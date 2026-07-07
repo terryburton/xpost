@@ -212,6 +212,30 @@ int grok(Xpost_Context *ctx,
     }
     s[ns] = '\0';  //fsm_check & xpost_name_cons  terminate on \0
 
+    { /* plain decimal integers dominate; scan them without the fsms */
+        char *p = s;
+        if (*p == '+' || *p == '-')
+            p++;
+        if (isdigit((unsigned char)*p))
+        {
+            do { p++; } while (isdigit((unsigned char)*p));
+            if (p - s == ns)
+            {
+                long num;
+                errno = 0;
+                num = strtol(s, NULL, 10);
+                if (errno == ERANGE || (long)(integer)num != num)
+                {
+                    /* beyond the integer range: PLRM 3.3.2 makes it a real */
+                    *retval = xpost_real_cons((real)strtod(s, NULL));
+                    return 0;
+                }
+                *retval = xpost_int_cons(num);
+                return 0;
+            }
+        }
+    }
+
     if (fsm_check(s, ns, fsm_dec, accept_dec))
     {
         long num;
