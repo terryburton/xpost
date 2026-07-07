@@ -88,6 +88,8 @@ int Vrestore(Xpost_Context *ctx,
     unsigned int vs;
     int ret;
 
+    ++ctx->namebind_gen; /* restored dicts may change bindings */
+
     ret = xpost_memory_table_get_addr(ctx->lo,
                                       XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
     if (!ret)
