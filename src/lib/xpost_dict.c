@@ -855,6 +855,8 @@ int xpost_dict_put(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->hold, k);
     xpost_stack_push(ctx->lo, ctx->hold, v);
 
+    ++ctx->namebind_gen; /* a binding may change: invalidate name cache */
+
     return xpost_dict_put_memory(ctx, xpost_context_select_memory(ctx, d), d, k, v);
 }
 
@@ -876,6 +878,8 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
     unsigned int hashnull;
     unsigned int i;
     unsigned int j;
+
+    ++ctx->namebind_gen;
 
     if (!xpost_save_ent_is_saved(mem, xpost_object_get_ent(d)))
         if (!xpost_save_save_ent(mem, dicttype, 0, xpost_object_get_ent(d)))
