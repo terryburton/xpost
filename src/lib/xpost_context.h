@@ -89,6 +89,8 @@ struct _Xpost_Context {
         int opge;
         int opif;
         int opifelse;
+        int opdef;
+        int opput;
         int token;
         int transform;
         int itransform;
@@ -111,6 +113,13 @@ struct _Xpost_Context {
        save level so restore reverts it, as the parameter is save/restore-subject */
     int packing;
     unsigned char packing_hist[256];
+
+    /* cache of name -> value resolutions against the dict stack,
+       invalidated in bulk whenever any binding may have changed */
+    unsigned int *namecache_gen;   /**< generation per (name index, bank) */
+    Xpost_Object *namecache_val;   /**< cached resolution */
+    unsigned int namecache_size;   /**< entries allocated */
+    unsigned int namebind_gen;     /**< current binding generation */
 
     /*@dependent@*/
     Xpost_Memory_File *gl; /**< global VM */
