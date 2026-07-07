@@ -236,6 +236,11 @@ int grok(Xpost_Context *ctx,
         }
     }
 
+    /* a token that does not start with a digit, sign or dot cannot
+       match any of the numeric forms */
+    if (!isdigit((unsigned char)*s) && *s != '+' && *s != '-' && *s != '.')
+        goto not_a_number;
+
     if (fsm_check(s, ns, fsm_dec, accept_dec))
     {
         long num;
@@ -301,6 +306,7 @@ int grok(Xpost_Context *ctx,
     }
 
     else
+      not_a_number:
         switch(*s)
         {
             case '(':
