@@ -20,6 +20,10 @@ diskf tmpf ne (disk file vs stdout are distinct) assert
 diskf dup eq (file object equals itself) assert
 tmpf dup ne not (stdout object not-ne itself) assert
 
+% --- %stderr is writable ---
+{ (%stderr) (w) file (semantics_test: stderr probe\n) writestring true } stopped
+{ pop false } if (writestring to %stderr) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
