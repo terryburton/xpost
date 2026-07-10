@@ -726,6 +726,9 @@ void _onerror(Xpost_Context *ctx,
 
     if (err > unknownerror) err = unknownerror;
 
+    strncpy(ctx->run_error_name, errorname[err], sizeof ctx->run_error_name - 1);
+    ctx->run_error_name[sizeof ctx->run_error_name - 1] = '\0';
+
     if (!validate_context(ctx))
         XPOST_LOG_ERR("context not valid");
 
@@ -1540,6 +1543,16 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
     return 1;
 }
 
+XPAPI const char *xpost_error_name_get(Xpost_Context *ctx)
+{
+    return ctx->run_uncaught ? ctx->run_error_name : "";
+}
+
+XPAPI const char *xpost_error_info_get(Xpost_Context *ctx)
+{
+    return ctx->run_uncaught ? ctx->run_error_info : "";
+}
+
 /*
    execute ps program until quit, fall-through to quit,
    SHOWPAGE_RETURN semantic, or error (default action: message, purge and quit).
@@ -1554,7 +1567,7 @@ static void push_start_proc(Xpost_Context *ctx, const char *name)
                                         xpost_name_cons(ctx, name))));
 }
 
-XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
+XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
     Xpost_Object lsav = null;
     int llev = 0;
@@ -1574,6 +1587,11 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
         case XPOST_INPUT_STRING:
             ps_str = inputptr;
             ps_file_ptr = tmpfile();
+            if (ps_file_ptr == NULL)
+            {
+                XPOST_LOG_ERR("cannot create temporary file for program");
+                return XPOST_RUN_FAILED;
+            }
             if (set_size)
                 fwrite(ps_str, 1, set_size, (FILE*)ps_file_ptr);
             else
@@ -1584,13 +1602,19 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
             ps_file_ptr = inputptr;
             break;
         case XPOST_INPUT_RESUME: /* resuming a returned session, skip startup */
-            /* the resumed run restarts the cascade count */
+            /* the resumed run restarts the cascade count and error record */
             ctx->onerr_run = 0;
+            ctx->run_error_name[0] = '\0';
+            ctx->run_error_info[0] = '\0';
+            ctx->run_uncaught = 0;
             goto run;
     }
 
-    /* a fresh run starts with a clean cascade count */
+    /* a fresh run starts with a clean cascade count and error record */
     ctx->onerr_run = 0;
+    ctx->run_error_name[0] = '\0';
+    ctx->run_error_info[0] = '\0';
+    ctx->run_uncaught = 0;
 
     /* prime the exec stack
        so it starts with a 'start*' procedure,
@@ -1648,18 +1672,20 @@ run:
                   xpost_name_cons(ctx, "ShowpageSemantics"));
     if (semantic.int_.val == XPOST_SHOWPAGE_RETURN)
     {
-        if (ret != 1)
-        {
-            /* the run stops at its quit operator, leaving the frames
-               beneath it -- the run's own scheduling tail -- on the
-               exec stack. A persistent context serving many runs
-               accumulates them, and an error unwind can later walk
-               down into a stale frame and execute it out of context.
-               Discard everything this run left behind. */
-            while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
-                (void)xpost_stack_pop(ctx->lo, ctx->es);
-        }
-        return ret == 1 ? yieldtocaller : 0;
+        if (ret == 1)
+            return XPOST_RUN_YIELDED;
+
+        /* the run stops at its quit operator, leaving the frames
+           beneath it -- the run's own scheduling tail -- on the
+           exec stack. A persistent context serving many runs
+           accumulates them, and an error unwind can later walk
+           down into a stale frame and execute it out of context.
+           Discard everything this run left behind, for errored
+           runs just as for completed ones. */
+        while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
+            (void)xpost_stack_pop(ctx->lo, ctx->es);
+
+        return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
     }
 
     XPOST_LOG_INFO("destroying device");
@@ -1723,7 +1749,7 @@ run:
         }
     }
 
-    return noerror;
+    return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
 }
 
 XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable)

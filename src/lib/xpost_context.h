@@ -136,6 +136,9 @@ struct _Xpost_Context {
                                    reaching `stop`; a runaway error cascade
                                    (an error raised from within the error
                                    machinery itself) drives this without bound */
+    char run_error_name[48];  /**< error that ended the last run ("" if none) */
+    char run_error_info[128]; /**< errorinfo detail for the same ("" if none) */
+    int run_uncaught;         /**< an error unwound past every stopped context */
 
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to
