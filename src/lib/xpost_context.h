@@ -95,6 +95,11 @@ struct _Xpost_Context {
 
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
 
+    unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
+                                    a completed run is truncated back to
+                                    this depth so its scheduling frames
+                                    cannot accumulate across jobs */
+
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);
     Xpost_Memory_File *(*xpost_interpreter_alloc_global_memory)(void);
