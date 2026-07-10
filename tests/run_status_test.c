@@ -13,6 +13,33 @@
 
 static int failures = 0;
 
+static char out_buf[256];
+static size_t out_len = 0;
+static char err_buf[256];
+static size_t err_len = 0;
+
+static size_t out_sink(void *user, const char *buf, size_t len)
+{
+    (void)user;
+    if (out_len + len < sizeof out_buf)
+    {
+        memcpy(out_buf + out_len, buf, len);
+        out_len += len;
+    }
+    return len;
+}
+
+static size_t err_sink(void *user, const char *buf, size_t len)
+{
+    (void)user;
+    if (err_len + len < sizeof err_buf)
+    {
+        memcpy(err_buf + err_len, buf, len);
+        err_len += len;
+    }
+    return len;
+}
+
 static void check(int cond, const char *what)
 {
     if (!cond)
@@ -76,10 +103,50 @@ int main(void)
     check(xpost_error_name_get(ctx)[0] == '\0',
           "no error name when the program caught it");
 
+    /* text-output handlers capture print and %stderr writes */
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+    xpost_stderr_handler_set(ctx, err_sink, NULL);
+    st = xpost_run(ctx, XPOST_INPUT_STRING,
+        "(to-out) print (%stderr) (w) file (to-err) writestring", 0);
+    check(st == XPOST_RUN_COMPLETE, "handler run completes");
+    out_buf[out_len] = '\0';
+    err_buf[err_len] = '\0';
+    check(strcmp(out_buf, "to-out") == 0, "stdout handler received print");
+    check(strcmp(err_buf, "to-err") == 0, "stderr handler received writestring");
+
+    /* clearing the handlers restores the default routing */
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_stderr_handler_set(ctx, NULL, NULL);
+    out_len = 0;
+    st = xpost_run(ctx, XPOST_INPUT_STRING, "(direct) print flush", 0);
+    check(st == XPOST_RUN_COMPLETE, "post-handler run completes");
+    check(out_len == 0, "cleared handler no longer receives output");
+
     /* the context stays healthy across all of the above */
     st = xpost_run(ctx, XPOST_INPUT_STRING,
         "x 3 eq { (STATE-OK) print } if flush", 0);
     check(st == XPOST_RUN_COMPLETE, "context reusable after errors");
+
+    /* Regression (PLRM 3.7.2): the local dictionaries systemdict holds --
+       errordict, $error, statusdict, serverdict, FontDirectory -- are the
+       sanctioned exception to the "no global->local reference" rule. A local
+       garbage collection reaches them only through global systemdict, so it
+       must mark them explicitly; otherwise repeated 1 vmreclaim on this
+       persistent, snapshot-free context sweeps and recycles them, corrupting
+       the error machinery so a later error is silently swallowed -- stopped
+       reports false where it should report true. Drive several error-and-
+       reclaim cycles, then confirm a fresh error inside a bound procedure is
+       still caught. */
+    out_len = 0;
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+    st = xpost_run(ctx, XPOST_INPUT_STRING,
+        "3 { { zzq_undef_a } stopped pop 1 vmreclaim } repeat "
+        "{ zzq_undef_b } stopped { (CAUGHT) }{ (MISSED) } ifelse print flush", 0);
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    out_buf[out_len < sizeof out_buf ? out_len : sizeof out_buf - 1] = '\0';
+    check(st == XPOST_RUN_COMPLETE, "error-and-reclaim cycles complete");
+    check(strcmp(out_buf, "CAUGHT") == 0,
+          "an error still raises after repeated local GC (systemdict's local dicts survive)");
 
     xpost_destroy(ctx);
     xpost_quit();
