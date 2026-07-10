@@ -394,7 +394,8 @@ currentglobal true setglobal
 .xpostsys /.handlejoberror {
     $error /newerror get
     handleerror
-    { (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
+    { //.internaldict /.rundied get exec
+      (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
       print flush } if
 } put
 setglobal
@@ -496,7 +497,7 @@ setglobal
     {
         cvx exec        % the file object has stayed on the stack
     } stopped {
-        .rundied
+        //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
     quit
