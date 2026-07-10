@@ -147,6 +147,11 @@ struct _Xpost_Context {
                             never pays to load them, and the no-graphics lockdown
                             path is exercised */
 
+    int job_snapshots; /**< take VM snapshots around each xpost_run job
+                            (restored on the quit path); disable for a
+                            persistent context serving many runs, where
+                            the per-run snapshots would accumulate save
+                            levels and pin every run's garbage */
 
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);
