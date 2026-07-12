@@ -752,6 +752,10 @@ int _flattenpath (Xpost_Context *ctx)
     xpost_stack_push(ctx->lo, ctx->hold, gd);
     gstate = xpost_dict_get(ctx, gd, namecurrgstate);
     flat = xpost_dict_get(ctx, gstate, xpost_name_cons(ctx, "flat"));
+    /* the flatness value bounds the error in device pixels; subdivide
+       well inside it so a curve's polygonization classifies the same
+       boundary pixels as a renderer that meets the bound exactly */
+    flat = xpost_real_cons((real)(NUM(flat) * 0.25));
 
     path = _cpath(ctx);
     pathlen = xpost_dict_length_memory(xpost_context_select_memory(ctx, path), path);
