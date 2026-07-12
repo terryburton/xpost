@@ -529,6 +529,16 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Binary tokens (PLRM 3.14): the conformance corpus against a golden
+# record generated from the reference interpreter, which revalidates
+# the golden when a reference interpreter is present.
+test('binary-tokens',
+  find_program('tests/run-bintok-test.sh'),
+  args: [ xpost_exe,
+          files('tests/binary_token_test.ps'),
+          files('tests/binary_token_test.expected') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',
