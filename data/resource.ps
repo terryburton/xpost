@@ -1,0 +1,63 @@
+//.internaldict /QUIET known { }{ (loading resource.ps...)print } ifelse
+
+% Level 2 resource machinery: named instances per category, held in
+% global VM. /Category is itself a category whose instances are
+% category implementation dictionaries: defining an instance there
+% brings a new category into existence, which is how programs register
+% private categories (typically copying /Generic as a starting point).
+% resourceforall and on-disk resource storage are not implemented.
+%
+% The instance tables live in the private global namespace, out of a
+% program's reach; only the operators below are public. Everything here
+% is global, and global VM stays selected on return: the font machinery
+% loaded next in init.ps is defined in global VM too.
+true setglobal
+
+.xpostsys /.resources 32 dict put
+//.xpostsys /.resources get /Category 32 dict put
+% the Generic category implementation: programs copy it to seed their
+% own categories, so it need only exist and name itself
+//.xpostsys /.resources get /Category get /Generic << /Category /Generic >> put
+
+% category  .instof  instances
+.xpostsys /.instof {
+    //.xpostsys /.resources get exch 2 copy known not {
+        pop pop /findresource cvx /undefinedresource signalerror
+    } if
+    get
+} bind put
+
+% key instance category  defineresource  instance
+/defineresource {
+    dup /Category eq {
+        % a new category comes into being with an empty instance table
+        2 index //.xpostsys /.resources get exch 2 copy known not
+            { 32 dict put }{ pop pop } ifelse
+    } if
+    //.xpostsys /.instof get exec 2 index 2 index put exch pop
+} bind def
+
+% key category  findresource  instance
+/findresource {
+    //.xpostsys /.instof get exec exch  % instances key
+    2 copy known not {
+        pop pop /findresource cvx /undefinedresource signalerror
+    } if
+    get
+} bind def
+
+% key category  resourcestatus  status size true | false
+/resourcestatus {
+    //.xpostsys /.resources get exch 2 copy known not {
+        pop pop pop false
+    }{
+        get exch known { 0 0 true }{ false } ifelse
+    } ifelse
+} bind def
+
+% key category  undefineresource  -
+/undefineresource {
+    //.xpostsys /.instof get exec exch undef
+} bind def
+
+//.internaldict /QUIET known { }{ (eof resource.ps\n)print } ifelse
