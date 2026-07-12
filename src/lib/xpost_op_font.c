@@ -376,7 +376,6 @@ int _show_char(Xpost_Context *ctx,
                real *ypos,
                unsigned int ch,
                unsigned int *glyph_previous,
-               int has_kerning,
                int ncomp,
                Xpost_Object comp1,
                Xpost_Object comp2,
@@ -394,33 +393,30 @@ int _show_char(Xpost_Context *ctx,
     long advance_x;
     long advance_y;
 
+    /* show does not kern: pair adjustment in PostScript is the
+       program's business (kshow, ashow), and the reference
+       interpreter advances by the glyph widths alone */
     glyph_index = xpost_font_face_glyph_index_get(data.face, ch);
-    //TODO check fontdict's /AutoKern bool
-    if (has_kerning && *glyph_previous && (glyph_index > 0))
-    {
-        long delta_x;
-        long delta_y;
-
-        if (xpost_font_face_kerning_delta_get(data.face, *glyph_previous, glyph_index,
-                                              &delta_x, &delta_y))
-        {
-            *xpos += delta_x >> 6;
-            *ypos += delta_y >> 6;
-        }
-    }
     if (!xpost_font_face_glyph_render(data.face, glyph_index))
         return 0;
     xpost_font_face_glyph_buffer_get(data.face,
                                      &buffer, &rows, &width, &pitch, &pixel_mode,
                                      &left, &top, &advance_x, &advance_y);
+    /* the pen rides at fractional device positions but the glyph
+       bitmap sits on the pixel grid: place it at the nearest
+       pixel, not the floor, so a pen an epsilon shy of a pixel
+       boundary (the linear advance's 16.16 quantization) lands
+       where exact arithmetic would put it */
     _draw_bitmap(ctx, devdic, putpix,
                  buffer, rows, width, pitch, pixel_mode,
-                 *xpos + left, *ypos - top,
+                 (int)floor(*xpos + left + 0.5),
+                 (int)floor(*ypos - top + 0.5),
                  ncomp, comp1, comp2, comp3);
-    /* the face transform leaves the advance in y-up glyph space;
-       the pen advances in y-down device space */
-    *xpos += advance_x >> 6;
-    *ypos -= advance_y >> 6;
+    /* the face transform leaves the advance in y-up glyph space; the
+       pen advances in y-down device space, keeping the fractional part
+       (truncating each glyph's advance drifts the line's length) */
+    *xpos += (real)(advance_x / 65536.0);
+    *ypos -= (real)(advance_y / 65536.0);
     *glyph_previous = glyph_index;
 #else
     (void)ctx;
@@ -431,7 +427,6 @@ int _show_char(Xpost_Context *ctx,
     (void)ypos;
     (void)ch;
     (void)glyph_previous;
-    (void)has_kerning;
     (void)ncomp;
     (void)comp1;
     (void)comp2;
@@ -502,7 +497,6 @@ int _show(Xpost_Context *ctx,
     Xpost_Object finalize;
     int ret;
 
-    int has_kerning;
     unsigned int glyph_previous;
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -576,10 +570,9 @@ int _show(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
     glyph_previous = 0;
     for (ch = cstr; *ch; ch++) {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                 ncomp, comp1, comp2, comp3);
     }
 
@@ -614,7 +607,6 @@ int _ashow(Xpost_Context *ctx,
     Xpost_Object finalize;
     int ret;
 
-    int has_kerning;
     unsigned int glyph_previous;
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -688,11 +680,10 @@ int _ashow(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
     glyph_previous = 0;
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                    ncomp, comp1, comp2, comp3);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
@@ -730,7 +721,6 @@ int _widthshow(Xpost_Context *ctx,
     Xpost_Object finalize;
     int ret;
 
-    int has_kerning;
     unsigned int glyph_previous;
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -804,11 +794,10 @@ int _widthshow(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
     glyph_previous = 0;
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                    ncomp, comp1, comp2, comp3);
         if (*ch == charcode.int_.val)
         {
@@ -851,7 +840,6 @@ int _awidthshow(Xpost_Context *ctx,
     Xpost_Object finalize;
     int ret;
 
-    int has_kerning;
     unsigned int glyph_previous;
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -925,11 +913,10 @@ int _awidthshow(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
     glyph_previous = 0;
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                 ncomp, comp1, comp2, comp3);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
@@ -962,9 +949,6 @@ int _stringwidth(Xpost_Context *ctx,
     real xpos = 0, ypos = 0;
     char *ch;
 
-    int has_kerning;
-    unsigned int glyph_previous;
-
     /* load the graphicsdict, current graphics state, and current font */
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
@@ -996,11 +980,9 @@ int _stringwidth(Xpost_Context *ctx,
 
     /* do everything BUT
        render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
-    glyph_previous = 0;
     for (ch = cstr; *ch; ch++)
     {
-        /* _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        /* _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                 ncomp, comp1, comp2, comp3); */
 
 #ifdef HAVE_FREETYPE2
@@ -1016,18 +998,6 @@ int _stringwidth(Xpost_Context *ctx,
         long advance_y;
 
         glyph_index = xpost_font_face_glyph_index_get(data.face, *ch);
-        if (has_kerning && glyph_previous && (glyph_index > 0))
-        {
-            long delta_x;
-            long delta_y;
-
-            if (xpost_font_face_kerning_delta_get(data.face, glyph_previous, glyph_index,
-                                                  &delta_x, &delta_y))
-            {
-                xpos += delta_x >> 6;
-                ypos += delta_y >> 6;
-            }
-        }
         if (!xpost_font_face_glyph_render(data.face, glyph_index))
             return unregistered;
         xpost_font_face_glyph_buffer_get(data.face, &buffer, &rows, &width, &pitch, &pixel_mode, &left, &top, &advance_x, &advance_y);
@@ -1037,9 +1007,8 @@ int _stringwidth(Xpost_Context *ctx,
                 *xpos + left, *ypos - top,
                 ncomp, comp1, comp2, comp3);
                 */
-        xpos += advance_x >> 6;
-        ypos += advance_y >> 6;
-        glyph_previous = glyph_index;
+        xpos += (real)(advance_x / 65536.0);
+        ypos += (real)(advance_y / 65536.0);
 #endif
 
     }
@@ -1101,7 +1070,6 @@ int _kshow(Xpost_Context *ctx,
     Xpost_Object finalize;
     int ret;
 
-    int has_kerning;
     unsigned int glyph_previous;
 
     (void) &proc;
@@ -1176,11 +1144,10 @@ int _kshow(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
-    has_kerning = xpost_font_face_kerning_has(data.face);
     glyph_previous = 0;
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous, has_kerning,
+        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, *ch, &glyph_previous,
                 ncomp, comp1, comp2, comp3);
     }
 
