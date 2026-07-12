@@ -277,13 +277,13 @@ Level 2 operators
  [ ] currentundercolorremoval
  [ ] setcolorrendering
  [ ] currentcolorrendering
- [ ] Named Resources
+ [X] Named Resources
  [ ] makepattern
  [ ] setpattern
  [X] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
      Flate, LZW, CCITTFax, DCT, ReusableStream; encode filters:
      ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT)
- [ ] defineresource, findresource, resourcestatus, resourceforall,
+ [X] defineresource, findresource, resourcestatus, resourceforall,
      undefineresource
  [ ] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
  [X] setglobal, currentglobal, gcheck
