@@ -155,6 +155,11 @@ if libpng_dep.found()
   config_h.set('HAVE_LIBPNG', 1)
 endif
 
+zlib_dep = dependency('zlib', required: false)
+if zlib_dep.found()
+  config_h.set('HAVE_ZLIB', 1)
+endif
+
 xcb_dep = dependency('xcb-image xcb-icccm xcb xcb-aux', required: false)
 if xcb_dep.found()
   config_h.set('HAVE_XCB', 1)
