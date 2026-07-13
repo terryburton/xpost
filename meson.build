@@ -521,6 +521,11 @@ test('error-format',
   find_program('tests/run-error-format-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# Single-opener invariant: fopen() appears only inside xpost_diskfile_fopen(),
+# so every disk file passes one enforcement point.
+test('fopen-funnel',
+  find_program('tests/check-fopen-funnel.sh'),
+  args: [ meson.current_source_dir() / 'src' / 'lib' ])
 #if get_option('nls') == true
 #  subdir('po')
 #endif

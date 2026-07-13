@@ -75,6 +75,52 @@ xpost_diskfile_stat(const char *path, long *pages, long *bytes,
     return 1;
 }
 
+/* The single path-to-stream opener for disk-backed files: every disk file
+   the interpreter opens is created here, so file-access policy has one
+   enforcement point. internal marks a trusted interpreter-managed path
+   (temporary scratch) rather than one derived from the running program.
+   Access policy is not yet applied; the parameter fixes the call sites so
+   that only this function changes when it is. */
+FILE *
+xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
+{
+    char bmode[8];
+    FILE *fp;
+
+    (void)internal;
+
+    /* PostScript files are binary byte streams; force binary mode so that
+       Windows text translation -- CRLF rewriting and a 0x1A byte read as
+       end-of-file -- cannot corrupt or truncate them. On POSIX 'b' is a
+       no-op. */
+    if (!strchr(mode, 'b'))
+    {
+        size_t n = strlen(mode);
+
+        if (n + 1 < sizeof bmode)
+        {
+            memcpy(bmode, mode, n);
+            bmode[n] = 'b';
+            bmode[n + 1] = '\0';
+            mode = bmode;
+        }
+    }
+
+    fp = fopen(path, mode);
+    if (!fp)
+    {
+        switch (errno)
+        {
+            case EACCES: *err = invalidfileaccess; break;
+            case ENOENT: *err = undefinedfilename; break;
+            default:     *err = unregistered; break;
+        }
+        return NULL;
+    }
+    *err = 0;
+    return fp;
+}
+
 #ifdef _WIN32
 /*
  * FIXME: maybe use a WIN32 API for all this. See FIXME in xpost_op_file.c
@@ -111,7 +157,10 @@ f_tmpfile(void)
 #ifdef DEBUG_FILE
     printf("fopen\n");
 #endif
-    return fopen(buf, "w+bD");
+    {
+        int err;
+        return xpost_diskfile_fopen(buf, "w+bD", 1, &err);
+    }
 }
 #else
 # define f_tmpfile tmpfile
@@ -427,7 +476,7 @@ xpost_memoryfile_open_write(void)
    caller must set access for a readable file,
    default is writable.
    eg.
-    FILE *fp = fopen(...);
+    FILE *fp = xpost_diskfile_fopen(path, mode, 0, &err);
     Xpost_Object f = readonly(xpost_file_cons(fp)).
  */
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
@@ -709,40 +758,9 @@ int xpost_file_open(Xpost_Memory_File *mem,
 #ifdef DEBUG_FILE
         printf("fopen\n");
 #endif
-        /* PostScript files are binary byte streams; force binary mode so that
-           Windows text translation -- CRLF rewriting and a 0x1A byte read as
-           end-of-file -- cannot corrupt or truncate them. On POSIX 'b' is a
-           no-op. The caller's mode string stays as given: the access
-           attributes below match against it. */
-        {
-            char bmode[8];
-            const char *fmode = mode;
-            size_t n = strlen(mode);
-
-            if (!strchr(mode, 'b') && n + 1 < sizeof bmode)
-            {
-                memcpy(bmode, mode, n);
-                bmode[n] = 'b';
-                bmode[n + 1] = '\0';
-                fmode = bmode;
-            }
-            fp = fopen(fn, fmode);
-        }
+        fp = xpost_diskfile_fopen(fn, mode, 0, &ret);
         if (fp == NULL)
-        {
-            switch (errno)
-            {
-                case EACCES:
-                    return invalidfileaccess;
-                    break;
-                case ENOENT:
-                    return undefinedfilename;
-                    break;
-                default:
-                    return unregistered;
-                    break;
-            }
-        }
+            return ret;
         f = xpost_file_cons(mem, fp);
         if (strcmp(mode, "r") == 0)
         {
