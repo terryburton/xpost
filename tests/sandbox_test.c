@@ -64,6 +64,7 @@ int main(void)
     char wdir[512];
     char readable[600];
     char outside[600];
+    char evilres[600];  /* a resource tree outside the permitted set */
     char prog[1400];
     FILE *w;
 
@@ -76,6 +77,20 @@ int main(void)
     snprintf(outside, sizeof outside, "%s.outside", root);
     w = fopen(outside, "wb");
     if (w) { fputs("SECRET", w); fclose(w); }
+
+    /* a <dir>/<category>/<instance> tree outside the permitted set, for the
+       .resourcefileopen check below */
+    snprintf(evilres, sizeof evilres, "%s.evilres", root);
+    test_mkdir(evilres);
+    {
+        char leaf[700];
+
+        snprintf(leaf, sizeof leaf, "%s/Cat", evilres);
+        test_mkdir(leaf);
+        snprintf(leaf, sizeof leaf, "%s/Cat/inst", evilres);
+        w = fopen(leaf, "wb");
+        if (w) { fputs("SENTINEL", w); fclose(w); }
+    }
 
     if (!xpost_init()) { printf("FAIL: xpost_init\n"); return 1; }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
@@ -132,6 +147,14 @@ int main(void)
     check(errors_with(ctx, "(PATH) getenv", "invalidaccess"), "getenv refused");
     check(errors_with(ctx, "(X) (y) putenv", "invalidaccess"), "putenv refused");
 
+    /* .resourcefileopen confines beneath its caller-supplied root; under the
+       sandbox the root must be read-permitted. An unpermitted root yields
+       false, not a file (a file would run the undefined name and error). */
+    snprintf(prog, sizeof prog,
+        "(%s) (Cat) (inst) .resourcefileopen { closefile leakdetected } if", evilres);
+    check(completes(ctx, prog),
+        ".resourcefileopen beneath an unpermitted root refused");
+
     /* the latch is one-way: the permit set is frozen after engaging */
     check(xpost_path_permit_read("/") == 0, "permit refused after engage");
 
@@ -143,6 +166,11 @@ int main(void)
     unlink(prog);
     unlink(readable);
     unlink(outside);
+    snprintf(prog, sizeof prog, "%s/Cat/inst", evilres);
+    unlink(prog);
+    snprintf(prog, sizeof prog, "%s/Cat", evilres);
+    rmdir(prog);
+    rmdir(evilres);
     rmdir(wdir);
     rmdir(root);
 

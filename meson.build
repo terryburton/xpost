@@ -646,6 +646,18 @@ lockdown_exe = executable('lockdown_test',
 test('lockdown',
   lockdown_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Implicit resource loading: findresource loads a named instance from the
+# search path on a miss, confined and leaf-validated.
+resource_load_exe = executable('resource_load_test',
+  'tests/resource_load_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('resource-load',
+  resource_load_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')
 #endif
