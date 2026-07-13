@@ -539,6 +539,18 @@ if host_machine.system() != 'windows'
     install: false)
   test('path-confine', path_confine_exe)
 endif
+
+# File-access sandbox: once engaged, only permitted directories may be
+# opened by the running program.
+sandbox_exe = executable('sandbox_test',
+  'tests/sandbox_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('sandbox',
+  sandbox_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')
 #endif
