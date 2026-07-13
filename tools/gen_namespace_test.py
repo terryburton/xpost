@@ -45,7 +45,7 @@ OPTIONAL = {
 }
 
 def live_keys():
-    r = subprocess.run([XP, "-q", "-d", "null", "/dev/stdin"],
+    r = subprocess.run([XP, "-q", "--no-sandbox", "-d", "null", "/dev/stdin"],
                        input=DUMP.encode(), capture_output=True, env=ENV, timeout=60)
     keys = []
     for line in r.stdout.decode("latin1").splitlines():
