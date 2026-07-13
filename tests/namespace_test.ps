@@ -18,7 +18,7 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
 % the 305 name keys every build exposes
 /golden <<
-  ($error) true  (.gscratch) true  (.privatedict) true  (.uparams) true
+  ($error) true  (.gscratch) true  (.lockdown) true  (.permitfileread) true  (.permitfilewrite) true  (.privatedict) true  (.uparams) true
   (<<) true  (=) true  (==) true  (==only) true
   (=only) true  (=print) true  (=string) true  (>>) true
   (DEVICE) true  (FontDirectory) true  (ISOLatin1Encoding) true  (Run) true

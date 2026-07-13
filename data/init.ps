@@ -991,6 +991,9 @@ currentglobal true setglobal
         exch dup type /nametype eq
         2 index type /operatortype eq and
         { dup 60 string cvs 0 get 46 eq
+          1 index /.lockdown ne and
+          1 index /.permitfileread ne and
+          1 index /.permitfilewrite ne and
           1 index /.gscratch ne and
           1 index /.privatedict ne and
         }{ false } ifelse
