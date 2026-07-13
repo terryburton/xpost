@@ -706,6 +706,65 @@ int xpost_op_bool_echo (Xpost_Context *ctx,
     return 0;
 }
 
+/* string  .permitfileread  -
+   permit reading files within the directory tree; ignored once locked down */
+static
+int xpost_op_string_permitfileread (Xpost_Context *ctx,
+                                    Xpost_Object dir)
+{
+    char *d = xpost_string_allocate_cstring(ctx, dir);
+
+    if (!d)
+        return VMerror;
+    xpost_path_permit_read(d);
+    free(d);
+    return 0;
+}
+
+/* string  .permitfilewrite  -
+   permit writing files within the directory tree; ignored once locked down */
+static
+int xpost_op_string_permitfilewrite (Xpost_Context *ctx,
+                                     Xpost_Object dir)
+{
+    char *d = xpost_string_allocate_cstring(ctx, dir);
+
+    if (!d)
+        return VMerror;
+    xpost_path_permit_write(d);
+    free(d);
+    return 0;
+}
+
+/* Remove the sandbox-control and raw resource-open operators from systemdict
+   so a program cannot name them after lockdown. .resourcefileopen stays bound
+   (and executeonly) inside the resource machinery, so findresource is
+   unaffected; the enforcement is the C-level permit check regardless. */
+static void
+_undef_sandbox_ops (Xpost_Context *ctx)
+{
+    static const char *const names[] = {
+        ".permitfileread", ".permitfilewrite", ".lockdown", ".resourcefileopen"
+    };
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    size_t i;
+
+    for (i = 0; i < sizeof names / sizeof names[0]; i++)
+        xpost_dict_undef(ctx, sd, xpost_name_cons(ctx, names[i]));
+}
+
+/* -  .lockdown  -
+   engage the file-access sandbox: subsequent program-driven opens are
+   confined to the permitted directories. One-way -- a trusted prolog
+   permits what it needs and locks down before running untrusted input. */
+static
+int xpost_op_lockdown (Xpost_Context *ctx)
+{
+    xpost_path_control_engage();
+    _undef_sandbox_ops(ctx);
+    return 0;
+}
+
 int xpost_oper_init_file_ops (Xpost_Context *ctx,
                               Xpost_Object sd)
 {
@@ -721,6 +780,12 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "file", (Xpost_Op_Func)xpost_op_string_mode_file, 1, 2, stringtype, stringtype);
     INSTALL;
     /* filter */
+    op = xpost_operator_cons(ctx, ".permitfileread", (Xpost_Op_Func)xpost_op_string_permitfileread, 0, 1, stringtype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".permitfilewrite", (Xpost_Op_Func)xpost_op_string_permitfilewrite, 0, 1, stringtype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".lockdown", (Xpost_Op_Func)xpost_op_lockdown, 0, 0);
+    INSTALL;
     op = xpost_operator_cons(ctx, "closefile", (Xpost_Op_Func)xpost_op_file_closefile, 0, 1, filetype);
     INSTALL;
     op = xpost_operator_cons(ctx, "read", (Xpost_Op_Func)xpost_op_file_read, 1, 1, filetype);
