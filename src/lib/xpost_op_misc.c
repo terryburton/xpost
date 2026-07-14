@@ -52,6 +52,7 @@
 #include "xpost_stack.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
+#include "xpost_file.h"  /* the sandbox denies environment access once engaged */
 #include "xpost_name.h"
 #include "xpost_string.h"
 #include "xpost_array.h"
@@ -184,6 +185,8 @@ int Sgetenv(Xpost_Context *ctx,
 {
     char *str;
     char *r;
+    if (xpost_path_control_is_engaged())
+        return invalidaccess;
     str = xpost_string_allocate_cstring(ctx, S);
     r = getenv(str);
     if (r)
@@ -213,6 +216,8 @@ int SSputenv(Xpost_Context *ctx,
              Xpost_Object S)
 {
     char *n, *s, *r;
+    if (xpost_path_control_is_engaged())
+        return invalidaccess;
     n = xpost_string_get_pointer(ctx, N);
     if (xpost_object_get_type(S) == nulltype)
     {
