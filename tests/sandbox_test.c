@@ -16,6 +16,13 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+/* the Windows CRT mkdir takes no mode argument */
+#ifdef _WIN32
+# define test_mkdir(p) mkdir(p)
+#else
+# define test_mkdir(p) mkdir((p), 0700)
+#endif
+
 #include "xpost.h"
 
 static int failures = 0;
@@ -53,11 +60,11 @@ static int errors_with(Xpost_Context *ctx, const char *prog, const char *name)
 int main(void)
 {
     Xpost_Context *ctx;
-    char root[] = "/tmp/xpost_sbx_XXXXXX";
+    char root[] = "xpost_sbx_XXXXXX";  /* relative: a native binary need not share /tmp */
     char wdir[512];
     char readable[600];
     char outside[600];
-    char prog[900];
+    char prog[1400];
     FILE *w;
 
     if (!mkdtemp(root)) { printf("FAIL: mkdtemp\n"); return 1; }
@@ -65,7 +72,7 @@ int main(void)
     w = fopen(readable, "wb");
     if (w) { fputs("DATA", w); fclose(w); }
     snprintf(wdir, sizeof wdir, "%s/wdir", root);
-    mkdir(wdir, 0700);
+    test_mkdir(wdir);
     snprintf(outside, sizeof outside, "%s.outside", root);
     w = fopen(outside, "wb");
     if (w) { fputs("SECRET", w); fclose(w); }
@@ -103,6 +110,27 @@ int main(void)
     /* write elsewhere in the tree is refused (only wdir may be written) */
     snprintf(prog, sizeof prog, "(%s/evil.txt) (w) file", root);
     check(errors_with(ctx, prog, "invalidfileaccess"), "unpermitted write refused");
+
+    /* deletefile and renamefile are control operations, not opens: a target
+       outside the permitted set is refused rather than escaping the latch */
+    snprintf(prog, sizeof prog, "(%s) deletefile", outside);
+    check(errors_with(ctx, prog, "invalidfileaccess"), "outside deletefile refused");
+    snprintf(prog, sizeof prog, "(%s) (%s/moved) renamefile", outside, wdir);
+    check(errors_with(ctx, prog, "invalidfileaccess"), "outside renamefile refused");
+
+    /* deletefile within the permitted write dir succeeds */
+    snprintf(prog, sizeof prog, "(%s/out.txt) deletefile", wdir);
+    check(completes(ctx, prog), "permitted deletefile succeeds");
+
+    /* directory enumeration hides files the program could not open: the proc
+       (which would error) is never reached for an unpermitted match */
+    snprintf(prog, sizeof prog,
+             "(%s) { pop zzznotanop } 256 string filenameforall", outside);
+    check(completes(ctx, prog), "enumeration hides unpermitted files");
+
+    /* the environment is neither read nor written once engaged */
+    check(errors_with(ctx, "(PATH) getenv", "invalidaccess"), "getenv refused");
+    check(errors_with(ctx, "(X) (y) putenv", "invalidaccess"), "putenv refused");
 
     /* the latch is one-way: the permit set is frozen after engaging */
     check(xpost_path_permit_read("/") == 0, "permit refused after engage");
