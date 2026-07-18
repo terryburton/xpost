@@ -24,6 +24,12 @@ tmpf dup ne not (stdout object not-ne itself) assert
 { (%stderr) (w) file (semantics_test: stderr probe\n) writestring true } stopped
 { pop false } if (writestring to %stderr) assert
 
+% --- an end-of-line marker is one white-space delimiter ---
+(ab\r\ncd) token pop exch (cd) eq
+    (a CRLF after a token is consumed as one marker) assert
+(ab\rcd) token pop exch (cd) eq
+    (a bare CR after a token is consumed alone) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
