@@ -30,6 +30,12 @@ tmpf dup ne not (stdout object not-ne itself) assert
 (ab\rcd) token pop exch (cd) eq
     (a bare CR after a token is consumed alone) assert
 
+% --- the job server accepts exitserver ---
+countdictstack
+{ serverdict begin 0 exitserver } stopped not
+    (exitserver continues the job) assert
+countdictstack eq (exitserver unwinds the begun serverdict) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
