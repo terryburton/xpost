@@ -37,6 +37,14 @@ cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
 (ab\rcd) token pop exch (cd) eq
     (a bare CR after a token is consumed alone) assert
 
+% --- gcheck holds for simple objects; composites answer for their
+%     storage ---
+42 gcheck (an integer is a legal element of a global composite) assert
+/st.gname gcheck (a name is a simple object under gcheck) assert
+[ 1 2 ] gcheck not (a local array is not) assert
+currentglobal true setglobal [ 1 2 ] exch setglobal gcheck
+(a global array is) assert
+
 % --- the job server accepts exitserver ---
 countdictstack
 { serverdict begin 0 exitserver } stopped not
