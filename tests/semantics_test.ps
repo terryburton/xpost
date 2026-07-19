@@ -269,6 +269,20 @@ FontDirectory /st.uf known not (undefinefont removes the instance) assert
 true setstrokeadjust currentstrokeadjust (stroke adjustment is recorded) assert
 false setstrokeadjust
 0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
+% --- ReusableStreamDecode buffers its whole source at construction
+%     and replays it from any position ---
+currentfile /ASCIIHexDecode filter /ReusableStreamDecode filter
+48656C6C6F>
+/rsdstash exch def
+rsdstash 5 string readstring pop (Hello) eq
+(a reusable stream reads its data) assert
+rsdstash resetfile
+rsdstash 5 string readstring pop (Hello) eq
+(resetfile replays a reusable stream) assert
+rsdstash 2 setfileposition
+rsdstash fileposition 2 eq (fileposition reports the reusable position) assert
+rsdstash 3 string readstring pop (llo) eq
+(setfileposition repositions a reusable stream) assert
 
 % --- binary tokens (PLRM 3.14.2): every encoding a packaged program
 %     body uses, plus the sibling byte orders ---
