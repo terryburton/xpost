@@ -331,10 +331,14 @@ st.sub 7 eq (SubFileDecode ends at the delimiter and the file resumes after it) 
 st.f <014142FD4380> writestring st.f closefile
 (semantics.scratch) (r) file /RunLengthDecode filter
 16 string readstring pop (ABCCCC) eq (RunLengthDecode expands runs) assert
-% a fixed deflate stream (zlib framing) of a known sentence
-currentfile /ASCIIHexDecode filter /FlateDecode filter 64 string readstring
-78DA0DCADB0980301444C156B6002D2AE00185E446B3577C54AFF33D3E4E7851437BA598497911F9CCDE6E553219568945B91272FF63EB830F58BD14F3>
-pop (squeeze me please, twenty-six letters and then some more) eq
+% a fixed deflate stream (zlib framing) of a known sentence, staged
+% through the scratch file so the decoder owns its source outright
+/st.f (semantics.scratch) (w) file def
+st.f <78DA0DCADB0980301444C156B6002D2AE00185E446B3577C54AFF33D3E4E7851437BA598497911F9CCDE6E553219568945B91272FF63EB830F58BD14F3> writestring
+st.f closefile
+(semantics.scratch) (r) file /FlateDecode filter
+64 string readstring pop
+(squeeze me please, twenty-six letters and then some more) eq
 (FlateDecode expands a fixed deflate stream) assert
 % DCTDecode inflates a JPEG stream into image samples; the guard probe
 % skips the block on a build without the JPEG library. The embedded
@@ -343,20 +347,12 @@ pop (squeeze me please, twenty-six letters and then some more) eq
 { currentfile /DCTDecode filter closefile /hasdct true def } stopped pop
 $error /newerror false put
 hasdct {
-    currentfile /ASCIIHexDecode filter /DCTDecode filter
-    /st.jf exch def
-    st.jf 192 string readstring
-} if
-FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304
-030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B101610
-1113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D
-141414141414141414141414141414141414141414141414141414141414141414141414
-1414141414141414141414141414FFC00011080008000803011100021101031101FFC400
-14000100000000000000000000000000000008FFC4001410010000000000000000000000
-0000000000FFC4001501010100000000000000000000000000000709FFC4001411010000
-0000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9>
-hasdct {
-    pop dup length 192 eq (DCTDecode delivers the full sample block) assert
+    /st.f (semantics.scratch) (w) file def
+    st.f <FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B1016101113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414FFC00011080008000803011100021101031101FFC40014000100000000000000000000000000000008FFC40014100100000000000000000000000000000000FFC4001501010100000000000000000000000000000709FFC40014110100000000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9> writestring
+    st.f closefile
+    (semantics.scratch) (r) file /DCTDecode filter
+    192 string readstring pop
+    dup length 192 eq (DCTDecode delivers the full sample block) assert
     dup 0 get 200 gt (DCTDecode red channel is high) assert
     2 get 80 lt (DCTDecode blue channel is low) assert
 } if
