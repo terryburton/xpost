@@ -318,6 +318,17 @@ currentfile /ASCIIHexDecode filter /FlateDecode filter 64 string readstring
 78DA0DCADB0980301444C156B6002D2AE00185E446B3577C54AFF33D3E4E7851437BA598497911F9CCDE6E553219568945B91272FF63EB830F58BD14F3>
 pop (squeeze me please, twenty-six letters and then some more) eq
 (FlateDecode expands a fixed deflate stream) assert
+% DCTDecode inflates a JPEG stream into image samples; the guard probe
+% skips the block on a build without the JPEG library. The embedded
+% stream is a solid red 8-by-8 JPEG: 192 samples, red channel high.
+/hasdct false def
+{ currentfile /DCTDecode filter closefile /hasdct true def } stopped pop
+$error /newerror false put
+hasdct {
+    currentfile /ASCIIHexDecode filter /DCTDecode filter
+    /st.jf exch def
+    st.jf 192 string readstring
+} if
 FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304
 030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B101610
 1113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D
