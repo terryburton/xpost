@@ -24,6 +24,13 @@ tmpf dup ne not (stdout object not-ne itself) assert
 { (%stderr) (w) file (semantics_test: stderr probe\n) writestring true } stopped
 { pop false } if (writestring to %stderr) assert
 
+% --- currentfile returns a literal file: programs stash it under a
+%     name and the later lookup must push the stashed file, not
+%     resume executing it ---
+currentfile xcheck not (currentfile carries the literal attribute) assert
+/cfstash currentfile def
+cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
+
 % --- an end-of-line marker is one white-space delimiter ---
 (ab\r\ncd) token pop exch (cd) eq
     (a CRLF after a token is consumed as one marker) assert
