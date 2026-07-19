@@ -45,6 +45,11 @@ cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
 currentglobal true setglobal [ 1 2 ] exch setglobal gcheck
 (a global array is) assert
 
+% --- bind terminates on a procedure that reaches itself ---
+/st.cyc [ 1 2 3 ] cvx def
+/st.cyc load 0 /st.cyc load put
+/st.cyc load bind type /arraytype eq (bind survives a cyclic procedure) assert
+
 % --- the job server accepts exitserver ---
 countdictstack
 { serverdict begin 0 exitserver } stopped not
