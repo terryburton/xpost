@@ -31,18 +31,28 @@ currentfile xcheck not (currentfile carries the literal attribute) assert
 /cfstash currentfile def
 cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
 
+% cvi and cvr read their string operands with the scanner's token
+% semantics: leading white space and anything past the numeral's end
+% are ignored, and a token that is not a numeral refuses
+(0.5\n) cvr 0.5 (cvr ignores what follows the numeral) assertnear
+(  16 pt) cvi 16 eq (cvi skips leading space and trailing text) assert
+{ (0.5junk) cvr } stopped { pop true }{ false } ifelse
+(a glued suffix is no numeral) assert
+
 % --- an end-of-line inside a string literal: escaped, it joins
 %     the lines; raw, it is one newline character, whichever of
 %     the three conventions wrote it ---
 (ab\
 cd) length 4 eq (an escaped CRLF joins the lines) assert
-(ab\cd) length 4 eq (an escaped bare CR joins the lines) assert
+(ab\
+cd) length 4 eq (an escaped bare CR joins the lines) assert
 (ab\
 cd) length 4 eq (an escaped LF joins the lines) assert
 (a
 b) dup length 3 eq exch 1 get 10 eq and
 (a raw CRLF reads as one newline) assert
-(ab) dup length 3 eq exch 1 get 10 eq and
+(a
+b) dup length 3 eq exch 1 get 10 eq and
 (a raw CR reads as one newline) assert
 
 % --- an end-of-line marker is one white-space delimiter ---
