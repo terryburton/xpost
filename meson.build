@@ -266,6 +266,13 @@ test('semantics',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Error reporting: a top-level job error prints the standard Adobe error line
+# and flush notice; a clean quit or a caught error prints neither.
+test('error-format',
+  find_program('tests/run-error-format-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')
 #endif
