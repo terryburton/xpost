@@ -39,6 +39,21 @@ cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
 { (0.5junk) cvr } stopped { pop true }{ false } ifelse
 (a glued suffix is no numeral) assert
 
+% a source that ends inside a procedure is a syntax error, not an
+% endless scan: the scanner answers null at end of input and nowhere
+% else, a literal null in the text being a name
+/st.f (semantics.scratch) (w) file def
+st.f (1 2 { 3 4) writestring st.f closefile
+{ (semantics.scratch) (r) file cvx exec } stopped
+{ $error /errorname get /syntaxerror eq }{ false } ifelse
+(a truncated procedure ends the scan) assert
+clear
+% a complete procedure still scans and runs
+/st.f (semantics.scratch) (w) file def
+st.f (/st.tp { 6 7 add } def) writestring st.f closefile
+(semantics.scratch) (r) file cvx exec
+st.tp 13 eq (a closed procedure scans and runs) assert
+
 % --- an end-of-line inside a string literal: escaped, it joins
 %     the lines; raw, it is one newline character, whichever of
 %     the three conventions wrote it ---
