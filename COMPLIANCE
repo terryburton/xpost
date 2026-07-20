@@ -280,7 +280,9 @@ Level 2 operators
  [ ] Named Resources
  [ ] makepattern
  [ ] setpattern
- [ ] filter
+ [X] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
+     Flate, LZW, CCITTFax, DCT, ReusableStream; encode filters:
+     ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT)
  [ ] defineresource, findresource, resourcestatus, resourceforall,
      undefineresource
  [ ] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
