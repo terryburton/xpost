@@ -259,6 +259,18 @@ end
     pop //quit % the operator
 } def
 
+% report a top-level job error the way a job server does: the standard
+% error line (through handleerror), then -- only when an error really
+% occurred, not on a normal quit -- the notice that the rest of the job
+% is flushed to end of file. An interactive executive keeps going, so it
+% reports without this line.
+/.handlejoberror {
+    $error /newerror get
+    handleerror
+    { (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
+      print flush } if
+} def
+
 % execute postscript program from stdin, and handle errors,
 % but do not assume an interactive session
 /startstdin {
@@ -271,7 +283,7 @@ end
     {
         (%stdin) run
     } stopped {
-        handleerror
+        .handlejoberror
     } if
     quit
 } def
@@ -289,7 +301,7 @@ end
         inputfilename (r) file cvx exec
         executive
     } stopped {
-        handleerror
+        .handlejoberror
     } if
     quit
 } def
@@ -309,7 +321,7 @@ end
     {
         inputfile cvx exec
     } stopped {
-        handleerror
+        .handlejoberror
     } if
     quit
 } def
