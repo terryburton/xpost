@@ -148,6 +148,17 @@ countdictstack
     (exitserver continues the job) assert
 countdictstack eq (exitserver unwinds the begun serverdict) assert
 
+% --- dict growth: inserting far past a small dict's capacity grows and
+% rehashes it in place, repeatedly. Regression for a heap-use-after-free
+% where a re-insertion that relocated the memory file left the grow's
+% source-table pointer dangling: every entry must survive the growths. ---
+/GD 4 dict def
+0 1 20000 { GD exch dup put } for
+GD length 20001 eq (a repeatedly grown dict keeps every entry) assert
+GD 0 get 0 eq (the first key survives dict growth) assert
+GD 12345 get 12345 eq (a middle key survives dict growth) assert
+GD 20000 get 20000 eq (the last key survives dict growth) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
