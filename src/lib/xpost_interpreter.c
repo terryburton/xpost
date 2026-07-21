@@ -623,9 +623,6 @@ int eval(Xpost_Context *ctx)
                                errant object since it is the "entry point" to the interpreter.
                              */
 
-    if (!validate_context(ctx))
-        return unregistered;
-
     if (_xpost_interpreter_is_tracing)
     {
         //XPOST_LOG_DUMP("eval(): Executing: ");
@@ -812,6 +809,12 @@ int mainloop(Xpost_Context *ctx)
 ctxswitch:
     xpost_ctx = ctx = _switch_context(ctx);
     itpdata->cid = ctx->id;
+
+    /* the context's memory pointers are fixed for the life of a run;
+       validate them once when a context becomes current rather than
+       before every evaluation step */
+    if (!validate_context(ctx))
+        return unregistered;
 
     while(!ctx->quit)
     {
