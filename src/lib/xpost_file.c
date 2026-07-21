@@ -680,7 +680,25 @@ int xpost_file_open(Xpost_Memory_File *mem,
 #ifdef DEBUG_FILE
         printf("fopen\n");
 #endif
-        fp = fopen(fn, mode);
+        /* PostScript files are binary byte streams; force binary mode so that
+           Windows text translation -- CRLF rewriting and a 0x1A byte read as
+           end-of-file -- cannot corrupt or truncate them. On POSIX 'b' is a
+           no-op. The caller's mode string stays as given: the access
+           attributes below match against it. */
+        {
+            char bmode[8];
+            const char *fmode = mode;
+            size_t n = strlen(mode);
+
+            if (!strchr(mode, 'b') && n + 1 < sizeof bmode)
+            {
+                memcpy(bmode, mode, n);
+                bmode[n] = 'b';
+                bmode[n + 1] = '\0';
+                fmode = bmode;
+            }
+            fp = fopen(fn, fmode);
+        }
         if (fp == NULL)
         {
             switch (errno)
