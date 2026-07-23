@@ -283,6 +283,10 @@ int xpost_op_stop(Xpost_Context *ctx)
 {
     Xpost_Object f = xpost_bool_cons(0);
     Xpost_Object x;
+    /* Reaching `stop` means the error machinery ran to completion and the
+       run is recovering (or quitting cleanly): the error cascade, if any,
+       has broken. Clear the consecutive-error count that _onerror keeps. */
+    ctx->onerr_run = 0;
     /* Unwind the exec stack to the nearest enclosing stopped context --
        the false that `stopped` pushed. Pop straight to it: counting the
        whole stack first to bound the loop is O(depth) yet the marker is

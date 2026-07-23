@@ -99,6 +99,10 @@ struct _Xpost_Context {
                                    holds off a re-raise until depth recedes */
     int os_over;              /**< likewise for the operand stack */
     int ds_over;              /**< likewise for the dictionary stack */
+    int onerr_run;            /**< consecutive errors handled without the run
+                                   reaching `stop`; a runaway error cascade
+                                   (an error raised from within the error
+                                   machinery itself) drives this without bound */
 
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to
