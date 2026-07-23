@@ -245,6 +245,17 @@ end
 userdict /.wrappedprocs known not
 (the machinery keeps its state out of userdict) assert
 
+% --- the machinery's internal references are frozen: a program
+% shadowing a core operator name reaches only its own calls ---
+/Courier findfont 10 scalefont setfont
+userdict /exch 99 put
+gsave
+{ 100 100 moveto (a) show
+  newpath 10 10 moveto 20 20 lineto stroke } stopped not
+grestore
+userdict /exch undef
+(text and stroking survive a shadowed exch) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
