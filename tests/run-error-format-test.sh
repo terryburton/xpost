@@ -10,7 +10,7 @@
 set -u
 xpost=$1
 tmp=${TMPDIR:-/tmp}/errfmt-$$
-trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps' 0
+trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps' 0
 
 # 1. a top-level undefined error: the error line (with its trailing space)
 #    and then the flush notice
@@ -30,5 +30,13 @@ printf '{ oops } stopped pop (done) = quit\n' > "$tmp".caught.ps
 out=$("$xpost" -q -d null "$tmp".caught.ps </dev/null 2>&1)
 printf '%s\n' "$out" | grep -Fq 'Flushing' && exit 1
 printf '%s\n' "$out" | grep -Fq 'done' || exit 1
+
+# 4. a runaway error cascade -- an errordict handler that itself raises an
+#    error, so recovery never reaches `stop` -- must abort the job cleanly
+#    rather than spin until VM exhaustion. The meson/make-check timeout
+#    bounds the run, so a failure to abort surfaces as a test timeout.
+printf 'errordict /undefinedresult { 1 0 div } put 1 0 div\n' > "$tmp".cascade.ps
+out=$("$xpost" -q -d null "$tmp".cascade.ps </dev/null 2>&1)
+printf '%s\n' "$out" | grep -Fq 'runaway error cascade' || exit 1
 
 exit 0

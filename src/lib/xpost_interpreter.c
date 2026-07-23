@@ -316,6 +316,16 @@ int evalfunc(Xpost_Context *ctx);
 #define XPOST_OPER_STACK_LIMIT 1000000
 #define XPOST_DICT_STACK_LIMIT 5000
 
+/* Ceiling on errors handled back-to-back without the run reaching `stop`.
+   A well-formed program recovers from every error through the error
+   machinery, which ends in `stop`; that resets the count (see
+   xpost_op_stop). Only a runaway cascade -- an error raised from inside
+   the error machinery itself, before it can reach `stop` -- accumulates
+   without bound. Left unchecked it spins until VM exhaustion; this makes
+   it abort the job cleanly instead. The bound is far above any legitimate
+   volume of caught-and-recovered errors, which never advance this count. */
+#define XPOST_ERROR_CASCADE_LIMIT 4096
+
 /* raise a stack's overflow error on crossing its ceiling; 0 if every
    stack is within bounds or already reported */
 static int _stack_ceilings(Xpost_Context *ctx)
@@ -724,6 +734,20 @@ void _onerror(Xpost_Context *ctx,
         fprintf(stderr, "LOOP in error handler\nabort\n");
         ++ctx->quit;
         /*exit(undefinedresult); */
+    }
+
+    /* A runaway error cascade re-enters here without ever reaching `stop`
+       (the error machinery raises before it can recover), so the nested
+       `in_onerror` guard above -- reset on every completed pass -- never
+       trips. Count consecutive handled errors instead and abort the job
+       when they run away, turning an otherwise unbounded spin into a
+       clean errored exit. xpost_op_stop clears the count on recovery. */
+    if (++ctx->onerr_run > XPOST_ERROR_CASCADE_LIMIT)
+    {
+        fprintf(stderr, "runaway error cascade (%s)\nabort\n",
+                errorname[err]);
+        ++ctx->quit;
+        return;
     }
 
     ++itpdata->in_onerror;
@@ -1403,8 +1427,13 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
             ps_file_ptr = inputptr;
             break;
         case XPOST_INPUT_RESUME: /* resuming a returned session, skip startup */
+            /* the resumed run restarts the cascade count */
+            ctx->onerr_run = 0;
             goto run;
     }
+
+    /* a fresh run starts with a clean cascade count */
+    ctx->onerr_run = 0;
 
     /* prime the exec stack
        so it starts with a 'start*' procedure,

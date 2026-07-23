@@ -315,6 +315,7 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->es_over = 0;
     ctx->os_over = 0;
     ctx->ds_over = 0;
+    ctx->onerr_run = 0;
     ctx->xpost_interpreter_cid_init = xpost_interpreter_cid_init;
     ctx->xpost_interpreter_alloc_local_memory = xpost_interpreter_alloc_local_memory;
     ctx->xpost_interpreter_alloc_global_memory = xpost_interpreter_alloc_global_memory;
