@@ -235,6 +235,39 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
 #endif
 }
 
+int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
+                                  unsigned int stackadr,
+                                  int type,
+                                  Xpost_Object *out)
+{
+    unsigned char *base = mem->base;
+    Xpost_Stack *root = (Xpost_Stack *)(base + stackadr);
+    Xpost_Stack *seg = (Xpost_Stack *)(base + root->prevseg); /* top segment */
+    int idx = 0;
+
+    /* Walk the segment chain once from the top rather than calling
+       topdown_fetch per index -- each of those re-walks the chain, so a scan
+       of the whole stack was O(n^2). Here each element is visited once. */
+    for (;;)
+    {
+        int k;
+        for (k = (int)seg->top; k-- > 0; )
+        {
+            if ((int)xpost_object_get_type(seg->data[k]) == type)
+            {
+                if (out)
+                    *out = seg->data[k];
+                return idx;
+            }
+            idx++;
+        }
+        if (seg == root)
+            break;
+        seg = (Xpost_Stack *)(base + seg->prevseg);
+    }
+    return -1;
+}
+
 Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
                                         unsigned int stackadr,
                                         int idx)

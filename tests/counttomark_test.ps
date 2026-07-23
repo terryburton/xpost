@@ -1,0 +1,64 @@
+% counttomark and the [ ] / << >> constructors: correctness + O(n)
+% performance guard, run through `xpost -d null` by run-ps-test.sh; prints
+% SUCCESS iff every assertion holds. counttomark reports how many operands
+% sit above the topmost mark, and array `]` and dictionary `>>` construction
+% are built on it. A former implementation fetched each operand with a
+% top-down index lookup that re-walked the stack segments, so counttomark --
+% and therefore every `[ ... ]` and `<< ... >>` -- was O(n^2) in the number
+% of elements above the mark. A large array or dictionary literal then
+% dominated any job that assembled one. The big-build cases below must stay
+% fast; a return to O(n^2) surfaces as a run-time timeout in meson/make-check.
+% Outputs were checked value-for-value against Ghostscript.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- counttomark counts only the elements above the topmost mark ---
+mark 10 20 30 counttomark 3 eq (counttomark counts 3) assert
+cleartomark
+mark counttomark 0 eq (counttomark of empty span is 0) assert
+cleartomark
+% a mark below another mark is not reached: count stops at the topmost mark
+mark 1 2 mark 7 8 9 counttomark 3 eq (counttomark stops at topmost mark) assert
+cleartomark cleartomark
+
+% --- array construction reverts the stack order correctly ---
+[ 10 20 30 ] dup 0 get 10 eq (array build elem 0) assert
+dup 1 get 20 eq (array build elem 1) assert
+dup 2 get 30 eq (array build elem 2) assert
+length 3 eq (array build length) assert
+[ ] length 0 eq (empty array build length) assert
+
+% --- dictionary construction pairs keys with values correctly ---
+<< /a 1 /b 2 /c 3 >> dup /a get 1 eq (dict build a) assert
+dup /b get 2 eq (dict build b) assert
+dup /c get 3 eq (dict build c) assert
+length 3 eq (dict build length) assert
+<< >> length 0 eq (empty dict build length) assert
+
+% --- a count that spans several 1000-element stack segments ---
+mark 20000 { 7 } repeat counttomark 20000 eq (multi-segment counttomark) assert
+cleartomark
+
+% performance guard: counttomark on a deep operand stack must stay O(n).
+% Arrays and dicts cap at 65535 elements here, so the [ ] / << >> paths
+% cannot themselves reach a punishing size; drive counttomark directly. A
+% mark with 200000 operands above it is counted 600 times: at O(n^2) each
+% count re-walks the segment chain per index (~50ms each) and the 600
+% repetitions stall for tens of seconds, timing the test out; at O(n) each
+% count is a single pass and the whole loop is well under a second. Each
+% count is also checked, so a miscount in the segment walk fails outright.
+mark 200000 { 0 } repeat
+600 { counttomark 200000 eq (repeated counttomark stays exact) assert } repeat
+cleartomark
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

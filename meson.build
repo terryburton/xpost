@@ -290,6 +290,13 @@ test('save-restore',
   args: [ xpost_exe, files('tests/save_restore_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# counttomark and the [ ] / << >> constructors built on it: correctness plus
+# a performance guard -- an O(n^2) counttomark on a deep stack times the test out.
+test('counttomark',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/counttomark_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',

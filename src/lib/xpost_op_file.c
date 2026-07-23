@@ -407,17 +407,13 @@ int xpost_op_file_status (Xpost_Context *ctx,
 static
 int xpost_op_currentfile (Xpost_Context *ctx)
 {
-    int z = xpost_stack_count(ctx->lo, ctx->es);
-    int i;
     Xpost_Object o;
-    for (i = 0; i<z; i++)
+    /* topmost file on the exec stack, found in a single top-down pass (the
+       former topdown_fetch-per-index loop was O(depth^2)) */
+    if (xpost_stack_topdown_find_type(ctx->lo, ctx->es, filetype, &o) >= 0)
     {
-        o = xpost_stack_topdown_fetch(ctx->lo, ctx->es, i);
-        if (xpost_object_get_type(o) == filetype)
-        {
-            xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(o));
-            return 0;
-        }
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(o));
+        return 0;
     }
     o = xpost_file_cons(ctx->lo, NULL);
     if (xpost_object_get_type(o) == invalidtype)
