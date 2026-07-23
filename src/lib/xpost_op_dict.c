@@ -98,6 +98,10 @@ int xpost_op_dict_to_mark(Xpost_Context *ctx)
     i = t.int_.val;
     if ((i % 2) == 1)
         return rangecheck;
+    if (i > 65535) /* sz field is 16 bits, as the dict operator enforces:
+                      raise limitcheck rather than let dict_cons truncate the
+                      capacity and then fault putting the discarded pairs */
+        return limitcheck;
     d = xpost_object_cvlit(xpost_dict_cons (ctx, i));
     if (xpost_object_get_type(d) == nulltype)
         return VMerror;
