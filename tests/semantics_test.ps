@@ -229,6 +229,22 @@ gsave
 grestore
 userdict /bp undef userdict /buf undef userdict /bz undef
 
+% --- the machinery's data roots and state are its own: a program may
+% take the names graphicsdict, DEVICE and =string for itself, and it
+% finds no machinery state in userdict to disturb ---
+/Courier findfont 10 scalefont setfont
+5 dict begin
+/graphicsdict (mine) def
+/DEVICE 42 def
+/=string 7 def
+{ newpath 10 10 moveto 40 40 lineto stroke
+  100 100 moveto (a) show
+  gsave 20 20 10 10 rectfill grestore } stopped not
+end
+(painting survives shadowed graphicsdict, DEVICE and =string) assert
+userdict /.wrappedprocs known not
+(the machinery keeps its state out of userdict) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit

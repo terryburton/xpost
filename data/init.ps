@@ -76,6 +76,11 @@ serverdict /exitserver {
 
 %(2\n)print
 /=string 128 string def
+% the scratch string serves every cvs in the machinery: as an operator
+% pushing it, procedures binding as they load freeze the reference,
+% and a program may take the name for itself
+/.=stringproc [ //=string ] cvx def
+/=string dup /.=stringproc load .wrapop def
 /=print {
     dup type /stringtype ne {
         //=string cvs
@@ -674,7 +679,7 @@ end % userdict
     % executable arrays promote; the procedures stay defed in
     % .wrappedprocs, keeping them inside the collector's view (the
     % operator table is outside it).
-    userdict /.wrappedprocs 128 dict put
+    graphicsdict /.wrappedprocs 128 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
         /clip /eoclip /initclip /rectclip /clippath
@@ -693,7 +698,7 @@ end % userdict
         dup userdict exch known {
             dup userdict exch get
             dup type /arraytype eq 1 index xcheck and {
-                userdict /.wrappedprocs get 2 index 2 index put
+                graphicsdict /.wrappedprocs get 2 index 2 index put
                 1 index exch .wrapop
                 userdict 3 1 roll put
             }{ pop pop } ifelse
