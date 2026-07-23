@@ -269,6 +269,33 @@ int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
     return -1;
 }
 
+int xpost_stack_peek_top(Xpost_Memory_File *mem,
+                         unsigned int stackadr,
+                         int n,
+                         Xpost_Object *out)
+{
+    unsigned char *base = mem->base;
+    Xpost_Stack *root = (Xpost_Stack *)(base + stackadr);
+    Xpost_Stack *seg = (Xpost_Stack *)(base + root->prevseg); /* top segment */
+    int got = 0;
+
+    /* One top-down pass: out[0] is the topmost element. Fetching each of the
+       top n with xpost_stack_topdown_fetch would re-walk the segment chain per
+       index and be O(n^2) on a multi-segment stack. */
+    while (got < n)
+    {
+        int t = (int)seg->top;
+        int take = (n - got < t) ? (n - got) : t;
+        int m;
+        for (m = 0; m < take; m++)
+            out[got + m] = seg->data[t - 1 - m];
+        got += take;
+        if (got < n)
+            seg = (Xpost_Stack *)(base + seg->prevseg);
+    }
+    return got;
+}
+
 Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
                                         unsigned int stackadr,
                                         int idx)
