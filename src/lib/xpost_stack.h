@@ -122,6 +122,17 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
                                 Xpost_Object obj);
 
 /**
+ * @brief Top-down index of the topmost element whose object type is @p type,
+ * or -1 if none. When @p out is non-NULL and a match is found it receives
+ * that element. One top-down segment pass: O(elements scanned), where a loop
+ * of xpost_stack_topdown_fetch per index would be O(n^2) on a segmented stack.
+ */
+int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
+                                  unsigned stackadr,
+                                  int type,
+                                  Xpost_Object *out);
+
+/**
  * @brief Index the stack from the bottom up, fetching object.
  */
 Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,

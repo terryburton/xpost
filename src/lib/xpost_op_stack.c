@@ -225,18 +225,18 @@ int xpost_op_cleartomark(Xpost_Context *ctx)
    count elements down to mark */
 int xpost_op_counttomark(Xpost_Context *ctx)
 {
-    unsigned i;
-    unsigned z;
-    z = xpost_stack_count(ctx->lo, ctx->os);
-    for (i = 0; i < z; i++)
-    {
-        if (xpost_stack_topdown_fetch(ctx->lo, ctx->os, i).tag == marktype)
-        {
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
-            return 0;
-        }
-    }
-    return unmatchedmark;
+    /* One top-down pass to the mark. The former loop fetched each operand with
+       xpost_stack_topdown_fetch per index, and each of those re-walks the
+       segment chain, so counttomark was O(depth^2). counttomark also underlies
+       the [ ] and << >> constructors (via xpost_op_array_to_mark /
+       xpost_op_dict_to_mark), so a large array or dictionary literal inherited
+       that quadratic cost. */
+    int i = xpost_stack_topdown_find_type(ctx->lo, ctx->os, marktype, NULL);
+    if (i < 0)
+        return unmatchedmark;
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i)))
+        return stackoverflow;
+    return 0;
 }
 
 int xpost_oper_init_stack_ops(Xpost_Context *ctx,
