@@ -778,6 +778,107 @@ void _onerror(Xpost_Context *ctx,
         }
     }
 
+    /* An error leaving a wrapped operator is the operator's error.
+       Each live call left its frame on the exec stack -- the operator
+       and the operand and dict depths at the call, under the finish
+       marker -- so the frames above the nearest stopped context are
+       exactly the calls the coming stop will unwind out of: the
+       innermost names the command, and the stacks go back to their
+       depths at the calls -- dropping what the calls part-way pushed,
+       though what they had already consumed stays consumed. A call
+       whose frame sits below the stopped context is left alone: its
+       procedure keeps running and its stacks are its own business. */
+    {
+        Xpost_Object fmark = xpost_bool_cons(0);
+        int found = 0;
+        int minos = 0, minds = 0;
+        unsigned int cmdop = 0;
+        /* Walk the exec stack top-down in a SINGLE pass over its
+           segments -- O(depth), not the O(depth^2) that repeated
+           topdown_fetch would cost. A deep stack at error time (a
+           runaway or a cascading error handler) would otherwise make
+           error handling itself the bottleneck. Stop at the nearest
+           stopped context (a bool false); above it, each wrapped
+           call's finish marker is followed, deeper, by its ds, os
+           and opcode integers. */
+        Xpost_Stack *esroot = (Xpost_Stack *)(ctx->lo->base + ctx->es);
+        Xpost_Stack *seg = esroot->prevseg
+            ? (Xpost_Stack *)(ctx->lo->base + esroot->prevseg) : esroot;
+        int p = (int)seg->top - 1;
+        int pending = 0; /* frame ints still to read: 3->ds 2->os 1->opcode */
+        int fds = 0, fos = 0;
+
+        for (;;)
+        {
+            Xpost_Object x;
+            if (p < 0)
+            {
+                if (seg == esroot)
+                    break;
+                seg = (Xpost_Stack *)(ctx->lo->base + seg->prevseg);
+                p = (int)seg->top - 1;
+                continue;
+            }
+            x = seg->data[p];
+            p--;
+            if (pending)
+            {
+                if (xpost_object_get_type(x) != integertype)
+                {
+                    pending = 0; /* malformed frame -- ignore it */
+                    continue;
+                }
+                if (pending == 3)
+                    fds = (int)x.int_.val;
+                else if (pending == 2)
+                    fos = (int)x.int_.val;
+                else
+                {
+                    if (!found)
+                    {
+                        found = 1;
+                        cmdop = (unsigned int)x.int_.val;
+                        minos = fos;
+                        minds = fds;
+                    }
+                    else
+                    {
+                        if (fos < minos) minos = fos;
+                        if (fds < minds) minds = fds;
+                    }
+                }
+                --pending;
+                continue;
+            }
+            if (xpost_dict_compare_objects(ctx, fmark, x) == 0)
+                break; /* the coming stop unwinds to here */
+            if (xpost_object_get_type(x) == operatortype &&
+                x.mark_.padw == (unsigned int)ctx->opcode_shortcuts.wrapdone)
+                pending = 3;
+        }
+        if (found)
+        {
+            int oscount, dscount;
+
+            ctx->currentobject = xpost_operator_cons_opcode(cmdop);
+            oscount = xpost_stack_count(ctx->lo, ctx->os);
+            while (oscount > minos)
+            {
+                (void)xpost_stack_pop(ctx->lo, ctx->os);
+                --oscount;
+            }
+            dscount = xpost_stack_count(ctx->lo, ctx->ds);
+            if (dscount > minds && minds >= 3)
+            {
+                while (dscount > minds)
+                {
+                    (void)xpost_stack_pop(ctx->lo, ctx->ds);
+                    --dscount;
+                }
+            }
+        }
+    }
+
     /* printf("1\n"); */
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
 

@@ -18,25 +18,30 @@ Level 1 operators
  [ ] eofill
  [ ] clip with complex paths
  [ ] eoclip
- [/] setlinejoin (implemented bevel joins and round joins)
- [X] currentlinejoin (implemented)
- [ ] setlinecap (stubbed)
- [X] currentlinecap (stubbed)
- [/] image (implemented for 8-bit, 4-bit, 2-bit, and 1-bit)
+ [/] setlinejoin
+ [X] currentlinejoin
+ [ ] setlinecap
+ [X] currentlinecap
+ [/] image
  [ ] imagemask
- [X] settransfer (implemented)
- [X] currenttransfer (implemented)
- [ ] sethalftone  (low priority)
- [ ] currenthalftone  (low priority)
+ [X] settransfer
+ [X] currenttransfer
+ [ ] setscreen
+ [ ] currentscreen
+ [ ] setcolorscreen
+ [ ] currentcolorscreen
+ [ ] sethalftone
+ [ ] currenthalftone
  [ ] makefont
- [X] ashow (implemented)
- [X] widthshow (implemented)
- [X] awidthshow (implemented)
- [X] kshow (implemented)
- [X] stringwidth (implemented)
- [/] Type-3 Fonts (implemented)
+ [X] ashow
+ [X] widthshow
+ [X] awidthshow
+ [X] kshow
+ [X] stringwidth
+ [/] Type-3 Fonts
  [ ] font data caching
  [ ] definefont for modified font properties (matrix, encoding, etc.)
+ [ ] base font CharStrings
 
  [X] pop
  [X] exch
@@ -172,8 +177,8 @@ Level 1 operators
  [X] currentgray
  [X] setrgbcolor
  [X] currentrgbcolor
- [ ] sethsbcolor
- [ ] currenthsbcolor
+ [X] sethsbcolor
+ [X] currenthsbcolor
  [X] settransfer
  [X] currenttransfer
  [X] matrix
@@ -215,26 +220,115 @@ Level 1 operators
  [X] fill
  [ ] eofill
  [X] stroke
+ [X] strokepath
+ [X] reversepath
  [/] image
  [ ] imagemask
  [X] showpage
  [X] copypage
- [ ] currentrasteropcode
- [ ] setrasteropcode
  [X] setfont
  [X] currentfont
  [X] show
  [X] stringwidth
+ [X] findfont
+ [X] scalefont
+ [X] setcharwidth
+ [X] = and == (also stack, pstack, =print)
+ [X] executive (also prompt, start)
+ [X] handleerror (an error out of a procedure-implemented operator
+     restores the stacks to their depths at the call; operands the
+     procedure had already consumed are not pushed back)
+ [X] run
+ [X] initgraphics
+ [X] nulldevice
+ [X] pathforall
+ [X] version
+ [ ] eexec
+ [ ] internaldict
+ [ ] cachestatus
+ [ ] setcachelimit
 
 Level 2 operators
 -----------------
 
  [X] arct
+ [X] rectfill
+ [X] rectstroke
+ [X] rectclip
+ [X] selectfont
+ [/] setcolorspace
+ [X] currentcolorspace
+ [X] setcolor
+ [X] currentcolor
+ [ ] setpagedevice
+ [ ] currentpagedevice
+ [ ] xshow
+ [ ] yshow
+ [ ] xyshow
+ [ ] glyphshow
  [ ] colorimage
  [ ] image with dict argument
+ [ ] imagemask with dict argument
  [ ] setcolortransfer
  [ ] currentcolortransfer
+ [ ] setblackgeneration
+ [ ] currentblackgeneration
+ [ ] setundercolorremoval
+ [ ] currentundercolorremoval
+ [ ] setcolorrendering
+ [ ] currentcolorrendering
  [ ] Named Resources
+ [ ] makepattern
+ [ ] setpattern
+ [ ] filter
+ [ ] defineresource, findresource, resourcestatus, resourceforall,
+     undefineresource
+ [ ] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
+ [X] setglobal, currentglobal, gcheck
+ [X] gstate, setgstate, currentgstate
+ [X] packedarray (built as ordinary arrays), setpacking,
+     currentpacking
+ [X] setcmykcolor, currentcmykcolor
+ [X] setoverprint, currentoverprint (recorded only)
+ [X] setsystemparams, currentsystemparams, setuserparams,
+     currentuserparams, setdevparams, currentdevparams (accepted;
+     the parameter sets are minimal)
+ [X] deletefile, renamefile, filenameforall
+ [X] fileposition, setfileposition
+ [X] cleardictstack
+ [X] undef
+ [X] vmreclaim (a request only: collection is not implemented)
+ [X] realtime
+ [X] product, revision, serialnumber
+ [ ] languagelevel
+ [ ] undefinefont
+ [ ] rootfont
+ [ ] startjob
+ [ ] setcachedevice2
+ [ ] setcacheparams, currentcacheparams
+ [ ] user paths
+ [ ] insideness testing
+ [ ] user objects
+ [ ] execform
+ [ ] setstrokeadjust, currentstrokeadjust (recorded only)
+ [ ] shared VM
+ [ ] binary object sequences
+
+Level 3 operators
+-----------------
+
+ [ ] shfill
+ [ ] composite fonts
+ [ ] clipsave
+ [ ] cliprestore
+ [ ] setsmoothness, currentsmoothness (recorded only)
+ [ ] findcolorrendering
+
+Extensions
+----------
+
+ [ ] pdfmark
+ [ ] page-size operators of the printer products
 
 Display Postscript
 ------------------
@@ -245,8 +339,10 @@ Display Postscript
 NeWS
 ----
 
- [ ] getenv/putenv
+ [X] getenv/putenv
  [X] magic dictionaries
+ [ ] setrasteropcode
+ [ ] currentrasteropcode
  [ ] classes
  [ ] canvases
  [ ] process type objects (magic dictionary controlling a DPS context)
@@ -261,49 +357,15 @@ Typical output devices
  [ ] jpeg
  [ ] png
  [ ] pdf
+ [ ] svg
  [ ] bounding-box
  [ ] dsc-compliant distilled ps
  [X] xcb
  [X] ms-windows
 
-PLRM 8.2 operator compliance campaign — deviations
----------------------------------------------------
+Known behavioural deviations
+----------------------------
 
-Recorded as found while working PLRM 8.2 operator by operator. Fixed items are
-listed for the record; open items are genuine remaining deviations.
-
- [X] mod    zero divisor is undefinedresult, not a SIGFPE (was a crash); fixed
- [X] sqrt   negative operand is rangecheck, not a silent NaN; fixed
- [X] atan/sin/cos  match the PLRM examples (a truncated RAD_PER_DEG had skewed
-     them, e.g. 1 0 atan gave 89.99996); fixed
- [X] repeat negative count is rangecheck (PLRM: nonnegative integer), not a
-     silent no-op; fixed
- [/] setpacking / currentpacking  the array packing mode is not maintained:
-     currentpacking stays false and setpacking has no effect, because the state
-     lived in systemdict, which is now sealed read-only. PLRM 8.2 makes the mode
-     a per-context, save/restore-subject parameter that governs scanner { }
-     packing. Packed arrays built explicitly by packedarray are unaffected.
- [/] error operand restoration  after an operator errors, coerced operand values
-     may remain on the stack where PLRM 3.11 restores the originals -- e.g.
-     1 0 div under stopped leaves 1.0 0.0 rather than the original 1 0 -- because
-     the dispatcher coerces int operands to real before the operator runs.
- [/] real precision  reals are IEEE single precision (PLRM 3.3.2 permits single
-     or double), so results carry ~7 significant figures and large values may
-     print in exponent form (4e+09) where a double-precision interpreter prints
-     4000000000. Values are correct; only precision and representation differ.
- [X] transform / dtransform / itransform / idtransform / invertmatrix  a matrix
-     operand that is not a six-element array is rangecheck, not an out-of-bounds
-     read; fixed
- [X] setlinecap / setlinejoin  values outside 0..2, and setmiterlimit below 1,
-     are rangecheck, not silently accepted; fixed
- [X] rotate / arc / arct  built angles through a truncated RAD_PER_DEG and so
-     missed the axis angles; now full precision, and a right-angle arct corner is
-     a single Bezier segment; fixed
- [X] status  gained the (filename) form (pages bytes referred created true, or
-     false) alongside the file-object form; fixed
- [X] currentuserparams / currentsystemparams  return a dictionary of the current
-     parameters (stack limits, VMReclaim / VMThreshold, RealFormat, ByteOrder,
-     MaxFontCache); setuserparams / setsystemparams apply the parameters they
-     recognise; fixed
- [X] bytesavailable  reports -1 for a filter or other non-seekable file rather
-     than reading a FILE* field those file types do not have; fixed
+ Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
+ carry about seven significant figures and large values print in exponent form
+ (4e+09).
