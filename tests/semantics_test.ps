@@ -218,6 +218,17 @@ countdictstack /ep.dd exch def
 { ep.d } stopped pop
 countdictstack ep.dd eq (the dict depth at the call comes back) assert
 
+% --- machinery runs a program's procedures on the program's stacks ---
+% a callback's defs reach the program's dictionaries, and the
+% machinery's private names are out of the callback's reach
+gsave
+{ 10 10 8 [10 0 0 -10 0 10]
+  { /bp (x) def /buf 5 def /bz 99 def <00112233445566778899> }
+  image } stopped not
+(an image source defining the row pump's names completes) assert
+grestore
+userdict /bp undef userdict /buf undef userdict /bz undef
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit

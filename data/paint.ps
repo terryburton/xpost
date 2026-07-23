@@ -144,7 +144,10 @@
     1 {
         {
             bp bz ge {exit} if
-            datasrc % src
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
                 8 {
                     dup % char char
@@ -160,7 +163,10 @@
     2 {
         {
             bp bz ge {exit} if
-            datasrc % src
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
 
                 4 {
@@ -196,7 +202,10 @@
     4 {
         {
             bp bz ge {exit} if
-            datasrc % str
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
                 0 exch dup % 0 char char
 
@@ -215,7 +224,10 @@
     8 {
         {
             bp bz ge {exit} if
-            datasrc
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             buf exch bp exch
             dup length
             %pstack()=
