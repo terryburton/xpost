@@ -235,9 +235,6 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
     tab->tab[ent].mark &= ~XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_MASK; // clear TLEV field
     tab->tab[ent].mark |= (tlev << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET);  // set TLEV field
 
-    o.saverec_.tag = tag;
-    o.saverec_.pad = pad;
-    o.saverec_.src = ent;
     cpy = _copy_ent(mem, ent);
     if (cpy == 0)
     {
@@ -245,7 +242,13 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
         return 0;
     }
 
-    o.saverec_.cpy = cpy;
+    /* src and cpy may be wider than a word; their high bits ride in the
+       tag (see XPOST_SAVEREC_TAG in xpost_save.h). pad keeps its meaning:
+       an array's element count for the collector, zero otherwise. */
+    o.saverec_.tag = XPOST_SAVEREC_TAG(tag, ent, cpy);
+    o.saverec_.pad = pad;
+    o.saverec_.src = (word)ent;
+    o.saverec_.cpy = (word)cpy;
     xpost_stack_push(mem, sav.save_.stk, o);
     return 1;
 }
@@ -282,8 +285,8 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
         rec = xpost_stack_pop(mem, sav.save_.stk);
         if (xpost_object_get_type(rec) == invalidtype)
             return;
-        sent = rec.saverec_.src;
-        cent = rec.saverec_.cpy;
+        sent = XPOST_SAVEREC_SRC(rec);
+        cent = XPOST_SAVEREC_CPY(rec);
         XPOST_LOG_INFO("replacing ent %u with copy ent %u", sent, cent);
         if (sent >= tab->nextent)
         {
