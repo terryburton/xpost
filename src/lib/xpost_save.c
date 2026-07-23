@@ -100,7 +100,22 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
         return null;
     }
     v.save_.lev = xpost_stack_count(mem, vs);
-    xpost_stack_init(mem, &v.save_.stk);
+    if (mem->free_substack)
+    {
+        /* reuse the record stack a previous restore parked. It is a single
+           segment (only those are pooled) and already unreferenced; empty
+           it before handing it out. */
+        Xpost_Stack *s;
+        v.save_.stk = mem->free_substack;
+        mem->free_substack = 0;
+        s = (Xpost_Stack *)(mem->base + v.save_.stk);
+        s->top = 0;
+        s->prevseg = v.save_.stk;
+    }
+    else
+    {
+        xpost_stack_init(mem, &v.save_.stk);
+    }
     xpost_stack_push(mem, vs, v);
     return v;
 }
@@ -328,6 +343,23 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
                 >> XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
             tab->tab[sent].mark &= ~XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_MASK;
             tab->tab[sent].mark |= (llv << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET);
+        }
+    }
+
+    /* The record stack is now empty and, with its save object popped, wholly
+       unreferenced. It is a raw file allocation the collector cannot reclaim
+       (xpost_stack_free is a broken stub, hence the dead line below), so a
+       save/restore-heavy job would leak one per save level. Park a single
+       one for the next save to reuse. Only single-segment stacks are pooled
+       -- the overwhelming common case, and it keeps reuse a plain top reset;
+       a stack that grew across segments is left as it was. */
+    {
+        Xpost_Stack *sub = (Xpost_Stack *)(mem->base + sav.save_.stk);
+        if (mem->free_substack == 0 && sub->nextseg == 0)
+        {
+            sub->top = 0;
+            sub->prevseg = sav.save_.stk;
+            mem->free_substack = sav.save_.stk;
         }
     }
     //xpost_stack_free(mem, sav.save_.stk);
