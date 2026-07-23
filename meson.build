@@ -317,6 +317,13 @@ test('vm',
   args: [ xpost_exe, files('tests/vm_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# roll operator: correctness (checked against Ghostscript) plus a large-roll
+# performance guard -- an O(n^2) roll on a deep stack times the test out.
+test('roll',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/roll_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # counttomark and the [ ] / << >> constructors built on it: correctness plus
 # a performance guard -- an O(n^2) counttomark on a deep stack times the test out.
 test('counttomark',

@@ -129,50 +129,64 @@ int IIroll(Xpost_Context *ctx,
            Xpost_Object N,
            Xpost_Object J)
 {
-    Xpost_Object *t;
-    Xpost_Object r;
-    int i;
+    Xpost_Object *src;
+    unsigned char *base;
+    Xpost_Stack *root, *top, *seg;
     int n = N.int_.val;
     int j = J.int_.val;
+    int got;
     if (n < 0)
         return rangecheck;
     if (n == 0) return 0;
+    if (n > xpost_stack_count(ctx->lo, ctx->os))
+        return stackunderflow;
     if (j < 0) j = n - ((- j) % n);
     j %= n;
     if (j == 0) return 0;
 
-    t = malloc((n - j) * sizeof(Xpost_Object));
-    if (!t)
+    /* roll touches each of the top n operands a constant number of times,
+       so it is inherently O(n). The former per-element topdown_fetch /
+       topdown_replace each walked O(index) stack segments, making a roll of
+       a deep stack O(n^2). Snapshot the top n operands in a single top-down
+       segment pass (src[0] is the topmost), then write them back rotated in
+       one more pass: element at top-down position i receives the operand
+       that was at position (i + j) mod n. Neither pass allocates VM, so the
+       cached base/segment pointers stay valid throughout. */
+    src = malloc((size_t)n * sizeof(Xpost_Object));
+    if (!src)
         return VMerror;
-    for (i = 0; i < n-j; i++)
+
+    base = ctx->lo->base;
+    root = (Xpost_Stack *)(base + ctx->os);
+    top = (Xpost_Stack *)(base + root->prevseg);
+
+    seg = top; got = 0;
+    while (got < n)
     {
-        r = xpost_stack_topdown_fetch(ctx->lo, ctx->os, n - 1 - i);
-        if (xpost_object_get_type(r) == invalidtype){
-	    free(t);
-            return stackunderflow;
-	}
-        t[i] = r;
+        int t = (int)seg->top;
+        int take = (n - got < t) ? (n - got) : t;
+        int m;
+        for (m = 0; m < take; m++)
+            src[got + m] = seg->data[t - 1 - m];
+        got += take;
+        if (got < n)
+            seg = (Xpost_Stack *)(base + seg->prevseg);
     }
-    for (i = 0; i < j; i++)
+
+    seg = top; got = 0;
+    while (got < n)
     {
-        r = xpost_stack_topdown_fetch(ctx->lo, ctx->os, j - 1 - i);
-        if (xpost_object_get_type(r) == invalidtype){
-	    free(t);
-            return stackunderflow;
-	}
-        if (!xpost_stack_topdown_replace(ctx->lo, ctx->os, n - 1 - i, r)){
-	    free(t);
-            return stackunderflow;
-	}
+        int t = (int)seg->top;
+        int put = (n - got < t) ? (n - got) : t;
+        int m;
+        for (m = 0; m < put; m++)
+            seg->data[t - 1 - m] = src[(got + m + j) % n];
+        got += put;
+        if (got < n)
+            seg = (Xpost_Stack *)(base + seg->prevseg);
     }
-    for (i = 0; i < n-j; i++)
-    {
-        if (!xpost_stack_topdown_replace(ctx->lo, ctx->os, n - j - 1 - i, t[i])){
-	    free(t);
-            return stackunderflow;
-	}
-    }
-    free(t);
+
+    free(src);
     return 0;
 }
 
