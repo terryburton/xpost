@@ -93,15 +93,36 @@ static
 int Icopy(Xpost_Context *ctx,
           Xpost_Object n)
 {
+    int nn = n.int_.val;
+    Xpost_Object *src;
     int i;
-    if (n.int_.val < 0)
+
+    if (nn < 0)
         return rangecheck;
-    if (n.int_.val > xpost_stack_count(ctx->lo, ctx->os))
+    if (nn > xpost_stack_count(ctx->lo, ctx->os))
         return stackunderflow;
-    for (i=0; i < n.int_.val; i++)
-        if (!xpost_stack_push(ctx->lo, ctx->os,
-                              xpost_stack_topdown_fetch(ctx->lo, ctx->os, n.int_.val - 1)))
+    if (nn == 0)
+        return 0;
+
+    /* Snapshot the top n operands in one pass, then push the copies. The
+       former loop re-fetched a fixed deep index (n-1) on every push, and each
+       fetch walked O(n) stack segments, so copy was O(n^2) on a deep stack.
+       Snapshot before pushing because a push may grow and move the memory
+       file, invalidating any cached base pointer. src[0] is the topmost, so
+       pushing src[n-1]..src[0] restores the operands' order above the copy. */
+    src = malloc((size_t)nn * sizeof(Xpost_Object));
+    if (!src)
+        return VMerror;
+    xpost_stack_peek_top(ctx->lo, ctx->os, nn, src);
+    for (i = nn - 1; i >= 0; i--)
+    {
+        if (!xpost_stack_push(ctx->lo, ctx->os, src[i]))
+        {
+            free(src);
             return stackoverflow;
+        }
+    }
+    free(src);
     return 0;
 }
 
@@ -148,30 +169,19 @@ int IIroll(Xpost_Context *ctx,
        so it is inherently O(n). The former per-element topdown_fetch /
        topdown_replace each walked O(index) stack segments, making a roll of
        a deep stack O(n^2). Snapshot the top n operands in a single top-down
-       segment pass (src[0] is the topmost), then write them back rotated in
-       one more pass: element at top-down position i receives the operand
-       that was at position (i + j) mod n. Neither pass allocates VM, so the
-       cached base/segment pointers stay valid throughout. */
+       pass (src[0] is the topmost), then write them back rotated in one more
+       pass: element at top-down position i receives the operand that was at
+       position (i + j) mod n. Neither pass allocates VM, so the cached
+       base/segment pointers stay valid throughout. */
     src = malloc((size_t)n * sizeof(Xpost_Object));
     if (!src)
         return VMerror;
 
+    xpost_stack_peek_top(ctx->lo, ctx->os, n, src);
+
     base = ctx->lo->base;
     root = (Xpost_Stack *)(base + ctx->os);
     top = (Xpost_Stack *)(base + root->prevseg);
-
-    seg = top; got = 0;
-    while (got < n)
-    {
-        int t = (int)seg->top;
-        int take = (n - got < t) ? (n - got) : t;
-        int m;
-        for (m = 0; m < take; m++)
-            src[got + m] = seg->data[t - 1 - m];
-        got += take;
-        if (got < n)
-            seg = (Xpost_Stack *)(base + seg->prevseg);
-    }
 
     seg = top; got = 0;
     while (got < n)

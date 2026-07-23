@@ -1,11 +1,13 @@
-% roll operator: correctness + O(n) performance guard, run through
+% roll and copy operators: correctness + O(n) performance guard, run through
 % `xpost -d null` by run-ps-test.sh; prints SUCCESS iff every assertion
-% holds. `roll` shuffles the top n operands; it is inherently O(n), but a
-% former implementation walked O(index) stack segments per element, making
-% a roll of a deep stack O(n^2) -- a large roll then dominated any job that
-% built a deep operand stack. The big-roll case below must stay fast; a
-% return to O(n^2) surfaces as a run-time timeout in meson/make-check.
-% Outputs were checked value-for-value against Ghostscript.
+% holds. Both shuffle or duplicate the top n operands and are inherently
+% O(n), but a former implementation walked O(index) stack segments per
+% element (roll fetched/replaced per index; copy re-fetched a fixed deep
+% index on every push), making either O(n^2) on a deep stack -- a large roll
+% or copy then dominated any job that built a deep operand stack. The
+% big-roll and big-copy cases below must stay fast; a return to O(n^2)
+% surfaces as a run-time timeout in meson/make-check. Outputs were checked
+% value-for-value against Ghostscript.
 
 /faildict 2 dict def
 faildict /n 0 put
@@ -51,6 +53,21 @@ clear
 mark 200000 { 0 } repeat
 200000 99999 roll
 cleartomark
+
+% copy duplicates the top n operands, preserving order (top-down)
+1 2 3  3 copy
+3 eq (copy pos0) assert  2 eq (copy pos1) assert  1 eq (copy pos2) assert
+3 eq (copy pos3) assert  2 eq (copy pos4) assert  1 eq (copy pos5) assert
+5 1 copy  5 eq (1 copy dup) assert  5 eq (1 copy orig) assert
+9 0 copy  9 eq (0 copy leaves top) assert
+
+% a copy spanning several 1000-element stack segments keeps count and order
+20000 { 3 } repeat  20000 copy  count 40000 eq (multi-segment copy count) assert
+clear
+
+% performance guard: a large copy on a deep stack must finish quickly. At
+% O(n^2) copy re-walks the stack per element and the test times out.
+200000 { 0 } repeat  200000 copy  clear
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

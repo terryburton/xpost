@@ -133,6 +133,18 @@ int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
                                   Xpost_Object *out);
 
 /**
+ * @brief Copy the top @p n elements into @p out (out[0] is the topmost) in one
+ * top-down segment pass. The caller must ensure the stack holds at least @p n
+ * elements. Returns the number copied. This snapshots in O(n); reading the top
+ * n with xpost_stack_topdown_fetch per index would be O(n^2) on a segmented
+ * stack.
+ */
+int xpost_stack_peek_top(Xpost_Memory_File *mem,
+                         unsigned stackadr,
+                         int n,
+                         Xpost_Object *out);
+
+/**
  * @brief Index the stack from the bottom up, fetching object.
  */
 Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
