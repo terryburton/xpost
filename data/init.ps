@@ -11,6 +11,26 @@
 systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
+% .xpostsys -- the interpreter's private namespace. Internal helper
+% procedures live here instead of scattered through userdict, so they
+% neither pollute the names a program may use nor obscure a program's own
+% definitions. Only the single dotted anchor name remains visible; the
+% helpers hide behind it. It is a LOCAL dictionary (the machinery loads in
+% local VM, so its helpers are local objects a global dictionary could not
+% hold) anchored in userdict, populated once at build time and stable across
+% save/restore thereafter.
+%
+% Convention -- a helper h is defined and called as:
+%     .xpostsys /h { ... } put              % define
+%     //.xpostsys /h get exec               % call
+% The // freezes the private dictionary into the calling procedure at scan
+% time, so a program cannot shadow it; the /h get resolves the helper at run
+% time, which keeps recursion and forward references working. Helpers reach
+% each other by the same call form.
+currentglobal false setglobal
+userdict /.xpostsys 400 dict put
+setglobal
+
 /statusdict <<
     /manualfeed false
     /product (Xpost)
