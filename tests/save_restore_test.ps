@@ -59,6 +59,30 @@ save
 restore
 e /k get 0 eq (outer restore reverts to pre-save value) assert
 
+% --- a dict that GROWS (dicgrow) under a save reverts cleanly ---
+% dicgrow moves the dict to a larger allocation, so the saved copy and the
+% live object end the save block at different addresses AND different sizes.
+% restore therefore has to exchange the whole storage identity (adr, sz and
+% used) between the two, not just the address: swapping the address alone
+% leaves the reverted dict claiming the grown byte count while pointing at
+% the smaller backup allocation, an entity whose range then overruns its
+% neighbours once it is freed and reused. The overrun only manifests with a
+% specific allocation adjacency (the multi-plate poster reproduces it under a
+% low GC threshold); what a small script can pin down is that the revert
+% itself is exact -- size and keys -- and survives a collection.
+/g 2 dict def  g /a 1 put
+save
+    g /b 2 put  g /c 3 put  g /d 4 put  g /e 5 put  g /f 6 put
+    g length 6 eq (grown dict is visible under save) assert
+restore
+g length 1 eq (grown dict reverts to its saved size) assert
+g /a known (its saved key survives) assert
+g /b known not (a key added under save is gone) assert
+% churn the collector over a fresh allocation load; the reverted dict must
+% read back intact rather than reflecting a stale grown-storage identity
+/blk 4000 array def 0 1 3999 { blk exch 3 array put } for
+g /a get 1 eq (the reverted dict is intact after a collection) assert
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

@@ -314,9 +314,22 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
             XPOST_LOG_ERR("cannot find table for ent %u", cent);
             return;
         }
+        /* Exchange the whole storage identity, not the address alone: a
+           composite that GREW under the save (dicgrow reallocates and gives
+           the object a larger sz) otherwise keeps its grown sz while pointing
+           at the smaller backup allocation. Its byte range then overruns the
+           entities that follow, and reusing or writing it corrupts them. Swap
+           sz and used alongside adr so the reverted object and the discarded
+           copy each carry a consistent (adr, sz, used) triple. */
         hold = tab->tab[sent].adr;                 // tmp = src
         tab->tab[sent].adr = tab->tab[cent].adr;  // src = cpy
         tab->tab[cent].adr = hold;                 // cpy = tmp
+        hold = tab->tab[sent].sz;
+        tab->tab[sent].sz = tab->tab[cent].sz;
+        tab->tab[cent].sz = hold;
+        hold = tab->tab[sent].used;
+        tab->tab[sent].used = tab->tab[cent].used;
+        tab->tab[cent].used = hold;
 
         /* The copy has done its job. After the swap it holds the
            discarded post-save contents and the popped saverec was its
