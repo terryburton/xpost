@@ -283,6 +283,13 @@ test('semantics',
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Save/restore VM: drive the entity count past 65536 and require dicts and
+# arrays to revert exactly -- guards the saverec entity-width truncation.
+test('save-restore',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/save_restore_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',

@@ -88,4 +88,38 @@ int xpost_save_save_ent(Xpost_Memory_File *mem, unsigned tag, unsigned pad, unsi
  */
 void xpost_save_restore_snapshot(Xpost_Memory_File *mem);
 
+/* A saverec records two entity numbers, src and cpy. An entity number
+   can exceed the 16-bit `word` that saverec_.src / saverec_.cpy provide
+   (see XPOST_OBJECT_COMP_MAX_ENT, which reaches 2^20 in the small-object
+   build): a bare-word store would truncate the high bits, and restore
+   and the garbage collector would then revert -- or mark -- the wrong
+   allocation. A saverec's tag word carries only its small type value
+   (saverecs have no access or flag bits), so the high parts of both
+   entity numbers ride in that tag above the 5-bit type field: src's high
+   XPOST_OBJECT_TAG_EXTRA_BITS_SIZE bits, then cpy's. `pad` is left alone
+   (arrays store their element count there for the collector). In the
+   large-object build a `word` already spans the whole entity number, so
+   the tag holds the bare type and no bits are borrowed. Saverecs are
+   only ever read through these accessors, never through xpost_object_get_ent. */
+#define XPOST_SAVEREC_ENT_HI_BITS  XPOST_OBJECT_TAG_EXTRA_BITS_SIZE
+#define XPOST_SAVEREC_ENT_HI_MASK  ((1u << XPOST_SAVEREC_ENT_HI_BITS) - 1u)
+#define XPOST_SAVEREC_SRC_HI_SHIFT 5u  /* first bit above the 5-bit type field */
+#define XPOST_SAVEREC_CPY_HI_SHIFT (XPOST_SAVEREC_SRC_HI_SHIFT + XPOST_SAVEREC_ENT_HI_BITS)
+
+#define XPOST_SAVEREC_TYPE(o) ((o).saverec_.tag & XPOST_OBJECT_TAG_DATA_TYPE_MASK)
+
+#ifdef WANT_LARGE_OBJECT
+# define XPOST_SAVEREC_TAG(type, src, cpy) ((word)(type))
+# define XPOST_SAVEREC_SRC(o) ((unsigned int)(o).saverec_.src)
+# define XPOST_SAVEREC_CPY(o) ((unsigned int)(o).saverec_.cpy)
+#else
+# define XPOST_SAVEREC_TAG(type, src, cpy) ((word)((unsigned int)(type) \
+    | ((((src) >> (8u * sizeof(word))) & XPOST_SAVEREC_ENT_HI_MASK) << XPOST_SAVEREC_SRC_HI_SHIFT) \
+    | ((((cpy) >> (8u * sizeof(word))) & XPOST_SAVEREC_ENT_HI_MASK) << XPOST_SAVEREC_CPY_HI_SHIFT)))
+# define XPOST_SAVEREC_SRC(o) ((unsigned int)(o).saverec_.src \
+    | ((((unsigned int)(o).saverec_.tag >> XPOST_SAVEREC_SRC_HI_SHIFT) & XPOST_SAVEREC_ENT_HI_MASK) << (8u * sizeof(word))))
+# define XPOST_SAVEREC_CPY(o) ((unsigned int)(o).saverec_.cpy \
+    | ((((unsigned int)(o).saverec_.tag >> XPOST_SAVEREC_CPY_HI_SHIFT) & XPOST_SAVEREC_ENT_HI_MASK) << (8u * sizeof(word))))
+#endif
+
 #endif

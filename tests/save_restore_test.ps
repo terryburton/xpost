@@ -1,0 +1,65 @@
+% Save/restore VM regression checks, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% Guards the saverec entity-width defect: a saverec stored the source
+% and copy entity numbers of a saved composite in 16-bit `word` fields,
+% so once the interpreter had allocated more than 65535 entities the
+% copy entity number was truncated and `restore` reverted -- or the
+% collector marked -- the wrong allocation. The failure is silent data
+% corruption: the modification made under save survives the restore, or
+% an unrelated object is clobbered. These checks first drive the entity
+% count past 65536, then require save/restore to revert dicts and arrays
+% exactly. Strings are deliberately not exercised: PLRM specifies that
+% restore "resets the values of all composite objects in local VM, except
+% strings, to their state at the time of the save", so a put'd string
+% character is meant to survive restore.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- drive the entity counter past 65536 with reachable allocations ---
+% (unreachable ones would be collected and their entity numbers reused)
+/j1 35000 array def
+/j2 35000 array def
+0 1 34999 { j1 exch 2 array put } for
+0 1 34999 { j2 exch 2 array put } for
+
+% --- dict reverts across save/restore ---
+/d 3 dict def
+d /a 1 put
+save
+    d /a 2 put
+    d /a get 2 eq (dict change is visible under save) assert
+restore
+d /a get 1 eq (dict reverts on restore past 65536 entities) assert
+
+% --- array reverts across save/restore ---
+/arr 4 array def
+arr 0 100 put
+save
+    arr 0 200 put
+restore
+arr 0 get 100 eq (array reverts on restore past 65536 entities) assert
+
+% --- nested save/restore reverts to the right level ---
+/e 3 dict def
+e /k 0 put
+save
+    e /k 1 put
+    save
+        e /k 2 put
+    restore
+    e /k get 1 eq (inner restore reverts to outer-save value) assert
+restore
+e /k get 0 eq (outer restore reverts to pre-save value) assert
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

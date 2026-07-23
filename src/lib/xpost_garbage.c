@@ -495,58 +495,64 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
 next:
         for (i = 0; i < s->top; i++)
         {
+            /* saverec entity numbers may exceed a word; decode their full
+               value and type through the accessors (see xpost_save.h)
+               rather than reading the packed fields raw. */
+            unsigned int rsrc = XPOST_SAVEREC_SRC(s->data[i]);
+            unsigned int rcpy = XPOST_SAVEREC_CPY(s->data[i]);
+            unsigned int rtype = XPOST_SAVEREC_TYPE(s->data[i]);
             /* _xpost_garbage_mark_object(ctx, mem, s->data[i]); */
             /* _xpost_garbage_mark_save_stack(ctx, mem, s->data[i].save_.stk); */
-            ret = _xpost_garbage_mark_ent(mem, s->data[i].saverec_.src);
+            ret = _xpost_garbage_mark_ent(mem, rsrc);
             if (!ret)
             {
                 XPOST_LOG_ERR("cannot mark array");
                 return 0;
             }
-            ret = _xpost_garbage_mark_ent(mem, s->data[i].saverec_.cpy);
+            ret = _xpost_garbage_mark_ent(mem, rcpy);
             if (!ret)
             {
                 XPOST_LOG_ERR("cannot mark array");
                 return 0;
             }
-            if (s->data[i].saverec_.tag == dicttype)
+            if (rtype == dicttype)
             {
-                ret = xpost_memory_table_get_addr(mem, s->data[i].saverec_.src, &ad);
+                ret = xpost_memory_table_get_addr(mem, rsrc, &ad);
                 if (!ret)
                 {
                     XPOST_LOG_ERR("cannot retrieve address for ent %u",
-                                  s->data[i].saverec_.src);
+                                  rsrc);
                     return 0;
                 }
                 if (!_xpost_garbage_mark_dict(ctx, mem, ad, 0))
                     return 0;
-                ret = xpost_memory_table_get_addr(mem, s->data[i].saverec_.cpy, &ad);
+                ret = xpost_memory_table_get_addr(mem, rcpy, &ad);
                 if (!ret)
                 {
                     XPOST_LOG_ERR("cannot retrieve address for ent %u",
-                                  s->data[i].saverec_.cpy);
+                                  rcpy);
                     return 0;
                 }
                 if (!_xpost_garbage_mark_dict(ctx, mem, ad, 0))
                     return 0;
             }
-            if (s->data[i].saverec_.tag == arraytype)
+            if (rtype == arraytype)
             {
                 unsigned int sz = s->data[i].saverec_.pad;
-                ret = xpost_memory_table_get_addr(mem, s->data[i].saverec_.src, &ad);
+                ret = xpost_memory_table_get_addr(mem, rsrc, &ad);
                 if (!ret)
                 {
                     XPOST_LOG_ERR("cannot retrieve address for array ent %u",
-                                  s->data[i].saverec_.src);
+                                  rsrc);
                     return 0;
                 }
                 if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, 0))
                     return 0;
-                ret = xpost_memory_table_get_addr(mem, s->data[i].saverec_.cpy, &ad);
+                ret = xpost_memory_table_get_addr(mem, rcpy, &ad);
                 if (!ret)
                 {
                     XPOST_LOG_ERR("cannot retrieve address for array ent %u",
-                                  s->data[i].saverec_.cpy);
+                                  rcpy);
                     return 0;
                 }
                 if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, 0))
