@@ -40,6 +40,7 @@
 #include "xpost_memory.h"  /* save/restore works with mtabs */
 #include "xpost_object.h"  /* save/restore examines objects */
 #include "xpost_stack.h"  /* save/restore manipulates (internal) stacks */
+#include "xpost_free.h"  /* restore discards the backup copies it made */
 #include "xpost_error.h"
 
 #include "xpost_save.h"  /* double-check prototypes */
@@ -301,6 +302,20 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
         hold = tab->tab[sent].adr;                 // tmp = src
         tab->tab[sent].adr = tab->tab[cent].adr;  // src = cpy
         tab->tab[cent].adr = hold;                 // cpy = tmp
+
+        /* The copy has done its job. After the swap it holds the
+           discarded post-save contents and the popped saverec was its
+           only reference, so return its entity and storage to the free
+           list -- the "explicit discarding by restore" the design calls
+           for (doc/NEWINTERNALS). Without it every composite modified
+           under a save leaks an entity until the next collection, which
+           the collector only runs on a byte/entity threshold; a job with
+           enough save/restore traffic drives the entity counter up
+           needlessly. Freeing here is safe: restore has no collection
+           safe point, nothing else names cent, and the collector's sweep
+           rebuilds the free list from the mark bits so a freed entity is
+           never double-listed. */
+        (void)xpost_free_memory_ent(mem, cent);
 
         /* the object is back to its pre-save contents, so clear its
            "backed up here" marker (reset tlev to its birth level llev).
