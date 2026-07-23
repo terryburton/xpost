@@ -1141,7 +1141,8 @@ void setlocalconfig(Xpost_Context *ctx,
         { NULL, NULL, NULL }
     };
     const char *strtemplate = "currentglobal false setglobal "
-                        "%s userdict /DEVICE %s %s put "
+                        "%s graphicsdict /currgstate get /device %s %s put "
+                        "graphicsdict /.outputdevice /%s put "
                         "setglobal";
     Xpost_Object namenewdev;
     Xpost_Object newdevstr;
@@ -1180,13 +1181,15 @@ void setlocalconfig(Xpost_Context *ctx,
         dimensions = x;
     }
     newdevstr = xpost_string_cons(ctx,
-                                  strlen(strtemplate) - 6
+                                  strlen(strtemplate) - 8
                                   + strlen(device_strings[i][1])
                                   + strlen(dimensions)
-                                  + strlen(device_strings[i][2]) + 1,
+                                  + strlen(device_strings[i][2])
+                                  + strlen(device_strings[i][0]) + 1,
                                   NULL);
     sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
-            device_strings[i][1], dimensions, device_strings[i][2]);
+            device_strings[i][1], dimensions, device_strings[i][2],
+            device_strings[i][0]);
     --newdevstr.comp_.sz; /* trim the '\0' */
 
     namenewdev = xpost_name_cons(ctx, "newdefaultdevice");
@@ -1610,9 +1613,15 @@ run:
     }
 
     XPOST_LOG_INFO("destroying device");
+    /* the device lives in the graphics state; the DEVICE name is an
+       accessor operator and no longer holds the dictionary itself */
     device = xpost_dict_get(ctx,
             xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2),
-            xpost_name_cons(ctx, "DEVICE"));
+            xpost_name_cons(ctx, ".graphicsdict"));
+    if (xpost_object_get_type(device) == dicttype)
+        device = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "currgstate"));
+    if (xpost_object_get_type(device) == dicttype)
+        device = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "device"));
     XPOST_LOG_INFO("device type=%s", xpost_object_type_names[xpost_object_get_type(device)]);
     /*xpost_operator_dump(ctx, 1); // is this pointer value constant? */
     if (xpost_object_get_type(device) == arraytype){

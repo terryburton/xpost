@@ -1014,7 +1014,7 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
     //optab = (void *)(ctx->gl->base + optadr);
 
-    if (xpost_object_get_type((namegraphicsdict = xpost_name_cons(ctx, "graphicsdict"))) == invalidtype)
+    if (xpost_object_get_type((namegraphicsdict = xpost_name_cons(ctx, ".graphicsdict"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namecurrgstate = xpost_name_cons(ctx, "currgstate"))) == invalidtype)
         return VMerror;
