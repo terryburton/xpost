@@ -155,6 +155,13 @@ typedef struct Xpost_Memory_File
     unsigned int start; /**< first 'live' entry in the memory_table. */
         /* the domain of the collector is entries >= start */
 
+    unsigned int free_substack; /**< one recycled save-record substack, or 0.
+                                     Save-record stacks are raw file allocations,
+                                     not table entities, so the collector cannot
+                                     reclaim them; restore parks an emptied one
+                                     here for the next save to reuse instead of
+                                     leaking it (see xpost_save.c). */
+
     int period;
     int threshold;
     int free_list_alloc_is_installed;
