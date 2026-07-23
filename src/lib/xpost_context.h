@@ -95,6 +95,11 @@ struct _Xpost_Context {
 
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
 
+    int es_over;              /**< the exec-stack ceiling has been reported;
+                                   holds off a re-raise until depth recedes */
+    int os_over;              /**< likewise for the operand stack */
+    int ds_over;              /**< likewise for the dictionary stack */
+
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to
                                     this depth so its scheduling frames
