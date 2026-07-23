@@ -112,6 +112,10 @@ int xpost_op_array_to_mark (Xpost_Context *ctx)
     if (xpost_object_get_type(t) == invalidtype)
         return stackunderflow;
     i = t.int_.val;
+    if (i > 65535) /* sz field is 16 bits, as the array operator enforces:
+                      raise limitcheck rather than let array_cons truncate the
+                      length and then fault putting the discarded elements */
+        return limitcheck;
     a = xpost_array_cons(ctx, i);
     if (xpost_object_get_type(a) == nulltype)
         return VMerror;
