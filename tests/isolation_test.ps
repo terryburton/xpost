@@ -27,10 +27,17 @@ gsave grestore
     % relocated helper procedures
     /gstatecopy /strcat /ravec /cpath /dolinejoin /ptdiff /magang /arcbez
     /rect /dashpath /minlinewidth /crossdashbound /dopending
-    /initial_ipos
+    /initial_ipos /loadgraphics
     % relocated private state dictionaries
     /dashdict /strokedict /setcolordict /currentcolordict
 ] def
+
+% the CLI file-runners no longer stash the input in a userdict variable, so a
+% program run as `xpost prog.ps` sees neither name (this test is itself run
+% that way, through startfilename)
+[ /inputfilename /inputfile ] {
+    where { pop false }{ true } ifelse (CLI runner leaves no variable) assert
+} forall
 
 % (1) none of the internal helper names are visible to a program
 HELPERS {
