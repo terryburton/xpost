@@ -31,7 +31,7 @@ override%pop pop%bind def
 % -  currentpoint  x y
 % return current point coordinates
 /currentpoint {
-    cpath dup length 0 eq {
+    //.xpostsys /cpath get exec dup length 0 eq {
         pop /currentpoint cvx /nocurrentpoint signalerror
     }{
         dup length 1 sub get % last-subpath
@@ -42,7 +42,7 @@ override%pop pop%bind def
 }
 override%pop pop%bind def
 
-/cpath { graphicsdict /currgstate get /currpath get } bind def
+.xpostsys /cpath { graphicsdict /currgstate get /currpath get } bind put
 
 /addtopath { % << /data [...] /cmd /... >> <<path>>
     %(addtopath)=
@@ -89,7 +89,7 @@ override%pop pop%bind def
 /moveto {
     transform
     2 array astore
-    << /data 3 2 roll /cmd /move >> cpath addtopath
+    << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath
 }
 override%pop pop%bind def
 
@@ -108,7 +108,7 @@ override%pop pop%bind def
 /lineto {
     transform
     2 array astore
-    << /data 3 2 roll /cmd /line >> cpath addtopath
+    << /data 3 2 roll /cmd /line >> //.xpostsys /cpath get exec addtopath
 }
 override%pop pop%bind def
 
@@ -127,7 +127,7 @@ override%pop pop%bind def
 /curveto {
     3 { 6 2 roll transform } repeat
     6 array astore
-    << /data 3 2 roll /cmd /curve >> cpath addtopath
+    << /data 3 2 roll /cmd /curve >> //.xpostsys /cpath get exec addtopath
 }
 override%pop pop%bind def
 
@@ -146,14 +146,14 @@ override%pop pop%bind def
 % -  closepath  -
 % connect subpath back to its starting point
 /closepath {
-    cpath length 0 gt {
-        cpath dup length 1 sub get % subpath
+    //.xpostsys /cpath get exec length 0 gt {
+        //.xpostsys /cpath get exec dup length 1 sub get % subpath
         dup dup length 1 sub get % subpath last-elem
         /cmd get /close eq { % subpath
             pop
         }{                   % subpath
             0 get /data get % subpath [data]
-            << /data 3 2 roll /cmd /close >> cpath addtopath
+            << /data 3 2 roll /cmd /close >> //.xpostsys /cpath get exec addtopath
         } ifelse
     } if
 }
@@ -168,7 +168,7 @@ override%pop pop%bind def
 % then performs the simpler task of calculating a bezier
 % for the arc that is symmetrical about the x-axis
 % formula derived from http://www.tinaja.com/glib/bezarc1.pdf
-/arcbez { % draw single bezier % x y r angle1 angle2  .  x1 y1 x2 y2 x3 y3 x0 y0
+.xpostsys /arcbez { % draw single bezier % x y r angle1 angle2  .  x1 y1 x2 y2 x3 y3 x0 y0
 	DICT
     %5 dict
 	begin
@@ -196,7 +196,7 @@ dup 0 10 dict
 	dup /mat matrix put
 	dup /mat1 matrix put
 put
-bind def%override%pop pop%bind def
+bind put%override%pop pop%bind put
 
 % x y r angle1 angle2  arc  -
 % append a counterclockwise circular arc to the current path
@@ -216,10 +216,10 @@ bind def%override%pop pop%bind def
         3 2 roll add exch arc
     }{ pop
         % draw single bezier
-        arcbez % x1 y1 x2 y2 x3 y3 x0 y0
+        //.xpostsys /arcbez get exec % x1 y1 x2 y2 x3 y3 x0 y0
         4 2 roll % x1 y1 x2 y2 x0 y0  x3 y3
         %{ currentpoint pop pop } stopped { moveto }{ lineto } ifelse
-		cpath length 0 eq { moveto }{ lineto } ifelse
+		//.xpostsys /cpath get exec length 0 eq { moveto }{ lineto } ifelse
         6 2 roll % x0 y0 x1 y1 x2 y2
         4 2 roll % x0 y0 x2 y2 x1 y1
         6 4 roll % x2 y2 x1 y1 x0 y0
@@ -244,10 +244,10 @@ override%pop pop%bind def
         add arcn
     }{ pop
         % draw single bezier
-        arcbez % x1 y1 x2 y2 x3 y3  x0 y0
+        //.xpostsys /arcbez get exec % x1 y1 x2 y2 x3 y3  x0 y0
         %4 2 roll
         %{ currentpoint pop pop } stopped { moveto }{ lineto } ifelse
-		cpath length 0 eq { moveto }{ lineto } ifelse
+		//.xpostsys /cpath get exec length 0 eq { moveto }{ lineto } ifelse
         %6 2 roll
         %4 2 roll
         %6 4 roll
@@ -348,17 +348,17 @@ override%pop pop%bind def
     }{
         dup /data get 4 2 getinterval flattendict exch /cp exch put
         << /data 3 2 roll /data get 4 2 getinterval /cmd /line >>
-        cpath addtopath
+        //.xpostsys /cpath get exec addtopath
     } ifelse
 } bind def
 
 /flattendict <<
     /move {
         dup /data get flattendict exch /cp exch put
-        cpath addtopath }
+        //.xpostsys /cpath get exec addtopath }
     /line {
         dup /data get flattendict exch /cp exch put
-        cpath addtopath }
+        //.xpostsys /cpath get exec addtopath }
     /curve {
         chopcurve
         %dup /data get 4 2 getinterval flattendict exch /cp exch put
@@ -367,12 +367,12 @@ override%pop pop%bind def
     }
     /close {
         dup /data get flattendict exch /cp exch put
-        cpath addtopath }
+        //.xpostsys /cpath get exec addtopath }
 >> def
 
 /flattenpath {
-    cpath length 0 gt {
-        cpath newpath
+    //.xpostsys /cpath get exec length 0 gt {
+        //.xpostsys /cpath get exec newpath
         0 1 2 index length 1 sub { % path i
             2 copy get             % path i subpath_i
             0 1 2 index length 1 sub { % p i sp_i j
@@ -389,17 +389,17 @@ override%pop pop%bind def
 
 /reversedict <<
     /close { % p i sp_i j sp_i_j
-        dopending
+        //.xpostsys /dopending get exec
         reversedict /pending /line put
         reversedict /isclosed true put
     }
     /line {
-        dopending
+        //.xpostsys /dopending get exec
         reversedict /pending /line put
     }
     /curve {
         dup /data get exch
-        dopending
+        //.xpostsys /dopending get exec
         reversedict /pending /curve put
         reversedict /curvedata 3 2 roll put
     }
@@ -407,7 +407,7 @@ override%pop pop%bind def
         reversedict /isclosed get {
             pop closepath
         }{
-            dopending
+            //.xpostsys /dopending get exec
         } ifelse
     }
 >> def
@@ -432,14 +432,14 @@ override%pop pop%bind def
     }
     /close { }
 >> def
-/dopending {
+.xpostsys /dopending {
     pendingdict reversedict /pending get get exec
-    cpath addtopath
-} bind def
+    //.xpostsys /cpath get exec addtopath
+} bind put
 
 /reversepath {
-    cpath length 0 gt {
-        cpath newpath
+    //.xpostsys /cpath get exec length 0 gt {
+        //.xpostsys /cpath get exec newpath
         0 1 2 index length 1 sub { % path i
             2 copy get             % path i subpath_i
             reversedict /pending /move put
@@ -478,14 +478,14 @@ override%pop pop%bind def
 % on start: pos is an "absolute" user-space distance
 % on exit: pos is relative to current sequence element,
 % and ipos and parity are set appropriately
-/initial_ipos {
+.xpostsys /initial_ipos {
     {
         pos dasharray ipos get lt { exit } if
         /pos pos dasharray ipos get sub def
         /ipos ipos 1 add dasharray length mod def
         /parity parity 1 add 2 mod def
     } loop
-} def
+} put
 
 % when crossing a dash sequence boundary
 % if we're drawing, we need to draw a line to
@@ -493,7 +493,7 @@ override%pop pop%bind def
 % and update pos=0 ++ipos parity=!parity
 % if we're not drawing, we need to update variables
 % and move to `current-sequence-element-length pos sub` units along the trajectory
-/crossdashbound {
+.xpostsys /crossdashbound {
     {/ang/rad/data}{exch def}forall
     /partial dasharray ipos get pos sub def
     {
@@ -504,11 +504,11 @@ override%pop pop%bind def
             %(-)=
         } ifelse /data 
             cp aload pop
-            partial ang ravec % x y dx dy
+            partial ang //.xpostsys /ravec get exec % x y dx dy
             3 2 roll add % x dx Y
             3 1 roll add exch % X Y
             2 copy 2 array astore /cp exch def
-            transform 2 array astore >> cpath addtopath
+            transform 2 array astore >> //.xpostsys /cpath get exec addtopath
         /rad rad partial sub def
         /ipos ipos 1 add dasharray length mod def
         /parity parity 1 add 2 mod def
@@ -523,13 +523,13 @@ override%pop pop%bind def
         %(-)=
     } ifelse /data 
         cp aload pop
-        rad ang ravec % x y dx dy
+        rad ang //.xpostsys /ravec get exec % x y dx dy
         3 2 roll add % x dx Y
         3 1 roll add exch % X Y
         2 copy 2 array astore /cp exch def
-        transform 2 array astore >> cpath addtopath
+        transform 2 array astore >> //.xpostsys /cpath get exec addtopath
     data rad ang % pop pop pop
-} def
+} put
 
 % "switch" actions for iterating through the (source) subpath
 /dashdict << % path i subpath_i j elem
@@ -541,7 +541,7 @@ override%pop pop%bind def
         %pstack()=
         /cp exch def
         parity 0 eq { % initially drawing, create initial move
-            << /cmd /move /data cp aload pop transform 2 array astore >> cpath addtopath
+            << /cmd /move /data cp aload pop transform 2 array astore >> //.xpostsys /cpath get exec addtopath
         } if
     }
     /line {
@@ -550,18 +550,18 @@ override%pop pop%bind def
         cp aload pop
         2 index aload pop
         itransform
-        ptdiff % [] dx dy
+        //.xpostsys /ptdiff get exec % [] dx dy
         %idtransform
-        magang % [] rad ang
+        //.xpostsys /magang get exec % [] rad ang
         1 index pos add dasharray ipos get le { % same dash position
             %(.)=
             1 index pos add /pos exch def
             parity 0 eq { % if drawing, continue line  % [] rad ang
                 2 index /cp 1 index aload pop itransform 2 array astore def
-                << /cmd /line /data 5 4 roll >> cpath addtopath
+                << /cmd /line /data 5 4 roll >> //.xpostsys /cpath get exec addtopath
             } if
         }{ % cross a dash pattern boundary
-            crossdashbound
+            //.xpostsys /crossdashbound get exec
             {
             /partial dasharray ipos get pos sub def
             1 index pos add dasharray ipos get sub /pos exch def
@@ -569,24 +569,24 @@ override%pop pop%bind def
             /parity parity 1 add 2 mod def
             parity 0 eq { % begin new segment
                 %(+)=
-                partial exch ravec % [] rad dx dy
+                partial exch //.xpostsys /ravec get exec % [] rad dx dy
                 %dtransform
                 cp aload pop % [] rad dx dy x y
                 3 2 roll add % dx x y+dy
                 3 1 roll add exch % x+dx y+dy
                 2 array astore /cp 1 index def
-                << /cmd /move /data 5 4 roll aload pop transform 2 array astore >> cpath addtopath
+                << /cmd /move /data 5 4 roll aload pop transform 2 array astore >> //.xpostsys /cpath get exec addtopath
                 0
             }{ % finish partial segment
                 %(-)=
                 %pstack()=
-                partial exch ravec % [] rad dx dy
+                partial exch //.xpostsys /ravec get exec % [] rad dx dy
                 %dtransform
                 cp aload pop 
                 3 2 roll add
                 3 1 roll add exch
                 2 array astore /cp 1 index def
-                << /cmd /line /data 5 4 roll aload pop transform 2 array astore >> cpath addtopath
+                << /cmd /line /data 5 4 roll aload pop transform 2 array astore >> //.xpostsys /cpath get exec addtopath
                 0
             } ifelse
             } pop
@@ -614,10 +614,10 @@ override%pop pop%bind def
     /parity 0 def
 
     dasharray length 0 ne {
-        initial_ipos
+        //.xpostsys /initial_ipos get exec
 
-        cpath length 0 gt {
-            cpath newpath
+        //.xpostsys /cpath get exec length 0 gt {
+            //.xpostsys /cpath get exec newpath
             0 1 2 index length 1 sub { % path i
                 2 copy get             % path i subpath_i
                 10 dict begin
@@ -641,47 +641,47 @@ override%pop pop%bind def
 } def
 
 % produce a vector from two points
-/ptdiff { % P0 P1
+.xpostsys /ptdiff { % P0 P1
     3 -1 roll sub
     3 1 roll exch sub exch % dx dy
-} bind def
+} bind put
 
 % convert cartesian vector to polar
-/magang { % dx dy  .  rad ang
+.xpostsys /magang { % dx dy  .  rad ang
     2 copy 
     dup mul exch dup mul add sqrt
     3 1 roll exch atan
-} bind def
+} bind put
 
 % convert polar vector to cartesian
-/ravec { % rad ang  .  dx dy
+.xpostsys /ravec { % rad ang  .  dx dy
     dup cos 2 index mul  % rad ang rad*cos(ang)
     3 1 roll sin mul     % rad*cos(ang) rad*sin(ang)
-} bind def
+} bind put
 
 % The stroke outline is constructed in device coordinates (strokepath
 % switches to the identity matrix), so its width is the line width as
 % transformed by the CTM. strokepath stashes that while the CTM is
 % still live; clamp to one pixel so thin strokes stay visible.
-/minlinewidth {
+.xpostsys /minlinewidth {
     strokedict /devlinewidth get
     dup 1 lt { pop 1 } if
-} bind def
+} bind put
 
-/dolinejoin { % RR|LL R|L C
+.xpostsys /dolinejoin { % RR|LL R|L C
     {
         { moveto lineto lineto closepath } % miter join
         { % XX X C
             6 4 roll pop pop
             2 copy moveto % X C
             2 copy 6 2 roll % C X C
-            ptdiff dup mul exch dup mul add sqrt % C r
+            //.xpostsys /ptdiff get exec dup mul exch dup mul add sqrt % C r
             0 360 arc
             closepath
         } % round join
         { moveto lineto lineto closepath } % bevel join
     } currentlinejoin get exec
-} def
+} put
 
 %
 % replace lineto segments . with 
@@ -712,7 +712,7 @@ override%pop pop%bind def
     /move {
         %strokedict /cp 2 index /data get put
         dup /data get strokedict /cp get copy pop
-        cpath addtopath
+        //.xpostsys /cpath get exec addtopath
         strokedict /justmoved true put
     }
     /line { % el
@@ -722,8 +722,8 @@ override%pop pop%bind def
         strokedict /cp get strokedict /oldcp get copy pop % oldcp
         2 copy strokedict /cp get astore pop % cp=(x1 y1)
 
-        ptdiff                             % el dx dy
-        magang                             % el rad ang
+        //.xpostsys /ptdiff get exec                             % el dx dy
+        //.xpostsys /magang get exec                             % el rad ang
         strokedict /oldang strokedict /ang get put
         strokedict /ang 2 index put                        % ang=atan(dy/dx)
         strokedict /justmoved get {
@@ -731,25 +731,25 @@ override%pop pop%bind def
         } if
         /DEBUGSTROKE where { pop (A)= pstack()= } if
 
-        minlinewidth
+        //.xpostsys /minlinewidth get exec
         .5 mul 1 index 90 sub % el rad ang .5lw ang_perp
-        ravec %idtransform
+        //.xpostsys /ravec get exec %idtransform
         rmoveto              % el rad ang      %rmoveto 1
         currentpoint strokedict /pointRR get astore pop % ptRR
 
-        2 copy ravec %idtransform
+        2 copy //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 2
         strokedict /pointR get strokedict /oldpointR get copy pop % oldptR
         currentpoint strokedict /pointR get astore pop % ptR
 
-        minlinewidth
+        //.xpostsys /minlinewidth get exec
         1 index 90 add       % el rad ang lw -ang_perp
-        ravec %idtransform
+        //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 3
         strokedict /pointL get strokedict /oldpointL get copy pop % oldptL
         currentpoint strokedict /pointL get astore pop % ptL
 
-        180 add ravec %idtransform
+        180 add //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 4
         currentpoint strokedict /pointLL get astore pop % ptLL
 
@@ -774,7 +774,7 @@ override%pop pop%bind def
                 strokedict /pointLL get aload pop
                 strokedict /oldpointL get aload pop
                 strokedict /oldcp get aload pop
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (D)= pstack()= } if
                 closepath
@@ -783,7 +783,7 @@ override%pop pop%bind def
                 strokedict /pointRR get aload pop
                 strokedict /oldpointR get aload pop 
                 strokedict /oldcp get aload pop 
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (E)= pstack()= } if
                 closepath
@@ -791,7 +791,7 @@ override%pop pop%bind def
         } if
 
         strokedict /cp get 2 array copy
-        << /data 3 2 roll /cmd /move >> cpath addtopath % moveto 6
+        << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath % moveto 6
 
         strokedict /justmoved false put
     }
@@ -802,31 +802,31 @@ override%pop pop%bind def
         strokedict /cp get strokedict /oldcp get copy pop % oldcp
         2 copy strokedict /cp get astore pop % cp=(x1 y1)
 
-        ptdiff                             % el dx dy
-        magang                             % el rad ang
+        //.xpostsys /ptdiff get exec                             % el dx dy
+        //.xpostsys /magang get exec                             % el rad ang
         strokedict /oldang strokedict /ang get put
         strokedict /ang 2 index put                        % ang=atan(dy/dx)
         /DEBUGSTROKE where { pop (A)= pstack()= } if
 
-        minlinewidth
+        //.xpostsys /minlinewidth get exec
         .5 mul 1 index 90 sub % el rad ang .5lw ang_perp
-        ravec %idtransform
+        //.xpostsys /ravec get exec %idtransform
         rmoveto              % el rad ang      %rmoveto 1
         currentpoint strokedict /pointRR get astore pop % ptRR
 
-        2 copy ravec %idtransform
+        2 copy //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 2
         strokedict /pointR get strokedict /oldpointR get copy pop % oldptR
         currentpoint strokedict /pointR get astore pop % ptR
 
-        minlinewidth
+        //.xpostsys /minlinewidth get exec
         1 index 90 add       % el rad ang lw -ang_perp
-        ravec %idtransform
+        //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 3
         strokedict /pointL get strokedict /oldpointL get copy pop % oldptL
         currentpoint strokedict /pointL get astore pop % ptL
 
-        180 add ravec %idtransform
+        180 add //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 4
         currentpoint strokedict /pointLL get astore pop % ptLL
 
@@ -846,7 +846,7 @@ override%pop pop%bind def
                 strokedict /pointLL get aload pop
                 strokedict /oldpointL get aload pop
                 strokedict /oldcp get aload pop
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (D)= pstack()= } if
                 closepath
@@ -855,7 +855,7 @@ override%pop pop%bind def
                 strokedict /pointRR get aload pop
                 strokedict /oldpointR get aload pop
                 strokedict /oldcp get aload pop
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (E)= pstack()= } if
                 closepath
@@ -872,7 +872,7 @@ override%pop pop%bind def
                 strokedict /firstLL get aload pop
                 strokedict /pointL get aload pop
                 strokedict /cp get aload pop
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 closepath
             }{ % left turn
@@ -880,7 +880,7 @@ override%pop pop%bind def
                 strokedict /firstRR get aload pop
                 strokedict /pointR get aload pop
                 strokedict /cp get aload pop
-                dolinejoin
+                //.xpostsys /dolinejoin get exec
 
                 closepath
             } ifelse
@@ -888,7 +888,7 @@ override%pop pop%bind def
         } if
 
         strokedict /cp get 2 array copy
-        << /data 3 2 roll /cmd /move >> cpath addtopath % moveto 6
+        << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath % moveto 6
 
         strokedict /justmoved false put
     }
@@ -905,8 +905,8 @@ override%pop pop%bind def
     put
     matrix currentmatrix % stash matrix on stack
     matrix setmatrix     % use identity matrix
-    cpath length 0 gt {
-        cpath newpath
+    //.xpostsys /cpath get exec length 0 gt {
+        //.xpostsys /cpath get exec newpath
         0 1 2 index length 1 sub { % path i
             2 copy get             % path i subpath_i
             dup length 0 gt {
@@ -943,12 +943,12 @@ override%pop pop%bind def
 } bind def
 
 /pathbbox {
-    cpath length 0 eq {
+    //.xpostsys /cpath get exec length 0 eq {
         /pathbbox cvx /nocurrentpoint signalerror
     }{
         << /minx 16#7fffffff /miny 1 index
             /maxx 1 index neg /maxy 1 index >> begin
-        cpath
+        //.xpostsys /cpath get exec
         0 1 2 index length 1 sub {
             2 copy get
             0 1 2 index length 1 sub {
@@ -976,11 +976,11 @@ DICT
 %5 dict
 begin
     {close curve line move}{exch def}forall
-    0 1 cpath length 1 sub {
+    0 1 //.xpostsys /cpath get exec length 1 sub {
         /cp exch def
-        0 1 cpath cp get % subpath
+        0 1 //.xpostsys /cpath get exec cp get % subpath
         length 1 sub {
-            cpath cp get exch get % elem
+            //.xpostsys /cpath get exec cp get exch get % elem
             dup /cmd get /close ne {
                 dup /data get % elem [data]
                 aload length  % elem d a t a n
@@ -1015,11 +1015,11 @@ DICT
 %5 dict
 begin
     {close curve line move}{exch def}forall
-    0 1 cpath length 1 sub {
+    0 1 //.xpostsys /cpath get exec length 1 sub {
         /cp exch def
-        0 1 cpath cp get % subpath
+        0 1 //.xpostsys /cpath get exec cp get % subpath
         length 1 sub {
-            cpath cp get exch get % elem
+            //.xpostsys /cpath get exec cp get exch get % elem
             dup /cmd get /close ne {
                 dup /data get % elem [data]
                 aload length  % elem d a t a n

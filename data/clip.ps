@@ -346,19 +346,19 @@ def
 
     PA {
         dup length 0 gt {
-            dup 0 get << /data 3 2 roll /cmd /move >> cpath addtopath
+            dup 0 get << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath
             1 1 index length 1 sub getinterval {
-                << /data 3 2 roll /cmd /line >> cpath addtopath
+                << /data 3 2 roll /cmd /line >> //.xpostsys /cpath get exec addtopath
             } forall
 
-            cpath dup length 1 sub get
+            //.xpostsys /cpath get exec dup length 1 sub get
             dup 0 get /data get
             exch dup length 1 sub get /data get
             aload pop 3 2 roll aload pop % x0 y0 xN yN
             exch 4 1 roll % xN x0 y0 yN
             eq 3 1 roll eq and {
                 %closepath
-                cpath dup length 1 sub get
+                //.xpostsys /cpath get exec dup length 1 sub get
                 dup length 1 sub get
                 /cmd /close put
             } if
