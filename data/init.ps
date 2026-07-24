@@ -803,7 +803,8 @@ currentglobal true setglobal
     % stack, so the move is invisible to the machinery and to programs.
     [ userdict {
         exch dup type /nametype eq
-        2 index xcheck and
+        % an operator, a bound procedure, or a standard array (the encodings)
+        2 index dup xcheck exch type /arraytype eq or and
         2 index gcheck and
         { exch pop }{ pop pop } ifelse
     } forall ]
