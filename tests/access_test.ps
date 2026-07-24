@@ -1,0 +1,95 @@
+% Access-attribute enforcement conformance, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every access check matches the PostScript
+% language semantics. readonly, executeonly and noaccess reduce the value and
+% execution access of composite objects; the standard operators then raise
+% invalidaccess when an access they need is withheld, and the access operators
+% raise typecheck when applied to an object they do not accept. Every assertion
+% below holds on Ghostscript too, so this is a conformance test rather than an
+% xpost tautology.
+
+/faildict 2 dict def
+faildict /n 0 put
+
+% run proc under stopped and report the outcome as a name: /ok on success, or
+% the raised errorname. the operand stack is left as it was found, so a caught
+% error's leftover operands do not unbalance the following checks.
+/outcome { % proc -> /ok | /errorname
+    /P exch def
+    mark
+    { P exec } stopped { $error /errorname get }{ /ok } ifelse
+    /R exch def
+    cleartomark
+    R
+} bind def
+
+/chk { % proc /expected (label) . -
+    /L exch def /E exch def
+    outcome
+    dup E eq { pop } {
+        (FAIL: ) print L print (: want ) print E 40 string cvs print
+        ( got ) print 40 string cvs print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- arrays: reads need read access, writes need write access ---
+{ [1 2 3] 0 4 put }                      /ok            (array unlimited put) chk
+{ [1 2 3] readonly 0 get pop }           /ok            (array readonly get) chk
+{ [1 2 3] readonly aload }               /ok            (array readonly aload) chk
+{ [1 2 3] readonly {pop} forall }        /ok            (array readonly forall) chk
+{ [1 2 3] readonly 0 4 put }             /invalidaccess (array readonly put) chk
+{ [1 2 3] readonly 1 2 array putinterval } /invalidaccess (array readonly putinterval) chk
+{ 1 2 3 3 array readonly astore }        /invalidaccess (array readonly astore) chk
+{ [1 2 3] 3 array readonly copy }        /invalidaccess (array copy readonly dest) chk
+{ [1 2 3] executeonly 0 get pop }        /invalidaccess (array executeonly get) chk
+{ [1 2 3] executeonly length pop }       /invalidaccess (array executeonly length) chk
+{ [1 2 3] executeonly 0 1 getinterval pop } /invalidaccess (array executeonly getinterval) chk
+{ [1 2 3] noaccess 0 get pop }           /invalidaccess (array noaccess get) chk
+{ [1 2 3] noaccess {pop} forall }        /invalidaccess (array noaccess forall) chk
+{ [1 2 3] noaccess aload }               /invalidaccess (array noaccess aload) chk
+{ [1 2 3] noaccess 3 array copy }        /invalidaccess (array copy noaccess source) chk
+
+% --- strings: same rules as arrays ---
+{ 3 string 0 65 put }                    /ok            (string unlimited put) chk
+{ (abc) readonly 0 get pop }             /ok            (string readonly get) chk
+{ (abc) readonly 0 1 getinterval pop }   /ok            (string readonly getinterval) chk
+{ 3 string readonly 0 65 put }           /invalidaccess (string readonly put) chk
+{ (abc) executeonly 0 get pop }          /invalidaccess (string executeonly get) chk
+{ (abc) noaccess length pop }            /invalidaccess (string noaccess length) chk
+{ (abc) noaccess {pop} forall }          /invalidaccess (string noaccess forall) chk
+{ 123 5 string readonly cvs pop }        /invalidaccess (cvs into readonly string) chk
+{ (1 2) token pop pop pop }              /ok            (token on readable string) chk
+{ (1 2) noaccess token }                 /invalidaccess (token on noaccess string) chk
+
+% --- dictionaries: reads need read access, writes need write access ---
+{ 2 dict /k 1 put }                      /ok            (dict unlimited put) chk
+{ 2 dict dup /k 1 put readonly /k get pop } /ok         (dict readonly get) chk
+{ 2 dict dup /k 1 put readonly {pop pop} forall } /ok   (dict readonly forall) chk
+{ 2 dict dup /k 1 put readonly /k 2 put } /invalidaccess (dict readonly put) chk
+{ 2 dict noaccess /k get }               /invalidaccess (dict noaccess get) chk
+{ 2 dict noaccess length pop }           /invalidaccess (dict noaccess length) chk
+{ 2 dict noaccess {pop pop} forall }     /invalidaccess (dict noaccess forall) chk
+{ 2 dict noaccess begin end }            /invalidaccess (dict noaccess begin) chk
+
+% --- exec: reading an array or string as code needs read access; a dict is
+%     only pushed, so exec of a noaccess dict is permitted ---
+{ [1 2 3] cvx executeonly exec }         /ok            (exec executeonly array) chk
+{ 2 dict noaccess exec }                 /ok            (exec noaccess dict) chk
+{ [1 2 3] cvx noaccess exec }            /invalidaccess (exec noaccess array) chk
+{ (abc) noaccess exec }                  /invalidaccess (exec noaccess string) chk
+
+% --- the access operators: readonly and noaccess accept composites (and files);
+%     executeonly excludes dictionaries; none accept a simple object ---
+{ 5 readonly }                           /typecheck     (readonly on integer) chk
+{ 5 executeonly }                        /typecheck     (executeonly on integer) chk
+{ 5 noaccess }                           /typecheck     (noaccess on integer) chk
+{ 2 dict readonly pop }                  /ok            (readonly on dict) chk
+{ 2 dict noaccess pop }                  /ok            (noaccess on dict) chk
+{ (abc) executeonly pop }                /ok            (executeonly on string) chk
+{ 2 dict executeonly }                   /typecheck     (executeonly on dict) chk
+
+count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
+    faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
+faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
+flush
+quit
