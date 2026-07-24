@@ -315,6 +315,37 @@ int returntocaller(Xpost_Context *ctx)
     return yieldtocaller;
 }
 
+/* -  .sysdictunlock  -
+   Make systemdict writeable so the graphics language can define into it. This
+   is a one-shot: once the language is loaded (.sysdictrelock has run), it does
+   nothing, so a program that reaches the name cannot reopen systemdict. The
+   window it opens runs only the interpreter's own graphics files, before any
+   program, and the error handler relocks systemdict if a load faults. */
+static
+int op_sysdictunlock(Xpost_Context *ctx)
+{
+    Xpost_Object sd;
+    if (ctx->sysdict_load_done)
+        return 0;
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
+    ctx->sysdict_unlocked = 1;
+    return 0;
+}
+
+/* -  .sysdictrelock  -
+   Restore systemdict to read-only after the graphics language has loaded, and
+   spend the one-shot. */
+static
+int op_sysdictrelock(Xpost_Context *ctx)
+{
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    ctx->sysdict_unlocked = 0;
+    ctx->sysdict_load_done = 1;
+    return 0;
+}
+
 int xpost_oper_init_misc_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
 {
@@ -332,6 +363,10 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     //optab = (void *)(ctx->gl->base + optadr);
 
     op = xpost_operator_cons(ctx, "bind", (Xpost_Op_Func)Pbind, 1, 1, proctype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".sysdictunlock", (Xpost_Op_Func)op_sysdictunlock, 0, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".sysdictrelock", (Xpost_Op_Func)op_sysdictrelock, 0, 0);
     INSTALL;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "null"), null);
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "version"),

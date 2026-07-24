@@ -729,6 +729,18 @@ void _onerror(Xpost_Context *ctx,
     if (!validate_context(ctx))
         XPOST_LOG_ERR("context not valid");
 
+    /* if a fault interrupts loading the graphics language into systemdict,
+       restore systemdict to read-only so the writeable window never outlives
+       the load */
+    if (ctx->sysdict_unlocked)
+    {
+        xpost_object_set_access(ctx,
+                xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
+                XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+        ctx->sysdict_unlocked = 0;
+        ctx->sysdict_load_done = 1;
+    }
+
     if (itpdata->in_onerror > 5)
     {
         fprintf(stderr, "LOOP in error handler\nabort\n");
