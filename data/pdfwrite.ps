@@ -1,6 +1,6 @@
 /QUIET where { pop }{ (loading pdfwrite.ps...)print } ifelse
 
-DATA_DIR(/qsort.ps)strcat run
+(/qsort.ps) //.xpostint /.loadmodule get exec
 
 /newPDFWRITEdevice { % width height  .  IMAGE-device-dict
     PDFWRITE dup /Create get exec

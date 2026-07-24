@@ -31,15 +31,15 @@ userdict begin
     /DEVICE dup /.DEVICEproc load .wrapop def
 
     %breakhere
-    DATA_DIR (/device.ps) strcat run %loads and uses (/image.ps)
-    DATA_DIR (/gstate.ps) strcat run
-    %DATA_DIR (/matrix.ps) strcat run % moved to xpost_op_matrix.c
-    DATA_DIR (/color.ps) strcat run
-    DATA_DIR (/path.ps) strcat run
-    DATA_DIR (/clip.ps) strcat run
-    DATA_DIR (/paint.ps) strcat run
-    DATA_DIR (/font.ps) strcat run
-    DATA_DIR (/pattern.ps) strcat run
+    (/device.ps) //.xpostint /.loadmodule get exec %loads and uses (/image.ps)
+    (/gstate.ps) //.xpostint /.loadmodule get exec
+    %(/matrix.ps) //.xpostint /.loadmodule get exec % moved to xpost_op_matrix.c
+    (/color.ps) //.xpostint /.loadmodule get exec
+    (/path.ps) //.xpostint /.loadmodule get exec
+    (/clip.ps) //.xpostint /.loadmodule get exec
+    (/paint.ps) //.xpostint /.loadmodule get exec
+    (/font.ps) //.xpostint /.loadmodule get exec
+    (/pattern.ps) //.xpostint /.loadmodule get exec
 
 
 % The graphics machinery is implemented in PostScript and runs in the

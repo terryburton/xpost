@@ -1,6 +1,6 @@
 /QUIET where { pop }{ (loading ppmimage.ps...)print } ifelse
 
-DATA_DIR(/qsort.ps)strcat run
+(/qsort.ps) //.xpostint /.loadmodule get exec
 
 /newPPMIMAGEdevice { % width height  .  IMAGE-device-dict
     PPMIMAGE dup /Create get exec

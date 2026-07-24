@@ -28,7 +28,7 @@
 %flush
 %(*){=}128 string filenameforall
 %(../../data)
-%DATA_DIR (/graphics.ps) strcat run initgraphics
+%(/graphics.ps) //.xpostint /.loadmodule get exec initgraphics
 %loadgraphics  %graphics support is now always loaded
 
 (Stack should be clear -V-\n)=
@@ -699,7 +699,7 @@ abc
 
 /DATA_DIR where {
     pop
-    DATA_DIR(/readstring.ps)strcat run
+    (/readstring.ps) //.xpostint /.loadmodule get exec
     (2:)= pstack
      not check 0 3 getinterval (abc) eq check
 }{
@@ -860,7 +860,7 @@ false false xor false eq check
 7 3 xor 4 eq check
 12 3 xor 15 eq check
 
-%DATA_DIR(/testdraw.ps)strcat run
+%(/testdraw.ps) //.xpostint /.loadmodule get exec
 
 failcount 0 eq {
     (SUCCESS)=

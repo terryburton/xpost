@@ -48,12 +48,23 @@ serverdict /exitserver {
     currentdict serverdict eq { end } if
 } put
 
-/strcat {
+.xpostint /strcat { % a b  .  ab   -- concatenate two strings
     2 copy
     length exch length exch 1 index add % a b an bn+an
     string dup 0 6 -1 roll putinterval % b an str
     dup 4 2 roll exch putinterval % (ab)
-} bind def
+} bind put
+
+% .loadmodule -- pull in one of the interpreter's own .ps files by name,
+% factoring the "(/x.ps) //.xpostint /.loadmodule get exec" idiom that appears throughout
+% the machinery. Kept in .xpostint like every other helper. It must be a
+% local object: it embeds the local .xpostint via //, and a global object
+% may not reference a local one.
+currentglobal false setglobal
+.xpostint /.loadmodule { % (/name.ps)  .  -
+    DATA_DIR exch //.xpostint /strcat get exec run
+} bind put
+setglobal
 
 %% predefined in xpost_interpreter.c:setlocalconfig()
 %%
@@ -127,10 +138,7 @@ serverdict /exitserver {
 %(../../data)
 
 %(4\n)print
-DATA_DIR
-(/err.ps)
-strcat
-run
+(/err.ps) //.xpostint /.loadmodule get exec
 
 %(5\n)print
 /stack { count dup 1 add copy //= repeat pop } def
@@ -467,8 +475,7 @@ false setglobal
 def
 
 
-DATA_DIR (/qsort.ps) strcat
-run
+(/qsort.ps) //.xpostint /.loadmodule get exec
 
 % (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
 /ncat {        % s1 s2 s3 .. sN n
@@ -582,7 +589,7 @@ true setglobal
 
             2 index dup length string cvs % c cat k (category)
             1 index dup length string cvx % c cat k (category) (key)
-            DATA_DIR (/Resources) strcat
+            DATA_DIR (/Resources) //.xpostint /strcat get exec
             DIRSEP 4 3 roll % c cat k (key) (Res)(/)(cat)
             DIRSEP 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
             (*) 6 ncat % c cat k (Res/cat/key*)
@@ -684,13 +691,13 @@ end % userdict
 /rectclip { newpath rect clip newpath } def
 
 /runtest {
-    DATA_DIR (/test.ps) strcat run
+    (/test.ps) //.xpostint /.loadmodule get exec
 } def
 
 % load graphics support
 /loadgraphics {
     /GRAPHICS_LOADED where { pop }{
-        DATA_DIR (/graphics.ps) strcat run
+        (/graphics.ps) //.xpostint /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -762,7 +769,7 @@ false setglobal
     (Would you like to 'runtest' or 'testfont' or '(filename)run'?\n)print
 } def
 
-DATA_DIR (/prepr.ps) strcat run  % use nifty preview prompt!
+(/prepr.ps) //.xpostint /.loadmodule get exec  % use nifty preview prompt!
 
 /QUIET where { pop }{ (eof init.ps\n)print } ifelse
 %loadgraphics %called by start* procs
