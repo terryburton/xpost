@@ -664,7 +664,7 @@ override%pop pop%bind def
 % transformed by the CTM. strokepath stashes that while the CTM is
 % still live; clamp to one pixel so thin strokes stay visible.
 .xpostsys /minlinewidth {
-    //.xpostsys /strokedict get /devlinewidth get
+    .gscratch /strokedict get /devlinewidth get
     dup 1 lt { pop 1 } if
 } bind put
 
@@ -699,7 +699,7 @@ override%pop pop%bind def
 %                 ----
 %                 1  4
 %           point RR  point LL
-.xpostsys /strokedict <<
+.gscratch /strokedict <<
     /ang 0
     /oldcp 2 array
     /cp 2 array
@@ -711,23 +711,23 @@ override%pop pop%bind def
     /pointLL 2 array
     /move {
         %strokedict /cp 2 index /data get put
-        dup /data get //.xpostsys /strokedict get /cp get copy pop
+        dup /data get .gscratch /strokedict get /cp get copy pop
         //.xpostsys /cpath get exec addtopath
-        //.xpostsys /strokedict get /justmoved true put
+        .gscratch /strokedict get /justmoved true put
     }
     /line { % el
 
-        //.xpostsys /strokedict get /cp get aload pop       % el x0 y0
+        .gscratch /strokedict get /cp get aload pop       % el x0 y0
         2 index /data get aload pop        % el x0 y0 x1 y1
-        //.xpostsys /strokedict get /cp get //.xpostsys /strokedict get /oldcp get copy pop % oldcp
-        2 copy //.xpostsys /strokedict get /cp get astore pop % cp=(x1 y1)
+        .gscratch /strokedict get /cp get .gscratch /strokedict get /oldcp get copy pop % oldcp
+        2 copy .gscratch /strokedict get /cp get astore pop % cp=(x1 y1)
 
         //.xpostsys /ptdiff get exec                             % el dx dy
         //.xpostsys /magang get exec                             % el rad ang
-        //.xpostsys /strokedict get /oldang //.xpostsys /strokedict get /ang get put
-        //.xpostsys /strokedict get /ang 2 index put                        % ang=atan(dy/dx)
-        //.xpostsys /strokedict get /justmoved get {
-            //.xpostsys /strokedict get /firstang 2 index put
+        .gscratch /strokedict get /oldang .gscratch /strokedict get /ang get put
+        .gscratch /strokedict get /ang 2 index put                        % ang=atan(dy/dx)
+        .gscratch /strokedict get /justmoved get {
+            .gscratch /strokedict get /firstang 2 index put
         } if
         /DEBUGSTROKE where { pop (A)= pstack()= } if
 
@@ -735,35 +735,35 @@ override%pop pop%bind def
         .5 mul 1 index 90 sub % el rad ang .5lw ang_perp
         //.xpostsys /ravec get exec %idtransform
         rmoveto              % el rad ang      %rmoveto 1
-        currentpoint //.xpostsys /strokedict get /pointRR get astore pop % ptRR
+        currentpoint .gscratch /strokedict get /pointRR get astore pop % ptRR
 
         2 copy //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 2
-        //.xpostsys /strokedict get /pointR get //.xpostsys /strokedict get /oldpointR get copy pop % oldptR
-        currentpoint //.xpostsys /strokedict get /pointR get astore pop % ptR
+        .gscratch /strokedict get /pointR get .gscratch /strokedict get /oldpointR get copy pop % oldptR
+        currentpoint .gscratch /strokedict get /pointR get astore pop % ptR
 
         //.xpostsys /minlinewidth get exec
         1 index 90 add       % el rad ang lw -ang_perp
         //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 3
-        //.xpostsys /strokedict get /pointL get //.xpostsys /strokedict get /oldpointL get copy pop % oldptL
-        currentpoint //.xpostsys /strokedict get /pointL get astore pop % ptL
+        .gscratch /strokedict get /pointL get .gscratch /strokedict get /oldpointL get copy pop % oldptL
+        currentpoint .gscratch /strokedict get /pointL get astore pop % ptL
 
         180 add //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 4
-        currentpoint //.xpostsys /strokedict get /pointLL get astore pop % ptLL
+        currentpoint .gscratch /strokedict get /pointLL get astore pop % ptLL
 
         closepath            % el              %closepath 5
         pop  % discard original lineto element
         /DEBUGSTROKE where { pop (B)= pstack()= } if
 
-        //.xpostsys /strokedict get /justmoved get {
-            //.xpostsys /strokedict get /firstRR //.xpostsys /strokedict get /pointRR get 2 array copy put
-            //.xpostsys /strokedict get /firstLL //.xpostsys /strokedict get /pointLL get 2 array copy put
+        .gscratch /strokedict get /justmoved get {
+            .gscratch /strokedict get /firstRR .gscratch /strokedict get /pointRR get 2 array copy put
+            .gscratch /strokedict get /firstLL .gscratch /strokedict get /pointLL get 2 array copy put
         } if
 
-        //.xpostsys /strokedict get /justmoved get not { % draw join
-            //.xpostsys /strokedict get /ang get //.xpostsys /strokedict get /oldang get sub
+        .gscratch /strokedict get /justmoved get not { % draw join
+            .gscratch /strokedict get /ang get .gscratch /strokedict get /oldang get sub
             % the side reads from the turn within one revolution: the
             % atan angles wrap at 360, so a difference below -180 is
             % the same turn seen across the seam
@@ -771,18 +771,18 @@ override%pop pop%bind def
             /DEBUGSTROKE where { pop (C)= pstack()= } if
             dup 0 le exch 180 ge or { % right turn
 
-                //.xpostsys /strokedict get /pointLL get aload pop
-                //.xpostsys /strokedict get /oldpointL get aload pop
-                //.xpostsys /strokedict get /oldcp get aload pop
+                .gscratch /strokedict get /pointLL get aload pop
+                .gscratch /strokedict get /oldpointL get aload pop
+                .gscratch /strokedict get /oldcp get aload pop
                 //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (D)= pstack()= } if
                 closepath
             }{ % left turn
 
-                //.xpostsys /strokedict get /pointRR get aload pop
-                //.xpostsys /strokedict get /oldpointR get aload pop 
-                //.xpostsys /strokedict get /oldcp get aload pop 
+                .gscratch /strokedict get /pointRR get aload pop
+                .gscratch /strokedict get /oldpointR get aload pop 
+                .gscratch /strokedict get /oldcp get aload pop 
                 //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (E)= pstack()= } if
@@ -790,52 +790,52 @@ override%pop pop%bind def
             } ifelse
         } if
 
-        //.xpostsys /strokedict get /cp get 2 array copy
+        .gscratch /strokedict get /cp get 2 array copy
         << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath % moveto 6
 
-        //.xpostsys /strokedict get /justmoved false put
+        .gscratch /strokedict get /justmoved false put
     }
     /close { % el
 
-        //.xpostsys /strokedict get /cp get aload pop       % el x0 y0
+        .gscratch /strokedict get /cp get aload pop       % el x0 y0
         2 index /data get aload pop        % el x0 y0 x1 y1
-        //.xpostsys /strokedict get /cp get //.xpostsys /strokedict get /oldcp get copy pop % oldcp
-        2 copy //.xpostsys /strokedict get /cp get astore pop % cp=(x1 y1)
+        .gscratch /strokedict get /cp get .gscratch /strokedict get /oldcp get copy pop % oldcp
+        2 copy .gscratch /strokedict get /cp get astore pop % cp=(x1 y1)
 
         //.xpostsys /ptdiff get exec                             % el dx dy
         //.xpostsys /magang get exec                             % el rad ang
-        //.xpostsys /strokedict get /oldang //.xpostsys /strokedict get /ang get put
-        //.xpostsys /strokedict get /ang 2 index put                        % ang=atan(dy/dx)
+        .gscratch /strokedict get /oldang .gscratch /strokedict get /ang get put
+        .gscratch /strokedict get /ang 2 index put                        % ang=atan(dy/dx)
         /DEBUGSTROKE where { pop (A)= pstack()= } if
 
         //.xpostsys /minlinewidth get exec
         .5 mul 1 index 90 sub % el rad ang .5lw ang_perp
         //.xpostsys /ravec get exec %idtransform
         rmoveto              % el rad ang      %rmoveto 1
-        currentpoint //.xpostsys /strokedict get /pointRR get astore pop % ptRR
+        currentpoint .gscratch /strokedict get /pointRR get astore pop % ptRR
 
         2 copy //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 2
-        //.xpostsys /strokedict get /pointR get //.xpostsys /strokedict get /oldpointR get copy pop % oldptR
-        currentpoint //.xpostsys /strokedict get /pointR get astore pop % ptR
+        .gscratch /strokedict get /pointR get .gscratch /strokedict get /oldpointR get copy pop % oldptR
+        currentpoint .gscratch /strokedict get /pointR get astore pop % ptR
 
         //.xpostsys /minlinewidth get exec
         1 index 90 add       % el rad ang lw -ang_perp
         //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 3
-        //.xpostsys /strokedict get /pointL get //.xpostsys /strokedict get /oldpointL get copy pop % oldptL
-        currentpoint //.xpostsys /strokedict get /pointL get astore pop % ptL
+        .gscratch /strokedict get /pointL get .gscratch /strokedict get /oldpointL get copy pop % oldptL
+        currentpoint .gscratch /strokedict get /pointL get astore pop % ptL
 
         180 add //.xpostsys /ravec get exec %idtransform
         rlineto              % el rad ang      %rlineto 4
-        currentpoint //.xpostsys /strokedict get /pointLL get astore pop % ptLL
+        currentpoint .gscratch /strokedict get /pointLL get astore pop % ptLL
 
         closepath            % el              %closepath 5
         pop  % discard original lineto element
         /DEBUGSTROKE where { pop (B)= pstack()= } if
 
-        //.xpostsys /strokedict get /justmoved get not { % draw join
-            //.xpostsys /strokedict get /ang get //.xpostsys /strokedict get /oldang get sub
+        .gscratch /strokedict get /justmoved get not { % draw join
+            .gscratch /strokedict get /ang get .gscratch /strokedict get /oldang get sub
             % the side reads from the turn within one revolution: the
             % atan angles wrap at 360, so a difference below -180 is
             % the same turn seen across the seam
@@ -843,18 +843,18 @@ override%pop pop%bind def
             /DEBUGSTROKE where { pop (C)= pstack()= } if
             dup 0 le exch 180 ge or { % right turn
 
-                //.xpostsys /strokedict get /pointLL get aload pop
-                //.xpostsys /strokedict get /oldpointL get aload pop
-                //.xpostsys /strokedict get /oldcp get aload pop
+                .gscratch /strokedict get /pointLL get aload pop
+                .gscratch /strokedict get /oldpointL get aload pop
+                .gscratch /strokedict get /oldcp get aload pop
                 //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (D)= pstack()= } if
                 closepath
             }{ % left turn
 
-                //.xpostsys /strokedict get /pointRR get aload pop
-                //.xpostsys /strokedict get /oldpointR get aload pop
-                //.xpostsys /strokedict get /oldcp get aload pop
+                .gscratch /strokedict get /pointRR get aload pop
+                .gscratch /strokedict get /oldpointR get aload pop
+                .gscratch /strokedict get /oldcp get aload pop
                 //.xpostsys /dolinejoin get exec
 
                 /DEBUGSTROKE where { pop (E)= pstack()= } if
@@ -862,24 +862,24 @@ override%pop pop%bind def
             } ifelse
 
             %draw final line join
-            //.xpostsys /strokedict get /firstang get //.xpostsys /strokedict get /ang get sub
+            .gscratch /strokedict get /firstang get .gscratch /strokedict get /ang get sub
             % the side reads from the turn within one revolution: the
             % atan angles wrap at 360, so a difference below -180 is
             % the same turn seen across the seam
             dup 0 lt { 360 add } if
             dup 0 le exch 180 ge or { % right turn
 
-                //.xpostsys /strokedict get /firstLL get aload pop
-                //.xpostsys /strokedict get /pointL get aload pop
-                //.xpostsys /strokedict get /cp get aload pop
+                .gscratch /strokedict get /firstLL get aload pop
+                .gscratch /strokedict get /pointL get aload pop
+                .gscratch /strokedict get /cp get aload pop
                 //.xpostsys /dolinejoin get exec
 
                 closepath
             }{ % left turn
 
-                //.xpostsys /strokedict get /firstRR get aload pop
-                //.xpostsys /strokedict get /pointR get aload pop
-                //.xpostsys /strokedict get /cp get aload pop
+                .gscratch /strokedict get /firstRR get aload pop
+                .gscratch /strokedict get /pointR get aload pop
+                .gscratch /strokedict get /cp get aload pop
                 //.xpostsys /dolinejoin get exec
 
                 closepath
@@ -887,10 +887,10 @@ override%pop pop%bind def
 
         } if
 
-        //.xpostsys /strokedict get /cp get 2 array copy
+        .gscratch /strokedict get /cp get 2 array copy
         << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath % moveto 6
 
-        //.xpostsys /strokedict get /justmoved false put
+        .gscratch /strokedict get /justmoved false put
     }
     %pstack()=
     /curve { pop } %s.b. eliminated by flattenpath
@@ -899,7 +899,7 @@ override%pop pop%bind def
 /strokepath {
     flattenpath          % convert all curve segments to line approximations
     //.xpostsys /dashpath get exec             % apply dashing effect
-    //.xpostsys /strokedict get /devlinewidth    % device-space width, while the CTM is live
+    .gscratch /strokedict get /devlinewidth    % device-space width, while the CTM is live
         currentlinewidth 0 dtransform
         dup mul exch dup mul add sqrt
     put
@@ -912,7 +912,7 @@ override%pop pop%bind def
             dup length 0 gt {
                 0 1 2 index length 1 sub { % p i sp_i j
                     2 copy get             % p i sp_i j sp_i_j
-                    //.xpostsys /strokedict get 1 index /cmd get get exec
+                    .gscratch /strokedict get 1 index /cmd get get exec
                     %(sd:)= pstack()=
                     pop                    % p i sp_i
                 } for              % p i sp_i

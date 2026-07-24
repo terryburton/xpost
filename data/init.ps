@@ -28,6 +28,15 @@ true setglobal   % systemdict is global, so these allocations must be global
 % each other by the same call form.
 currentglobal false setglobal
 userdict /.xpostsys 400 dict put
+% Mutable per-render scratch (strokedict, caches, local resources) must stay in
+% local VM so the collector reclaims it, yet the graphics machinery -- global
+% once it lives in systemdict -- cannot hold a frozen local reference to it. A
+% bound accessor bridges the two: .gscratch returns the local scratch dictionary
+% transiently, and a bound reference to the operator resists a program's
+% shadowing. Defined here, before any module loads, so every user reaches it.
+userdict /.gscratchdict 64 dict put
+/.gscratchproc [ //.gscratchdict ] cvx def
+/.gscratch dup /.gscratchproc load .wrapop def
 setglobal
 
 currentglobal true setglobal
@@ -769,6 +778,10 @@ end % userdict
     % (the get and exec of //.xpostsys /h get exec, and everything else) freeze
     % and survive a program shadowing an operator name
     .xpostsys .bindscope
+    % the mutable scratch holds procedure tables too (the stroke switch
+    % handlers live inside strokedict); bind them so they survive a program
+    % shadowing the operator names they call
+    .gscratch .bindscope
     % Relocate the private C operators from systemdict into .internaldict. Every
     % machinery reference to them is now frozen -- the standard operators bound
     % above and .bindscope over the loaded procedures -- so a program
@@ -780,6 +793,7 @@ end % userdict
         { dup 60 string cvs 0 get 46 eq
           1 index /.sysdictunlock ne and
           1 index /.sysdictrelock ne and
+          1 index /.gscratch ne and
         }{ false } ifelse
         { exch pop }{ pop pop } ifelse
     } forall ]
