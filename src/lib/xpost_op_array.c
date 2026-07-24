@@ -124,7 +124,15 @@ int xpost_op_array_to_mark (Xpost_Context *ctx)
         v = xpost_stack_pop(ctx->lo, ctx->os);
         if (xpost_object_get_type(v) == invalidtype)
             return stackunderflow;
-        xpost_array_put(ctx, a, i-1, v);
+        {
+            /* propagate the VM check: a global array (or procedure, built
+               through this same path) may not hold a local element, matching
+               the put operators -- array_put raised it but the result was
+               discarded, silently dropping the element */
+            int ret = xpost_array_put(ctx, a, i-1, v);
+            if (ret)
+                return ret;
+        }
     }
     (void)xpost_stack_pop(ctx->lo, ctx->os); // pop mark
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(a));
