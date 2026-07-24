@@ -271,7 +271,7 @@ end
     currentglobal
     false setglobal
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
     } stopped {
         (unable to load graphics)print
         handleerror
@@ -308,7 +308,7 @@ end
 % but do not assume an interactive session
 /startstdin {
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -323,15 +323,14 @@ end
 
 % execute postscript program from a named file, and handle errors.
 /startfilename { % (filename)
-    /inputfilename exch def
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
     } stopped {
         (unable to load graphics)print
         quit
     } if
     {
-        inputfilename (r) file cvx exec
+        (r) file cvx exec        % (filename) has stayed on the stack
         executive
     } stopped {
         .handlejoberror
@@ -344,15 +343,14 @@ end
 % a stream with no associated "name".
 /startfile { % file-object
     /QUIET where { pop }{ (startfile\n)print } ifelse
-    /inputfile exch def
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
     } stopped {
         (unable to load graphics)print
         quit
     } if
     {
-        inputfile cvx exec
+        cvx exec        % the file object has stayed on the stack
     } stopped {
         .handlejoberror
     } if
@@ -678,7 +676,7 @@ end % userdict
 } def
 
 % load graphics support
-/loadgraphics {
+.xpostsys /loadgraphics {
     /GRAPHICS_LOADED where { pop }{
         (/graphics.ps) //.xpostsys /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
@@ -719,10 +717,10 @@ end % userdict
         userdict /USEDRAWLINE true put
         initgraphics
     } ifelse
-} def
+} put
 
 /testfont {
-    loadgraphics
+    //.xpostsys /loadgraphics get exec
     /Courier findfont
     40 scalefont
     setfont
