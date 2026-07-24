@@ -32,7 +32,7 @@
 /fill {
     closepath
     flattenpath
-    doclip
+    //.xpostsys /doclip get exec
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
         [ % mark
@@ -101,7 +101,7 @@
         1 le {
         flattenpath
         //.xpostsys /dashpath get exec
-        doclip
+        //.xpostsys /doclip get exec
         mark
         {          % x0 y0 
             2 copy % x0 y0 x0 y0
