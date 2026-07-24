@@ -192,7 +192,7 @@ userdict /stroke /st.stroke load put
 % error: it names the command, and the stacks return to their depths
 % at the call -- what the procedure part-way pushed drops, operands
 % still in place stay
-/ep.op /ep.testname { (j1) (j2) ep.doesnotexist } .wrapop def
+/ep.op /ep.testname { (j1) (j2) ep.doesnotexist } 1183615869 internaldict /.wrapop get exec def
 count /ep.d0 exch def
 1 2 { ep.op } stopped
 (the wrapped-operator error is caught) assert
@@ -202,19 +202,19 @@ exch 32 string cvs (ep.testname) eq and
 count ep.d0 sub 2 eq (the operand depth at the call comes back) assert
 pop pop
 % nested wrapped calls report the innermost and unwind to the caller
-/ep.in /ep.inner { 7 8 ep.alsomissing } .wrapop def
-/ep.out /ep.outer { (x) (y) ep.in } .wrapop def
+/ep.in /ep.inner { 7 8 ep.alsomissing } 1183615869 internaldict /.wrapop get exec def
+/ep.out /ep.outer { (x) (y) ep.in } 1183615869 internaldict /.wrapop get exec def
 count /ep.d1 exch def
 { ep.out } stopped pop
 $error /command get 32 string cvs (ep.inner) eq
 (a nested wrapped error names the innermost operator) assert
 count ep.d1 eq (a nested wrapped error unwinds the operand junk) assert
 % a wrapper that catches its own error keeps its own state
-/ep.c /ep.catcher { (kept) { ep.gone } stopped pop } .wrapop def
+/ep.c /ep.catcher { (kept) { ep.gone } stopped pop } 1183615869 internaldict /.wrapop get exec def
 ep.c (kept) eq (a wrapper catching its own error keeps its stack) assert
 % the dict stack comes back when the procedure dies inside a begin
 countdictstack /ep.dd exch def
-/ep.d /ep.dicty { 5 dict begin ep.nothere } .wrapop def
+/ep.d /ep.dicty { 5 dict begin ep.nothere } 1183615869 internaldict /.wrapop get exec def
 { ep.d } stopped pop
 countdictstack ep.dd eq (the dict depth at the call comes back) assert
 

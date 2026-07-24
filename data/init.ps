@@ -39,6 +39,23 @@ setglobal
 % The calling convention matches .xpostint's.
 currentglobal true setglobal
 userdict /.xpostsys 400 dict put
+% The private C operators live under dot-prefixed names. Near the end of
+% graphics loading they are relocated out of systemdict into .internaldict, so
+% a program sees only the standard operators in systemdict while a font program
+% still reaches them through 1183615869 internaldict. The few operators fetched
+% by name during graphics loading are seeded here first, before that pass.
+userdict /.internaldict 256 dict put
+[ /.fillpoly ]
+{ dup systemdict exch get .internaldict 3 1 roll put } forall
+
+% int  internaldict  dict
+% the guarded accessor by which a font program reaches the private
+% operators; the password is part of the language folklore
+/internaldict {
+    1183615869 eq { //.internaldict }{
+        /internaldict cvx /invalidaccess signalerror
+    } ifelse
+} bind def
 setglobal
 
 /statusdict <<
@@ -756,6 +773,19 @@ end % userdict
     % (the get and exec of //.xpostint /h get exec, and everything else) freeze
     % and survive a program shadowing an operator name
     .xpostint .bindscope
+    % Relocate the private C operators from systemdict into .internaldict. Every
+    % machinery reference to them is now frozen -- the standard operators bound
+    % above and .bindscope over the loaded procedures -- so a program
+    % enumerating systemdict sees only the standard names, while a font program
+    % reaches them through 1183615869 internaldict.
+    [ systemdict {
+        exch dup type /nametype eq
+        2 index type /operatortype eq and
+        { dup 60 string cvs 0 get 46 eq }{ false } ifelse
+        { exch pop }{ pop pop } ifelse
+    } forall ]
+    dup { dup systemdict exch get .internaldict 3 1 roll put } forall
+    { systemdict exch undef } forall
     userdict /.bindone undef
     userdict /.bindscope undef
         userdict /GRAPHICS_LOADED true put
