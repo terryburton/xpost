@@ -697,6 +697,10 @@ end % userdict
 % load graphics support
 .xpostsys /loadgraphics {
     /GRAPHICS_LOADED where { pop }{
+        % Open a writeable window on systemdict so the graphics language can be
+        % relocated into it; the matching relock below closes it. For now the
+        % language still loads into userdict, so the window is inert.
+        .sysdictunlock
         (/graphics.ps) //.xpostsys /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
@@ -773,11 +777,15 @@ end % userdict
     [ systemdict {
         exch dup type /nametype eq
         2 index type /operatortype eq and
-        { dup 60 string cvs 0 get 46 eq }{ false } ifelse
+        { dup 60 string cvs 0 get 46 eq
+          1 index /.sysdictunlock ne and
+          1 index /.sysdictrelock ne and
+        }{ false } ifelse
         { exch pop }{ pop pop } ifelse
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
+    .sysdictrelock
     userdict /.bindone undef
     userdict /.bindscope undef
         userdict /GRAPHICS_LOADED true put

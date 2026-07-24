@@ -109,6 +109,12 @@ struct _Xpost_Context {
 
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
 
+    int sysdict_unlocked; /**< systemdict is temporarily writeable while the
+                            graphics language loads into it; the error handler
+                            relocks it if a load faults */
+    int sysdict_load_done; /**< the graphics language has been loaded into
+                             systemdict; the one-shot unlock is spent */
+
     int es_over;              /**< the exec-stack ceiling has been reported;
                                    holds off a re-raise until depth recedes */
     int os_over;              /**< likewise for the operand stack */
