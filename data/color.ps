@@ -34,10 +34,12 @@
     //.xpostint /currentcolordict get currentcolorspace get exec
 } bind def
 
-/.min { % x y  . x (if x < y)
+currentglobal true setglobal
+.xpostsys /.min { % x y  . x (if x < y)
         %        y (otherwise)
     2 copy gt{exch}if pop
-} bind def
+} bind put
+setglobal
 % component  .c01  real in [0,1]
 % a colour component is clamped to the unit range (PLRM: values outside
 % 0 to 1 are adjusted to the nearest valid value)
@@ -68,7 +70,7 @@
             .11 mul add
             graphicsdict /currgstate get /colorcomp4 get
             add
-            1 .min sub
+            1 //.xpostsys /.min get exec sub
         } bind
     >>
     /DeviceRGB <<
@@ -85,11 +87,11 @@
         /DeviceCMYK {
             graphicsdict /currgstate get /colorcomp4 get % k
             1 graphicsdict /currgstate get /colorcomp1 get % k 1 c
-            2 index add 1 .min sub % k 1-min(1,c+k)
+            2 index add 1 //.xpostsys /.min get exec sub % k 1-min(1,c+k)
             1 graphicsdict /currgstate get /colorcomp2 get % k R 1 m
-            3 index add 1 .min sub % k R 1-min(1,m+k)
+            3 index add 1 //.xpostsys /.min get exec sub % k R 1-min(1,m+k)
             1 graphicsdict /currgstate get /colorcomp3 get % k R G 1 y
-            5 4 roll add 1 .min sub % R G 1-min(1,y+k)
+            5 4 roll add 1 //.xpostsys /.min get exec sub % R G 1-min(1,y+k)
         } bind
     >>
     /DeviceCMYK <<
@@ -104,8 +106,8 @@
             % component moves entirely into the black channel, so black
             % separates as pure K rather than four inks
             1 graphicsdict /currgstate get /colorcomp1 get sub
-            1 graphicsdict /currgstate get /colorcomp2 get sub .min
-            1 graphicsdict /currgstate get /colorcomp3 get sub .min  % k
+            1 graphicsdict /currgstate get /colorcomp2 get sub //.xpostsys /.min get exec
+            1 graphicsdict /currgstate get /colorcomp3 get sub //.xpostsys /.min get exec  % k
             dup dup dup                                              % k k k k
             1 graphicsdict /currgstate get /colorcomp1 get sub exch sub % k k k c'
             4 1 roll                                                 % c' k k k

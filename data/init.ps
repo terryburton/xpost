@@ -31,6 +31,17 @@ currentglobal false setglobal
 userdict /.xpostint 400 dict put
 setglobal
 
+% .xpostsys -- the GLOBAL companion to .xpostint. Machinery that loads in
+% global VM (built under currentglobal true) cannot reference the local
+% .xpostint: a global object may not hold a local one. Helpers those
+% families need live here instead, in a global dictionary a global
+% procedure may freeze into itself. And because a local procedure may
+% freely reference a global object, .xpostsys serves local machinery too.
+% The calling convention matches .xpostint's.
+currentglobal true setglobal
+userdict /.xpostsys 400 dict put
+setglobal
+
 /statusdict <<
     /manualfeed false
     /product (Xpost)
