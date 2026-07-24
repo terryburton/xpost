@@ -706,6 +706,12 @@ end % userdict
         dup userdict exch known {
             dup userdict exch get
             dup type /arraytype eq 1 index xcheck and {
+                % bind the procedure before wrapping it: a wrapped operator's
+                % body is not reached by the later .bindscope pass, so freezing
+                % its operator references (the get and exec of an internal
+                % helper call, among the rest) has to happen here, or a program
+                % that shadows an operator name reaches into the machinery.
+                bind
                 graphicsdict /.wrappedprocs get 2 index 2 index put
                 1 index exch .wrapop
                 userdict 3 1 roll put
@@ -736,6 +742,10 @@ end % userdict
     userdict .bindscope
     graphicsdict .bindscope
     errordict .bindscope
+    % the private helper namespace too, so a helper's own operator references
+    % (the get and exec of //.xpostsys /h get exec, and everything else) freeze
+    % and survive a program shadowing an operator name
+    .xpostsys .bindscope
     userdict /.bindone undef
     userdict /.bindscope undef
         userdict /GRAPHICS_LOADED true put
