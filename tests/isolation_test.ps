@@ -24,9 +24,12 @@ faildict /n 0 put
 gsave grestore
 
 /HELPERS [
+    % relocated helper procedures
     /gstatecopy /strcat /ravec /cpath /dolinejoin /ptdiff /magang /arcbez
     /rect /dashpath /minlinewidth /crossdashbound /dopending
     /initial_ipos
+    % relocated private state dictionaries
+    /dashdict /strokedict /setcolordict /currentcolordict
 ] def
 
 % (1) none of the internal helper names are visible to a program

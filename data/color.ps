@@ -15,23 +15,23 @@
     graphicsdict /currgstate get /colorspace get
 } bind def
 
-/setcolordict <<
+.xpostint /setcolordict <<
     /DeviceGray /setgray cvx
     /DeviceRGB /setrgbcolor cvx
     /DeviceCMYK /setcmykcolor cvx
     /Pattern { pop }
->> def
+>> put
 /setcolor {
-    //setcolordict currentcolorspace get exec
+    //.xpostint /setcolordict get currentcolorspace get exec
 } bind def
 
-/currentcolordict <<
+.xpostint /currentcolordict <<
     /DeviceGray /currentgray cvx
     /DeviceRGB /currentrgbcolor cvx
     /DeviceCMYK /currentcmykcolor cvx
->> def
+>> put
 /currentcolor {
-    //currentcolordict currentcolorspace get exec
+    //.xpostint /currentcolordict get currentcolorspace get exec
 } bind def
 
 /.min { % x y  . x (if x < y)
