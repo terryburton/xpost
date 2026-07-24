@@ -169,10 +169,10 @@ override%pop pop%bind def
 % for the arc that is symmetrical about the x-axis
 % formula derived from http://www.tinaja.com/glib/bezarc1.pdf
 .xpostint /arcbez { % draw single bezier % x y r angle1 angle2  .  x1 y1 x2 y2 x3 y3 x0 y0
-	DICT
-    %5 dict
+	10 dict
 	begin
-    %/mat matrix def
+    /mat matrix def
+    /mat1 matrix def
     5 3 roll mat translate pop                         % r angle1 angle2
     3 2 roll dup mat1 scale mat mat concatmatrix pop % angle1 angle2
     2 copy exch sub /da exch def                       % da=a2-a1
@@ -699,6 +699,11 @@ override%pop pop%bind def
 %                 ----
 %                 1  4
 %           point RR  point LL
+% strokedict is mutable per-render state: local, in the local scratch,
+% while the machinery around it loads global; the pathforall walkers'
+% scratch dictionary lives beside it for the same reason
+currentglobal false setglobal
+.gscratch /.pfdict 12 dict put
 .gscratch /strokedict <<
     /ang 0
     /oldcp 2 array
@@ -895,6 +900,7 @@ override%pop pop%bind def
     %pstack()=
     /curve { pop } %s.b. eliminated by flattenpath
 >> put
+setglobal
 
 /strokepath {
     flattenpath          % convert all curve segments to line approximations
@@ -972,8 +978,7 @@ override%pop pop%bind def
 % move line curve close  pathforall  -
 % enumerate current path in user coordinates
 /pathforall {
-DICT
-%5 dict
+.gscratch /.pfdict get
 begin
     {close curve line move}{exch def}forall
     0 1 //.xpostint /cpath get exec length 1 sub {
@@ -1004,15 +1009,12 @@ begin
         } for
     } for
 end
-}
-dup 0 10 dict put
-bind def
+} bind def
 
 % move line curve close  .devpathforall  -
 % enumerate current path in device coordinates
 /.devpathforall {
-DICT
-%5 dict
+.gscratch /.pfdict get
 begin
     {close curve line move}{exch def}forall
     0 1 //.xpostint /cpath get exec length 1 sub {
@@ -1029,8 +1031,6 @@ begin
         } for
     } for
 end
-}
-dup 0 10 dict put
-bind def
+} bind def
 
 /QUIET where { pop }{ (eof path.ps\n)print } ifelse

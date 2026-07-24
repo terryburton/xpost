@@ -8,11 +8,15 @@
     /breakhere{}def
 }ifelse
 
-false setglobal
+true setglobal
 userdict begin
 
     %/CONSTRAINFLATNESS null def
 
+    % graphicsdict holds the live per-render graphics state -- currgstate and
+    % the gstack, which carries local gstate copies -- so it and its accessors
+    % stay in local VM while the machinery around them loads into global VM.
+    currentglobal false setglobal
     /graphicsdict <<
         /currgstate 12 dict
         /gstackarray 100 array
@@ -29,6 +33,7 @@ userdict begin
     /graphicsdict dup /.graphicsdictproc load .wrapop def
     /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
     /DEVICE dup /.DEVICEproc load .wrapop def
+    setglobal
 
     %breakhere
     (/device.ps) //.xpostint /.loadmodule get exec %loads and uses (/image.ps)
@@ -41,6 +46,11 @@ userdict begin
     (/font.ps) //.xpostint /.loadmodule get exec
     (/pattern.ps) //.xpostint /.loadmodule get exec
 
+
+% The language definitions loaded into global VM above; the binding pass
+% below rebinds the local userdict and systemdict in place, so return to
+% local VM (the [ currentdict systemdict ] array it builds is local).
+false setglobal
 
 % The graphics machinery is implemented in PostScript and runs in the
 % middle of user programs, whose dictionaries are then on the dict

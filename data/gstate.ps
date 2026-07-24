@@ -2,7 +2,9 @@
 
 % gstatetemplate yields a freshly-initialized dictionary
 % with the following values. currmatrix and scratchmatrix
-% are newly-allocated arrays.
+% are newly-allocated arrays. The template embeds local objects (the initial
+% path storage and the device), so it and its accessor stay in local VM.
+currentglobal false setglobal
 /gstatetemplate <<
     /colorspace /DeviceGray
     /colorcomp1 0.0
@@ -30,6 +32,7 @@
     dup /currmatrix [ 1 0 0 1 0 0 ] put  % allocate fresh arrays
     dup /scratchmatrix [ 1 0 0 1 0 0 ] put
 } def
+setglobal
 
 
 

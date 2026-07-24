@@ -26,14 +26,19 @@ true setglobal   % systemdict is global, so these allocations must be global
 % time, so a program cannot shadow it; the /h get resolves the helper at run
 % time, which keeps recursion and forward references working. Helpers reach
 % each other by the same call form.
-currentglobal false setglobal
+% .xpostint is GLOBAL: it holds the graphics helper procedures and their static
+% tables, which move into systemdict with the language, and a global object may
+% not hold a local one. Its mutable state lives in .gscratch (below) instead.
+currentglobal true setglobal
 userdict /.xpostint 400 dict put
+setglobal
 % Mutable per-render scratch (strokedict, caches, local resources) must stay in
 % local VM so the collector reclaims it, yet the graphics machinery -- global
 % once it lives in systemdict -- cannot hold a frozen local reference to it. A
 % bound accessor bridges the two: .gscratch returns the local scratch dictionary
 % transiently, and a bound reference to the operator resists a program's
 % shadowing. Defined here, before any module loads, so every user reaches it.
+currentglobal false setglobal
 userdict /.gscratchdict 64 dict put
 /.gscratchproc [ //.gscratchdict ] cvx def
 /.gscratch dup /.gscratchproc load .wrapop def
@@ -93,10 +98,9 @@ serverdict /exitserver {
 
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
 % factoring the "(/x.ps) //.xpostint /.loadmodule get exec" idiom that appears throughout
-% the machinery. Kept in .xpostint like every other helper. It must be a
-% local object: it embeds the local .xpostint via //, and a global object
-% may not reference a local one.
-currentglobal false setglobal
+% the machinery. Kept in .xpostint like every other helper, and global with it:
+% the //.xpostint it embeds is now a global reference.
+currentglobal true setglobal
 .xpostint /.loadmodule { % (/name.ps)  .  -
     DATA_DIR exch //.xpostint /strcat get exec run
 } bind put
@@ -687,11 +691,12 @@ end % userdict
 } def
 
 % x y w h
+currentglobal true setglobal   % a global .xpostint helper
 .xpostint /rect { %ccw in device space
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
-    idtransform 4 2 roll itransform 
+    idtransform 4 2 roll itransform
     2 copy 6 2 roll
     moveto
     1 index 0 rlineto
@@ -699,6 +704,7 @@ end % userdict
     neg 0 rlineto
     lineto
 } put
+setglobal
 
 % the painting pair works on its own path and leaves the caller's
 % untouched; rectclip clips by the rectangles alone and clears the
@@ -712,6 +718,10 @@ end % userdict
 } def
 
 % load graphics support
+% Global, like every .xpostint helper. It matters here beyond the dictionary's
+% own VM: the device-maker procedures baked into this body must be global so the
+% .devicemakers dictionary it builds can install into the global .xpostint.
+currentglobal true setglobal
 .xpostint /loadgraphics {
     /GRAPHICS_LOADED where { pop }{
         % Open a writeable window on systemdict so the graphics language can be
@@ -816,6 +826,7 @@ end % userdict
         initgraphics
     } ifelse
 } put
+setglobal
 
 /testfont {
     //.xpostint /loadgraphics get exec
