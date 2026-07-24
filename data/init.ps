@@ -777,9 +777,11 @@ false setglobal
     cvx {exec}stopped pop } def
 /pause{ doprompt } def
 
-/.dir {
+currentglobal true setglobal
+.xpostsys /.dir {
     (*) { = } 128 string filenameforall
-} def
+} put
+setglobal
 
 /xpost {
     (Xpost is running. Please type a command:\n)print
