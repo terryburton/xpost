@@ -445,6 +445,16 @@ test('isolation',
   args: [ xpost_exe, files('tests/isolation_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Access-attribute enforcement: readonly, executeonly and noaccess reduce the
+# value and execution access of composite objects, and the standard operators
+# raise invalidaccess (or the access operators typecheck) accordingly, across
+# arrays, strings and dictionaries. Standard PostScript that prints SUCCESS on
+# a conforming interpreter too, so it is a conformance test rather than an xpost tautology.
+test('access',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/access_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',

@@ -107,8 +107,10 @@ static
 int Aexecuteonly(Xpost_Context *ctx,
                  Xpost_Object o)
 {
-    //o.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-    //o.tag |= (XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    word type = xpost_object_get_type(o);
+    /* executeonly applies to arrays, strings and files, not dictionaries */
+    if (type != arraytype && type != stringtype && type != filetype)
+        return typecheck;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
@@ -120,8 +122,9 @@ static
 int Anoaccess(Xpost_Context *ctx,
               Xpost_Object o)
 {
-    //o.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-    //o.tag |= (XPOST_OBJECT_TAG_ACCESS_NONE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    /* noaccess applies to composite objects and files */
+    if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
+        return typecheck;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
@@ -133,8 +136,9 @@ static
 int Areadonly(Xpost_Context *ctx,
               Xpost_Object o)
 {
-    //o.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-    //o.tag |= (XPOST_OBJECT_TAG_ACCESS_READ_ONLY << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    /* readonly applies to composite objects and files */
+    if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
+        return typecheck;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
@@ -465,6 +469,8 @@ int AScvs (Xpost_Context *ctx,
     int n;
     int ret;
 
+    if (!xpost_object_is_writeable(ctx, str))
+        return invalidaccess;
     switch(xpost_object_get_type(any))
     {
         default:
