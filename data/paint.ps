@@ -14,7 +14,7 @@
     gsave
         %(1 setgray\n) print
         1 setgray
-        [ currentcolordict DEVICE /nativecolorspace get
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         %dup =
         get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
@@ -69,7 +69,7 @@
     ]
 
     dup length 2 gt {
-        [ currentcolordict DEVICE /nativecolorspace get get exec
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
         counttomark 2 add -1 roll
         DEVICE dup /FillPoly get exec
@@ -109,7 +109,7 @@
         }
         {          % ... xN-1 yN-1 xN yN
             4 copy % ... xN-1 yN-1 xN yN xN-1 yN-1 xN yN
-            [ currentcolordict DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
@@ -121,7 +121,7 @@
         {}
         {            % x0 y0 xN yN
             4 2 roll % xN yN x0 y0
-            [ currentcolordict DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll % gray xN yN x0 y0
