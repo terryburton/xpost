@@ -1,0 +1,68 @@
+% Local/global VM integrity checks, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% PLRM's VM rule: a global composite object may not hold a reference to a
+% local one, so a local object can never outlive the restore that reclaims it
+% while something global still points at it. xpost enforces this in the put
+% operators, but -- unlike the reference interpreters -- NOT in literal
+% construction ([ ] and { }): a global array or procedure can be built holding
+% a local object, and restore does not then detect the dangling reference. The
+% final section characterises that gap so a change in either direction is
+% noticed; the checks above it guard the enforcement that does hold. See
+% COMPLIANCE.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/probe { { exec } stopped } bind def    % proc . did-it-raise-an-error?
+
+% --- enforced: a local value may not enter a global container -------------
+clear false setglobal /Ld 4 dict def
+true setglobal /Gd 4 dict def
+{ Gd /k Ld put } probe (a local value is rejected from a global dict) assert
+
+clear true setglobal /Ga 1 array def
+false setglobal /La 4 dict def
+true setglobal
+{ Ga 0 La put } probe (a local value is rejected from a global array) assert
+
+% --- allowed: a global value may enter a local container; same-VM is fine --
+clear false setglobal /Ld2 4 dict def
+true setglobal /Gd2 4 dict def
+false setglobal
+{ Ld2 /k Gd2 put } probe not (a global value is accepted into a local dict) assert
+
+clear false setglobal /La2 1 array def
+true setglobal /Gd3 4 dict def
+false setglobal
+{ La2 0 Gd3 put } probe not (a global value is accepted into a local array) assert
+
+clear true setglobal /Gd4 4 dict def /Gd5 4 dict def
+false setglobal
+{ Gd4 /k Gd5 put } probe not (global into global is accepted) assert
+
+clear false setglobal /Ld6 4 dict def /Ld7 4 dict def
+{ Ld6 /k Ld7 put } probe not (local into local is accepted) assert
+
+% --- DEVIATION from the reference interpreters ----------------------------
+% gs raises invalidaccess when building [ local ] (or baking { //local })
+% under global VM; xpost builds the reference silently. The same silent build
+% underlies baking a local helper into a global procedure, and a later restore
+% does not catch the resulting dangling reference. These assert the CURRENT
+% xpost behaviour: when literal construction learns the VM check, they flip and
+% this section must be updated to expect protection (and COMPLIANCE amended).
+clear false setglobal /Ldev 4 dict def
+true setglobal
+{ [ Ldev ] pop } probe not
+    (DEVIATION: a global array literal silently accepts a local element) assert
+clear false setglobal
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

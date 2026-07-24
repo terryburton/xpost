@@ -290,6 +290,14 @@ test('save-restore',
   args: [ xpost_exe, files('tests/save_restore_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Local/global VM integrity: the put operators reject a local value entering a
+# global container and accept the reverse; a characterisation guard records
+# that literal construction ([ ] and { }) skips the check, unlike gs.
+test('vm',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/vm_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # counttomark and the [ ] / << >> constructors built on it: correctness plus
 # a performance guard -- an O(n^2) counttomark on a deep stack times the test out.
 test('counttomark',
