@@ -12,9 +12,8 @@ systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
 % .xpostint -- the interpreter's private namespace. Internal helper
-% procedures live here instead of scattered through userdict, so they
-% neither pollute the names a program may use nor obscure a program's own
-% definitions. Only the single dotted anchor name remains visible; the
+% procedures live here, out of the names a program may use, so they neither
+% pollute those names nor obscure a program's own definitions. Only the single dotted anchor name remains visible; the
 % helpers hide behind it. It is a LOCAL dictionary (the machinery loads in
 % local VM, so its helpers are local objects a global dictionary could not
 % hold) anchored in userdict, populated once at build time and stable across
