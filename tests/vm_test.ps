@@ -3,13 +3,10 @@
 %
 % PLRM's VM rule: a global composite object may not hold a reference to a
 % local one, so a local object can never outlive the restore that reclaims it
-% while something global still points at it. xpost enforces this in the put
-% operators, but -- unlike the reference interpreters -- NOT in literal
-% construction ([ ] and { }): a global array or procedure can be built holding
-% a local object, and restore does not then detect the dangling reference. The
-% final section characterises that gap so a change in either direction is
-% noticed; the checks above it guard the enforcement that does hold. See
-% COMPLIANCE.
+% while something global still points at it. The rule is enforced uniformly --
+% by the put operators AND by literal construction ([ ] and the { } procedure
+% builder, which share the array-from-mark path). This file runs identically
+% on the reference interpreters: every assertion here also holds on gs.
 
 /faildict 2 dict def
 faildict /n 0 put
@@ -31,6 +28,12 @@ false setglobal /La 4 dict def
 true setglobal
 { Ga 0 La put } probe (a local value is rejected from a global array) assert
 
+% construction is checked too: gs and xpost both raise invalidaccess building
+% [ local ] under global VM (the { //local } procedure builder shares this path)
+clear false setglobal /Lc 4 dict def
+true setglobal
+{ [ Lc ] pop } probe (a local value is rejected from a global array literal) assert
+
 % --- allowed: a global value may enter a local container; same-VM is fine --
 clear false setglobal /Ld2 4 dict def
 true setglobal /Gd2 4 dict def
@@ -49,17 +52,10 @@ false setglobal
 clear false setglobal /Ld6 4 dict def /Ld7 4 dict def
 { Ld6 /k Ld7 put } probe not (local into local is accepted) assert
 
-% --- DEVIATION from the reference interpreters ----------------------------
-% gs raises invalidaccess when building [ local ] (or baking { //local })
-% under global VM; xpost builds the reference silently. The same silent build
-% underlies baking a local helper into a global procedure, and a later restore
-% does not catch the resulting dangling reference. These assert the CURRENT
-% xpost behaviour: when literal construction learns the VM check, they flip and
-% this section must be updated to expect protection (and COMPLIANCE amended).
-clear false setglobal /Ldev 4 dict def
-true setglobal
-{ [ Ldev ] pop } probe not
-    (DEVIATION: a global array literal silently accepts a local element) assert
+% a local array literal may of course hold a local element
+clear false setglobal /Lc2 4 dict def
+{ [ Lc2 ] pop } probe not (a local array literal accepts a local element) assert
+
 clear false setglobal
 
 count 0 eq (operand stack is balanced) assert
