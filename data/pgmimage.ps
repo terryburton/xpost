@@ -1,6 +1,6 @@
 /QUIET where { pop }{ (loading pgmimage.ps...)print } ifelse
 
-DATA_DIR(/qsort.ps)strcat run
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
     PGMIMAGE dup /Create get exec

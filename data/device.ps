@@ -5,9 +5,9 @@
 
 /QUIET where { pop }{ (loading device.ps...\n)print } ifelse
 
-DATA_DIR (/image.ps) strcat run  % image.ps implements device base classes
-DATA_DIR (/nulldev.ps) strcat run  % nulldevice
-DATA_DIR (/pdfwrite.ps) strcat run  % pdf device
+(/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
+(/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
+(/pdfwrite.ps) //.xpostsys /.loadmodule get exec  % pdf device
 
 %/newdefaultdevice load ==
 newdefaultdevice % defined in xpost_interpreter.c:setlocalconfig()
