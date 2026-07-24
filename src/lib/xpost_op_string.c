@@ -72,6 +72,8 @@ static
 int Slength(Xpost_Context *ctx,
             Xpost_Object S)
 {
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(S.comp_.sz));
     return 0;
 }
@@ -112,6 +114,10 @@ int Scopy(Xpost_Context *ctx,
           Xpost_Object D)
 {
     Xpost_Object subs;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
     if (D.comp_.sz < S.comp_.sz)
         return rangecheck;
     s_copy(ctx, S, D);
@@ -129,6 +135,8 @@ int Sget(Xpost_Context *ctx,
 {
     integer val;
     int ret;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
     ret = xpost_string_get(ctx, S, I.int_.val, &val);
     if (ret)
         return ret;
@@ -142,6 +150,8 @@ int Sput(Xpost_Context *ctx,
          Xpost_Object I,
          Xpost_Object C)
 {
+    if (!xpost_object_is_writeable(ctx, S))
+        return invalidaccess;
     return xpost_string_put(ctx, S, I.int_.val, C.int_.val);
 }
 
@@ -151,7 +161,10 @@ int Sgetinterval(Xpost_Context *ctx,
                  Xpost_Object I,
                  Xpost_Object L)
 {
-    Xpost_Object subs = xpost_object_get_interval(S, I.int_.val, L.int_.val);
+    Xpost_Object subs;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    subs = xpost_object_get_interval(S, I.int_.val, L.int_.val);
     if (xpost_object_get_type(subs) == invalidtype)
         return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, subs);
@@ -164,7 +177,12 @@ int Sputinterval(Xpost_Context *ctx,
                  Xpost_Object I,
                  Xpost_Object S)
 {
-    Xpost_Object subs = xpost_object_get_interval(D, I.int_.val, S.comp_.sz);
+    Xpost_Object subs;
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    subs = xpost_object_get_interval(D, I.int_.val, S.comp_.sz);
     if (xpost_object_get_type(subs) == invalidtype)
         return rangecheck;
     s_copy(ctx, S, subs);
@@ -191,6 +209,8 @@ int Sanchorsearch(Xpost_Context *ctx,
     char *s, *k;
     Xpost_Object interval;
 
+    if (!xpost_object_is_readable(ctx, str) || !xpost_object_is_readable(ctx, seek))
+        return invalidaccess;
     s = xpost_string_get_pointer(ctx, str);
     k = xpost_string_get_pointer(ctx, seek);
     if (seek.comp_.sz <= str.comp_.sz && ancsearch(s, k, seek.comp_.sz))
@@ -222,6 +242,8 @@ int Ssearch(Xpost_Context *ctx,
     char *s, *k;
     Xpost_Object interval;
 
+    if (!xpost_object_is_readable(ctx, str) || !xpost_object_is_readable(ctx, seek))
+        return invalidaccess;
     if (seek.comp_.sz > str.comp_.sz)
     {
         /* needle cannot match: report not-found, per PLRM */
@@ -265,6 +287,8 @@ int Sforall(Xpost_Context *ctx,
     integer val;
     int ret;
 
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
     if (S.comp_.sz == 0) return 0;
     assert(ctx->gl->base);
     //xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "forall", NULL,0,0));

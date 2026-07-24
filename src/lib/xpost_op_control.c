@@ -59,6 +59,12 @@ static
 int xpost_op_any_exec (Xpost_Context *ctx,
                        Xpost_Object O)
 {
+    word type = xpost_object_get_type(O);
+    /* executing an array or string reads its contents, which a
+       no-access object forbids; dicts are merely pushed, so are exempt */
+    if ((type == arraytype || type == stringtype)
+        && xpost_object_get_access(ctx, O) == XPOST_OBJECT_TAG_ACCESS_NONE)
+        return invalidaccess;
     if (!xpost_stack_push(ctx->lo, ctx->es, O))
         return execstackoverflow;
     return 0;

@@ -719,6 +719,8 @@ int Stoken(Xpost_Context *ctx,
     Xpost_Object t;
     int ret;
 
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->hold, S);
 
     ret = toke(ctx, &S, Snext, Sback, &t);
