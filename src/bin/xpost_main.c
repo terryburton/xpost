@@ -138,6 +138,7 @@ _xpost_main_usage(const char *filename)
     printf("  -o, --output=[FILE]                output file\n");
     printf("  -d, --device=[STRING]              device name\n");
     printf("  -Dname=token, --define name=token  add definition to userdict\n");
+    printf("  --no-graphics                      lock down and run without loading graphics\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
     printf("  -q, --quiet                        suppress interpreter messages (default)\n");
     printf("  -v, --verbose                      do not go quiet into that good night\n");
@@ -245,6 +246,7 @@ int main(int argc, char *argv[])
     const char *define = NULL;
     char **defs = NULL;
     int num_defs = 0;
+    int no_graphics = 0;
     int output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
     int have_device;
     int width = -1;
@@ -361,6 +363,10 @@ int main(int argc, char *argv[])
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
             }
+            else if (!strcmp(argv[i], "--no-graphics"))
+            {
+                no_graphics = 1;
+            }
             else if ((!strcmp(argv[i], "-v")) ||
                      (!strcmp(argv[i], "--verbose")))
             {
@@ -447,6 +453,9 @@ int main(int argc, char *argv[])
         XPOST_LOG_ERR("Failed to initialize.");
         goto quit_xpost;
     }
+
+    if (no_graphics)
+        xpost_skip_graphics_set(ctx, 1);
 
     XPOST_LOG_INFO("defs=%p", (void*)defs);
     if (defs){
