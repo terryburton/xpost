@@ -7,10 +7,8 @@
 %      array proc  qsort  -
 % sort array contents in-place using proc or `lt` for comparisons
 
-% qsort is an internal helper, not a standard operator (absent from PostScript
-% and Ghostscript), so it lives in the private .xpostsys namespace, reached
-% through a frozen //.xpostsys reference a program cannot shadow. Global VM, so
-% the global graphics machinery can bind it and its private qsortdict helpers.
+% qsort, with its qsortdict helpers, lives in the private .xpostsys namespace
+% in global VM; call sites reach it as //.xpostsys /qsort get exec.
 .xpostsys /qsort known { currentfile flushfile } if
 
 currentglobal true setglobal

@@ -11,13 +11,11 @@
 systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
-% .xpostsys -- the interpreter's private namespace. Internal helper
-% procedures live here, out of the names a program may use, so they neither
-% pollute those names nor obscure a program's own definitions. Only the single dotted anchor name remains visible; the
-% helpers hide behind it. It is a LOCAL dictionary (the machinery loads in
-% local VM, so its helpers are local objects a global dictionary could not
-% hold) anchored in userdict, populated once at build time and stable across
-% save/restore thereafter.
+% .xpostsys -- the interpreter's private namespace. Internal helper procedures
+% and their static tables live here, out of the names a program may use; only
+% the dotted anchor name is visible and the helpers hide behind it. A GLOBAL
+% dictionary anchored in userdict, populated once at build time; its mutable
+% per-render state lives in .gscratch (below) instead.
 %
 % Convention -- a helper h is defined and called as:
 %     .xpostsys /h { ... } put              % define
@@ -26,18 +24,13 @@ true setglobal   % systemdict is global, so these allocations must be global
 % time, so a program cannot shadow it; the /h get resolves the helper at run
 % time, which keeps recursion and forward references working. Helpers reach
 % each other by the same call form.
-% .xpostsys is GLOBAL: it holds the graphics helper procedures and their static
-% tables, which move into systemdict with the language, and a global object may
-% not hold a local one. Its mutable state lives in .gscratch (below) instead.
 currentglobal true setglobal
 userdict /.xpostsys 400 dict put
 setglobal
-% Mutable per-render scratch (strokedict, caches, local resources) must stay in
-% local VM so the collector reclaims it, yet the graphics machinery -- global
-% once it lives in systemdict -- cannot hold a frozen local reference to it. A
-% bound accessor bridges the two: .gscratch returns the local scratch dictionary
-% transiently, and a bound reference to the operator resists a program's
-% shadowing. Defined here, before any module loads, so every user reaches it.
+% .gscratch returns the local scratch dictionary the machinery mutates each
+% render (strokedict, caches, local resources); it is a LOCAL object the
+% collector reclaims. A bound reference to the operator resists shadowing.
+% Defined before any module loads.
 currentglobal false setglobal
 userdict /.gscratchdict 64 dict put
 /.gscratchproc [ //.gscratchdict ] cvx def
@@ -90,8 +83,7 @@ serverdict /exitserver {
 
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
 % factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
-% the machinery. Kept in .xpostsys like every other helper, and global with it:
-% the //.xpostsys it embeds is now a global reference.
+% the machinery. In .xpostsys like every other helper, and global with it.
 currentglobal true setglobal
 .xpostsys /.loadmodule { % (/name.ps)  .  -
     DATA_DIR exch //.xpostsys /strcat get exec run
@@ -709,16 +701,13 @@ setglobal
     (/test.ps) //.xpostsys /.loadmodule get exec
 } def
 
-% load graphics support
-% Global, like every .xpostsys helper. It matters here beyond the dictionary's
-% own VM: the device-maker procedures baked into this body must be global so the
-% .devicemakers dictionary it builds can install into the global .xpostsys.
+% load graphics support. Global: the device-maker procedures baked into this
+% body are global, matching the global .xpostsys their table installs into.
 currentglobal true setglobal
 .xpostsys /loadgraphics {
     /GRAPHICS_LOADED where { pop }{
-        % Open a writeable window on systemdict so the graphics language can be
-        % relocated into it; the matching relock below closes it. For now the
-        % language still loads into userdict, so the window is inert.
+        % Open a writeable window on systemdict so the standard operators can be
+        % relocated into it; the matching relock below closes it.
         .sysdictunlock
         (/graphics.ps) //.xpostsys /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
@@ -793,14 +782,12 @@ currentglobal true setglobal
     % shadowing the operator names they call
     .gscratch .bindscope
 
-    % Move the standard operators from userdict into the now-writeable
-    % systemdict, where the language keeps its operators, leaving userdict for
-    % the program to fill. Only global operator-valued names move; the local
-    % error state, the font directories and the interactive helpers stay in
-    % userdict. Every machinery reference to these names is already frozen (the
-    % standard operators bound above and .bindscope over the loaded procedures),
-    % and a runtime lookup still finds them one dictionary further down the
-    % stack, so the move is invisible to the machinery and to programs.
+    % Move the standard operators from userdict into the unlocked systemdict,
+    % leaving userdict for the program. Only global operator-valued names move;
+    % the local error state, the font directories and the interactive helpers
+    % stay. Machinery references to these names are already frozen (binding and
+    % .bindscope over the loaded procedures), and a runtime lookup finds them
+    % one dictionary further down the stack.
     [ userdict {
         exch dup type /nametype eq
         % an operator, a bound procedure, or a standard array (the encodings)
@@ -811,19 +798,15 @@ currentglobal true setglobal
     dup { dup userdict exch get systemdict 3 1 roll put } forall
     { userdict exch undef } forall
 
-    % interrupt is an error handler, not a userdict operator: the language keeps
-    % it in errordict (PLRM lists it among the errordict entries).
+    % interrupt is an error handler; it lives in errordict.
     userdict /interrupt known {
         errordict /interrupt userdict /interrupt get put
         userdict /interrupt undef
     } if
 
-    % userdict, errordict and $error are already bound in systemdict -- their
-    % dictionaries are local, named there under the PLRM exception that lets
-    % systemdict reference a few local dictionaries -- so drop the redundant
-    % userdict copies. Ghostscript keeps these names in systemdict alone. (The
-    % embedding error hook reads $error from systemdict too; see
-    % _record_run_error in xpost_op_control.c.)
+    % userdict, errordict, $error and FontDirectory are names in systemdict for
+    % local dictionaries; the userdict copies are dropped so each name resolves
+    % in systemdict.
     [ /userdict /errordict /$error /FontDirectory ] {
         dup systemdict exch known { userdict exch undef }{ pop } ifelse
     } forall
