@@ -705,10 +705,6 @@ setglobal
 /rectstroke { gsave newpath //.xpostint /rect get exec stroke grestore } def
 /rectclip { newpath //.xpostint /rect get exec clip newpath } def
 
-/runtest {
-    (/test.ps) //.xpostint /.loadmodule get exec
-} def
-
 % load graphics support. Global: the device-maker procedures baked into this
 % body are global, matching the global .xpostint their table installs into.
 currentglobal true setglobal
@@ -847,15 +843,6 @@ currentglobal true setglobal
 } put
 setglobal
 
-/testfont {
-    //.xpostint /loadgraphics get exec
-    /Courier findfont
-    40 scalefont
-    setfont
-    100 100 moveto
-    (Hello World!) show
-} def
-
 $error/initializing false put % ready to go!
 false setglobal
 
@@ -873,8 +860,7 @@ currentglobal true setglobal
 setglobal
 
 /xpost {
-    (Xpost is running. Please type a command:\n)print
-    (Would you like to 'runtest' or 'testfont' or '(filename)run'?\n)print
+    (Xpost is running. Type '(filename)run' to run a program.\n)print
 } def
 
 (/prepr.ps) //.xpostint /.loadmodule get exec  % use nifty preview prompt!
