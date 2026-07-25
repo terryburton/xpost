@@ -47,7 +47,7 @@ setglobal
     cvr dup 0.0 lt { pop 0.0 } if dup 1.0 gt { pop 1.0 } if
 } bind def
 
-/ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
+.xpostsys /ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
     /DeviceGray <<
         /DeviceGray {
             graphicsdict /currgstate get /colorcomp1 get
@@ -123,7 +123,7 @@ setglobal
             graphicsdict /currgstate get /colorcomp4 get
         } bind
     >>
->> def
+>> put
 
 /setgray {
     graphicsdict /currgstate get /colorspace /DeviceGray put
@@ -131,7 +131,7 @@ setglobal
 } bind def
 
 /currentgray {
-    ColorConversion /DeviceGray get
+    //.xpostsys /ColorConversion get /DeviceGray get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
@@ -144,7 +144,7 @@ setglobal
 } bind def
 
 /currentrgbcolor {
-    ColorConversion /DeviceRGB get
+    //.xpostsys /ColorConversion get /DeviceRGB get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
@@ -203,7 +203,7 @@ setglobal
 } bind def
 
 /currentcmykcolor {
-    ColorConversion /DeviceCMYK get
+    //.xpostsys /ColorConversion get /DeviceCMYK get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
