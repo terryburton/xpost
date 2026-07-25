@@ -1033,4 +1033,9 @@ begin
 end
 } bind def
 
+% override was the load-time switch between the C and PostScript implementations
+% of the operators above; it is not needed once this file has loaded, so it does
+% not join the language in systemdict.
+/override where { /override undef } if
+
 /QUIET where { pop }{ (eof path.ps\n)print } ifelse
