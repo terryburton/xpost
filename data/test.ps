@@ -3,6 +3,15 @@
 %traceon
 %/break { currentfile flushfile } def
 
+% concatenate two strings -- the interpreter's own helper is sealed away in a
+% private namespace before this program runs, so the readstring test below
+% builds its data-file path with a local copy
+/.testcat { % s1 s2  .  s1s2
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 3 index length 3 index putinterval
+    exch pop exch pop
+} bind def
 
 /failcount 0 def
 /fail {
@@ -699,7 +708,7 @@ abc
 
 /DATA_DIR where {
     pop
-    (/readstring.ps) //.xpostint /.loadmodule get exec
+    DATA_DIR (/readstring.ps) .testcat run
     (2:)= pstack
      not check 0 3 getinterval (abc) eq check
 }{

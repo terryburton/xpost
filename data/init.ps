@@ -849,6 +849,22 @@ currentglobal true setglobal
     .sysdictrelock
     userdict /.bindone undef
     userdict /.bindscope undef
+
+    % Seal the private namespaces. They are fully populated now -- init and the
+    % graphics modules have defined every helper, and the C operators have just
+    % been relocated into .internaldict -- and the machinery only reads them
+    % hereafter, always through a frozen // reference to the object. Freeze each
+    % read-only so a program cannot overwrite a helper, and drop its userdict
+    % anchor so a program cannot reach or even enumerate it. The frozen
+    % references keep the objects alive and working; .gscratchdict stays writable
+    % and anchored, as the machinery mutates it every render.
+    userdict /.internaldict get readonly pop
+    userdict /.xpostint get readonly pop
+    userdict /.xpostsys get readonly pop
+    userdict /.internaldict undef
+    userdict /.xpostint undef
+    userdict /.xpostsys undef
+
         /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
         initgraphics
     } ifelse
