@@ -1,7 +1,6 @@
 /QUIET where { pop }{ (loading graphics.ps...\n)print } ifelse
 
-% implement xpost-specifics
-% to test on ghostscript
+% fallback definitions so this file can run standalone
 /DATA_DIR where {pop}{
     /DATA_DIR{}def
     /strcat{1 1 index length 1 sub getinterval}def
@@ -14,8 +13,8 @@ userdict begin
     %/CONSTRAINFLATNESS null def
 
     % graphicsdict holds the live per-render graphics state -- currgstate and
-    % the gstack, which carries local gstate copies -- so it and its accessors
-    % stay in local VM while the machinery around them loads into global VM.
+    % the gstack of local gstate copies -- so it and its accessors stay in
+    % local VM.
     currentglobal false setglobal
     /graphicsdict <<
         /currgstate 12 dict
@@ -47,8 +46,7 @@ userdict begin
     (/pattern.ps) //.xpostint /.loadmodule get exec
 
 
-% The language definitions loaded into global VM above; the binding pass
-% below rebinds the local userdict and systemdict in place, so return to
+% The binding pass below rebinds userdict and systemdict in place; it runs in
 % local VM (the [ currentdict systemdict ] array it builds is local).
 false setglobal
 
