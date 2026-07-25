@@ -87,19 +87,22 @@ serverdict /exitserver {
 } put
 setglobal
 
-.xpostsys /strcat { % a b  .  ab   -- concatenate two strings
+% concatenate two strings -- a pure global helper, so it lives in .xpostsys
+currentglobal true setglobal
+.xpostsys /.strcat { % a b  .  ab
     2 copy
     length exch length exch 1 index add % a b an bn+an
     string dup 0 6 -1 roll putinterval % b an str
     dup 4 2 roll exch putinterval % (ab)
 } bind put
+setglobal
 
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
 % factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
 % the machinery. In .xpostsys like every other helper, and global with it.
 currentglobal true setglobal
 .xpostsys /.loadmodule { % (/name.ps)  .  -
-    DATA_DIR exch //.xpostsys /strcat get exec run
+    DATA_DIR exch //.xpostsys /.strcat get exec run
 } bind put
 setglobal
 
@@ -612,7 +615,7 @@ true setglobal
 
             2 index dup length string cvs % c cat k (category)
             1 index dup length string cvx % c cat k (category) (key)
-            DATA_DIR (/Resources) //.xpostsys /strcat get exec
+            DATA_DIR (/Resources) //.xpostsys /.strcat get exec
             DIRSEP 4 3 roll % c cat k (key) (Res)(/)(cat)
             DIRSEP 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
             (*) 6 ncat % c cat k (Res/cat/key*)
