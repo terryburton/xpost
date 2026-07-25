@@ -378,7 +378,7 @@
                 exch 1 get
                 lt             % (y1 < y2)
             } ifelse
-        } qsort   % [sorted-list-of-intersections]
+        } //.xpostsys /qsort get exec   % [sorted-list-of-intersections]
         } pop
         dup .yxsort
         /DEBUGFILL where { pop
