@@ -336,6 +336,7 @@ end
     false setglobal
     {
         //.xpostint /loadgraphics get exec
+        //.xpostint /.finalize get exec
     } stopped {
         (unable to load graphics)print
         handleerror
@@ -373,6 +374,7 @@ end
 /startstdin {
     {
         //.xpostint /loadgraphics get exec
+        //.xpostint /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -389,6 +391,7 @@ end
 /startfilename { % (filename)
     {
         //.xpostint /loadgraphics get exec
+        //.xpostint /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -409,6 +412,7 @@ end
     /QUIET where { pop }{ (startfile\n)print } ifelse
     {
         //.xpostint /loadgraphics get exec
+        //.xpostint /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -747,9 +751,6 @@ setglobal
 currentglobal true setglobal
 .xpostint /loadgraphics {
     systemdict /GRAPHICS_LOADED known { }{
-        % Open a writeable window on systemdict so the standard operators can be
-        % relocated into it; the matching relock below closes it.
-        .sysdictunlock
         (/graphics.ps) //.xpostint /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
@@ -790,6 +791,22 @@ currentglobal true setglobal
             }{ pop pop } ifelse
         }{ pop } ifelse
     } forall
+    } ifelse
+} put
+
+% The interpreter lockdown. Runs once, after loadgraphics has loaded whatever it
+% is going to (or on its own if graphics is never loaded), when every helper the
+% machinery needs has been defined. It freezes the machinery's operator
+% references, relocates the language into systemdict and the private C operators
+% into .internaldict, seals and hides the private namespaces, and returns the
+% device classes to local VM. loadgraphics does the loading; this does the
+% locking down -- so nothing unrelated to graphics is tied to loading it. The
+% shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
+.xpostint /.finalize {
+    systemdict /GRAPHICS_LOADED known { }{
+        % Open a writeable window on systemdict so the standard operators can be
+        % relocated into it; the matching relock below closes it.
+        .sysdictunlock
     % With the standard operators now operator-typed, freeze the
     % machinery's own references to them: bind substitutes an
     % operator wherever a name in a loaded procedure currently
