@@ -354,12 +354,16 @@ end
 % occurred, not on a normal quit -- the notice that the rest of the job
 % is flushed to end of file. An interactive executive keeps going, so it
 % reports without this line.
-/.handlejoberror {
+% in the private global namespace, reached by the start procedures below through
+% a frozen reference, so it does not sit visible in systemdict
+currentglobal true setglobal
+.xpostsys /.handlejoberror {
     $error /newerror get
     handleerror
     { (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
       print flush } if
-} def
+} put
+setglobal
 
 % execute postscript program from stdin, and handle errors,
 % but do not assume an interactive session
@@ -374,7 +378,7 @@ end
     {
         (%stdin) run
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -392,7 +396,7 @@ end
         (r) file cvx exec        % (filename) has stayed on the stack
         executive
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -412,7 +416,7 @@ end
     {
         cvx exec        % the file object has stayed on the stack
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -431,7 +435,7 @@ end
     {
         (%stdin) run
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -445,7 +449,7 @@ end
         (r) file cvx exec        % (filename) has stayed on the stack
         executive
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -459,7 +463,7 @@ end
         cvx exec        % the file object has stayed on the stack
     } stopped {
         .rundied
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -701,7 +705,10 @@ true setglobal
 
 currentglobal
 false setglobal
-/.fontsubstitutions <<
+% //.xpostsys /.fontsubstitutions get: findfont's substitute-face table, hidden in the private
+% global namespace where a program cannot reach it
+currentglobal true setglobal
+.xpostsys /.fontsubstitutions <<
     /Times-Roman (Nimbus Roman No9 L)
     dup (URW Bookman L)
 
@@ -714,7 +721,8 @@ false setglobal
     dup (Nimbus Sans L)
 
     /Palatino-Roman (URW Palladio L)
->> def
+>> put
+setglobal
 
 % For the moment, we consider any fonts handled by FreeType to be Type 1.
 % The FontDirectory will merely hold defined Type 3 fonts.
@@ -736,7 +744,7 @@ end % userdict
             dup /Encoding 256 array put
             dup /BuildChar {} put
         } stopped { % operator failed: 
-            .fontsubstitutions exch 2 copy known { % try substitution
+            //.xpostsys /.fontsubstitutions get exch 2 copy known { % try substitution
                 get
                 findfont % call proc (tail-)recursively 
             }{
