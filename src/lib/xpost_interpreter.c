@@ -1252,7 +1252,6 @@ void loadinitps(Xpost_Context *ctx)
 
     assert(ctx->gl->base);
     xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "quit", NULL,0,0));
-    ctx->ignoreinvalidaccess = 1;
 
 #define XPOST_PATH_INIT \
     do \
@@ -1323,16 +1322,15 @@ void loadinitps(Xpost_Context *ctx)
 
     ctx->quit = 0;
     mainloop(ctx);
-    ctx->ignoreinvalidaccess = 0;
 }
 
 
-/* copy userdict names to systemdict
-    Problem: This is clearly an invalidaccess,
-    and yet is required by the PLRM. Discussion:
-https://groups.google.com/d/msg/comp.lang.postscript/VjCI0qxkGY4/y0urjqRA1IoJ
-    The ignoreinvalidaccess exception has been isolated to this one case.
- */
+/* Name the standard local dictionaries in systemdict. systemdict is global, so
+   holding a reference to a local dictionary would be an invalidaccess; the PLRM
+   sanctions exactly this exception (section 3.7.2), naming userdict, errordict,
+   $error and FontDirectory in systemdict so a program reaches each by name. The
+   ignoreinvalidaccess window is isolated to these puts; the rest of the
+   interpreter, initialisation included, obeys the local/global rule. */
 static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
 {
     Xpost_Object ed, de, fd;
@@ -1341,11 +1339,17 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
     ed = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "errordict"));
     if (xpost_object_get_type(ed) == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = 0;
         return undefined;
+    }
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "errordict"), ed);
     de = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "$error"));
     if (xpost_object_get_type(de) == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = 0;
         return undefined;
+    }
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "$error"), de);
     /* FontDirectory is likewise a name in systemdict for a local dictionary
        (PLRM). It exists in userdict by the time this runs. */
