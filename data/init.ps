@@ -829,7 +829,9 @@ currentglobal true setglobal
     } def
     systemdict .bindscope
     userdict .bindscope
-    graphicsdict .bindscope
+    % graphicsdict exists only once graphics has loaded; without it there is
+    % nothing to bind and this step is simply skipped
+    /graphicsdict where { pop graphicsdict .bindscope } if
     errordict .bindscope
     % the private helper namespace too, so a helper's own operator references
     % (the get and exec of //.xpostint /h get exec, and everything else) freeze
@@ -921,8 +923,13 @@ currentglobal true setglobal
     } forall
     setglobal
 
-        /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
-        initgraphics
+        % initgraphics needs a device, so it runs only when graphics has loaded;
+        % locking down without graphics leaves no graphics state to initialise
+        /graphicsdict where {
+            pop
+            /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
+            initgraphics
+        } if
     } ifelse
 } put
 setglobal
