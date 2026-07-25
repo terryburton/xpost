@@ -849,11 +849,13 @@ $error/initializing false put % ready to go!
 false setglobal
 
 % debug ps functions
+currentglobal true setglobal
 /doprompt{
     (\nbreak>)print flush
     (%lineedit)(r)file
     cvx {exec}stopped pop } def
 /pause{ doprompt } def
+setglobal
 
 currentglobal true setglobal
 .xpostsys /.dir {
@@ -861,9 +863,11 @@ currentglobal true setglobal
 } put
 setglobal
 
+currentglobal true setglobal
 /xpost {
     (Xpost is running. Type '(filename)run' to run a program.\n)print
 } def
+setglobal
 
 (/prepr.ps) //.xpostint /.loadmodule get exec  % use nifty preview prompt!
 
