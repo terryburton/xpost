@@ -71,6 +71,14 @@ faildict /n 0 put
 { 2 dict noaccess {pop pop} forall }     /invalidaccess (dict noaccess forall) chk
 { 2 dict noaccess begin end }            /invalidaccess (dict noaccess begin) chk
 
+% --- readonly scope: for an array or string it reduces the access of only the
+%     object it returns, so another reference to the same value stays writable;
+%     for a dictionary it reduces the value itself, so every reference is
+%     affected (PLRM 8.2 readonly; agrees with gs 10.02.1 and Adobe Distiller) ---
+{ /rs (asdf) def rs readonly pop rs 0 65 put } /ok            (string readonly is per-object, original writable) chk
+{ [1 2 3] dup readonly pop 0 9 put }           /ok            (array readonly is per-object, original writable) chk
+{ 2 dict dup readonly pop /x 1 put }           /invalidaccess (dict readonly is shared, sealing one ref seals all) chk
+
 % --- exec: reading an array or string as code needs read access; a dict is
 %     only pushed, so exec of a noaccess dict is permitted ---
 { [1 2 3] cvx executeonly exec }         /ok            (exec executeonly array) chk
