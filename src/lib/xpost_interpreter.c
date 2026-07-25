@@ -1335,7 +1335,7 @@ https://groups.google.com/d/msg/comp.lang.postscript/VjCI0qxkGY4/y0urjqRA1IoJ
  */
 static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
 {
-    Xpost_Object ed, de;
+    Xpost_Object ed, de, fd;
 
     ctx->ignoreinvalidaccess = 1;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
@@ -1347,6 +1347,11 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
     if (xpost_object_get_type(de) == invalidtype)
         return undefined;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "$error"), de);
+    /* FontDirectory is likewise a name in systemdict for a local dictionary
+       (PLRM). It exists in userdict by the time this runs. */
+    fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
+    if (xpost_object_get_type(fd) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
     ctx->ignoreinvalidaccess = 0;
     return 0;
 }
