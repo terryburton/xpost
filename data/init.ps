@@ -701,7 +701,7 @@ setglobal
 % body are global, matching the global .xpostsys their table installs into.
 currentglobal true setglobal
 .xpostsys /loadgraphics {
-    /GRAPHICS_LOADED where { pop }{
+    systemdict /GRAPHICS_LOADED known { }{
         % Open a writeable window on systemdict so the standard operators can be
         % relocated into it; the matching relock below closes it.
         .sysdictunlock
@@ -824,12 +824,14 @@ currentglobal true setglobal
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
+    % GRAPHICS_LOADED (the load latch) and USEDRAWLINE go into systemdict while
+    % it is still unlocked, where a program cannot remove or overwrite them
+    systemdict /GRAPHICS_LOADED true put
+    systemdict /USEDRAWLINE true put
     .sysdictrelock
     userdict /.bindone undef
     userdict /.bindscope undef
-        userdict /GRAPHICS_LOADED true put
         /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
-        userdict /USEDRAWLINE true put
         initgraphics
     } ifelse
 } put
