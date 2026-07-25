@@ -452,6 +452,10 @@ end % systemdict
 userdict begin
 false setglobal
 
+% executive is a global procedure in systemdict. It reaches $error by name,
+% not with a frozen reference: $error is a name in systemdict for a dictionary
+% in local VM, and a global procedure may not freeze a local object.
+currentglobal true setglobal
 /executive {
     //execdict begin
 
@@ -465,7 +469,7 @@ false setglobal
 
     { %loop
         /quitflag false def
-        //$error /newerror false put
+        $error /newerror false put
         /prompt load stopped {
             (Error during prompt execution\n) print
             handleerror
@@ -476,12 +480,12 @@ false setglobal
             /stmtfile (%statementedit) (r) file def
         } stopped {
             cleartomark
-            //$error /newerror get {
-                //$error /errorname get 
+            $error /newerror get {
+                $error /errorname get
                 /undefinedfilename ne { % ^d at prompt
                     handleerror
                 } if
-                //$error /newerror false put
+                $error /newerror false put
                 exit
             } if
         }{
@@ -499,10 +503,11 @@ false setglobal
     //execdict /execdepth 2 copy get 1 sub put
 
     end
-    //$error /doclose false put
+    $error /doclose false put
     interrupt
 } bind
 def
+setglobal
 
 
 (/qsort.ps) //.xpostint /.loadmodule get exec
@@ -794,6 +799,7 @@ currentglobal true setglobal
     % one dictionary further down the stack.
     [ userdict {
         exch dup type /nametype eq
+        1 index 60 string cvs 0 get 46 ne and   % not a private dotted name
         % an operator, a bound procedure, or a standard array (the encodings)
         2 index dup xcheck exch type /arraytype eq or and
         2 index gcheck and
