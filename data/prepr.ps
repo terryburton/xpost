@@ -11,6 +11,12 @@
 % lowercase letters for simple objects
 %
 
+% ti and prompt are global: prompt relocates from userdict into systemdict
+% with the other interactive helpers, so it bakes a global ti (a global
+% procedure may not reference a local object). ti stays private -- it lives
+% in this scratch dictionary, which end discards, reachable only through the
+% //ti frozen into prompt.
+currentglobal true setglobal
 1 dict begin
 /ti [
     %simple
@@ -60,6 +66,5 @@
     flush
 }
 end def
-
-%/undef where { pop currentdict /ti undef } if
+setglobal
 
