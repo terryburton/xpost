@@ -299,6 +299,8 @@ int xpost_op_dict_any_undef(Xpost_Context *ctx,
                             Xpost_Object D,
                             Xpost_Object K)
 {
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
     XPOST_LOG_WARN("FIXME: undef doesn't adequately fix the chain");
     xpost_dict_undef(ctx, D, K);
     return 0;
