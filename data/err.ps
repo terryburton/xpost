@@ -70,7 +70,7 @@ end
             end end %end end end end end end end end
         } if
     } ifelse
-    interrupt
+    stop
 } def
 % signalerror is the standard operator programs call to raise an error; it
 % belongs in systemdict, so it is global and relocates there. The private
@@ -148,7 +148,6 @@ end
 currentglobal true setglobal   % handleerror is a global operator
 /handleerror { errordict /handleerror get exec } def
 setglobal
-/interrupt { stop } def
 
 end
 setglobal

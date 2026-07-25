@@ -143,7 +143,6 @@ setglobal
 %/revision 0 def % now an operator in xpost_op_misc.c
 /run { (r) file cvx exec } def
 /Run { (\() print dup =print (\) run\n) print flush run } def
-/interrupt { stop } def
 
 %(2\n)print
 /=string 128 string def
@@ -324,7 +323,7 @@ end
         %exit
         //execdict /quitflag true put
         $error /newerror false put
-        interrupt
+        stop
     } put
     setglobal
 
@@ -512,7 +511,7 @@ currentglobal true setglobal
 
     end
     $error /doclose false put
-    interrupt
+    stop
 } bind
 def
 setglobal
@@ -815,12 +814,6 @@ currentglobal true setglobal
     } forall ]
     dup { dup userdict exch get systemdict 3 1 roll put } forall
     { userdict exch undef } forall
-
-    % interrupt is an error handler; it lives in errordict.
-    userdict /interrupt known {
-        errordict /interrupt userdict /interrupt get put
-        userdict /interrupt undef
-    } if
 
     % userdict, errordict, $error and FontDirectory are names in systemdict for
     % local dictionaries; the userdict copies are dropped so each name resolves
