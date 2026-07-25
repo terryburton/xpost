@@ -1333,7 +1333,7 @@ void loadinitps(Xpost_Context *ctx)
    interpreter, initialisation included, obeys the local/global rule. */
 static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
 {
-    Xpost_Object ed, de, fd;
+    Xpost_Object ed, de, fd, st, sv;
 
     ctx->ignoreinvalidaccess = 1;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
@@ -1356,6 +1356,14 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
     fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
     if (xpost_object_get_type(fd) == dicttype)
         xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+    /* statusdict and serverdict are local dictionaries a program mutates, so
+       save/restore isolates a job's changes; systemdict names them (PLRM). */
+    st = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "statusdict"));
+    if (xpost_object_get_type(st) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "statusdict"), st);
+    sv = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "serverdict"));
+    if (xpost_object_get_type(sv) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serverdict"), sv);
     ctx->ignoreinvalidaccess = 0;
     return 0;
 }
