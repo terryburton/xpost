@@ -59,6 +59,23 @@ userdict /.internaldict 256 dict put
         /internaldict cvx /invalidaccess signalerror
     } ifelse
 } bind def
+
+% Debug aids and the internal context-state markers are C operators, not part of
+% the language, and must not sit in a program's lookup path. The machinery
+% operators above are relocated near the end of graphics loading, once the bind
+% pass has frozen the procedures that use them; these are graphics-independent
+% and used by nothing, so they move into .internaldict here, during init, and are
+% hidden whether or not graphics is ever loaded.
+1 dict begin
+[ /dumpnames /dumpvm /debugloadon /debugloadoff /breakhere
+  /_i_am_zombie_ /_i_am_free_ ]
+{ /nm exch def
+    systemdict nm known {
+        .internaldict nm systemdict nm get put
+        systemdict nm undef
+    } if
+} forall
+end
 setglobal
 
 % statusdict holds device/product status a program may change, so it is a local
