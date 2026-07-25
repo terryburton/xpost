@@ -54,7 +54,20 @@ sanctioned global-names-local exception, applied in C by `copyudtosd` under a
 narrow `ignoreinvalidaccess` window; the load-time relocation then drops their
 userdict copies so each resolves only through `systemdict`.
 
-### Private — machinery, sealed and hidden after graphics load
+### Private — machinery, sealed and hidden by the lockdown step
+
+Start-up runs in two separated stages, each a proc the start procedures call in
+turn. `loadgraphics` **loads** — it pulls in the graphics modules and nothing
+else. `.finalize` **locks down** — it freezes the machinery's operator
+references, relocates the language into `systemdict` and the private C operators
+into `.internaldict`, seals and hides the private namespaces, and returns the
+device classes to local VM. The lockdown is not graphics work; it only runs after
+`loadgraphics` because it must seal *after* everything that will ever be loaded.
+`.finalize` guards its two graphics-only steps (binding `graphicsdict`, calling
+`initgraphics`) behind `/graphicsdict where`, so it hardens the interpreter with
+or without graphics — loading graphics stays genuinely optional. The shared
+`GRAPHICS_LOADED` latch, set at the end of `.finalize`, keeps both steps
+idempotent.
 
 | Dictionary | VM | Lifecycle | Sealed | Reached by |
 |---|---|---|---|---|
