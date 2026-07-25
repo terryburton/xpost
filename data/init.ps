@@ -69,22 +69,31 @@ userdict /.internaldict 256 dict put
 } bind def
 setglobal
 
-/statusdict <<
+% statusdict holds device/product status a program may change, so it is a local
+% dictionary -- save and restore isolate a job's changes -- that systemdict names
+% (copyudtosd), like $error, errordict and userdict. Ghostscript keeps statusdict
+% local as well.
+currentglobal false setglobal
+userdict /statusdict <<
     /manualfeed false
     /product (Xpost)
->> def
+>> put
+setglobal
 
 % the job server's dictionary. exitserver ends the encapsulated job,
 % announces that permanent state may change, and execution continues
 % with the definitions made so far outliving the job -- the idiom
 % every driver prolog uses. xpost runs jobs unencapsulated, so
 % announcing and unwinding the begun dictionary is the whole of it.
-/serverdict 2 dict def
+% serverdict is likewise a local dictionary named in systemdict.
+currentglobal false setglobal
+userdict /serverdict 2 dict put
 serverdict /exitserver {
     pop
     (%%[ exitserver: permanent state may be changed ]%%\n) print flush
     currentdict serverdict eq { end } if
 } put
+setglobal
 
 .xpostint /strcat { % a b  .  ab   -- concatenate two strings
     2 copy
@@ -821,7 +830,7 @@ currentglobal true setglobal
     % userdict, errordict, $error and FontDirectory are names in systemdict for
     % local dictionaries; the userdict copies are dropped so each name resolves
     % in systemdict.
-    [ /userdict /errordict /$error /FontDirectory ] {
+    [ /userdict /errordict /$error /FontDirectory /statusdict /serverdict ] {
         dup systemdict exch known { userdict exch undef }{ pop } ifelse
     } forall
 
