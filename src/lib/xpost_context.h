@@ -128,6 +128,12 @@ struct _Xpost_Context {
                                     a completed run is truncated back to
                                     this depth so its scheduling frames
                                     cannot accumulate across jobs */
+    int skip_graphics; /**< run the interpreter lockdown (.finalize) without
+                            loading graphics; xpost_run selects the no-graphics
+                            start procedures so a program that needs no graphics
+                            never pays to load them, and the no-graphics lockdown
+                            path is exercised */
+
 
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);

@@ -1594,23 +1594,29 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
        if ps_file is not NULL:
        'startfile' executes a named file wrapped in a stopped context with handleerror
     */
+    /* with skip_graphics set, dispatch to the no-graphics start procedures,
+       which run the interpreter lockdown without loading the graphics modules.
+       The interactive (tty) session always loads graphics. */
     if (ps_file)
     {
         /*printf("ps_file\n"); */
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_string_cons(ctx, strlen(ps_file), ps_file)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startfilename")));
+        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
+            ctx->skip_graphics ? "startfilenamenographics" : "startfilename")));
     }
     else if (ps_file_ptr)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startfile")));
+        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
+            ctx->skip_graphics ? "startfilenographics" : "startfile")));
     }
     else
     {
         if (xpost_isatty(fileno(stdin)))
             xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "start")));
         else
-            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startstdin")));
+            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
+                ctx->skip_graphics ? "startstdinnographics" : "startstdin")));
     }
 
     (void) xpost_save_create_snapshot_object(ctx->gl);
@@ -1703,6 +1709,11 @@ run:
     }
 
     return noerror;
+}
+
+XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable)
+{
+    ctx->skip_graphics = enable;
 }
 
 /*

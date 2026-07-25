@@ -425,6 +425,53 @@ end
     quit
 } def
 
+% No-graphics start procedures, selected by --no-graphics. Each mirrors its
+% graphics-loading counterpart above but runs .finalize alone, without
+% loadgraphics: the interpreter is still locked down -- the language relocates
+% into systemdict and the private namespaces are sealed and hidden -- while the
+% graphics modules are never loaded. This exercises the path in which loadgraphics
+% is genuinely optional, and lets a program that needs no graphics avoid the cost.
+/startstdinnographics {
+    { //.xpostint /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        (%stdin) run
+    } stopped {
+        .handlejoberror
+    } if
+    quit
+} def
+
+/startfilenamenographics { % (filename)
+    { //.xpostint /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        (r) file cvx exec        % (filename) has stayed on the stack
+        executive
+    } stopped {
+        .handlejoberror
+    } if
+    quit
+} def
+
+/startfilenographics { % file-object
+    { //.xpostint /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        cvx exec        % the file object has stayed on the stack
+    } stopped {
+        .rundied
+        .handlejoberror
+    } if
+    quit
+} def
+
 /prompt {
     (PS) print
     count dup 0 eq { pop } { (<) print //=print exec } ifelse
