@@ -805,6 +805,59 @@ static void _verify_reachability(Xpost_Context *ctx, Xpost_Memory_File *mem)
     _vseen_lo = _vseen_gl = NULL;
 }
 
+/* PLRM 3.7.2: an object in global VM must not reference an object in local
+   VM -- with one interpreter-maintained exception (PLRM 3.7.7 and the note
+   under systemdict): "systemdict, a global dictionary, contains several
+   entries whose values are local dictionaries, such as userdict and $error."
+   errordict, statusdict, serverdict and FontDirectory are local for the same
+   reason. A local collection marks only local roots and does not descend the
+   global systemdict, so these sanctioned local dictionaries -- reachable only
+   through global systemdict -- would be swept and their storage recycled,
+   corrupting the error machinery and other services on the next job. Mark the
+   local values systemdict holds so the exception references keep them alive.
+   No other global container may hold a local reference (invalidaccess bars
+   it), so systemdict is the only one that needs this treatment. */
+static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
+                                                     Xpost_Memory_File *mem,
+                                                     int markall)
+{
+    Xpost_Object sd;
+    Xpost_Memory_File *sdmem;
+    unsigned int adr, ent;
+    dichead *dp;
+    dicrec *tp;
+    int j;
+
+    /* systemdict is the permanent bottom entry of the dictionary stack */
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    if (xpost_object_get_type(sd) != dicttype)
+        return 1;
+    sdmem = xpost_context_select_memory(ctx, sd);
+    if (!sdmem || sdmem != ctx->gl)
+        return 1; /* systemdict already covered if it is not global */
+    ent = xpost_object_get_ent(sd);
+    if (ent >= sdmem->table.nextent)
+        return 1;
+    adr = sdmem->table.tab[ent].adr;
+    dp = (dichead *)(sdmem->base + adr);
+    tp = (dicrec *)(sdmem->base + adr + sizeof(dichead));
+    for (j = 0; j < DICTABN(dp->sz); j++)
+    {
+        Xpost_Object v = tp[j].value;
+        if (xpost_object_get_type(tp[j].key) == nulltype)
+            continue;
+        if (!xpost_object_is_composite(v))
+            continue;
+        /* only the local-VM values are the sanctioned exceptions; a global
+           value is reached through the global roots, not swept here */
+        if (xpost_context_select_memory(ctx, v) != mem)
+            continue;
+        if (!_xpost_garbage_mark_object(ctx, mem, v, markall))
+            return 0;
+    }
+    return 1;
+}
+
 /*
    determine GLOBAL/LOCAL
    clear all marks,
@@ -955,6 +1008,12 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 
             /* the object being executed may exist only here */
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->currentobject, markall))
+                return -1;
+
+            /* the sanctioned global->local references: the local
+               dictionaries systemdict holds (userdict, $error, errordict,
+               statusdict, serverdict, FontDirectory) -- see PLRM 3.7.2 */
+            if (!_xpost_garbage_mark_systemdict_exceptions(ctx, mem, markall))
                 return -1;
 #if 0
 #ifdef DEBUG_GC
