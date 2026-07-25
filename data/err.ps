@@ -139,7 +139,9 @@ errordict begin
 end
 /QUIET where { pop }{ (errordict installed...)print } ifelse
 
+currentglobal true setglobal   % a standard operator; relocates into systemdict
 /handleerror { errordict /handleerror get exec } def
+setglobal
 /interrupt { stop } def
 
 end
