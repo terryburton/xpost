@@ -445,6 +445,17 @@ test('isolation',
   args: [ xpost_exe, files('tests/isolation_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# No-graphics lockdown: --no-graphics selects the no-graphics start procedures,
+# which run .finalize (the interpreter lockdown) without loadgraphics. The
+# language still relocates into systemdict and the private namespaces are still
+# sealed and hidden, while the graphics modules are never loaded and the
+# interpreter stays functional -- so loading graphics is genuinely optional, not
+# a prerequisite for a hardened interpreter.
+test('nographics',
+  find_program('tests/run-nographics-test.sh'),
+  args: [ xpost_exe, files('tests/nographics_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Access-attribute enforcement: readonly, executeonly and noaccess reduce the
 # value and execution access of composite objects, and the standard operators
 # raise invalidaccess (or the access operators typecheck) accordingly, across

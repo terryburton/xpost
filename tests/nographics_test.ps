@@ -1,0 +1,78 @@
+% No-graphics lockdown regression, run through `xpost --no-graphics -d null` by
+% run-nographics-test.sh; prints SUCCESS iff every assertion holds. The start
+% procedure runs .finalize (the interpreter lockdown) WITHOUT loadgraphics, so:
+%   (1) the graphics modules are never loaded -- /graphicsdict is undefined, as
+%       are the render helpers the graphics load would define, and
+%   (2) the interpreter is still fully locked down -- the language relocates into
+%       systemdict, the private C operators relocate into .internaldict, and the
+%       private namespaces are sealed and hidden -- exactly as when graphics does
+%       load, so loading graphics is a genuinely optional step, not a prerequisite
+%       for a hardened interpreter.
+% The interpreter must also remain fully functional for non-graphics work.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- graphics is genuinely not loaded ---
+/graphicsdict where { pop false }{ true } ifelse
+    (graphicsdict is undefined -- no graphics loaded) assert
+% render helpers the graphics load would have defined are absent
+[ /ravec /strcat /dolinejoin /arcbez /rect ] {
+    where { pop false }{ true } ifelse (graphics helper name is absent) assert
+} forall
+
+% --- the interpreter is nonetheless locked down ---
+systemdict /executive known (executive relocated into systemdict) assert
+userdict /executive known not (executive gone from userdict) assert
+systemdict /signalerror known (signalerror relocated into systemdict) assert
+systemdict /handleerror known (handleerror in systemdict) assert
+
+% the private namespaces are hidden (anchor dropped from userdict)
+[ /.xpostint /.xpostsys /.internaldict ] {
+    userdict exch known not
+    (namespace anchor dropped from userdict) assert
+} forall
+
+% the private C operators relocated out of systemdict into .internaldict (the
+% 1183615869 internaldict accessor is itself part of the font machinery, so it
+% is absent here; the relocation still hides the operators from systemdict)
+systemdict /.fillpoly known not (.fillpoly relocated out of systemdict) assert
+systemdict /.fillrectrgb known not (.fillrectrgb relocated out of systemdict) assert
+% the debug operators stay hidden (they move to .internaldict during init)
+systemdict /dumpvm known not (debug operator dumpvm hidden) assert
+
+% the CLI file runner keeps the input on the operand stack, so a program run
+% as `xpost prog.ps` sees no filename variable (this test is run that way,
+% through startfilenamenographics)
+[ /inputfilename /inputfile ] {
+    where { pop false }{ true } ifelse (CLI runner leaves no variable) assert
+} forall
+
+% --- the interpreter is fully functional without graphics ---
+2 3 add 5 eq (arithmetic works) assert
+3 dict dup /k 9 put /k get 9 eq (dictionaries work) assert
+(abcd) length 4 eq (strings work) assert
+[ 1 2 3 4 5 ] length 5 eq (arrays work) assert
+% a raising operator leaves its operands on the stack, so scope with a mark
+mark { 1 0 div } stopped { $error /errorname get /undefinedresult eq }{ false } ifelse
+    (built-in error handling works) assert
+cleartomark
+% file leaves its operands on the stack when it raises, so scope the probe with
+% a mark and clear back to it
+mark { (no.such.file.xyz) (r) file } stopped
+    (a raised error unwinds to a stopped context) assert
+cleartomark
+
+% a program may freely define the now-absent graphics names for its own use
+/ravec { 42 } def ravec 42 eq (program may use a freed helper name) assert
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit
