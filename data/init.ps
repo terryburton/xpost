@@ -33,8 +33,12 @@ setglobal
 % Defined before any module loads.
 currentglobal false setglobal
 userdict /.gscratchdict 64 dict put
-/.gscratchproc [ //.gscratchdict ] cvx def
-/.gscratch dup /.gscratchproc load .wrapop def
+% .gscratchproc freezes the local scratch dictionary, so it is itself a local
+% object and lives in userdict, where the operator table keeps it reachable; a
+% global home would hold a local reference. Only the .gscratch operator that
+% wraps it is a simple object fit for systemdict.
+userdict /.gscratchproc [ //.gscratchdict ] cvx put
+/.gscratch dup userdict /.gscratchproc get .wrapop def
 setglobal
 
 currentglobal true setglobal
