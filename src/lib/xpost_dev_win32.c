@@ -1015,8 +1015,8 @@ int newwin32device(Xpost_Context *ctx,
 static
 unsigned int _loadwin32devicecont_opcode;
 
-/* Specializes or sub-classes the PPMIMAGE device class.
-   load PPMIMAGE
+/* Specializes or sub-classes the .xpost_PPMIMAGE device class.
+   load .xpost_PPMIMAGE
    load and call ps procedure .copydict which leaves copy on stack
    call loadXXXdevicecont by continuation.
 */
@@ -1027,7 +1027,7 @@ int loadwin32device(Xpost_Context *ctx)
     int ret;
 
     /* see note in newwin32device above */
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "PPMIMAGE"));
+    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, ".xpost_PPMIMAGE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
