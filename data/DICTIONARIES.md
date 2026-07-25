@@ -99,7 +99,6 @@ but still enumerable). It cannot be hidden when reached by name at run time.
 | `.gstatetemplate` | mutable (device change) | the template a fresh gstate is copied from; `setpagedevice` writes its device |
 | `.xpost_BBOX` … `.xpost_SVGWRITE` | mutable (setpagedevice) | device class templates; local so a job's page geometry reverts. Reached by name from the C drivers and the `newXdevice` makers, so they stay anchored |
 | `.error` | mutable | the error hook `signalerror` runs; records into the local `$error` |
-| `.fontsubstitutions` | static | findfont's substitution table |
 | `.gscratchproc`, `.graphicsdictproc`, `.DEVICEproc`, `.=stringproc` | static | procedures wrapped into operators; anchored so the collector keeps them (the operator table is outside its view) |
 | `.resourcepath` | static after host setup | resource search path; the host appends directories at start-up |
 
