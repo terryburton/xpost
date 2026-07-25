@@ -622,7 +622,7 @@ true setglobal
 
 currentglobal
 false setglobal
-/fontsubstitutions <<
+/.fontsubstitutions <<
     /Times-Roman (Nimbus Roman No9 L)
     dup (URW Bookman L)
 
@@ -657,7 +657,7 @@ end % userdict
             dup /Encoding 256 array put
             dup /BuildChar {} put
         } stopped { % operator failed: 
-            fontsubstitutions exch 2 copy known { % try substitution
+            .fontsubstitutions exch 2 copy known { % try substitution
                 get
                 findfont % call proc (tail-)recursively 
             }{

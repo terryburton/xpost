@@ -1,11 +1,11 @@
 /QUIET where { pop }{ (loading gstate.ps...)print } ifelse
 
-% gstatetemplate yields a freshly-initialized dictionary
+% .gstatetemplate yields a freshly-initialized dictionary
 % with the following values. currmatrix and scratchmatrix
 % are newly-allocated arrays. The template embeds local objects (the initial
 % path storage and the device), so it and its accessor stay in local VM.
 currentglobal false setglobal
-/gstatetemplate <<
+/.gstatetemplate <<
     /colorspace /DeviceGray
     /colorcomp1 0.0
     /colorcomp2 0.0
@@ -28,7 +28,7 @@ currentglobal false setglobal
     /currfont 1 dict
     /device DEVICE
 >> def
-/gstatetemplate { //gstatetemplate % use template
+/.gstatetemplate { //.gstatetemplate % use template
     dup /currmatrix [ 1 0 0 1 0 0 ] put  % allocate fresh arrays
     dup /scratchmatrix [ 1 0 0 1 0 0 ] put
 } def
@@ -162,7 +162,7 @@ end
 % -  gstate  gstate
 % create graphics state object
 /gstate {
-    gstatetemplate dup length dict copy
+    .gstatetemplate dup length dict copy
 } def
 
 % gstate  setgstate  -
