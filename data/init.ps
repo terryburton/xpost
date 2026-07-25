@@ -819,6 +819,23 @@ currentglobal true setglobal
     dup { dup userdict exch get systemdict 3 1 roll put } forall
     { userdict exch undef } forall
 
+    % interrupt is an error handler, not a userdict operator: the language keeps
+    % it in errordict (PLRM lists it among the errordict entries).
+    userdict /interrupt known {
+        errordict /interrupt userdict /interrupt get put
+        userdict /interrupt undef
+    } if
+
+    % userdict, errordict and $error are already bound in systemdict -- their
+    % dictionaries are local, named there under the PLRM exception that lets
+    % systemdict reference a few local dictionaries -- so drop the redundant
+    % userdict copies. Ghostscript keeps these names in systemdict alone. (The
+    % embedding error hook reads $error from systemdict too; see
+    % _record_run_error in xpost_op_control.c.)
+    [ /userdict /errordict /$error /FontDirectory ] {
+        dup systemdict exch known { userdict exch undef }{ pop } ifelse
+    } forall
+
     % Relocate the private C operators from systemdict into .internaldict. Every
     % machinery reference to them is now frozen -- the standard operators bound
     % above and .bindscope over the loaded procedures -- so a program
