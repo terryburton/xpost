@@ -978,13 +978,18 @@ currentglobal true setglobal
     % device -- so a job's page setup does not leak into the next. In local VM the
     % ordinary save/restore reverts those writes; a global home does not. (They
     % were local until the language moved into global VM and were swept along.)
-    % Rebind each to a local copy now that the device modules have finished
-    % loading, with headroom for the parameters setpagedevice adds.
+    % Rebind each to a local copy in privatedict now that the device modules have
+    % finished loading, with headroom for the parameters setpagedevice adds, and
+    % drop the userdict anchor: the classes leave the program's namespace entirely
+    % and the makers, the C drivers and setpagedevice reach them through
+    % privatedict.
     currentglobal false setglobal
     [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
       /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
     { userdict 1 index known
-        { dup userdict exch get dup length 16 add dict copy userdict 3 1 roll put }
+        { dup userdict 1 index get dup length 16 add dict copy   % name name localcopy
+          .privatedict 3 1 roll put                              % name (privatedict/name = localcopy)
+          userdict exch undef }                                  % drop the userdict anchor
         { pop } ifelse
     } forall
     setglobal

@@ -3,7 +3,7 @@
 (/qsort.ps) //.xpostint /.loadmodule get exec
 
 /newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
-    .xpost_PGMIMAGE dup /Create get exec
+    .privatedict /.xpost_PGMIMAGE get dup /Create get exec
 } def
 
 % .xpost_PGMIMAGE device handles 8bit images.

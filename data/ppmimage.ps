@@ -3,7 +3,7 @@
 (/qsort.ps) //.xpostint /.loadmodule get exec
 
 /newPPMIMAGEdevice { % width height  .  IMAGE-device-dict
-    .xpost_PPMIMAGE dup /Create get exec
+    .privatedict /.xpost_PPMIMAGE get dup /Create get exec
 } def
 
 % .xpost_PPMIMAGE device handles 24bit rgb images.

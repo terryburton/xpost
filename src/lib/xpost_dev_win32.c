@@ -1027,7 +1027,7 @@ int loadwin32device(Xpost_Context *ctx)
     int ret;
 
     /* see note in newwin32device above */
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, ".xpost_PPMIMAGE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_PPMIMAGE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
