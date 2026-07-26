@@ -297,6 +297,16 @@ test('counttomark',
   args: [ xpost_exe, files('tests/counttomark_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
+# write the current-matrix array in place; that write must be backed up for
+# save/restore. Guards the regression where it was not -- a transform set inside
+# a save leaked past the restore, so dvips documents (casselman) rendered text
+# at a runaway scale and overflowed the operand stack.
+test('save-restore-ctm',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',
