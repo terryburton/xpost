@@ -175,9 +175,12 @@ setglobal
 /=string 128 string def
 % the scratch string serves every cvs in the machinery: as an operator
 % pushing it, procedures binding as they load freeze the reference,
-% and a program may take the name for itself
-/.=stringproc [ //=string ] cvx def
-/=string dup /.=stringproc load .wrapop def
+% and a program may take the name for itself. Anchor the pusher procedure in
+% internaldict rather than systemdict so a program enumerating systemdict does
+% not see it; .wrapop freezes the procedure into the =string operator, and
+% internaldict keeps it alive thereafter.
+.internaldict /.=stringproc [ //=string ] cvx put
+/=string dup .internaldict /.=stringproc get .wrapop def
 /=print {
     dup type /stringtype ne {
         //=string cvs
