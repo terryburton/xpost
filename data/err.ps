@@ -75,9 +75,13 @@ end
 % signalerror is the standard operator programs call to raise an error; it
 % belongs in systemdict, so it is global and relocates there. The private
 % .error hook stays local (it runs the handler in local VM and records into
-% the local $error), reached here by name at the point an error is raised.
+% the local $error). It lives in privatedict, off the dict stack, reached
+% through the .privatedict operator; a global procedure may use the result
+% transiently. Mirror it in now so an error during graphics loading still
+% finds it; .finalize drops the userdict anchor.
+.privatedict /.error userdict /.error get put
 currentglobal true setglobal
-/signalerror { .error } def
+/signalerror { .privatedict /.error get exec } def
 setglobal
 /QUIET where { pop }{ (.error installed...)print } ifelse
 
