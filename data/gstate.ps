@@ -28,10 +28,13 @@ currentglobal false setglobal
     /currfont 1 dict
     /device DEVICE
 >> def
-/.gstatetemplate { //.gstatetemplate % use template
+% the template proc lives in privatedict, off the dict stack; it freezes the
+% template dictionary defined above, so that dictionary needs no userdict anchor
+% and .finalize drops it. Callers reach the proc through .privatedict.
+.privatedict /.gstatetemplate { //.gstatetemplate % use template
     dup /currmatrix [ 1 0 0 1 0 0 ] put  % allocate fresh arrays
     dup /scratchmatrix [ 1 0 0 1 0 0 ] put
-} def
+} put
 setglobal
 
 
@@ -162,7 +165,7 @@ end
 % -  gstate  gstate
 % create graphics state object
 /gstate {
-    .gstatetemplate dup length dict copy
+    .privatedict /.gstatetemplate get exec dup length dict copy
 } def
 
 % gstate  setgstate  -
