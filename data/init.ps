@@ -543,6 +543,16 @@ setglobal
     >>
 } def
 
+% Move the start procedures into privatedict, off the dict stack: the C fetches
+% them there (through ctx->privatedict) to prime a run, so a program never sees
+% them among systemdict's names. They bind with the rest of privatedict in
+% .finalize, before any program can shadow the operator names they call.
+[ /start /startstdin /startfilename /startfile
+  /startstdinnographics /startfilenamenographics /startfilenographics ]
+{ dup systemdict exch known
+    { dup dup systemdict exch get .privatedict 3 1 roll put systemdict exch undef }
+    { pop } ifelse
+} forall
 
 end % systemdict
 
