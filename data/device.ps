@@ -9,6 +9,17 @@
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/pdfwrite.ps) //.xpostsys /.loadmodule get exec  % pdf device
 
+% Mirror the device class dictionaries into privatedict, where the makers and
+% the C drivers reach them, before the default device is made below. They stay
+% in userdict too, for the load-time methods still to come, until .finalize
+% replaces them with local copies in privatedict and drops the userdict anchors.
+[ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
+  /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+{ dup userdict exch known
+    { dup userdict exch get .privatedict 3 1 roll put }
+    { pop } ifelse
+} forall
+
 %/newdefaultdevice load ==
 newdefaultdevice % defined in xpost_interpreter.c:setlocalconfig()
                  % as similar to one of these:

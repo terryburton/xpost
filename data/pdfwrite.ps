@@ -3,7 +3,7 @@
 (/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPDFWRITEdevice { % width height  .  IMAGE-device-dict
-    .xpost_PDFWRITE dup /Create get exec
+    .privatedict /.xpost_PDFWRITE get dup /Create get exec
 } def
 
 % .xpost_PPMIMAGE device handles 24bit rgb images.

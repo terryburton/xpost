@@ -6,7 +6,7 @@
     put
 } def
 /newnulldevice { % width height
-    .xpost_NULLDEV dup /Create get exec
+    .privatedict /.xpost_NULLDEV get dup /Create get exec
 } def
 
 % .xpost_NULLDEV device implements the "nulldevice", which
