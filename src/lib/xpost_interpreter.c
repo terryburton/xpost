@@ -1650,8 +1650,7 @@ run:
     XPOST_LOG_INFO("destroying device");
     /* the device lives in the graphics state; the DEVICE name is an
        accessor operator and no longer holds the dictionary itself */
-    device = xpost_dict_get(ctx,
-            xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2),
+    device = xpost_dict_get(ctx, ctx->privatedict,
             xpost_name_cons(ctx, ".graphicsdict"));
     if (xpost_object_get_type(device) == dicttype)
         device = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "currgstate"));

@@ -27,7 +27,7 @@ userdict begin
     % references, and a program may take either name for itself.
     % The implementation procedures anchor under reserved names so
     % the collector keeps them.
-    /.graphicsdict graphicsdict def   % the C operators' direct road in
+    .privatedict /.graphicsdict graphicsdict put   % the C operators' direct road in, off the dict stack
     /.graphicsdictproc [ //graphicsdict ] cvx def
     /graphicsdict dup /.graphicsdictproc load .wrapop def
     /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
