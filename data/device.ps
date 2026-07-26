@@ -3,7 +3,7 @@
 % It also implements the Showpage Semantics behavior
 % specified in the call to xpost_create().
 
-/QUIET where { pop }{ (loading device.ps...\n)print } ifelse
+//.internaldict /QUIET known { }{ (loading device.ps...\n)print } ifelse
 
 (/image.ps) //.xpostint /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostint /.loadmodule get exec  % nulldevice
@@ -96,4 +96,4 @@ end
 
 } bind def
 
-/QUIET where { pop }{ (eof device.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof device.ps\n)print } ifelse

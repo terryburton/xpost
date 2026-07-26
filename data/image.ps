@@ -1,6 +1,6 @@
-/QUIET where { pop }{ (loading image.ps...\n)print } ifelse
+//.internaldict /QUIET known { }{ (loading image.ps...\n)print } ifelse
 
 (/pgmimage.ps) //.xpostint /.loadmodule get exec
 (/ppmimage.ps) //.xpostint /.loadmodule get exec
 
-/QUIET where { pop }{ (eof image.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof image.ps\n)print } ifelse

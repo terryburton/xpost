@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading color.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading color.ps...)print } ifelse
 
 
 /setcolorspace {
@@ -221,4 +221,4 @@ setglobal
     setcolor
 } bind def
 
-/QUIET where { pop }{ (eof color\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof color\n)print } ifelse

@@ -101,6 +101,15 @@ userdict /.internaldict 256 dict put
     } if
 } forall
 end
+
+% QUIET, the -q startup flag, is handed in through systemdict by the C -- the
+% only dictionary that exists that early. It guards the interpreter's own
+% load-time progress messages and a program never needs it, so move it into
+% .internaldict now, before any banner guard runs. The guards below read it
+% through a frozen //.internaldict reference that no program can see or shadow.
+systemdict /QUIET known
+    { .internaldict /QUIET systemdict /QUIET get put systemdict /QUIET undef }
+if
 setglobal
 
 % statusdict holds device/product status a program may change, so it is a local
@@ -177,7 +186,7 @@ setglobal
 %def
 
 %(EXE_DIR =) print EXE_DIR print (\n) print
-/QUIET where { pop }{ (DATA_DIR =) print .privatedict /DATA_DIR get print (\n) print } ifelse
+//.internaldict /QUIET known { }{ (DATA_DIR =) print .privatedict /DATA_DIR get print (\n) print } ifelse
 
 %(1\n)print
 %/product (Xpost) def % now an operator in xpost_op_misc.c
@@ -433,7 +442,7 @@ setglobal
 % execute a postscript program from a file object, which may represent
 % a stream with no associated "name".
 /startfile { % file-object
-    /QUIET where { pop }{ (startfile\n)print } ifelse
+    //.internaldict /QUIET known { }{ (startfile\n)print } ifelse
     {
         //.xpostint /loadgraphics get exec
         //.xpostint /.finalize get exec
@@ -577,7 +586,7 @@ currentglobal true setglobal
     //execdict begin
 
     /execdepth execdepth 1 add def
-    /QUIET where { pop }{
+    //.internaldict /QUIET known { }{
         product print
         ( version ) print version print
         (.) print revision =print
@@ -1052,7 +1061,7 @@ currentglobal true setglobal
         % locking down without graphics leaves no graphics state to initialise
         /graphicsdict where {
             pop
-            /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
+            //.internaldict /QUIET known { }{ (graphics loaded, calling initgraphics\n)print } ifelse
             initgraphics
         } if
     } ifelse
@@ -1085,5 +1094,5 @@ setglobal
 
 (/prepr.ps) //.xpostint /.loadmodule get exec  % use nifty preview prompt!
 
-/QUIET where { pop }{ (eof init.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof init.ps\n)print } ifelse
 %loadgraphics %called by start* procs

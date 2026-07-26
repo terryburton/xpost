@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading path.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading path.ps...)print } ifelse
 
 %/PSOVERRIDE null def  % define PSOVERRIDE to use full postscript implementation
 % various functions have been reimplemented in C and their definitions here deactivated.
@@ -1038,4 +1038,4 @@ end
 % not join the language in systemdict.
 /override where { /override undef } if
 
-/QUIET where { pop }{ (eof path.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof path.ps\n)print } ifelse

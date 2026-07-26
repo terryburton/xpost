@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading ppmimage.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading ppmimage.ps...)print } ifelse
 
 (/qsort.ps) //.xpostint /.loadmodule get exec
 
@@ -492,4 +492,4 @@
 
 } if
 
-/QUIET where { pop }{ (eof ppmimage.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof ppmimage.ps\n)print } ifelse
