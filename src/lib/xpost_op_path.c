@@ -113,7 +113,7 @@ int _newpath(Xpost_Context *ctx)
     int ret;
 
     /* graphicsdict /currgstate get /currpath 1 dict put */
-    ret = xpost_op_any_load(ctx, namegraphicsdict);
+    ret = xpost_op_privatedict_load(ctx, namegraphicsdict);
     if (ret) return ret;
     gd = xpost_stack_pop(ctx->lo, ctx->os);
     gstate = xpost_dict_get(ctx, gd, namecurrgstate);
@@ -131,7 +131,7 @@ Xpost_Object _cpath(Xpost_Context *ctx)
     int ret;
 
     /* graphicsdict /currgstate get /currpath get */
-    ret = xpost_op_any_load(ctx, namegraphicsdict);
+    ret = xpost_op_privatedict_load(ctx, namegraphicsdict);
     if (ret) return invalid;
     gd = xpost_stack_pop(ctx->lo, ctx->os);
     if (xpost_object_get_type(gd) == invalidtype)
@@ -901,7 +901,7 @@ int _flattenpath (Xpost_Context *ctx)
     int ret;
     int i;
 
-    ret = xpost_op_any_load(ctx, namegraphicsdict);
+    ret = xpost_op_privatedict_load(ctx, namegraphicsdict);
     if (ret) return ret;
     gd = xpost_stack_pop(ctx->lo, ctx->os);
     xpost_stack_push(ctx->lo, ctx->hold, gd);
@@ -1116,29 +1116,30 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "flattenpath", (Xpost_Op_Func)_flattenpath, 0, 0);
     INSTALL;
 
-    /* the current-path length test reaches the path through the
-       .graphicsdict anchor: cpath is a hidden helper now, and the
-       machinery must not resolve it through the dict stack */
-    _arc_start_proc = xpost_array_cons(ctx, 11);
-    xpost_array_put(ctx, _arc_start_proc, 0, xpost_object_cvx(xpost_name_cons(ctx, ".graphicsdict")));
-    xpost_array_put(ctx, _arc_start_proc, 1, xpost_object_cvlit(xpost_name_cons(ctx, "currgstate")));
+    /* the current-path length test reaches the path through
+       privatedict, off the dict stack, where .graphicsdict now lives */
+    _arc_start_proc = xpost_array_cons(ctx, 13);
+    xpost_array_put(ctx, _arc_start_proc, 0, xpost_object_cvx(xpost_name_cons(ctx, ".privatedict")));
+    xpost_array_put(ctx, _arc_start_proc, 1, xpost_object_cvlit(xpost_name_cons(ctx, ".graphicsdict")));
     xpost_array_put(ctx, _arc_start_proc, 2, xpost_object_cvx(xpost_name_cons(ctx, "get")));
-    xpost_array_put(ctx, _arc_start_proc, 3, xpost_object_cvlit(xpost_name_cons(ctx, "currpath")));
+    xpost_array_put(ctx, _arc_start_proc, 3, xpost_object_cvlit(xpost_name_cons(ctx, "currgstate")));
     xpost_array_put(ctx, _arc_start_proc, 4, xpost_object_cvx(xpost_name_cons(ctx, "get")));
-    xpost_array_put(ctx, _arc_start_proc, 5, xpost_object_cvx(xpost_name_cons(ctx, "length")));
-    xpost_array_put(ctx, _arc_start_proc, 6, xpost_int_cons(0));
-    xpost_array_put(ctx, _arc_start_proc, 7, xpost_object_cvx(xpost_name_cons(ctx, "gt")));
+    xpost_array_put(ctx, _arc_start_proc, 5, xpost_object_cvlit(xpost_name_cons(ctx, "currpath")));
+    xpost_array_put(ctx, _arc_start_proc, 6, xpost_object_cvx(xpost_name_cons(ctx, "get")));
+    xpost_array_put(ctx, _arc_start_proc, 7, xpost_object_cvx(xpost_name_cons(ctx, "length")));
+    xpost_array_put(ctx, _arc_start_proc, 8, xpost_int_cons(0));
+    xpost_array_put(ctx, _arc_start_proc, 9, xpost_object_cvx(xpost_name_cons(ctx, "gt")));
     {
         Xpost_Object true_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
         xpost_array_put(ctx, true_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "lineto")));
-        xpost_array_put(ctx, _arc_start_proc, 8, true_clause);
+        xpost_array_put(ctx, _arc_start_proc, 10, true_clause);
     }
     {
         Xpost_Object false_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
         xpost_array_put(ctx, false_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-        xpost_array_put(ctx, _arc_start_proc, 9, false_clause);
+        xpost_array_put(ctx, _arc_start_proc, 11, false_clause);
     }
-    xpost_array_put(ctx, _arc_start_proc, 10, xpost_object_cvx(xpost_name_cons(ctx, "ifelse")));
+    xpost_array_put(ctx, _arc_start_proc, 12, xpost_object_cvx(xpost_name_cons(ctx, "ifelse")));
 
     return 0;
 }
