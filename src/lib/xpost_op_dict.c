@@ -243,6 +243,20 @@ int xpost_op_any_load(Xpost_Context *ctx,
     return undefined;
 }
 
+/* Like xpost_op_any_load, but resolves the key in the interpreter's private
+   machinery dictionary (privatedict), which is off the dict stack. The device
+   drivers reach the device class dictionaries this way: the classes live in
+   privatedict, not on the dict stack, so a dict-stack load would not find them. */
+int xpost_op_privatedict_load(Xpost_Context *ctx,
+                              Xpost_Object K)
+{
+    Xpost_Object x = xpost_dict_get(ctx, ctx->privatedict, K);
+    if (xpost_object_get_type(x) == invalidtype)
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, x);
+    return 0;
+}
+
 /* key value  store  -
    replace topmost definition of key */
 static

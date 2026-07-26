@@ -36,6 +36,7 @@
 extern int DEBUGLOAD;
 
 int xpost_op_any_load(Xpost_Context *ctx, Xpost_Object K);
+int xpost_op_privatedict_load(Xpost_Context *ctx, Xpost_Object K);
 int xpost_oper_init_dict_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 #endif
