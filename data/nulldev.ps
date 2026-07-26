@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading nulldev.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading nulldev.ps...)print } ifelse
 
 /nulldevice {
     graphicsdict /currgstate get /device
@@ -84,4 +84,4 @@
     }
 >> def
 
-/QUIET where { pop }{ (eof nulldev.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof nulldev.ps\n)print } ifelse
