@@ -1539,6 +1539,16 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
    execute ps program until quit, fall-through to quit,
    SHOWPAGE_RETURN semantic, or error (default action: message, purge and quit).
  */
+/* The start procedures live in privatedict, off the dict stack, so a program
+   cannot name them. Fetch the one named and push it, executable, onto the exec
+   stack to prime the run. */
+static void push_start_proc(Xpost_Context *ctx, const char *name)
+{
+    xpost_stack_push(ctx->lo, ctx->es,
+        xpost_object_cvx(xpost_dict_get(ctx, ctx->privatedict,
+                                        xpost_name_cons(ctx, name))));
+}
+
 XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
     Xpost_Object lsav = null;
@@ -1601,22 +1611,19 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
     {
         /*printf("ps_file\n"); */
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_string_cons(ctx, strlen(ps_file), ps_file)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
-            ctx->skip_graphics ? "startfilenamenographics" : "startfilename")));
+        push_start_proc(ctx, ctx->skip_graphics ? "startfilenamenographics" : "startfilename");
     }
     else if (ps_file_ptr)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
-            ctx->skip_graphics ? "startfilenographics" : "startfile")));
+        push_start_proc(ctx, ctx->skip_graphics ? "startfilenographics" : "startfile");
     }
     else
     {
         if (xpost_isatty(fileno(stdin)))
-            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "start")));
+            push_start_proc(ctx, "start");
         else
-            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx,
-                ctx->skip_graphics ? "startstdinnographics" : "startstdin")));
+            push_start_proc(ctx, ctx->skip_graphics ? "startstdinnographics" : "startstdin");
     }
 
     (void) xpost_save_create_snapshot_object(ctx->gl);
