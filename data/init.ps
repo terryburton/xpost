@@ -962,6 +962,28 @@ currentglobal true setglobal
     userdict /.internaldict undef
     userdict /.xpostsys undef
 
+    % Return the device class dictionaries to local VM. setpagedevice records the
+    % page geometry into them at run time, and that state must be subject to save
+    % and restore -- a restore to before a setpagedevice reinstates the earlier
+    % device -- so a job's page setup does not leak into the next. In local VM the
+    % ordinary save/restore reverts those writes; a global home does not. (They
+    % were local until the language moved into global VM and were swept along.)
+    % Rebind each to a local copy in privatedict now that the device modules have
+    % finished loading, with headroom for the parameters setpagedevice adds, and
+    % drop the userdict anchor: the classes leave the program's namespace entirely
+    % and the makers, the C drivers and setpagedevice reach them through
+    % privatedict.
+    currentglobal false setglobal
+    [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
+      /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+    { userdict 1 index known
+        { dup userdict 1 index get dup length 16 add dict copy   % name name localcopy
+          .privatedict 3 1 roll put                              % name (privatedict/name = localcopy)
+          userdict exch undef }                                  % drop the userdict anchor
+        { pop } ifelse
+    } forall
+    setglobal
+
         % initgraphics needs a device, so it runs only when graphics has loaded;
         % locking down without graphics leaves no graphics state to initialise
         /graphicsdict where {
