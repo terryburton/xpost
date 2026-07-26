@@ -982,6 +982,17 @@ currentglobal true setglobal
           userdict exch undef }                                  % drop the userdict anchor
         { pop } ifelse
     } forall
+    % Move the remaining local machinery anchors into privatedict as well: the
+    % graphics scratch and the wrapped-operator anchor procedures. These are
+    % reached only through frozen references and the operator table, both of
+    % which the privatedict root keeps alive, so the objects move by reference
+    % (no copy) and dropping the userdict anchor hides them without breaking a
+    % thing.
+    [ /.gscratchdict /.gscratchproc /.graphicsdictproc /.DEVICEproc ]
+    { dup userdict exch known
+        { dup dup userdict exch get .privatedict 3 1 roll put userdict exch undef }
+        { pop } ifelse
+    } forall
     setglobal
 
         % initgraphics needs a device, so it runs only when graphics has loaded;
