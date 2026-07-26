@@ -1006,6 +1006,11 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->window_device, markall))
                 return -1;
 
+            /* privatedict holds the local machinery off the dict stack; root it
+               here so its contents survive collection without a userdict anchor */
+            if (!_xpost_garbage_mark_object(ctx, mem, ctx->privatedict, markall))
+                return -1;
+
             /* the object being executed may exist only here */
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->currentobject, markall))
                 return -1;

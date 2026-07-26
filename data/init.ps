@@ -27,6 +27,16 @@ true setglobal   % systemdict is global, so these allocations must be global
 currentglobal true setglobal
 userdict /.xpostsys 400 dict put
 setglobal
+% privatedict -- the interpreter's private LOCAL machinery dictionary. Recorded
+% in the context (where the collector roots it and C reaches it) but never placed
+% on the dict stack, so a program can neither name nor enumerate its members. It
+% is LOCAL because it holds local objects (the device class dictionaries, the
+% graphics scratch and template, the wrapped-operator anchor procedures) that a
+% global private dictionary may not hold. Reached from PostScript through the
+% .privatedict operator.
+currentglobal false setglobal
+256 dict .setprivatedict
+setglobal
 % .gscratch returns the local scratch dictionary the machinery mutates each
 % render (strokedict, caches, local resources); it is a LOCAL object the
 % collector reclaims. A bound reference to the operator resists shadowing.
@@ -925,6 +935,7 @@ currentglobal true setglobal
           1 index /.sysdictunlock ne and
           1 index /.sysdictrelock ne and
           1 index /.gscratch ne and
+          1 index /.privatedict ne and
         }{ false } ifelse
         { exch pop }{ pop pop } ifelse
     } forall ]

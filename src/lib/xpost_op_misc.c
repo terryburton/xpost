@@ -346,6 +346,29 @@ int op_sysdictrelock(Xpost_Context *ctx)
     return 0;
 }
 
+/* dict  .setprivatedict  -
+   Record the interpreter's private local machinery dictionary in the context,
+   where the collector roots it and the C reaches it, without it ever going on
+   the dict stack. Called once from init.ps. */
+static
+int op_setprivatedict(Xpost_Context *ctx,
+                      Xpost_Object D)
+{
+    ctx->privatedict = D;
+    return 0;
+}
+
+/* -  .privatedict  dict
+   Push the private local machinery dictionary. Like .gscratch, it hands a local
+   object to whatever asks; a global procedure may use the result transiently
+   without holding a local reference. */
+static
+int op_privatedict(Xpost_Context *ctx)
+{
+    xpost_stack_push(ctx->lo, ctx->os, ctx->privatedict);
+    return 0;
+}
+
 int xpost_oper_init_misc_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
 {
@@ -365,6 +388,10 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "bind", (Xpost_Op_Func)Pbind, 1, 1, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".sysdictunlock", (Xpost_Op_Func)op_sysdictunlock, 0, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".setprivatedict", (Xpost_Op_Func)op_setprivatedict, 0, 1, dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".privatedict", (Xpost_Op_Func)op_privatedict, 1, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".sysdictrelock", (Xpost_Op_Func)op_sysdictrelock, 0, 0);
     INSTALL;
