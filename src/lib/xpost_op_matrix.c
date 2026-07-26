@@ -51,6 +51,7 @@
 #include "xpost_string.h"
 #include "xpost_dict.h"
 #include "xpost_array.h"
+#include "xpost_save.h"
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
@@ -123,6 +124,8 @@ void _xmat2psmat(Xpost_Context *ctx,
                  Xpost_Object psm)
 {
     Xpost_Object arr[6];
+    Xpost_Memory_File *mem = xpost_context_select_memory(ctx, psm);
+    unsigned int ent = xpost_object_get_ent(psm);
 
     arr[0] = xpost_real_cons(m->xx);
     arr[1] = xpost_real_cons(m->yx);
@@ -130,17 +133,13 @@ void _xmat2psmat(Xpost_Context *ctx,
     arr[3] = xpost_real_cons(m->yy);
     arr[4] = xpost_real_cons(m->xz);
     arr[5] = xpost_real_cons(m->yz);
-    xpost_memory_put(xpost_context_select_memory(ctx, psm),
-            xpost_object_get_ent(psm), 0, sizeof arr, arr);
-
-    /*
-    xpost_array_put(ctx, psm, 0, xpost_real_cons(m->xx));
-    xpost_array_put(ctx, psm, 1, xpost_real_cons(m->yx));
-    xpost_array_put(ctx, psm, 2, xpost_real_cons(m->xy));
-    xpost_array_put(ctx, psm, 3, xpost_real_cons(m->yy));
-    xpost_array_put(ctx, psm, 4, xpost_real_cons(m->xz));
-    xpost_array_put(ctx, psm, 5, xpost_real_cons(m->yz));
-    */
+    /* Back the array up for save/restore before the bulk write, the way
+       xpost_array_put does per element. Without this a matrix modified inside a
+       save -- the CTM, under scale/concat/rotate -- is not reverted by the
+       matching restore, so a transform set inside a save leaks past it. */
+    if (!xpost_save_ent_is_saved(mem, ent))
+        xpost_save_save_ent(mem, arraytype, psm.comp_.sz, ent);
+    xpost_memory_put(mem, ent, 0, sizeof arr, arr);
 }
 
 /* forward decl's */

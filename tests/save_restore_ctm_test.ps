@@ -1,0 +1,18 @@
+%!PS
+% save/restore and gsave/grestore must revert the CTM. scale/concat/rotate
+% modify the current-matrix array in place; that write must be backed up for
+% save/restore, or a transform set inside a save/gsave leaks past the restore
+% (which made dvips documents render text at a runaway scale). Prints SUCCESS
+% iff a point transforms identically before and after each bracket.
+/fail 0 def
+/chk { % (name)
+    10 20 transform /y1 exch def /x1 exch def
+    x0 x1 eq y0 y1 eq and not { /fail fail 1 add def (FAIL: ) print == }{ pop } ifelse
+} def
+/mark0 { 10 20 transform /y0 exch def /x0 exch def } def
+
+initgraphics mark0 save 7 3 scale restore (save/scale/restore) chk
+initgraphics mark0 gsave 45 rotate grestore (gsave/rotate/grestore) chk
+initgraphics mark0 save [2 0 0 2 5 5] concat restore (save/concat/restore) chk
+initgraphics mark0 save 4 4 scale save 2 2 scale restore restore (nested save/scale) chk
+fail 0 eq { (SUCCESS) = }{ (FAILURES: ) print fail = } ifelse
