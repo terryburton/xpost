@@ -105,6 +105,14 @@ struct _Xpost_Context {
 
     Xpost_Object event_handler;
     Xpost_Object window_device;
+    /**< privatedict -- a LOCAL dictionary that holds the interpreter's local
+         machinery (the device class dictionaries, the wrapped-operator anchor
+         procedures, the graphics scratch and template). Rooted here so the
+         collector keeps it and its contents, but never pushed on the dict
+         stack, so a program can neither name nor enumerate its members. The
+         C reaches the device classes through it; PostScript through a frozen
+         reference. Set from init.ps by .setprivatedict. */
+    Xpost_Object privatedict;
     const char *device_str;
 
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
