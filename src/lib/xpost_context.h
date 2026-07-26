@@ -115,6 +115,11 @@ struct _Xpost_Context {
     Xpost_Object privatedict;
     const char *device_str;
 
+    int quiet; /**< the -q/--quiet startup flag, retained so the shutdown
+                    message can honour it without reading a PostScript name:
+                    QUIET lives in the private .internaldict, out of a program's
+                    reach, once init.ps has relocated it there. */
+
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
 
     int sysdict_unlocked; /**< systemdict is temporarily writeable while the

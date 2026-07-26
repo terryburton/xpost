@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading clip.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading clip.ps...)print } ifelse
 
 /initclip {
     %(initclip)=
@@ -371,4 +371,4 @@ end }
 bind
 put
 
-/QUIET where { pop }{ (eof clip.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof clip.ps\n)print } ifelse

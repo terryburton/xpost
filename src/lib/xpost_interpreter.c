@@ -1452,10 +1452,15 @@ XPAPI Xpost_Context *xpost_create(const char *device,
                    device, outfile, bufferin, bufferout,
                    semantics, set_size, width, height);
 
+    xpost_ctx->quiet = quiet;
     if (quiet)
     {
-        /* a boolean, matching the convention of other interpreters:
-           programs test both `/QUIET where` and the value itself */
+        /* Hand the quiet flag to the boot code through systemdict -- the only
+           dictionary that exists this early. init.ps relocates QUIET into the
+           private .internaldict as soon as that dictionary is built, so the
+           load-time banner guards read it through a frozen reference and a
+           program can neither see nor shadow it. GS drives the same flag from
+           -dQUIET and its own init reads it the same way. */
         xpost_dict_put(xpost_ctx,
                        sd /*xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)*/ ,
                        xpost_name_cons(xpost_ctx, "QUIET"),
@@ -1729,7 +1734,7 @@ XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable)
 XPAPI void xpost_destroy(Xpost_Context *ctx)
 {
 
-    if (!xpost_dict_known_key(ctx, ctx->gl, xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0), xpost_name_cons(ctx, "QUIET")))
+    if (!ctx->quiet)
     {
         printf("bye!\n");
         fflush(NULL);
