@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading paint.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
 % Painting Operators
 
@@ -281,4 +281,4 @@
     end
 } def
 
-/QUIET where { pop }{ (eof paint.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof paint.ps\n)print } ifelse

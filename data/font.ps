@@ -8,7 +8,7 @@
 % performing special handling for Type 3 (postscript) fonts,
 % and calling the C operators for all other types.
 
-/QUIET where { pop }{ (loading font.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading font.ps...)print } ifelse
 
 /definefont { % /fontname -dict-
     dup type /dicttype ne
@@ -294,5 +294,5 @@
     /udieresis /yacute /thorn /ydieresis
 ] def
 
-/QUIET where { pop }{ (eof font.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof font.ps\n)print } ifelse
 

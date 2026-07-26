@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading graphics.ps...\n)print } ifelse
+//.internaldict /QUIET known { }{ (loading graphics.ps...\n)print } ifelse
 
 % fallback definitions so this file can run standalone; in the normal flow
 % DATA_DIR lives in privatedict, so test for it there
@@ -75,7 +75,7 @@ false setglobal
 
 end %userdict
 
-/QUIET where { pop }{ (eof graphics.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof graphics.ps\n)print } ifelse
 
 /TESTGRAPHICS where {pop}{ currentfile flushfile} ifelse
 (TESTGRAPHICS graphics)=
