@@ -898,6 +898,11 @@ currentglobal true setglobal
     % handlers live inside strokedict); bind them so they survive a program
     % shadowing the operator names they call
     .gscratch .bindscope
+    % privatedict holds machinery procedures too -- the gstate-template accessor,
+    % the device class methods -- so bind them against a shadowed operator name
+    % the same way. The anchor procedures moved here below were bound in userdict
+    % before the move, so they carry their frozen references with them.
+    .privatedict .bindscope
 
     % Move the standard operators from userdict into the unlocked systemdict,
     % leaving userdict for the program. Only global operator-valued names move;
@@ -988,11 +993,14 @@ currentglobal true setglobal
     % which the privatedict root keeps alive, so the objects move by reference
     % (no copy) and dropping the userdict anchor hides them without breaking a
     % thing.
-    [ /.gscratchdict /.gscratchproc /.graphicsdictproc /.DEVICEproc ]
+    [ /.gscratchdict /.gscratchproc /.graphicsdictproc /.DEVICEproc /.error ]
     { dup userdict exch known
         { dup dup userdict exch get .privatedict 3 1 roll put userdict exch undef }
         { pop } ifelse
     } forall
+    % the gstate-template dictionary is frozen into its accessor proc (already in
+    % privatedict), so only its userdict anchor remains -- drop it
+    userdict /.gstatetemplate known { userdict /.gstatetemplate undef } if
     setglobal
 
         % initgraphics needs a device, so it runs only when graphics has loaded;
