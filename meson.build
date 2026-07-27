@@ -495,6 +495,12 @@ test('op-subfiledecode',
   args: [ xpost_exe, files('tests/op_subfiledecode_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# String data sources for filters (PLRM 3.8.4): a filter may read from a string.
+test('op-string-filter',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],

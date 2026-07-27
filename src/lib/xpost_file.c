@@ -1095,6 +1095,50 @@ Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem,
     return f;
 }
 
+/* A readable file over a private copy of a byte range, for the string form of
+   the filter operator. The copy is owned by the memory file (is_malloc) and is
+   released when the file is closed; the wrapping decode filter closes it (see
+   xpost_file_object_close), since a filter otherwise leaves its source open. */
+Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
+                                        const unsigned char *ptr,
+                                        unsigned int len)
+{
+    Xpost_Object f;
+    unsigned int ent;
+    Xpost_File *mf;
+    unsigned char *copy;
+
+    f.tag = filetype;
+    copy = malloc(len ? len : 1);
+    if (!copy)
+        return invalid;
+    if (len)
+        memcpy(copy, ptr, len);
+    mf = xpost_memoryfile_open_read(copy, len);
+    if (!mf)
+    {
+        free(copy);
+        return invalid;
+    }
+    ((Xpost_MemoryFile *)mf)->is_malloc = 1;
+    if (!xpost_memory_table_alloc(mem, sizeof mf, filetype, &ent))
+    {
+        XPOST_LOG_ERR("cannot allocate file record");
+        xpost_file_close(mf);
+        free(mf);
+        return invalid;
+    }
+    f.mark_.padw = ent;
+    if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
+    {
+        XPOST_LOG_ERR("cannot save file pointer in VM");
+        xpost_file_close(mf);
+        free(mf);
+        return invalid;
+    }
+    return f;
+}
+
 Xpost_Object xpost_file_cons_writebuffer(Xpost_Memory_File *mem)
 {
     Xpost_Object f;
@@ -4350,6 +4394,33 @@ int xpost_file_get_bytes_available(Xpost_Memory_File *mem,
     return 0;
 }
 
+/* If f is a decode filter whose source is an in-memory file this module
+   synthesised from a string (the string form of the filter operator), return
+   that source so the closing filter can release it; otherwise NULL. A decode
+   filter's source sits at a fixed offset after the method table in every filter
+   struct, so it is read through Xpost_FilterBase once f is known to be one. */
+static Xpost_File *_owned_memory_source(Xpost_File *f)
+{
+    Xpost_File_Methods *m = f->methods;
+    Xpost_File *src;
+
+    if (m != &a85_methods && m != &hex_methods && m != &rle_methods
+        && m != &subfile_methods && m != &lzw_methods && m != &fax_methods
+#ifdef HAVE_ZLIB
+        && m != &flate_methods
+#endif
+#ifdef HAVE_LIBJPEG
+        && m != &dct_methods
+#endif
+        )
+        return NULL;
+    src = ((Xpost_FilterBase *)f)->source;
+    if (src && src->methods == &memory_methods
+            && ((Xpost_MemoryFile *)src)->is_read)
+        return src;
+    return NULL;
+}
+
 /* close the file,
    NULL the FILE*. */
 int xpost_file_object_close(Xpost_Memory_File *mem,
@@ -4366,6 +4437,23 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
 #endif
 
         xpost_file_close(fp);
+        /* a reusable stream survives its close -- the method rewound
+           it -- and the object stays open for the next consumer */
+        if (fp->methods == &rsd_methods)
+            return 0;
+        /* release a source synthesised from a string, which the filter owns */
+        {
+            Xpost_File *osrc = _owned_memory_source(fp);
+            if (osrc)
+            {
+                xpost_file_close(osrc);
+                free(osrc);
+            }
+        }
+        /* the close method released the stream's own resources; the object's
+           only pointer to the backing struct is cleared next, and file
+           entities are never collected, so free the struct here or it leaks */
+        free(fp);
         fp = NULL;
         ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof fp, &fp);
         if (!ret)
