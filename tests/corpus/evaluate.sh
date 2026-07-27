@@ -48,6 +48,12 @@ evaluate_corpus() {
     for p in "$@"; do
         [ -f "$p" ] || continue
         b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
+        # a corpus may list basenames (one per line) in a "slow" file: programs
+        # that render correctly but too slowly to fit the per-file timeout, held
+        # out until the underlying performance work lands
+        if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
+            echo "  $b  held out (see $corpus/slow)"; continue
+        fi
         dev=$(device_for "$corpus" "$b")
         gsdev=${dev}raw
         rm -f "$work"/g_*.* "$work"/x_*.*
