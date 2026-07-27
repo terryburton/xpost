@@ -2,9 +2,9 @@ name: linux CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, main ]
     types: [opened, synchronize, reopened]
 
 jobs:
