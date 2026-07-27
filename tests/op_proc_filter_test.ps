@@ -1,0 +1,30 @@
+% Procedure data sources for filters (PLRM 3.8.4), run through `xpost -d null` by
+% run-ps-test.sh. Standard PostScript; prints SUCCESS on Ghostscript too.
+%
+% A filter may read from a procedure that returns successive strings and a
+% zero-length string at end of data.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+% one chunk then end of data
+/st1 0 def
+{ st1 0 eq { /st1 1 def (48656C6C6F>) }{ () } ifelse } /ASCIIHexDecode filter
+12 string readstring pop (Hello) eq (procedure source, single chunk) assert
+
+% several chunks then end of data
+/i2 0 def
+{ [ (48) (656C) (6C6F>) ] i2 2 le { i2 get /i2 i2 1 add def }{ pop () } ifelse }
+/ASCIIHexDecode filter 12 string readstring pop
+(Hello) eq (procedure source, multiple chunks) assert
+
+% a procedure that is empty at once yields no data
+{ () } /ASCIIHexDecode filter 12 string readstring not
+(procedure source empty at end of data) assert
+
+% RunLengthDecode from a procedure source
+/st3 0 def
+{ st3 0 eq { /st3 1 def (\001AB\200) }{ () } ifelse } /RunLengthDecode filter
+8 string readstring pop (AB) eq (procedure source through RunLengthDecode) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
