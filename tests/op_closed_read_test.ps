@@ -1,0 +1,27 @@
+% Reading from a closed file reports end-of-data (an empty result and false)
+% rather than raising an error, matching Adobe Distiller and Ghostscript. Run
+% through `xpost -d null` by run-ps-test.sh; prints SUCCESS on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/cr.f (closedread.scratch) (w) file def
+cr.f (Hi) writestring cr.f closefile
+/mkclosed { (closedread.scratch) (r) file dup closefile } def
+
+% every read-family operator returns false at once on a closed file
+mkclosed read not (read of a closed file is false) assert
+mkclosed 4 string readstring exch pop not (readstring of a closed file is false) assert
+mkclosed 4 string readstring pop length 0 eq (readstring of a closed file yields an empty string) assert
+mkclosed 4 string readhexstring exch pop not (readhexstring of a closed file is false) assert
+mkclosed 20 string readline exch pop not (readline of a closed file is false) assert
+
+% closing twice is harmless and status reports the file is closed
+mkclosed dup closefile status not (status of a closed file is false) assert
+
+% an open file still reads normally
+/g (closedread.scratch) (r) file def
+g read pop 72 eq (an open file still reads a byte) assert
+g 1 string readstring exch pop (an open file still reads a string) assert
+g closefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
