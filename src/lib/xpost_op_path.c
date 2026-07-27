@@ -72,7 +72,8 @@
  */
 
 //#define RAD_PER_DEG (M_PI / 180.0)
-#define RAD_PER_DEG (0.0174533)
+/* full precision: a truncated literal skewed arc endpoints off the axes */
+#define RAD_PER_DEG (M_PI / 180.0)
 
 /*name objects*/
 static Xpost_Object namegraphicsdict;
@@ -620,15 +621,32 @@ int _arc_append(Xpost_Context *ctx,
     if (fabs(a2 - a1) > 5760)
         a2 = a1 + dir * 5760;
 
+    /* snap an endpoint that lands a hair off a quadrant boundary onto it: the
+       tangent-point arithmetic behind arct/arcto leaves a right-angle corner's
+       start/end angle a shade off 90n, which would otherwise flip a floor() and
+       emit a full quadrant plus a sub-ulp sliver instead of one segment. The
+       tolerance is set from single-precision reals (typedef float real): one ulp
+       of a degree value near 90 is 90*2^-23 ~= 7.6e-6, so an angle within 1e-5
+       (just over one ulp) of 90n is a right angle blurred by float rounding, not
+       a distinct span. Anything a full ulp or more away is left to split. */
+    {
+        double q1 = floor(a1 / 90.0 + 0.5) * 90.0;
+        double q2 = floor(a2 / 90.0 + 0.5) * 90.0;
+        if (fabs(a1 - q1) < 1e-5) a1 = q1;
+        if (fabs(a2 - q2) < 1e-5) a2 = q2;
+    }
     cur = a1;
     b = dir > 0 ? (floor(a1 / 90) + 1) * 90 : (ceil(a1 / 90) - 1) * 90;
-    while (n < 65 && (dir > 0 ? b < a2 : b > a2))
+    /* tolerate a hair of floating-point slop at a quadrant boundary: a span
+       that ends exactly on 90n (a right-angle corner, common from arct) must
+       be one segment, not a full quadrant plus a sub-microdegree sliver */
+    while (n < 65 && (dir > 0 ? b < a2 - 1e-6 : b > a2 + 1e-6))
     {
         segs[n][0] = cur; segs[n][1] = b; n++;
         cur = b;
         b += dir * 90;
     }
-    if (fabs(a2 - cur) > 1e-9)
+    if (fabs(a2 - cur) > 1e-6)
     {
         segs[n][0] = cur; segs[n][1] = a2; n++;
     }
