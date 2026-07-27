@@ -944,7 +944,7 @@ override%pop pop%bind def
 
 /pathbbox {
     cpath length 0 eq {
-        0 0 0 0
+        /pathbbox cvx /nocurrentpoint signalerror
     }{
         << /minx 16#7fffffff /miny 1 index
             /maxx 1 index neg /maxy 1 index >> begin
@@ -954,8 +954,11 @@ override%pop pop%bind def
             0 1 2 index length 1 sub {
                 2 copy get
                 /data get
+                % stored points are device coordinates; the box is
+                % reported in user space (PLRM), so map each point
+                % back through the inverse CTM before accumulation
                 aload length 2 idiv
-                { maxmin } repeat
+                { itransform maxmin } repeat
                 pop
             } for
             pop pop
