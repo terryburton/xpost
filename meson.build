@@ -320,6 +320,13 @@ test('op-matrix-gstate',
   args: [ xpost_exe, files('tests/op_matrix_gstate_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Path-construction operators (PLRM 8.2): currentpoint tracking, nocurrentpoint,
+# and arc endpoints on the axes (full-precision degrees).
+test('op-path',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_path_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

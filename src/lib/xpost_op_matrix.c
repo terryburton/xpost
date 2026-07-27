@@ -58,7 +58,8 @@
 #include "xpost_op_matrix.h"
 
 //#define RAD_PER_DEG (M_PI / 180.0)
-#define RAD_PER_DEG (0.0174533)
+/* full precision: a truncated literal skewed rotate off the axis angles */
+#define RAD_PER_DEG (M_PI / 180.0)
 
 // TODO Factor out name_cons() calls.
 

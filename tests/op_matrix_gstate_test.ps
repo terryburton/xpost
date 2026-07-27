@@ -7,6 +7,7 @@
 %     six-element array raised no error and read out of bounds; PLRM: rangecheck
 %   - setlinecap/setlinejoin outside 0..2, and setmiterlimit below 1, were
 %     accepted silently; PLRM: rangecheck
+%   - rotate built its matrix through a truncated RAD_PER_DEG
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
@@ -39,6 +40,11 @@ dx 20.0 (dtransform x, no translation) assertnear dy 60.0 (dtransform y) assertn
                      5 get 3.0 (translate sets ty) assertnear
 2 3 matrix scale dup 0 get 2.0 (scale sets xx) assertnear
                  3 get 3.0 (scale sets yy) assertnear
+% rotate 90 -> [cos sin -sin cos 0 0] = [0 1 -1 0 0 0], within single-precision slack
+90 matrix rotate dup 0 get 0.0 (rotate 90 cos) assertnear
+                 dup 1 get 1.0 (rotate 90 sin) assertnear
+                 dup 2 get -1.0 (rotate 90 -sin) assertnear
+                 3 get 0.0 (rotate 90 cos again) assertnear
 [1 2 3 4 5 6] [1 0 0 1 0 0] matrix concatmatrix 0 get 1.0 (concatmatrix identity) assertnear
 
 % --- currentmatrix / setmatrix round-trip ---
