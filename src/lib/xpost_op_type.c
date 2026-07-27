@@ -165,11 +165,23 @@ int Awcheck(Xpost_Context *ctx,
 /* number  cvi  int
    convert number to integer */
 static
+/* Largest and smallest values the integer type holds, as doubles, for range
+   checks; the ternary folds to a constant. */
+#define XPOST_INTEGER_HI_D ((sizeof(integer) >= 8) ? 9223372036854775807.0 : 2147483647.0)
+#define XPOST_INTEGER_LO_D ((sizeof(integer) >= 8) ? -9223372036854775808.0 : -2147483648.0)
+
 int Ncvi(Xpost_Context *ctx,
          Xpost_Object n)
 {
     if (xpost_object_get_type(n) == realtype)
-        n = xpost_int_cons((integer)n.real_.val);
+    {
+        double v = (double)n.real_.val;
+        /* cvi truncates toward zero; PLRM raises rangecheck when the real is
+           too large to represent as an integer */
+        if (v >= XPOST_INTEGER_HI_D + 1.0 || v <= XPOST_INTEGER_LO_D - 1.0)
+            return rangecheck;
+        n = xpost_int_cons((integer)v);
+    }
     xpost_stack_push(ctx->lo, ctx->os, n);
     return 0;
 }
@@ -245,10 +257,11 @@ int Scvi(Xpost_Context *ctx,
     free(t);
     if (ret)
         return ret;
-    if (dbl >= LONG_MAX || dbl <= LONG_MIN)
-        return limitcheck;
+    /* a numeral that does not fit the integer type is rangecheck (PLRM cvi) */
+    if (dbl >= XPOST_INTEGER_HI_D + 1.0 || dbl <= XPOST_INTEGER_LO_D - 1.0)
+        return rangecheck;
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((long)dbl));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)dbl));
     return 0;
 }
 
