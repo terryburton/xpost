@@ -317,6 +317,10 @@ static
 int Rsqrt (Xpost_Context *ctx,
             Xpost_Object x)
 {
+    /* PLRM: the operand must be nonnegative; a negative one is rangecheck,
+       not a silent NaN */
+    if (x.real_.val < 0.0)
+        return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)sqrt(x.real_.val)));
     return 0;
 }

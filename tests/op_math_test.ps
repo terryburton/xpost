@@ -44,6 +44,10 @@
 % --- div always real ---
 4 2 div 2.0 eq (4 2 div = 2.0 real) assert
 
+% --- sqrt: negative is rangecheck ---
+{ -1 sqrt } /rangecheck (sqrt of negative is rangecheck) erris
+16 sqrt 4.0 eq (sqrt 16 = 4) assert
+
 % --- round: ties go to the greater value (PLRM) ---
 3.2 round 3.0 eq (round 3.2 = 3) assert
 6.5 round 7.0 eq (round 6.5 = 7) assert
