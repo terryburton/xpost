@@ -1,0 +1,30 @@
+% String data sources for filters (PLRM 3.8.4), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% A filter's data source may be a string; the filter reads a private copy of it.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+% ASCIIHexDecode from a string
+(48656C6C6F>) /ASCIIHexDecode filter 12 string readstring pop
+(Hello) eq (ASCIIHexDecode reads from a string source) assert
+
+% SubFileDecode over a string, positive count includes the delimiter
+(alpha*EOD*beta) 1 (*EOD*) /SubFileDecode filter 20 string readstring pop
+(alpha*EOD*) eq (SubFileDecode reads from a string source) assert
+
+% SubFileDecode over a string, count zero
+(head*EOD*tail) 0 (*EOD*) /SubFileDecode filter 20 string readstring pop
+(head) eq (SubFileDecode count zero over a string) assert
+
+% RunLengthDecode from a string: <01> means copy the next 2 literal bytes
+(\001AB\200) /RunLengthDecode filter 8 string readstring pop
+(AB) eq (RunLengthDecode reads from a string source) assert
+
+% closing a string-sourced filter is accepted
+{ (48656C6C6F>) /ASCIIHexDecode filter closefile true } stopped { pop false } if
+(a string-sourced filter closes cleanly) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
