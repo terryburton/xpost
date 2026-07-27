@@ -63,6 +63,19 @@ Xpost_Object _promote_integer_to_real(Xpost_Object o)
     return xpost_real_cons((real)o.int_.val);
 }
 
+/* Record that operand at top-down index idx was coerced from the integer orig,
+   so an error can restore the original the program pushed (PLRM 3.11). Called
+   only when a coercion actually happens, so it is a no-op for the usual case. */
+static void _op_restore_note(Xpost_Context *ctx, int idx, Xpost_Object orig)
+{
+    if (ctx->op_restore_n < (int)(sizeof ctx->op_restore_idx))
+    {
+        ctx->op_restore_idx[ctx->op_restore_n] = (unsigned char)idx;
+        ctx->op_restore_val[ctx->op_restore_n] = orig;
+        ctx->op_restore_n++;
+    }
+}
+
 /* copied from the header file for reference:
    typedef struct Xpost_Signature {
    int (*fp)(Xpost_Context *ctx);
@@ -137,6 +150,7 @@ int _stack_float(Xpost_Context *ctx)
         case invalidtype:
             return stackunderflow;
         case integertype:
+            _op_restore_note(ctx, 0, s0);
             xpost_stack_topdown_replace(ctx->lo, ctx->os, 0, s0 = _promote_integer_to_real(s0));
             /* fallthrough */
         case realtype:
@@ -214,6 +228,7 @@ int _stack_float_float(Xpost_Context *ctx)
         case invalidtype:
             return stackunderflow;
         case integertype:
+            _op_restore_note(ctx, 0, s0);
             xpost_stack_topdown_replace(ctx->lo, ctx->os, 0, s0 = _promote_integer_to_real(s0));
             /* fallthrough */
         case realtype:
@@ -223,6 +238,7 @@ int _stack_float_float(Xpost_Context *ctx)
                 case invalidtype:
                     return stackunderflow;
                 case integertype:
+                    _op_restore_note(ctx, 1, s1);
                     xpost_stack_topdown_replace(ctx->lo, ctx->os, 1, s1 = _promote_integer_to_real(s1));
                     /* fallthrough */
                 case realtype:
@@ -585,6 +601,8 @@ int xpost_operator_exec(Xpost_Context *ctx,
     unsigned int optadr;
     int ret;
 
+    ctx->op_restore_n = 0;
+
     ret = xpost_memory_table_get_addr(ctx->gl,
                                       XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
     if (!ret)
@@ -643,6 +661,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
             {
                 if (xpost_object_get_type(el) == integertype)
                 {
+                    _op_restore_note(ctx, j, el);
                     if (!xpost_stack_topdown_replace(ctx->lo, ctx->os, j, el = _promote_integer_to_real(el)))
                         return unregistered;
                     continue;
@@ -661,6 +680,12 @@ int xpost_operator_exec(Xpost_Context *ctx,
 
         if (pass) goto call;
     }
+    /* no signature matched: a rejected trial may have coerced an operand from
+       integer to real before failing. The operator never ran, so the operands
+       are still on the stack; put back the integers the program pushed. */
+    for (i = 0; i < ctx->op_restore_n; i++)
+        xpost_stack_topdown_replace(ctx->lo, ctx->os,
+                ctx->op_restore_idx[i], ctx->op_restore_val[i]);
     return err;
 
   call:

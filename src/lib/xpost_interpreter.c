@@ -767,6 +767,15 @@ void _onerror(Xpost_Context *ctx,
             xpost_stack_push(ctx->lo, ctx->os,
                     xpost_stack_bottomup_fetch(ctx->lo, ctx->hold, i));
         }
+        /* the restored args carry the dispatcher's integer->real coercions;
+           put back the integers the program actually pushed (PLRM 3.11) */
+        for (i = 0; i < ctx->op_restore_n; i++)
+        {
+            int idx = ctx->op_restore_idx[i];
+            if (idx < n)
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
+                        ctx->op_restore_val[i]);
+        }
     }
 
     /* printf("1\n"); */

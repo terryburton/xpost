@@ -1,0 +1,49 @@
+% Operand restoration on error (PLRM 3.11): after an operator errors, the operand
+% stack is restored to the state it was in when the operator began -- including
+% the integer types the program pushed, not the reals the dispatcher coerces them
+% to. Run through `xpost -d null` by run-ps-test.sh. Standard PostScript; prints
+% SUCCESS on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/isint { type /integertype eq } def
+/isreal { type /realtype eq } def
+
+% div by zero: both operands restored as integers, deeper stack untouched
+clear 9 8 1 0 { div } stopped pop
+count 4 eq (div by zero leaves four operands) assert
+4 array astore /a exch def
+a 0 get 9 eq (deep operand untouched) assert
+a 3 get 0 eq (dividend value restored) assert  % a3 is top (the 0)
+a 3 get isint (top operand restored as integer, not real) assert
+a 2 get isint (second operand restored as integer, not real) assert
+
+% real numerator stays real, integer denominator stays integer
+clear 1.5 0 { div } stopped pop
+2 array astore /a exch def
+a 0 get isreal (real operand kept real) assert
+a 1 get isint (integer operand kept integer) assert
+
+% idiv / mod by zero (integer operators, no coercion) still restore cleanly
+clear 7 0 { idiv } stopped pop 2 array astore /a exch def
+a 0 get 7 eq a 1 get 0 eq and (idiv operands restored) assert
+a 0 get isint a 1 get isint and (idiv operands are integers) assert
+clear 7 0 { mod } stopped pop 2 array astore /a exch def
+a 0 get isint a 1 get isint and (mod operands are integers) assert
+
+% dispatch typecheck: a rejected float signature must not leave a coerced operand
+clear (x) 1 { add } stopped pop 2 array astore /a exch def
+a 1 get 1 eq (add: integer operand value kept) assert
+a 1 get isint (add: integer operand not coerced by the rejected float signature) assert
+clear 1 (x) { add } stopped pop 2 array astore /a exch def
+a 0 get isint (add: leading integer operand not coerced) assert
+
+% single-operand coercion: sqrt of a negative integer restores the integer
+clear -1 { sqrt } stopped pop
+dup -1 eq (sqrt: value restored) assert
+isint (sqrt: operand restored as integer) assert
+
+% successful coercing operator is unaffected
+clear 6 4 div 1.5 sub abs 1e-6 lt (div still works) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
