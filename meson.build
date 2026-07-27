@@ -360,6 +360,12 @@ test('op-packing',
   args: [ xpost_exe, files('tests/op_packing_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# vmreclaim (PLRM 8.2): 2 (local and global) reclaims local VM like 1 (local).
+test('op-vmreclaim',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_vmreclaim_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside
