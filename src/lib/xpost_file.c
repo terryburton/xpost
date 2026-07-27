@@ -1289,11 +1289,11 @@ rle_readch(Xpost_File *f)
     }
 }
 
-/* SubFileDecode filter: pass bytes through until the EOD string has
-   been seen count times; the final occurrence is consumed but not
-   delivered, leaving the source just after it. A count of zero with
-   a non-empty string ends at the first occurrence; an empty string
-   makes count a plain byte count. */
+/* SubFileDecode filter: pass bytes through until the EOD string has been seen
+   count times. For count > 0 the data delivered is everything up to and
+   including the count-th occurrence, leaving the source just after it. A count
+   of zero with a non-empty string consumes the first occurrence without
+   delivering it; an empty string makes count a plain byte count. */
 typedef struct Xpost_SubFile
 {
     Xpost_File methods;
@@ -1367,7 +1367,7 @@ subfile_readch(Xpost_File *f)
             {
                 if (ff->count > 1)
                 {
-                    /* deliver this occurrence and keep going */
+                    /* an intermediate occurrence: deliver it and keep going */
                     ff->count--;
                     memcpy(ff->pend, ff->eodstr, matched);
                     ff->pendn = matched;
@@ -1375,6 +1375,18 @@ subfile_readch(Xpost_File *f)
                     return ff->pend[0];
                 }
                 ff->eod = 1;
+                if (ff->count == 1)
+                {
+                    /* the final occurrence: PLRM passes all data "up to and
+                       including" the count-th EOD string, so deliver it before
+                       reporting end-of-data (pend drains ahead of the eod flag).
+                       The source is already positioned just past it. */
+                    memcpy(ff->pend, ff->eodstr, matched);
+                    ff->pendn = matched;
+                    ff->pendi = 1;
+                    return ff->pend[0];
+                }
+                /* count == 0: the first occurrence is consumed but not passed */
                 return EOF;
             }
             continue;
@@ -3894,9 +3906,6 @@ Xpost_Object xpost_file_cons_filter_subfile(Xpost_Memory_File *mem, Xpost_Object
         memcpy(ff->eodstr, eod, eodlen);
         ff->eodlen = eodlen;
         ff->pendn = ff->pendi = 0;
-        /* count 0 with a delimiter behaves as a single occurrence */
-        if (eodlen > 0 && ff->count < 1)
-            ff->count = 1;
     }
     return _filter_object_cons(mem, &ff->methods);
 }
