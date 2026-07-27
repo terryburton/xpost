@@ -83,6 +83,12 @@ struct _Xpost_Context {
     unsigned char op_restore_idx[8];
     Xpost_Object op_restore_val[8];
 
+    /* array-packing mode (setpacking/currentpacking): when set, the scanner
+       builds { } procedures read-only. packing_hist records the mode at each
+       save level so restore reverts it, as the parameter is save/restore-subject */
+    int packing;
+    unsigned char packing_hist[256];
+
     /*@dependent@*/
     Xpost_Memory_File *gl; /**< global VM */
     /*@dependent@*/

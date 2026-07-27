@@ -63,11 +63,17 @@ int Zsave(Xpost_Context *ctx)
     /* each object's mark records the save level (as level+1) in an 8-bit
        field, so the save stack cannot exceed 255 levels without aliasing
        another level's bookkeeping */
+    Xpost_Object v;
+
     if (xpost_memory_table_get_addr(ctx->lo,
             XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs)
         && xpost_stack_count(ctx->lo, vs) >= 255)
         return limitcheck;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_save_create_snapshot_object(ctx->lo)))
+    v = xpost_save_create_snapshot_object(ctx->lo);
+    /* remember the packing mode at this level so restore reverts it */
+    if (v.save_.lev < sizeof ctx->packing_hist)
+        ctx->packing_hist[v.save_.lev] = (unsigned char)ctx->packing;
+    if (!xpost_stack_push(ctx->lo, ctx->os, v))
         return stackoverflow;
     return 0;
 }
@@ -95,6 +101,9 @@ int Vrestore(Xpost_Context *ctx,
         xpost_save_restore_snapshot(ctx->lo);
         z--;
     }
+    /* the packing mode is save/restore-subject: revert it to this level */
+    if (V.save_.lev < sizeof ctx->packing_hist)
+        ctx->packing = ctx->packing_hist[V.save_.lev];
     return 0;
 }
 
