@@ -1,0 +1,28 @@
+% cvs produces a real string for integer, real, boolean, string, name and
+% operator objects; every other type yields --nostringval--. The debugging
+% == operator keeps its own -mark- rendering. Matches Adobe Distiller and
+% Ghostscript. Run through `xpost -d null` by run-ps-test.sh; prints SUCCESS
+% on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/streq { 2 copy length exch length eq { eq } { pop pop false } ifelse } def
+/cvseq { 64 string cvs exch streq } def
+
+% types with a genuine string representation
+(42) 42 cvseq (cvs integer) assert
+(3.5) 3.5 cvseq (cvs real) assert
+(true) true cvseq (cvs boolean) assert
+(false) false cvseq (cvs boolean false) assert
+(hello) (hello) cvseq (cvs string) assert
+(foo) /foo cvseq (cvs name) assert
+(add) /add load cvseq (cvs operator) assert
+
+% every other type is --nostringval--
+(--nostringval--) mark cvseq (cvs mark) assert
+(--nostringval--) save cvseq (cvs save) assert
+(--nostringval--) [1 2 3] cvseq (cvs array) assert
+(--nostringval--) 1 dict cvseq (cvs dict) assert
+(--nostringval--) null cvseq (cvs null) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
