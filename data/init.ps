@@ -587,6 +587,51 @@ setglobal
     { pop } ifelse
 } forall
 
+% A procedure data source for a filter (PLRM 3.8.4) is run to yield successive
+% strings, ending with a zero-length string. Its output is collected into one
+% string and that string is filtered. Only the two-operand form can present a
+% procedure at the source position -- every other form's source sits below one
+% or two non-procedure operands -- so other forms and file/string sources pass
+% straight through to the operator.
+currentglobal true setglobal
+.xpostsys /.cfilter /filter load put
+.xpostsys /.collectproc {   % proc  .collectproc  string
+    3 dict begin
+    /p exch def
+    /n 0 def
+    % a well-behaved source returns a zero-length string at end of data; the
+    % byte cap stops a source that never does from running unbounded
+    [ {
+        p exec
+        dup length 0 eq { pop exit } if
+        dup length n add /n exch def
+        n 1048576 gt { /filter cvx /limitcheck signalerror } if
+    } loop ]
+    /pieces exch def
+    /buf n string def
+    /off 0 def
+    pieces {
+        dup length exch
+        buf off 3 -1 roll putinterval
+        off add /off exch def
+    } forall
+    buf
+    end
+} put
+setglobal
+/filter {
+    count 2 ge
+    { 1 index dup type /arraytype eq exch xcheck and }
+    { false }
+    ifelse
+    {
+        exch //.xpostsys /.collectproc get exec exch
+        //.xpostsys /.cfilter get exec
+    }{
+        //.xpostsys /.cfilter get exec
+    } ifelse
+} def
+
 end % systemdict
 
 userdict begin
