@@ -5,24 +5,24 @@
 % are newly-allocated arrays.
 /gstatetemplate <<
     /colorspace /DeviceGray
-    /colorcomp1 0
-    /colorcomp2 0
-    /colorcomp3 0
-    /colorcomp4 0
+    /colorcomp1 0.0
+    /colorcomp2 0.0
+    /colorcomp3 0.0
+    /colorcomp4 0.0
     /transfer {}
     %/currmatrix DEVICE /defaultmatrix get matrix copy
     %/currmatrix [ 1 0 0 1 0 0 ]
     %/scratchmatrix [ 1 0 0 1 0 0 ] % ??
     /currpath 1 dict
     /clipregion 1 dict
-    /flat 1
-    /linewidth 1
+    /flat 1.0
+    /linewidth 1.0
     /linecap 0
     /linejoin 0
     /miterlimit 10.0
     /overprint false
     /dasharray []
-    /dashoffset 0
+    /dashoffset 0.0
     /currfont 1 dict
     /device DEVICE
 >> def
@@ -196,7 +196,7 @@ end
 % num  setlinewidth  -
 % set line width
 /setlinewidth {
-    graphicsdict /currgstate get exch /linewidth exch put
+    graphicsdict /currgstate get exch cvr /linewidth exch put
 } def
 
 % -  currentlinewidth  num
@@ -221,7 +221,7 @@ end
 
 % array offset  setdash  -
 /setdash {
-    graphicsdict /currgstate get exch /dashoffset exch put
+    graphicsdict /currgstate get exch cvr /dashoffset exch put
     graphicsdict /currgstate get exch /dasharray exch put
 } def
 
@@ -249,7 +249,7 @@ end
 /setmiterlimit {
     dup 1 lt
     { pop /setmiterlimit cvx /rangecheck signalerror }
-    { graphicsdict /currgstate get exch /miterlimit exch put } ifelse
+    { graphicsdict /currgstate get exch cvr /miterlimit exch put } ifelse
 } def
 
 % -  currentmiterlimit  num
@@ -273,7 +273,7 @@ end
 /setflat {
     /CONSTRAINFLATNESS where{
         pop dup 100 gt{pop 100}if dup .2 lt{pop .2}if } if
-    graphicsdict /currgstate get exch /flat exch put
+    graphicsdict /currgstate get exch cvr /flat exch put
 } def
 
 /currentflat {

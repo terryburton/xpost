@@ -1,0 +1,40 @@
+% Graphics-state number parameters are reals (PLRM: these are real-valued),
+% matching Adobe Distiller and Ghostscript. Run through `xpost -d null` by
+% run-ps-test.sh. Standard PostScript; prints SUCCESS on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/isreal { type /realtype eq } def
+
+initgraphics
+currentlinewidth isreal (default linewidth is real) assert
+currentflat isreal (default flat is real) assert
+currentgray isreal (default gray is real) assert
+currentmiterlimit isreal (default miterlimit is real) assert
+currentrgbcolor pop pop isreal (default rgb component is real) assert
+currentdash exch pop isreal (default dash offset is real) assert
+
+% integer arguments are coerced to real, as the reference interpreters do
+1 setgray currentgray isreal (setgray of an integer gives a real) assert
+1 0 0 setrgbcolor currentrgbcolor pop pop isreal (setrgbcolor of integers gives reals) assert
+0 0 0 1 setcmykcolor currentcmykcolor pop pop pop isreal (setcmykcolor of integers gives reals) assert
+3 setlinewidth currentlinewidth isreal (setlinewidth of an integer gives a real) assert
+5 setmiterlimit currentmiterlimit isreal (setmiterlimit of an integer gives a real) assert
+2 setflat currentflat isreal (setflat of an integer gives a real) assert
+[2 2] 1 setdash currentdash exch pop isreal (setdash integer offset gives a real) assert
+
+% the numeric value is preserved
+initgraphics 0.5 setgray currentgray 0.5 sub abs 1e-6 lt (gray value preserved) assert
+3 setlinewidth currentlinewidth 3 sub abs 1e-6 lt (linewidth value preserved) assert
+
+% colour components outside [0,1] are clamped to the nearest bound (PLRM)
+-1 setgray currentgray 0.0 eq (setgray clamps a negative component) assert
+1.5 setgray currentgray 1.0 eq (setgray clamps an over-range component) assert
+-0.5 0 0 setrgbcolor currentrgbcolor pop pop 0.0 eq (setrgbcolor clamps a negative component) assert
+2 0 0 0 setcmykcolor currentcmykcolor pop pop pop 1.0 eq (setcmykcolor clamps an over-range component) assert
+0.5 -0.5 0.5 sethsbcolor currenthsbcolor pop exch pop 0.0 eq (sethsbcolor clamps a negative saturation) assert
+% hue is clamped, not wrapped: below 0 and above 1 both land on red
+-0.25 1 1 sethsbcolor currentrgbcolor pop pop 1.0 eq (a negative hue clamps to red) assert
+1.25 1 1 sethsbcolor currentrgbcolor pop pop 1.0 eq (an over-range hue clamps to red) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
