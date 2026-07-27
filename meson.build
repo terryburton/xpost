@@ -327,6 +327,13 @@ test('op-path',
   args: [ xpost_exe, files('tests/op_path_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# status operator (PLRM 8.2): the (filename) form returns pages/bytes/referred/
+# created/true or false, alongside the existing file-object boolean form.
+test('op-status',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_status_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

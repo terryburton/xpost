@@ -56,6 +56,25 @@
 #include "xpost_error.h"  /* file functions may throw errors */
 #include "xpost_file.h"  /* double-check prototypes */
 
+/* Report on a named regular file for the string form of status. Returns 1 and
+   fills the fields when the file exists, 0 otherwise. bytes is the size; pages
+   is an implementation-defined block count; referred and created are the
+   access and modification times in seconds. */
+int
+xpost_diskfile_stat(const char *path, long *pages, long *bytes,
+                    long *referred, long *created)
+{
+    struct stat st;
+
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
+        return 0;
+    *bytes = (long)st.st_size;
+    *pages = (long)((st.st_size + 1023) / 1024);
+    *referred = (long)st.st_atime;
+    *created = (long)st.st_mtime;
+    return 1;
+}
+
 #ifdef _WIN32
 /*
  * FIXME: maybe use a WIN32 API for all this. See FIXME in xpost_op_file.c
