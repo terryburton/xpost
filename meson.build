@@ -445,6 +445,16 @@ test('isolation',
   args: [ xpost_exe, files('tests/isolation_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Startup namespace cleanliness: after startup userdict and globaldict are empty
+# and systemdict exposes precisely the golden key set, so no internal operator or
+# procedure can leak into a userland-visible dictionary unnoticed. A deliberate
+# change to systemdict's public surface fails this until the golden set is
+# regenerated (tools/gen_namespace_test.py), making every such change reviewed.
+test('namespace',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/namespace_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # No-graphics lockdown: --no-graphics selects the no-graphics start procedures,
 # which run .finalize (the interpreter lockdown) without loadgraphics. The
 # language still relocates into systemdict and the private namespaces are still
