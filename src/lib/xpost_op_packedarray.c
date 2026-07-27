@@ -61,6 +61,12 @@ int packedarray(Xpost_Context *ctx,
 {
     int i;
     Xpost_Object a, v;
+
+    if (n.int_.val < 0)
+        return rangecheck;
+    if (n.int_.val > 65535) /* sz field is 16 bits; PLRM minimum limit */
+        return limitcheck;
+
     a = xpost_array_cons(ctx, n.int_.val);
     if (xpost_object_get_type(a) == nulltype)
         return VMerror;
