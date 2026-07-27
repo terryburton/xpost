@@ -81,8 +81,14 @@ static
 int setpacking(Xpost_Context *ctx,
                Xpost_Object b)
 {
-    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "currentpacking"), b);
+    ctx->packing = (b.int_.val != 0);
+    return 0;
+}
+
+static
+int currentpacking(Xpost_Context *ctx)
+{
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(ctx->packing));
     return 0;
 }
 
@@ -99,8 +105,9 @@ int xpost_oper_init_packedarray_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "packedarray", (Xpost_Op_Func)packedarray, 1, 1, integertype);
     INSTALL;
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "currentpacking"), xpost_bool_cons(0));
     op = xpost_operator_cons(ctx, "setpacking", (Xpost_Op_Func)setpacking, 0, 1, booleantype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "currentpacking", (Xpost_Op_Func)currentpacking, 1, 0);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);

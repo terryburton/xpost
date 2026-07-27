@@ -354,6 +354,12 @@ test('op-error-restore',
   args: [ xpost_exe, files('tests/op_error_restore_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Array packing mode (PLRM 8.2): setpacking/currentpacking and read-only procs.
+test('op-packing',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_packing_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

@@ -466,7 +466,15 @@ int grok(Xpost_Context *ctx,
                 {
                     ret = xpost_op_array_to_mark(ctx);  // ie. the /] operator
                     if (ret == 0)
-                        *retval = xpost_object_cvx(xpost_stack_pop(ctx->lo, ctx->os));
+                    {
+                        Xpost_Object proc = xpost_stack_pop(ctx->lo, ctx->os);
+                        /* in packing mode a procedure is built read-only, which
+                           is how xpost represents a packed array */
+                        if (ctx->packing)
+                            proc = xpost_object_set_access(ctx, proc,
+                                    XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+                        *retval = xpost_object_cvx(proc);
+                    }
                 }
                 --depth;
                 return ret;

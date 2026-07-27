@@ -1,0 +1,38 @@
+% Array packing mode (setpacking / currentpacking, PLRM 8.2), run through
+% `xpost -d null` by run-ps-test.sh. Standard PostScript; prints SUCCESS on
+% Ghostscript too. A packed array is read-only, so packing is observed through
+% wcheck rather than through the type, which differs between implementations.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+currentpacking not (currentpacking is initially false) assert
+true setpacking currentpacking (setpacking true is reported by currentpacking) assert
+
+% a procedure built while packing is on is read-only, executable, and runs
+{ 10 20 add } dup xcheck (a packed procedure is executable) assert
+dup wcheck not (a packed procedure is read-only) assert
+exec 30 eq (a packed procedure executes correctly) assert
+
+% with packing off a procedure is writable again
+false setpacking
+{ 10 20 add } wcheck (an unpacked procedure is writable) assert
+currentpacking not (setpacking false is reported) assert
+
+% the mode is save/restore-subject in both directions
+false setpacking
+save true setpacking restore
+currentpacking not (restore reverts packing set on within the save) assert
+true setpacking
+save false setpacking restore
+currentpacking (restore reverts packing cleared within the save) assert
+
+% a packed procedure survives garbage collection and still runs
+true setpacking
+/pk { 2 3 mul } def
+false setpacking
+0 vmreclaim
+pk 6 eq (a packed procedure survives collection) assert
+
+false setpacking
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
