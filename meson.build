@@ -312,6 +312,14 @@ test('op-control',
   args: [ xpost_exe, files('tests/op_control_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Matrix/coordinate and graphics-state operators (PLRM 8.2): a bad-length matrix
+# is rangecheck (was an out-of-bounds read), setlinecap/join outside 0..2 and
+# setmiterlimit below 1 are rangecheck, and rotate uses full-precision degrees.
+test('op-matrix-gstate',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_matrix_gstate_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside
