@@ -445,6 +445,16 @@ test('isolation',
   args: [ xpost_exe, files('tests/isolation_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Dispatch-dictionary tamper resistance: no internal dispatch dictionary may
+# store an executable operator NAME (re-looked-up at run time, so a program's
+# redefinition hijacks internal machinery -- the casselman ch8 loop); operator
+# values must be stored instead. Scans every reachable internal namespace,
+# self-testing that the scanner catches a planted unsafe entry.
+test('tamper-dispatch',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Startup namespace cleanliness: after startup userdict and globaldict are empty
 # and systemdict exposes precisely the golden key set, so no internal operator or
 # procedure can leak into a userland-visible dictionary unnoticed. A deliberate
