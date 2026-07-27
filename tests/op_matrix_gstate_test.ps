@@ -5,6 +5,8 @@
 % Regression for campaign fixes:
 %   - transform/dtransform/itransform/idtransform with a matrix that is not a
 %     six-element array raised no error and read out of bounds; PLRM: rangecheck
+%   - setlinecap/setlinejoin outside 0..2, and setmiterlimit below 1, were
+%     accepted silently; PLRM: rangecheck
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
@@ -43,5 +45,27 @@ dx 20.0 (dtransform x, no translation) assertnear dy 60.0 (dtransform y) assertn
 matrix currentmatrix /save1 exch def
 [2 0 0 2 0 0] setmatrix matrix currentmatrix 0 get 2.0 (setmatrix took effect) assertnear
 save1 setmatrix matrix currentmatrix 0 get save1 0 get (currentmatrix restored) assertnear
+
+% --- setlinecap / setlinejoin: 0..2 only ---
+0 setlinecap currentlinecap 0 eq (setlinecap 0) assert
+2 setlinecap currentlinecap 2 eq (setlinecap 2) assert
+{ 3 setlinecap }  /rangecheck (setlinecap 3 is rangecheck) erris
+{ -1 setlinecap } /rangecheck (setlinecap -1 is rangecheck) erris
+1 setlinejoin currentlinejoin 1 eq (setlinejoin 1) assert
+{ 3 setlinejoin } /rangecheck (setlinejoin 3 is rangecheck) erris
+
+% --- setmiterlimit: >= 1 ---
+10 setmiterlimit currentmiterlimit 10 sub abs 1e-3 lt (setmiterlimit 10) assert
+1 setmiterlimit currentmiterlimit 1 sub abs 1e-3 lt (setmiterlimit 1 is the boundary) assert
+{ 0.5 setmiterlimit } /rangecheck (setmiterlimit below 1 is rangecheck) erris
+{ 0 setmiterlimit }   /rangecheck (setmiterlimit 0 is rangecheck) erris
+
+% --- setlinewidth / setflat round-trips ---
+3.5 setlinewidth currentlinewidth 3.5 sub abs 1e-3 lt (setlinewidth) assert
+0.8 setflat currentflat 0.8 sub abs 1e-3 lt (setflat) assert
+
+% --- gsave/grestore restores a parameter ---
+5 setmiterlimit gsave 9 setmiterlimit grestore
+currentmiterlimit 5 sub abs 1e-3 lt (grestore restores miterlimit) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

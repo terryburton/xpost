@@ -208,7 +208,9 @@ end
 % int  setlinecap  -
 % set shape of the ends for stroke (0=butt, 1=round, 2=square)
 /setlinecap {
-    graphicsdict /currgstate get exch /linecap exch put
+    dup 0 lt 1 index 2 gt or
+    { pop /setlinecap cvx /rangecheck signalerror }
+    { graphicsdict /currgstate get exch /linecap exch put } ifelse
 } def
 
 % -  currentlinecap  int
@@ -232,7 +234,9 @@ end
 % int  setlinejoin  -
 % set shape of corners for stroke (0=miter, 1=round, 2=bevel)
 /setlinejoin {
-    graphicsdict /currgstate get exch /linejoin exch put
+    dup 0 lt 1 index 2 gt or
+    { pop /setlinejoin cvx /rangecheck signalerror }
+    { graphicsdict /currgstate get exch /linejoin exch put } ifelse
 } def
 
 % -  currentlinejoin  int
@@ -243,7 +247,9 @@ end
 
 % num  setmiterlimit  -
 /setmiterlimit {
-    graphicsdict /currgstate get exch /miterlimit exch put
+    dup 1 lt
+    { pop /setmiterlimit cvx /rangecheck signalerror }
+    { graphicsdict /currgstate get exch /miterlimit exch put } ifelse
 } def
 
 % -  currentmiterlimit  num
