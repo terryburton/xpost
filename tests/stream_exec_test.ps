@@ -1,0 +1,89 @@
+% Program streams and inline data, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Each construct is
+% standard PostScript and prints SUCCESS on Ghostscript too.
+%
+% Covers the stream machinery the differential corpora lean on, independently of
+% any downloaded corpus:
+%   - executing an encoded program directly off a live decode filter
+%     (`currentfile /ASCII85Decode filter cvx exec`), the packaging BWIPP uses
+%     for every resource it carries (250+ consecutive such blocks): the scanner
+%     runs on the filter to its end-of-data and the outer file resumes exactly
+%     past the terminator, block after block
+%   - the same through a chained ASCII85+Flate filter (compressed packaging)
+%   - readline data records trailing the invoking line (the dvips/VDP idiom),
+%     read at the top level, from a procedure, and in a loop to a terminator
+%   - readline from a disk file, and its false result at end of file
+%
+% Regenerate the encoded payloads with python3:
+%   base64.a85encode(b"<program>") + b"~>"   (optionally zlib.compress first)
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse
+} def
+
+% --- an encoded program stream defines a value; the outer scanner resumes ---
+% payload: /se.a 42 def
+currentfile /ASCII85Decode filter cvx exec
+06:\W@3@B^+Co%q$3~>
+se.a 42 eq (an ASCII85-encoded program stream executes) assert
+
+% --- a second block immediately after: the outer file must have been left
+%     exactly past the previous terminator for this one to decode at all ---
+% payload: /se.b se.a 8 add def
+currentfile /ASCII85Decode filter cvx exec
+06:\W@N]`'/n#k^+CSek+Co%q$3~>
+se.b 50 eq (a second consecutive encoded block executes) assert
+
+% --- a compressed program stream through a chained filter ---
+% payload: /se.c 99 def /se.d (chained) def
+currentfile /ASCII85Decode filter /FlateDecode filter cvx exec
+Gb!59:=W!<Yd@A#8PN.1#BE]V1m0X-1\4LC1dPSU!2FK>aT~>
+se.c 99 eq se.d (chained) eq and (an ASCII85+Flate program stream executes) assert
+
+% --- ordinary code keeps running after the encoded blocks ---
+/se.after true def
+se.after (the outer file resumes cleanly after the encoded blocks) assert
+
+% --- readline: the record follows the invoking line ---
+/se.buf 64 string def
+currentfile se.buf readline
+alpha-record
+pop /se.r1 exch dup length string copy def
+se.r1 (alpha-record) eq (readline takes the line after the reading one) assert
+
+% --- readline from inside a procedure: records trail the invocation ---
+/se.rd { currentfile se.buf readline pop dup length string copy } def
+se.rd
+beta-record
+/se.r2 exch def
+se.r2 (beta-record) eq (readline inside a procedure reads the trailing record) assert
+
+% --- readline record loop to a terminator (the VDP data-block idiom) ---
+/se.sum 0 def
+{
+    currentfile se.buf readline pop
+    dup (EOD) eq { pop exit } if
+    cvi se.sum add /se.sum exch def
+} loop
+11
+22
+33
+EOD
+se.sum 66 eq (a readline record loop accumulates to its terminator) assert
+
+% --- readline from a disk file: a terminated line arrives true, the
+%     unterminated last line arrives false, and past the end it is () false ---
+/se.f (stream_exec.scratch) (w) file def
+se.f (first line\nsecond) writestring
+se.f closefile
+/se.g (stream_exec.scratch) (r) file def
+se.g se.buf readline
+exch (first line) eq and (a terminated disk line arrives with true) assert
+se.g se.buf readline
+not exch (second) eq and (the unterminated last line arrives with false) assert
+se.g se.buf readline
+not exch () eq and (past the end readline yields an empty line and false) assert
+se.g closefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
