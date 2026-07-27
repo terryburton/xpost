@@ -34,5 +34,12 @@ false setpacking
 0 vmreclaim
 pk 6 eq (a packed procedure survives collection) assert
 
+% the packedarray operator validates its count like array does
+{ 1 2 -1 packedarray } stopped { $error /errorname get /rangecheck eq } { false } ifelse
+  (packedarray of a negative count is a rangecheck) assert
+clear
+1 2 3 3 packedarray length 3 eq
+  (packedarray builds an array of the requested length) assert
+
 false setpacking
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
