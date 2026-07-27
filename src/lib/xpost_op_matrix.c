@@ -125,13 +125,20 @@ int _psmat2xmat(Xpost_Context *ctx,
 }
 
 static
-void _xmat2psmat(Xpost_Context *ctx,
-                 Xpost_Matrix *m,
-                 Xpost_Object psm)
+int _xmat2psmat(Xpost_Context *ctx,
+                Xpost_Matrix *m,
+                Xpost_Object psm)
 {
     Xpost_Object arr[6];
-    Xpost_Memory_File *mem = xpost_context_select_memory(ctx, psm);
-    unsigned int ent = xpost_object_get_ent(psm);
+    Xpost_Memory_File *mem;
+    unsigned int ent;
+
+    /* the bulk write below stores six objects at once; a destination shorter
+       than six would overrun its storage in the arena (PLRM: rangecheck) */
+    if (xpost_object_get_type(psm) != arraytype || psm.comp_.sz != 6)
+        return rangecheck;
+    mem = xpost_context_select_memory(ctx, psm);
+    ent = xpost_object_get_ent(psm);
 
     arr[0] = xpost_real_cons(m->xx);
     arr[1] = xpost_real_cons(m->yx);
@@ -146,6 +153,7 @@ void _xmat2psmat(Xpost_Context *ctx,
     if (!xpost_save_ent_is_saved(mem, ent))
         xpost_save_save_ent(mem, arraytype, psm.comp_.sz, ent);
     xpost_memory_put(mem, ent, 0, sizeof arr, arr);
+    return 0;
 }
 
 /* forward decl's */
@@ -171,7 +179,7 @@ int _ident_matrix(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     xpost_matrix_identity(&mat);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     return 0;
 }
@@ -282,7 +290,7 @@ int _translate(Xpost_Context *ctx,
     Xpost_Object psmat;
     psmat = xpost_object_cvlit(xpost_array_cons(ctx, 6));
     xpost_matrix_translate(&mat, xt.real_.val, yt.real_.val);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
@@ -300,7 +308,7 @@ int _mat_translate(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     xpost_matrix_translate(&mat, xt.real_.val, yt.real_.val);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     return 0;
 }
@@ -316,7 +324,7 @@ int _scale(Xpost_Context *ctx,
     Xpost_Object psmat;
     psmat = xpost_object_cvlit(xpost_array_cons(ctx, 6));
     xpost_matrix_scale(&mat, xs.real_.val, ys.real_.val);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
@@ -334,7 +342,7 @@ int _mat_scale(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     xpost_matrix_scale(&mat, xs.real_.val, ys.real_.val);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     return 0;
 }
@@ -349,7 +357,7 @@ int _rotate(Xpost_Context *ctx,
     Xpost_Object psmat;
     psmat = xpost_object_cvlit(xpost_array_cons(ctx, 6));
     xpost_matrix_rotate(&mat, angle.real_.val * RAD_PER_DEG);
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
@@ -366,7 +374,7 @@ int _mat_rotate(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     xpost_matrix_rotate(&mat, (real)(RAD_PER_DEG * angle.real_.val));
-    _xmat2psmat(ctx, &mat, psmat);
+    if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     return 0;
 }
@@ -389,7 +397,7 @@ int _concat(Xpost_Context *ctx,
     if (_psmat2xmat(ctx, psctm, &ctm)) return rangecheck;
     xpost_matrix_mult(&ctm, &mat, &result);
     //replace CTM
-    _xmat2psmat(ctx, &result, psctm);
+    if (_xmat2psmat(ctx, &result, psctm)) return rangecheck;
     return 0;
 }
 
@@ -405,7 +413,7 @@ int _concat_matrix(Xpost_Context *ctx,
     if (_psmat2xmat(ctx, psmat1, &mat1)) return rangecheck;
     if (_psmat2xmat(ctx, psmat2, &mat2)) return rangecheck;
     xpost_matrix_mult(&mat2, &mat1, &mat3);
-    _xmat2psmat(ctx, &mat3, psmat3);
+    if (_xmat2psmat(ctx, &mat3, psmat3)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat3);
     return 0;
 }
@@ -567,7 +575,7 @@ int _invert_matrix(Xpost_Context *ctx,
     mat2.yy = mat1.xx * invdet;
     mat2.xz = (mat1.xy * mat1.yz - mat1.yy * mat1.xz) * invdet;
     mat2.yz = (mat1.yx * mat1.xz - mat1.xx * mat1.yz) * invdet;
-    _xmat2psmat(ctx, &mat2, psmat2);
+    if (_xmat2psmat(ctx, &mat2, psmat2)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat2);
     return 0;
 }
