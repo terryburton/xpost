@@ -305,6 +305,13 @@ test('op-math',
   args: [ xpost_exe, files('tests/op_math_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Control operators (PLRM 8.2): repeat of a negative count is rangecheck (PLRM: the
+# count is a nonnegative integer), plus if/ifelse/for/loop/exit/stopped behaviour.
+test('op-control',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_control_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

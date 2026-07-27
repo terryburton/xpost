@@ -185,7 +185,10 @@ int xpost_op_int_proc_repeat (Xpost_Context *ctx,
                               Xpost_Object n,
                               Xpost_Object P)
 {
-    if (n.int_.val <= 0) return 0;
+    /* PLRM: the count must be a nonnegative integer -- a negative one is
+       rangecheck, not a silent no-op; zero legitimately does nothing */
+    if (n.int_.val < 0) return rangecheck;
+    if (n.int_.val == 0) return 0;
 
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_operator_cons_opcode(ctx->opcode_shortcuts.repeat)))
