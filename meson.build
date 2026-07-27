@@ -341,6 +341,12 @@ test('op-userparams',
   args: [ xpost_exe, files('tests/op_userparams_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# bytesavailable (PLRM 8.2): remaining bytes for a seekable file, -1 for a filter.
+test('op-bytesavailable',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_bytesavailable_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

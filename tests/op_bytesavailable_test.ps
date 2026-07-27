@@ -1,0 +1,21 @@
+% bytesavailable operator (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% For a seekable file bytesavailable is the number of bytes remaining; for a
+% non-seekable file, whose remaining count cannot be determined, it is -1.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+/f (bytesavail.scratch) (w) file def
+f (0123456789) writestring
+f closefile
+
+(bytesavail.scratch) (r) file
+dup bytesavailable 10 eq (a ten-byte file reports ten bytes available) assert
+dup 4 string readstring pop pop
+dup bytesavailable 6 eq (after reading four, six remain) assert
+closefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
