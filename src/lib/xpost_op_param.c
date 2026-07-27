@@ -70,8 +70,12 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
             if (ctx->garbage_collect_function(ctx->lo, 1, 0) == -1)
                 return VMerror;
             break;
-        case 2: /* perform immediate collection in local and global vm */
-            if (ctx->garbage_collect_function(ctx->gl, 1, 1) == -1)
+        case 2: /* local and global; global collection is disabled (see
+                   xpost_garbage_collect), so perform the local collection --
+                   passing the global mfile would collect nothing. Global
+                   objects cannot reference local ones, so the local sweep is
+                   complete on its own. */
+            if (ctx->garbage_collect_function(ctx->lo, 1, 0) == -1)
                 return VMerror;
             break;
     }
