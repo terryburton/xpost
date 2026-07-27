@@ -215,13 +215,14 @@ int grok(Xpost_Context *ctx,
     if (fsm_check(s, ns, fsm_dec, accept_dec))
     {
         long num;
+        errno = 0;
         num = strtol(s, NULL, 10);
-        if ((num == LONG_MAX || num == LONG_MIN) && errno==ERANGE)
+        if (errno == ERANGE || (long)(integer)num != num)
         {
-            XPOST_LOG_ERR("integer out of range");
-            return limitcheck;
+            /* beyond the integer range: PLRM 3.3.2 makes it a real */
+            *retval = xpost_real_cons((real)strtod(s, NULL));
+            return 0;
         }
-        //return xpost_int_cons(num);
         *retval = xpost_int_cons(num);
         return 0;
     }
