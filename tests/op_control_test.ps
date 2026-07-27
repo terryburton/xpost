@@ -45,4 +45,16 @@ false { 1 }{ 2 } ifelse 2 eq (ifelse false) assert
 { 42 } stopped not (stopped is false when no stop occurs) assert
 { 1 0 idiv } stopped (an error acts as stop under stopped) assert
 
+% for's control value is an integer when initial and increment are integers,
+% even if the limit is real: the type follows initial and increment, not the
+% limit (PLRM). A real increment does make the control value real.
+/intcount 0 def
+0 1 3.5 { type /integertype eq { /intcount intcount 1 add def } if } for
+intcount 4 eq (a real limit still yields integer control values) assert
+/sum 0 def 0 1 3.5 { sum add /sum exch def } for
+sum 6 eq (a real limit iterates the integers 0 through 3) assert
+/realcount 0 def
+0 0.5 1.0 { type /realtype eq { /realcount realcount 1 add def } if } for
+realcount 3 eq (a real increment yields real control values) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

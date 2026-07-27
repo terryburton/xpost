@@ -103,6 +103,16 @@ int xpost_op_bool_proc_proc_ifelse (Xpost_Context *ctx,
     return 0;
 }
 
+/* the control value's type follows initial and increment, not the limit
+   (PLRM): an integer counter with a real limit still steps through integers,
+   so read the limit as a real for the termination test without promoting the
+   counter */
+static double _for_limit(Xpost_Object lim)
+{
+    return xpost_object_get_type(lim) == realtype
+        ? (double)lim.real_.val : (double)lim.int_.val;
+}
+
 /* initial increment limit proc  for  -
    execute proc with values from initial by steps
    of increment to limit */
@@ -115,7 +125,7 @@ int xpost_op_int_int_int_proc_for (Xpost_Context *ctx,
 {
     integer i = init.int_.val;
     integer j = incr.int_.val;
-    integer n = lim.int_.val;
+    double n = _for_limit(lim);
     int up = j > 0;
     if (up? i > n : i < n) return 0;
     assert(ctx->gl->base);
@@ -394,7 +404,7 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "ifelse", (Xpost_Op_Func)xpost_op_bool_proc_proc_ifelse, 0, 3, booleantype, proctype, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_int_int_int_proc_for, 0, 4, \
-                             integertype, integertype, integertype, proctype);
+                             integertype, integertype, numbertype, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_real_real_real_proc_for, 0, 4, \
                              floattype, floattype, floattype, proctype);
