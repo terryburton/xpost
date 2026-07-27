@@ -4,6 +4,13 @@
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
 
+% cvr/cvi of a string interpret PostScript number syntax; a C-style 0x hex
+% prefix or a non-number is a typecheck
+{ (0x10) cvr } stopped { $error /errorname get /typecheck eq }{ pop false } ifelse
+(cvr rejects a 0x hex prefix) assert
+{ (hello) cvr } stopped { $error /errorname get /typecheck eq }{ pop false } ifelse
+(cvr rejects a non-number) assert
+
 % cvi truncates toward zero
 3.7 cvi 3 eq (cvi of 3.7 is 3) assert
 -3.7 cvi -3 eq (cvi of -3.7 is -3) assert
