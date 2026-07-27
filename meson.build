@@ -320,6 +320,14 @@ test('op-matrix-gstate',
   args: [ xpost_exe, files('tests/op_matrix_gstate_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A wrong-typed operand is a typecheck, not a stackunderflow, when a higher-arity
+# signature's operands are absent (PLRM/Distiller; gs differs for the matrix
+# builders, so this one is xpost-only).
+test('op-dispatch-typecheck',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_dispatch_typecheck_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Path-construction operators (PLRM 8.2): currentpoint tracking, nocurrentpoint,
 # and arc endpoints on the axes (full-precision degrees).
 test('op-path',

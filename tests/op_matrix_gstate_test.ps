@@ -33,6 +33,16 @@ initgraphics
 { 1 1 [0 0 0 0 0] translate } /rangecheck (translate: short destination matrix is rangecheck) erris
 { [1 0 0 1 0 0] [1 0 0 1 0 0] [1 2 3] concatmatrix } /rangecheck (concatmatrix: short destination is rangecheck) erris
 
+% --- a non-number coordinate is a typecheck: the matrix form's higher arity
+%     must not turn it into a stackunderflow; too few operands still underflows ---
+{ (x) 2 transform }   /typecheck (transform: a non-number coordinate is typecheck) erris
+{ 2 (y) transform }   /typecheck (transform: a non-number ordinate is typecheck) erris
+{ (x) 2 dtransform }  /typecheck (dtransform: a non-number coordinate is typecheck) erris
+{ (x) 2 itransform }  /typecheck (itransform: a non-number coordinate is typecheck) erris
+{ (x) 2 idtransform } /typecheck (idtransform: a non-number coordinate is typecheck) erris
+{ 3 transform }       /stackunderflow (transform: a single operand is stackunderflow) erris
+{ transform }         /stackunderflow (transform: no operands is stackunderflow) erris
+
 % --- transform / itransform round-trip with an explicit matrix ---
 10 20 [2 0 0 3 5 7] transform /ty exch def /tx exch def
 tx 25.0 (transform x) assertnear ty 67.0 (transform y) assertnear

@@ -639,7 +639,12 @@ int xpost_operator_exec(Xpost_Context *ctx,
         if (ct < sp[i].in)
         {
             pass = 0;
-            err = stackunderflow;
+            /* a higher-arity signature that lacks operands must not mask a
+               type mismatch already found against a signature whose arity
+               was satisfied: a wrong-typed operand is a typecheck, not a
+               stackunderflow */
+            if (err != typecheck)
+                err = stackunderflow;
             continue;
         }
 
