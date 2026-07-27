@@ -1,0 +1,28 @@
+% User and system parameter operators (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% currentuserparams and currentsystemparams each return a dictionary of the
+% current parameters; setuserparams and setsystemparams accept a dictionary and
+% apply the parameters they recognise, ignoring any they do not.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+currentuserparams
+dup type /dicttype eq (currentuserparams returns a dictionary) assert
+dup /MaxOpStack known (currentuserparams reports MaxOpStack) assert
+/MaxOpStack get type /integertype eq (MaxOpStack is an integer) assert
+
+currentsystemparams
+type /dicttype eq (currentsystemparams returns a dictionary) assert
+
+% setuserparams applies known parameters and ignores unknown ones without error
+{ << /VMReclaim 0 /ThisIsNotAParam 123 >> setuserparams true }
+stopped { pop false } if (setuserparams accepts a mixed dictionary) assert
+
+% setsystemparams accepts a dictionary without error
+{ << /ThisIsNotAParam 1 >> setsystemparams true }
+stopped { pop false } if (setsystemparams accepts a dictionary) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
