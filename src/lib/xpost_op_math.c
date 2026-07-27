@@ -136,6 +136,14 @@ int Iidiv(Xpost_Context *ctx,
 {
     if (y.int_.val == 0)
         return undefinedresult;
+    /* INT_MIN / -1 overflows a two's-complement integer (a hardware fault on
+       some platforms); it exceeds the integer range, so yield the real quotient
+       the way an overflowing product does */
+    if (y.int_.val == -1 && x.int_.val == (-2147483647 - 1))
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(-(real)x.int_.val));
+        return 0;
+    }
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x.int_.val / y.int_.val));
     return 0;
 }
@@ -147,6 +155,15 @@ int Imod(Xpost_Context *ctx,
          Xpost_Object x,
          Xpost_Object y)
 {
+    /* a zero divisor is undefinedresult (PLRM), not a hardware divide fault;
+       guard the INT_MIN % -1 overflow the same way idiv's quotient is guarded */
+    if (y.int_.val == 0)
+        return undefinedresult;
+    if (y.int_.val == -1)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+        return 0;
+    }
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x.int_.val % y.int_.val));
     return 0;
 }
