@@ -145,7 +145,6 @@ end
 % -  initgraphics  -
 % reset graphics state parameters
 /initgraphics {
-    break
     gstate setgstate
     initmatrix
     /QUIET where { pop }{ matrix currentmatrix == } ifelse

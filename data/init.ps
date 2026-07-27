@@ -478,23 +478,6 @@ def
 (/qsort.ps) //.xpostint /.loadmodule get exec
 
 % (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
-/ncat {        % s1 s2 s3 .. sN n
-    dup 1 add  % s1 s2 s3 .. sN n n+1 
-    copy       % s1 s2 s3 .. sN n  s1 s2 s3 .. sN n
-    0 exch     % s1 s2 s3 .. sN n  s1 s2 s3 .. sN 0 n 
-    {   
-        exch length add 
-    } repeat             % s1 s2 s3 .. sN  n   len 
-    string exch          % s1 s2 s3 .. sN str   n   
-    0 exch               % s1 s2 s3 .. sN str  off  n
-    -1 1 {               % s1 s2 s3 .. sN str  off  n
-        2 add -1 roll       % s2 s3 .. sN str  off s1
-        3 copy putinterval  % s2 s3 .. sN str' off s1
-        length add          % s2 s3 .. sN str' off+len(s1)
-                            % s2 s3 .. sN str' off'
-    } for                               % str' off'
-    pop  % str'
-} def 
 
 
 % Named Resources
@@ -751,14 +734,11 @@ $error/initializing false put % ready to go!
 false setglobal
 
 % debug ps functions
-/break{ /hook /pause load def } def
-/clearhook{ /hook {} store } def
 /doprompt{
     (\nbreak>)print flush
     (%lineedit)(r)file
     cvx {exec}stopped pop } def
 /pause{ doprompt } def
-/hook{ } def
 
 /.dir {
     (*) { = } 128 string filenameforall
