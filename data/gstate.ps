@@ -220,7 +220,14 @@ end
 } def
 
 % array offset  setdash  -
+% a non-empty dash array must hold no negative element and not be all zero
 /setdash {
+    1 index dup length 0 gt {
+        false exch
+        { dup 0 lt { pop pop /setdash cvx /rangecheck signalerror } if
+          0 gt { pop true } if } forall
+        not { /setdash cvx /rangecheck signalerror } if
+    } { pop } ifelse
     graphicsdict /currgstate get exch cvr /dashoffset exch put
     graphicsdict /currgstate get exch /dasharray exch put
 } def

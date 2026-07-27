@@ -77,6 +77,16 @@ save1 setmatrix matrix currentmatrix 0 get save1 0 get (currentmatrix restored) 
 3.5 setlinewidth currentlinewidth 3.5 sub abs 1e-3 lt (setlinewidth) assert
 0.8 setflat currentflat 0.8 sub abs 1e-3 lt (setflat) assert
 
+% --- setdash validates the dash pattern (PLRM) ---
+{ [1 -2] 0 setdash } /rangecheck (setdash: a negative element is rangecheck) erris
+{ [0 0] 0 setdash }  /rangecheck (setdash: an all-zero array is rangecheck) erris
+{ [0] 0 setdash }    /rangecheck (setdash: a single zero is rangecheck) erris
+{ [0 1] 0 setdash } stopped not (setdash: one positive element is accepted) assert
+{ [] 0 setdash } stopped not (setdash: an empty array is accepted) assert
+{ [1 2] -5 setdash } stopped not (setdash: a negative offset is accepted) assert
+[3 2] 1 setdash currentdash exch pop 1.0 sub abs 1e-3 lt (setdash offset roundtrips) assert
+[] 0 setdash
+
 % --- gsave/grestore restores a parameter ---
 5 setmiterlimit gsave 9 setmiterlimit grestore
 currentmiterlimit 5 sub abs 1e-3 lt (grestore restores miterlimit) assert
