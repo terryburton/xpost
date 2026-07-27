@@ -810,6 +810,26 @@ typedef struct Xpost_FilterFile
     long count;        /* decoded bytes delivered (tell) */
 } Xpost_FilterFile;
 
+/* Peek past optional whitespace for a trailing "~>" and consume it, leaving the
+   source just past the end-of-data marker so a fresh ASCII85Decode filter on the
+   same stream stays in sync (the dvips image idiom abandons the filter after each
+   readstring). A non-terminator byte is put back untouched. */
+static void
+a85_eat_eod(Xpost_FilterFile *ff)
+{
+    int nc;
+    do { nc = xpost_file_getc(ff->source); } while (nc != EOF && isspace(nc));
+    if (nc == '~')
+    {
+        do { nc = xpost_file_getc(ff->source); } while (nc != EOF && isspace(nc));
+        if (nc != '>' && nc != EOF)
+            xpost_file_ungetc(ff->source, nc);
+        ff->eod = 1;
+    }
+    else if (nc != EOF)
+        xpost_file_ungetc(ff->source, nc);
+}
+
 static int
 a85_readch(Xpost_File *f)
 {
@@ -861,6 +881,10 @@ a85_readch(Xpost_File *f)
             ff->outn = 4;
             ff->outi = 1;
             ff->count++;
+            /* a "z" is a complete zero group; consume a trailing "~>" eagerly,
+               exactly as the full five-character group below does */
+            if (!ff->eod)
+                a85_eat_eod(ff);
             return 0;
         }
         if (c < '!' || c > 'u')
@@ -873,6 +897,15 @@ a85_readch(Xpost_File *f)
         if (n == 5)
             break;
     }
+
+    /* A full five-character group breaks the gather loop before the closing
+       "~>" is seen; the next read would consume it only when it starts a fresh
+       group. The dvips image idiom abandons the filter after each readstring, so
+       consume a trailing "~>" eagerly -- leaving the underlying file just past
+       it, the way Ghostscript does -- rather than stranding it to be read as a
+       token, which desynchronises every following scanline. */
+    if (n == 5 && !ff->eod)
+        a85_eat_eod(ff);
 
     if (n <= 1)   /* nothing, or a dangling single character */
         return EOF;
@@ -1153,6 +1186,16 @@ hex_readch(Xpost_File *f)
             ff->eod = 1;
             lo = 0;
         }
+        else if (!ff->eod)
+        {
+            /* the byte is complete; eagerly consume a trailing '>' so a
+               following read of an abandoned filter is not stranded on it */
+            do { c = xpost_file_getc(ff->source); } while (c != EOF && isspace(c));
+            if (c == '>')
+                ff->eod = 1;
+            else if (c != EOF)
+                xpost_file_ungetc(ff->source, c);
+        }
     }
     return (hi << 4) | lo;
 }
@@ -1171,6 +1214,42 @@ typedef struct Xpost_RleFile
     int repbyte;
 } Xpost_RleFile;
 
+/* Read the next run header from the source: prime a literal or repeat run, or
+   set eod on the 128 marker or EOF. Called eagerly as each run empties so the
+   closing 128 -- and, through it, the underlying filter's own EOD -- is
+   consumed while the source is positioned there, rather than stranded for a
+   following read to trip on (the dvips image idiom abandons the filter after
+   each readstring, so nothing else would consume it). */
+static void
+rle_prime(Xpost_RleFile *ff)
+{
+    int c;
+
+    if (ff->eod)
+        return;
+    c = xpost_file_getc(ff->source);
+    if (c == EOF || c == 128)
+    {
+        ff->eod = 1;
+        return;
+    }
+    if (c < 128)
+    {
+        ff->litrun = c + 1;   /* this many literal bytes follow */
+    }
+    else
+    {
+        int rb = xpost_file_getc(ff->source);
+        if (rb == EOF)
+        {
+            ff->eod = 1;
+            return;
+        }
+        ff->repbyte = rb;
+        ff->reprun = 257 - c;   /* this many copies */
+    }
+}
+
 static int
 rle_readch(Xpost_File *f)
 {
@@ -1183,43 +1262,31 @@ rle_readch(Xpost_File *f)
         ff->pushback = -1;
         return c;
     }
-    if (ff->reprun > 0)
+    for (;;)
     {
-        ff->reprun--;
-        return ff->repbyte;
+        if (ff->reprun > 0)
+        {
+            c = ff->repbyte;
+            if (--ff->reprun == 0)
+                rle_prime(ff);   /* eagerly consume a trailing 128 */
+            return c;
+        }
+        if (ff->litrun > 0)
+        {
+            c = xpost_file_getc(ff->source);
+            if (c == EOF)
+            {
+                ff->eod = 1;
+                return EOF;
+            }
+            if (--ff->litrun == 0)
+                rle_prime(ff);   /* eagerly consume a trailing 128 */
+            return c;
+        }
+        if (ff->eod)
+            return EOF;
+        rle_prime(ff);   /* prime the first run */
     }
-    if (ff->litrun > 0)
-    {
-        ff->litrun--;
-        c = xpost_file_getc(ff->source);
-        if (c == EOF)
-            ff->eod = 1;
-        return c;
-    }
-    if (ff->eod)
-        return EOF;
-    c = xpost_file_getc(ff->source);
-    if (c == EOF || c == 128)
-    {
-        ff->eod = 1;
-        return EOF;
-    }
-    if (c < 128)
-    {
-        ff->litrun = c;   /* this byte plus litrun more */
-        c = xpost_file_getc(ff->source);
-        if (c == EOF)
-            ff->eod = 1;
-        return c;
-    }
-    ff->repbyte = xpost_file_getc(ff->source);
-    if (ff->repbyte == EOF)
-    {
-        ff->eod = 1;
-        return EOF;
-    }
-    ff->reprun = 257 - c - 1;   /* this byte plus reprun more */
-    return ff->repbyte;
 }
 
 /* SubFileDecode filter: pass bytes through until the EOD string has
@@ -1338,28 +1405,29 @@ typedef struct Xpost_FlateFile
     unsigned char in[1];
     unsigned char out[4096];
     int outn, outi;
+    int look, haslook;   /* one byte read ahead to drive zlib past the trailer */
 } Xpost_FlateFile;
 
-static int
-flate_readch(Xpost_File *f)
+/* Inflate the next chunk (up to the whole out buffer) from the source. When the
+   buffer fills without reaching the stream's end, look one byte past it so that a
+   trailing EOD -- and, beneath a nested filter, that filter's own terminator -- is
+   consumed the moment the last data byte becomes available. A bounded reader stops
+   the instant it has its byte count and never reads far enough to trigger the
+   trailer otherwise; the peeked byte is delivered ahead of the following refill,
+   which then drives zlib through the trailer while the reader is none the wiser. */
+static void
+flate_refill(Xpost_FlateFile *ff)
 {
-    Xpost_FlateFile *ff = (Xpost_FlateFile *)f;
     int c, ret;
 
-    if (ff->pushback >= 0)
-    {
-        c = ff->pushback;
-        ff->pushback = -1;
-        return c;
-    }
-    if (ff->outi < ff->outn)
-        return ff->out[ff->outi++];
+    ff->outi = 0;
+    ff->outn = 0;
     if (ff->eod)
-        return EOF;
+        return;
 
     ff->strm.next_out = ff->out;
     ff->strm.avail_out = sizeof(ff->out);
-    while (ff->strm.avail_out == sizeof(ff->out))
+    while (ff->strm.avail_out > 0)
     {
         if (ff->strm.avail_in == 0)
         {
@@ -1387,13 +1455,83 @@ flate_readch(Xpost_File *f)
         }
     }
     ff->outn = (int)(sizeof(ff->out) - ff->strm.avail_out);
-    ff->outi = 0;
-    if (ff->outi < ff->outn)
+
+    if (ff->strm.avail_out == 0 && !ff->eod)
     {
-        ff->outi = 1;
-        return ff->out[0];
+        unsigned char sb;
+        for (;;)
+        {
+            ff->strm.next_out = &sb;
+            ff->strm.avail_out = 1;
+            if (ff->strm.avail_in == 0)
+            {
+                c = xpost_file_getc(ff->source);
+                if (c == EOF)
+                {
+                    ff->eod = 1;
+                    break;
+                }
+                ff->in[0] = (unsigned char)c;
+                ff->strm.next_in = ff->in;
+                ff->strm.avail_in = 1;
+            }
+            ret = inflate(&ff->strm, Z_NO_FLUSH);
+            if (ret == Z_STREAM_END)
+            {
+                ff->eod = 1;
+                if (ff->strm.avail_out == 0)   /* the final byte came with the end */
+                {
+                    ff->look = sb;
+                    ff->haslook = 1;
+                }
+                break;
+            }
+            if (ret != Z_OK && ret != Z_BUF_ERROR)
+            {
+                XPOST_LOG_ERR("FlateDecode error %d", ret);
+                ff->eod = 1;
+                break;
+            }
+            if (ff->strm.avail_out == 0)   /* a byte past the buffer; stream continues */
+            {
+                ff->look = sb;
+                ff->haslook = 1;
+                break;
+            }
+            /* Z_OK/Z_BUF_ERROR with no output: needs more input, keep going */
+        }
     }
-    return EOF;
+}
+
+static int
+flate_readch(Xpost_File *f)
+{
+    Xpost_FlateFile *ff = (Xpost_FlateFile *)f;
+
+    if (ff->pushback >= 0)
+    {
+        int c = ff->pushback;
+        ff->pushback = -1;
+        return c;
+    }
+    for (;;)
+    {
+        if (ff->outi < ff->outn)
+            return ff->out[ff->outi++];
+        if (ff->haslook)
+        {
+            /* Deliver the read-ahead byte, refilling behind it first so that if it
+               was the stream's last byte the trailer is consumed now, not on a
+               follow-up read the bounded reader never makes. */
+            int b = ff->look;
+            ff->haslook = 0;
+            flate_refill(ff);
+            return b;
+        }
+        if (ff->eod)
+            return EOF;
+        flate_refill(ff);
+    }
 }
 #endif
 
@@ -1709,6 +1847,7 @@ typedef struct Xpost_LzwFile
     unsigned char suffix[4096];
     unsigned char stack[4096];
     int sp;
+    int nextval, havenext;   /* one code read ahead so a trailing 257 is eaten */
 } Xpost_LzwFile;
 
 static int
@@ -1726,6 +1865,30 @@ lzw_nextcode(Xpost_LzwFile *ff)
     }
     ff->bitcnt -= ff->codewidth;
     return (int)(ff->bitbuf >> ff->bitcnt) & ((1 << ff->codewidth) - 1);
+}
+
+/* The end-of-data code has just been read, so the source is byte-aligned past
+   the LZW padding. Nudge any decoding filter beneath (hex, base-85) to swallow
+   its own in-band terminator, leaving the underlying file past the whole encoded
+   stream; a plain byte is put back untouched. */
+static void
+lzw_eat_eod(Xpost_LzwFile *ff)
+{
+    int c = xpost_file_getc(ff->source);
+    if (c != EOF)
+        xpost_file_ungetc(ff->source, c);
+    ff->eod = 1;
+}
+
+static int
+lzw_getcode(Xpost_LzwFile *ff)
+{
+    if (ff->havenext)
+    {
+        ff->havenext = 0;
+        return ff->nextval;
+    }
+    return lzw_nextcode(ff);
 }
 
 static int
@@ -1747,21 +1910,13 @@ lzw_readch(Xpost_File *f)
 
     for (;;)
     {
-        code = lzw_nextcode(ff);
+        code = lzw_getcode(ff);
         if (code < 0 || code == 257)
         {
-            ff->eod = 1;
-            /* peek one byte past the end-of-data code: an encoding
-               filter beneath (hex, base-85) swallows its own in-band
-               terminator producing that byte, leaving the underlying
-               file positioned past the whole encoded stream; a plain
-               byte is put back untouched */
             if (code == 257)
-            {
-                int c = xpost_file_getc(ff->source);
-                if (c != EOF)
-                    xpost_file_ungetc(ff->source, c);
-            }
+                lzw_eat_eod(ff);
+            else
+                ff->eod = 1;
             return EOF;
         }
         if (code == 256)
@@ -1823,6 +1978,25 @@ lzw_readch(Xpost_File *f)
      && ff->codewidth < 12)
         ff->codewidth++;
     ff->prev = code;
+
+    /* Read the following code ahead of need. A bounded readstring stops the
+       moment it has its byte count and never reads again, so a lazily-read 257
+       would be stranded, desynchronising a fresh filter on the same stream. Peek
+       it here, with the table and code width in the state this code left them:
+       a trailing 257 is eaten now (source left byte-aligned past the padding); a
+       real code is cached for the next call; a clear code is handled there too. */
+    {
+        int nxt = lzw_nextcode(ff);
+        if (nxt == 257)
+            lzw_eat_eod(ff);
+        else if (nxt < 0)
+            ff->eod = 1;
+        else
+        {
+            ff->nextval = nxt;
+            ff->havenext = 1;
+        }
+    }
 
     k = ff->stack[--ff->sp];
     return k;
@@ -3749,6 +3923,7 @@ Xpost_Object xpost_file_cons_filter_flate(Xpost_Memory_File *mem, Xpost_Object s
             return invalid;
         }
         ff->outn = ff->outi = 0;
+        ff->haslook = 0;
     }
     return _filter_object_cons(mem, &ff->methods);
 }
