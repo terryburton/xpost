@@ -372,6 +372,13 @@ test('op-intoverflow',
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Radix number range (PLRM 3.2): unsigned twos-complement in the integer width,
+# limitcheck beyond it. Integer-width-specific, so xpost-only (see the file).
+test('op-radix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_radix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

@@ -1,0 +1,25 @@
+% Radix number range (PLRM 3.2), run through `xpost -d null` by run-ps-test.sh.
+%
+% A radix number is unsigned and keeps the same twos-complement representation
+% in the integer type's width, and one that exceeds that width is a limitcheck.
+% This is specific to the 32-bit integer type and is adjudicated against Adobe
+% Distiller and PLRM (an interpreter with wider integers keeps larger values as
+% integers), so it is checked on xpost only, not compared to Ghostscript.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/tok { token pop exch pop } def   % string -> its first token
+
+(16#FFFFFFFF) tok -1 eq (16#FFFFFFFF is -1 in twos complement) assert
+(16#80000000) tok -2147483648 eq (16#80000000 is INT_MIN) assert
+(16#7FFFFFFF) tok 2147483647 eq (16#7FFFFFFF is INT_MAX) assert
+(2#1111) tok 15 eq (binary radix) assert
+(8#777) tok 511 eq (octal radix) assert
+
+% exceeding the integer width is a limitcheck (scanned at run time via token)
+{ (16#1FFFFFFFF) token } stopped { $error /errorname get /limitcheck eq }{ false } ifelse
+(radix beyond the integer width is limitcheck) assert
+{ (2#100000000000000000000000000000000) token } stopped { $error /errorname get /limitcheck eq }{ false } ifelse
+(binary radix beyond the width is limitcheck) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
