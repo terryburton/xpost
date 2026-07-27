@@ -1,0 +1,69 @@
+% Interpreter isolation regression, run through `xpost -d null` by
+% run-ps-test.sh; prints SUCCESS iff every assertion holds. The interpreter's
+% internal helper procedures live in the private .xpostsys namespace instead
+% of userdict, so:
+%   (1) their names do not pollute the dictionaries a program sees -- a
+%       program's `/ravec where` is false, as it is on Ghostscript, and
+%   (2) a program may redefine any of those names for its own use without
+%       disturbing the graphics machinery that used to call them by bare name
+%       (that clash is precisely why a program working on gs failed on xpost).
+% The machinery is also required to survive a program shadowing the operator
+% names its helper calls rely on (get, exec), which the helper-call form
+% //.xpostsys /h get exec only withstands because those references are frozen.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% the graphics machinery must be loaded for its helpers to exist
+gsave grestore
+
+/HELPERS [
+    /gstatecopy /strcat /ravec /cpath /dolinejoin /ptdiff /magang /arcbez
+    /rect /dashpath /minlinewidth /crossdashbound /dopending
+    /initial_ipos
+] def
+
+% (1) none of the internal helper names are visible to a program
+HELPERS {
+    dup where { pop (STILL-VISIBLE: ) print == false }{ pop true } ifelse
+    (internal helper name is hidden) assert
+} forall
+
+% exercise the machinery the helpers serve, as a baseline
+{
+    gsave
+        0.4 setgray 8 setlinewidth 1 setlinejoin [6 3] 1 setdash
+        newpath 20 20 moveto 180 120 lineto 60 190 lineto closepath stroke
+        newpath 100 100 40 0 300 arc fill
+        newpath 30 30 140 140 rectclip newpath 0 0 200 200 rectfill
+    grestore
+} stopped not (baseline graphics run cleanly) assert
+
+% (2) redefine every helper name to a value of the program's own, then run the
+% same graphics: the machinery must use its frozen helpers, not the program's
+HELPERS { { (PROGRAM-OWNED) } def } forall
+{
+    gsave
+        0.4 setgray 8 setlinewidth 1 setlinejoin [6 3] 1 setdash
+        newpath 20 20 moveto 180 120 lineto 60 190 lineto closepath stroke
+        newpath 100 100 40 0 300 arc fill
+        newpath 30 30 140 140 rectclip newpath 0 0 200 200 rectfill
+    grestore
+} stopped not (graphics survive a program redefining every helper name) assert
+
+% (3) the program's own definitions are intact and answer to the program
+/rect { (mine) } def
+rect (mine) eq (a program's own /rect is its own) assert
+/ravec { 42 } def
+ravec 42 eq (a program's own /ravec is its own) assert
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

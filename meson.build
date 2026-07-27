@@ -428,6 +428,15 @@ test('save-restore-ctm',
   args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Interpreter isolation: internal helper procedures hide in .xpostsys, so their
+# names neither pollute nor obscure a program's own, and a program may redefine
+# them without disturbing the graphics machinery (a clash that broke real
+# programs on xpost). Also covers surviving a program shadowing get/exec.
+test('isolation',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/isolation_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',
