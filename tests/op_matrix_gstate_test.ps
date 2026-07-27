@@ -1,0 +1,47 @@
+% Matrix/coordinate and graphics-state operator compliance (PLRM 8.2), run through
+% `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every assertion holds.
+% Standard PostScript; prints SUCCESS on Ghostscript too.
+%
+% Regression for campaign fixes:
+%   - transform/dtransform/itransform/idtransform with a matrix that is not a
+%     six-element array raised no error and read out of bounds; PLRM: rangecheck
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assertnear { 3 1 roll sub abs 1e-3 lt exch assert } def
+/erris { 3 dict begin /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear end } def
+
+initgraphics
+
+% --- a bad-length matrix is rangecheck (was an out-of-bounds read) ---
+{ 10 20 [1 0 0 1] transform }   /rangecheck (transform: short matrix is rangecheck) erris
+{ 10 20 [1 2 3 4 5 6 7] transform } /rangecheck (transform: long matrix is rangecheck) erris
+{ 10 20 [1 0 0 1] dtransform }  /rangecheck (dtransform: short matrix is rangecheck) erris
+{ 25 67 [1 0 0 1] itransform }  /rangecheck (itransform: short matrix is rangecheck) erris
+{ 20 60 [1 0 0 1] idtransform } /rangecheck (idtransform: short matrix is rangecheck) erris
+{ [1 0 0 1] matrix invertmatrix } /rangecheck (invertmatrix: short matrix is rangecheck) erris
+
+% --- transform / itransform round-trip with an explicit matrix ---
+10 20 [2 0 0 3 5 7] transform /ty exch def /tx exch def
+tx 25.0 (transform x) assertnear ty 67.0 (transform y) assertnear
+tx ty [2 0 0 3 5 7] itransform /iy exch def /ix exch def
+ix 10.0 (itransform recovers x) assertnear iy 20.0 (itransform recovers y) assertnear
+% dtransform ignores the translation
+10 20 [2 0 0 3 5 7] dtransform /dy exch def /dx exch def
+dx 20.0 (dtransform x, no translation) assertnear dy 60.0 (dtransform y) assertnear
+
+% --- matrix builders (check specific elements, preserving the matrix with dup) ---
+2 3 matrix translate dup 4 get 2.0 (translate sets tx) assertnear
+                     5 get 3.0 (translate sets ty) assertnear
+2 3 matrix scale dup 0 get 2.0 (scale sets xx) assertnear
+                 3 get 3.0 (scale sets yy) assertnear
+[1 2 3 4 5 6] [1 0 0 1 0 0] matrix concatmatrix 0 get 1.0 (concatmatrix identity) assertnear
+
+% --- currentmatrix / setmatrix round-trip ---
+matrix currentmatrix /save1 exch def
+[2 0 0 2 0 0] setmatrix matrix currentmatrix 0 get 2.0 (setmatrix took effect) assertnear
+save1 setmatrix matrix currentmatrix 0 get save1 0 get (currentmatrix restored) assertnear
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
