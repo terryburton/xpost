@@ -1,0 +1,20 @@
+# Programs held out of the differential run: they render correctly but too slowly
+# to fit evaluate.sh's per-file timeout. Remove an entry once its performance is
+# addressed. One basename per line (no extension).
+#
+# ch8  -- its shfill figures are finely-tessellated 3-D sphere meshes (~100k+
+#         triangles, DataSource arrays ~3000 lines each). xpost paints each
+#         triangle through a per-triangle DeviceN colour reduction and fill in
+#         PostScript, so a single page takes ~300s; Ghostscript does mesh shading
+#         in C. Correct since commit 57aed9a0 (before which it crashed); needs a
+#         C-level mesh rasterizer, or at least cached per-triangle colour
+#         reduction, before it fits the timeout.
+ch8
+
+# ch14 -- its Type 4 (free-form Gouraud) mesh figures render through the same
+#         per-triangle PostScript colour reduction as ch8, ~28s per page over 20
+#         pages, so the file cannot finish inside evaluate.sh's per-file timeout.
+#         Renders correctly (per-page pixel differences are the usual font-raster
+#         noise, in line with the rest of the corpus); needs the same C-level mesh
+#         rasterizer as ch8.
+ch14
