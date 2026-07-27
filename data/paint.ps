@@ -100,7 +100,7 @@
     dup mul exch dup mul exch add sqrt
         1 le {
         flattenpath
-        dashpath
+        //.xpostint /dashpath get exec
         doclip
         mark
         {          % x0 y0 

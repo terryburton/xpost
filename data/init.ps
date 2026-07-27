@@ -653,7 +653,7 @@ end % userdict
 } def
 
 % x y w h
-/rect { %ccw in device space
+.xpostint /rect { %ccw in device space
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
@@ -664,14 +664,14 @@ end % userdict
     0 exch rlineto
     neg 0 rlineto
     lineto
-} def
+} put
 
 % the painting pair works on its own path and leaves the caller's
 % untouched; rectclip clips by the rectangles alone and clears the
 % path, as the language specifies
-/rectfill { gsave newpath rect fill grestore } def
-/rectstroke { gsave newpath rect stroke grestore } def
-/rectclip { newpath rect clip newpath } def
+/rectfill { gsave newpath //.xpostint /rect get exec fill grestore } def
+/rectstroke { gsave newpath //.xpostint /rect get exec stroke grestore } def
+/rectclip { newpath //.xpostint /rect get exec clip newpath } def
 
 /runtest {
     (/test.ps) //.xpostint /.loadmodule get exec

@@ -604,7 +604,7 @@ override%pop pop%bind def
 % modifies current path
 % FIXME: manually iterates through the path structure.
 %        encapsulate using .devpathforall
-/dashpath {
+.xpostint /dashpath {
     10 dict begin
     currentdash % [] offset
     /dashoffset exch def
@@ -638,7 +638,7 @@ override%pop pop%bind def
         } if
     } if
     end
-} def
+} put
 
 % produce a vector from two points
 .xpostint /ptdiff { % P0 P1
@@ -898,7 +898,7 @@ override%pop pop%bind def
 
 /strokepath {
     flattenpath          % convert all curve segments to line approximations
-    dashpath             % apply dashing effect
+    //.xpostint /dashpath get exec             % apply dashing effect
     strokedict /devlinewidth    % device-space width, while the CTM is live
         currentlinewidth 0 dtransform
         dup mul exch dup mul add sqrt
