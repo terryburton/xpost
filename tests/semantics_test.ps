@@ -324,9 +324,16 @@ a85bintok 42 eq (binary token through the filter) assert
 currentfile /ASCIIHexDecode filter cvx exec
 2F73742E68657876616C2034322064656620>
 st.hexval 42 eq (ASCIIHexDecode delivers and the file resumes after the marker) assert
-currentfile 1 (*EOD*) /SubFileDecode filter cvx exec
-/st.sub 7 def *EOD*
-st.sub 7 eq (SubFileDecode ends at the delimiter and the file resumes after it) assert
+% SubFileDecode passes data up to and INCLUDING the count-th EOD string (PLRM),
+% and a count of zero consumes the first occurrence without passing it
+/st.subf (semantics.scratch) (w) file def
+st.subf (subfile payload*EOD*after) writestring st.subf closefile
+(semantics.scratch) (r) file 1 (*EOD*) /SubFileDecode filter
+40 string readstring pop (subfile payload*EOD*) eq
+    (SubFileDecode passes data up to and including the delimiter) assert
+(semantics.scratch) (r) file 0 (*EOD*) /SubFileDecode filter
+40 string readstring pop (subfile payload) eq
+    (SubFileDecode with count zero consumes the delimiter without passing it) assert
 /st.f (semantics.scratch) (w) file def
 st.f <014142FD4380> writestring st.f closefile
 (semantics.scratch) (r) file /RunLengthDecode filter
