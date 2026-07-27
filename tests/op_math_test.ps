@@ -60,6 +60,18 @@
 3.7 floor 3.0 eq (floor 3.7 = 3) assert
 -3.7 truncate -3.0 eq (truncate -3.7 = -3) assert
 
+% --- atan (degrees 0..360), the PLRM examples exactly ---
+0 1 atan 0.0 (0 1 atan = 0) assertnear
+1 0 atan 90.0 (1 0 atan = 90) assertnear
+-100 0 atan 270.0 (-100 0 atan = 270) assertnear
+1 1 atan 45.0 (1 1 atan = 45) assertnear
+
+% --- sin / cos in degrees ---
+0 cos 1.0 (cos 0 = 1) assertnear
+90 sin 1.0 (sin 90 = 1) assertnear
+30 sin 0.5 (sin 30 = 0.5) assertnear
+60 cos 0.5 (cos 60 = 0.5) assertnear
+
 % --- exp / ln / log ---
 2 3 exp 8.0 (2 3 exp = 8) assertnear
 1 ln 0.0 (ln 1 = 0) assertnear

@@ -41,9 +41,9 @@
 
 //#define PI (4.0 * atan(1.0))
 //double RAD_PER_DEG /* = PI / 180.0 */;
-//#define RAD_PER_DEG (M_PI / 180.0)
-//#define RAD_PER_DEG (3.14159 / 180.0)
-#define RAD_PER_DEG (0.0174533)
+/* the full-precision conversion: a truncated literal (0.0174533) skewed atan,
+   sin and cos off the PLRM examples (1 0 atan gave 89.99996, not 90.0) */
+#define RAD_PER_DEG (M_PI / 180.0)
 
 #include "xpost.h"
 #include "xpost_compat.h"
