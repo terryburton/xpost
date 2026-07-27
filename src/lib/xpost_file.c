@@ -802,8 +802,19 @@ int xpost_file_get_bytes_available(Xpost_Memory_File *mem,
     FILE *fp;
     struct stat sb;
     long sz, pos;
+    Xpost_File *file;
 
-    fp = ((Xpost_DiskFile*)xpost_file_get_file_pointer(mem, f))->file;
+    file = xpost_file_get_file_pointer(mem, f);
+    if (!file) return ioerror;
+    /* only a seekable disk file has a determinable byte count; for a memory
+       file or a filter it cannot be determined, so report -1 (PLRM) rather
+       than reading a FILE* field the other file types do not have */
+    if (file->methods != &disk_methods)
+    {
+        *retval = -1;
+        return 0;
+    }
+    fp = ((Xpost_DiskFile*)file)->file;
     if (!fp) return ioerror;
     ret = fstat(fileno(fp), &sb);
     if (ret != 0)

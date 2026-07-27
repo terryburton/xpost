@@ -301,3 +301,9 @@ listed for the record; open items are genuine remaining deviations.
      a single Bezier segment; fixed
  [X] status  gained the (filename) form (pages bytes referred created true, or
      false) alongside the file-object form; fixed
+ [X] currentuserparams / currentsystemparams  return a dictionary of the current
+     parameters (stack limits, VMReclaim / VMThreshold, RealFormat, ByteOrder,
+     MaxFontCache); setuserparams / setsystemparams apply the parameters they
+     recognise; fixed
+ [X] bytesavailable  reports -1 for a filter or other non-seekable file rather
+     than reading a FILE* field those file types do not have; fixed
