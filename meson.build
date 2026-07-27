@@ -488,6 +488,13 @@ test('isolation',
 # redefinition hijacks internal machinery -- the casselman ch8 loop); operator
 # values must be stored instead. Scans every reachable internal namespace,
 # self-testing that the scanner catches a planted unsafe entry.
+# SubFileDecode EOD semantics (PLRM 3.13.3): a positive count passes data up to
+# and including the count-th delimiter; count zero consumes it without passing.
+test('op-subfiledecode',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_subfiledecode_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],

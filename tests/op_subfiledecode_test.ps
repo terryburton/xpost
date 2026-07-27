@@ -1,0 +1,36 @@
+% SubFileDecode EOD semantics (PLRM 3.13.3), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% Regression for the campaign fix: SubFileDecode with a positive count excluded
+% the EOD string from the passed-through data, but PLRM passes all data "up to
+% and including" the count-th occurrence. A count of zero consumes the first
+% occurrence without passing it, and an empty EOD string passes exactly that
+% many bytes.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/mkfile { (subfiledecode.scratch) (w) file dup 3 -1 roll writestring closefile
+          (subfiledecode.scratch) (r) file } def
+
+% count 1: data up to and including the first EOD string
+(alpha*EOD*omega) mkfile 1 (*EOD*) /SubFileDecode filter 40 string readstring pop
+(alpha*EOD*) eq (count 1 includes the delimiter) assert
+
+% count 2: through the second occurrence
+(a*E*b*E*c) mkfile 2 (*E*) /SubFileDecode filter 40 string readstring pop
+(a*E*b*E*) eq (count 2 includes both delimiters) assert
+
+% count 0: the first occurrence is consumed but not passed
+(head*EOD*tail) mkfile 0 (*EOD*) /SubFileDecode filter 40 string readstring pop
+(head) eq (count 0 consumes the delimiter without passing it) assert
+
+% the underlying file resumes immediately after the consumed delimiter
+(one*EOD*two) mkfile dup 1 (*EOD*) /SubFileDecode filter 40 string readstring pop pop
+40 string readstring pop (two) eq (the source resumes after the delimiter) assert
+
+% empty EOD string: pass exactly count bytes
+(0123456789) mkfile 4 () /SubFileDecode filter 40 string readstring pop
+(0123) eq (empty EOD string passes exactly count bytes) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
