@@ -123,7 +123,11 @@ int xpost_op_file_read(Xpost_Context *ctx,
         return invalidaccess;
     b = xpost_file_read_byte(ctx->lo, f);
     if (xpost_object_get_type(b) == invalidtype)
-        return ioerror;
+    {
+        /* a closed file reads as end-of-data rather than erroring */
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     if (b.int_.val != EOF)
     {
         xpost_stack_push(ctx->lo, ctx->os, b);
@@ -179,7 +183,13 @@ int xpost_op_file_readhexstring (Xpost_Context *ctx,
     Xpost_File *f;
     char *s;
     if (!xpost_file_get_status(ctx->lo, F))
-        return ioerror;
+    {
+        /* a closed file reads as end-of-data rather than erroring */
+        S.comp_.sz = 0;
+        xpost_stack_push(ctx->lo, ctx->os, S);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     if (!xpost_object_is_readable(ctx,F))
         return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
@@ -241,7 +251,13 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
     Xpost_File *f;
     char *s;
     if (!xpost_file_get_status(ctx->lo, F))
-        return ioerror;
+    {
+        /* a closed file reads as end-of-data rather than erroring */
+        S.comp_.sz = 0;
+        xpost_stack_push(ctx->lo, ctx->os, S);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     if (!xpost_object_is_readable(ctx,F))
         return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
@@ -293,7 +309,13 @@ int xpost_op_file_readline (Xpost_Context *ctx,
     char *s;
     int n, c = ' ';
     if (!xpost_file_get_status(ctx->lo, F))
-        return ioerror;
+    {
+        /* a closed file reads as end-of-data rather than erroring */
+        S.comp_.sz = 0;
+        xpost_stack_push(ctx->lo, ctx->os, S);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     if (!xpost_object_is_readable(ctx,F))
         return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);

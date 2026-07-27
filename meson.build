@@ -404,6 +404,12 @@ test('op-index-type',
   args: [ xpost_exe, files('tests/op_index_type_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# reading from a closed file reports end-of-data rather than raising an error.
+test('op-closed-read',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_closed_read_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside
