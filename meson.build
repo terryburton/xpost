@@ -379,6 +379,13 @@ test('op-radix',
   args: [ xpost_exe, files('tests/op_radix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# cvi/cvr number conversion (PLRM 8.2): reject non-PostScript syntax; cvi of an
+# over-range real is rangecheck, not a wrap.
+test('op-cvi',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_cvi_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

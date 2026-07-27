@@ -1,0 +1,21 @@
+% cvi / cvr number conversion (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh. Standard PostScript; prints SUCCESS on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+% cvi truncates toward zero
+3.7 cvi 3 eq (cvi of 3.7 is 3) assert
+-3.7 cvi -3 eq (cvi of -3.7 is -3) assert
+(3.3E1) cvi 33 eq (cvi of a real numeral string) assert
+(42) cvi 42 eq (cvi of an integer string) assert
+(16#ff) cvi 255 eq (cvi of a radix string) assert
+
+% cvi of an over-range real is rangecheck or a correctly-signed large integer,
+% never a wrap to the opposite sign
+{ 3000000000.0 cvi } stopped { $error /errorname get /rangecheck eq }{ 0 gt } ifelse
+(cvi of a large positive real does not wrap) assert
+{ -3000000000.0 cvi } stopped { $error /errorname get /rangecheck eq }{ -2000000000 lt } ifelse
+(cvi of a large negative real does not wrap) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
