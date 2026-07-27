@@ -1,0 +1,48 @@
+% Control operator compliance (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% Regression for the campaign fix: repeat with a negative count is rangecheck
+% (PLRM: the count is a "nonnegative integer"; rangecheck is the only Errors-list
+% code that fits an out-of-range count), not a silent no-op.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/erris { 3 dict begin /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear  % PLRM restores the failed operator's operands; drop them
+    end } def
+
+% --- repeat: nonnegative count; negative is rangecheck, zero is a no-op ---
+{ -1 { } repeat } /rangecheck (repeat of a negative count is rangecheck) erris
+{ -999 { (x) } repeat } /rangecheck (repeat of a large negative count is rangecheck) erris
+mark 0 { (nope) } repeat counttomark 0 eq exch pop (repeat 0 does nothing) assert
+/rc 0 def 4 { /rc rc 1 add def } repeat rc 4 eq (repeat n runs proc n times) assert
+/re 0 def
+10 { /re re 1 add def re 3 ge { exit } if } repeat re 3 eq (exit terminates repeat early) assert
+
+% --- if / ifelse ---
+true { 7 } if 7 eq (if true runs) assert
+false { 7 } if count 0 eq (if false runs nothing) assert
+true { 1 }{ 2 } ifelse 1 eq (ifelse true) assert
+false { 1 }{ 2 } ifelse 2 eq (ifelse false) assert
+{ 1 { 2 } if } /typecheck (if with a non-boolean is typecheck) erris
+
+% --- for: bounds, direction, empty range ---
+/s 0 def 1 1 5 { s add /s exch def } for s 15 eq (for sums 1..5) assert
+/s 0 def 5 -1 1 { s add /s exch def } for s 15 eq (for counts down) assert
+/n 0 def 1 1 0 { pop /n 1 def } for n 0 eq (an empty for range never runs) assert
+
+% --- loop / exit ---
+/k 0 def { /k k 1 add def k 5 ge { exit } if } loop k 5 eq (loop with exit) assert
+
+% --- exec ---
+{ 2 3 add } exec 5 eq (exec runs a procedure) assert
+3 exec 3 eq (exec of a non-procedure leaves it) assert
+
+% --- stopped / stop ---
+{ stop } stopped (stop is caught by stopped) assert
+{ 42 } stopped not (stopped is false when no stop occurs) assert
+{ 1 0 idiv } stopped (an error acts as stop under stopped) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

@@ -265,3 +265,29 @@ Typical output devices
  [ ] dsc-compliant distilled ps
  [X] xcb
  [X] ms-windows
+
+PLRM 8.2 operator compliance campaign — deviations
+---------------------------------------------------
+
+Recorded as found while working PLRM 8.2 operator by operator. Fixed items are
+listed for the record; open items are genuine remaining deviations.
+
+ [X] mod    zero divisor is undefinedresult, not a SIGFPE (was a crash); fixed
+ [X] sqrt   negative operand is rangecheck, not a silent NaN; fixed
+ [X] atan/sin/cos  match the PLRM examples (a truncated RAD_PER_DEG had skewed
+     them, e.g. 1 0 atan gave 89.99996); fixed
+ [X] repeat negative count is rangecheck (PLRM: nonnegative integer), not a
+     silent no-op; fixed
+ [/] setpacking / currentpacking  the array packing mode is not maintained:
+     currentpacking stays false and setpacking has no effect, because the state
+     lived in systemdict, which is now sealed read-only. PLRM 8.2 makes the mode
+     a per-context, save/restore-subject parameter that governs scanner { }
+     packing. Packed arrays built explicitly by packedarray are unaffected.
+ [/] error operand restoration  after an operator errors, coerced operand values
+     may remain on the stack where PLRM 3.11 restores the originals -- e.g.
+     1 0 div under stopped leaves 1.0 0.0 rather than the original 1 0 -- because
+     the dispatcher coerces int operands to real before the operator runs.
+ [/] real precision  reals are IEEE single precision (PLRM 3.3.2 permits single
+     or double), so results carry ~7 significant figures and large values may
+     print in exponent form (4e+09) where a double-precision interpreter prints
+     4000000000. Values are correct; only precision and representation differ.
