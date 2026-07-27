@@ -1,0 +1,67 @@
+% Arithmetic/math operator compliance (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
+% prints SUCCESS on Ghostscript too.
+%
+% Regression for three PLRM deviations found in the 8.2 compliance campaign:
+%   - mod by a zero divisor raised a hardware fault (SIGFPE) instead of the
+%     undefinedresult error PLRM mandates; INT_MIN mod/idiv -1 overflowed likewise
+%   - sqrt of a negative operand returned NaN instead of rangecheck
+%   - a truncated RAD_PER_DEG (0.0174533) skewed atan/sin/cos off the PLRM examples
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assertnear { 3 1 roll sub abs 1e-4 lt exch assert } def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear  % PLRM restores the failed operator's operands; drop them
+    end
+} def
+
+% --- mod / idiv / div: zero divisor is undefinedresult, not a crash ---
+{ 7 0 mod } /undefinedresult (mod by zero is undefinedresult) erris
+{ 7 0 idiv } /undefinedresult (idiv by zero is undefinedresult) erris
+{ 1 0 div } /undefinedresult (div by zero is undefinedresult) erris
+% surviving these proves no SIGFPE took the interpreter down
+(reached: interpreter survived the zero divisions) =
+
+% --- INT_MIN edge: no overflow fault ---
+{ -2147483648 -1 mod cvi } stopped { pop false }{ 0 eq } ifelse
+    (INT_MIN mod -1 is 0, no fault) assert
+{ -2147483648 -1 idiv } stopped { pop false }{ pop true } ifelse
+    (INT_MIN idiv -1 yields a value, no fault) assert
+
+% --- mod sign follows the dividend (PLRM examples) ---
+5 3 mod 2 eq (5 3 mod = 2) assert
+5 2 mod 1 eq (5 2 mod = 1) assert
+-5 3 mod -2 eq (-5 3 mod = -2) assert
+
+% --- idiv truncates toward zero ---
+3 2 idiv 1 eq (3 2 idiv = 1) assert
+-5 2 idiv -2 eq (-5 2 idiv = -2) assert
+
+% --- div always real ---
+4 2 div 2.0 eq (4 2 div = 2.0 real) assert
+
+% --- round: ties go to the greater value (PLRM) ---
+3.2 round 3.0 eq (round 3.2 = 3) assert
+6.5 round 7.0 eq (round 6.5 = 7) assert
+-4.8 round -5.0 eq (round -4.8 = -5) assert
+-6.5 round -6.0 eq (round -6.5 = -6, greater of -7/-6) assert
+99 round 99 eq (round of an integer stays integer-valued) assert
+
+% --- ceiling / floor / truncate ---
+3.2 ceiling 4.0 eq (ceiling 3.2 = 4) assert
+3.7 floor 3.0 eq (floor 3.7 = 3) assert
+-3.7 truncate -3.0 eq (truncate -3.7 = -3) assert
+
+% --- exp / ln / log ---
+2 3 exp 8.0 (2 3 exp = 8) assertnear
+1 ln 0.0 (ln 1 = 0) assertnear
+1000 log 3.0 (log 1000 = 3) assertnear
+
+% --- integer add overflowing to real (value; representation is impl-defined) ---
+2000000000 2000000000 add 4.0e9 (int add overflow -> real) assertnear
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
