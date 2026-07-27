@@ -165,6 +165,7 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp);
  * @brief Construct a file object wrapping a pointer and size.
  */
 Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem, unsigned char *str, size_t limit);
+Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem, const unsigned char *ptr, unsigned int len);
 
 /**
  * @brief Construct a file object for accumulating output.

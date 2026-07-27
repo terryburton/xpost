@@ -1393,6 +1393,58 @@ int xpost_op_lockdown (Xpost_Context *ctx)
     return 0;
 }
 
+/* The string forms of filter: a private copy of the string becomes a readable
+   file, and the file-source machinery runs over it. The wrapping filter owns
+   and releases that source when it is closed (xpost_file_object_close). */
+static
+Xpost_Object _string_source(Xpost_Context *ctx, Xpost_Object S)
+{
+    Xpost_Object F;
+
+    F = xpost_file_cons_readstring(ctx->lo,
+            (const unsigned char *)xpost_string_get_pointer(ctx, S), S.comp_.sz);
+    if (xpost_object_get_type(F) == filetype)
+    {
+        F.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        F.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                  << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    }
+    return F;
+}
+
+static
+int xpost_op_string_filter (Xpost_Context *ctx,
+                            Xpost_Object S,
+                            Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter(ctx, F, name);
+}
+
+static
+int xpost_op_string_filter_dict (Xpost_Context *ctx,
+                                 Xpost_Object S,
+                                 Xpost_Object dict,
+                                 Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_dict(ctx, F, dict, name);
+}
+
+static
+int xpost_op_string_filter_subfile (Xpost_Context *ctx,
+                                    Xpost_Object S,
+                                    Xpost_Object count,
+                                    Xpost_Object eod,
+                                    Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_subfile(ctx, F, count, eod, name);
+}
+
 int xpost_oper_init_file_ops (Xpost_Context *ctx,
                               Xpost_Object sd)
 {
@@ -1423,6 +1475,17 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter_int, 1, 3,
             filetype, integertype, nametype);
+    INSTALL;
+    /* longest pattern first: the subfile form's EOD-string operand would
+       otherwise let the two-operand form match a four-operand call */
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter_subfile, 1, 4,
+            stringtype, integertype, stringtype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter_dict, 1, 3,
+            stringtype, dicttype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter, 1, 2,
+            stringtype, nametype);
     INSTALL;
     op = xpost_operator_cons(ctx, "closefile", (Xpost_Op_Func)xpost_op_file_closefile, 0, 1, filetype);
     INSTALL;
