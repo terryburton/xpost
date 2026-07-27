@@ -26,6 +26,13 @@ initgraphics
 { 20 60 [1 0 0 1] idtransform } /rangecheck (idtransform: short matrix is rangecheck) erris
 { [1 0 0 1] matrix invertmatrix } /rangecheck (invertmatrix: short matrix is rangecheck) erris
 
+% --- a bad-length destination matrix is rangecheck (was a silent arena overwrite) ---
+{ [1 2 3] identmatrix } /rangecheck (identmatrix: short destination is rangecheck) erris
+{ 90 [1 2 3] rotate } /rangecheck (rotate: short destination matrix is rangecheck) erris
+{ 2 2 [0 0 0] scale } /rangecheck (scale: short destination matrix is rangecheck) erris
+{ 1 1 [0 0 0 0 0] translate } /rangecheck (translate: short destination matrix is rangecheck) erris
+{ [1 0 0 1 0 0] [1 0 0 1 0 0] [1 2 3] concatmatrix } /rangecheck (concatmatrix: short destination is rangecheck) erris
+
 % --- transform / itransform round-trip with an explicit matrix ---
 10 20 [2 0 0 3 5 7] transform /ty exch def /tx exch def
 tx 25.0 (transform x) assertnear ty 67.0 (transform y) assertnear
