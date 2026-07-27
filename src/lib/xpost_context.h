@@ -76,6 +76,13 @@ struct _Xpost_Context {
 
     Xpost_Object currentobject;  /**< currently-executing object, for error() */
 
+    /* operands the dispatcher coerced from integer to real for the current
+       operator; an error restores them to the originals the program pushed,
+       as PLRM 3.11 requires. Empty for operators that coerce nothing. */
+    int op_restore_n;
+    unsigned char op_restore_idx[8];
+    Xpost_Object op_restore_val[8];
+
     /*@dependent@*/
     Xpost_Memory_File *gl; /**< global VM */
     /*@dependent@*/
