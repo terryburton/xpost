@@ -548,7 +548,10 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
     }
     else
     {
-        xpost_glob_free(globbuf); /* reference has already been popped */
+        /* iteration is complete and the reference has already been popped:
+           release the matched paths and the container filenameforall allocated */
+        xpost_glob_free(globbuf);
+        free(globbuf);
     }
     return 0;
 }
