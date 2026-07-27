@@ -462,8 +462,6 @@ int AScvs (Xpost_Context *ctx,
     char nostringval[] = "--nostringval--";
     char strue[] = "true";
     char sfalse[] = "false";
-    char smark[] = "-mark-";
-    char ssave[] = "-save-";
     int n;
     int ret;
 
@@ -474,20 +472,6 @@ int AScvs (Xpost_Context *ctx,
                 return rangecheck;
             memcpy(xpost_string_get_pointer(ctx, str), nostringval, sizeof(nostringval)-1);
             str.comp_.sz = sizeof(nostringval)-1;
-            break;
-
-        case savetype:
-            if (str.comp_.sz < sizeof(ssave)-1)
-                return rangecheck;
-            memcpy(xpost_string_get_pointer(ctx, str), ssave, sizeof(ssave)-1);
-            str.comp_.sz = sizeof(ssave)-1;
-            break;
-
-        case marktype:
-            if (str.comp_.sz < sizeof(smark)-1)
-                return rangecheck;
-            memcpy(xpost_string_get_pointer(ctx, str), smark, sizeof(smark)-1);
-            str.comp_.sz = sizeof(smark)-1;
             break;
 
         case booleantype:

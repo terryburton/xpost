@@ -392,6 +392,12 @@ test('op-gstate-types',
   args: [ xpost_exe, files('tests/op_gstate_types_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# cvs yields --nostringval-- for every type outside the string-representable set.
+test('op-cvs',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_cvs_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside
