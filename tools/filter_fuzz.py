@@ -332,6 +332,161 @@ o closefile src closefile
         fails.append(("concat",len(expect),"SF-cat",err or f"got {out[:24].hex()} want {expect[:24].hex()}","","",""))
     return fails
 
+def _run_gs_ps(prog):
+    r = subprocess.run([GS,"-q","-dNOSAFER","-dBATCH","-dNODISPLAY","-c",prog],
+                       capture_output=True)
+    return r.stdout
+
+def _gs_transform(input_bytes, filt, params):
+    """run gs: read input file through `filt` (with params dict) to stdout"""
+    inb = os.path.join(S,"gt.bin"); open(inb,"wb").write(input_bytes)
+    dec = "Decode" in filt
+    if dec:
+        prog = ("/i (%s)(r)file def /d i %s /%s filter def /o (%%stdout)(w)file def "
+                "{ d read { o exch write } { exit } ifelse } loop o flushfile quit"
+                % (inb, params, filt))
+    else:
+        prog = ("/i (%s)(r)file def /o (%%stdout)(w)file def /f o %s /%s filter def "
+                "{ i read { f exch write } { exit } ifelse } loop f closefile o flushfile quit"
+                % (inb, params, filt))
+    return _run_gs_ps(prog)
+
+def _xp_transform(input_bytes, filt, params):
+    """run xpost: read input file through `filt` (with params dict) to out file"""
+    inb  = os.path.join(S,"xt.bin");  open(inb,"wb").write(input_bytes)
+    outb = os.path.join(S,"xt.out")
+    try: os.remove(outb)
+    except OSError: pass
+    dec = "Decode" in filt
+    if dec:
+        body = (f"/i ({inb}) (r) file def\n/d i {params} /{filt} filter def\n"
+                f"/o ({outb}) (w) file def\n"
+                "{ d read { o exch write } { exit } ifelse } loop\no closefile i closefile\n")
+    else:
+        body = (f"/i ({inb}) (r) file def\n/o ({outb}) (w) file def\n"
+                f"/f o {params} /{filt} filter def\n"
+                "{ i read { f exch write } { exit } ifelse } loop\nf closefile o closefile i closefile\n")
+    ps = f"{{\n{body}\n(OK\\n) print }} stopped {{ (ERR ) print $error /errorname get == }} if\n"
+    r = run_xpost(ps)
+    txt = r.stdout.decode("latin1")
+    err = txt.split("ERR",1)[1].strip().split("\n")[0] if "ERR" in txt else None
+    out = open(outb,"rb").read() if os.path.exists(outb) else b""
+    return out, err
+
+def _bilevel(kind, cols, rows, seed=1):
+    """packed 1-bit rows, cols wide (0=white in CCITT terms)"""
+    stride = (cols + 7) // 8
+    rnd = random.Random(seed)
+    out = bytearray()
+    for r in range(rows):
+        row = bytearray(stride)
+        for c in range(cols):
+            if   kind=="white": bit=0
+            elif kind=="black": bit=1
+            elif kind=="vstripe": bit=c & 1
+            elif kind=="hstripe": bit=r & 1
+            elif kind=="edge": bit=1 if c==cols-1 else 0
+            else: bit=rnd.getrandbits(1)
+            if bit: row[c>>3] |= 0x80 >> (c & 7)
+        out += row
+    return bytes(out)
+
+def _mask_pad(data, cols, rows):
+    """zero the pad bits after Columns in each row's final byte: decoders
+    (gs and xpost alike) fill them with the white background, so only the
+    first Columns bits of a row are defined"""
+    stride = (cols + 7) // 8
+    rem = cols & 7
+    if rem == 0:
+        return data
+    out = bytearray(data)
+    mask = (0xFF00 >> rem) & 0xFF
+    for r in range(rows):
+        i = r * stride + stride - 1
+        if i < len(out):
+            out[i] &= mask
+    return bytes(out)
+
+def t_ccitt():
+    """CCITTFaxDecode/Encode: G3 one-dimensional (K=0) and G4 (K<0) codings,
+    gs as the independent oracle both ways, plus the xpost round trip. Rows are
+    compared over their defined Columns bits only (both engines background-fill
+    the final byte's padding)."""
+    fails=[]
+    cases=[]
+    for k in (0,-1):
+        for cols in (8,17,64,216,1728):
+            for rows in (1,2,5):
+                for kind in ("white","black","vstripe","hstripe","edge","rand"):
+                    cases.append((k,cols,rows,kind))
+    for k,cols,rows,kind in cases:
+        data = _bilevel(kind,cols,rows)
+        want = _mask_pad(data,cols,rows)
+        params = f"<< /K {k} /Columns {cols} /Rows {rows} >>"
+        name = f"K{k}:{cols}x{rows}:{kind}"
+        genc = _gs_transform(data,"CCITTFaxEncode",params)
+        # T1: gs-encode -> xpost decode
+        out,err = _xp_transform(genc,"CCITTFaxDecode",params)
+        if err or _mask_pad(out,cols,rows) != want:
+            fails.append((name,len(data),"C-T1",err or f"got {len(out)}B want {len(data)}B","",out[:16].hex(),want[:16].hex()))
+        # T2: xpost encode -> gs decode
+        xenc,err = _xp_transform(data,"CCITTFaxEncode",params)
+        if err:
+            fails.append((name,len(data),"C-T2","encode err: "+err,"","","")); continue
+        back = _gs_transform(xenc,"CCITTFaxDecode",params)
+        if _mask_pad(back,cols,rows) != want:
+            fails.append((name,len(data),"C-T2",f"gs can't decode xpost stream: got {len(back)}B","",back[:16].hex(),want[:16].hex()))
+        # T3: xpost round trip
+        out,err = _xp_transform(xenc,"CCITTFaxDecode",params)
+        if err or _mask_pad(out,cols,rows) != want:
+            fails.append((name,len(data),"C-T3",err or f"got {len(out)}B want {len(data)}B","",out[:16].hex(),want[:16].hex()))
+    return fails, len(cases)
+
+def _raster(kind, w, h, colors, seed=1):
+    """smooth 8-bit sample rasters (DCT is lossy: content must be low-frequency)"""
+    rnd = random.Random(seed)
+    out = bytearray()
+    for y in range(h):
+        for x in range(w):
+            for c in range(colors):
+                if kind=="flat": v=128
+                elif kind=="gradx": v=(x*255)//max(w-1,1)
+                elif kind=="grady": v=(y*255)//max(h-1,1)
+                else: v=min(235, 20 + x*2 + y*2 + c*15)   # gentle diagonal ramp, no wrap
+                out.append(v)
+    return bytes(out)
+
+def t_dct():
+    """DCTEncode/Decode: lossy, so compare per-sample within a tolerance;
+    gs as the independent oracle both ways, plus the xpost round trip."""
+    fails=[]; TOL=32
+    cases=[(w,h,n,kind) for (w,h) in ((8,8),(16,9),(33,17))
+                        for n in (1,3) for kind in ("flat","gradx","ramp")]
+    def close(a,b):
+        if len(a)!=len(b): return False
+        return all(abs(x-y)<=TOL for x,y in zip(a,b))
+    for w,h,n,kind in cases:
+        data = _raster(kind,w,h,n)
+        params = f"<< /Columns {w} /Rows {h} /Colors {n} >>"
+        name = f"{w}x{h}c{n}:{kind}"
+        genc = _gs_transform(data,"DCTEncode",params)
+        # T1: gs-encode -> xpost decode
+        out,err = _xp_transform(genc,"DCTDecode","<< >>")
+        if err or not close(out,data):
+            fails.append((name,len(data),"D-T1",err or f"mismatch got {len(out)}B want {len(data)}B","",out[:16].hex(),data[:16].hex()))
+        # T2: xpost encode -> gs decode
+        xenc,err = _xp_transform(data,"DCTEncode",params)
+        if err:
+            fails.append((name,len(data),"D-T2","encode err: "+err,"","","")); continue
+        back = _gs_transform(xenc,"DCTDecode","<< >>")
+        if not close(back,data):
+            fails.append((name,len(data),"D-T2",f"gs decode of xpost jpeg mismatches: {len(back)}B","",back[:16].hex(),data[:16].hex()))
+        # T3: xpost round trip
+        out,err = _xp_transform(xenc,"DCTDecode","<< >>")
+        if err or not close(out,data):
+            fails.append((name,len(data),"D-T3",err or f"mismatch got {len(out)}B","",out[:16].hex(),data[:16].hex()))
+    return fails, len(cases)
+
 def make_groups(V):
     """build T4 concat groups stressing boundary-aligned segment sizes."""
     by={name:data for name,data in V}
@@ -377,6 +532,16 @@ def main():
         total+=len(sf)
         print(f"[SubFile  ] SF={len(sf):3}  (positioning + fresh-filter concat)")
         for f in sf: allf.append(("SubFile",)+f)
+    if not sys.argv[1:] or "CCITT" in sys.argv[1:]:
+        cf,ncc=t_ccitt()
+        total+=len(cf)
+        print(f"[CCITT    ] C={len(cf):3}  (G3-1D + G4, gs-oracle both ways; {ncc} cases)")
+        for f in cf: allf.append(("CCITT",)+f)
+    if not sys.argv[1:] or "DCT" in sys.argv[1:]:
+        df,ndc=t_dct()
+        total+=len(df)
+        print(f"[DCT      ] D={len(df):3}  (lossy round trips within tolerance; {ndc} cases)")
+        for f in df: allf.append(("DCT",)+f)
 
     print(f"\n=== {total} failures ===")
     for f in allf[:80]:
