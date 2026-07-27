@@ -400,6 +400,33 @@ int xpost_op_file_status (Xpost_Context *ctx,
     return 0;
 }
 
+/* string  status  pages bytes referred created true | false
+   report on a named file: its block count, size, and access and modification
+   times if it exists and the sandbox permits it, otherwise false */
+static
+int xpost_op_string_status (Xpost_Context *ctx,
+                            Xpost_Object S)
+{
+    char *sbuf;
+    long pages, bytes, referred, created;
+    int exists;
+
+    sbuf = xpost_string_allocate_cstring(ctx, S);
+    if (!sbuf)
+        return VMerror;
+    exists = xpost_diskfile_stat(sbuf, &pages, &bytes, &referred, &created);
+    free(sbuf);
+    if (exists)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pages));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(bytes));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(referred));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(created));
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(exists));
+    return 0;
+}
+
 /* -  currentfile  file
    return topmost file from the exec stack. The result carries the
    literal attribute (PLRM): programs stash it under a name and a
@@ -664,6 +691,8 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
 #endif
     op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_file_status, 1, 1, filetype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_string_status, 5, 1, stringtype);
     INSTALL;
     /* string status */
     /* run: see init.ps */

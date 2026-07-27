@@ -210,4 +210,7 @@ int xpost_file_write_byte(Xpost_Memory_File *mem, Xpost_Object f, Xpost_Object b
  * @}
  */
 
+
+int xpost_diskfile_stat(const char *path, long *pages, long *bytes, long *referred, long *created);
+
 #endif

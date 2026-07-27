@@ -291,3 +291,13 @@ listed for the record; open items are genuine remaining deviations.
      or double), so results carry ~7 significant figures and large values may
      print in exponent form (4e+09) where a double-precision interpreter prints
      4000000000. Values are correct; only precision and representation differ.
+ [X] transform / dtransform / itransform / idtransform / invertmatrix  a matrix
+     operand that is not a six-element array is rangecheck, not an out-of-bounds
+     read; fixed
+ [X] setlinecap / setlinejoin  values outside 0..2, and setmiterlimit below 1,
+     are rangecheck, not silently accepted; fixed
+ [X] rotate / arc / arct  built angles through a truncated RAD_PER_DEG and so
+     missed the axis angles; now full precision, and a right-angle arct corner is
+     a single Bezier segment; fixed
+ [X] status  gained the (filename) form (pages bytes referred created true, or
+     false) alongside the file-object form; fixed
