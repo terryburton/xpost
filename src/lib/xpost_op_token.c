@@ -229,22 +229,36 @@ int grok(Xpost_Context *ctx,
 
     else if (fsm_check(s, ns, fsm_rad, accept_rad))
     {
-        long base, num;
-        base = strtol(s, &s, 10);
+        unsigned long base, num;
+        base = strtoul(s, &s, 10);
         if ((base > 36) || (base < 2))
         {
             XPOST_LOG_ERR("bad radix");
             return limitcheck;
         }
         errno = 0;
-        num = strtol(s + 1, NULL, base);
-        if ((num == LONG_MAX || num == LONG_MIN) && errno == ERANGE)
+        /* PLRM 3.2: a radix number is unsigned. Read it unsigned so the full
+           integer width parses on every platform: where long is no wider than
+           int (LLP64, e.g. Windows), a signed read would overflow on any value
+           past INT_MAX -- 16#FFFFFFFF among them -- and spuriously limitcheck. */
+        num = strtoul(s + 1, NULL, base);
+        if (errno == ERANGE)
         {
             XPOST_LOG_ERR("radixnumber out of range");
             return limitcheck;
         }
-        //return xpost_int_cons(num);
-        *retval = xpost_int_cons(num);
+        /* it keeps the same twos-complement representation, so it must fit the
+           integer type's bit width; one that exceeds it is a limitcheck (not
+           narrowed, and not promoted to a real the way an over-range decimal
+           integer is). Where long is wider than int the value parsed above but
+           may still be too wide; ERANGE has already caught it where it did not. */
+        if (sizeof(integer) < sizeof(long)
+                && num > (((unsigned long)1 << (8 * sizeof(integer))) - 1))
+        {
+            XPOST_LOG_ERR("radixnumber exceeds integer width");
+            return limitcheck;
+        }
+        *retval = xpost_int_cons((integer)num);
         return 0;
     }
 
