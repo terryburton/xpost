@@ -372,6 +372,12 @@ Typical output devices
 Known behavioural deviations
 ----------------------------
 
+ [X] filter  a procedure data source is read eagerly -- run to end-of-data when
+     the filter is created, not as it is read -- and only in the two-operand
+     form; a procedure that never ends is bounded by limitcheck.
+ [X] SubFileDecode  a zero count with an empty EOD string passes zero bytes
+     (PLRM), where some interpreters read to end-of-file.
+
  Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
  carry about seven significant figures and large values print in exponent form
  (4e+09).
