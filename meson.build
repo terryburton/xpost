@@ -524,6 +524,11 @@ test('filter-eod',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+test('stream-exec',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 
 # Access-attribute enforcement: readonly, executeonly and noaccess reduce the
 # value and execution access of composite objects, and the standard operators

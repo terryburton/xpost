@@ -548,6 +548,19 @@ st.e <F0F00F0FF0F00F0F> writestring st.e closefile st.f closefile
 16 string readstring exch pop not
 (a marker-less mixed stream does not decode) assert
 
+% --- statusdict: the printer-state dictionary drivers probe and write. The
+% dvips prologue reads /product from it and its @manualfeed/@copies specials
+% put flags into it, so it must exist, carry product, and accept puts; and
+% #copies must scan as an ordinary name. ---
+statusdict type /dicttype eq (statusdict exists) assert
+statusdict /product known (statusdict carries product) assert
+statusdict /product get type /stringtype eq (product is a string) assert
+{ statusdict /manualfeed true put } stopped not (statusdict accepts a put) assert
+statusdict /manualfeed get (the put value reads back) assert
+statusdict /manualfeed false put
+/#copies 2 def
+#copies 2 eq (#copies scans as an ordinary name) assert
+currentdict /#copies undef
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
