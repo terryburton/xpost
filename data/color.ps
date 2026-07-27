@@ -38,6 +38,12 @@
         %        y (otherwise)
     2 copy gt{exch}if pop
 } bind def
+% component  .c01  real in [0,1]
+% a colour component is clamped to the unit range (PLRM: values outside
+% 0 to 1 are adjusted to the nearest valid value)
+/.c01 {
+    cvr dup 0.0 lt { pop 0.0 } if dup 1.0 gt { pop 1.0 } if
+} bind def
 
 /ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
     /DeviceGray <<
@@ -119,7 +125,7 @@
 
 /setgray {
     graphicsdict /currgstate get /colorspace /DeviceGray put
-    graphicsdict /currgstate get exch /colorcomp1 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
 } bind def
 
 /currentgray {
@@ -130,9 +136,9 @@
 
 /setrgbcolor {
     graphicsdict /currgstate get /colorspace /DeviceRGB put
-    graphicsdict /currgstate get exch /colorcomp3 exch put
-    graphicsdict /currgstate get exch /colorcomp2 exch put
-    graphicsdict /currgstate get exch /colorcomp1 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
 } bind def
 
 /currentrgbcolor {
@@ -144,11 +150,14 @@
 % hue saturation brightness  sethsbcolor  -
 % the components are recorded in RGB, converted with the usual
 % hexcone model (hue scaled to a sector 0-5; the sector's fractional
-% part blends between the derived p, q and t values)
+% part blends between the derived p, q and t values). Each component is
+% clamped to [0,1] first, as the reference interpreters clamp hue rather
+% than wrap it.
 /sethsbcolor {
+    3 { .c01 3 1 roll } repeat
     7 dict begin
     {/b /s /h}{exch def}forall
-    /h h h truncate sub 6 mul def       % wrap hue, scale to sector 0-5
+    /h h h truncate sub 6 mul def       % scale hue to sector 0-5 (1 maps to 0)
     /i h truncate cvi def
     /f h i sub def
     /p b 1 s sub mul def
@@ -171,7 +180,7 @@
     /v r g 2 copy lt {exch} if pop b 2 copy lt {exch} if pop def
     /d v r g 2 copy gt {exch} if pop b 2 copy gt {exch} if pop sub def
     d 0 eq {
-        0 0 v
+        0.0 0.0 v
     }{
         v r eq { g b sub d div 6 add
         }{ v g eq { b r sub d div 2 add
@@ -185,10 +194,10 @@
 
 /setcmykcolor {
     graphicsdict /currgstate get /colorspace /DeviceCMYK put
-    graphicsdict /currgstate get exch /colorcomp4 exch put
-    graphicsdict /currgstate get exch /colorcomp3 exch put
-    graphicsdict /currgstate get exch /colorcomp2 exch put
-    graphicsdict /currgstate get exch /colorcomp1 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp4 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
+    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
 } bind def
 
 /currentcmykcolor {
