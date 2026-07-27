@@ -334,6 +334,13 @@ test('op-status',
   args: [ xpost_exe, files('tests/op_status_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# User/system parameter operators (PLRM 8.2): current* return a parameter
+# dictionary and set* apply the parameters they recognise.
+test('op-userparams',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_userparams_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
 # write the current-matrix array in place; that write must be backed up for
 # save/restore. Guards the regression where it was not -- a transform set inside

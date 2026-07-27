@@ -335,18 +335,41 @@ end
     flush
 } def
 
-/setdevparams {
-} def
-/currentdevparams {
+% User, system, and device parameters. The current* operators return a fresh
+% dictionary of the present values; the set* operators apply the parameters they
+% recognise from the supplied dictionary and ignore the rest. The stack limits
+% mirror the interpreter's fixed capacities (XPOST_{OPER,DICT,EXEC}_STACK_LIMIT
+% in xpost_interpreter.c) and cannot be changed.
+currentglobal true setglobal
+/.uparams << /VMReclaim 0 /VMThreshold 0 >> def
+setglobal
+
+/setdevparams { pop pop } def
+/currentdevparams { pop 0 dict } def
+
+/currentuserparams {
+    << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
+       /VMReclaim .uparams /VMReclaim get
+       /VMThreshold .uparams /VMThreshold get >>
 } def
 /setuserparams {
+    dup /VMReclaim known {
+        dup /VMReclaim get
+        dup .uparams /VMReclaim 3 -1 roll put
+        vmreclaim
+    } if
+    dup /VMThreshold known {
+        dup /VMThreshold get
+        dup .uparams /VMThreshold 3 -1 roll put
+        setvmthreshold
+    } if
+    pop
 } def
-/currentuserparams {
-} def
-/setsystemparams {
-} def
+
 /currentsystemparams {
+    << /RealFormat (IEEE) /ByteOrder true /MaxFontCache 1048576 >>
 } def
+/setsystemparams { pop } def
 
 /setpagedevice {
     dup type /dicttype ne {
