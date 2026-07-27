@@ -239,6 +239,16 @@ int _string_to_number(const char *t,
         return typecheck;
     if (errno == ERANGE)
         return limitcheck;
+    /* strtod also accepts forms outside PostScript number syntax -- a C-style
+       0x hexadecimal prefix and inf/nan; PostScript treats those as typecheck */
+    {
+        const char *p;
+        for (p = t; p < end; p++)
+            if (*p == 'x' || *p == 'X')
+                return typecheck;
+    }
+    if (!(num == num) || num > 1e308 || num < -1e308)
+        return typecheck;
     *out = num;
     return 0;
 }
