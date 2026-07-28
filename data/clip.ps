@@ -225,7 +225,7 @@ put
         { 2 array astore }  % ... mark [x0 y0] ... [xN yN]
         {}
         { counttomark 1 sub index } % ... mark [x0 y0] ... [x0 y0]
-        .devpathforall
+        //.xpostsys /.devpathforall get exec
         ]  % /PA mark [...] [...] [...] 
     ] def
 
@@ -248,7 +248,7 @@ put
         { 2 array astore }
         {}
         { counttomark 1 sub index ] [ }
-        .devpathforall
+        //.xpostsys /.devpathforall get exec
         ]
     ]
     %pstack()=

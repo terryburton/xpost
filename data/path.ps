@@ -1013,7 +1013,7 @@ end
 
 % move line curve close  .devpathforall  -
 % enumerate current path in device coordinates
-/.devpathforall {
+.xpostsys /.devpathforall {
 .gscratch /.pfdict get
 begin
     {close curve line move}{exch def}forall
@@ -1031,7 +1031,7 @@ begin
         } for
     } for
 end
-} bind def
+} bind put
 
 % override was the load-time switch between the C and PostScript implementations
 % of the operators above; it is not needed once this file has loaded, so it does
