@@ -706,9 +706,8 @@ abc
 (1:)= pstack
  check (abc) eq check
 
-/DATA_DIR where {
-    pop
-    DATA_DIR (/readstring.ps) .testcat run
+.privatedict /DATA_DIR known {
+    .privatedict /DATA_DIR get (/readstring.ps) .testcat run
     (2:)= pstack
      not check 0 3 getinterval (abc) eq check
 }{
