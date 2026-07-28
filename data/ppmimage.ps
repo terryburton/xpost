@@ -207,8 +207,8 @@
 		/w w x add def
 
         {
-            /USEDRAWLINE where { pop
-                USEDRAWLINE {
+            //.internaldict /USEDRAWLINE known {
+                //.internaldict /USEDRAWLINE get {
                     %(Using DrawLine\n) print
                     y 1 h {
                         %dup =only ( )print
@@ -395,8 +395,8 @@
             3 2 roll aload pop
 
             {
-                /USEDRAWLINE where { pop
-                    USEDRAWLINE {
+                //.internaldict /USEDRAWLINE known {
+                    //.internaldict /USEDRAWLINE get {
                         r g b 7 3 roll
                         currentdict DrawLine
                         exit
