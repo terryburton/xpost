@@ -2,7 +2,7 @@
 
 /nulldevice {
     graphicsdict /currgstate get /device
-    612 792 newnulldevice
+    612 792 .privatedict /newnulldevice get exec
     put
 } def
 /newnulldevice { % width height

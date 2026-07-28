@@ -107,6 +107,23 @@ SYSINTERNALS { { (PROGRAM-OWNED) } def } forall
     42 =string cvs pop                       % =string operator pushes the scratch
 } stopped not (arc and =string survive redefined internal names) assert
 
+% The device makers (newPGMIMAGEdevice ...) moved out of systemdict into
+% privatedict at lockdown: a program builds a device through the default device
+% or the nulldevice operator, never by naming a maker, so the names are invisible
+% and the nulldevice operator reaches its maker through privatedict, surviving a
+% program taking the names.
+/MAKERNAMES [ /newPGMIMAGEdevice /newPPMIMAGEdevice /newPBMIMAGEdevice
+    /newTIFFIMAGEdevice /newnulldevice /newbboxdevice /newPDFWRITEdevice
+    /newSVGWRITEdevice /newDSCWRITEdevice ] def
+MAKERNAMES {
+    dup where { pop (MAKER-VISIBLE: ) print == false }{ pop true } ifelse
+    (device maker name is hidden) assert
+} forall
+MAKERNAMES { { (PROGRAM-OWNED) } def } forall
+{
+    gsave nulldevice newpath 0 0 moveto 10 10 lineto stroke grestore
+} stopped not (nulldevice survives redefined maker names) assert
+
 startupudlen 0 eq (userdict was empty at startup) assert
 
 count 0 eq (operand stack is balanced) assert
