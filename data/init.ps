@@ -640,8 +640,7 @@ setglobal
 
 % Named Resources
 true setglobal
-globaldict begin
-/globalresourcedict <<
+.privatedict /globalresourcedict <<
     /Category <<
         /Generic <<
             /DefineResource { % key instance 
@@ -657,8 +656,7 @@ globaldict begin
     >>
     /ProcSet <<
     >>
->> def
-end
+>> put
 
 false setglobal
 .privatedict /localresourcedict <<
@@ -697,7 +695,7 @@ true setglobal
 % key category  findresource  instance
 /findresource {
     dup /Category eq {
-        globaldict /globalresourcedict get
+        .privatedict /globalresourcedict get
     }{
     } ifelse
 } def
@@ -706,7 +704,7 @@ true setglobal
     /findresource {
         {   %attempt to load from dictionary
             currentglobal { % global vm mode: only check globaldict
-                globaldict /globalresourcedict get % k c d
+                .privatedict /globalresourcedict get % k c d
                 1 index 2 copy known % k c d c b
             }{ % local vm mode: check userdict and globaldict
                 .privatedict /localresourcedict get % k c d
