@@ -182,8 +182,8 @@
 		/w w x add def
 
         {
-            /USEDRAWLINE where { pop
-                USEDRAWLINE {
+            //.internaldict /USEDRAWLINE known {
+                //.internaldict /USEDRAWLINE get {
                     (using DrawLine)=
                     y 1 h {
                         val exch 
@@ -352,8 +352,8 @@
             3 2 roll aload pop
 
             {
-                /USEDRAWLINE where { 
-                    USEDRAWLINE {
+                //.internaldict /USEDRAWLINE known {
+                    //.internaldict /USEDRAWLINE get {
                         val 5 1 roll
                         currentdict DrawLine
                         exit

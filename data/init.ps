@@ -964,10 +964,12 @@ currentglobal true setglobal
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
-    % GRAPHICS_LOADED (the load latch) and USEDRAWLINE go into systemdict while
-    % it is still unlocked, where a program cannot remove or overwrite them
+    % GRAPHICS_LOADED (the load latch) is program-facing, so it goes into
+    % systemdict while it is still unlocked, where a program cannot remove or
+    % overwrite it. USEDRAWLINE is an internal device-rendering flag read only by
+    % the image devices, so it joins the relocated operators in .internaldict.
     systemdict /GRAPHICS_LOADED true put
-    systemdict /USEDRAWLINE true put
+    .internaldict /USEDRAWLINE true put
     .sysdictrelock
     userdict /.bindone undef
     userdict /.bindscope undef
