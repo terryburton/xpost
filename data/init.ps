@@ -37,6 +37,13 @@ setglobal
 currentglobal false setglobal
 256 dict .setprivatedict
 setglobal
+% DATA_DIR, the directory the interpreter loads its .ps modules from, is set by
+% the bootstrap into userdict before this file runs. Move it into privatedict so
+% it does not sit among the program's names; the loader reaches it there.
+userdict /DATA_DIR known {
+    .privatedict /DATA_DIR userdict /DATA_DIR get put
+    userdict /DATA_DIR undef
+} if
 % .gscratch returns the local scratch dictionary the machinery mutates each
 % render (strokedict, caches, local resources); it is a LOCAL object the
 % collector reclaims. A bound reference to the operator resists shadowing.
@@ -137,7 +144,7 @@ setglobal
 % the machinery. In .xpostint like every other helper, and global with it.
 currentglobal true setglobal
 .xpostint /.loadmodule { % (/name.ps)  .  -
-    DATA_DIR exch //.xpostsys /.strcat get exec run
+    .privatedict /DATA_DIR get exch //.xpostsys /.strcat get exec run
 } bind put
 setglobal
 
@@ -170,7 +177,7 @@ setglobal
 %def
 
 %(EXE_DIR =) print EXE_DIR print (\n) print
-/QUIET where { pop }{ (DATA_DIR =) print DATA_DIR print (\n) print } ifelse
+/QUIET where { pop }{ (DATA_DIR =) print .privatedict /DATA_DIR get print (\n) print } ifelse
 
 %(1\n)print
 %/product (Xpost) def % now an operator in xpost_op_misc.c
@@ -648,14 +655,12 @@ globaldict begin
 end
 
 false setglobal
-userdict begin
-/localresourcedict <<
+.privatedict /localresourcedict <<
     /Encoding <<
         /StandardEncoding [ ]
         /ISOLatin1Encoding [ ]
     >>
->> def
-end
+>> put
 true setglobal
 
 % key instance category  defineresource  instance
@@ -681,7 +686,7 @@ true setglobal
     %get
 } def
 
-/DIRSEP (/) def
+.privatedict /DIRSEP (/) put
 
 % key category  findresource  instance
 /findresource {
@@ -698,7 +703,7 @@ true setglobal
                 globaldict /globalresourcedict get % k c d
                 1 index 2 copy known % k c d c b
             }{ % local vm mode: check userdict and globaldict
-                userdict /localresourcedict get % k c d
+                .privatedict /localresourcedict get % k c d
                 1 index 2 copy known % k c d c b
             } ifelse
 
@@ -717,9 +722,9 @@ true setglobal
 
             2 index dup length string cvs % c cat k (category)
             1 index dup length string cvx % c cat k (category) (key)
-            DATA_DIR (/Resources) //.xpostsys /.strcat get exec
-            DIRSEP 4 3 roll % c cat k (key) (Res)(/)(cat)
-            DIRSEP 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
+            .privatedict /DATA_DIR get (/Resources) //.xpostsys /.strcat get exec
+            .privatedict /DIRSEP get 4 3 roll % c cat k (key) (Res)(/)(cat)
+            .privatedict /DIRSEP get 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
             (*) 6 ncat % c cat k (Res/cat/key*)
             [ exch
             {dup length string copy} 128 string filenameforall

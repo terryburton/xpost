@@ -1,8 +1,9 @@
 /QUIET where { pop }{ (loading graphics.ps...\n)print } ifelse
 
-% fallback definitions so this file can run standalone
-/DATA_DIR where {pop}{
-    /DATA_DIR{}def
+% fallback definitions so this file can run standalone; in the normal flow
+% DATA_DIR lives in privatedict, so test for it there
+.privatedict /DATA_DIR known {}{
+    .privatedict /DATA_DIR {} put
     /strcat{1 1 index length 1 sub getinterval}def
     /breakhere{}def
 }ifelse
