@@ -9,6 +9,12 @@
 % names its helper calls rely on (get, exec), which the helper-call form
 % //.xpostsys /h get exec only withstands because those references are frozen.
 
+% capture userdict's size before this program defines anything: at startup it
+% must be empty, every helper and every piece of machinery having been relocated
+% into a private namespace or systemdict. (This program's own defs land here as
+% it runs, so the check has to read the length first.)
+userdict length /startupudlen exch def
+
 /faildict 2 dict def
 faildict /n 0 put
 /assert { % bool (name) . -
@@ -81,6 +87,27 @@ ravec 42 eq (a program's own /ravec is its own) assert
     grestore
 } stopped not (graphics survive shadowed get/exec) assert
 end
+
+% Internals that were relocated out of systemdict into the private internaldict
+% at lockdown: the =string pusher (.=stringproc) and the draw-line device flag
+% (USEDRAWLINE), together with the arc guard (.pathempty) and run-error hook
+% (.rundied). A program sees none of them, and the machinery reaches what it
+% needs through frozen references -- the arc start procedure tests the current
+% path through privatedict, and =string freezes in its scratch-string pusher --
+% so both survive a program taking the names.
+/SYSINTERNALS [ /.pathempty /.rundied /.=stringproc /USEDRAWLINE ] def
+SYSINTERNALS {
+    dup where { pop (SYSINTERNAL-VISIBLE: ) print == false }{ pop true } ifelse
+    (relocated systemdict internal is hidden) assert
+} forall
+SYSINTERNALS { { (PROGRAM-OWNED) } def } forall
+{
+    newpath 100 100 40 0 360 arc            % builds its path through privatedict
+    { pop pop }{ pop pop }{ pop pop pop pop pop pop }{ } pathforall
+    42 =string cvs pop                       % =string operator pushes the scratch
+} stopped not (arc and =string survive redefined internal names) assert
+
+startupudlen 0 eq (userdict was empty at startup) assert
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
