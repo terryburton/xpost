@@ -140,7 +140,7 @@
     newpath
 } bind def
 
-/bitsdict <<
+.xpostint /bitsdict <<
     1 {
         {
             bp bz ge {exit} if
@@ -237,7 +237,7 @@
     }
     12 {
     }
->> def
+>> put
 
 % width height bits/sample matrix datasrc  image  -
 /image {
@@ -254,7 +254,7 @@
         /buf bz string def
         /bp 0 def
 
-        bitsdict bits get exec
+        //.xpostint /bitsdict get bits get exec
 
         mat mat invertmatrix concat
         %vdx vdy scale
