@@ -42,10 +42,13 @@ currentglobal true setglobal
 setglobal
 % component  .c01  real in [0,1]
 % a colour component is clamped to the unit range (PLRM: values outside
-% 0 to 1 are adjusted to the nearest valid value)
-/.c01 {
+% 0 to 1 are adjusted to the nearest valid value). A pure global helper, so it
+% lives in .xpostsys beside .min and the colour conversions that freeze it in.
+currentglobal true setglobal
+.xpostsys /.c01 {
     cvr dup 0.0 lt { pop 0.0 } if dup 1.0 gt { pop 1.0 } if
-} bind def
+} bind put
+setglobal
 
 .xpostsys /ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
     /DeviceGray <<
@@ -127,7 +130,7 @@ setglobal
 
 /setgray {
     graphicsdict /currgstate get /colorspace /DeviceGray put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentgray {
@@ -138,9 +141,9 @@ setglobal
 
 /setrgbcolor {
     graphicsdict /currgstate get /colorspace /DeviceRGB put
-    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentrgbcolor {
@@ -156,7 +159,7 @@ setglobal
 % clamped to [0,1] first, as the reference interpreters clamp hue rather
 % than wrap it.
 /sethsbcolor {
-    3 { .c01 3 1 roll } repeat
+    3 { //.xpostsys /.c01 get exec 3 1 roll } repeat
     7 dict begin
     {/b /s /h}{exch def}forall
     /h h h truncate sub 6 mul def       % scale hue to sector 0-5 (1 maps to 0)
@@ -196,10 +199,10 @@ setglobal
 
 /setcmykcolor {
     graphicsdict /currgstate get /colorspace /DeviceCMYK put
-    graphicsdict /currgstate get exch .c01 /colorcomp4 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp4 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentcmykcolor {
