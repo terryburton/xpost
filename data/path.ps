@@ -306,13 +306,13 @@ override%pop pop%bind def
 %         P23 = P''2 = P2 P3 median
 %          P3 = P''3 = P3
 /chopcurve { % <</cmd /curve /data [...]>>
-    flattendict /cp get aload pop
+    //.xpostsys /flattendict get /cp get aload pop
     2 index /data get aload pop
     checkflat % curve-error
     %(checkflat)= dup =
     currentflat gt {
         /data get aload pop
-        flattendict /cp get aload pop 8 2 roll % P0 P1 P2 P3
+        //.xpostsys /flattendict get /cp get aload pop 8 2 roll % P0 P1 P2 P3
         %(median)=
         %pstack()=
         3 getpair 3 getpair median % P0 P1 P2 P3 P01
@@ -343,32 +343,32 @@ override%pop pop%bind def
         << /data 3 2 roll /cmd /curve >> %  <P"1 P"2 P"3>  <P'1 P'2 P'3>
         dup /data get 4 2 getinterval exch %  <P"1 P"2 P"3> [P'3] <P'1 P'2 P'3>
         chopcurve
-        flattendict exch /cp exch put
+        //.xpostsys /flattendict get exch /cp exch put
         chopcurve
     }{
-        dup /data get 4 2 getinterval flattendict exch /cp exch put
+        dup /data get 4 2 getinterval //.xpostsys /flattendict get exch /cp exch put
         << /data 3 2 roll /data get 4 2 getinterval /cmd /line >>
         //.xpostsys /cpath get exec addtopath
     } ifelse
 } bind def
 
-/flattendict <<
+.xpostsys /flattendict <<
     /move {
-        dup /data get flattendict exch /cp exch put
+        dup /data get //.xpostsys /flattendict get exch /cp exch put
         //.xpostsys /cpath get exec addtopath }
     /line {
-        dup /data get flattendict exch /cp exch put
+        dup /data get //.xpostsys /flattendict get exch /cp exch put
         //.xpostsys /cpath get exec addtopath }
     /curve {
         chopcurve
-        %dup /data get 4 2 getinterval flattendict exch /cp exch put
+        %dup /data get 4 2 getinterval //.xpostsys /flattendict get exch /cp exch put
         %<< /data 3 2 roll /data get 4 2 getinterval /cmd /line >>
         %cpath addtopath
     }
     /close {
-        dup /data get flattendict exch /cp exch put
+        dup /data get //.xpostsys /flattendict get exch /cp exch put
         //.xpostsys /cpath get exec addtopath }
->> def
+>> put
 
 /flattenpath {
     //.xpostsys /cpath get exec length 0 gt {
@@ -377,7 +377,7 @@ override%pop pop%bind def
             2 copy get             % path i subpath_i
             0 1 2 index length 1 sub { % p i sp_i j
                 2 copy get             % p i sp_i j sp_i_j
-                flattendict 1 index /cmd get get exec
+                //.xpostsys /flattendict get 1 index /cmd get get exec
                 pop                    % p i sp_i
             } for
             pop pop
@@ -387,32 +387,32 @@ override%pop pop%bind def
 }
 override%pop pop%bind def
 
-/reversedict <<
+.xpostsys /reversedict <<
     /close { % p i sp_i j sp_i_j
         //.xpostsys /dopending get exec
-        reversedict /pending /line put
-        reversedict /isclosed true put
+        //.xpostsys /reversedict get /pending /line put
+        //.xpostsys /reversedict get /isclosed true put
     }
     /line {
         //.xpostsys /dopending get exec
-        reversedict /pending /line put
+        //.xpostsys /reversedict get /pending /line put
     }
     /curve {
         dup /data get exch
         //.xpostsys /dopending get exec
-        reversedict /pending /curve put
-        reversedict /curvedata 3 2 roll put
+        //.xpostsys /reversedict get /pending /curve put
+        //.xpostsys /reversedict get /curvedata 3 2 roll put
     }
     /move {
-        reversedict /isclosed get {
+        //.xpostsys /reversedict get /isclosed get {
             pop closepath
         }{
             //.xpostsys /dopending get exec
         } ifelse
     }
->> def
+>> put
 
-/pendingdict <<
+.xpostsys /pendingdict <<
     /move {
         dup /cmd /move put
         dup /data 2 copy get dup length 2 sub 2 getinterval put %final point if curve
@@ -425,15 +425,15 @@ override%pop pop%bind def
         dup /cmd /curve put
         dup /data 2 copy get
         dup length 2 sub 2 getinterval aload pop % el el /data x y
-        reversedict /curvedata get               % el el /data x y arr
+        //.xpostsys /reversedict get /curvedata get               % el el /data x y arr
         aload pop pop pop 4 2 roll 6 4 roll
         6 array astore                           % el el /data arr
         put                                      % el
     }
     /close { }
->> def
+>> put
 .xpostsys /dopending {
-    pendingdict reversedict /pending get get exec
+    //.xpostsys /pendingdict get //.xpostsys /reversedict get /pending get get exec
     //.xpostsys /cpath get exec addtopath
 } bind put
 
@@ -442,11 +442,11 @@ override%pop pop%bind def
         //.xpostsys /cpath get exec newpath
         0 1 2 index length 1 sub { % path i
             2 copy get             % path i subpath_i
-            reversedict /pending /move put
-            reversedict /isclosed false put
+            //.xpostsys /reversedict get /pending /move put
+            //.xpostsys /reversedict get /isclosed false put
             dup length 1 sub -1 0 { % p i sp_i j
                 2 copy get          % p i sp_i j sp_i_j
-                reversedict 1 index /cmd get get exec
+                //.xpostsys /reversedict get 1 index /cmd get get exec
                 pop                 % p i sp_i
             } for
             pop pop
