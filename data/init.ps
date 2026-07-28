@@ -842,7 +842,7 @@ setglobal
 % body are global, matching the global .xpostint their table installs into.
 currentglobal true setglobal
 .xpostint /loadgraphics {
-    systemdict /GRAPHICS_LOADED known { }{
+    //.internaldict /GRAPHICS_LOADED known { }{
         (/graphics.ps) //.xpostint /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
@@ -895,7 +895,7 @@ currentglobal true setglobal
 % locking down -- so nothing unrelated to graphics is tied to loading it. The
 % shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
 .xpostint /.finalize {
-    systemdict /GRAPHICS_LOADED known { }{
+    //.internaldict /GRAPHICS_LOADED known { }{
         % Open a writeable window on systemdict so the standard operators can be
         % relocated into it; the matching relock below closes it.
         .sysdictunlock
@@ -982,13 +982,19 @@ currentglobal true setglobal
     % machinery reference to them is now frozen -- the standard operators bound
     % above and .bindscope over the loaded procedures -- so a program
     % enumerating systemdict sees only the standard names, while a font program
-    % reaches them through 1183615869 internaldict.
+    % reaches them through 1183615869 internaldict. Two operators stay, both
+    % dotted, so no program name collides with them. The local-state accessors
+    % (.gscratch/.privatedict) are the operators the machinery reaches its
+    % per-render scratch and its private dictionary through: driver prologs and
+    % machinery name them at run time, past the reach of the bind pass, so
+    % relocating them breaks rendering (verified). The C core reaches privatedict
+    % through the context field, not by name. .sysdictunlock and .sysdictrelock
+    % relocate with the rest: the unlock has already run, and the relock below is
+    % reached through .internaldict.
     [ systemdict {
         exch dup type /nametype eq
         2 index type /operatortype eq and
         { dup 60 string cvs 0 get 46 eq
-          1 index /.sysdictunlock ne and
-          1 index /.sysdictrelock ne and
           1 index /.gscratch ne and
           1 index /.privatedict ne and
         }{ false } ifelse
@@ -996,13 +1002,17 @@ currentglobal true setglobal
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
-    % GRAPHICS_LOADED (the load latch) is program-facing, so it goes into
-    % systemdict while it is still unlocked, where a program cannot remove or
-    % overwrite it. USEDRAWLINE is an internal device-rendering flag read only by
-    % the image devices, so it joins the relocated operators in .internaldict.
-    systemdict /GRAPHICS_LOADED true put
+    % newdefaultdevice is the device-bootstrap string the C builds for /start. It
+    % ran during graphics loading, before this pass, and nothing calls it again,
+    % so drop it from systemdict while systemdict is still unlocked.
+    systemdict /newdefaultdevice known { systemdict /newdefaultdevice undef } if
+    % The load latch and the internal draw-line flag are interpreter state a
+    % program has no use for; both go into .internaldict, out of a program's
+    % sight, while it is still writable here. .internaldict is sealed below, so
+    % the latch cannot be removed or overwritten afterwards.
+    .internaldict /GRAPHICS_LOADED true put
     .internaldict /USEDRAWLINE true put
-    .sysdictrelock
+    .internaldict /.sysdictrelock get exec
     userdict /.bindone undef
     userdict /.bindscope undef
 
