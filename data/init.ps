@@ -11,21 +11,26 @@
 systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
-% .xpostint -- the interpreter's private namespace. Internal helper procedures
+% .xpostsys -- the interpreter's private namespace. Internal helper procedures
 % and their static tables live here, out of the names a program may use; only
 % the dotted anchor name is visible and the helpers hide behind it. A GLOBAL
-% dictionary anchored in userdict, populated once at build time; its mutable
-% per-render state lives in .gscratch (below) instead.
+% dictionary anchored in userdict, sealed read-only and dropped from userdict at
+% lockdown; its mutable per-render state lives in .gscratch instead. It is global
+% so a global systemdict procedure may freeze a // reference to it (a global
+% object may not reference a local one); local machinery lives in privatedict.
 %
-% Convention -- a helper h is defined and called as:
-%     .xpostint /h { ... } put              % define
-%     //.xpostint /h get exec               % call
-% The // freezes the private dictionary into the calling procedure at scan
-% time, so a program cannot shadow it; the /h get resolves the helper at run
-% time, which keeps recursion and forward references working. Helpers reach
-% each other by the same call form.
+% Convention -- a helper h is reached through a frozen // reference, in either of
+% two forms:
+%     .xpostsys /h { ... } put       ...  //.xpostsys /h get exec   % define, call
+%     .xpostsys begin /h { ... } def ...  //h exec ... end          % define, bake
+% The // freezes the dictionary (get form) or the helper object itself (baked
+% form) into the caller at scan time, so a program cannot shadow it. The get form
+% resolves h at run time, which mutual recursion and forward references need;
+% baking costs no run-time lookup but cannot express them. Helpers that were the
+% path/clip/image/graphics family use the get form; the colour/shading/pattern/
+% halftone families bake.
 currentglobal true setglobal
-userdict /.xpostint 400 dict put
+userdict /.xpostsys 400 dict put
 setglobal
 % privatedict -- the interpreter's private LOCAL machinery dictionary. Recorded
 % in the context (where the collector roots it and C reaches it) but never placed
@@ -58,15 +63,7 @@ userdict /.gscratchproc [ //.gscratchdict ] cvx put
 /.gscratch dup userdict /.gscratchproc get .wrapop def
 setglobal
 
-% .xpostsys -- the GLOBAL companion to .xpostint. Machinery that loads in
-% global VM (built under currentglobal true) cannot reference the local
-% .xpostint: a global object may not hold a local one. Helpers those
-% families need live here instead, in a global dictionary a global
-% procedure may freeze into itself. And because a local procedure may
-% freely reference a global object, .xpostsys serves local machinery too.
-% The calling convention matches .xpostint's.
 currentglobal true setglobal
-userdict /.xpostsys 400 dict put
 % The private C operators live under dot-prefixed names. Near the end of
 % graphics loading they are relocated out of systemdict into .internaldict, so
 % a program sees only the standard operators in systemdict while a font program
@@ -149,10 +146,10 @@ currentglobal true setglobal
 setglobal
 
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
-% factoring the "(/x.ps) //.xpostint /.loadmodule get exec" idiom that appears throughout
-% the machinery. In .xpostint like every other helper, and global with it.
+% factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
+% the machinery. In .xpostsys like every other helper, and global with it.
 currentglobal true setglobal
-.xpostint /.loadmodule { % (/name.ps)  .  -
+.xpostsys /.loadmodule { % (/name.ps)  .  -
     .privatedict /DATA_DIR get exch //.xpostsys /.strcat get exec run
 } bind put
 setglobal
@@ -231,7 +228,7 @@ setglobal
 %(../../data)
 
 %(4\n)print
-(/err.ps) //.xpostint /.loadmodule get exec
+(/err.ps) //.xpostsys /.loadmodule get exec
 
 %(5\n)print
 /stack { count dup 1 add copy //= repeat pop } def
@@ -364,8 +361,8 @@ end
     currentglobal
     false setglobal
     {
-        //.xpostint /loadgraphics get exec
-        //.xpostint /.finalize get exec
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         handleerror
@@ -406,8 +403,8 @@ setglobal
 % but do not assume an interactive session
 /startstdin {
     {
-        //.xpostint /loadgraphics get exec
-        //.xpostint /.finalize get exec
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -423,8 +420,8 @@ setglobal
 % execute postscript program from a named file, and handle errors.
 /startfilename { % (filename)
     {
-        //.xpostint /loadgraphics get exec
-        //.xpostint /.finalize get exec
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -444,8 +441,8 @@ setglobal
 /startfile { % file-object
     //.internaldict /QUIET known { }{ (startfile\n)print } ifelse
     {
-        //.xpostint /loadgraphics get exec
-        //.xpostint /.finalize get exec
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -465,7 +462,7 @@ setglobal
 % graphics modules are never loaded. This exercises the path in which loadgraphics
 % is genuinely optional, and lets a program that needs no graphics avoid the cost.
 /startstdinnographics {
-    { //.xpostint /.finalize get exec } stopped {
+    { //.xpostsys /.finalize get exec } stopped {
         (unable to lock down interpreter)print
         quit
     } if
@@ -478,7 +475,7 @@ setglobal
 } def
 
 /startfilenamenographics { % (filename)
-    { //.xpostint /.finalize get exec } stopped {
+    { //.xpostsys /.finalize get exec } stopped {
         (unable to lock down interpreter)print
         quit
     } if
@@ -492,7 +489,7 @@ setglobal
 } def
 
 /startfilenographics { % file-object
-    { //.xpostint /.finalize get exec } stopped {
+    { //.xpostsys /.finalize get exec } stopped {
         (unable to lock down interpreter)print
         quit
     } if
@@ -636,7 +633,7 @@ def
 setglobal
 
 
-(/qsort.ps) //.xpostint /.loadmodule get exec
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 % (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
 
@@ -816,8 +813,8 @@ end % userdict
 } def
 
 % x y w h
-currentglobal true setglobal   % a global .xpostint helper
-.xpostint /rect { %ccw in device space
+currentglobal true setglobal   % a global .xpostsys helper
+.xpostsys /rect { %ccw in device space
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
@@ -834,16 +831,16 @@ setglobal
 % the painting pair works on its own path and leaves the caller's
 % untouched; rectclip clips by the rectangles alone and clears the
 % path, as the language specifies
-/rectfill { gsave newpath //.xpostint /rect get exec fill grestore } def
-/rectstroke { gsave newpath //.xpostint /rect get exec stroke grestore } def
-/rectclip { newpath //.xpostint /rect get exec clip newpath } def
+/rectfill { gsave newpath //.xpostsys /rect get exec fill grestore } def
+/rectstroke { gsave newpath //.xpostsys /rect get exec stroke grestore } def
+/rectclip { newpath //.xpostsys /rect get exec clip newpath } def
 
 % load graphics support. Global: the device-maker procedures baked into this
-% body are global, matching the global .xpostint their table installs into.
+% body are global, matching the global .xpostsys their table installs into.
 currentglobal true setglobal
-.xpostint /loadgraphics {
+.xpostsys /loadgraphics {
     //.internaldict /GRAPHICS_LOADED known { }{
-        (/graphics.ps) //.xpostint /.loadmodule get exec
+        (/graphics.ps) //.xpostsys /.loadmodule get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -894,7 +891,7 @@ currentglobal true setglobal
 % device classes to local VM. loadgraphics does the loading; this does the
 % locking down -- so nothing unrelated to graphics is tied to loading it. The
 % shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
-.xpostint /.finalize {
+.xpostsys /.finalize {
     //.internaldict /GRAPHICS_LOADED known { }{
         % Open a writeable window on systemdict so the standard operators can be
         % relocated into it; the matching relock below closes it.
@@ -926,9 +923,9 @@ currentglobal true setglobal
     /graphicsdict where { pop graphicsdict .bindscope } if
     errordict .bindscope
     % the private helper namespace too, so a helper's own operator references
-    % (the get and exec of //.xpostint /h get exec, and everything else) freeze
+    % (the get and exec of //.xpostsys /h get exec, and everything else) freeze
     % and survive a program shadowing an operator name
-    .xpostint .bindscope
+    .xpostsys .bindscope
     % the mutable scratch holds procedure tables too (the stroke switch
     % handlers live inside strokedict); bind them so they survive a program
     % shadowing the operator names they call
@@ -1025,10 +1022,8 @@ currentglobal true setglobal
     % references keep the objects alive and working; .gscratchdict stays writable
     % and anchored, as the machinery mutates it every render.
     userdict /.internaldict get readonly pop
-    userdict /.xpostint get readonly pop
     userdict /.xpostsys get readonly pop
     userdict /.internaldict undef
-    userdict /.xpostint undef
     userdict /.xpostsys undef
 
     % Return the device class dictionaries to local VM. setpagedevice records the
@@ -1083,11 +1078,11 @@ false setglobal
 
 % debug ps functions -- interpreter aids, not language operators, so private
 currentglobal true setglobal
-.xpostint /doprompt {
+.xpostsys /doprompt {
     (\nbreak>)print flush
     (%lineedit)(r)file
     cvx {exec}stopped pop } put
-.xpostint /pause { //.xpostint /doprompt get exec } put
+.xpostsys /pause { //.xpostsys /doprompt get exec } put
 setglobal
 
 currentglobal true setglobal
@@ -1097,12 +1092,12 @@ currentglobal true setglobal
 setglobal
 
 currentglobal true setglobal
-.xpostint /xpost {
+.xpostsys /xpost {
     (Xpost is running. Type '(filename)run' to run a program.\n)print
 } put
 setglobal
 
-(/prepr.ps) //.xpostint /.loadmodule get exec  % use nifty preview prompt!
+(/prepr.ps) //.xpostsys /.loadmodule get exec  % use nifty preview prompt!
 
 //.internaldict /QUIET known { }{ (eof init.ps\n)print } ifelse
 %loadgraphics %called by start* procs

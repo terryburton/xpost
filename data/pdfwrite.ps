@@ -1,6 +1,6 @@
 //.internaldict /QUIET known { }{ (loading pdfwrite.ps...)print } ifelse
 
-(/qsort.ps) //.xpostint /.loadmodule get exec
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPDFWRITEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PDFWRITE get dup /Create get exec

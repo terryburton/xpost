@@ -5,9 +5,9 @@
 
 //.internaldict /QUIET known { }{ (loading device.ps...\n)print } ifelse
 
-(/image.ps) //.xpostint /.loadmodule get exec  % image.ps implements device base classes
-(/nulldev.ps) //.xpostint /.loadmodule get exec  % nulldevice
-(/pdfwrite.ps) //.xpostint /.loadmodule get exec  % pdf device
+(/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
+(/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
+(/pdfwrite.ps) //.xpostsys /.loadmodule get exec  % pdf device
 
 % Mirror the device class dictionaries into privatedict, where the makers and
 % the C drivers reach them, before the default device is made below. They stay

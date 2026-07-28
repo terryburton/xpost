@@ -37,7 +37,7 @@
 %flush
 %(*){=}128 string filenameforall
 %(../../data)
-%(/graphics.ps) //.xpostint /.loadmodule get exec initgraphics
+%(/graphics.ps) //.xpostsys /.loadmodule get exec initgraphics
 %loadgraphics  %graphics support is now always loaded
 
 (Stack should be clear -V-\n)=
@@ -868,7 +868,7 @@ false false xor false eq check
 7 3 xor 4 eq check
 12 3 xor 15 eq check
 
-%(/testdraw.ps) //.xpostint /.loadmodule get exec
+%(/testdraw.ps) //.xpostsys /.loadmodule get exec
 
 failcount 0 eq {
     (SUCCESS)=

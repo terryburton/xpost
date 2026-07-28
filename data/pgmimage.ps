@@ -1,6 +1,6 @@
 //.internaldict /QUIET known { }{ (loading pgmimage.ps...)print } ifelse
 
-(/qsort.ps) //.xpostint /.loadmodule get exec
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PGMIMAGE get dup /Create get exec

@@ -15,23 +15,23 @@
     graphicsdict /currgstate get /colorspace get
 } bind def
 
-.xpostint /setcolordict <<
+.xpostsys /setcolordict <<
     /DeviceGray /setgray cvx
     /DeviceRGB /setrgbcolor cvx
     /DeviceCMYK /setcmykcolor cvx
     /Pattern { pop }
 >> put
 /setcolor {
-    //.xpostint /setcolordict get currentcolorspace get exec
+    //.xpostsys /setcolordict get currentcolorspace get exec
 } bind def
 
-.xpostint /currentcolordict <<
+.xpostsys /currentcolordict <<
     /DeviceGray /currentgray cvx
     /DeviceRGB /currentrgbcolor cvx
     /DeviceCMYK /currentcmykcolor cvx
 >> put
 /currentcolor {
-    //.xpostint /currentcolordict get currentcolorspace get exec
+    //.xpostsys /currentcolordict get currentcolorspace get exec
 } bind def
 
 currentglobal true setglobal

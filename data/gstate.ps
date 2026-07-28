@@ -41,7 +41,7 @@ setglobal
 
 % Graphics State Operators -- Device Independent
 
-.xpostint /deepcopy { % dict1 dict2 . dict2'
+.xpostsys /deepcopy { % dict1 dict2 . dict2'
     begin
     {
         dup type /arraytype eq
@@ -51,7 +51,7 @@ setglobal
             def
         }{
             dup type /dicttype eq {
-                dup maxlength dict //.xpostint /deepcopy get exec
+                dup maxlength dict //.xpostsys /deepcopy get exec
                 def
             }{
                 def
@@ -61,7 +61,7 @@ setglobal
     currentdict end
 } put
 
-.xpostint /gstatecopy { % dict1 dict2 . dict2'
+.xpostsys /gstatecopy { % dict1 dict2 . dict2'
     begin
     { % key val
         %pstack()= %1 index =
@@ -118,7 +118,7 @@ graphicsdict begin
     /gptr gptr 1 add def
     gptr gstackarray length ge { /gsave cvx /limitcheck signalerror } if
     gstackarray gptr gstate currentgstate put % push copy on stack
-    currgstate /currpath 2 copy get 1 dict //.xpostint /deepcopy get exec put % make a new working copy of path
+    currgstate /currpath 2 copy get 1 dict //.xpostsys /deepcopy get exec put % make a new working copy of path
 end
 } def
 
@@ -129,7 +129,7 @@ graphicsdict begin
     gptr -1 gt {
         gstackarray gptr get
             %dup {exch = ==} forall
-        currgstate //.xpostint /gstatecopy get exec pop
+        currgstate //.xpostsys /gstatecopy get exec pop
         gptr 0 gt { %discard all but one element, for grestoreall
             gstackarray gptr null put % discard stack copy
         } if
@@ -144,7 +144,7 @@ end
 graphicsdict begin
     /gptr -1 def
     gstackarray 0 get
-    currgstate //.xpostint /gstatecopy get exec pop
+    currgstate //.xpostsys /gstatecopy get exec pop
 end
 } def
 
@@ -177,7 +177,7 @@ end
 % gstate  currentgstate  gstate
 % copy current graphics state into given gstate object
 /currentgstate {
-    graphicsdict /currgstate get exch //.xpostint /gstatecopy get exec
+    graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec
 } def
 
 % -  currentfont  dict

@@ -436,7 +436,7 @@ test('save-restore-ctm',
   args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Interpreter isolation: internal helper procedures hide in .xpostint, so their
+# Interpreter isolation: internal helper procedures hide in .xpostsys, so their
 # names neither pollute nor obscure a program's own, and a program may redefine
 # them without disturbing the graphics machinery (the clash that broke real gs
 # programs on xpost). Also covers surviving a program shadowing get/exec.

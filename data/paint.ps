@@ -14,7 +14,7 @@
     gsave
         %(1 setgray\n) print
         1 setgray
-        [ //.xpostint /currentcolordict get DEVICE /nativecolorspace get
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         %dup =
         get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
@@ -32,7 +32,7 @@
 /fill {
     closepath
     flattenpath
-    //.xpostint /doclip get exec
+    //.xpostsys /doclip get exec
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
         [ % mark
@@ -47,7 +47,7 @@
         { 2 array astore } % ... mark [x0 y0] ... [xN yN]
         {}
         { counttomark dup 0 ne { 1 sub index } if } % ... mark [x0 y0] ... [x0 y0]
-        //.xpostint /.devpathforall get exec
+        //.xpostsys /.devpathforall get exec
         ]
         dup length 0 eq {pop} if
     ]
@@ -69,7 +69,7 @@
     ]
 
     dup length 2 gt {
-        [ //.xpostint /currentcolordict get DEVICE /nativecolorspace get get exec
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
         counttomark 2 add -1 roll
         DEVICE dup /FillPoly get exec
@@ -100,8 +100,8 @@
     dup mul exch dup mul exch add sqrt
         1 le {
         flattenpath
-        //.xpostint /dashpath get exec
-        //.xpostint /doclip get exec
+        //.xpostsys /dashpath get exec
+        //.xpostsys /doclip get exec
         mark
         {          % x0 y0 
             2 copy % x0 y0 x0 y0
@@ -109,7 +109,7 @@
         }
         {          % ... xN-1 yN-1 xN yN
             4 copy % ... xN-1 yN-1 xN yN xN-1 yN-1 xN yN
-            [ //.xpostint /currentcolordict get DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
@@ -121,7 +121,7 @@
         {}
         {            % x0 y0 xN yN
             4 2 roll % xN yN x0 y0
-            [ //.xpostint /currentcolordict get DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll % gray xN yN x0 y0
@@ -129,7 +129,7 @@
             DEVICE dup /DrawLine get exec  % -
             pop
         }
-        //.xpostint /.devpathforall get exec
+        //.xpostsys /.devpathforall get exec
         cleartomark
         flushpage
     }{
@@ -140,7 +140,7 @@
     newpath
 } bind def
 
-.xpostint /bitsdict <<
+.xpostsys /bitsdict <<
     1 {
         {
             bp bz ge {exit} if
@@ -254,7 +254,7 @@
         /buf bz string def
         /bp 0 def
 
-        //.xpostint /bitsdict get bits get exec
+        //.xpostsys /bitsdict get bits get exec
 
         mat mat invertmatrix concat
         %vdx vdy scale

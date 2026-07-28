@@ -1,13 +1,13 @@
 % Interpreter isolation regression, run through `xpost -d null` by
 % run-ps-test.sh; prints SUCCESS iff every assertion holds. The interpreter's
-% internal helper procedures live in the private .xpostint namespace, so:
+% internal helper procedures live in the private .xpostsys namespace, so:
 %   (1) their names do not pollute the dictionaries a program sees -- a
 %       program's `/ravec where` is false, as it is on Ghostscript, and
 %   (2) a program may redefine any of those names for its own use without
 %       disturbing the graphics machinery.
 % The machinery is also required to survive a program shadowing the operator
 % names its helper calls rely on (get, exec), which the helper-call form
-% //.xpostint /h get exec only withstands because those references are frozen.
+% //.xpostsys /h get exec only withstands because those references are frozen.
 
 % capture userdict's size before this program defines anything: at startup it
 % must be empty, every helper and every piece of machinery having been relocated

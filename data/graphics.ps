@@ -36,15 +36,15 @@ userdict begin
     setglobal
 
     %breakhere
-    (/device.ps) //.xpostint /.loadmodule get exec %loads and uses (/image.ps)
-    (/gstate.ps) //.xpostint /.loadmodule get exec
-    %(/matrix.ps) //.xpostint /.loadmodule get exec % moved to xpost_op_matrix.c
-    (/color.ps) //.xpostint /.loadmodule get exec
-    (/path.ps) //.xpostint /.loadmodule get exec
-    (/clip.ps) //.xpostint /.loadmodule get exec
-    (/paint.ps) //.xpostint /.loadmodule get exec
-    (/font.ps) //.xpostint /.loadmodule get exec
-    (/pattern.ps) //.xpostint /.loadmodule get exec
+    (/device.ps) //.xpostsys /.loadmodule get exec %loads and uses (/image.ps)
+    (/gstate.ps) //.xpostsys /.loadmodule get exec
+    %(/matrix.ps) //.xpostsys /.loadmodule get exec % moved to xpost_op_matrix.c
+    (/color.ps) //.xpostsys /.loadmodule get exec
+    (/path.ps) //.xpostsys /.loadmodule get exec
+    (/clip.ps) //.xpostsys /.loadmodule get exec
+    (/paint.ps) //.xpostsys /.loadmodule get exec
+    (/font.ps) //.xpostsys /.loadmodule get exec
+    (/pattern.ps) //.xpostsys /.loadmodule get exec
 
 
 % The binding pass below rebinds userdict and systemdict in place; it runs in
@@ -176,7 +176,7 @@ newpath
 closepath
 
 (doclip)=
-//.xpostint /doclip get exec
+//.xpostsys /doclip get exec
 (pathforall)=
 { (moveto) 3 args }
 { (lineto) 3 args }

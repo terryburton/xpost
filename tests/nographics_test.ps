@@ -34,7 +34,7 @@ systemdict /signalerror known (signalerror relocated into systemdict) assert
 systemdict /handleerror known (handleerror in systemdict) assert
 
 % the private namespaces are hidden (anchor dropped from userdict)
-[ /.xpostint /.xpostsys /.internaldict ] {
+[ /.xpostsys /.xpostsys /.internaldict ] {
     userdict exch known not
     (namespace anchor dropped from userdict) assert
 } forall
