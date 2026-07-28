@@ -221,4 +221,23 @@ setglobal
     setcolor
 } bind def
 
+% setcolordict and currentcolordict dispatch a device colour through the
+% operator named for its space. They were built holding those names as `cvx`
+% values, which a running dispatch re-looks-up on the dict stack -- so a program
+% redefining setgray/setrgbcolor/setcmykcolor (or the current* readers) would
+% reach its own definition through the interpreter's internal dispatch. `bind`
+% freezes operator names in a procedure body but not names held as data in a
+% dispatch dictionary, so capture the real operators here by value, now that they
+% are defined and before any program can redefine them -- the idiom font.ps uses
+% for show and setfont. The machinery then always reaches the real operators,
+% while a program's own set*/current* calls still see its redefinition.
+.xpostsys /setcolordict get
+    dup /DeviceGray  /setgray      load put
+    dup /DeviceRGB   /setrgbcolor   load put
+        /DeviceCMYK  /setcmykcolor  load put
+.xpostsys /currentcolordict get
+    dup /DeviceGray  /currentgray      load put
+    dup /DeviceRGB   /currentrgbcolor   load put
+        /DeviceCMYK  /currentcmykcolor  load put
+
 //.internaldict /QUIET known { }{ (eof color\n)print } ifelse
