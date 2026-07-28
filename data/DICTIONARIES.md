@@ -71,16 +71,15 @@ idempotent.
 
 | Dictionary | VM | Lifecycle | Sealed | Reached by |
 |---|---|---|---|---|
-| `.xpostsys` | global | static | read-only + anchor dropped | frozen `//.xpostsys /h get exec`; the home for helpers that embed a local reference |
-| `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | frozen `//.xpostsys /h ...`; the general private global-helper home |
+| `.xpostsys` | global | static | read-only + anchor dropped | frozen `//.xpostsys /h get exec` (or baked `//h`); the interpreter's single private helper namespace |
 | `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; holds the C operators relocated out of `systemdict` |
-| `.xpostsys /.resources` | global | persistent | (member, writable) | the resource instance table; `defineresource` writes it; global-persistent per PLRM. A read-only seal of `.xpostsys` is *shallow* and correctly leaves this member writable |
 
-`.xpostsys` and `.xpostsys` are both global because a global `systemdict`
-procedure may freeze a `//` reference to them, and a global object may not
-reference a local one. The seal is read-only (shallow) plus dropping the
-userdict anchor, so a program can neither reach, enumerate, nor overwrite the
-namespaces; the frozen references keep them working. Reads are not fully
+`.xpostsys` is global because a global `systemdict` procedure may freeze a `//`
+reference to it, and a global object may not reference a local one; the few
+helpers that must embed a local reference live in `privatedict` instead. The seal
+is read-only (shallow) plus dropping the userdict anchor, so a program can neither
+reach, enumerate, nor overwrite the namespace; the frozen references keep it
+working. Reads are not fully
 prevented (a determined program can extract a reference by decompiling a readable
 `systemdict` procedure), which is accepted: it is self-harm under per-job
 isolation, and closing it would need `executeonly` everywhere, which is
@@ -121,7 +120,7 @@ but still enumerable). It cannot be hidden when reached by name at run time.
    - A standard program-facing dictionary that is mutable → a **local** dict
      that `systemdict` names (`copyudtosd` + relocation), like `statusdict`.
    - Interpreter-private machinery, static, reached only by the machinery →
-     `.xpostsys` (or `.xpostsys` if it must freeze a local reference), where it
+     `.xpostsys` (or `privatedict` if it must freeze a local reference), where it
      is sealed and hidden. Reference it with a frozen `//` so it survives the
      seal.
    - Private but reached **by name at run time** (by C, or by a program using a
@@ -129,8 +128,8 @@ but still enumerable). It cannot be hidden when reached by name at run time.
      dotted if private); it cannot be hidden.
 
 3. **A global dictionary may hold a mutable *member* only if that member is
-   itself intentionally persistent** (like `.xpostsys /.resources`). An
-   accidentally-mutable member of a global dictionary leaks across jobs — this
-   is the bug fixed for the device classes and `statusdict`/`serverdict`. Note
+   itself intentionally persistent.** An accidentally-mutable member of a global
+   dictionary leaks across jobs — this is the bug fixed for the device classes
+   and `statusdict`/`serverdict`. Note
    `readonly` is shallow (per PLRM, per-object for arrays/strings, shared for
    dicts, never recursive), so sealing a container does not lock its members.
