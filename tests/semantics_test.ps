@@ -256,6 +256,20 @@ grestore
 userdict /exch undef
 (text and stroking survive a shadowed exch) assert
 
+% --- the language answers for itself ---
+languagelevel 3 eq (languagelevel names the level) assert
+false (pw) startjob (startjob accepts a job boundary) assert
+currentshared currentglobal eq (shared and global VM are one view) assert
+42 scheck (scheck follows gcheck) assert
+shareddict globaldict eq (shareddict is the global dictionary) assert
+/st.uf << /FontType 3 /FontMatrix [1 0 0 1 0 0] /Encoding 256 array
+    /BuildChar { pop pop } /FontBBox [0 0 1 1] >> definefont pop
+/st.uf undefinefont
+FontDirectory /st.uf known not (undefinefont removes the instance) assert
+true setstrokeadjust currentstrokeadjust (stroke adjustment is recorded) assert
+false setstrokeadjust
+0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit

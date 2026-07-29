@@ -2015,7 +2015,13 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
        (PLRM). It exists in userdict by the time this runs. */
     fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
     if (xpost_object_get_type(fd) == dicttype)
+    {
         xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+        /* the aliases name the same local directory, in systemdict rather
+           than userdict so the program's dictionary stays clear */
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "GlobalFontDirectory"), fd);
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SharedFontDirectory"), fd);
+    }
     /* statusdict and serverdict are local dictionaries a program mutates, so
        save/restore isolates a job's changes; systemdict names them (PLRM). */
     st = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "statusdict"));
