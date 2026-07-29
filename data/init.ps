@@ -135,6 +135,22 @@ serverdict /exitserver {
 } put
 setglobal
 
+% bool password  startjob  bool
+% job boundaries are accepted -- definitions persist either way,
+% as xpost runs jobs unencapsulated
+/startjob { pop pop true } def
+
+% the interpreter answers for the whole language
+/languagelevel 3 def
+
+/setvmthreshold { pop } def
+
+% the shared-VM view of global VM, one and the same here
+/setshared /setglobal load def
+/currentshared /currentglobal load def
+/scheck /gcheck load def
+/shareddict globaldict def
+
 % concatenate two strings -- a pure global helper, so it lives in .xpostsys
 currentglobal true setglobal
 .xpostsys /.strcat { % a b  .  ab

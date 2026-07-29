@@ -300,18 +300,20 @@ Level 2 operators
  [X] vmreclaim (a request only: collection is not implemented)
  [X] realtime
  [X] product, revision, serialnumber
- [ ] languagelevel
- [ ] undefinefont
+ [X] languagelevel
+ [X] undefinefont
  [ ] rootfont
- [ ] startjob
+ [X] startjob (job boundaries accepted; no VM encapsulation)
  [ ] setcachedevice2
  [ ] setcacheparams, currentcacheparams
  [ ] user paths
  [ ] insideness testing
  [ ] user objects
  [ ] execform
- [ ] setstrokeadjust, currentstrokeadjust (recorded only)
- [ ] shared VM
+ [X] setstrokeadjust, currentstrokeadjust (recorded only)
+ [X] shared VM (setshared, currentshared, scheck, shareddict,
+     SharedFontDirectory, GlobalFontDirectory: the global-VM view
+     by other names)
  [ ] binary object sequences
 
 Level 3 operators
@@ -321,7 +323,7 @@ Level 3 operators
  [ ] composite fonts
  [ ] clipsave
  [ ] cliprestore
- [ ] setsmoothness, currentsmoothness (recorded only)
+ [X] setsmoothness, currentsmoothness (recorded only)
  [ ] findcolorrendering
 
 Extensions
