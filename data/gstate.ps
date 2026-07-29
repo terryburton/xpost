@@ -198,6 +198,24 @@ end
     graphicsdict /currgstate get /transfer get
 } def
 
+% flag  setstrokeadjust  -   (recorded only)
+/setstrokeadjust {
+    graphicsdict /currgstate get exch /strokeadjust exch put
+} def
+/currentstrokeadjust {
+    graphicsdict /currgstate get /strokeadjust 2 copy known
+        { get }{ pop pop false } ifelse
+} def
+
+% num  setsmoothness  -   (recorded only)
+/setsmoothness {
+    graphicsdict /currgstate get exch /smoothness exch put
+} def
+/currentsmoothness {
+    graphicsdict /currgstate get /smoothness 2 copy known
+        { get }{ pop pop 0.02 } ifelse
+} def
+
 % num  setlinewidth  -
 % set line width
 /setlinewidth {
