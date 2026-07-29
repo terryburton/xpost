@@ -527,6 +527,13 @@ test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
 
+# Machinery stays born in its final home: every registered private-namespace
+# member keeps its dictionary and every graphics-state template slot survives,
+# per the register in tests/dict_homes.golden.
+test('dict-homes',
+  find_program('tests/check-dict-homes.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.
