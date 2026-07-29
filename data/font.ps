@@ -294,5 +294,14 @@
     /udieresis /yacute /thorn /ydieresis
 ] def
 
+% key  undefinefont  -
+/undefinefont {
+    FontDirectory exch undef
+} def
+
+% GlobalFontDirectory and SharedFontDirectory, aliases for FontDirectory, are
+% named in systemdict by copyudtosd (in C), alongside FontDirectory itself,
+% rather than defined here in userdict.
+
 //.internaldict /QUIET known { }{ (eof font.ps\n)print } ifelse
 
