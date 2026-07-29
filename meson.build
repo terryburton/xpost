@@ -295,6 +295,13 @@ test('semantics',
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Graphics regression checks: operator wrapping and the wrapped-operator
+# error posture, asserted through the interpreter's private operators.
+test('graphics-regression',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Save/restore VM: drive the entity count past 65536 and require dicts and
 # arrays to revert exactly -- guards the saverec entity-width truncation.
 test('save-restore',
