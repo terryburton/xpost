@@ -563,18 +563,6 @@ setglobal
 } def
 /setsystemparams { pop } def
 
-/setpagedevice {
-    dup type /dicttype ne {
-        /setpagedevice cvx /typecheck signalerror
-    } if
-    pop
-} def
-/currentpagedevice {
-    <<
-	/PageSize [ DEVICE /dimensions get aload pop ]
-    >>
-} def
-
 % Move the start procedures into privatedict, off the dict stack: the C fetches
 % them there (through ctx->privatedict) to prime a run, so a program never sees
 % them among systemdict's names. They bind with the rest of privatedict in
@@ -801,6 +789,141 @@ currentglobal true setglobal
 .xpostsys /loadgraphics {
     //.internaldict /GRAPHICS_LOADED known { }{
         (/graphics.ps) //.xpostsys /.loadmodule get exec
+
+    % Page device selection and configuration. Keys:
+    %   /OutputDevice   name from the device table (defaults to the
+    %                   device the interpreter started with)
+    %   /PageSize       [w h] points (default 612x792)
+    %   /HWResolution   [rx ry] dots per inch (default [72 72])
+    %   /OutputFile     output path for the device
+    %   /PageOffset     [x y] points, translated after initgraphics
+    % Every other key is stored on the device dictionary, which is how
+    % device features (TextAlphaBits, WhiteIsOpaque, ...) are reached.
+    % Same-device requests merge over the previous ones, so a partial
+    % dictionary adjusts the page; switching OutputDevice starts from
+    % the new device's defaults. The outgoing device is destroyed, the
+    % new device is installed in the graphics state template, and the
+    % page is reinitialised.
+    currentglobal true setglobal
+    .xpostsys /.devicemakers <<
+        /pgm { .privatedict /newPGMIMAGEdevice get exec }
+        /ppm { .privatedict /newPPMIMAGEdevice get exec }
+        /null { .privatedict /newnulldevice get exec }
+        /bbox { .privatedict /newbboxdevice get exec }
+        /pdfwrite { .privatedict /newPDFWRITEdevice get exec }
+        /png { /newpngdevice where { pop }{ loadpngdevice } ifelse newpngdevice }
+        /pngalpha { /newpngalphadevice where { pop }{ loadpngalphadevice } ifelse newpngalphadevice }
+        /jpeg { /newjpegdevice where { pop }{ loadjpegdevice } ifelse newjpegdevice }
+    >> put
+    setglobal
+
+    % pagedevicedict  setpagedevice  -
+    /setpagedevice {
+        dup type /dicttype ne {
+            /setpagedevice cvx /typecheck signalerror
+        } if
+        16 dict begin
+        /pd exch def
+        % requests merge with the accumulated parameters, except that
+        % switching OutputDevice reinstalls the new device's defaults:
+        % nothing carries across a device change
+        /merged
+        pd /OutputDevice 2 copy known {
+            get /.pagedevice where {
+                pop .pagedevice /OutputDevice 2 copy known
+                    { get }{ pop pop null } ifelse
+            }{ null } ifelse ne
+        }{ pop pop false } ifelse
+            { pd length 8 add dict }
+            { /.pagedevice where
+                { pop .pagedevice dup length pd length add dict copy }
+                { pd length 8 add dict }
+            ifelse }
+        ifelse def
+        pd { merged 3 1 roll put } forall
+        /dev merged /OutputDevice 2 copy known { get }{ pop pop
+            graphicsdict /.outputdevice 2 copy known
+            { get }{ pop pop /pgm } ifelse
+        } ifelse def
+        //.xpostsys /.devicemakers get dev known not {
+            end /setpagedevice cvx /rangecheck signalerror
+        } if
+        /res merged /HWResolution 2 copy known { get }{ pop pop [72 72] } ifelse def
+        /size merged /PageSize 2 copy known { get }{ pop pop [612 792] } ifelse def
+        /off merged /PageOffset 2 copy known { get }{ pop pop [0 0] } ifelse def
+        /sx res 0 get 72 div def
+        /sy res 1 get 72 div def
+        /pw size 0 get sx mul ceiling cvi def
+        /ph size 1 get sy mul ceiling cvi def
+
+        % device constructors read /OutputFileName via where
+        merged /OutputFile 2 copy known {
+            get userdict /OutputFileName 3 -1 roll put
+        }{
+            pop pop
+            userdict /OutputFileName known { userdict /OutputFileName undef } if
+        } ifelse
+
+        % retire the outgoing device (Destroy frees its buffers; a
+        % vector device's output was written by showpage's Emit)
+        /DEVICE where { pop
+            DEVICE type /dicttype eq {
+                DEVICE dup /Destroy 2 copy known { get exec }{ pop pop pop } ifelse
+            } if
+        } if
+
+        % the new device builds under its own local name -- DEVICE
+        % everywhere means the accessor reading the graphics state, and
+        % the machinery's frozen references to it must not see the
+        % half-configured newcomer
+        /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
+
+        % post-construction fixups, as the initial device receives
+        newdev /defaultmatrix [ sx 0 0 sy neg 0 ph ] put
+        newdev /NoOutput known not {
+            newdev /FillPoly //.internaldict /.fillpoly get put
+            newdev /nativecolorspace get /DeviceGray eq {
+                newdev /FillRect //.internaldict /.fillrectgray get put
+            } if
+            newdev /nativecolorspace get /DeviceRGB eq {
+                newdev /ImgData known {
+                    newdev /FillRect get type /operatortype ne {
+                        newdev /FillRect //.internaldict /.fillrectrgb get put
+                    } if
+                } if
+            } if
+        } if
+
+        % remaining keys are device features
+        merged { % key value
+            1 index /OutputDevice eq
+            2 index /PageSize eq or
+            2 index /HWResolution eq or
+            2 index /OutputFile eq or
+            2 index /PageOffset eq or
+            { pop pop }{ newdev 3 1 roll put } ifelse
+        } forall
+        merged /OutputDevice dev put
+        userdict /.pagedevice merged put
+
+        % the template and the live gstate carry the device; painting
+        % and the defaultmatrix operator resolve it through them
+        .privatedict /.gstatetemplate get exec /device newdev put
+        graphicsdict /currgstate get /device newdev put
+        initgraphics
+        off aload pop translate
+        end
+    } def
+
+    % -  currentpagedevice  dict
+    /currentpagedevice {
+        /.pagedevice where { pop
+            .pagedevice dup length 1 add dict copy
+        }{
+            << /PageSize [ DEVICE /dimensions get aload pop ] >>
+        } ifelse
+    } def
+
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -822,7 +945,7 @@ currentglobal true setglobal
         /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
         /currentcolor /currentcolorspace
         /image /imagemask
-        /showpage /copypage /erasepage
+        /showpage /copypage /erasepage /setpagedevice /currentpagedevice
         /nulldevice /gsave /grestore /grestoreall /initgraphics
     ] {
         dup userdict exch known {
