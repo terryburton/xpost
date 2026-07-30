@@ -1356,8 +1356,8 @@ int _stringoutline(Xpost_Context *ctx,
             free(cstr);
             return oc.err;
         }
-        oc.px += (double)advance_x / 64;
-        oc.py += (double)advance_y / 64;
+        oc.px += advance_x / 65536.0;
+        oc.py += advance_y / 65536.0;
 #endif
     }
     free(cstr);
