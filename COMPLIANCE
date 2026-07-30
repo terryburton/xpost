@@ -247,8 +247,8 @@ Level 1 operators
  [X] version
  [X] eexec
  [ ] internaldict
- [ ] cachestatus
- [ ] setcachelimit
+ [X] cachestatus
+ [X] setcachelimit
 
 Level 2 operators
 -----------------
@@ -314,10 +314,10 @@ Level 2 operators
  [X] product, revision, serialnumber
  [X] languagelevel
  [X] undefinefont
- [ ] rootfont
+ [X] rootfont
  [X] startjob (job boundaries accepted; no VM encapsulation)
- [ ] setcachedevice2
- [ ] setcacheparams, currentcacheparams
+ [X] setcachedevice2 (reduces to setcachedevice)
+ [X] setcacheparams, currentcacheparams
  [ ] user paths
  [ ] insideness testing
  [ ] user objects
@@ -345,7 +345,7 @@ Level 3 operators
  [X] clipsave
  [X] cliprestore
  [X] setsmoothness, currentsmoothness (recorded only)
- [ ] findcolorrendering
+ [X] findcolorrendering (names the default instance)
 
 Extensions
 ----------
