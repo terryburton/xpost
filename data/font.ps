@@ -19,9 +19,15 @@
 % device's TextAlphaBits asks
 currentglobal true setglobal
 .xpostsys /.runbuild { % ... proc  .runbuild  ...
-    graphicsdict /.inglyph true put
+    % .inglyph counts glyph-build nesting: a build procedure may itself show
+    % text, so a bare flag would clear on the inner build and read false while
+    % the outer build is still running. setcachedevice/setcharwidth are valid
+    % while it is nonzero.
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 1 add
+    graphicsdict exch /.inglyph exch put
     exec
-    graphicsdict /.inglyph false put
+    graphicsdict /.inglyph get 1 sub
+    graphicsdict exch /.inglyph exch put
 } put
 setglobal
 
@@ -140,6 +146,8 @@ setglobal
 } def
 
 /setcharwidth {
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
+    0 eq { /setcharwidth cvx /undefined signalerror } if
     graphicsdict /currgstate get /currfont get
     dup /xadvance 5 4 roll put
     /yadvance 3 2 roll put
@@ -200,6 +208,8 @@ currentglobal true setglobal
 setglobal
 
 /setcachedevice {
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
+    0 eq { /setcachedevice cvx /undefined signalerror } if
     graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse
     graphicsdict /.t3cap 2 copy known { get }{ pop pop null } ifelse
     null eq and {
@@ -584,7 +594,7 @@ setglobal
             fnt /yadvance 0 put
             gsave
                 fnt /BuildGlyph 2 copy known {
-                    get fnt gname 3 -1 roll exec
+                    get fnt gname 3 -1 roll //.xpostsys /.runbuild get exec
                 }{
                     pop pop
                     /code null def

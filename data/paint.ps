@@ -1131,7 +1131,7 @@
         % clips: the coverage painter writes pixels directly
         /aadone false def
         paintpat not
-        graphicsdict /.inglyph 2 copy known { get }{ pop pop false } ifelse
+        graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 0 gt
         interp or and
         .cliptrivial and {
             << /buf buf /width width /height height
