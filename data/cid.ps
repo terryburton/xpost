@@ -299,8 +299,14 @@ currentglobal true setglobal
 % code paints as a one-byte show under the selected descendant, so
 % any descendant kind -- including a nested composite -- renders
 % through the ordinary dispatch
+% After each composite character paints, the show machinery calls
+% .showhook with the character's full (multi-byte, big-endian) code
+% when a caller has bound one on the dictionary stack: the spacing
+% show operators bind it to advance the pen by their delta, and plain
+% show, binding none, leaves each call a no-op.
+
 /.showfmap {
-    10 dict begin
+    12 dict begin
     /str exch def /fnt exch def
     /dc fnt /Encoding get length array def
     /cs 1 string def
@@ -318,6 +324,9 @@ currentglobal true setglobal
             graphicsdict /currgstate get /currfont dc curf get put
             cs show
             graphicsdict /currgstate get /currfont fnt put
+            /fc 0 def
+            0 1 w 1 sub { str p 3 -1 roll add get fc 256 mul add /fc exch def } for
+            /.showhook where { pop fc .showhook }{ } ifelse
         } if
         /p p w add def
     } loop
@@ -396,6 +405,9 @@ currentglobal true setglobal
             } ifelse
         } if
         gid .glyphshowidx
+        /fc 0 def
+        0 1 w 1 sub { str p 3 -1 roll add get fc 256 mul add /fc exch def } for
+        /.showhook where { pop fc .showhook }{ } ifelse
         /p p w add def
     } loop
     graphicsdict /currgstate get /currfont fnt put
