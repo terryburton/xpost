@@ -149,6 +149,28 @@ CIENAMES { { (PROGRAM-OWNED) } def } forall
     newpath 20 20 moveto 180 20 lineto 180 180 lineto closepath fill
 } stopped not (CIE colour survives redefined converter names) assert
 
+% The shading family lives in the global .xpostsys, baked into shfill and into
+% each other, so the names are invisible and a program redefining them cannot
+% reach the shading machinery (self-recursive members keep a frozen get form).
+/SHADENAMES [
+    /.fneval /.fneval2 /.fnsh /.shcolor /.clipbig /.axialsh /.radialsh
+    /.mrdbyte /.mrdbits /.mrddec /.mrdpt /.mrdcolor /.mrdvertex /.gsetcolor
+    /.gmid /.gtri /.meshsh /.bez1 /.pgridmap /.pmix /.patchpaint /.patchsh
+] def
+SHADENAMES {
+    dup where { pop (SHADE-VISIBLE: ) print == false }{ pop true } ifelse
+    (shading helper name is hidden) assert
+} forall
+SHADENAMES { { (PROGRAM-OWNED) } def } forall
+{
+    << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [ 10 10 190 190 ]
+       /Function << /FunctionType 3 /Domain [ 0 1 ]
+         /Functions [ << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 1 0 0 ] /C1 [ 1 1 0 ] /N 1 >>
+                      << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 1 1 0 ] /C1 [ 0 0 1 ] /N 1 >> ]
+         /Bounds [ 0.5 ] /Encode [ 0 1 0 1 ] >>
+       /Extend [ true true ] >> shfill
+} stopped not (shading survives redefined helper names) assert
+
 % The pattern family lives in .xpostsys, reached across files by a frozen
 % //.xpostsys reference, so redefining the names cannot disturb a pattern fill.
 /PATNAMES [ /.patternactive /.patterntile /.patternclip /.patternfill /.patterneofill ] def
