@@ -56,6 +56,7 @@
 % -  fill  -
 % fill current path with current color
 /fill {
+    //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
     flattenpath
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
@@ -114,6 +115,7 @@
 
     flushpage
     newpath
+    } ifelse
 } bind def
 
 % -  eofill  -
@@ -125,6 +127,7 @@
 % whole paths through FillPath still receives the nonzero
 % approximation, as before.
 /eofill {
+    //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
         //fill exec
     }{
@@ -147,6 +150,7 @@
 
         flushpage
         newpath
+    } ifelse
     } ifelse
 } bind def
 
@@ -245,6 +249,9 @@
 % -  stroke  -
 % draw line along current path
 /stroke {
+    //.xpostsys /.patternactive get exec {
+        strokepath //.xpostsys /.patternfill get exec
+    }{
     % the hairline walk clips each segment against the rectangular
     % clip region before plotting it: a complex clip takes the outline
     % fill below, whose span intersection is exact for any region
@@ -302,6 +309,7 @@
     } ifelse
 
     newpath
+    } ifelse
 } bind def
 
 % Row machinery: image data arrives from datasrc in arbitrary
@@ -1111,26 +1119,55 @@
         % shared matrix per glyph is the classic case)
         mat matrix invertmatrix concat
         /ink polarity {1}{0} ifelse def
+        % consecutive set samples paint as one run; under a pattern
+        % colour the runs assemble into a single path so the tiling
+        % runs once over the whole stencil
+        /paintpat //.xpostsys /.patternactive get exec def
         width height mul 16384 le {
             % a small stencil's runs resolve once per distinct mask,
             % consecutive equal-extent rows merged into taller
             % rectangles, painted through fewer fills
             /rects buf width height ink //.xpostsys /.stencilruns get exec def
+            paintpat { newpath } if
             0 4 rects length 1 sub { /i exch def
                 rects i get rects i 1 add get
                 rects i 2 add get rects i 3 add get
-                rectfill
+                paintpat {
+                    /rh exch def /rw exch def /ry exch def /rx exch def
+                    rx ry moveto rx rw add ry lineto
+                    rx rw add ry rh add lineto rx ry rh add lineto closepath
+                }{
+                    rectfill
+                } ifelse
             } for
+            paintpat { //.xpostsys /.patternfill get exec } if
         }{
-            0 1 height 1 sub { /y exch def
-                0 1 width 1 sub { /x exch def
-                    buf y rowbytes mul x 8 idiv add get
-                    x 8 mod 7 sub bitshift 1 and
-                    ink eq {
-                        x y 1 1 rectfill
-                    } if
-                } for
-            } for
+        paintpat { newpath } if
+        0 1 height 1 sub { /y exch def
+            /x 0 def
+            {
+                x width ge { exit } if
+                buf y rowbytes mul x 8 idiv add get
+                x 8 mod 7 sub bitshift 1 and ink eq {
+                    /x0 x def
+                    {
+                        /x x 1 add def
+                        x width ge { exit } if
+                        buf y rowbytes mul x 8 idiv add get
+                        x 8 mod 7 sub bitshift 1 and ink ne { exit } if
+                    } loop
+                    paintpat {
+                        x0 y moveto x y lineto
+                        x y 1 add lineto x0 y 1 add lineto closepath
+                    }{
+                        x0 y x x0 sub 1 rectfill
+                    } ifelse
+                }{
+                    /x x 1 add def
+                } ifelse
+            } loop
+        } for
+        paintpat { //.xpostsys /.patternfill get exec } if
         } ifelse
         end
     grestore
