@@ -16,7 +16,7 @@
 userdict   length 0 ne { userdict   length (userdict not empty)   bad } if
 globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
-% the 331 name keys every build exposes
+% the 325 name keys every build exposes
 /golden <<
   ($error) true  (.gscratch) true  (.lockdown) true  (.permitfileread) true
   (.permitfilewrite) true  (.privatedict) true  (.resourcefileopen) true  (.uparams) true
@@ -24,12 +24,12 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (=only) true  (=print) true  (=string) true  (>>) true
   (DEVICE) true  (FontDirectory) true  (GlobalFontDirectory) true  (ISOLatin1Encoding) true
   (Run) true  (SharedFontDirectory) true  (ShowpageSemantics) true  ([) true
-  (]) true  (abs) true  (add) true  (addtopath) true
+  (]) true  (abs) true  (add) true
   (aload) true  (anchorsearch) true  (and) true  (arc) true
   (arcn) true  (arct) true  (arcto) true  (array) true
   (ashow) true  (astore) true  (atan) true  (awidthshow) true
   (begin) true  (bind) true  (bitshift) true  (bytesavailable) true
-  (ceiling) true  (charpath) true  (checkflat) true  (chopcurve) true
+  (ceiling) true  (charpath) true
   (clear) true  (cleardictstack) true  (cleartomark) true  (clip) true
   (clippath) true  (closefile) true  (closepath) true  (concat) true
   (concatmatrix) true  (copy) true  (copypage) true  (cos) true
@@ -55,7 +55,7 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (findresource) true  (flattenpath) true  (floor) true  (flush) true
   (flushfile) true  (flushpage) true  (for) true  (forall) true
   (fork) true  (gcheck) true  (ge) true  (get) true
-  (getenv) true  (getinterval) true  (getpair) true  (globaldict) true
+  (getenv) true  (getinterval) true  (globaldict) true
   (globalvmstatus) true  (graphicsdict) true  (grestore) true  (grestoreall) true
   (gsave) true  (gstate) true  (gt) true  (handleerror) true
   (identmatrix) true  (idiv) true  (idtransform) true  (if) true
@@ -66,7 +66,7 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (lineto) true  (ln) true  (load) true  (loadbgrdevice) true
   (loadrasterdevice) true  (log) true  (loop) true  (lt) true
   (makefont) true  (makepattern) true  (mark) true  (matrix) true
-  (maxlength) true  (maxmin) true  (median) true  (mod) true
+  (maxlength) true  (mod) true
   (moveto) true  (mul) true  (ne) true  (neg) true
   (newpath) true  (noaccess) true  (not) true  (null) true
   (nulldevice) true  (or) true  (packedarray) true  (pathbbox) true
