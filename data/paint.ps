@@ -91,14 +91,38 @@
 } bind def
 
 % -  eofill  -
-% fill using even-odd rule
-% the scanline pairing in FillPoly is even-odd, so this
-% coincides with fill
+% fill using the even-odd rule
+% The even-odd interior resolves to pixel-band rectangles through the
+% same scan-conversion as the nonzero fill, and the rectangles --
+% winding-uniform -- then travel the ordinary pipeline: clip span
+% intersection and the device FillPoly. A vector device consuming
+% whole paths through FillPath still receives the nonzero
+% approximation, as before.
 /eofill {
-    % this implementation's own fill, immune to a program's
-    % redefinition of the name (which may itself invoke eofill)
-    //fill exec
-} def
+    DEVICE /FillPath known .cliptrivial and {
+        //fill exec
+    }{
+        closepath
+        flattenpath
+        .fillpolyargs .eospanpoly
+        .cliptrivial not {
+            //.xpostsys /.clippolyargs get exec .clipfillpoly
+        } if
+
+        dup length 2 gt {
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+            counttomark { currenttransfer exec counttomark 1 roll } repeat
+            counttomark 2 add -1 roll
+            DEVICE dup /FillPoly get exec
+            pop
+        }{
+            pop
+        } ifelse
+
+        flushpage
+        newpath
+    } ifelse
+} bind def
 
 % -  stroke  -
 % draw line along current path
