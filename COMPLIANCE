@@ -265,8 +265,9 @@ Level 2 operators
  [X] currentcolorspace
  [X] setcolor
  [X] currentcolor
- [ ] setpagedevice
- [ ] currentpagedevice
+ [X] setpagedevice (OutputDevice, PageSize, HWResolution, OutputFile,
+     PageOffset; other keys reach the device as features)
+ [X] currentpagedevice
  [X] xshow
  [X] yshow
  [X] xyshow
@@ -357,7 +358,8 @@ Display Postscript
 ------------------
 
  [X] multiple contexts
- [ ] multiple devices
+ [/] multiple devices (setpagedevice switches the device mid-job; one
+     device per context at a time)
 
 NeWS
 ----
