@@ -6,6 +6,9 @@
 % path storage and the device), so it and its accessor stay in local VM.
 currentglobal false setglobal
 /.gstatetemplate <<
+    % the space as set (what currentcolorspace reports; may be an array)
+    /setspace /DeviceGray
+    % the space the colour components below are recorded in
     /colorspace /DeviceGray
     /colorcomp1 0.0
     /colorcomp2 0.0
