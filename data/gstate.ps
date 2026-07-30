@@ -17,6 +17,11 @@ currentglobal false setglobal
     % the tints a Separation or DeviceN colour was set with, for currentcolor
     % (the component values above hold the tint-transformed alternate colour)
     /tintcomps null
+    % the pattern colour: the instantiated pattern dictionary, and for
+    % an uncoloured pattern the underlying space and its components
+    /patdict null
+    /patbase null
+    /patcomps null
     % black generation, undercolor removal and the colour rendering
     % dictionary, recorded for round-tripping
     /blackgen {}

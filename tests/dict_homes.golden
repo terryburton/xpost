@@ -96,6 +96,9 @@
 .xpostsys /.refreshscreencell
 .xpostsys /.ht5component
 .xpostsys /.htreadthresholds
+.xpostsys /.patternactive
+.xpostsys /.patternfill
+.xpostsys /.patterneofill
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
 gstate /colorspace
@@ -135,3 +138,6 @@ gstate /bluescreenfreq
 gstate /bluescreenangle
 gstate /bluescreenproc
 gstate /halftone
+gstate /patdict
+gstate /patbase
+gstate /patcomps
