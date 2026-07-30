@@ -514,6 +514,12 @@ test('op-proc-filter',
   args: [ xpost_exe, files('tests/op_proc_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# setcachedevice/setcharwidth are valid only within a glyph description (PLRM 8.2).
+test('op-glyphcontext',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_glyphcontext_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],

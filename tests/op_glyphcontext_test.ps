@@ -1,0 +1,44 @@
+% setcachedevice / setcharwidth are valid only within a glyph-description
+% procedure (PLRM 8.2). Run through `xpost -d null` by run-ps-test.sh. Standard
+% PostScript; prints SUCCESS on Ghostscript too.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/erris { 3 dict begin /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse tag assert clear end } def
+
+% outside any glyph description these operators are undefined
+{ 100 0 setcharwidth }        /undefined (setcharwidth outside a glyph build) erris
+{ 1 0 0 0 10 10 setcachedevice } /undefined (setcachedevice outside a glyph build) erris
+
+% a Type 3 BuildChar may call setcachedevice; show renders without error
+/T3C 9 dict dup begin
+    /FontType 3 def /FontMatrix [0.01 0 0 0.01 0 0] def /FontBBox [0 0 100 100] def
+    /Encoding 256 array def 0 1 255 { Encoding exch /.notdef put } for Encoding 65 /a put
+    /CharProcs 3 dict def
+    CharProcs /a { 100 0 0 0 100 100 setcachedevice 0 0 100 100 rectfill } put
+    CharProcs /.notdef { 0 0 setcharwidth } put
+    /BuildChar { exch begin Encoding exch get CharProcs exch
+        2 copy known not { pop /.notdef } if get exec end } bind def
+end def
+/T3C T3C definefont pop
+{ /T3C findfont 10 scalefont setfont newpath 0 0 moveto (a) show } stopped not
+(Type 3 BuildChar renders through show) assert
+
+% a Type 3 BuildGlyph may call setcachedevice; glyphshow and show both render
+/T3G 9 dict dup begin
+    /FontType 3 def /FontMatrix [0.01 0 0 0.01 0 0] def /FontBBox [0 0 100 100] def
+    /Encoding 256 array def 0 1 255 { Encoding exch /.notdef put } for Encoding 66 /b put
+    /CharProcs 3 dict def
+    CharProcs /b { 100 0 0 0 100 100 setcachedevice 0 0 100 100 rectfill } put
+    CharProcs /.notdef { 0 0 setcharwidth } put
+    /BuildGlyph { exch begin CharProcs exch
+        2 copy known not { pop /.notdef } if get exec end } bind def
+end def
+/T3G T3G definefont pop
+{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto /b glyphshow } stopped not
+(Type 3 BuildGlyph renders through glyphshow) assert
+{ /T3G findfont 10 scalefont setfont newpath 0 0 moveto (b) show } stopped not
+(Type 3 BuildGlyph renders through show) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
