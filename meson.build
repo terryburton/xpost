@@ -576,6 +576,15 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Embedded Type 1 with a no-access Private: definefont must reach the loader and
+# read Subrs out of Private in C, not raise invalidaccess at a PostScript-level
+# read. Guards the regression where access enforcement broke every embedded
+# Type 1 font (the whole casselman corpus).
+test('font-type1-noaccess',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_type1_noaccess_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools

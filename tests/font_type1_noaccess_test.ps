@@ -1,0 +1,48 @@
+% Regression: definefont on an embedded Type 1 font whose Private dictionary is
+% no-access must not raise invalidaccess. A Type 1 font program seals its Private
+% dictionary no-access (via the standard ND/NP procedures); the interpreter's
+% loader reads the Subrs array out of Private in C, where the access attribute
+% does not forbid the read, rather than from PostScript, where it does. Before
+% the fix, the access enforcement rejected a PostScript-level read of Private and
+% every embedded Type 1 font -- all of the casselman corpus -- failed with
+% invalidaccess on definefont. Run through `xpost -d null` by run-ps-test.sh;
+% prints SUCCESS iff definefont does not raise invalidaccess.
+
+/faildict 1 dict def faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop }{ (FAIL: )print print (\n)print faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
+% a minimally shaped Type 1 font: FontType 1, CharStrings and a no-access Private
+% holding Subrs -- enough to reach the loader down the definefont Type 1 branch.
+% The charstrings are not a real font program, so the face will not build and
+% definefont raises invalidfont; that is fine. The point is that it must get that
+% far without an invalidaccess reading the no-access Private.
+/mkfont {
+    10 dict begin
+        /FontType 1 def
+        /FontMatrix [0.001 0 0 0.001 0 0] def
+        /FontBBox [0 0 1000 1000] def
+        /Encoding StandardEncoding def
+        /CharStrings 2 dict dup /.notdef (\000\000\000\000) put def
+        /Private 4 dict dup begin
+            /Subrs 0 array def
+            /lenIV 4 def
+        end noaccess def
+    currentdict end
+} def
+
+% the Private dictionary really is no-access
+mkfont dup /Private get rcheck not exch pop
+    (the Private dictionary is no-access) assert
+
+% definefont must not raise invalidaccess on it
+mark /RegrTestT1 mkfont
+{ definefont pop /no-error } stopped { $error /errorname get } if
+/result exch def
+cleartomark
+result /invalidaccess ne (definefont did not raise invalidaccess on no-access Private) assert
+
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit
