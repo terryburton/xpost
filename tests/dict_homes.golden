@@ -52,6 +52,7 @@
 .xpostsys /.min
 .xpostsys /minlinewidth
 .xpostsys /.ncomponents
+.xpostsys /.nib12
 .xpostsys /normclipwind
 .xpostsys /p2abc
 .xpostsys /pause
