@@ -199,6 +199,10 @@ put
 %       receiving new polygon.
 % convert polygon array back to path structure
 .xpostsys /doclip {
+    % when the clip region is an axis-aligned rectangle that already
+    % contains the whole path, clipping passes every point through
+    % unchanged: skip the polygon-clipping machinery
+    .cliptrivial not {
 	%DICT
 	20 dict
 	begin
@@ -361,7 +365,8 @@ put
         } ifelse
     } forall
 
-end }
+end
+    } if }
 %dup 0 10 dict put
 bind
 put
