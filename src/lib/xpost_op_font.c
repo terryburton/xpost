@@ -78,9 +78,125 @@ typedef struct textstate
 {
     Xpost_Object encoding;  /* the font's /Encoding array, or invalid */
     Xpost_Object charstrings; /* the font's /CharStrings dict, or invalid */
+    Xpost_Object metrics;   /* the font's /Metrics dict, or invalid */
+    real cdmat[4];          /* character space -> device space (FontMatrix o CTM) */
+    int cdmat_ok;           /* the matrix above is usable */
     Xpost_Object blendpix;  /* the device's BlendPix method, or invalid */
     int blend;              /* anti-alias: TextAlphaBits > 1 and BlendPix present */
 } textstate;
+
+/* the linear part of character space -> device space: the font
+   dictionary's FontMatrix composed with the CTM (row convention:
+   x' = e0 x + e2 y, y' = e1 x + e3 y). Returns 0 when either matrix
+   is unusable. */
+static
+int _char_device_matrix(Xpost_Context *ctx,
+                        Xpost_Object gs,
+                        Xpost_Object fontdict,
+                        real e[4])
+{
+    Xpost_Object psmat;
+    real fm[4] = { 1.0, 0.0, 0.0, 1.0 };
+    real cm[4];
+    int i;
+
+    psmat = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"));
+    if (xpost_object_get_type(psmat) == arraytype && psmat.comp_.sz == 6)
+    {
+        for (i = 0; i < 4; i++)
+        {
+            Xpost_Object el = xpost_array_get(ctx, psmat, i);
+            if (xpost_object_get_type(el) == realtype)
+                fm[i] = el.real_.val;
+            else if (xpost_object_get_type(el) == integertype)
+                fm[i] = (real)el.int_.val;
+        }
+    }
+    psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
+    if (xpost_object_get_type(psmat) != arraytype || psmat.comp_.sz != 6)
+        return 0;
+    for (i = 0; i < 4; i++)
+    {
+        Xpost_Object el = xpost_array_get(ctx, psmat, i);
+        cm[i] = xpost_object_get_type(el) == realtype ? el.real_.val
+             : (real)el.int_.val;
+    }
+    e[0] = fm[0] * cm[0] + fm[1] * cm[2];
+    e[1] = fm[0] * cm[1] + fm[1] * cm[3];
+    e[2] = fm[2] * cm[0] + fm[3] * cm[2];
+    e[3] = fm[2] * cm[1] + fm[3] * cm[3];
+    return 1;
+}
+
+/* the glyph name the font's /Encoding assigns a character code, or the
+   invalid object (codes past the array, or entries that are not names) */
+static
+Xpost_Object _encoded_name(Xpost_Context *ctx,
+                           Xpost_Object encoding,
+                           unsigned int ch)
+{
+    if (xpost_object_get_type(encoding) == arraytype
+     && ch < (unsigned int)encoding.comp_.sz)
+    {
+        Xpost_Object en = xpost_array_get(ctx, encoding, ch);
+        if (xpost_object_get_type(en) == nametype)
+            return en;
+    }
+    return invalid;
+}
+
+/* A /Metrics entry for this glyph name overrides its width (PLRM 5.9.2):
+   a number is a new x width, a two-element array carries the width in its
+   second element, a four-element array carries the width vector in its
+   last two. The values are in character space; deliver the device-space
+   advance in 16.16, y-up, the convention the face's advances arrive in.
+   (The sidebearing the array forms also carry is not applied.) */
+static
+int _metrics_advance(Xpost_Context *ctx,
+                     const textstate *ts,
+                     Xpost_Object glyphname,
+                     long *ax,
+                     long *ay)
+{
+    Xpost_Object v;
+    real wx, wy = 0.0;
+
+    if (!ts->cdmat_ok
+     || xpost_object_get_type(ts->metrics) != dicttype
+     || xpost_object_get_type(glyphname) != nametype)
+        return 0;
+    v = xpost_dict_get(ctx, ts->metrics, glyphname);
+    if (xpost_object_get_type(v) == integertype)
+        wx = (real)v.int_.val;
+    else if (xpost_object_get_type(v) == realtype)
+        wx = v.real_.val;
+    else if (xpost_object_get_type(v) == arraytype
+          && (v.comp_.sz == 2 || v.comp_.sz == 4))
+    {
+        Xpost_Object el = xpost_array_get(ctx, v, v.comp_.sz == 2 ? 1 : 2);
+        if (xpost_object_get_type(el) == realtype)
+            wx = el.real_.val;
+        else if (xpost_object_get_type(el) == integertype)
+            wx = (real)el.int_.val;
+        else
+            return 0;
+        if (v.comp_.sz == 4)
+        {
+            el = xpost_array_get(ctx, v, 3);
+            if (xpost_object_get_type(el) == realtype)
+                wy = el.real_.val;
+            else if (xpost_object_get_type(el) == integertype)
+                wy = (real)el.int_.val;
+            else
+                return 0;
+        }
+    }
+    else
+        return 0;
+    *ax = (long)((ts->cdmat[0] * wx + ts->cdmat[2] * wy) * 65536.0);
+    *ay = (long)(-(ts->cdmat[1] * wx + ts->cdmat[3] * wy) * 65536.0);
+    return 1;
+}
 
 /* Extract the CharStrings of a Type 1 font program on disk: the
    values a font dictionary built by running the program would hold,
@@ -922,6 +1038,7 @@ int _setfont(Xpost_Context *ctx,
 
 static
 textstate _text_state_get(Xpost_Context *ctx,
+                          Xpost_Object gs,
                           Xpost_Object fontdict,
                           Xpost_Object devdic)
 {
@@ -930,6 +1047,9 @@ textstate _text_state_get(Xpost_Context *ctx,
 
     ts.encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     ts.charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
+    ts.metrics = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Metrics"));
+    ts.cdmat_ok = xpost_object_get_type(ts.metrics) == dicttype
+               && _char_device_matrix(ctx, gs, fontdict, ts.cdmat);
     ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
     tab = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
     ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
@@ -1048,44 +1168,14 @@ void _face_setup(Xpost_Context *ctx,
                  Xpost_Object fontdict,
                  void *face)
 {
-    Xpost_Object psmat;
-    real fm[4] = { 1.0, 0.0, 0.0, 1.0 };
-    real cm[4];
     real e[4];
     real q;
     real r;
     float mat[6] = { 0 };
-    int i;
 
-    psmat = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"));
-    if (xpost_object_get_type(psmat) == arraytype && psmat.comp_.sz == 6)
-    {
-        for (i = 0; i < 4; i++)
-        {
-            Xpost_Object el = xpost_array_get(ctx, psmat, i);
-            if (xpost_object_get_type(el) == realtype)
-                fm[i] = el.real_.val;
-            else if (xpost_object_get_type(el) == integertype)
-                fm[i] = (real)el.int_.val;
-        }
-    }
-
-    psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
-    if (xpost_object_get_type(psmat) != arraytype || psmat.comp_.sz != 6)
+    /* text space -> device space: FontMatrix then CTM */
+    if (!_char_device_matrix(ctx, gs, fontdict, e))
         return;
-    for (i = 0; i < 4; i++)
-    {
-        Xpost_Object el = xpost_array_get(ctx, psmat, i);
-        cm[i] = xpost_object_get_type(el) == realtype ? el.real_.val
-             : (real)el.int_.val;
-    }
-
-    /* text space -> device space: FontMatrix then CTM
-       (row convention: x' = a x + c y, y' = b x + d y) */
-    e[0] = fm[0] * cm[0] + fm[1] * cm[2];
-    e[1] = fm[0] * cm[1] + fm[1] * cm[3];
-    e[2] = fm[2] * cm[0] + fm[3] * cm[2];
-    e[3] = fm[2] * cm[1] + fm[3] * cm[3];
 
     q = (real)sqrt(e[0] * e[0] + e[1] * e[1]);
     if (q == 0)
@@ -1239,6 +1329,7 @@ int _show_glyph(Xpost_Context *ctx,
                 real *xpos,
                 real *ypos,
                 unsigned int glyph_index,
+                Xpost_Object glyphname,
                 int ncomp,
                 Xpost_Object comp1,
                 Xpost_Object comp2,
@@ -1270,6 +1361,8 @@ int _show_glyph(Xpost_Context *ctx,
                  (int)floor(*xpos + left + 0.5),
                  (int)floor(*ypos - top + 0.5),
                  ncomp, comp1, comp2, comp3);
+    /* a /Metrics entry for this glyph overrides the face's advance */
+    _metrics_advance(ctx, ts, glyphname, &advance_x, &advance_y);
     /* the face transform leaves the advance in y-up glyph space; the
        pen advances in y-down device space, keeping the fractional part
        (truncating each glyph's advance drifts the line's length) */
@@ -1284,6 +1377,7 @@ int _show_glyph(Xpost_Context *ctx,
     (void)xpos;
     (void)ypos;
     (void)glyph_index;
+    (void)glyphname;
     (void)ncomp;
     (void)comp1;
     (void)comp2;
@@ -1313,7 +1407,8 @@ int _show_char(Xpost_Context *ctx,
                                                      ts->charstrings,
                                                      data.face, ch);
     return _show_glyph(ctx, devdic, putpix, data, ts, xpos, ypos,
-                       glyph_index, ncomp, comp1, comp2, comp3);
+                       glyph_index, _encoded_name(ctx, ts->encoding, ch),
+                       ncomp, comp1, comp2, comp3);
 }
 
 static
@@ -1399,7 +1494,7 @@ int _show(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -1507,7 +1602,7 @@ int _glyphshow_common(Xpost_Context *ctx,
 
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
     if (xpost_object_get_type(privatestr) == invalidtype)
@@ -1558,7 +1653,8 @@ int _glyphshow_common(Xpost_Context *ctx,
         ? _glyph_index_for_name(ctx, ts.charstrings, data.face, gname)
         : gid;
     _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
-                glyph_index, ncomp, comp[0], comp[1], comp[2]);
+                glyph_index, byname ? gname : invalid,
+                ncomp, comp[0], comp[1], comp[2]);
 
     xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
     xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
@@ -2817,7 +2913,7 @@ int _ashow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -2931,7 +3027,7 @@ int _widthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -3050,7 +3146,7 @@ int _awidthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -3143,6 +3239,7 @@ int _stringwidth(Xpost_Context *ctx,
     char *ch;
     Xpost_Object encoding;
     Xpost_Object charstrings;
+    textstate mts;
 
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -3170,6 +3267,13 @@ int _stringwidth(Xpost_Context *ctx,
     _face_setup(ctx, gs, fontdict, data.face);
     encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
+    /* only the /Metrics fields matter here: stringwidth accumulates the
+       same per-glyph advances show would take */
+    memset(&mts, 0, sizeof mts);
+    mts.encoding = encoding;
+    mts.metrics = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Metrics"));
+    mts.cdmat_ok = xpost_object_get_type(mts.metrics) == dicttype
+                && _char_device_matrix(ctx, gs, fontdict, mts.cdmat);
     XPOST_LOG_INFO("loaded font data from dict");
 
     /* get a c-style nul-terminated string */
@@ -3206,6 +3310,10 @@ int _stringwidth(Xpost_Context *ctx,
                 *xpos + left, *ypos - top,
                 ncomp, comp1, comp2, comp3);
                 */
+        /* a /Metrics entry for this glyph overrides the face's advance */
+        _metrics_advance(ctx, &mts,
+                         _encoded_name(ctx, encoding, (unsigned char)*ch),
+                         &advance_x, &advance_y);
         xpos += (real)(advance_x / 65536.0);
         ypos += (real)(advance_y / 65536.0);
 #endif
@@ -3464,7 +3572,7 @@ int _kshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
