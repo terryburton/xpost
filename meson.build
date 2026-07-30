@@ -455,6 +455,16 @@ test('access',
   args: [ xpost_exe, files('tests/access_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every output device renders: the rest of the suite runs under -d null,
+# which never loads the graphics/device stack, so a device that fails to
+# initialise or emit a page would otherwise be invisible. Render a trivial
+# page through each built device and require non-empty output.
+test('devices',
+  find_program('tests/run-devices-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',
