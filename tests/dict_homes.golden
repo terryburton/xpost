@@ -105,6 +105,9 @@
 .xpostsys /.fneval2
 .xpostsys /.gtri
 .xpostsys /.zeros
+.xpostsys /.upathops
+.xpostsys /.upathargs
+.xpostsys /.isupmat
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
 gstate /colorspace
