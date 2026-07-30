@@ -788,6 +788,105 @@
 % paint the current colour through a one-bit stencil: samples equal to
 % the polarity mark unit squares of image space, the rest leave the
 % page untouched. Each row of samples begins on a byte boundary.
+% the runs of small stencils, resolved once per distinct mask: text
+% shown through Type 3 bitmap fonts paints the same few masks over
+% and over, and scanning their bits again for every occurrence is
+% where such jobs spend their time. Keyed by a content hash, verified
+% against the stored copy of the mask; runs of consecutive rows
+% sharing one extent merge into taller rectangles, whose union is the
+% very region the row runs cover. The cache lives in the local private
+% dictionary: its runs and mask copies are local render objects, which
+% the global helper namespace could not hold.
+
+% buf width height ink  .stencilruns  rects
+.xpostsys /.stencilruns {
+    10 dict begin
+    /kink exch def /kh exch def /kw exch def /kbuf exch def
+    /hh kw 31 mul kh add 33 mul kink add def
+    0 1 kbuf length 1 sub {
+        kbuf exch get hh 33 mul add 16#FFFFFF and /hh exch def
+    } for
+    /found null def
+    .privatedict /.stencilcache known not {
+        .privatedict /.stencilcache 64 dict put
+    } if
+    .privatedict /.stencilcache get hh 2 copy known {
+        get {
+            dup 0 get kw eq 1 index 1 get kh eq and
+            1 index 2 get kink eq and {
+                dup 3 get kbuf eq {
+                    4 get /found exch def exit
+                } if
+            } if
+            pop
+        } forall
+    }{ pop pop } ifelse
+    found null ne {
+        found
+    }{
+        /rowbytes kw 7 add 8 idiv def
+        /cap kw 2 idiv 1 add kh mul def
+        /rxa cap array def /rya cap array def
+        /rwa cap array def /rha cap array def
+        /rn 0 def
+        /prev 0 dict def
+        0 1 kh 1 sub { /y exch def
+            /cur 8 dict def
+            /x 0 def
+            {
+                x kw ge { exit } if
+                kbuf y rowbytes mul x 8 idiv add get
+                x 8 mod 7 sub bitshift 1 and kink eq {
+                    /x0 x def
+                    {
+                        /x x 1 add def
+                        x kw ge { exit } if
+                        kbuf y rowbytes mul x 8 idiv add get
+                        x 8 mod 7 sub bitshift 1 and kink ne { exit } if
+                    } loop
+                    /rl x x0 sub def
+                    /ext false def
+                    prev x0 2 copy known {
+                        get dup rwa exch get rl eq {
+                            dup rha exch 2 copy get 1 add put
+                            cur x0 3 -1 roll put
+                            /ext true def
+                        }{ pop } ifelse
+                    }{ pop pop } ifelse
+                    ext not {
+                        rxa rn x0 put rya rn y put
+                        rwa rn rl put rha rn 1 put
+                        cur x0 rn put
+                        /rn rn 1 add def
+                    } if
+                }{
+                    /x x 1 add def
+                } ifelse
+            } loop
+            /prev cur def
+        } for
+        /rects rn 4 mul array def
+        0 1 rn 1 sub { /i exch def
+            rects i 4 mul       rxa i get put
+            rects i 4 mul 1 add rya i get put
+            rects i 4 mul 2 add rwa i get put
+            rects i 4 mul 3 add rha i get put
+        } for
+        .privatedict /.stencilcache get length 200 ge {
+            .privatedict /.stencilcache 64 dict put
+        } if
+        /tuple [ kw kh kink kbuf dup length string copy rects ] def
+        .privatedict /.stencilcache get hh 2 copy known {
+            get [ exch aload pop tuple ]
+        }{
+            pop pop [ tuple ]
+        } ifelse
+        .privatedict /.stencilcache get hh 3 -1 roll put
+        rects
+    } ifelse
+    end
+} put
+
 .xpostsys /.stencilmask {
     gsave
         newpath
@@ -812,15 +911,27 @@
         % shared matrix per glyph is the classic case)
         mat matrix invertmatrix concat
         /ink polarity {1}{0} ifelse def
-        0 1 height 1 sub { /y exch def
-            0 1 width 1 sub { /x exch def
-                buf y rowbytes mul x 8 idiv add get
-                x 8 mod 7 sub bitshift 1 and
-                ink eq {
-                    x y 1 1 rectfill
-                } if
+        width height mul 16384 le {
+            % a small stencil's runs resolve once per distinct mask,
+            % consecutive equal-extent rows merged into taller
+            % rectangles, painted through fewer fills
+            /rects buf width height ink //.xpostsys /.stencilruns get exec def
+            0 4 rects length 1 sub { /i exch def
+                rects i get rects i 1 add get
+                rects i 2 add get rects i 3 add get
+                rectfill
             } for
-        } for
+        }{
+            0 1 height 1 sub { /y exch def
+                0 1 width 1 sub { /x exch def
+                    buf y rowbytes mul x 8 idiv add get
+                    x 8 mod 7 sub bitshift 1 and
+                    ink eq {
+                        x y 1 1 rectfill
+                    } if
+                } for
+            } for
+        } ifelse
         end
     grestore
 } put
