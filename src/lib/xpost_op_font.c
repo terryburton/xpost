@@ -68,6 +68,14 @@ typedef struct fontdata
     void *face;
 } fontdata;
 
+/* per-text-operator rendering configuration, gathered once from the
+   font dictionary and the device dictionary */
+typedef struct textstate
+{
+    Xpost_Object blendpix;  /* the device's BlendPix method, or invalid */
+    int blend;              /* anti-alias: TextAlphaBits > 1 and BlendPix present */
+} textstate;
+
 static
 int _findfont(Xpost_Context *ctx,
               Xpost_Object fontname)
@@ -251,6 +259,25 @@ int _setfont(Xpost_Context *ctx,
     return 0;
 }
 
+static
+textstate _text_state_get(Xpost_Context *ctx,
+                          Xpost_Object fontdict,
+                          Xpost_Object devdic)
+{
+    textstate ts;
+    Xpost_Object tab;
+
+    (void)fontdict;
+
+    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
+    tab = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
+    ts.blend = xpost_object_get_type(ts.blendpix) == operatortype
+            && xpost_object_get_type(tab) == integertype
+            && tab.int_.val > 1;
+    return ts;
+}
+
+
 #ifdef HAVE_FREETYPE2
 /* Give the face the current orientation before using it. The pixel
    size set by scalefont carries the CTM's magnitude (the scalefont
@@ -292,10 +319,17 @@ void _face_transform_from_ctm(Xpost_Context *ctx,
     xpost_font_face_transform(face, mat);
 }
 
+/* Plot a rendered glyph bitmap through the device. An 8-bit coverage
+   bitmap is thresholded at half coverage -- the sharp rasterization a
+   scan conversion of the outline would produce -- unless the device
+   anti-aliases text (ts->blend), in which case fully covered pixels go
+   through PutPix and partially covered edge pixels through the
+   device's BlendPix with their coverage. */
 static
 void _draw_bitmap(Xpost_Context *ctx,
                   Xpost_Object devdic,
                   Xpost_Object putpix,
+                  const textstate *ts,
                   const unsigned char *buffer,
                   int rows,
                   int width,
@@ -319,24 +353,28 @@ void _draw_bitmap(Xpost_Context *ctx,
 
     for (i = 0; i < rows; i++)
     {
-        //printf("\n");
         for (j = 0; j < width; j++)
         {
-            //pix = tmp[j];
+            int cov = -1;  /* -1 solid, 0 skip, else blend coverage */
+
             switch (pixel_mode)
             {
                 case XPOST_FONT_PIXEL_MODE_MONO:
                     pix = (tmp[j / 8] >> (7 - (j % 8))) & 1;
+                    cov = pix ? -1 : 0;
                     break;
                 case XPOST_FONT_PIXEL_MODE_GRAY:
                     pix = tmp[j];
+                    if (ts->blend)
+                        cov = pix == 255 ? -1 : (int)pix;
+                    else
+                        cov = pix >= 128 ? -1 : 0;
                     break;
                 default:
                     XPOST_LOG_ERR("unsupported pixel_mode");
                     return;
             }
-            //printf("%c", pix? 'X':'_');
-            if (pix)
+            if (cov)
             {
                 switch (ncomp)
                 {
@@ -349,10 +387,14 @@ void _draw_bitmap(Xpost_Context *ctx,
                         xpost_stack_push(ctx->lo, ctx->os, comp3);
                         break;
                 }
+                if (cov > 0)
+                    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(cov));
                 xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xpos + j));
                 xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ypos + i));
                 xpost_stack_push(ctx->lo, ctx->os, devdic);
-                if (xpost_object_get_type(putpix) == operatortype)
+                if (cov > 0)
+                    xpost_stack_push(ctx->lo, ctx->es, ts->blendpix);
+                else if (xpost_object_get_type(putpix) == operatortype)
                     xpost_stack_push(ctx->lo, ctx->es, putpix);
                 else
                 {
@@ -365,6 +407,7 @@ void _draw_bitmap(Xpost_Context *ctx,
         tmp += pitch;
     }
 }
+
 #endif
 
 static
@@ -372,6 +415,7 @@ int _show_char(Xpost_Context *ctx,
                Xpost_Object devdic,
                Xpost_Object putpix,
                struct fontdata data,
+               const textstate *ts,
                real *xpos,
                real *ypos,
                unsigned int ch,
@@ -406,7 +450,7 @@ int _show_char(Xpost_Context *ctx,
        pixel, not the floor, so a pen an epsilon shy of a pixel
        boundary (the linear advance's 16.16 quantization) lands
        where exact arithmetic would put it */
-    _draw_bitmap(ctx, devdic, putpix,
+    _draw_bitmap(ctx, devdic, putpix, ts,
                  buffer, rows, width, pitch, pixel_mode,
                  (int)floor(*xpos + left + 0.5),
                  (int)floor(*ypos - top + 0.5),
@@ -421,6 +465,7 @@ int _show_char(Xpost_Context *ctx,
     (void)devdic;
     (void)putpix;
     (void)data;
+    (void)ts;
     (void)xpos;
     (void)ypos;
     (void)ch;
@@ -492,6 +537,7 @@ int _show(Xpost_Context *ctx,
     char *ch;
     Xpost_Object devdic;
     Xpost_Object putpix;
+    textstate ts;
     Xpost_Object colorspace;
     int ncomp;
     Xpost_Object comp1, comp2, comp3;
@@ -514,6 +560,7 @@ int _show(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
+    ts = _text_state_get(ctx, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -571,7 +618,7 @@ int _show(Xpost_Context *ctx,
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++) {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, (unsigned char)*ch,
+        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
                 ncomp, comp1, comp2, comp3);
     }
 
@@ -600,6 +647,7 @@ int _ashow(Xpost_Context *ctx,
     char *ch;
     Xpost_Object devdic;
     Xpost_Object putpix;
+    textstate ts;
     Xpost_Object colorspace;
     int ncomp;
     Xpost_Object comp1, comp2, comp3;
@@ -622,6 +670,7 @@ int _ashow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
+    ts = _text_state_get(ctx, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -680,7 +729,7 @@ int _ashow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, (unsigned char)*ch,
+        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
                    ncomp, comp1, comp2, comp3);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
@@ -712,6 +761,7 @@ int _widthshow(Xpost_Context *ctx,
     char *ch;
     Xpost_Object devdic;
     Xpost_Object putpix;
+    textstate ts;
     Xpost_Object colorspace;
     int ncomp;
     Xpost_Object comp1, comp2, comp3;
@@ -734,6 +784,7 @@ int _widthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
+    ts = _text_state_get(ctx, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -792,7 +843,7 @@ int _widthshow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, (unsigned char)*ch,
+        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
                    ncomp, comp1, comp2, comp3);
         if ((unsigned char)*ch == charcode.int_.val)
         {
@@ -829,6 +880,7 @@ int _awidthshow(Xpost_Context *ctx,
     char *ch;
     Xpost_Object devdic;
     Xpost_Object putpix;
+    textstate ts;
     Xpost_Object colorspace;
     int ncomp;
     Xpost_Object comp1, comp2, comp3;
@@ -851,6 +903,7 @@ int _awidthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
+    ts = _text_state_get(ctx, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -909,7 +962,7 @@ int _awidthshow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, (unsigned char)*ch,
+        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
                 ncomp, comp1, comp2, comp3);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
@@ -1058,6 +1111,7 @@ int _kshow(Xpost_Context *ctx,
     char *ch;
     Xpost_Object devdic;
     Xpost_Object putpix;
+    textstate ts;
     Xpost_Object colorspace;
     int ncomp;
     Xpost_Object comp1, comp2, comp3;
@@ -1081,6 +1135,7 @@ int _kshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
+    ts = _text_state_get(ctx, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -1139,7 +1194,7 @@ int _kshow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &xpos, &ypos, (unsigned char)*ch,
+        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
                 ncomp, comp1, comp2, comp3);
     }
 
