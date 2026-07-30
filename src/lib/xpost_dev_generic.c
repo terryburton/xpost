@@ -2115,11 +2115,29 @@ static int _pdf_fmt_num(char *o, double v)
    survives a `restore` executed by the job before showpage/Emit. The current
    page's marks are not part of virtual memory, so `restore` must not discard
    them; storing them in the device dict would let it. */
+/* one registered separation colour space: the dedup key (the separation
+   name as given), the colour-space array body for the page's /ColorSpace
+   resource (missing only the function reference, which depends on object
+   numbering known at Emit), and the complete function object body
+   (dictionary plus stream) defining the tint transform */
+typedef struct
+{
+    char *name;
+    size_t namelen;
+    char *csdef;
+    size_t csdeflen;
+    char *func;
+    size_t funclen;
+} Pdf_Sep;
+
 typedef struct
 {
     char *data;
     size_t len;
     size_t cap;
+    Pdf_Sep *seps;
+    int nseps;
+    int sepcap;
 } Pdf_Acc;
 
 static int _pdf_acc_append(Pdf_Acc *a, const char *s, size_t n)
@@ -2172,6 +2190,9 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     a.data = (char *)malloc(4096);
     a.len = 0;
     a.cap = a.data ? 4096 : 0;
+    a.seps = NULL;
+    a.nseps = 0;
+    a.sepcap = 0;
     priv = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(a), NULL));
     _pdf_acc_put(ctx, priv, &a);
     xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
@@ -2351,6 +2372,147 @@ static int _pdfchunks(Xpost_Context *ctx, Xpost_Object devdic)
     return 0;
 }
 
+/* format a number in PDF syntax into a fresh string: the marking
+   methods format through the accumulator, but separation registration
+   builds function source in strings, and both must agree */
+static int _pdfnumstr(Xpost_Context *ctx, Xpost_Object num)
+{
+    char t[32];
+    int n;
+
+    n = _pdf_fmt_num(t, xpost_object_get_type(num) == realtype
+                        ? num.real_.val : (double)num.int_.val);
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, n, t)));
+    return 0;
+}
+
+/* Separation registry: the device's .registersep method files each
+   separation colour space used by the page under a small integer, which
+   the content stream references as /CS<i>. Entries live beside the
+   content in the accumulator -- outside virtual memory -- so a `restore`
+   cannot roll the registry away from content that already references it. */
+
+static int _pdf_sep_find(Pdf_Acc *a, const char *name, size_t namelen)
+{
+    int i;
+
+    for (i = 0; i < a->nseps; i++)
+        if (a->seps[i].namelen == namelen &&
+            memcmp(a->seps[i].name, name, namelen) == 0)
+            return i;
+    return -1;
+}
+
+/* look a separation up by name: index true, or false when unregistered */
+static int _pdffindsep(Xpost_Context *ctx, Xpost_Object name, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    int i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    i = _pdf_sep_find(&a, (char *)xpost_string_get_pointer(ctx, name),
+                      name.comp_.sz);
+    if (i >= 0)
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(i >= 0));
+    return 0;
+}
+
+static char *_pdf_sep_strdup(Xpost_Context *ctx, Xpost_Object str)
+{
+    char *p = (char *)malloc(str.comp_.sz ? str.comp_.sz : 1);
+
+    if (p)
+        memcpy(p, xpost_string_get_pointer(ctx, str), str.comp_.sz);
+    return p;
+}
+
+/* register a separation (name, colour-space body, function object body),
+   returning its index; an already-registered name just returns its index */
+static int _pdfregsep(Xpost_Context *ctx,
+                      Xpost_Object name, Xpost_Object csdef, Xpost_Object func,
+                      Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    Pdf_Sep *s;
+    int i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    i = _pdf_sep_find(&a, (char *)xpost_string_get_pointer(ctx, name),
+                      name.comp_.sz);
+    if (i >= 0)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+        return 0;
+    }
+    if (a.nseps == a.sepcap)
+    {
+        int nc = a.sepcap ? a.sepcap * 2 : 4;
+        Pdf_Sep *ns = (Pdf_Sep *)realloc(a.seps, nc * sizeof(Pdf_Sep));
+        if (!ns)
+            return VMerror;
+        a.seps = ns;
+        a.sepcap = nc;
+        /* the grown array must reach /Private even if a copy below
+           fails: the old block is gone */
+        _pdf_acc_put(ctx, priv, &a);
+    }
+    s = &a.seps[a.nseps];
+    s->name = _pdf_sep_strdup(ctx, name);
+    s->namelen = name.comp_.sz;
+    s->csdef = _pdf_sep_strdup(ctx, csdef);
+    s->csdeflen = csdef.comp_.sz;
+    s->func = _pdf_sep_strdup(ctx, func);
+    s->funclen = func.comp_.sz;
+    if (!s->name || !s->csdef || !s->func)
+    {
+        free(s->name);
+        free(s->csdef);
+        free(s->func);
+        return VMerror;
+    }
+    i = a.nseps++;
+    _pdf_acc_put(ctx, priv, &a);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+    return 0;
+}
+
+static int _pdfsepcount(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(a.nseps));
+    return 0;
+}
+
+/* fetch a registered separation's colour-space body and function object
+   body as strings, for Emit to build the resources and objects around */
+static int _pdfsepget(Xpost_Context *ctx, Xpost_Object idx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    Pdf_Sep *s;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    if (idx.int_.val < 0 || idx.int_.val >= a.nseps)
+        return rangecheck;
+    s = &a.seps[idx.int_.val];
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, s->csdeflen, s->csdef)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, s->funclen, s->func)));
+    return 0;
+}
+
 /* free the accumulator's malloc'd buffer (device Destroy) */
 /* truncate the accumulator for the next page, keeping the buffer */
 static int _pdfreset(Xpost_Context *ctx, Xpost_Object devdic)
@@ -2369,6 +2531,7 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
 {
     Pdf_Acc a;
     Xpost_Object priv;
+    int i;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return 0;
@@ -2376,6 +2539,16 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
     a.data = NULL;
     a.len = 0;
     a.cap = 0;
+    for (i = 0; i < a.nseps; i++)
+    {
+        free(a.seps[i].name);
+        free(a.seps[i].csdef);
+        free(a.seps[i].func);
+    }
+    free(a.seps);
+    a.seps = NULL;
+    a.nseps = 0;
+    a.sepcap = 0;
     _pdf_acc_put(ctx, priv, &a);
     return 0;
 }
@@ -2423,6 +2596,15 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".pdfchunks", (Xpost_Op_Func)_pdfchunks, 1, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdffree", (Xpost_Op_Func)_pdffree, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdfreset", (Xpost_Op_Func)_pdfreset, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfnumstr", (Xpost_Op_Func)_pdfnumstr, 1, 1,
+            numbertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffindsep", (Xpost_Op_Func)_pdffindsep, 2, 2,
+            stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfregsep", (Xpost_Op_Func)_pdfregsep, 1, 4,
+            stringtype, stringtype, stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfsepcount", (Xpost_Op_Func)_pdfsepcount, 1, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfsepget", (Xpost_Op_Func)_pdfsepget, 2, 2,
+            integertype, dicttype); INSTALL;
     if (xpost_object_get_type((nameImgData = xpost_name_cons(ctx, "ImgData"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
