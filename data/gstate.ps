@@ -312,14 +312,24 @@ end
 .xpostsys /.gcd { % m n .gcd g
     { dup 0 eq { pop exit } if exch 1 index mod } loop
 } put
-.xpostsys /.installscreencell {
-    20 dict begin
-    /proc exch def /ang exch def /freq exch def
+
+% freq ang  .screenlattice  a b L q quad
+% the rotated integer lattice the screen tiles the device plane with:
+% the angle becomes the nearest rational tangent b/a whose cell
+% diagonal sits near the requested frequency. (a,b) and (-b,a) are the
+% lattice vectors, L the side of the repeating tile of L*L pixels,
+% q = a*a + b*b, and quad the whole quarter turns folded out of the
+% angle -- the lattice needs the angle only modulo ninety degrees, but
+% the spot pattern need not share the cell's symmetry, so the quarter
+% turns rotate the spot's argument instead. An axis-aligned screen
+% falls out as b = 0. The spot evaluation at install time and the
+% rendered threshold cell both build from this, so they sample the
+% same points.
+.xpostsys /.screenlattice {
+    12 dict begin
+    /ang exch def /freq exch def
     /n DEVICE /defaultmatrix get 0 get abs 72 mul freq div
        round cvi dup 2 lt { pop 2 } if dup 48 gt { pop 48 } if def
-    % the lattice needs the angle only modulo ninety degrees, but the
-    % spot pattern need not have the cell's symmetry: the whole
-    % quarter turns rotate the spot's argument instead
     /th ang 90 div dup floor sub 90 mul def
     /quad ang 90 div floor cvi 4 mod dup 0 lt { 4 add } if def
     /besta n def /bestb 0 def /bestscore 1e9 def
@@ -344,6 +354,14 @@ end
     /a besta def /b bestb def
     /q a dup mul b dup mul add def
     /L q a abs b abs //.xpostsys /.gcd get exec idiv def
+    a b L q quad
+    end
+} put
+.xpostsys /.installscreencell {
+    20 dict begin
+    /proc exch def /ang exch def /freq exch def
+    freq ang //.xpostsys /.screenlattice get exec
+    /quad exch def /q exch def /L exch def /b exch def /a exch def
     /vals L L mul array def
     % arguments stay strictly inside (-1 1) whatever their sign: a
     % program may fold a negation into its spot, and the closed end
