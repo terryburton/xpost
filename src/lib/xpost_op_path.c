@@ -109,6 +109,7 @@ static Xpost_Object namemove;
 static Xpost_Object nameline;
 static Xpost_Object namecurve;
 static Xpost_Object nameclose;
+static Xpost_Object nameclipregion;
 static Xpost_Object nameflat;
 
 /*opcodes*/
@@ -653,6 +654,71 @@ int _path_walk_bbox(Xpost_Context *ctx, Xpost_Object path,
     return any ? 1 : 2;
 }
 
+/* test whether a path is a single closed axis-aligned rectangle
+   and return its bounds */
+static
+int _path_is_rect(Xpost_Context *ctx, Xpost_Object path,
+                  real *minx, real *miny, real *maxx, real *maxy)
+{
+    char *p;
+    unsigned int used, o;
+    real px[5], py[5];
+    int npts = 0;
+    int j;
+
+    if (xpost_object_get_type(path) != stringtype)
+        return 0;
+    p = xpost_string_get_pointer(ctx, path);
+    used = _path_get_u32(p, 0);
+    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    {
+        int cmd = p[o];
+        real co[2];
+
+        if (cmd == PATH_CMD_CLOSE)
+            continue; /* close repeats the start point */
+        if (o == PATH_HDR)
+        {
+            if (cmd != PATH_CMD_MOVE)
+                return 0;
+        }
+        else if (cmd != PATH_CMD_LINE)
+            return 0; /* second subpath or curve */
+        if (npts >= 5)
+            return 0;
+        _path_get_coords(p, o, co, 2);
+        px[npts] = co[0];
+        py[npts] = co[1];
+        npts++;
+    }
+    /* an explicitly repeated start point is equivalent to closure */
+    if (npts == 5)
+    {
+        if (px[4] != px[0] || py[4] != py[0])
+            return 0;
+        npts = 4;
+    }
+    if (npts != 4)
+        return 0;
+    /* every side, including the closing one, must be axis-parallel */
+    for (j = 0; j < 4; j++)
+    {
+        int n = (j + 1) & 3;
+        if (px[j] != px[n] && py[j] != py[n])
+            return 0;
+    }
+    *minx = *maxx = px[0];
+    *miny = *maxy = py[0];
+    for (j = 1; j < 4; j++)
+    {
+        if (px[j] < *minx) *minx = px[j];
+        if (px[j] > *maxx) *maxx = px[j];
+        if (py[j] < *miny) *miny = py[j];
+        if (py[j] > *maxy) *maxy = py[j];
+    }
+    return *maxx > *minx && *maxy > *miny;
+}
+
 /* build the polygon argument for the device FillPoly procedure in a
    single traversal: a flat array of [x y] point pairs with subpaths
    separated (and terminated) by null. A close element repeats the
@@ -747,6 +813,39 @@ int _fillpolyargs(Xpost_Context *ctx)
     free(pts);
 
     xpost_stack_push(ctx->lo, ctx->os, result);
+    return 0;
+}
+
+/* clip trivial-accept test.
+   Push true when the clip region is an axis-aligned rectangle and the
+   current path lies entirely inside it: clipping the path against such
+   a region passes every point through unchanged, so the caller can skip
+   the polygon-clipping machinery. Push false in every uncertain case. */
+static
+int _cliptrivial(Xpost_Context *ctx)
+{
+    Xpost_Object gstate, path, clipregion;
+    real cminx, cminy, cmaxx, cmaxy;
+    real pminx, pminy, pmaxx, pmaxy;
+    int accept = 0, ret;
+
+    gstate = _gstate(ctx);
+    if (xpost_object_get_type(gstate) == invalidtype)
+        return undefined;
+    path = xpost_dict_get(ctx, gstate, namecurrpath);
+    clipregion = xpost_dict_get(ctx, gstate, nameclipregion);
+
+    if (_path_is_rect(ctx, clipregion, &cminx, &cminy, &cmaxx, &cmaxy))
+    {
+        ret = _path_walk_bbox(ctx, path, 0, NULL, &pminx, &pminy, &pmaxx, &pmaxy);
+        /* an empty path is accepted: there is nothing to clip */
+        accept = ret == 2 ||
+                 (ret == 1 &&
+                  pminx >= cminx && pmaxx <= cmaxx &&
+                  pminy >= cminy && pmaxy <= cmaxy);
+    }
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(accept));
     return 0;
 }
 
@@ -1418,6 +1517,7 @@ int _flattenpath (Xpost_Context *ctx)
     char *p;
     unsigned int used, o;
     real cp[2] = { 0, 0 };
+    int curved = 0;
     int ret;
 
     gstate = _gstate(ctx);
@@ -1434,6 +1534,21 @@ int _flattenpath (Xpost_Context *ctx)
         return unregistered;
     p = xpost_string_get_pointer(ctx, path);
     used = _path_get_u32(p, 0);
+
+    /* a path without curves is already flat: leave it untouched
+       rather than rebuild an identical copy */
+    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    {
+        if (p[o] < PATH_CMD_MOVE || p[o] > PATH_CMD_CLOSE)
+            return unregistered;
+        if (p[o] == PATH_CMD_CURVE)
+        {
+            curved = 1;
+            break;
+        }
+    }
+    if (!curved)
+        return 0;
 
     xpost_stack_push(ctx->lo, ctx->hold, path);
     ret = _newpath(ctx);
@@ -1508,6 +1623,8 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
         return VMerror;
     if (xpost_object_get_type((nameclose = xpost_name_cons(ctx, "close"))) == invalidtype)
         return VMerror;
+    if (xpost_object_get_type((nameclipregion = xpost_name_cons(ctx, "clipregion"))) == invalidtype)
+        return VMerror;
     if (xpost_object_get_type((nameflat = xpost_name_cons(ctx, "flat"))) == invalidtype)
         return VMerror;
 
@@ -1568,6 +1685,9 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     _rcurveto_cont_opcode = op.mark_.padw;
 
     op = xpost_operator_cons(ctx, "closepath", (Xpost_Op_Func)_closepath, 0, 0);
+    INSTALL;
+
+    op = xpost_operator_cons(ctx, ".cliptrivial", (Xpost_Op_Func)_cliptrivial, 1, 0);
     INSTALL;
 
     op = xpost_operator_cons(ctx, ".fillpolyargs", (Xpost_Op_Func)_fillpolyargs, 1, 0);
