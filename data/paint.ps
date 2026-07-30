@@ -52,9 +52,21 @@
 
 % -  fill  -
 % fill current path with current color
+% A device with a FillPath method consumes the whole path itself
+% (vector devices fill with curves preserved). The path must lie
+% inside a rectangular clip: a non-trivial clip region is cut by the
+% polygon machinery below, at the cost of flattening.
 /fill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
+    DEVICE /FillPath known .cliptrivial and {
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+        //.xpostsys /.applytransfer get exec
+        DEVICE dup /FillPath get exec
+        pop
+        flushpage
+        newpath
+    }{
     flattenpath
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
@@ -112,6 +124,7 @@
 
     flushpage
     newpath
+    } ifelse
     } ifelse
 } bind def
 
@@ -256,9 +269,14 @@
         strokepath //.xpostsys /.patternfill get exec
     }{
     DEVICE /StrokePath known {
-        flattenpath
-        //.xpostsys /dashpath get exec
-        //.xpostsys /doclip get exec
+        % dashing and non-rectangular clipping consume line segments;
+        % with neither active the path passes through unflattened, so
+        % curves reach the device
+        currentdash pop length 0 eq .cliptrivial and not {
+            flattenpath
+            //.xpostsys /dashpath get exec
+            //.xpostsys /doclip get exec
+        } if
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         //.xpostsys /.applytransfer get exec
         DEVICE dup /StrokePath get exec
