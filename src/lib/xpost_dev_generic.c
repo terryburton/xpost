@@ -77,6 +77,7 @@ static Xpost_Object namerepeat;
 static Xpost_Object namecvx;
 static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
+static Xpost_Object nameFillRect;
 
 char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
 {
@@ -322,6 +323,8 @@ int _fillpoly(Xpost_Context *ctx,
     int numlines;
     /* Xpost_Object x1, y1, x2, y2; */
     Xpost_Object drawline;
+    Xpost_Object fillrect;
+    int usefillrect;
     struct point *points, *intersections, *tmp;
     int i, j;
     int cap;
@@ -417,11 +420,22 @@ int _fillpoly(Xpost_Context *ctx,
     /* intersect polygon edges with scanlines */
     for (i = 0, j = 0; i < poly.comp_.sz - 1; i++)
     {
-        real rx, ry;
+        real rx, ry, eylo, eyhi, ybase;
+        integer k;
 
         if (points[i].x == SUBPATH_BREAK || points[i+1].x == SUBPATH_BREAK)
             continue;
-        for (yscan = (real)(miny + 0.5); yscan < maxy; yscan += 1.0)
+
+        /* An edge only crosses the scanlines spanning its own y-range, so
+           restrict the sweep to that band instead of the whole page (a ±1
+           scanline margin keeps this exactly equivalent across floating-point
+           boundaries: the extra scanlines simply miss). Makes the fill cost
+           proportional to total edge height rather than edges x page height. */
+        eylo = points[i].y < points[i+1].y ? points[i].y : points[i+1].y;
+        eyhi = points[i].y < points[i+1].y ? points[i+1].y : points[i].y;
+        ybase = (real)(miny + 0.5);
+        k = (eylo - 1.0 > ybase) ? (integer)(eylo - 1.0 - ybase) : 0;
+        for (yscan = ybase + (real)k; yscan < maxy && yscan <= eyhi + 1.0; yscan += 1.0)
         {
             if (_intersect(points[i].x, points[i].y,
                            points[i+1].x, points[i+1].y,
@@ -452,13 +466,51 @@ int _fillpoly(Xpost_Context *ctx,
     /* sort intersection points */
     qsort(intersections, j, sizeof *intersections, _cyxcomp);
 
-    /* arrange ((x1,y1),(x2,y2)) pairs */
-    for (i = 0; i < numlines * 2; i += 2)
+    /* A fill scanline is a horizontal span. When the device provides a
+       compiled FillRect, render each span through it (the per-pixel plotting
+       then happens in C rather than a PostScript DrawLine/PutPix loop);
+       otherwise fall back to DrawLine unchanged. Both take the same colour
+       components plus four numbers, so the loop body and colour roll below are
+       identical either way. */
+    fillrect = xpost_dict_get(ctx, devdic, nameFillRect);
+    usefillrect = xpost_object_get_type(fillrect) == operatortype;
+
+    if (usefillrect)
     {
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].x)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].y)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].x)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].y)));
+        /* DrawLine plots a span from its first point (included) toward its
+           second (excluded), so it covers |x1-x2| pixels: [x1, x2-1] when
+           x1 < x2, or [x2+1, x1] when x1 > x2, and nothing when x1 == x2.
+           FillRect fills the inclusive box [x, x+w] on row y (a fill span is
+           height 0), so pass the low end as x and |x1-x2|-1 as w, dropping
+           empty spans, to match DrawLine's pixels exactly. */
+        int emitted = 0;
+        for (i = 0; i < numlines * 2; i += 2)
+        {
+            integer x1 = (integer)floor(intersections[i].x);
+            integer y1 = (integer)floor(intersections[i].y);
+            integer x2 = (integer)floor(intersections[i+1].x);
+            integer xlo;
+            if (x1 == x2)
+                continue;
+            xlo = x1 < x2 ? x1 : x2 + 1;
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(y1));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((x1 < x2 ? x2 - x1 : x1 - x2) - 1)); /* w */
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));                                 /* h */
+            emitted++;
+        }
+        numlines = emitted;
+    }
+    else
+    {
+        /* arrange ((x1,y1),(x2,y2)) pairs */
+        for (i = 0; i < numlines * 2; i += 2)
+        {
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].x)));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].y)));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].x)));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].y)));
+        }
     }
 
     /*call the device's DrawLine generically with continuations.
@@ -525,12 +577,19 @@ int _fillpoly(Xpost_Context *ctx,
        */
 
     xpost_stack_push(ctx->lo, ctx->os, devdic);
-    drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
-    xpost_stack_push(ctx->lo, ctx->os, drawline);
+    if (usefillrect)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, fillrect);
+    }
+    else
+    {
+        drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
+        xpost_stack_push(ctx->lo, ctx->os, drawline);
 
-    /*if drawline is a procedure, we also need to call exec */
-    if (xpost_object_get_type(drawline) == arraytype)
-        xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+        /*if drawline is a procedure, we also need to call exec */
+        if (xpost_object_get_type(drawline) == arraytype)
+            xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+    }
 
     /*--the rest of the code here calls-back to postscript (by "continuation")
         by pushing executable names on the execution-stack, and then returns.
@@ -656,6 +715,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
     if (xpost_object_get_type((nameImgData = xpost_name_cons(ctx, "ImgData"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;
