@@ -330,8 +330,8 @@ Level 3 operators
 
  [ ] shfill
  [ ] composite fonts
- [ ] clipsave
- [ ] cliprestore
+ [X] clipsave
+ [X] cliprestore
  [X] setsmoothness, currentsmoothness (recorded only)
  [ ] findcolorrendering
 
