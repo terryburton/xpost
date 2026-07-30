@@ -381,7 +381,7 @@ Typical output devices
  [ ] png
  [ ] pdf
  [ ] svg
- [ ] bounding-box
+ [X] bounding-box
  [ ] dsc-compliant distilled ps
  [X] xcb
  [X] ms-windows
