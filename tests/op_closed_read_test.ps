@@ -1,6 +1,5 @@
 % Reading from a closed file reports end-of-data (an empty result and false)
-% rather than raising an error, matching Adobe Distiller and Ghostscript. Run
-% through `xpost -d null` by run-ps-test.sh; prints SUCCESS on Ghostscript too.
+% rather than raising an error. Run through `xpost -d null` by run-ps-test.sh.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

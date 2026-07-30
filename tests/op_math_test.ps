@@ -1,12 +1,10 @@
 % Arithmetic/math operator compliance (PLRM 8.2), run through `xpost -d null` by
-% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
-% prints SUCCESS on Ghostscript too.
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for three PLRM deviations found in the 8.2 compliance campaign:
-%   - mod by a zero divisor raised a hardware fault (SIGFPE) instead of the
-%     undefinedresult error PLRM mandates; INT_MIN mod/idiv -1 overflowed likewise
-%   - sqrt of a negative operand returned NaN instead of rangecheck
-%   - a truncated RAD_PER_DEG (0.0174533) skewed atan/sin/cos off the PLRM examples
+%   - mod or idiv by a zero divisor is undefinedresult (PLRM), as is INT_MIN
+%     mod/idiv -1
+%   - sqrt of a negative operand is rangecheck
+%   - RAD_PER_DEG is M_PI/180, so atan/sin/cos hit the PLRM examples
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

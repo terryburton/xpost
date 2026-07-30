@@ -1,10 +1,9 @@
 % Control operator compliance (PLRM 8.2), run through `xpost -d null` by
-% run-ps-test.sh: prints SUCCESS iff every assertion holds. Standard PostScript;
-% prints SUCCESS on Ghostscript too.
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for the campaign fix: repeat with a negative count is rangecheck
-% (PLRM: the count is a "nonnegative integer"; rangecheck is the only Errors-list
-% code that fits an out-of-range count), not a silent no-op.
+% repeat with a negative count is rangecheck (PLRM: the count is a "nonnegative
+% integer"; rangecheck is the only Errors-list code that fits an out-of-range
+% count), not a silent no-op.
 
 % for's control value is an integer when initial and increment are integers,
 

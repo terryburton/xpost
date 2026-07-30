@@ -1,8 +1,7 @@
 % cvs produces a real string for integer, real, boolean, string, name and
 % operator objects; every other type yields --nostringval--. The debugging
-% == operator keeps its own -mark- rendering. Matches Adobe Distiller and
-% Ghostscript. Run through `xpost -d null` by run-ps-test.sh; prints SUCCESS
-% on Ghostscript too.
+% == operator keeps its own -mark- rendering. Run through `xpost -d null` by
+% run-ps-test.sh.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
