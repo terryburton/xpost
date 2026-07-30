@@ -39,7 +39,7 @@ Level 1 operators
  [X] awidthshow
  [X] kshow
  [X] stringwidth
- [/] Type-3 Fonts
+ [X] Type-3 Fonts
  [X] font data caching
  [X] definefont for modified font properties (matrix, encoding, etc.)
  [X] base font CharStrings (a face whose program cannot be read
