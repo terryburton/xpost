@@ -313,6 +313,13 @@ test('bbox-device',
   args: [ xpost_exe, files('tests/bbox_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# pngalpha device: RGBA output where the erased page is transparent and
+# marks (including explicit white) are opaque; png stays RGB.
+test('pngalpha-device',
+  find_program('tests/run-pngalpha-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Save/restore VM: drive the entity count past 65536 and require dicts and
 # arrays to revert exactly -- guards the saverec entity-width truncation.
 test('save-restore',

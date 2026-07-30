@@ -378,7 +378,7 @@ Typical output devices
  [ ] pbm
  [ ] tiff
  [X] jpeg
- [ ] png
+ [X] png (also a png with alpha)
  [ ] pdf
  [ ] svg
  [X] bounding-box
