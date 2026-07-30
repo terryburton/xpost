@@ -45,6 +45,18 @@ DEVICE begin
         currentdict /nativecolorspace get /DeviceGray eq {
             /FillRect //.internaldict /.fillrectgray get def
         } if
+        % packed-integer rgb devices whose raster is a PS-level ImgData
+        % array (PPMIMAGE) likewise -- .fillrectrgb writes those rows
+        % directly, so a device that keeps its raster in a C buffer (bgr)
+        % has no ImgData and stays on its own FillRect. Skip a device that
+        % brought a compiled FillRect of its own (the png family) too.
+        currentdict /nativecolorspace get /DeviceRGB eq {
+            currentdict /ImgData known {
+                currentdict /FillRect get type /operatortype ne {
+                    /FillRect //.internaldict /.fillrectrgb get def
+                } if
+            } if
+        } if
     } if
 end
 
