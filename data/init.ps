@@ -70,7 +70,8 @@ currentglobal true setglobal
 % still reaches them through 1183615869 internaldict. The few operators fetched
 % by name during graphics loading are seeded here first, before that pass.
 userdict /.internaldict 256 dict put
-[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows ]
+[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows
+  /.pdfinit /.pdfput /.flatecompress ]
 { dup systemdict exch get .internaldict 3 1 roll put } forall
 
 % int  internaldict  dict
