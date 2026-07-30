@@ -21,6 +21,7 @@
 .xpostsys /arcbez
 .xpostsys /.c01
 .xpostsys /.c255
+.xpostsys /.clipspans
 .xpostsys /ColorConversion
 .xpostsys /cpath
 .xpostsys /crossdashbound
