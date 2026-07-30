@@ -134,14 +134,15 @@
 % same scan-conversion as the nonzero fill, and the rectangles --
 % winding-uniform -- then travel the ordinary pipeline: clip span
 % intersection and the device FillPoly. A vector device consuming
-% whole paths through FillPath still receives the nonzero
-% approximation, as before.
+% whole paths through FillPath carries the rule to its consumer.
 /eofill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
+        graphicsdict /currgstate get /.eorule true put
         % this implementation's own fill, immune to a program's
         % redefinition of the name (which may itself invoke eofill)
         //fill exec
+        graphicsdict /currgstate get /.eorule false put
     }{
         closepath
         flattenpath
