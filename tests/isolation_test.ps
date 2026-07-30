@@ -149,6 +149,21 @@ CIENAMES { { (PROGRAM-OWNED) } def } forall
     newpath 20 20 moveto 180 20 lineto 180 180 lineto closepath fill
 } stopped not (CIE colour survives redefined converter names) assert
 
+% The halftone/screen family lives in .xpostsys, so redefining the names
+% cannot disturb screen or halftone setup (public ops reach it by frozen get).
+/HTNAMES [ /.spreadgrayscreen /.samplespot /.gcd /.screenlattice
+    /.installscreencell /.refreshscreencell /.ht5component /.htreadthresholds ] def
+HTNAMES {
+    dup where { pop (HT-VISIBLE: ) print == false }{ pop true } ifelse
+    (halftone helper name is hidden) assert
+} forall
+HTNAMES { { (PROGRAM-OWNED) } def } forall
+{
+    60 45 { dup mul exch dup mul add 1 sqrt sub } setscreen
+    << /HalftoneType 3 /Width 4 /Height 4
+       /Thresholds <10305070 20406080 15355575 25456585> >> sethalftone
+} stopped not (screen and halftone setup survive redefined helper names) assert
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

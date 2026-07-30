@@ -87,6 +87,15 @@
 .xpostsys /.strcat
 .xpostsys /.wcmatch
 .xpostsys /xpost
+.xpostsys /.applytransfer
+.xpostsys /.spreadgrayscreen
+.xpostsys /.samplespot
+.xpostsys /.gcd
+.xpostsys /.screenlattice
+.xpostsys /.installscreencell
+.xpostsys /.refreshscreencell
+.xpostsys /.ht5component
+.xpostsys /.htreadthresholds
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
 gstate /colorspace
