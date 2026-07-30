@@ -1123,6 +1123,18 @@
         % colour the runs assemble into a single path so the tiling
         % runs once over the whole stencil
         /paintpat //.xpostsys /.patternactive get exec def
+        % a glyph-context stencil blends its edges when the device
+        % blends text, the transform is axis-aligned, and nothing
+        % clips: the coverage painter writes pixels directly
+        /aadone false def
+        paintpat not
+        graphicsdict /.inglyph 2 copy known { get }{ pop pop false } ifelse and
+        .cliptrivial and {
+            << /buf buf /width width /height height
+               /ink ink /mat matrix currentmatrix >> .stencilaa
+            { /aadone true def } if
+        } if
+        aadone not {
         width height mul 16384 le {
             % a small stencil's runs resolve once per distinct mask,
             % consecutive equal-extent rows merged into taller
@@ -1169,6 +1181,7 @@
         } for
         paintpat { //.xpostsys /.patternfill get exec } if
         } ifelse
+        } if
         end
     grestore
 } put
