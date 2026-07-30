@@ -382,7 +382,7 @@ Typical output devices
  [X] tiff (24-bit rgb, one uncompressed strip)
  [X] jpeg
  [X] png (also a png with alpha)
- [ ] pdf
+ [X] pdf (pdfwrite)
  [ ] svg
  [X] bounding-box
  [ ] dsc-compliant distilled ps

@@ -313,6 +313,14 @@ test('bbox-device',
   args: [ xpost_exe, files('tests/bbox_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# PDF device: write a PDF and check its structure; round-trip via gs when
+# present. The input is a single fill large enough to overflow the content
+# buffer, exercising the flush path.
+test('pdf-device',
+  find_program('tests/run-pdf-test.sh'),
+  args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # pngalpha device: RGBA output where the erased page is transparent and
 # marks (including explicit white) are opaque; png stays RGB.
 test('pngalpha-device',
