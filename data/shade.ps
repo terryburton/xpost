@@ -336,13 +336,22 @@ currentglobal true setglobal
     dec kk 2 mul 1 add get dec kk 2 mul get sub frv mul
     dec kk 2 mul get add
 } def
+% a mesh DataSource may instead be an array of the flag, coordinate and
+% colour values directly (PLRM 4.9.3): then BitsPer* and Decode are ignored
+% and each field is one array element. /litds selects which reading applies.
+/.mrdflag { % - . flag
+    litds { ds dp get cvi /dp dp 1 add def }
+          { bpf //.mrdbits exec cvi } ifelse
+} def
 /.mrdpt { % - . [x y]
-    [ 0 bpc //.mrddec exec 1 bpc //.mrddec exec ]
+    litds { [ ds dp get ds dp 1 add get ] /dp dp 2 add def }
+          { [ 0 bpc //.mrddec exec 1 bpc //.mrddec exec ] } ifelse
 } def
 /.mrdcolor { % - . [c0..cn-1]
-    [ 0 1 ncomp 1 sub { /c exch def
-        c 2 add bpcm //.mrddec exec
-    } for ]
+    litds { [ ds dp ncomp getinterval aload pop ] /dp dp ncomp add def }
+           { [ 0 1 ncomp 1 sub { /c exch def
+                 c 2 add bpcm //.mrddec exec
+             } for ] } ifelse
 } def
 /.mrdvertex { % - . [x y c0..cn-1]
     [ //.mrdpt exec aload pop //.mrdcolor exec aload pop ]
@@ -411,14 +420,25 @@ currentglobal true setglobal
     /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
     /ds sh /DataSource get def
     /dp 0 def
-    /dec sh /Decode get def
-    /bpc sh /BitsPerCoordinate get def
-    /bpcm sh /BitsPerComponent get def
-    /ncomp dec length 4 sub 2 idiv def
-    bpc 16 eq bpc 32 eq or
-    bpcm 8 eq bpcm 16 eq or and not {
-        /shfill cvx /rangecheck signalerror
-    } if
+    /litds ds type /arraytype eq def
+    litds {
+        % array DataSource: flag, coordinates and colours are literal numbers,
+        % with one parametric value per vertex under a Function or one value per
+        % colour-space component otherwise (BitsPer* and Decode ignored, PLRM)
+        /ncomp shfn null eq { //.ncomponents exec }{ 1 } ifelse def
+    }{
+        /dec sh /Decode get def
+        /bpc sh /BitsPerCoordinate get def
+        /bpcm sh /BitsPerComponent get def
+        % lattice (type 5) meshes carry no per-vertex flag, so BitsPerFlag is
+        % absent there; it is consulted only by the free-form (type 4) reader
+        /bpf sh /BitsPerFlag 2 copy known { get }{ pop pop 8 } ifelse def
+        /ncomp dec length 4 sub 2 idiv def
+        bpc 16 eq bpc 32 eq or
+        bpcm 8 eq bpcm 16 eq or and not {
+            /shfill cvx /rangecheck signalerror
+        } if
+    } ifelse
     % subdivision depth from the mesh's device scale: two levels
     % within a few pixels, four when triangles are large
     /dpt 4 def
@@ -440,13 +460,13 @@ currentglobal true setglobal
         /va null def /vb null def /vc null def
         {
             dp ds length ge { exit } if
-            /flag sh /BitsPerFlag get //.mrdbits exec cvi def
+            /flag //.mrdflag exec def
             flag 0 eq {
                 dp ds length ge { exit } if
                 /va //.mrdvertex exec def
-                sh /BitsPerFlag get //.mrdbits exec pop
+                //.mrdflag exec pop
                 /vb //.mrdvertex exec def
-                sh /BitsPerFlag get //.mrdbits exec pop
+                //.mrdflag exec pop
                 /vc //.mrdvertex exec def
             }{
                 flag 1 eq {
@@ -562,16 +582,21 @@ currentglobal true setglobal
     /shfn sh /Function 2 copy known { get }{ pop pop null } ifelse def
     /ds sh /DataSource get def
     /dp 0 def
-    /dec sh /Decode get def
-    /bpc sh /BitsPerCoordinate get def
-    /bpcm sh /BitsPerComponent get def
-    /bpf sh /BitsPerFlag get def
-    /ncomp dec length 4 sub 2 idiv def
     /tensor sh /ShadingType get 7 eq def
-    bpc 16 eq bpc 32 eq or
-    bpcm 8 eq bpcm 16 eq or and not {
-        /shfill cvx /rangecheck signalerror
-    } if
+    /litds ds type /arraytype eq def
+    litds {
+        /ncomp shfn null eq { //.ncomponents exec }{ 1 } ifelse def
+    }{
+        /dec sh /Decode get def
+        /bpc sh /BitsPerCoordinate get def
+        /bpcm sh /BitsPerComponent get def
+        /bpf sh /BitsPerFlag get def
+        /ncomp dec length 4 sub 2 idiv def
+        bpc 16 eq bpc 32 eq or
+        bpcm 8 eq bpcm 16 eq or and not {
+            /shfill cvx /rangecheck signalerror
+        } if
+    } ifelse
     % pts: p1..p16 as [x y] in data order; cols: c1..c4; g: the grid
     /pts 16 array def
     /cols 4 array def
@@ -579,7 +604,7 @@ currentglobal true setglobal
     /np tensor { 15 }{ 11 } ifelse def
     {
         dp ds length ge { exit } if
-        /flag bpf //.mrdbits exec cvi def
+        /flag //.mrdflag exec def
         dp ds length ge { exit } if
         flag 0 eq {
             0 1 np { pts exch //.mrdpt exec put } for
