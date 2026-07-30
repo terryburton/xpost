@@ -14,7 +14,7 @@ Level 1 operators
  [X] setdash
  [X] currentdash
  [X] arcto
- [ ] fill with complex paths
+ [X] fill with complex paths
  [ ] eofill
  [ ] clip with complex paths
  [ ] eoclip
