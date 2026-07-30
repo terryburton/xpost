@@ -450,7 +450,7 @@
     begin
         /OutputFileName where { pop
             ImgData
-            OutputFileName (w) file
+            OutputFileName //.xpostsys /.pagefilename get exec (w) file
             .writeppm
         }{
             ImgData
