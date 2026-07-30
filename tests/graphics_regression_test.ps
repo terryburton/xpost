@@ -406,6 +406,30 @@ basefont null ne {
     10 34 inknear (charpath clip admits the ring) assert
 } if
 
+% --- text metrics: stringwidth reports the scaled glyph advances ---
+% a bold digit spans roughly half its em -- far from the rounded-to-a-
+% whole-pixel failure mode of one em per glyph -- and the reported
+% width scales linearly with the font size, including sub-unit sizes
+basefont null ne {
+/Helvetica-Bold findfont 13 scalefont setfont
+(23) stringwidth pop /w13 exch def
+w13 13 div dup 0.8 gt exch 1.6 lt and ((23) width is a plausible em fraction) assert
+/Helvetica-Bold findfont 1 scalefont setfont
+(23) stringwidth pop 13 mul
+w13 (stringwidth scales linearly with the font size) assertnear
+/Helvetica-Bold findfont 0.62 scalefont setfont
+(23) stringwidth pop 13 mul 0.62 div
+w13 (a sub-unit font size scales the advances) assertnear
+
+% the pen moves by exactly the width stringwidth reports
+erasepage
+/Helvetica-Bold findfont 13 scalefont setfont
+(23) stringwidth pop /w13 exch def
+newpath 4 20 moveto (23) show
+currentpoint pop 4 sub
+w13 (show advances the pen by stringwidth) assertnear
+} if
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

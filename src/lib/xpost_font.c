@@ -747,6 +747,35 @@ _outline_cubicto(const FT_Vector *control1, const FT_Vector *control2, const FT_
 }
 #endif
 
+
+#ifdef HAVE_FREETYPE2
+/* The hinter rounds slot->advance to whole pixels and the rounding
+   accumulates as horizontal drift across a string. Derive the pen
+   advance from the unhinted linear width instead, applied through the
+   face's current transform (identity when none is set), and report it
+   in 16.16 pixels: squeezing through the slot's 26.6 resolution costs
+   up to 1/64 pixel per glyph, a whole percent of a sub-pixel em.
+   Bitmap-only glyphs carry no linear width; those widen the slot
+   advance. */
+static void
+_glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
+{
+    FT_GlyphSlot slot = face->glyph;
+    FT_Fixed lin = slot->linearHoriAdvance;   /* 16.16 pixels */
+    FT_Matrix m;
+
+    if (lin == 0)
+    {
+        *advance_x = slot->advance.x << 10;   /* 26.6 -> 16.16 */
+        *advance_y = slot->advance.y << 10;
+        return;
+    }
+    FT_Get_Transform(face, &m, NULL);
+    *advance_x = FT_MulFix(m.xx, lin);
+    *advance_y = FT_MulFix(m.yx, lin);
+}
+#endif
+
 int
 xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_Font_Outline_Sink *sink, long *advance_x, long *advance_y)
 {
@@ -756,15 +785,14 @@ xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_
     FT_Error err;
     struct _outline_walk w;
 
-    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_BITMAP);
+    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_BITMAP | FT_LOAD_NO_HINTING);
     if (err)
     {
         XPOST_LOG_ERR("Can not load glyph (error : %d)", err);
         return 0;
     }
     slot = ((FT_Face)face)->glyph;
-    *advance_x = slot->advance.x;
-    *advance_y = slot->advance.y;
+    _glyph_linear_advance((FT_Face)face, advance_x, advance_y);
     if (slot->format != FT_GLYPH_FORMAT_OUTLINE)
     {
         XPOST_LOG_ERR("glyph has no outline");
@@ -808,7 +836,7 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 #ifdef HAVE_FREETYPE2
     FT_Error err;
 
-    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
+    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_FORCE_AUTOHINT);
     if (!err)
     {
         if (((FT_Face)face)->glyph->format != FT_GLYPH_FORMAT_BITMAP)
@@ -838,34 +866,6 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 
     return 0;
 }
-
-#ifdef HAVE_FREETYPE2
-/* The hinter rounds slot->advance to whole pixels and the rounding
-   accumulates as horizontal drift across a string. Derive the pen
-   advance from the unhinted linear width instead, applied through the
-   face's current transform (identity when none is set), and report it
-   in 16.16 pixels: squeezing through the slot's 26.6 resolution costs
-   up to 1/64 pixel per glyph, a whole percent of a sub-pixel em.
-   Bitmap-only glyphs carry no linear width; those widen the slot
-   advance. */
-static void
-_glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
-{
-    FT_GlyphSlot slot = face->glyph;
-    FT_Fixed lin = slot->linearHoriAdvance;   /* 16.16 pixels */
-    FT_Matrix m;
-
-    if (lin == 0)
-    {
-        *advance_x = slot->advance.x << 10;   /* 26.6 -> 16.16 */
-        *advance_y = slot->advance.y << 10;
-        return;
-    }
-    FT_Get_Transform(face, &m, NULL);
-    *advance_x = FT_MulFix(m.xx, lin);
-    *advance_y = FT_MulFix(m.yx, lin);
-}
-#endif
 
 void
 xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y)
