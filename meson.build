@@ -585,6 +585,16 @@ test('font-type1-noaccess',
   args: [ xpost_exe, files('tests/font_type1_noaccess_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedded Type 1 with an over-allocated /Subrs array -- more slots declared than
+# filled, leaving null entries. definefont must still load the font. Guards the
+# regression where .loadfont1 rejected the whole font on the first null Subr,
+# which is why xpost rendered 0/13 of the (dvips Computer Modern) casselman corpus
+# while Ghostscript rendered all of it -- CMR10 declares 38 Subrs and fills 15.
+test('font-type1-sparse-subrs',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools
