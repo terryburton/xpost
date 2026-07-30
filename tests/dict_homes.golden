@@ -34,6 +34,7 @@
 .xpostsys /dashpath
 .xpostsys /deepcopy
 .xpostsys /despike
+.xpostsys /.devicemakers
 .xpostsys /.devpathforall
 .xpostsys /.dir
 .xpostsys /doclip
