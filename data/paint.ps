@@ -127,9 +127,12 @@
 % -  stroke  -
 % draw line along current path
 /stroke {
+    % the hairline walk clips its segments by half-planes, exact only
+    % against a rectangular region: a complex clip takes the outline
+    % fill below, whose span intersection is exact for any region
     currentlinewidth 0 dtransform
-    dup mul exch dup mul exch add sqrt
-        1 le {
+    dup mul exch dup mul exch add sqrt 1 le
+    .cliptrivial and {
         flattenpath
         //.xpostsys /dashpath get exec
         //.xpostsys /doclip get exec
