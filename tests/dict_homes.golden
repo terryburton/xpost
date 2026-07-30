@@ -110,3 +110,12 @@ gstate /device
 gstate /screenfreq
 gstate /screenangle
 gstate /screenproc
+gstate /redscreenfreq
+gstate /redscreenangle
+gstate /redscreenproc
+gstate /greenscreenfreq
+gstate /greenscreenangle
+gstate /greenscreenproc
+gstate /bluescreenfreq
+gstate /bluescreenangle
+gstate /bluescreenproc
