@@ -129,6 +129,8 @@
 /eofill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
+        % this implementation's own fill, immune to a program's
+        % redefinition of the name (which may itself invoke eofill)
         //fill exec
     }{
         closepath
