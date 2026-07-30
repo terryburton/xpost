@@ -457,6 +457,18 @@ basefont null ne {
     2 24 moveto (A) show
     wantsnap snapshot snapeq not (the base font still renders its own glyph) assert
 
+    % a font's /Metrics dictionary overrides a glyph's advance by name,
+    % mapped from character space through the font matrix (the encoding
+    % must name the glyph for the width to be found)
+    basefont dup length dict copy
+    dup /Encoding StandardEncoding put
+    dup /Metrics << /A 900 >> put
+    /MetricsTest exch definefont 100 scalefont setfont
+    (A) stringwidth pop 90 sub abs 1 lt (a Metrics entry overrides the glyph advance) assert
+    basefont 100 scalefont setfont
+    (A) stringwidth pop 90 sub abs 1 ge (the base font keeps its own advance) assert
+    basefont 20 scalefont setfont
+
     % a base font publishes its glyph complement in /CharStrings, as
     % re-encoding programs expect: they size tables from its length,
     % test membership with known, and enumerate its keys
