@@ -2215,30 +2215,22 @@ int xpost_dev_pdf_fmt_num(char *o, double v)
     return _pdf_fmt_num(o, v);
 }
 
-/* Emit the content-stream operators for a filled path into the accumulator: the
-   colour ("r g b rg"), the flattened subpaths ("x y m" / "x y l", closed with
-   "h"), and an even-odd fill ("f*"). This is the per-coordinate hot loop of the
-   pdfwrite FillPoly, in C. */
+/* Emit the content-stream operators for a filled path into the accumulator:
+   the flattened subpaths ("x y m" / "x y l", closed with "h") and an even-odd
+   fill ("f*"). This is the per-coordinate hot loop of the pdfwrite FillPoly,
+   in C; the fill colour is the device's business, emitted beforehand. */
 static int _pdffillpoly(Xpost_Context *ctx,
-                        Xpost_Object r, Xpost_Object g, Xpost_Object b,
                         Xpost_Object poly, Xpost_Object devdic)
 {
 #define PDFNUMVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
                                                            : (double)(o).int_.val)
     Pdf_Acc a;
     Xpost_Object priv;
-    char tmp[96];
+    char tmp[128];
     int i, n, len, needmove = 1;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
-
-    len = 0;
-    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(r)); tmp[len++] = ' ';
-    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(g)); tmp[len++] = ' ';
-    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(b));
-    memcpy(tmp + len, " rg\n", 4); len += 4;
-    _pdf_acc_append(&a, tmp, len);
 
     n = poly.comp_.sz;
     for (i = 0; i < n; i++)
@@ -2268,8 +2260,9 @@ static int _pdffillpoly(Xpost_Context *ctx,
 
     _pdf_acc_put(ctx, priv, &a);
     return 0;
-#undef PDFNUMVAL
 }
+
+#undef PDFNUMVAL
 
 /* The svgwrite FillPoly hot loop: emit one SVG path element for a filled
    path into the accumulator -- the fill colour as percentages, an even-odd
@@ -2421,8 +2414,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 0, 2,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".flatecompress", (Xpost_Op_Func)_flatecompress, 2, 1, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 0, 5,
-            numbertype, numbertype, numbertype, arraytype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 0, 2,
+            arraytype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".svgfillpoly", (Xpost_Op_Func)_svgfillpoly, 0, 5,
             numbertype, numbertype, numbertype, arraytype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdfinit", (Xpost_Op_Func)_pdfinit, 0, 1, dicttype); INSTALL;
