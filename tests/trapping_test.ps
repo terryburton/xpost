@@ -1,0 +1,55 @@
+% In-RIP trapping procedure set (PLRM 6.3), run through `xpost -d null` by
+% run-ps-test.sh; prints SUCCESS iff every assertion holds. The trapping
+% operators live in the Trapping procedure set: a program reaches them with
+% /Trapping /ProcSet findresource begin. settrapparams merges a request
+% dictionary into the cumulative trapping parameters, currenttrapparams reads
+% them back, and settrapzone establishes a zone. This device generates no
+% traps, so the operators maintain the queryable parameter state and accept a
+% zone without producing one -- the conformant answer for a device without
+% in-RIP trapping. gs 10.02.1 ships no Trapping procedure set, so this is a
+% conformant superset that lets trap-aware jobs run instead of erroring.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/Trapping /ProcSet findresource type /dicttype eq (Trapping ProcSet is defined) assert
+/Trapping /ProcSet findresource begin
+
+% currenttrapparams returns a dictionary; the language prescribes no defaults
+currenttrapparams type /dicttype eq (currenttrapparams returns a dict) assert
+currenttrapparams length 0 eq (no default parameters) assert
+
+% settrapparams merges a request dictionary's entries
+<< /TrapWidth 5 /StepLimit 2 >> settrapparams
+currenttrapparams /TrapWidth get 5 eq (settrapparams sets TrapWidth) assert
+currenttrapparams /StepLimit get 2 eq (settrapparams sets StepLimit) assert
+
+% the merge is cumulative: a later request keeps earlier keys
+<< /BlackWidth 3 >> settrapparams
+currenttrapparams /TrapWidth get 5 eq (earlier key survives a later merge) assert
+currenttrapparams /BlackWidth get 3 eq (later key is added) assert
+
+% currenttrapparams hands back a copy, not the live parameter dictionary
+currenttrapparams currenttrapparams eq not (currenttrapparams returns a copy) assert
+
+% settrapparams rejects a non-dictionary operand (mark/cleartomark discards the
+% offending operand the error leaves behind)
+mark { 42 settrapparams } stopped { $error /errorname get /typecheck eq }{ false } ifelse
+    (settrapparams typechecks its operand) assert cleartomark
+
+% settrapzone establishes a zone from the current path and emits nothing here
+newpath 0 0 moveto 100 0 lineto 100 100 lineto closepath
+{ settrapzone true } stopped { pop false } if (settrapzone accepts a zone) assert
+
+end
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit
