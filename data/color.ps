@@ -272,6 +272,7 @@ setglobal
     graphicsdict /currgstate get /colorcomp2 0.0 put
     graphicsdict /currgstate get /colorcomp3 0.0 put
     graphicsdict /currgstate get /colorcomp4 0.0 put
+    graphicsdict /currgstate get /sepindex null put
     graphicsdict /currgstate get /tintcomps null put
     %exec pop
 } bind def
@@ -560,6 +561,7 @@ setglobal
     graphicsdict /currgstate get /setspace /DeviceGray put
     graphicsdict /currgstate get /colorspace /DeviceGray put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentgray {
@@ -574,6 +576,7 @@ setglobal
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentrgbcolor {
@@ -634,6 +637,7 @@ setglobal
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentcmykcolor {
