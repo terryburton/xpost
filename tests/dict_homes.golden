@@ -97,6 +97,7 @@
 .xpostsys /.refreshscreencell
 .xpostsys /.ht5component
 .xpostsys /.htreadthresholds
+.xpostsys /.pagefilename
 .xpostsys /.patternactive
 .xpostsys /.patternfill
 .xpostsys /.patterneofill
