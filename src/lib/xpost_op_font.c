@@ -74,7 +74,7 @@ typedef struct fontdata
 } fontdata;
 
 /* per-text-operator rendering configuration, gathered once from the
-   font dictionary and the device dictionary */
+   font dictionary, the device dictionary and the graphics state */
 typedef struct textstate
 {
     Xpost_Object encoding;  /* the font's /Encoding array, or invalid */
@@ -87,6 +87,8 @@ typedef struct textstate
     int vector;             /* the device consumes glyph outlines, not bitmaps */
     int extents;            /* the device consumes glyph ink extents, not marks */
     Xpost_Object fillrect;  /* the device's FillRect, for extent reporting */
+    int sepindex;           /* separation registered with the device, or -1 */
+    double septint;         /* the separation's tint */
 } textstate;
 
 /* the linear part of character space -> device space: the font
@@ -1047,7 +1049,7 @@ textstate _text_state_get(Xpost_Context *ctx,
                           Xpost_Object devdic)
 {
     textstate ts;
-    Xpost_Object tab, vec;
+    Xpost_Object tab, vec, sep;
 
     ts.encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     ts.charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
@@ -1071,6 +1073,20 @@ textstate _text_state_get(Xpost_Context *ctx,
     memset(&ts.fillrect, 0, sizeof ts.fillrect);  /* invalidtype */
     if (ts.extents)
         ts.fillrect = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "FillRect"));
+    /* a separation the graphics state registered with the device:
+       glyph outlines fill in the separation, not the process colour */
+    ts.sepindex = -1;
+    ts.septint = 0.0;
+    sep = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "sepindex"));
+    if (xpost_object_get_type(sep) == integertype)
+    {
+        Xpost_Object tint = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "septint"));
+        ts.sepindex = sep.int_.val;
+        if (xpost_object_get_type(tint) == realtype)
+            ts.septint = tint.real_.val;
+        else if (xpost_object_get_type(tint) == integertype)
+            ts.septint = (double)tint.int_.val;
+    }
     return ts;
 }
 
@@ -1553,6 +1569,7 @@ static int _frag_closepath(void *user)
 static
 int _show_char_outline(Xpost_Context *ctx,
                        Xpost_Object devdic,
+                       const textstate *ts,
                        void *face,
                        unsigned int glyph_index,
                        real xpos,
@@ -1590,7 +1607,17 @@ int _show_char_outline(Xpost_Context *ctx,
     r = COMPVAL(comp1);
     g = ncomp >= 3 ? COMPVAL(comp2) : r;
     b = ncomp >= 3 ? COMPVAL(comp3) : r;
-    if (ncomp == 4 && !f.svg)
+    if (ts->sepindex >= 0 && !f.svg)
+    {
+        /* the fill colour is a separation registered with the device:
+           paint in its /CS<i> resource space at the recorded tint */
+        memcpy(t, "/CS", 3); n = 3;
+        n += xpost_dev_pdf_fmt_num(t + n, (double)ts->sepindex);
+        memcpy(t + n, " cs ", 4); n += 4;
+        n += xpost_dev_pdf_fmt_num(t + n, ts->septint);
+        memcpy(t + n, " scn\n", 5); n += 5;
+    }
+    else if (ncomp == 4 && !f.svg)
     {
         /* the device's process model is CMYK: the glyph fills in it */
         n = xpost_dev_pdf_fmt_num(t, r);
@@ -1679,7 +1706,7 @@ int _show_glyph(Xpost_Context *ctx,
 
     if (ts->vector)
     {
-        if (!_show_char_outline(ctx, devdic, data.face, glyph_index,
+        if (!_show_char_outline(ctx, devdic, ts, data.face, glyph_index,
                                 *xpos, *ypos, ncomp, comp1, comp2, comp3, comp4,
                                 &advance_x, &advance_y))
             return 0;

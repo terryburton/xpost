@@ -109,6 +109,56 @@ EOF
         grep -aq ' rg$' "$cmykdec"      && { echo "FAIL: an RGB operator leaked into process-CMYK output"; exit 1; }
     fi
     echo "CMYK process colour model OK"
+
+    # separation colour spaces: a [/Separation name alt tint] space set through
+    # setcolorspace/setcolor paints as /CS<i> cs t scn (CS/SCN for strokes) with
+    # the space preserved in the page's /ColorSpace resources (grep-able in the
+    # uncompressed page object) and the tint transform embedded as a function --
+    # Type 4 calculator source when the procedure stays within that operator set,
+    # sampled Type 0 otherwise. A gsave/grestore round-trip re-selects the
+    # separation after a process-colour interlude; registration survives an
+    # intervening save/restore.
+    sepps=$(mktemp)
+    seppdf=$(mktemp)
+    sepdec="$seppdf.dec.pdf"
+    trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf" "$cmykps" "$cmykpdf" "$cmykdec" "$sepps" "$seppdf" "$sepdec"' EXIT
+    cat > "$sepps" <<'EOF'
+<< /PageSize [100 100] >> setpagedevice
+[/Separation (Spot A) /DeviceCMYK {dup 0 exch dup 0.5 mul exch 0.25 mul}] setcolorspace
+0.8 setcolor
+newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
+gsave 0 setgray newpath 70 40 moveto 10 0 rlineto 0 10 rlineto -10 0 rlineto closepath fill grestore
+newpath 40 10 moveto 10 0 rlineto 0 10 rlineto -10 0 rlineto closepath fill
+/half 0.5 def
+[/Separation /SpotB /DeviceGray {half mul 1 exch sub}] setcolorspace
+save 1.0 setcolor newpath 50 50 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill restore
+showpage
+EOF
+    "$xpost" -q -d pdfwrite -o "$seppdf" "$sepps" </dev/null >/dev/null 2>&1
+    grep -aq '/CS0 \[/Separation /Spot#20A /DeviceCMYK 5 0 R\]' "$seppdf" || { echo "FAIL: no escaped Spot A colour space resource"; exit 1; }
+    grep -aq '/CS1 \[/Separation /SpotB /DeviceGray 6 0 R\]' "$seppdf"    || { echo "FAIL: no SpotB colour space resource"; exit 1; }
+    grep -aq '/FunctionType 4' "$seppdf" || { echo "FAIL: no Type 4 tint transform"; exit 1; }
+    grep -aq '/FunctionType 0' "$seppdf" || { echo "FAIL: no sampled Type 0 tint transform"; exit 1; }
+    if command -v mutool >/dev/null 2>&1; then
+        mutool clean -d "$seppdf" "$sepdec" >/dev/null 2>&1
+        grep -aq '/CS0 cs 0.8 scn' "$sepdec" || { echo "FAIL: fill not painted in the separation"; exit 1; }
+        grep -aq '/CS0 CS 0.8 SCN' "$sepdec" || { echo "FAIL: stroke not painted in the separation"; exit 1; }
+        grep -aq '0 0 0 rg' "$sepdec"        || { echo "FAIL: no process-colour interlude inside gsave"; exit 1; }
+        grep -aq '/CS1 cs 1 scn' "$sepdec"   || { echo "FAIL: registration did not survive restore"; exit 1; }
+    fi
+    echo "separation colour spaces OK"
+
+    # independent oracle: a separating consumer images each separation as its
+    # own plate, named as given
+    platedir=$(mktemp -d)
+    gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=tiffsep -o "$platedir/p%d.tif" "$seppdf" >/dev/null 2>&1
+    if [ -f "$platedir/p1(Spot A).tif" ] && [ -f "$platedir/p1(SpotB).tif" ]; then
+        echo "gs separation plates OK"
+    else
+        ls "$platedir"; rm -rf "$platedir"; echo "FAIL: gs did not image the separations as plates"; exit 1
+    fi
+    rm -rf "$platedir"
 else
     echo "gs not found: skipping round-trip check"
 fi
