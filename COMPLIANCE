@@ -319,9 +319,11 @@ Level 2 operators
  [X] startjob (job boundaries accepted; no VM encapsulation)
  [X] setcachedevice2 (reduces to setcachedevice)
  [X] setcacheparams, currentcacheparams
- [ ] user paths
+ [X] user paths (upath, uappend, ufill, ueofill, ustroke,
+     ustrokepath, setbbox; ucache is accepted, nothing is cached)
  [ ] insideness testing
- [ ] user objects
+ [X] user objects (defineuserobject, execuserobject,
+     undefineuserobject)
  [ ] execform
  [X] setstrokeadjust, currentstrokeadjust (recorded only)
  [X] shared VM (setshared, currentshared, scheck, shareddict,
