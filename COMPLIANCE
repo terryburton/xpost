@@ -285,7 +285,9 @@ Level 2 operators
      ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT)
  [X] defineresource, findresource, resourcestatus, resourceforall,
      undefineresource
- [ ] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
+ [X] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
+     (parameters recorded and queryable; no traps are generated, as the
+     language leaves in-RIP trapping device-dependent)
  [X] setglobal, currentglobal, gcheck
  [X] gstate, setgstate, currentgstate
  [X] packedarray (built as ordinary arrays), setpacking,
