@@ -149,6 +149,22 @@ CIENAMES { { (PROGRAM-OWNED) } def } forall
     newpath 20 20 moveto 180 20 lineto 180 180 lineto closepath fill
 } stopped not (CIE colour survives redefined converter names) assert
 
+% The pattern family lives in .xpostsys, reached across files by a frozen
+% //.xpostsys reference, so redefining the names cannot disturb a pattern fill.
+/PATNAMES [ /.patternactive /.patterntile /.patternclip /.patternfill /.patterneofill ] def
+PATNAMES {
+    dup where { pop (PAT-VISIBLE: ) print == false }{ pop true } ifelse
+    (pattern helper name is hidden) assert
+} forall
+PATNAMES { { (PROGRAM-OWNED) } def } forall
+{
+    /Pattern setcolorspace
+    << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [ 0 0 10 10 ]
+       /XStep 10 /YStep 10 /PaintProc { pop 0 0 5 5 rectfill } >>
+    matrix makepattern setpattern
+    newpath 20 20 moveto 120 20 lineto 120 120 lineto closepath fill
+} stopped not (pattern fill survives redefined helper names) assert
+
 % The halftone/screen family lives in .xpostsys, so redefining the names
 % cannot disturb screen or halftone setup (public ops reach it by frozen get).
 /HTNAMES [ /.spreadgrayscreen /.samplespot /.gcd /.screenlattice
