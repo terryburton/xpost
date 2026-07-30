@@ -379,7 +379,7 @@ Typical output devices
  [X] pgm
  [X] ppm
  [X] pbm
- [ ] tiff
+ [X] tiff (24-bit rgb, one uncompressed strip)
  [X] jpeg
  [X] png (also a png with alpha)
  [ ] pdf
