@@ -386,7 +386,8 @@ Typical output devices
  [X] pdf (pdfwrite)
  [X] svg (svgwrite)
  [X] bounding-box
- [ ] dsc-compliant distilled ps
+ [X] dsc-compliant distilled ps (pswrite; separations arrive as
+     their process colours)
  [X] xcb
  [X] ms-windows
 

@@ -1168,6 +1168,21 @@ tf.rt 2 8 mul 2 add 3 mul 1 add get 255 eq and
 tf.rt 2 8 mul 2 add 3 mul 2 add get 0 eq and
 (the strip carries the painted pixel) assert
 
+% The distilled-ps device wraps the recorded marks in document
+% structure and a prolog naming the accumulated operators
+/DEVP 100 100 .privatedict /newDSCWRITEdevice get exec def
+DEVP /OutputFileName (graphics.scratch) put
+0.5 10 10 30 20 DEVP dup /FillRect get exec
+DEVP dup /Emit get exec
+/pw.s (graphics.scratch) (r) file 4096 string readstring pop def
+pw.s (%!PS-Adobe-3.0) anchorsearch { pop pop true }{ pop false } ifelse
+(the distilled page opens with its DSC header) assert
+pw.s (re\nf\n) search { pop pop pop true }{ pop false } ifelse
+(the recorded rectangle reaches the page) assert
+pw.s (%%EOF) search { pop pop pop true }{ pop false } ifelse
+(the distilled page closes with its trailer) assert
+DEVP dup /Destroy get exec
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush
