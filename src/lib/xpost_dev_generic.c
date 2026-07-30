@@ -974,6 +974,41 @@ int _fillrectgray(Xpost_Context *ctx,
     return 0;
 }
 
+/* Blend a coverage-weighted pixel for grayscale array-of-strings devices:
+   dst += (val - dst) * cov / 255. The text operators use this for glyph
+   edge pixels when the device renders anti-aliased text. */
+static
+int _blendpixgray(Xpost_Context *ctx,
+                  Xpost_Object val,
+                  Xpost_Object cov,
+                  Xpost_Object x,
+                  Xpost_Object y,
+                  Xpost_Object devdic)
+{
+    Xpost_Object imgdata, row;
+    int ix, iy, c;
+    int src, dst;
+    unsigned char *p;
+
+    imgdata = xpost_dict_get(ctx, devdic, nameImgData);
+    if (xpost_object_get_type(imgdata) != arraytype)
+        return undefined;
+    ix = xpost_object_get_type(x) == realtype ? (int)floor(x.real_.val) : x.int_.val;
+    iy = xpost_object_get_type(y) == realtype ? (int)floor(y.real_.val) : y.int_.val;
+    c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
+    if (iy < 0 || iy >= imgdata.comp_.sz)
+        return 0;
+    row = xpost_array_get(ctx, imgdata, iy);
+    if (ix < 0 || ix >= row.comp_.sz)
+        return 0;
+    src = (int)((xpost_object_get_type(val) == realtype
+                 ? val.real_.val : (double)val.int_.val) * 255.0);
+    p = (unsigned char *)xpost_string_get_pointer(ctx, row) + ix;
+    dst = *p;
+    *p = (unsigned char)(dst + ((src - dst) * c + 127) / 255);
+    return 0;
+}
+
 /* Fill a rectangle of a packed-integer rgb device (each row an array
    of r<<16|g<<8|b). Mirrors PPMIMAGE PutPix handling: each channel
    scaled by 255 and truncated, coordinates floored, negative extents
@@ -1857,6 +1892,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".blendpixgray", (Xpost_Op_Func)_blendpixgray, 0, 5,
+            numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 0, 8,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
