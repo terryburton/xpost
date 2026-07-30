@@ -52,6 +52,13 @@
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall
+    % the page dimensions are points and need not be integral; adopt the
+    % exact values when the page device machinery published them
+    graphicsdict /.exactpagedims 2 copy known {
+        get
+        dup 0 get /width exch def
+        1 get /height exch def
+    }{ pop pop } ifelse
     currentdict end
     dup /.copydict get exec
     begin
@@ -59,7 +66,7 @@
         currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
         % first content op: the device matrix mapping device coords to PDF
         % user space (y-up). Part of the content so it compresses with the rest.
-        (1 0 0 -1 0 ) .put height cvi 20 string cvs .put ( cm\n) .put
+        (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
     currentdict
     end } bind
 
@@ -395,8 +402,8 @@
         /F /OutputFileName where { pop OutputFileName (w) file }{ (%stdout) (w) file } ifelse def
         /BytePos 0 def
 
-        /hs height cvi 20 string cvs def
-        /ws width cvi 20 string cvs def
+        /hs height .pdfnumstr def
+        /ws width .pdfnumstr def
         /clen 0 def
         Chunks { length /clen exch clen add def } forall
 
@@ -482,7 +489,7 @@
         % marks must not stack on the emitted content (a later Emit
         % rewrites the output with the then-current page)
         currentdict //.internaldict /.pdfreset get exec
-        (1 0 0 -1 0 ) .put height cvi 20 string cvs .put ( cm\n) .put
+        (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
     end }
 >> def
 
