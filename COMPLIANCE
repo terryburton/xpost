@@ -20,7 +20,7 @@ Level 1 operators
  [ ] eoclip
  [/] setlinejoin
  [X] currentlinejoin
- [ ] setlinecap
+ [X] setlinecap
  [X] currentlinecap
  [/] image
  [ ] imagemask
