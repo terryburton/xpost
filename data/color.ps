@@ -258,6 +258,7 @@ setglobal
     graphicsdict /currgstate get /colorcomp2 0.0 put
     graphicsdict /currgstate get /colorcomp3 0.0 put
     graphicsdict /currgstate get /colorcomp4 0.0 put
+    graphicsdict /currgstate get /tintcomps null put
     %exec pop
 } bind def
 
@@ -338,6 +339,15 @@ setglobal
         % reports, so stash the space being painted in and restore it
         % after the conversion (whose device-space setters overwrite it)
         dup graphicsdict exch /.sepspace exch put
+        % record the tints as given, for currentcolor: the component values
+        % in the gstate hold the tint-transformed alternate colour. Stash
+        % them aside for now -- the conversion below runs setcolorspace on
+        % the alternative space, whose tail clears the gstate's tint record
+        0 get /Separation eq { 1 }{ graphicsdict /.sepspace get 1 get length } ifelse
+        array astore
+        dup graphicsdict exch /.tintstash exch put
+        aload pop
+        graphicsdict /.sepspace get
         dup 0 get /Separation eq { DEVICE /.registersep known } { false } ifelse {
             % a device that preserves separations also receives the
             % (tint, space) pair: convert first (the device-space
@@ -359,6 +369,7 @@ setglobal
             setcolor
         } ifelse
         graphicsdict /currgstate get /setspace graphicsdict /.sepspace get put
+        graphicsdict /currgstate get /tintcomps graphicsdict /.tintstash get put
     } {
     dup type /arraytype eq { //.xpostsys /.ciefams get 1 index 0 get known }{ false } ifelse
     {
@@ -384,9 +395,16 @@ setglobal
     /DeviceCMYK /currentcmykcolor cvx
 >> put
 /currentcolor {
-    % deliver the recorded components: keyed by the space they are
-    % recorded in (for Separation/DeviceN, the alternative space)
-    //.xpostsys /currentcolordict get graphicsdict /currgstate get /colorspace get get exec
+    % a Separation or DeviceN colour reads back as the tints it was set
+    % with, recorded by setcolor; everything else delivers the recorded
+    % components, keyed by the space they are recorded in
+    graphicsdict /currgstate get /setspace get
+    dup type /arraytype eq { 0 get dup /Separation eq exch /DeviceN eq or }{ pop false } ifelse
+    graphicsdict /currgstate get /tintcomps get type /arraytype eq and {
+        graphicsdict /currgstate get /tintcomps get aload pop
+    }{
+        //.xpostsys /currentcolordict get graphicsdict /currgstate get /colorspace get get exec
+    } ifelse
 } bind def
 
 currentglobal true setglobal
