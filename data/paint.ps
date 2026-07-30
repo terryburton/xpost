@@ -1107,7 +1107,8 @@
         /bp 0 def
         { % collect the sample data
             bp buf length ge {exit} if
-            datasrc
+            % the source runs on the caller's stacks (see .fill)
+            currentdict currentdict /datasrc get end exec exch begin
             dup length 0 eq {pop exit} if
             dup length bp add buf length gt {
                 0 buf length bp sub getinterval
