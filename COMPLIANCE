@@ -23,7 +23,7 @@ Level 1 operators
  [X] setlinecap
  [X] currentlinecap
  [/] image
- [ ] imagemask
+ [X] imagemask
  [X] settransfer
  [X] currenttransfer
  [ ] setscreen
@@ -223,7 +223,7 @@ Level 1 operators
  [X] strokepath
  [X] reversepath
  [/] image
- [ ] imagemask
+ [X] imagemask
  [X] showpage
  [X] copypage
  [X] setfont
