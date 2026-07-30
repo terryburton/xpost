@@ -365,7 +365,7 @@ Typical output devices
  [X] ppm
  [ ] pbm
  [ ] tiff
- [ ] jpeg
+ [X] jpeg
  [ ] png
  [ ] pdf
  [ ] svg
