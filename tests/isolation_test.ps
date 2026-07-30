@@ -202,6 +202,22 @@ HTNAMES { { (PROGRAM-OWNED) } def } forall
        /Thresholds <10305070 20406080 15355575 25456585> >> sethalftone
 } stopped not (screen and halftone setup survive redefined helper names) assert
 
+% font/CID family (font.ps + cid.ps) now in .xpostsys
+/FONTNAMES [ /.cmapnext /.cidface /.fmapnext /.fmapdesc /.showfmap /.showtype0
+    /.cshmeasure /.cshsetfont /.bytecmap /.runbuild /.t3capture /.t3build
+    /.glyphbytes /.kshowshow /.rootsetfont ] def
+FONTNAMES {
+    dup where { pop (FONT-VISIBLE: ) print == false }{ pop true } ifelse
+    (font helper name is hidden) assert
+} forall
+FONTNAMES { { (PROGRAM-OWNED) } def } forall
+{
+    /Helvetica findfont 12 scalefont setfont
+    50 50 moveto (font test) show
+    50 30 moveto { pop pop } (kshow) kshow
+    /Times-Roman findfont 20 scalefont setfont 50 10 moveto (X) true charpath stroke
+} stopped not (font show, kshow and charpath survive redefined names) assert
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush
