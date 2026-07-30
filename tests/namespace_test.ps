@@ -16,7 +16,7 @@
 userdict   length 0 ne { userdict   length (userdict not empty)   bad } if
 globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
-% the 329 name keys every build exposes
+% the 330 name keys every build exposes
 /golden <<
   ($error) true  (.gscratch) true  (.lockdown) true  (.permitfileread) true
   (.permitfilewrite) true  (.privatedict) true  (.uparams) true  (<<) true
@@ -76,31 +76,31 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (rcurveto) true  (read) true  (readhexstring) true  (readline) true
   (readonly) true  (readstring) true  (realtime) true  (rectclip) true
   (rectfill) true  (rectstroke) true  (renamefile) true  (repeat) true
-  (resourcestatus) true  (restore) true  (returntocaller) true  (reversepath) true
-  (revision) true  (rlineto) true  (rmoveto) true  (roll) true
-  (rotate) true  (round) true  (rrand) true  (run) true
-  (save) true  (scale) true  (scalefont) true  (scheck) true
-  (search) true  (selectfont) true  (serialnumber) true  (serverdict) true
-  (setcachedevice) true  (setcharwidth) true  (setcmykcolor) true  (setcolor) true
-  (setcolorspace) true  (setdash) true  (setdevparams) true  (setfileposition) true
-  (setflat) true  (setfont) true  (setglobal) true  (setgray) true
-  (setgstate) true  (sethsbcolor) true  (setlinecap) true  (setlinejoin) true
-  (setlinewidth) true  (setmatrix) true  (setmiterlimit) true  (setobjectformat) true
-  (setoverprint) true  (setpacking) true  (setpagedevice) true  (setpattern) true
-  (setrgbcolor) true  (setshared) true  (setsmoothness) true  (setstrokeadjust) true
-  (setsystemparams) true  (settransfer) true  (setuserparams) true  (setvmthreshold) true
-  (shareddict) true  (show) true  (showpage) true  (signalerror) true
-  (sin) true  (sqrt) true  (srand) true  (stack) true
-  (startjob) true  (status) true  (statusdict) true  (stop) true
-  (stopped) true  (store) true  (string) true  (stringwidth) true
-  (stroke) true  (strokepath) true  (sub) true  (systemdict) true
-  (tan) true  (token) true  (transform) true  (translate) true
-  (true) true  (truncate) true  (type) true  (undef) true
-  (undefinefont) true  (undefineresource) true  (userdict) true  (usertime) true
-  (version) true  (vmreclaim) true  (vmstatus) true  (wcheck) true
-  (where) true  (widthshow) true  (write) true  (writehexstring) true
-  (writeobject) true  (writestring) true  (xcheck) true  (xor) true
-  (yield) true
+  (resourceforall) true  (resourcestatus) true  (restore) true  (returntocaller) true
+  (reversepath) true  (revision) true  (rlineto) true  (rmoveto) true
+  (roll) true  (rotate) true  (round) true  (rrand) true
+  (run) true  (save) true  (scale) true  (scalefont) true
+  (scheck) true  (search) true  (selectfont) true  (serialnumber) true
+  (serverdict) true  (setcachedevice) true  (setcharwidth) true  (setcmykcolor) true
+  (setcolor) true  (setcolorspace) true  (setdash) true  (setdevparams) true
+  (setfileposition) true  (setflat) true  (setfont) true  (setglobal) true
+  (setgray) true  (setgstate) true  (sethsbcolor) true  (setlinecap) true
+  (setlinejoin) true  (setlinewidth) true  (setmatrix) true  (setmiterlimit) true
+  (setobjectformat) true  (setoverprint) true  (setpacking) true  (setpagedevice) true
+  (setpattern) true  (setrgbcolor) true  (setshared) true  (setsmoothness) true
+  (setstrokeadjust) true  (setsystemparams) true  (settransfer) true  (setuserparams) true
+  (setvmthreshold) true  (shareddict) true  (show) true  (showpage) true
+  (signalerror) true  (sin) true  (sqrt) true  (srand) true
+  (stack) true  (startjob) true  (status) true  (statusdict) true
+  (stop) true  (stopped) true  (store) true  (string) true
+  (stringwidth) true  (stroke) true  (strokepath) true  (sub) true
+  (systemdict) true  (tan) true  (token) true  (transform) true
+  (translate) true  (true) true  (truncate) true  (type) true
+  (undef) true  (undefinefont) true  (undefineresource) true  (userdict) true
+  (usertime) true  (version) true  (vmreclaim) true  (vmstatus) true
+  (wcheck) true  (where) true  (widthshow) true  (write) true
+  (writehexstring) true  (writeobject) true  (writestring) true  (xcheck) true
+  (xor) true  (yield) true
 >> def
 
 % names present only when an optional library or the platform provides them
