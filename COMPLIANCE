@@ -275,8 +275,8 @@ Level 2 operators
      smooths the samples of any shape on the direct raster path,
      while a mask still decides each pixel by its nearest sample)
  [X] imagemask with dict argument
- [ ] setcolortransfer
- [ ] currentcolortransfer
+ [X] setcolortransfer
+ [X] currentcolortransfer
  [ ] setblackgeneration
  [ ] currentblackgeneration
  [ ] setundercolorremoval

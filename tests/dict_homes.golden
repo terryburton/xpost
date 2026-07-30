@@ -95,6 +95,9 @@ gstate /colorcomp2
 gstate /colorcomp3
 gstate /colorcomp4
 gstate /transfer
+gstate /redtransfer
+gstate /greentransfer
+gstate /bluetransfer
 gstate /currpath
 gstate /clipregion
 gstate /flat
