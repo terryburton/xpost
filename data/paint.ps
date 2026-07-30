@@ -1,5 +1,29 @@
 //.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
+% mark c1..cn  .applytransfer  mark c1'..cn'
+% apply the transfer functions to the marked colour components: three
+% components pass through the red, green and blue transfers, four to
+% red, green, blue and grey in the CMYK order, anything else through
+% the grey transfer
+.xpostsys /.applytransfer {
+    counttomark 3 eq {
+        graphicsdict /currgstate get /bluetransfer get exec
+        3 1 roll
+        graphicsdict /currgstate get /greentransfer get exec
+        3 1 roll
+        graphicsdict /currgstate get /redtransfer get exec
+        3 1 roll
+    }{
+    counttomark 4 eq {
+        currenttransfer exec 4 1 roll
+        graphicsdict /currgstate get /bluetransfer get exec 4 1 roll
+        graphicsdict /currgstate get /greentransfer get exec 4 1 roll
+        graphicsdict /currgstate get /redtransfer get exec 4 1 roll
+    }{
+        counttomark { currenttransfer exec counttomark 1 roll } repeat
+    } ifelse } ifelse
+} put
+
 % Painting Operators
 
 % -  erasepage  -
@@ -17,7 +41,7 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         %dup =
         get exec
-        counttomark { currenttransfer exec counttomark 1 roll } repeat
+        //.xpostsys /.applytransfer get exec
         %(FillRect\n) print
         0 0 DEVICE /dimensions get aload pop
         DEVICE dup /FillRect get exec
@@ -77,7 +101,7 @@
 
     dup length 2 gt {
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-        counttomark { currenttransfer exec counttomark 1 roll } repeat
+        //.xpostsys /.applytransfer get exec
         counttomark 2 add -1 roll
         DEVICE dup /FillPoly get exec
         pop
@@ -111,7 +135,7 @@
 
         dup length 2 gt {
             [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-            counttomark { currenttransfer exec counttomark 1 roll } repeat
+            //.xpostsys /.applytransfer get exec
             counttomark 2 add -1 roll
             DEVICE dup /FillPoly get exec
             pop
@@ -244,7 +268,7 @@
             //.xpostsys /.hairext get exec
             .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
                 %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
                 %pstack(L)=
@@ -259,7 +283,7 @@
             //.xpostsys /.hairext get exec
             .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
                 %5 1 roll % gray xN yN x0 y0
                 %pstack(C)=
@@ -530,6 +554,22 @@
                 v 255 div currenttransfer exec //.xpostsys /.c255 get exec
                 put
             } for
+            nat 3 eq {
+                /tlutr 256 string def
+                /tlutg 256 string def
+                /tlutb 256 string def
+                0 1 255 { /v exch def
+                    tlutr v v 255 div
+                        graphicsdict /currgstate get /redtransfer get exec
+                        //.xpostsys /.c255 get exec put
+                    tlutg v v 255 div
+                        graphicsdict /currgstate get /greentransfer get exec
+                        //.xpostsys /.c255 get exec put
+                    tlutb v v 255 div
+                        graphicsdict /currgstate get /bluetransfer get exec
+                        //.xpostsys /.c255 get exec put
+                } for
+            } if
             ncomp 1 eq {
                 /lut 256 nat mul string def
                 0 1 255 { /v exch def
@@ -537,9 +577,9 @@
                     //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
                     nat 3 eq {
                         /bb exch def /gg exch def /rr exch def
-                        lut v 3 mul       tlut rr //.xpostsys /.c255 get exec get put
-                        lut v 3 mul 1 add tlut gg //.xpostsys /.c255 get exec get put
-                        lut v 3 mul 2 add tlut bb //.xpostsys /.c255 get exec get put
+                        lut v 3 mul       tlutr rr //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 1 add tlutg gg //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 2 add tlutb bb //.xpostsys /.c255 get exec get put
                     }{
                         lut v 3 -1 roll //.xpostsys /.c255 get exec tlut exch get put
                     } ifelse
@@ -583,6 +623,11 @@
                 bd /dluts dluts put
             } ifelse
             bd /tlut tlut put
+            nat 3 eq {
+                bd /tlutr tlutr put
+                bd /tlutg tlutg put
+                bd /tlutb tlutb put
+            } if
             bd /y 0 put
             /interpok interp def
             interpok {
