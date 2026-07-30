@@ -144,7 +144,7 @@ EOF
         mutool clean -d "$seppdf" "$sepdec" >/dev/null 2>&1
         grep -aq '/CS0 cs 0.8 scn' "$sepdec" || { echo "FAIL: fill not painted in the separation"; exit 1; }
         grep -aq '/CS0 CS 0.8 SCN' "$sepdec" || { echo "FAIL: stroke not painted in the separation"; exit 1; }
-        grep -aq '0 0 0 rg' "$sepdec"        || { echo "FAIL: no process-colour interlude inside gsave"; exit 1; }
+        grep -aq '^0 g$' "$sepdec"           || { echo "FAIL: no process-colour interlude inside gsave"; exit 1; }
         grep -aq '/CS1 cs 1 scn' "$sepdec"   || { echo "FAIL: registration did not survive restore"; exit 1; }
     fi
     echo "separation colour spaces OK"
@@ -159,6 +159,35 @@ EOF
         ls "$platedir"; rm -rf "$platedir"; echo "FAIL: gs did not image the separations as plates"; exit 1
     fi
     rm -rf "$platedir"
+
+    # colour-space preservation: by default each paint reaches the content
+    # stream in the space it was set in -- grey as g/G, RGB as rg, CMYK as k --
+    # for fills, strokes and glyphs alike, so a press workflow receives pure-K
+    # ink as pure K rather than a converted black. The content stream is
+    # deflate-compressed, so decompress with mutool to read the operators.
+    if command -v mutool >/dev/null 2>&1; then
+        cspps=$(mktemp)
+        csppdf=$(mktemp)
+        cspdec="$csppdf.dec.pdf"
+        trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf" "$cmykps" "$cmykpdf" "$cmykdec" "$sepps" "$seppdf" "$sepdec" "$cspps" "$csppdf" "$cspdec"' EXIT
+        cat > "$cspps" <<'EOF'
+<< /PageSize [100 100] >> setpagedevice
+0.5 setgray newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+0 0 0 1 setcmykcolor newpath 70 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+0 setgray 2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
+/Courier findfont 12 scalefont setfont
+0 1 0 0 setcmykcolor 10 80 moveto (K) show
+0.25 setgray 40 80 moveto (g) show
+showpage
+EOF
+        "$xpost" -q -d pdfwrite -o "$csppdf" "$cspps" </dev/null >/dev/null 2>&1
+        mutool clean -d "$csppdf" "$cspdec" >/dev/null 2>&1
+        for probe in '0.5 g' '1 0 0 rg' '0 0 0 1 k' '0 G' '0 1 0 0 k' '0.25 g'; do
+            grep -aq "^$probe\$" "$cspdec" || { echo "FAIL: colour-space not preserved: $probe"; exit 1; }
+        done
+        echo "colour-space preservation OK"
+    fi
 else
     echo "gs not found: skipping round-trip check"
 fi
