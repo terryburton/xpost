@@ -266,9 +266,9 @@ Level 2 operators
  [X] currentcolor
  [ ] setpagedevice
  [ ] currentpagedevice
- [ ] xshow
- [ ] yshow
- [ ] xyshow
+ [X] xshow
+ [X] yshow
+ [X] xyshow
  [X] glyphshow
  [X] colorimage
  [X] image with dict argument (ImageTypes 1, 3 and 4; Interpolate
