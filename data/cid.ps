@@ -457,6 +457,7 @@ setglobal
 % the character's advance in the font, measured without marking;
 % stack-pure, so a compiled program can run it with a caller's
 % leavings below its operands
+currentglobal true setglobal
 .xpostsys /.cshmeasure {
     gsave
     nulldevice
@@ -467,6 +468,7 @@ setglobal
 
 % font  .cshsetfont  -
 .xpostsys /.cshsetfont { graphicsdict /currgstate get /currfont 3 -1 roll put } put
+setglobal
 
 % cshow's walks compile into programs that run after the private dict
 % ends, so the procedure executes on the caller's stacks with no

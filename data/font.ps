@@ -17,11 +17,13 @@
 % run a glyph-description procedure with the glyph flag raised: the
 % stencil painter blends mask edges only for glyphs, the way the
 % device's TextAlphaBits asks
+currentglobal true setglobal
 .xpostsys /.runbuild { % ... proc  .runbuild  ...
     graphicsdict /.inglyph true put
     exec
     graphicsdict /.inglyph false put
 } put
+setglobal
 
 /definefont { % /fontname -dict-
     dup type /dicttype ne
@@ -146,6 +148,7 @@
 % declare the glyph's metrics and turn the build's marks into a
 % coverage mask: painting swaps to a raster sized from the glyph box
 % under the transform in force, shifted onto it in device space
+currentglobal true setglobal
 .xpostsys /.t3capture {
     16 dict begin
     {ury urx lly llx wy wx}{exch def}forall
@@ -193,6 +196,7 @@
     } if
     end
 } put
+setglobal
 
 /setcachedevice {
     graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse
@@ -210,6 +214,7 @@
 % stored mask and its advances; a miss runs the build procedure,
 % capturing its marks when it declares setcachedevice, and paints
 % the fresh entry the same way a hit does
+currentglobal true setglobal
 .xpostsys /.t3build {
     10 dict begin
     /code exch def /font exch def
@@ -295,6 +300,7 @@
     } ifelse
     end
 } put
+setglobal
 
 /show {
     graphicsdict /currgstate get /currfont get
@@ -510,7 +516,9 @@
 % kshow's compiled program paints through the implementation's own
 % show, captured here while the name still holds this file's
 % procedure -- an array, which a compiled program pushes as data
+currentglobal true setglobal
 .xpostsys /.kshowshow /show load put
+setglobal
 
 /kshow {
     % kshow steps the string one byte at a time, which a composite font
