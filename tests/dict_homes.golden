@@ -17,6 +17,7 @@
 .privatedict /.graphicsdict
 .privatedict /.gstatetemplate
 .privatedict /newnulldevice
+.privatedict /.stencilcache
 .privatedict /.xpost
 .xpostsys /arcbez
 .xpostsys /.c01
@@ -76,6 +77,7 @@
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.spacecomps
 .xpostsys /.stencilmask
+.xpostsys /.stencilruns
 .xpostsys /.strcat
 .xpostsys /.wcmatch
 .xpostsys /xpost
