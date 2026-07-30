@@ -1,0 +1,28 @@
+%!PS
+% Regression: a Type 1 font whose /Subrs array is over-allocated -- more slots
+% declared than filled, leaving null entries -- must still load through
+% definefont. dvips-embedded Computer Modern fonts (CMR10: 38 declared, 15
+% filled) do exactly this; .loadfont1 used to reject the whole font on the
+% first null Subr with /invalidfont.
+/FontDict 10 dict def
+FontDict begin
+  /FontType 1 def
+  /FontMatrix [0.001 0 0 0.001 0 0] def
+  /FontBBox [0 0 700 700] def
+  /Encoding 256 array def
+  0 1 255 { Encoding exch /.notdef put } for
+  Encoding 65 /A put
+  /CharStrings 3 dict def
+  CharStrings /.notdef <10bf317079bb21e4> put
+  CharStrings /A <10bf317079bb21e4> put
+  /Private 4 dict def
+  Private /lenIV 4 put
+  Private /Subrs 6 array put
+  Private /Subrs get 0 <10bf3170f9> put
+  % Subrs slots 1..5 left null on purpose (the over-allocation)
+end
+/TestSparse FontDict definefont
+% reaching here means definefont accepted the sparse Subrs (no invalidfont)
+/TestSparse findfont 24 scalefont setfont
+100 100 moveto (A) show
+(SUCCESS) =
