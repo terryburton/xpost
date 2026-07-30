@@ -37,7 +37,6 @@
 .xpostsys /doprompt
 .xpostsys /evaluate
 .xpostsys /.finalize
-.xpostsys /flattendict
 .xpostsys /.fontsubstitutions
 .xpostsys /gstatecopy
 .xpostsys /h
@@ -53,14 +52,12 @@
 .xpostsys /normclipwind
 .xpostsys /p2abc
 .xpostsys /pause
-.xpostsys /pendingdict
 .xpostsys /polyarea2
 .xpostsys /ptdiff
 .xpostsys /qsort
 .xpostsys /ravec
 .xpostsys /rect
 .xpostsys /.resources
-.xpostsys /reversedict
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.strcat
