@@ -336,7 +336,12 @@ Level 3 operators
  [X] shfill (sampled functions at byte depths; FunctionTypes 0, 2 and
      3 -- the type 4 calculator functions rangecheck, and functions of
      more than one input are served by type 0 only)
- [ ] composite fonts
+ [X] composite fonts (FMapTypes 2 through 8 over any descendants,
+     and FMapType 9 through composefont with CIDFont descendants of
+     CIDFontType 2, incremental GlyphDirectory delivery, and
+     CIDFontType 0, charstrings through StartData; escapes select
+     within one modal level; cshow rebinds a CMap composite to
+     one-byte codes)
  [X] clipsave
  [X] cliprestore
  [X] setsmoothness, currentsmoothness (recorded only)
