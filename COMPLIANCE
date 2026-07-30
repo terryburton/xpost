@@ -211,7 +211,7 @@ Level 1 operators
  [X] rcurveto
  [X] closepath
  [X] flattenpath
- [ ] charpath
+ [X] charpath
  [X] clippath
  [X] pathbbox
  [X] initclip
