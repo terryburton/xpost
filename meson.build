@@ -336,6 +336,13 @@ test('counttomark',
   args: [ xpost_exe, files('tests/counttomark_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# In-RIP trapping procedure set (PLRM 6.3): settrapparams/currenttrapparams
+# maintain the trapping-parameter state, settrapzone accepts a zone.
+test('trapping',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/trapping_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Arithmetic/math operators (PLRM 8.2): zero-divisor mod/idiv are undefinedresult
 # not a SIGFPE, sqrt of a negative is rangecheck, and atan/sin/cos hit the PLRM
 # examples (a truncated RAD_PER_DEG had skewed them). From the 8.2 compliance campaign.
