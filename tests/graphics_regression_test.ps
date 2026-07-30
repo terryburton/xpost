@@ -21,6 +21,7 @@
 /.fillpoly     1183615869 internaldict /.fillpoly get def
 /.fillrectgray 1183615869 internaldict /.fillrectgray get def
 /.wrapop       1183615869 internaldict /.wrapop get def
+/.zerorows     1183615869 internaldict /.zerorows get def
 
 % failures accumulate in a dedicated dict, so an assert that runs with
 % another dictionary begun still updates the shared counter
@@ -1134,6 +1135,38 @@ newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath fill
 grestore
 iso.p (a pattern paint procedure runs on the caller's stacks) assert
 userdict /i undef userdict /pat undef userdict /iso.p undef
+
+% The TIFF device frames the rgb raster as a baseline TIFF: the
+% little-endian header, a directory whose width entry answers, and
+% one uncompressed strip of the pixels
+/DEVT 8 8 .privatedict /newTIFFIMAGEdevice get exec def
+DEVT /OutputFileName (graphics.scratch) put
+DEVT /ImgData get .zerorows
+1 1 0 2 2 4 4 DEVT dup /FillRect get exec
+DEVT dup /Emit get exec
+/tf.h (graphics.scratch) (r) file 500 string readstring pop def
+tf.h 0 get 16#49 eq tf.h 1 get 16#49 eq and
+tf.h 2 get 42 eq and (the TIFF opens little-endian with its magic) assert
+% the directory follows the compressed strip at the patched offset
+/tf.le4 { % pos . v
+    /tf.p exch def 0
+    3 -1 0 { tf.p add tf.h exch get exch 256 mul add } for
+} def
+/tf.ifd 4 tf.le4 def
+tf.ifd 8 gt (the directory offset patches past the strip) assert
+tf.h tf.ifd 2 add 12 3 mul add get 3 eq
+tf.h tf.ifd 2 add 12 3 mul add 1 add get 1 eq and
+(the fourth directory entry is the compression tag) assert
+tf.h tf.ifd 2 add 12 3 mul add 8 add get 5 eq
+(the strip compresses with the shared coder) assert
+% decoding the strip recovers the painted pixel
+/tf.rt 192 string def
+(graphics.scratch) (r) file dup 8 setfileposition
+/LZWDecode filter tf.rt readstring pop pop
+tf.rt 2 8 mul 2 add 3 mul get 255 eq
+tf.rt 2 8 mul 2 add 3 mul 1 add get 255 eq and
+tf.rt 2 8 mul 2 add 3 mul 2 add get 0 eq and
+(the strip carries the painted pixel) assert
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
