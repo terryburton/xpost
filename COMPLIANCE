@@ -33,7 +33,7 @@ Level 1 operators
  [X] currentcolorscreen
  [X] sethalftone
  [X] currenthalftone
- [ ] makefont
+ [X] makefont
  [X] ashow
  [X] widthshow
  [X] awidthshow
