@@ -64,6 +64,7 @@
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.strcat
+.xpostsys /.wcmatch
 .xpostsys /xpost
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
