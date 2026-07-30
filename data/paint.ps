@@ -4,8 +4,10 @@
 % apply the transfer functions to the marked colour components: three
 % components pass through the red, green and blue transfers, four to
 % red, green, blue and grey in the CMYK order, anything else through
-% the grey transfer
+% the grey transfer. The painting machinery refreshes the screening
+% cell here first, so a bilevel device screens against the current screen
 .xpostsys /.applytransfer {
+    //.xpostsys /.refreshscreencell get exec
     counttomark 3 eq {
         graphicsdict /currgstate get /bluetransfer get exec
         3 1 roll
@@ -472,6 +474,7 @@
     gsave
         newpath
         24 dict begin
+        //.xpostsys /.refreshscreencell get exec
         {mranges mbits ncomp decode datasrc mat bits height width}{exch def}forall
         % the dictionary image form leaves its Interpolate request in
         % the local private dict for this one painting, out of a
@@ -623,6 +626,11 @@
                 bd /dluts dluts put
             } ifelse
             bd /tlut tlut put
+            DEVICE /.htcell known {
+                bd /.htcell DEVICE /.htcell get put
+                bd /.htw DEVICE /.htw get put
+                bd /.hth DEVICE /.hth get put
+            } if
             nat 3 eq {
                 bd /tlutr tlutr put
                 bd /tlutg tlutg put
