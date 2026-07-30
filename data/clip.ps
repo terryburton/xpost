@@ -371,4 +371,16 @@ end
 bind
 put
 
+% -  .clippolyargs  poly
+% the clip region in the device FillPoly argument format, for the
+% span-level clipping the fill pipeline performs. .fillpolyargs reads
+% the current path, so the region stands in for it briefly.
+.xpostsys /.clippolyargs {
+    graphicsdict /currgstate get /currpath get
+    graphicsdict /currgstate get /currpath
+        graphicsdict /currgstate get /clipregion get put
+    .fillpolyargs
+    exch graphicsdict /currgstate get /currpath 3 -1 roll put
+} bind put
+
 //.internaldict /QUIET known { }{ (eof clip.ps\n)print } ifelse

@@ -32,7 +32,6 @@
 /fill {
     closepath
     flattenpath
-    //.xpostsys /doclip get exec
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
         [ % mark
@@ -67,6 +66,14 @@
         } ifelse
     } forall
     ]
+
+    % A non-trivial clip region intersects span-by-span in the same
+    % scan-conversion the fill itself uses: exact for any region the
+    % nonzero rule can describe (disjoint windows, concave boundaries,
+    % counters), where the half-plane clipper serves only convex ones
+    .cliptrivial not {
+        //.xpostsys /.clippolyargs get exec .clipfillpoly
+    } if
 
     dup length 2 gt {
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
