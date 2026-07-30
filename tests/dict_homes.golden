@@ -94,6 +94,9 @@ gstate /colorcomp1
 gstate /colorcomp2
 gstate /colorcomp3
 gstate /colorcomp4
+gstate /blackgen
+gstate /ucr
+gstate /colorrendering
 gstate /transfer
 gstate /redtransfer
 gstate /greentransfer
