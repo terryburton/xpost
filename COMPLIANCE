@@ -332,7 +332,9 @@ Level 2 operators
 Level 3 operators
 -----------------
 
- [ ] shfill
+ [X] shfill (sampled functions at byte depths; FunctionTypes 0, 2 and
+     3 -- the type 4 calculator functions rangecheck, and functions of
+     more than one input are served by type 0 only)
  [ ] composite fonts
  [X] clipsave
  [X] cliprestore

@@ -16,7 +16,7 @@
 userdict   length 0 ne { userdict   length (userdict not empty)   bad } if
 globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
-% the 344 name keys every build exposes
+% the 345 name keys every build exposes
 /golden <<
   ($error) true  (.gscratch) true  (.lockdown) true  (.permitfileread) true
   (.permitfilewrite) true  (.privatedict) true  (.resourcefileopen) true  (.uparams) true
@@ -93,17 +93,18 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (setpagedevice) true  (setpattern) true  (setrgbcolor) true  (setscreen) true
   (setshared) true  (setsmoothness) true  (setstrokeadjust) true  (setsystemparams) true
   (settransfer) true  (setundercolorremoval) true  (setuserparams) true  (setvmthreshold) true
-  (shareddict) true  (show) true  (showpage) true  (signalerror) true
-  (sin) true  (sqrt) true  (srand) true  (stack) true
-  (startjob) true  (status) true  (statusdict) true  (stop) true
-  (stopped) true  (store) true  (string) true  (stringwidth) true
-  (stroke) true  (strokepath) true  (sub) true  (systemdict) true
-  (token) true  (transform) true  (translate) true  (true) true
-  (truncate) true  (type) true  (undef) true  (undefinefont) true
-  (undefineresource) true  (userdict) true  (usertime) true  (version) true
-  (vmreclaim) true  (vmstatus) true  (wcheck) true  (where) true
-  (widthshow) true  (write) true  (writehexstring) true  (writeobject) true
-  (writestring) true  (xcheck) true  (xor) true  (yield) true
+  (shareddict) true  (shfill) true  (show) true  (showpage) true
+  (signalerror) true  (sin) true  (sqrt) true  (srand) true
+  (stack) true  (startjob) true  (status) true  (statusdict) true
+  (stop) true  (stopped) true  (store) true  (string) true
+  (stringwidth) true  (stroke) true  (strokepath) true  (sub) true
+  (systemdict) true  (token) true  (transform) true  (translate) true
+  (true) true  (truncate) true  (type) true  (undef) true
+  (undefinefont) true  (undefineresource) true  (userdict) true  (usertime) true
+  (version) true  (vmreclaim) true  (vmstatus) true  (wcheck) true
+  (where) true  (widthshow) true  (write) true  (writehexstring) true
+  (writeobject) true  (writestring) true  (xcheck) true  (xor) true
+  (yield) true
 >> def
 
 % names present only when an optional library or the platform provides them
