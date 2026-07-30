@@ -57,8 +57,7 @@ def
     % the clip machinery consumes line segments, so the region is cut
     % from a flattened working copy; the caller's path is kept aside
     % and put back, undisturbed by flattening or the intersection
-    graphicsdict /currgstate get /currpath get
-    1 dict //.xpostsys /deepcopy get exec
+    graphicsdict /currgstate get /currpath get .copypath
     flattenpath
     //.xpostsys /doclip get exec
     graphicsdict /currgstate get
@@ -349,22 +348,18 @@ put
 
     PA {
         dup length 0 gt {
-            dup 0 get << /data 3 2 roll /cmd /move >> //.xpostsys /cpath get exec addtopath
-            1 1 index length 1 sub getinterval {
-                << /data 3 2 roll /cmd /line >> //.xpostsys /cpath get exec addtopath
+            dup 0 get aload pop .devmoveto
+            dup 1 1 index length 1 sub getinterval {
+                aload pop .devlineto
             } forall
 
-            //.xpostsys /cpath get exec dup length 1 sub get
-            dup 0 get /data get
-            exch dup length 1 sub get /data get
-            aload pop 3 2 roll aload pop % x0 y0 xN yN
-            exch 4 1 roll % xN x0 y0 yN
+            dup dup length 1 sub get aload pop % P xN yN
+            2 index 0 get aload pop % P xN yN x0 y0
+            exch 4 1 roll % P x0 xN yN y0
             eq 3 1 roll eq and {
-                %closepath
-                //.xpostsys /cpath get exec dup length 1 sub get
-                dup length 1 sub get
-                /cmd /close put
+                .retagclose
             } if
+            pop
         }{
             pop
         } ifelse
