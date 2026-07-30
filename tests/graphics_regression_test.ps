@@ -484,6 +484,42 @@ countink smallink gt (the CTM at show time scales the marks) assert
 /Helvetica-Bold findfont [26 0 0 52 0 0] makefont setfont
 (23) stringwidth pop
 wa13 2 mul (makefont scales the advances by its x component) assertnear
+
+% a sub-pixel em is served exactly: FreeType cannot size a face below
+% a pixel, so the interpreter carries the residual scale itself; the
+% advances stay linear all the way down
+/Helvetica-Bold findfont 0.25 scalefont setfont
+(23) stringwidth pop 13 mul 0.25 div
+wa13 (a sub-pixel em scales the advances) assertnear
+
+% and a sub-pixel em under a magnifying CTM marks like the equivalent
+% point size: 0.3 em drawn at 40x covers the ink of 12 pt within a
+% rasterization tolerance
+erasepage
+/Helvetica-Bold findfont 12 scalefont setfont
+newpath 4 20 moveto (6) show
+countink /ink12 exch def
+erasepage
+/Helvetica-Bold findfont 0.3 scalefont setfont
+gsave 40 40 scale newpath 0.1 0.5 moveto (6) show grestore
+countink ink12 sub abs
+ink12 0.15 mul lt (a sub-pixel em under a magnifying CTM marks at full size) assert
+
+% an annulus clip built the standard way: the closepath's point bridges
+% into the inner subpath by a straight line, so the region arrives as
+% one keyhole path; the clipper must split it at the close, peel the
+% doubled bridge edge, and subtract the opposite-wound inner ring
+erasepage
+gsave
+newpath 32 32 24 0 360 arc closepath
+        32 32 12 360 0 arcn closepath
+clip
+newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+grestore
+32 14 inkat (ring clip admits the band) assert
+14 32 inkat (ring clip admits the band on the other axis) assert
+32 32 inkat not (ring clip excludes the hole) assert
+32 4 inkat not (ring clip excludes outside the outer circle) assert
 } if
 
 count 0 eq (operand stack is balanced) assert
