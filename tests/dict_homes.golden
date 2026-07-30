@@ -107,3 +107,6 @@ gstate /dasharray
 gstate /dashoffset
 gstate /currfont
 gstate /device
+gstate /screenfreq
+gstate /screenangle
+gstate /screenproc
