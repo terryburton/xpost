@@ -165,6 +165,7 @@ _xpost_main_usage(const char *filename)
     printf("  -o, --output=[FILE]                output file\n");
     printf("  -d, --device=[STRING]              device name\n");
     printf("  -Dname=token, --define name=token  add definition to userdict\n");
+    printf("  -I[DIR], --include [DIR]           add a resource search directory\n");
     printf("  --no-graphics                      lock down and run without loading graphics\n");
     printf("  --no-sandbox                       allow the program unrestricted file access\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
@@ -274,6 +275,8 @@ int main(int argc, char *argv[])
     const char *define = NULL;
     char **defs = NULL;
     int num_defs = 0;
+    char **incs = NULL;
+    int num_incs = 0;
     int no_graphics = 0;
     int no_sandbox = 0;
     int output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
@@ -385,6 +388,35 @@ int main(int argc, char *argv[])
                     }
                     defs = tmp;
                     defs[num_defs++] = strdup(define);
+                }
+            }
+            else if ((!strncmp(argv[i], "-I", 2)) ||
+                     (!strcmp(argv[i], "--include")))
+            {
+                const char *inc;
+                if (argv[i][1] == 'I' && argv[i][2])
+                {
+                    inc = argv[i] + 2;
+                }
+                else if ((i + 1) < argc)
+                {
+                    inc = argv[++i];
+                }
+                else
+                {
+                    XPOST_LOG_ERR("missing option value");
+                    _xpost_main_usage(filename);
+                    goto quit_xpost;
+                }
+                {
+                    char **tmp = realloc(incs, (num_incs + 1) * sizeof *incs);
+                    if (!tmp)
+                    {
+                        XPOST_LOG_ERR("out of memory");
+                        goto quit_xpost;
+                    }
+                    incs = tmp;
+                    incs[num_incs++] = strdup(inc);
                 }
             }
             else if (!strcmp(argv[i], "--no-sandbox"))
@@ -502,11 +534,26 @@ int main(int argc, char *argv[])
         num_defs = 0;
     }
 
+    /* seed the resource search path from -I directories */
+    if (num_incs > 0)
+    {
+        for (i = 0; i < num_incs; i++)
+        {
+            xpost_add_resource_dir(ctx, incs[i]);
+            /* resource files are read from beneath this directory */
+            xpost_path_permit_read(incs[i]);
+            free(incs[i]);
+        }
+        free(incs);
+        incs = NULL;
+        num_incs = 0;
+    }
+
     /* confine the program to its working area unless --no-sandbox: the
        current and temporary directories, the input file's directory
-       (read) and the output file's directory (write). The interpreter's
-       own start-up files have already loaded, so they need no
-       permitting here. */
+       (read) and the output file's directory (write). The interpreter
+       permits its own data directory (init.ps, graphics.ps) during
+       start-up; -I resource directories were read-permitted above. */
     if (!no_sandbox)
     {
         const char *tmp = getenv("TMPDIR");
