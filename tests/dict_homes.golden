@@ -58,6 +58,7 @@
 .xpostsys /.imgsource
 .xpostsys /initial
 .xpostsys /.instof
+.xpostsys /.intest
 .xpostsys /.it1row
 .xpostsys /.it2row
 .xpostsys /loadgraphics

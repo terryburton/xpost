@@ -124,6 +124,37 @@
     } ifelse
 } bind def
 
+% x y proc  .intest  bool
+% The insideness core: proc resolves the subject region -- the spans
+% the corresponding painting operator would mark -- and the probe is
+% the device pixel holding the point, inset by the fill grid's quantum
+% so mere boundary contact stays outside, and insideness is any span
+% surviving the intersection. The clip does not participate: the test
+% asks about the painting operator's own marks. The user-path aperture
+% probe waits on the user-path operators.
+.xpostsys /.intest {
+    4 dict begin
+    /.insp exch def
+    transform
+    floor 0.00390625 add /.iny exch def
+    floor 0.00390625 add /.inx exch def
+    [ [.inx .iny]
+      [.inx 0.9921875 add .iny]
+      [.inx 0.9921875 add .iny 0.9921875 add]
+      [.inx .iny 0.9921875 add] ]
+    gsave .insp exec exch .clipfillpoly length 2 gt grestore
+    end
+} put
+
+% x y  infill  bool          x y  ineofill  bool
+% would fill (eofill) of the current path mark the point's pixel
+/infill { { flattenpath .fillpolyargs } //.xpostsys /.intest get exec } bind def
+/ineofill { { closepath flattenpath .fillpolyargs .eospanpoly } //.xpostsys /.intest get exec } bind def
+
+% the stroke form wraps infill: the stroke outline becomes the current
+% path inside a gsave and fills by the nonzero rule, the probe beneath
+/instroke { gsave strokepath infill grestore } bind def
+
 % x1 y1 x2 y2 rect  .hairsegclip  x1' y1' x2' y2' true
 %                                 false
 % the portion of the segment within the rectangle [x0 y0 x1 y1],
