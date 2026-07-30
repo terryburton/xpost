@@ -241,4 +241,36 @@ setglobal
     end
 } bind def
 
+% In-RIP trapping (PLRM 6.3). The trapping operators are defined in the
+% Trapping procedure set; a program reaches them with
+%   /Trapping /ProcSet findresource begin ... end
+% The trapping parameter dictionary is not directly accessible: it is read and
+% altered only through currenttrapparams and settrapparams. This interpreter
+% keeps that parameter state and accepts trapping zones, but generates no traps
+% -- a conformant answer for a device without in-RIP trapping.
+currentglobal true setglobal
+/Trapping <<
+    % the cumulative trapping-parameter dictionary. The language prescribes no
+    % default values (they are device-specific), so it starts empty.
+    /.trapparams 15 dict
+    % dict  settrapparams  -
+    % merge a request dictionary's entries into the trapping parameters. The
+    % effect is cumulative across calls; a key given a null value is set to
+    % null (cancelled), an omitted key is left unchanged.
+    /settrapparams {
+        dup type /dicttype ne { /settrapparams cvx /typecheck signalerror } if
+        { .trapparams 3 1 roll put } forall
+    } bind
+    % -  currenttrapparams  dict
+    % return a dictionary reflecting the current trapping parameters
+    /currenttrapparams {
+        .trapparams dup length 1 add dict copy
+    } bind
+    % -  settrapzone  -
+    % establish a trapping zone from the current path with the current
+    % parameters; this device emits no traps, so nothing is produced
+    /settrapzone { } bind
+>> /ProcSet defineresource pop
+setglobal
+
 //.internaldict /QUIET known { }{ (eof resource.ps\n)print } ifelse
