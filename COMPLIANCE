@@ -277,12 +277,12 @@ Level 2 operators
  [X] imagemask with dict argument
  [X] setcolortransfer
  [X] currentcolortransfer
- [ ] setblackgeneration
- [ ] currentblackgeneration
- [ ] setundercolorremoval
- [ ] currentundercolorremoval
- [ ] setcolorrendering
- [ ] currentcolorrendering
+ [X] setblackgeneration (recorded only)
+ [X] currentblackgeneration
+ [X] setundercolorremoval (recorded only)
+ [X] currentundercolorremoval
+ [X] setcolorrendering (recorded only)
+ [X] currentcolorrendering
  [X] Named Resources
  [ ] makepattern
  [ ] setpattern
