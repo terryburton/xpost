@@ -16,6 +16,7 @@
 .privatedict /.error
 .privatedict /.graphicsdict
 .privatedict /.gstatetemplate
+.privatedict /.imginterp
 .privatedict /newnulldevice
 .privatedict /.stencilcache
 .privatedict /.xpost
