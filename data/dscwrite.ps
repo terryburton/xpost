@@ -23,6 +23,9 @@
 
 % no separation registry: paints fall back to process colours
 .xpost_DSCWRITE /.registersep undef
+% no image consumer either: sampled images paint through the
+% ordinary methods rather than reference objects Emit never writes
+.xpost_DSCWRITE /PaintImage undef
 
 .xpost_DSCWRITE /Emit { % IMAGE  .  -
 begin
