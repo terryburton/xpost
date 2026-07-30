@@ -23,12 +23,11 @@
 %     Ghostscript agrees; Distiller reports limitcheck, its 127-byte
 %     name limit firing before the bounds check.
 %
-% run-bintok-test.sh compares xpost against the golden record, and,
-% when gs is available, diffs gs against the same golden outside the
-% documented deviations, so either implementation drifting fails the
-% check. A change to the golden is a conformance adjudication, not a
-% regeneration: verify any new line against the PLRM and, where it is
-% silent, against both interpreters before committing it.
+% run-bintok-test.sh compares xpost against the committed golden
+% record, so a regression in the scanner fails the check. A change to
+% the golden is a conformance adjudication, not a regeneration: verify
+% any new line against the PLRM and, where it is silent, against both
+% interpreters before committing it.
 
 % SCRATCH must be defined by the caller (a writable scratch path)
 
@@ -207,9 +206,8 @@
 (bseq null nonzero) <8001000C 00000000 00000001> case
 (bseq mark)         <8001000C 0A000000 00000000> case
 (bseq bool)         <8001000C 04000000 00000001> case
-% a boolean record value other than 0 or 1 is outside the encoding;
-% the reference implementation's response is not meaningful, so the
-% corner stays unprobed
+% a boolean record value other than 0 or 1 is outside the encoding,
+% so the corner stays unprobed
 (bseq real ieee be) <8001000C 02000000 3F800000> case
 (bseq int le)       <8101 0C00 01000000 05000000> case
 (bseq real native le-host) <8301 0C00 02000000 0000803F> case
