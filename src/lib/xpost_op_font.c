@@ -1240,6 +1240,124 @@ void _face_setup(Xpost_Context *ctx,
     xpost_font_face_transform(face, mat);
 }
 
+/* Resolve the current colour into the device's native space, applying
+   the same source-to-destination conversions as the ColorConversion
+   table in color.ps (gray by NTSC luminosity, CMYK composed by
+   additive complement, RGB to CMYK with full black generation and
+   undercolor removal), so glyphs mark in exactly the colour a fill
+   under the same graphics state would. A source space the table does
+   not know passes its raw components through. Returns 0 on success. */
+static
+int _device_color(Xpost_Context *ctx,
+                  Xpost_Object gs,
+                  Xpost_Object devdic,
+                  int *ncomp,
+                  Xpost_Object comp[4])
+{
+#define GSCOMP(name) (o = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, name)), \
+                      xpost_object_get_type(o) == realtype ? o.real_.val \
+                    : xpost_object_get_type(o) == integertype ? (double)o.int_.val \
+                    : 0.0)
+#define MIN1(x) ((x) < 1.0 ? (x) : 1.0)
+    Xpost_Object colorspace, srcspace, o;
+    enum { SRC_GRAY, SRC_RGB, SRC_CMYK, SRC_OTHER } src;
+    double v[4];
+
+    srcspace = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorspace"));
+    if (xpost_dict_compare_objects(ctx, srcspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+        src = SRC_GRAY;
+    else if (xpost_dict_compare_objects(ctx, srcspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
+        src = SRC_RGB;
+    else if (xpost_dict_compare_objects(ctx, srcspace, xpost_name_cons(ctx, "DeviceCMYK")) == 0)
+        src = SRC_CMYK;
+    else
+        src = SRC_OTHER;
+    v[0] = GSCOMP("colorcomp1");
+    v[1] = GSCOMP("colorcomp2");
+    v[2] = GSCOMP("colorcomp3");
+    v[3] = GSCOMP("colorcomp4");
+
+    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
+    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    {
+        double g;
+
+        switch (src)
+        {
+            case SRC_RGB:
+                g = 0.3 * v[0] + 0.59 * v[1] + 0.11 * v[2];
+                break;
+            case SRC_CMYK:
+                g = 1.0 - MIN1(0.3 * v[0] + 0.59 * v[1] + 0.11 * v[2] + v[3]);
+                break;
+            default: /* gray, or an unknown space's first component */
+                g = v[0];
+                break;
+        }
+        *ncomp = 1;
+        comp[0] = xpost_real_cons((real)g);
+    }
+    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
+    {
+        double r, g, b;
+
+        switch (src)
+        {
+            case SRC_GRAY:
+                r = g = b = v[0];
+                break;
+            case SRC_CMYK:
+                r = 1.0 - MIN1(v[0] + v[3]);
+                g = 1.0 - MIN1(v[1] + v[3]);
+                b = 1.0 - MIN1(v[2] + v[3]);
+                break;
+            default:
+                r = v[0]; g = v[1]; b = v[2];
+                break;
+        }
+        *ncomp = 3;
+        comp[0] = xpost_real_cons((real)r);
+        comp[1] = xpost_real_cons((real)g);
+        comp[2] = xpost_real_cons((real)b);
+    }
+    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceCMYK")) == 0)
+    {
+        double c, m, y, k;
+
+        switch (src)
+        {
+            case SRC_GRAY:
+                c = m = y = 0;
+                k = 1.0 - v[0];
+                break;
+            case SRC_RGB:
+                c = 1.0 - v[0];
+                m = 1.0 - v[1];
+                y = 1.0 - v[2];
+                k = c < m ? c : m;
+                if (y < k) k = y;
+                c -= k; m -= k; y -= k;
+                break;
+            default:
+                c = v[0]; m = v[1]; y = v[2]; k = v[3];
+                break;
+        }
+        *ncomp = 4;
+        comp[0] = xpost_real_cons((real)c);
+        comp[1] = xpost_real_cons((real)m);
+        comp[2] = xpost_real_cons((real)y);
+        comp[3] = xpost_real_cons((real)k);
+    }
+    else
+    {
+        XPOST_LOG_ERR("unimplemented device colorspace");
+        return unregistered;
+    }
+    return 0;
+#undef GSCOMP
+#undef MIN1
+}
+
 /* Plot a rendered glyph bitmap through the device. An 8-bit coverage
    bitmap is thresholded at half coverage -- the sharp rasterization a
    scan conversion of the outline would produce -- unless the device
@@ -1261,7 +1379,8 @@ void _draw_bitmap(Xpost_Context *ctx,
                   int ncomp,
                   Xpost_Object comp1,
                   Xpost_Object comp2,
-                  Xpost_Object comp3)
+                  Xpost_Object comp3,
+                  Xpost_Object comp4)
 {
     int i, j;
     const unsigned char *tmp;
@@ -1310,6 +1429,12 @@ void _draw_bitmap(Xpost_Context *ctx,
                         xpost_stack_push(ctx->lo, ctx->os, comp1);
                         xpost_stack_push(ctx->lo, ctx->os, comp2);
                         xpost_stack_push(ctx->lo, ctx->os, comp3);
+                        break;
+                    case 4:
+                        xpost_stack_push(ctx->lo, ctx->os, comp1);
+                        xpost_stack_push(ctx->lo, ctx->os, comp2);
+                        xpost_stack_push(ctx->lo, ctx->os, comp3);
+                        xpost_stack_push(ctx->lo, ctx->os, comp4);
                         break;
                 }
                 if (cov > 0)
@@ -1436,6 +1561,7 @@ int _show_char_outline(Xpost_Context *ctx,
                        Xpost_Object comp1,
                        Xpost_Object comp2,
                        Xpost_Object comp3,
+                       Xpost_Object comp4,
                        long *advance_x,
                        long *advance_y)
 {
@@ -1462,9 +1588,22 @@ int _show_char_outline(Xpost_Context *ctx,
     }
 
     r = COMPVAL(comp1);
-    g = ncomp == 3 ? COMPVAL(comp2) : r;
-    b = ncomp == 3 ? COMPVAL(comp3) : r;
-    if (f.svg)
+    g = ncomp >= 3 ? COMPVAL(comp2) : r;
+    b = ncomp >= 3 ? COMPVAL(comp3) : r;
+    if (ncomp == 4 && !f.svg)
+    {
+        /* the device's process model is CMYK: the glyph fills in it */
+        n = xpost_dev_pdf_fmt_num(t, r);
+        t[n++] = ' ';
+        n += xpost_dev_pdf_fmt_num(t + n, g);
+        t[n++] = ' ';
+        n += xpost_dev_pdf_fmt_num(t + n, b);
+        t[n++] = ' ';
+        n += xpost_dev_pdf_fmt_num(t + n, COMPVAL(comp4));
+        memcpy(t + n, " k\n", 3);
+        n += 3;
+    }
+    else if (f.svg)
     {
         memcpy(t, "<path fill=\"rgb(", 16); n = 16;
         n += xpost_dev_pdf_fmt_num(t + n, r * 100); t[n++] = '%'; t[n++] = ',';
@@ -1523,7 +1662,8 @@ int _show_glyph(Xpost_Context *ctx,
                 int ncomp,
                 Xpost_Object comp1,
                 Xpost_Object comp2,
-                Xpost_Object comp3)
+                Xpost_Object comp3,
+                Xpost_Object comp4)
 {
 #ifdef HAVE_FREETYPE2
     unsigned char *buffer;
@@ -1540,7 +1680,7 @@ int _show_glyph(Xpost_Context *ctx,
     if (ts->vector)
     {
         if (!_show_char_outline(ctx, devdic, data.face, glyph_index,
-                                *xpos, *ypos, ncomp, comp1, comp2, comp3,
+                                *xpos, *ypos, ncomp, comp1, comp2, comp3, comp4,
                                 &advance_x, &advance_y))
             return 0;
     }
@@ -1559,6 +1699,12 @@ int _show_glyph(Xpost_Context *ctx,
         {
             switch (ncomp)
             {
+                case 4:
+                    xpost_stack_push(ctx->lo, ctx->os, comp1);
+                    xpost_stack_push(ctx->lo, ctx->os, comp2);
+                    xpost_stack_push(ctx->lo, ctx->os, comp3);
+                    xpost_stack_push(ctx->lo, ctx->os, comp4);
+                    break;
                 case 3:
                     xpost_stack_push(ctx->lo, ctx->os, comp1);
                     xpost_stack_push(ctx->lo, ctx->os, comp2);
@@ -1598,7 +1744,7 @@ int _show_glyph(Xpost_Context *ctx,
                      buffer, rows, width, pitch, pixel_mode,
                      (int)floor(*xpos + left + 0.5),
                      (int)floor(*ypos - top + 0.5),
-                     ncomp, comp1, comp2, comp3);
+                     ncomp, comp1, comp2, comp3, comp4);
     }
     /* a /Metrics entry for this glyph overrides the face's advance */
     _metrics_advance(ctx, ts, glyphname, &advance_x, &advance_y);
@@ -1621,6 +1767,7 @@ int _show_glyph(Xpost_Context *ctx,
     (void)comp1;
     (void)comp2;
     (void)comp3;
+    (void)comp4;
 #endif
     return 1;
 }
@@ -1637,7 +1784,8 @@ int _show_char(Xpost_Context *ctx,
                int ncomp,
                Xpost_Object comp1,
                Xpost_Object comp2,
-               Xpost_Object comp3)
+               Xpost_Object comp3,
+               Xpost_Object comp4)
 {
     /* show does not kern: pair adjustment in PostScript is the
        program's business (kshow, ashow); the advance is the glyph
@@ -1647,7 +1795,7 @@ int _show_char(Xpost_Context *ctx,
                                                      data.face, ch);
     return _show_glyph(ctx, devdic, putpix, data, ts, xpos, ypos,
                        glyph_index, _encoded_name(ctx, ts->encoding, ch),
-                       ncomp, comp1, comp2, comp3);
+                       ncomp, comp1, comp2, comp3, comp4);
 }
 
 static
@@ -1711,9 +1859,8 @@ int _show(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object putpix;
     textstate ts;
-    Xpost_Object colorspace;
     int ncomp;
-    Xpost_Object comp1, comp2, comp3;
+    Xpost_Object comp[4];
     Xpost_Object finalize;
     int ret;
 
@@ -1759,23 +1906,9 @@ int _show(Xpost_Context *ctx,
         return ret;
     }
 
-    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        ncomp = 1;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-    }
-    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-    {
-        ncomp = 3;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        comp2 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-        comp3 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-    }
-    else
-    {
-        XPOST_LOG_ERR("unimplemented device colorspace");
-	free(cstr);
+        free(cstr);
         return unregistered;
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
@@ -1792,7 +1925,7 @@ int _show(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++) {
         _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp1, comp2, comp3);
+                ncomp, comp[0], comp[1], comp[2], comp[3]);
     }
 
     /* update current position in the graphics state */
@@ -1859,26 +1992,8 @@ int _glyphshow_common(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    {
-        Xpost_Object colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-        if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
-        {
-            ncomp = 1;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        }
-        else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-        {
-            ncomp = 3;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-            comp[1] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-            comp[2] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-        }
-        else
-        {
-            XPOST_LOG_ERR("unimplemented device colorspace");
-            return unregistered;
-        }
-    }
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
+        return unregistered;
 
     finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
     xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
@@ -1893,7 +2008,7 @@ int _glyphshow_common(Xpost_Context *ctx,
         : gid;
     _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
                 glyph_index, byname ? gname : invalid,
-                ncomp, comp[0], comp[1], comp[2]);
+                ncomp, comp[0], comp[1], comp[2], comp[3]);
 
     xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
     xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
@@ -2625,25 +2740,10 @@ int _stencilaa(Xpost_Context *ctx,
         }
     }
 
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        Xpost_Object colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-        if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
-        {
-            ncomp = 1;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        }
-        else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-        {
-            ncomp = 3;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-            comp[1] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-            comp[2] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-        }
-        else
-        {
-            free(cov);
-            goto refuse;
-        }
+        free(cov);
+        goto refuse;
     }
     /* the answer goes under the queue: the painter stacks one entry
        per pixel above it, and each entry consumes its own operands
@@ -2651,7 +2751,7 @@ int _stencilaa(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
     _draw_bitmap(ctx, devdic, putpix, &ts, cov, devh, devw, devw,
                  XPOST_FONT_PIXEL_MODE_GRAY, ix0, iy0,
-                 ncomp, comp[0], comp[1], comp[2]);
+                 ncomp, comp[0], comp[1], comp[2], comp[3]);
     free(cov);
     return 0;
 refuse:
@@ -2742,23 +2842,8 @@ int _t3cachehit(Xpost_Context *ctx,
             && o.int_.val > 1;
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
 
-    {
-        Xpost_Object colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-        if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
-        {
-            ncomp = 1;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        }
-        else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-        {
-            ncomp = 3;
-            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-            comp[1] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-            comp[2] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-        }
-        else
-            goto refuse;
-    }
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
+        goto refuse;
 
     dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
     dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
@@ -2796,7 +2881,7 @@ int _t3cachehit(Xpost_Context *ctx,
                  XPOST_FONT_PIXEL_MODE_GRAY,
                  (int)floor(dx + 0.5) + left,
                  (int)floor(dy + 0.5) - top,
-                 ncomp, comp[0], comp[1], comp[2]);
+                 ncomp, comp[0], comp[1], comp[2], comp[3]);
     return 0;
 refuse:
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
@@ -3130,9 +3215,8 @@ int _ashow(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object putpix;
     textstate ts;
-    Xpost_Object colorspace;
     int ncomp;
-    Xpost_Object comp1, comp2, comp3;
+    Xpost_Object comp[4];
     Xpost_Object finalize;
     int ret;
 
@@ -3178,23 +3262,9 @@ int _ashow(Xpost_Context *ctx,
         return ret;
     }
 
-    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        ncomp = 1;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-    }
-    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-    {
-        ncomp = 3;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        comp2 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-        comp3 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-    }
-    else
-    {
-        XPOST_LOG_ERR("unimplemented device colorspace");
-	free(cstr);
+        free(cstr);
         return unregistered;
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
@@ -3212,7 +3282,7 @@ int _ashow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp1, comp2, comp3);
+                   ncomp, comp[0], comp[1], comp[2], comp[3]);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
     }
@@ -3244,9 +3314,8 @@ int _widthshow(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object putpix;
     textstate ts;
-    Xpost_Object colorspace;
     int ncomp;
-    Xpost_Object comp1, comp2, comp3;
+    Xpost_Object comp[4];
     Xpost_Object finalize;
     int ret;
 
@@ -3292,23 +3361,9 @@ int _widthshow(Xpost_Context *ctx,
         return ret;
     }
 
-    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        ncomp = 1;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-    }
-    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-    {
-        ncomp = 3;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        comp2 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-        comp3 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-    }
-    else
-    {
-        XPOST_LOG_ERR("unimplemented device colorspace");
-	free(cstr);
+        free(cstr);
         return unregistered;
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
@@ -3326,7 +3381,7 @@ int _widthshow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp1, comp2, comp3);
+                   ncomp, comp[0], comp[1], comp[2], comp[3]);
         if ((unsigned char)*ch == charcode.int_.val)
         {
             xpos += cx.real_.val;
@@ -3363,9 +3418,8 @@ int _awidthshow(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object putpix;
     textstate ts;
-    Xpost_Object colorspace;
     int ncomp;
-    Xpost_Object comp1, comp2, comp3;
+    Xpost_Object comp[4];
     Xpost_Object finalize;
     int ret;
 
@@ -3411,23 +3465,9 @@ int _awidthshow(Xpost_Context *ctx,
         return ret;
     }
 
-    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        ncomp = 1;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-    }
-    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-    {
-        ncomp = 3;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        comp2 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-        comp3 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-    }
-    else
-    {
-        XPOST_LOG_ERR("unimplemented device colorspace");
-	free(cstr);
+        free(cstr);
         return unregistered;
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
@@ -3445,7 +3485,7 @@ int _awidthshow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp1, comp2, comp3);
+                ncomp, comp[0], comp[1], comp[2], comp[3]);
         xpos += dx.real_.val;
         ypos += dy.real_.val;
         if ((unsigned char)*ch == charcode.int_.val)
@@ -3788,9 +3828,8 @@ int _kshow(Xpost_Context *ctx,
     Xpost_Object devdic;
     Xpost_Object putpix;
     textstate ts;
-    Xpost_Object colorspace;
     int ncomp;
-    Xpost_Object comp1, comp2, comp3;
+    Xpost_Object comp[4];
     Xpost_Object finalize;
     int ret;
 
@@ -3837,23 +3876,9 @@ int _kshow(Xpost_Context *ctx,
         return ret;
     }
 
-    colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
-    if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+    if (_device_color(ctx, gs, devdic, &ncomp, comp))
     {
-        ncomp = 1;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-    }
-    else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
-    {
-        ncomp = 3;
-        comp1 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
-        comp2 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
-        comp3 = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
-    }
-    else
-    {
-        XPOST_LOG_ERR("unimplemented device colorspace");
-	free(cstr);
+        free(cstr);
         return unregistered;
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
@@ -3871,7 +3896,7 @@ int _kshow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp1, comp2, comp3);
+                ncomp, comp[0], comp[1], comp[2], comp[3]);
     }
 
     /* update current position in the graphics state */
