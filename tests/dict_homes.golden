@@ -19,7 +19,6 @@
 .privatedict /newnulldevice
 .privatedict /.xpost
 .xpostsys /arcbez
-.xpostsys /bitsdict
 .xpostsys /.c01
 .xpostsys /ColorConversion
 .xpostsys /cpath
@@ -36,6 +35,7 @@
 .xpostsys /dopending
 .xpostsys /doprompt
 .xpostsys /evaluate
+.xpostsys /.fill
 .xpostsys /.finalize
 .xpostsys /.fontsubstitutions
 .xpostsys /gstatecopy
@@ -44,16 +44,21 @@
 .xpostsys /hodgman
 .xpostsys /.identdecode
 .xpostsys /.imagepaint
+.xpostsys /.imagepaintm
+.xpostsys /.imagetype3
+.xpostsys /.imagetype4
 .xpostsys /.imgsource
 .xpostsys /initial
 .xpostsys /.instof
+.xpostsys /.it1row
+.xpostsys /.it2row
 .xpostsys /loadgraphics
 .xpostsys /.loadmodule
 .xpostsys /magang
+.xpostsys /.mcscale
 .xpostsys /.min
 .xpostsys /minlinewidth
 .xpostsys /.ncomponents
-.xpostsys /.nib12
 .xpostsys /normclipwind
 .xpostsys /p2abc
 .xpostsys /pause
@@ -63,6 +68,8 @@
 .xpostsys /ravec
 .xpostsys /rect
 .xpostsys /.resources
+.xpostsys /.rownorm
+.xpostsys /.sampleat
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.spacecomps
