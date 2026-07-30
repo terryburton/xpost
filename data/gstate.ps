@@ -264,6 +264,14 @@ end
     graphicsdict /currgstate get /colorrendering get
 } def
 
+% string  findcolorrendering  name bool
+% one rendering serves every condition: the default instance
+/findcolorrendering { pop /DefaultColorRendering true } def
+currentglobal true setglobal
+/DefaultColorRendering 0 dict dup /ColorRenderingType 1 put
+/ColorRendering defineresource pop
+setglobal
+
 % redproc greenproc blueproc grayproc  setcolortransfer  -
 % record one transfer procedure per component; the grey channel
 % shares its slot with settransfer, and is the one painting applies
