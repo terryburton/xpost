@@ -42,6 +42,7 @@
 .xpostsys /h
 .xpostsys /.handlejoberror
 .xpostsys /hodgman
+.xpostsys /.identdecode
 .xpostsys /.imagepaint
 .xpostsys /.imgsource
 .xpostsys /initial
