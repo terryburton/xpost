@@ -133,6 +133,20 @@ setglobal
 
 % key category  resourcestatus  status size true | false
 /resourcestatus {
+    % querying a category that does not exist is an undefined error (PLRM);
+    % only a present-but-absent instance yields false. Ensure the category is
+    % defined the same way findresource does before reporting on an instance.
+    2 dict begin
+    /category exch def
+    /key exch def
+    //.xpostsys /.resources get category known not {
+        category /Category //.xpostsys /.loadresource get exec pop
+    } if
+    //.xpostsys /.resources get category known not {
+        end /resourcestatus cvx /undefined signalerror
+    } if
+    key category
+    end
     2 copy .gscratch /.lresources get exch 2 copy known {
         get exch known {
             pop pop 0 0 true
