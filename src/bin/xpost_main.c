@@ -91,6 +91,7 @@ static const char *_xpost_main_devices[] =
     "pgm",
     "ppm",
     "pbm",
+    "tiff",
     "null",
     "bbox",
 #ifdef _WIN32
