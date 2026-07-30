@@ -1009,6 +1009,52 @@ int _blendpixgray(Xpost_Context *ctx,
     return 0;
 }
 
+/* Blend a coverage-weighted pixel for packed-integer rgb devices
+   (each row an array of r<<16|g<<8|b): per channel,
+   dst += (val - dst) * cov / 255. The text operators use this for
+   glyph edge pixels when the device renders anti-aliased text. */
+static
+int _blendpixrgb(Xpost_Context *ctx,
+                 Xpost_Object r,
+                 Xpost_Object g,
+                 Xpost_Object b,
+                 Xpost_Object cov,
+                 Xpost_Object x,
+                 Xpost_Object y,
+                 Xpost_Object devdic)
+{
+    Xpost_Object imgdata, row, pix;
+    int ix, iy, c, packed;
+    int sr, sg, sb, dr, dg, db;
+
+    imgdata = xpost_dict_get(ctx, devdic, nameImgData);
+    if (xpost_object_get_type(imgdata) != arraytype)
+        return undefined;
+    ix = xpost_object_get_type(x) == realtype ? (int)floor(x.real_.val) : x.int_.val;
+    iy = xpost_object_get_type(y) == realtype ? (int)floor(y.real_.val) : y.int_.val;
+    c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
+    if (iy < 0 || iy >= imgdata.comp_.sz)
+        return 0;
+    row = xpost_array_get(ctx, imgdata, iy);
+    if (xpost_object_get_type(row) != arraytype)
+        return undefined;
+    if (ix < 0 || ix >= row.comp_.sz)
+        return 0;
+    pix = xpost_array_get(ctx, row, ix);
+    packed = xpost_object_get_type(pix) == integertype ? pix.int_.val : 0;
+    sr = (int)((xpost_object_get_type(r) == realtype ? r.real_.val : (double)r.int_.val) * 255.0);
+    sg = (int)((xpost_object_get_type(g) == realtype ? g.real_.val : (double)g.int_.val) * 255.0);
+    sb = (int)((xpost_object_get_type(b) == realtype ? b.real_.val : (double)b.int_.val) * 255.0);
+    dr = (packed >> 16) & 0xff;
+    dg = (packed >> 8) & 0xff;
+    db = packed & 0xff;
+    dr += ((sr - dr) * c + 127) / 255;
+    dg += ((sg - dg) * c + 127) / 255;
+    db += ((sb - db) * c + 127) / 255;
+    xpost_array_put(ctx, row, ix, xpost_int_cons(dr << 16 | dg << 8 | db));
+    return 0;
+}
+
 /* Fill a rectangle of a packed-integer rgb device (each row an array
    of r<<16|g<<8|b). Mirrors PPMIMAGE PutPix handling: each channel
    scaled by 255 and truncated, coordinates floored, negative extents
@@ -1894,6 +1940,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".blendpixgray", (Xpost_Op_Func)_blendpixgray, 0, 5,
             numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".blendpixrgb", (Xpost_Op_Func)_blendpixrgb, 0, 7,
+            numbertype, numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 0, 8,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
