@@ -624,6 +624,20 @@ int _fillpoly(Xpost_Context *ctx,
     return 0;
 }
 
+/* A colour component scaled to a 0..max channel value. The component is
+   clamped to [0,1] first: the colour pipeline can hand a device an
+   out-of-range component, and unclamped it would wrap the byte or shift
+   sign bits across the packed pixel. */
+static double
+_channel(Xpost_Object v, double max)
+{
+    double d = xpost_object_get_type(v) == realtype
+             ? v.real_.val : (double)v.int_.val;
+    if (d < 0.0) d = 0.0;
+    if (d > 1.0) d = 1.0;
+    return d * max;
+}
+
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
    PGMIMAGE. Writes the ImgData row strings directly rather than looping over
    PutPix in PostScript; erasepage clears the whole page through FillRect, so
@@ -652,8 +666,7 @@ int _fillrectgray(Xpost_Context *ctx,
     height = imgdata.comp_.sz;
 
     /* value -> byte, matching PGMIMAGE PutPix "255 mul cvi put" */
-    b = (unsigned char)(int)((xpost_object_get_type(val) == realtype
-                              ? val.real_.val : (double)val.int_.val) * 255.0);
+    b = (unsigned char)(int)_channel(val, 255.0);
 
     dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
     dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
@@ -713,12 +726,9 @@ int _fillrectrgb(Xpost_Context *ctx,
         return undefined;
     height = imgdata.comp_.sz;
 
-    packed = ((int)((xpost_object_get_type(r) == realtype
-                     ? r.real_.val : (double)r.int_.val) * 255.0) << 16)
-           | ((int)((xpost_object_get_type(g) == realtype
-                     ? g.real_.val : (double)g.int_.val) * 255.0) << 8)
-           |  (int)((xpost_object_get_type(b) == realtype
-                     ? b.real_.val : (double)b.int_.val) * 255.0);
+    packed = ((int)_channel(r, 255.0) << 16)
+           | ((int)_channel(g, 255.0) << 8)
+           |  (int)_channel(b, 255.0);
 
     dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
     dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
