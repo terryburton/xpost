@@ -14,6 +14,7 @@ xpost_data_src = files([
   'bboxdev.ps',
   'pdfwrite.ps',
   'svgwrite.ps',
+  'dscwrite.ps',
   'gstate.ps',
   'matrix.ps',
   'path.ps',
