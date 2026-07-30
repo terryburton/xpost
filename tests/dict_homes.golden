@@ -20,6 +20,7 @@
 .privatedict /.xpost
 .xpostsys /arcbez
 .xpostsys /.c01
+.xpostsys /.c255
 .xpostsys /ColorConversion
 .xpostsys /cpath
 .xpostsys /crossdashbound
