@@ -15,9 +15,9 @@ Level 1 operators
  [X] currentdash
  [X] arcto
  [X] fill with complex paths
- [ ] eofill
+ [X] eofill
  [X] clip with complex paths
- [ ] eoclip
+ [X] eoclip
  [X] setlinejoin
  [X] currentlinejoin
  [X] setlinecap
@@ -215,10 +215,10 @@ Level 1 operators
  [X] pathbbox
  [X] initclip
  [X] clip
- [ ] eoclip
+ [X] eoclip
  [X] erasepage
  [X] fill
- [ ] eofill
+ [X] eofill
  [X] stroke
  [X] strokepath
  [X] reversepath
