@@ -384,7 +384,7 @@ Typical output devices
  [X] jpeg
  [X] png (also a png with alpha)
  [X] pdf (pdfwrite)
- [ ] svg
+ [X] svg (svgwrite)
  [X] bounding-box
  [ ] dsc-compliant distilled ps
  [X] xcb

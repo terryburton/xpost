@@ -321,6 +321,14 @@ test('pdf-device',
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# SVG device: render fills, strokes and glyph outlines through
+# setpagedevice and require the document's structural landmarks,
+# including resolution-independent point sizing.
+test('svg-device',
+  find_program('tests/run-svg-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # pngalpha device: RGBA output where the erased page is transparent and
 # marks (including explicit white) are opaque; png stays RGB.
 test('pngalpha-device',
