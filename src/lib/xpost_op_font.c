@@ -1979,8 +1979,37 @@ int _loadfont1(Xpost_Context *ctx,
         {
             Xpost_Object s = xpost_array_get(ctx, subrs, i);
 
+            /* A Type 1 font may over-allocate its Subrs array and leave slots
+               unfilled (null): CMR10 declares 38 and fills only 15. Emit a
+               minimal charstring-encrypted "return" for such a slot, so a
+               callsubr on it is a harmless no-op the way the reference
+               interpreters treat an empty subroutine, rather than rejecting the
+               whole font (or leaving a hole freetype faults on). */
             if (xpost_object_get_type(s) != stringtype)
-                goto fails;
+            {
+                unsigned char cs[5];
+                unsigned short rr = 4330;
+                int j;
+
+                cs[0] = cs[1] = cs[2] = cs[3] = 0; /* lenIV skip bytes */
+                cs[4] = 11;                        /* charstring: return */
+                for (j = 0; j < 5; j++)
+                {
+                    unsigned char c = (unsigned char)(cs[j] ^ (rr >> 8));
+                    cs[j] = c;
+                    rr = (unsigned short)(((unsigned int)(c + rr)) * 52845u + 22719u);
+                }
+                if (_cid_emit(&sec, &slen, &scap, "dup %d 5 RD ", i)) goto fails;
+                while (slen + 5 + 1 >= scap)
+                {
+                    char *nb = realloc(sec, scap * 2);
+                    if (!nb) goto fails;
+                    sec = nb; scap *= 2;
+                }
+                memcpy(sec + slen, cs, 5); slen += 5;
+                if (_cid_emit(&sec, &slen, &scap, " NP\n")) goto fails;
+                continue;
+            }
             if (_cid_emit(&sec, &slen, &scap, "dup %d %u RD ", i,
                           (unsigned int)s.comp_.sz)) goto fails;
             if (_t1_emit_bin(ctx, &sec, &slen, &scap, s)) goto fails;
