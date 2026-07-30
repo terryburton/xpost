@@ -1040,6 +1040,54 @@ grestore
 32 4 inkat not (ring clip excludes outside the outer circle) assert
 } if
 
+% Insideness testing: the probe pixel or aperture region intersects
+% the spans the painting operator would mark. Point results at edges
+% are half-open in device space; the clip does not participate
+initgraphics
+newpath 10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 infill (infill inside) assert
+25 15 infill not (infill outside) assert
+10.01 15 infill (infill just inside the edge) assert
+9.99 15 infill not (infill just outside the edge) assert
+10 15 infill (infill on the near edge) assert
+20 15 infill not (infill on the far edge) assert
+15 15 infill pop
+currentpoint pop 10 eq (infill leaves the current path) assert
+gsave
+newpath 0 0 moveto 5 0 lineto 5 5 lineto 0 5 lineto closepath clip
+newpath 10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 infill (infill disregards the clip) assert
+grestore
+newpath
+15 15 infill not (infill of an empty path) assert
+newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath
+        10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 ineofill not (ineofill sees the even-odd hole) assert
+5 15 ineofill (ineofill inside the ring) assert
+15 15 infill (infill fills the nonzero hole) assert
+{ 14 14 16 16 setbbox 14 14 moveto 16 14 lineto 16 16 lineto closepath }
+ineofill not (an aperture inside the hole misses) assert
+{ 18 18 40 40 setbbox 18 18 moveto 25 18 lineto 25 25 lineto closepath }
+infill (an overlapping aperture hits) assert
+{ 40 40 50 50 setbbox 40 40 moveto 50 40 lineto 50 50 lineto closepath }
+infill not (a disjoint aperture misses) assert
+newpath 10 10 moveto 20 10 lineto
+5 setlinewidth
+15 11 instroke (instroke within the stroke width) assert
+15 14 instroke not (instroke beyond the stroke width) assert
+1 setlinewidth
+5 2 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
+inufill (inufill inside the triangle) assert
+2 7 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
+inufill not (inufill outside the triangle) assert
+15 11.4 { 10 10 20 12 setbbox 10 10 moveto 20 10 lineto }
+inustroke not (inustroke without the matrix keeps the pen) assert
+% inustroke's optional matrix concatenates before strokepath; a matrix
+% that shapes the pen anisotropically is not exercised here, as this
+% interpreter approximates the pen from the transform's leading column
+% and so keeps it isotropic
+newpath
+
 % Byte-mapped composite fonts: each mapping hands the declared
 % descendant the right code, shown by the descendants' distinct
 % advances and by the codes cshow reports
