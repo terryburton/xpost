@@ -1,5 +1,5 @@
 % cvi / cvr number conversion (PLRM 8.2), run through `xpost -d null` by
-% run-ps-test.sh. Standard PostScript; prints SUCCESS on Ghostscript too.
+% run-ps-test.sh.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

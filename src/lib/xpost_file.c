@@ -912,8 +912,8 @@ a85_readch(Xpost_File *f)
        "~>" is seen; the next read would consume it only when it starts a fresh
        group. The dvips image idiom abandons the filter after each readstring, so
        consume a trailing "~>" eagerly -- leaving the underlying file just past
-       it, the way Ghostscript does -- rather than stranding it to be read as a
-       token, which desynchronises every following scanline. */
+       it -- rather than stranding it to be read as a token, which
+       desynchronises every following scanline. */
     if (n == 5 && !ff->eod)
         a85_eat_eod(ff);
 
