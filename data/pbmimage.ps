@@ -1,0 +1,71 @@
+//.internaldict /QUIET known { }{ (loading pbmimage.ps...)print } ifelse
+
+% .xpost_PBMIMAGE: the bilevel sibling of the grayscale device. The page
+% renders through the grayscale machinery it inherits and emission
+% thresholds each row at half coverage, black where dark, packed
+% most significant bit first as the portable bitmap format wants.
+
+/newPBMIMAGEdevice { % width height  .  IMAGE-device-dict
+    .privatedict /.xpost_PBMIMAGE get dup /Create get exec
+} def
+
+/.xpost_PBMIMAGE .xpost_PGMIMAGE dup length 2 add dict copy def
+
+% a bilevel page keeps its glyphs bilevel
+.xpost_PBMIMAGE /TextAlphaBits 1 put
+
+% every grey painted screens through the halftone in force
+.xpost_PBMIMAGE /ScreenPaint true put
+
+.xpost_PBMIMAGE /PutPix { % val x y IMAGE  .  -
+begin
+    {
+        .to-int exch .to-int exch
+        dup 0 lt { stop } if
+        dup height ge { stop } if
+        1 index 0 lt { stop } if
+        1 index width ge { stop } if
+        currentdict /.htcell known {
+            2 copy                          % v x y x y
+            .hth mod .htw mul               % v x y x (y%h)*w
+            exch .htw mod add               % v x y idx
+            .htcell exch get                % v x y thr
+            4 -1 roll 256 mul 0.5 add cvi exch ge % x y white?
+            { 255 }{ 0 } ifelse 3 1 roll    % v' x y
+            ImgData exch get 3 1 roll exch
+            put
+        }{
+            ImgData exch get 3 1 roll exch
+            255 mul cvi
+            put
+        } ifelse
+    } stopped {
+        pop pop pop
+    } if
+end } put
+
+.xpost_PBMIMAGE /.writepbm { % img file
+    2 dict begin
+    {/f /a}{exch def}forall
+    a f //.internaldict /.writepbmrows get exec
+    f (%stdout)(w)file ne {
+        f closefile
+    } if
+    end
+} put
+
+.xpost_PBMIMAGE /Emit {
+    begin
+        /OutputFileName where { pop
+            ImgData
+            OutputFileName //.xpostsys /.pagefilename get exec (w) file
+            .writepbm
+        }{
+            ImgData
+            (%stdout) (w) file
+            .writepbm
+        } ifelse
+    end
+} put
+
+//.internaldict /QUIET known { }{ (eof pbmimage.ps\n)print } ifelse
