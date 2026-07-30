@@ -5,8 +5,7 @@
 % local one, so a local object can never outlive the restore that reclaims it
 % while something global still points at it. The rule is enforced uniformly --
 % by the put operators AND by literal construction ([ ] and the { } procedure
-% builder, which share the array-from-mark path). This file runs identically
-% on the reference interpreters: every assertion here also holds on gs.
+% builder, which share the array-from-mark path).
 
 /faildict 2 dict def
 faildict /n 0 put
@@ -28,8 +27,8 @@ false setglobal /La 4 dict def
 true setglobal
 { Ga 0 La put } probe (a local value is rejected from a global array) assert
 
-% construction is checked too: gs and xpost both raise invalidaccess building
-% [ local ] under global VM (the { //local } procedure builder shares this path)
+% construction is checked too: building [ local ] under global VM raises
+% invalidaccess (the { //local } procedure builder shares this path)
 clear false setglobal /Lc 4 dict def
 true setglobal
 { [ Lc ] pop } probe (a local value is rejected from a global array literal) assert

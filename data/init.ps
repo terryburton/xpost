@@ -111,8 +111,7 @@ setglobal
 
 % statusdict holds device/product status a program may change, so it is a local
 % dictionary -- save and restore isolate a job's changes -- that systemdict names
-% (copyudtosd), like $error, errordict and userdict. Ghostscript keeps statusdict
-% local as well.
+% (copyudtosd), like $error, errordict and userdict.
 currentglobal false setglobal
 userdict /statusdict <<
     /manualfeed false
