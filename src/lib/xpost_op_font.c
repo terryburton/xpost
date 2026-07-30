@@ -1918,11 +1918,10 @@ _t1_emit_bin(Xpost_Context *ctx, char **buf, size_t *len, size_t *cap,
 static
 int _loadfont1(Xpost_Context *ctx,
                Xpost_Object fontdict,
-               Xpost_Object csflat,
-               Xpost_Object subrs)
+               Xpost_Object csflat)
 {
 #ifdef HAVE_FREETYPE2
-    Xpost_Object priv, privatestr, fontbbox;
+    Xpost_Object priv, privatestr, fontbbox, subrs;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
     char *hdr, *sec;
@@ -1931,12 +1930,16 @@ int _loadfont1(Xpost_Context *ctx,
     int i;
     unsigned int k;
 
-    if (xpost_object_get_type(csflat) != arraytype
-     || xpost_object_get_type(subrs) != arraytype)
+    if (xpost_object_get_type(csflat) != arraytype)
         return invalidfont;
     priv = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
     if (xpost_object_get_type(priv) != dicttype)
         return invalidfont;
+    /* The subroutine array lives in the Private dictionary, which a Type 1
+       font seals no-access. Read it here in C, where the access attribute does
+       not apply, rather than from the PostScript loader, where it would forbid
+       the read. An absent or non-array Subrs means no subroutines. */
+    subrs = xpost_dict_get(ctx, priv, xpost_name_cons(ctx, "Subrs"));
 
     hdr = malloc(hcap);
     if (!hdr)
@@ -1968,7 +1971,7 @@ int _loadfont1(Xpost_Context *ctx,
     for (k = 0; k < sizeof _cid_private_keys / sizeof *_cid_private_keys; k++)
         if (_cid_emit_entry(ctx, &sec, &slen, &scap, priv,
                             _cid_private_keys[k])) goto fails;
-    if (subrs.comp_.sz > 0)
+    if (xpost_object_get_type(subrs) == arraytype && subrs.comp_.sz > 0)
     {
         if (_cid_emit(&sec, &slen, &scap, "/Subrs %d array\n", subrs.comp_.sz))
             goto fails;
@@ -2078,7 +2081,7 @@ failh:
     free(hdr);
     return invalidfont;
 #else
-    (void)ctx; (void)fontdict; (void)csflat; (void)subrs;
+    (void)ctx; (void)fontdict; (void)csflat;
     return invalidfont;
 #endif
 }
@@ -3581,8 +3584,8 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, ".stencilaa", (Xpost_Op_Func)_stencilaa, 1, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 0, 3,
-            dicttype, arraytype, arraytype);
+    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 0, 2,
+            dicttype, arraytype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".loadcidfont2", (Xpost_Op_Func)_loadcidfont2, 0, 2,
             dicttype, arraytype);

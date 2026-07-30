@@ -60,10 +60,11 @@ setglobal
     2 index /Private 2 copy known { get type /dicttype eq }{ pop pop false } ifelse and {
         pop
         % an embedded Type 1 program: its interpreted dictionaries are
-        % written back out as a font program and opened as a face; the
-        % charstrings and subroutines flatten here, where forall lives
+        % written back out as a font program and opened as a face. The
+        % charstrings flatten here, where forall lives; the subroutines are
+        % read from the (no-access) Private dictionary inside .loadfont1, in C,
+        % where the access attribute does not forbid the read.
         dup dup /CharStrings get [ exch { } forall ]
-        2 index /Private get /Subrs 2 copy known { get }{ pop pop 0 array } ifelse
         .loadfont1
     }{
         3 eq {
