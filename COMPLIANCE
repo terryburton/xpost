@@ -41,7 +41,7 @@ Level 1 operators
  [X] stringwidth
  [/] Type-3 Fonts
  [ ] font data caching
- [ ] definefont for modified font properties (matrix, encoding, etc.)
+ [X] definefont for modified font properties (matrix, encoding, etc.)
  [ ] base font CharStrings
 
  [X] pop
