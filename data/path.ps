@@ -453,6 +453,38 @@ bind def
     } currentlinejoin get exec
 } put
 
+% x y ang  .docap  -
+% append the line-cap shape at one end of an open subpath: the
+% endpoint in device space and the outward direction along the
+% segment. A butt cap adds nothing; a round cap is the half-disc
+% beyond the end; a projecting square extends half a width past it.
+% Each shape meets the stroke body only along the end's chord, so its
+% winding cannot cancel the body's under the nonzero rule.
+currentglobal true setglobal
+.xpostsys /.docap {
+    currentlinecap 0 eq {
+        pop pop pop
+    }{
+        4 dict begin
+        /ang exch def /y exch def /x exch def
+        /h //.xpostsys /minlinewidth get exec .5 mul def
+        currentlinecap 1 eq {
+            x y moveto
+            x y h ang 90 sub ang 90 add arc
+            closepath
+        }{
+            x y moveto
+            h ang 90 sub //.xpostsys /ravec get exec rmoveto
+            h ang //.xpostsys /ravec get exec rlineto
+            //.xpostsys /minlinewidth get exec ang 90 add //.xpostsys /ravec get exec rlineto
+            h ang 180 add //.xpostsys /ravec get exec rlineto
+            closepath
+        } ifelse
+        end
+    } ifelse
+} put
+setglobal
+
 %
 % replace lineto segments . with 
 %                         |              L LL
@@ -486,7 +518,22 @@ currentglobal false setglobal
     /pointRR 2 array
     /pointL 2 array
     /pointLL 2 array
+    /needcap false
+    % the previous subpath ended without a closepath: only now is it
+    % known to be open, so it takes its caps here -- the trailing end
+    % at the first point facing away from the first segment's travel,
+    % the leading end at the last point facing along the last one's
+    /docaps {
+        .gscratch /strokedict get /needcap get {
+            .gscratch /strokedict get /firstpt get aload pop
+            .gscratch /strokedict get /firstang get 180 add
+            //.xpostsys /.docap get exec
+            .gscratch /strokedict get /cp get aload pop .gscratch /strokedict get /ang get //.xpostsys /.docap get exec
+        } if
+        .gscratch /strokedict get /needcap false put
+    }
     0 { % move: x y
+        .gscratch /strokedict get /docaps get exec
         2 copy .gscratch /strokedict get /firstpt get astore pop
         2 copy .gscratch /strokedict get /cp get astore pop
         moveto
@@ -569,6 +616,7 @@ currentglobal false setglobal
         .gscratch /strokedict get /cp get aload pop moveto % moveto 6
 
         .gscratch /strokedict get /justmoved false put
+        .gscratch /strokedict get /needcap true put
     }
     3 { % close: the closing segment runs back to the subpath start
 
@@ -666,6 +714,8 @@ currentglobal false setglobal
         .gscratch /strokedict get /cp get aload pop moveto % moveto 6
 
         .gscratch /strokedict get /justmoved false put
+        % a closed subpath meets itself through its joins: no cap owed
+        .gscratch /strokedict get /needcap false put
     }
     2 { } %curve: s.b. eliminated by flattenpath
 >> put
@@ -680,6 +730,7 @@ setglobal
     put
     matrix currentmatrix % stash matrix on stack
     matrix setmatrix     % use identity matrix
+    .gscratch /strokedict get /needcap false put
     .pathempty not {
         10 dict begin
         /str //.xpostsys /cpath get exec def
@@ -690,6 +741,8 @@ setglobal
             /off exch def                     % coords... cmd
             .gscratch /strokedict get exch get exec
         } loop
+        % the path ran out with a subpath still open: its caps are owed
+        .gscratch /strokedict get /docaps get exec
         end
     } if
     setmatrix           % restore stashed matrix
