@@ -1099,7 +1099,7 @@
     gsave
         newpath
         10 dict begin
-        {datasrc mat polarity height width}{exch def}forall
+        {interp datasrc mat polarity height width}{exch def}forall
         /rowbytes width 7 add 8 idiv def
         /buf rowbytes height mul string def
         /bp 0 def
@@ -1128,10 +1128,12 @@
         % clips: the coverage painter writes pixels directly
         /aadone false def
         paintpat not
-        graphicsdict /.inglyph 2 copy known { get }{ pop pop false } ifelse and
+        graphicsdict /.inglyph 2 copy known { get }{ pop pop false } ifelse
+        interp or and
         .cliptrivial and {
             << /buf buf /width width /height height
-               /ink ink /mat matrix currentmatrix >> .stencilaa
+               /ink ink /interp interp
+               /mat matrix currentmatrix >> .stencilaa
             { /aadone true def } if
         } if
         aadone not {
@@ -1201,9 +1203,11 @@
         % fetch through the dictionary: a procedure source fetched by
         % name would execute instead of arriving as the operand
         currentdict /DataSource get //.xpostsys /.imgsource get exec
+        currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
+        dup type /booleantype ne { pop false } if
         end
     }{
-        //.xpostsys /.imgsource get exec
+        //.xpostsys /.imgsource get exec false
     } ifelse
     //.xpostsys /.stencilmask get exec
 } def
