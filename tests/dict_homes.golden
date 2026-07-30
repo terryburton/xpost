@@ -16,6 +16,7 @@
 .privatedict /.error
 .privatedict /.graphicsdict
 .privatedict /.gstatetemplate
+.privatedict /.hairhw
 .privatedict /.hairrect
 .privatedict /.imginterp
 .privatedict /newnulldevice
@@ -45,6 +46,7 @@
 .xpostsys /.fontsubstitutions
 .xpostsys /gstatecopy
 .xpostsys /h
+.xpostsys /.hairext
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror
 .xpostsys /hodgman
