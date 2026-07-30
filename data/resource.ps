@@ -20,6 +20,16 @@ true setglobal
 % own categories, so it need only exist and name itself
 //.xpostsys /.resources get /Category get /Generic << /Category /Generic >> put
 
+% the standard regular categories exist from the start, empty until
+% instances are defined into them
+[ /Font /CIDFont /CMap /FontSet /Encoding /Form /Pattern /ProcSet
+  /ColorSpace /Halftone /ColorRendering /IdiomSet /Filter
+  /ColorSpaceFamily /Emulator /ControlLanguage /Localization /PDL ]
+{
+    dup //.xpostsys /.resources get exch 32 dict put
+    //.xpostsys /.resources get /Category get exch dup << /Category 3 -1 roll >> put
+} forall
+
 % Directories searched, in order, when findresource misses in VM. Empty
 % by default; the host appends entries (xpost_add_resource_dir, -I).
 .privatedict /.resourcepath [] put
@@ -32,6 +42,21 @@ true setglobal
     get
 } bind put
 
+% instances defined in local VM live beside the global table and go
+% away with restore, as the local dictionary holding them does
+currentglobal false setglobal
+.gscratch /.lresources 32 dict put
+setglobal
+
+% category  .linstof  instances
+% the local table of a category, created on first use
+.xpostsys /.linstof {
+    .gscratch /.lresources get exch 2 copy known not {
+        2 copy 8 dict put
+    } if
+    get
+} bind put
+
 % key instance category  defineresource  instance
 /defineresource {
     dup /Category eq {
@@ -39,7 +64,9 @@ true setglobal
         2 index //.xpostsys /.resources get exch 2 copy known not
             { 32 dict put }{ pop pop } ifelse
     } if
-    //.xpostsys /.instof get exec 2 index 2 index put exch pop
+    dup //.xpostsys /.instof get exec pop     % the category must exist either way
+    currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse
+    2 index 2 index put exch pop
 } bind def
 
 % key category  .loadresource  bool
@@ -71,6 +98,7 @@ true setglobal
 
 % key category  findresource  instance
 /findresource {
+  { % loop, so the local-shadow path can exit early
     2 dict begin
     /category exch def
     /key exch def
@@ -83,6 +111,11 @@ true setglobal
     //.xpostsys /.resources get category known not {
         end /findresource cvx /undefinedresource signalerror
     } if
+    % a local instance shadows a global one of the same name
+    .gscratch /.lresources get category known {
+        .gscratch /.lresources get category get dup key known
+            { key get end exit }{ pop } ifelse
+    } if
     category //.xpostsys /.instof get exec /instances exch def
     instances key known not {
         % miss: load the instance from the search path. The instance table
@@ -94,20 +127,39 @@ true setglobal
     } if
     instances key get
     end
+    exit
+  } loop
 } bind def
 
 % key category  resourcestatus  status size true | false
 /resourcestatus {
-    //.xpostsys /.resources get exch 2 copy known not {
-        pop pop pop false
+    2 copy .gscratch /.lresources get exch 2 copy known {
+        get exch known {
+            pop pop 0 0 true
+        }{
+            //.xpostsys /.resources get exch 2 copy known not
+                { pop pop pop false }
+                { get exch known { 0 0 true }{ false } ifelse } ifelse
+        } ifelse
     }{
-        get exch known { 0 0 true }{ false } ifelse
+        pop pop pop
+        //.xpostsys /.resources get exch 2 copy known not
+            { pop pop pop false }
+            { get exch known { 0 0 true }{ false } ifelse } ifelse
     } ifelse
 } bind def
 
 % key category  undefineresource  -
 /undefineresource {
-    //.xpostsys /.instof get exec exch undef
+    2 copy .gscratch /.lresources get exch 2 copy known {
+        get 1 index known {
+            //.xpostsys /.linstof get exec exch undef pop
+        }{
+            pop pop //.xpostsys /.instof get exec exch undef
+        } ifelse
+    }{
+        pop pop pop //.xpostsys /.instof get exec exch undef
+    } ifelse
 } bind def
 
 % string template  .wcmatch  bool
@@ -169,7 +221,13 @@ true setglobal
 % resources; whether such changes are enumerated is unspecified, as
 % the language allows.
 /resourceforall {
-    //.xpostsys /.instof get exec
+    % merge the global table with any local instances over it
+    dup //.xpostsys /.instof get exec exch
+    .gscratch /.lresources get exch 2 copy known {
+        get exch dup length 2 index length add 1 add dict
+        exch { 2 index 3 1 roll put } forall
+        exch { 2 index 3 1 roll put } forall
+    }{ pop pop } ifelse
     5 dict begin
     /.rfinst exch def /.rfscr exch def /.rfproc exch def /.rftmpl exch def
     /.rfbuf 127 string def
