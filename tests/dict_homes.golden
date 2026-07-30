@@ -42,6 +42,8 @@
 .xpostsys /h
 .xpostsys /.handlejoberror
 .xpostsys /hodgman
+.xpostsys /.imagepaint
+.xpostsys /.imgsource
 .xpostsys /initial
 .xpostsys /.instof
 .xpostsys /loadgraphics
@@ -49,6 +51,7 @@
 .xpostsys /magang
 .xpostsys /.min
 .xpostsys /minlinewidth
+.xpostsys /.ncomponents
 .xpostsys /normclipwind
 .xpostsys /p2abc
 .xpostsys /pause
@@ -60,6 +63,8 @@
 .xpostsys /.resources
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
+.xpostsys /.spacecomps
+.xpostsys /.stencilmask
 .xpostsys /.strcat
 .xpostsys /.wcmatch
 .xpostsys /xpost

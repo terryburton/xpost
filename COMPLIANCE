@@ -270,8 +270,10 @@ Level 2 operators
  [ ] xyshow
  [ ] glyphshow
  [ ] colorimage
- [ ] image with dict argument
- [ ] imagemask with dict argument
+ [X] image with dict argument (ImageTypes 1, 3 and 4; Interpolate
+     smooths the samples of any shape on the direct raster path,
+     while a mask still decides each pixel by its nearest sample)
+ [X] imagemask with dict argument
  [ ] setcolortransfer
  [ ] currentcolortransfer
  [ ] setblackgeneration
