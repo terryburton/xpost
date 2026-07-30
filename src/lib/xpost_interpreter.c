@@ -1810,6 +1810,7 @@ void setlocalconfig(Xpost_Context *ctx,
         { "raster",  "loadrasterdevice", "newrasterdevice"   },
         { "pdfwrite","",                 "newPDFWRITEdevice" },
         { "png",     "loadpngdevice",    "newpngdevice"      },
+        { "pngalpha", "loadpngalphadevice", "newpngalphadevice" },
         { "jpeg",    "loadjpegdevice",   "newjpegdevice"      },
         { NULL, NULL, NULL }
     };
