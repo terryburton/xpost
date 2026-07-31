@@ -24,7 +24,7 @@
 % Content is accumulated in a growable buffer held outside virtual memory -- via
 % the device's /Private string, like the raster devices' pixel buffer -- so that
 % it survives a `restore` the job may execute before showpage (the current
-% page's marks are not part of VM). Emit splits it into <=65500-byte strings
+% page's marks are not part of VM). Emit splits it into <=65535-byte strings
 % (the PostScript string limit) and deflate-compresses it, falling back to
 % uncompressed without zlib.
 
@@ -67,7 +67,7 @@
     dup /.copydict get exec
     begin
         /.docinfo 8 dict def    % document metadata from DOCINFO pdfmarks
-        currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
+        currentdict .pdfinit    % create the content accumulator (outside VM)
         /.pdfimages 0 array def
         % first content op: the device matrix mapping device coords to PDF
         % user space (y-up). Part of the content so it compresses with the rest.
@@ -76,16 +76,14 @@
     end } bind
 
     /Destroy { % IMAGE  .  -
-        dup //.internaldict /.pdffree get exec pop
+        dup .pdffree pop
     } bind
 
-    % the zero pad for xref offsets is a shared read-only constant, kept in the
-    % global private dictionary rather than leaking a name into userdict
     currentglobal true setglobal .xpostsys /.zeros (0000000000) put setglobal
 
     % append a string to the content accumulator (held outside VM via /Private)
     /.put { % str  .  -
-        currentdict //.internaldict /.pdfput get exec
+        currentdict .pdfput
     } bind
 
     % append a number in PDF syntax (integer, or two decimals; never
@@ -102,15 +100,6 @@
             dup 10 lt { (0) .put } if
             20 string cvs .put
         } ifelse
-    } bind
-
-    % format a number in PDF syntax to a fresh string at the accumulator's
-    % full precision (colour levels and function source need more than the
-    % coordinate formatter's two decimals). The C op matches .put's own
-    % formatting, so both the marking methods and separation registration
-    % agree.
-    /.pdfnumstr { % num  .  str
-        //.internaldict /.pdfnumstr get exec
     } bind
 
     % the number of components the colour pipeline delivered with the
@@ -181,14 +170,6 @@
         } ifelse
     } bind
 
-    % concatenate two strings into a new one (registration-time only)
-    /.strcat { % a b  .  ab
-        /.cb exch def /.ca exch def
-        .ca length .cb length add string
-        dup 0 .ca putinterval
-        dup .ca length .cb putinterval
-    } bind
-
     % escape a separation name into PDF name syntax: regular characters
     % pass, delimiters and characters outside 33..126 become #xx
     /.escname { % string  .  string'
@@ -234,18 +215,18 @@
         exch {  % str elem
             .t4ok not { pop exit } if
             dup type /integertype eq 1 index type /realtype eq or {
-                .pdfnumstr .strcat ( ) .strcat
+                .pdfnumstr //.xpostsys /.strcat get exec ( ) //.xpostsys /.strcat get exec
             }{
             dup type /nametype eq 1 index xcheck and {
                 dup .t4ops exch known {
-                    31 string cvs .strcat ( ) .strcat
+                    31 string cvs //.xpostsys /.strcat get exec ( ) //.xpostsys /.strcat get exec
                 }{
                     pop /.t4ok false def
                 } ifelse
             }{
             dup type /arraytype eq 1 index xcheck and {
                 .t4build {
-                    .strcat ( ) .strcat
+                    //.xpostsys /.strcat get exec ( ) //.xpostsys /.strcat get exec
                 }{
                     /.t4ok false def
                 } ifelse
@@ -253,7 +234,7 @@
                 pop /.t4ok false def
             } ifelse } ifelse } ifelse
         } forall
-        .t4ok { (}) .strcat true }{ pop false } ifelse
+        .t4ok { (}) //.xpostsys /.strcat get exec true }{ pop false } ifelse
     } bind
 
     % sample the tint transform at 256 points into 8-bit Type 0 data
@@ -293,27 +274,27 @@
             false
         }{
             /.sepname .sepspace 1 get dup type /stringtype ne { 127 string cvs } if def
-            .sepname currentdict //.internaldict /.pdffindsep get exec {
+            .sepname currentdict .pdffindsep {
                 true
             }{
-                (/Separation /) .sepname .escname .strcat ( /) .strcat
-                .sepspace 2 get 31 string cvs .strcat
+                (/Separation /) .sepname .escname //.xpostsys /.strcat get exec ( /) //.xpostsys /.strcat get exec
+                .sepspace 2 get 31 string cvs //.xpostsys /.strcat get exec
                 /.rangetext .sepnout 1 eq { (0 1) }{
                     .sepnout 3 eq { (0 1 0 1 0 1) }{ (0 1 0 1 0 1 0 1) } ifelse
                 } ifelse def
                 .sepspace 3 get .t4build {
                     /.fbody exch def
-                    (<< /FunctionType 4 /Domain [0 1] /Range [) .rangetext .strcat
-                    (] /Length ) .strcat .fbody length 20 string cvs .strcat
-                    ( >>\nstream\n) .strcat .fbody .strcat (\nendstream) .strcat
+                    (<< /FunctionType 4 /Domain [0 1] /Range [) .rangetext //.xpostsys /.strcat get exec
+                    (] /Length ) //.xpostsys /.strcat get exec .fbody length 20 string cvs //.xpostsys /.strcat get exec
+                    ( >>\nstream\n) //.xpostsys /.strcat get exec .fbody //.xpostsys /.strcat get exec (\nendstream) //.xpostsys /.strcat get exec
                 }{
                     .t0build /.fbody exch def
-                    (<< /FunctionType 0 /Domain [0 1] /Range [) .rangetext .strcat
-                    (] /Size [256] /BitsPerSample 8 /Length ) .strcat
-                    .fbody length 20 string cvs .strcat
-                    ( >>\nstream\n) .strcat .fbody .strcat (\nendstream) .strcat
+                    (<< /FunctionType 0 /Domain [0 1] /Range [) .rangetext //.xpostsys /.strcat get exec
+                    (] /Size [256] /BitsPerSample 8 /Length ) //.xpostsys /.strcat get exec
+                    .fbody length 20 string cvs //.xpostsys /.strcat get exec
+                    ( >>\nstream\n) //.xpostsys /.strcat get exec .fbody //.xpostsys /.strcat get exec (\nendstream) //.xpostsys /.strcat get exec
                 } ifelse
-                .sepname 3 1 roll currentdict //.internaldict /.pdfregsep get exec
+                .sepname 3 1 roll currentdict .pdfregsep
                 true
             } ifelse
         } ifelse
@@ -359,7 +340,7 @@
     begin
         /.polyarg exch def
         .pdffillcolor
-        .polyarg currentdict //.internaldict /.pdffillpoly get exec
+        .polyarg currentdict .pdffillpoly
     end }
 
     % append collected path elements (coordinates then a /m /l /c /h
@@ -394,7 +375,7 @@
     /FillPath { % c1..cN IMAGE  .  -
     begin
         .pdffillcolor
-        currentdict //.internaldict /.pdffillpath get exec
+        currentdict .pdffillpath
     end }
 
     % w h ncomp mat rows decode interp IMAGE . -  ; take a whole sampled
@@ -411,7 +392,7 @@
         (q\n) .put
         % a rectangular clip region travels with the paint; the
         % painting operators arrive pre-clipped, images cannot
-        //.internaldict /.cliprect get exec {
+        .cliprect {
             /picy1 exch def /picx1 exch def /picy0 exch def /picx0 exch def
             picx0 .pdfnum ( ) .put picy0 .pdfnum ( ) .put
             picx1 picx0 sub .pdfnum ( ) .put
@@ -453,9 +434,9 @@
 
     /Emit { % IMAGE  .  -
     begin
-        /Chunks currentdict //.internaldict /.pdfchunks get exec def
+        /Chunks currentdict .pdfchunks def
         % deflate the content stream (falls back to uncompressed without zlib)
-        Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
+        Chunks .flatecompress /flated exch def /Chunks exch def
         /F /OutputFileName where { pop OutputFileName (w) file }{ (%stdout) (w) file } ifelse def
         /BytePos 0 def
 
@@ -472,7 +453,7 @@
 
         % objects 1-4 are fixed; the separations' function objects
         % follow the content as 5..4+n, and Info comes last
-        /nseps currentdict //.internaldict /.pdfsepcount get exec def
+        /nseps currentdict .pdfsepcount def
         /nimg .pdfimages length def
         /haveinfo .docinfo length 0 gt def
         /nobj 4 nseps add nimg add haveinfo { 1 add } if def
@@ -490,7 +471,7 @@
             0 1 nseps 1 sub {
                 /.sepi exch def
                 ( /CS) .w .sepi 20 string cvs .w ( [) .w
-                .sepi currentdict //.internaldict /.pdfsepget get exec pop .w
+                .sepi currentdict .pdfsepget pop .w
                 ( ) .w .sepi 5 add 20 string cvs .w ( 0 R]) .w
             } for
             ( >>) .w
@@ -516,7 +497,7 @@
             /.sepi exch def
             offfuncs .sepi BytePos put
             .sepi 5 add 20 string cvs .w ( 0 obj\n) .w
-            .sepi currentdict //.internaldict /.pdfsepget get exec exch pop .w
+            .sepi currentdict .pdfsepget exch pop .w
             (\nendobj\n) .w
         } for
         /offimgs nimg array def
@@ -524,7 +505,7 @@
             /.imi exch def
             /.ime .pdfimages .imi get def
             offimgs .imi BytePos put
-            .ime /rows get //.internaldict /.flatecompress get exec /.imf exch def /.imc exch def
+            .ime /rows get .flatecompress /.imf exch def /.imc exch def
             /.imlen 0 def
             .imc { length .imlen add /.imlen exch def } forall
             .imi 5 add nseps add 20 string cvs .w ( 0 obj\n) .w
@@ -590,7 +571,7 @@
         % start the next page fresh: showpage's page clear and later
         % marks must not stack on the emitted content (a later Emit
         % rewrites the output with the then-current page)
-        currentdict //.internaldict /.pdfreset get exec
+        currentdict .pdfreset
         /.pdfimages 0 array def
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
     end }
@@ -600,7 +581,7 @@
     (TESTGRAPHICS pdfwrite)=
     /dev 200 200 newPDFWRITEdevice def
     0 0 0 [ [20 20] [80 20] [80 80] [20 80] ] dev dup /FillPoly get exec
-    dev //.internaldict /.pdfchunks get exec 0 get length 0 gt { (pdfwrite content PASS)= }{ (pdfwrite content FAIL)= } ifelse
+    dev .pdfchunks 0 get length 0 gt { (pdfwrite content PASS)= }{ (pdfwrite content FAIL)= } ifelse
     dev dup /Destroy get exec
 } if
 

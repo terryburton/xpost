@@ -47,7 +47,7 @@ end } put
 .xpost_PBMIMAGE /.writepbm { % img file
     2 dict begin
     {/f /a}{exch def}forall
-    a f //.internaldict /.writepbmrows get exec
+    a f .writepbmrows
     f (%stdout)(w)file ne {
         f closefile
     } if

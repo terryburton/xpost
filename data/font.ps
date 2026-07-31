@@ -527,9 +527,7 @@ setglobal
 % kshow's compiled program paints through the implementation's own
 % show, captured here while the name still holds this file's
 % procedure -- an array, which a compiled program pushes as data
-currentglobal true setglobal
 .xpostsys /.kshowshow /show load put
-setglobal
 
 /kshow {
     % kshow steps the string one byte at a time, which a composite font
@@ -627,8 +625,7 @@ setglobal
 % the show variants position per glyph: through a composite font one
 % glyph spans however many bytes its CMap says, and the number array
 % advances by glyphs, not bytes
-% str  .glyphbytes  w -- the byte width of the glyph at the position,
-% hidden in the private namespace and reached by a frozen reference
+% str  .glyphbytes  w
 currentglobal true setglobal
 .xpostsys /.glyphbytes { % str p -> w
     graphicsdict /currgstate get /currfont get
@@ -820,15 +817,6 @@ setglobal
     /udieresis /yacute /thorn /ydieresis
 ] readonly def
 
-% key  undefinefont  -
-/undefinefont {
-    FontDirectory exch undef
-} def
-
-% GlobalFontDirectory and SharedFontDirectory, aliases for FontDirectory, are
-% named in systemdict by copyudtosd (in C), alongside FontDirectory itself,
-% rather than defined here in userdict.
-
 % file  eexec  -
 % run the encrypted portion of a Type 1 font program: the decrypted
 % stream executes with systemdict as the current dictionary, and the
@@ -842,15 +830,31 @@ setglobal
     end
 } def
 
+% int  internaldict  dict
+% the guarded dictionary some font programs probe for; the password is part of
+% the language folklore. It holds the interpreter's private operators (defined
+% in .internaldict at startup) and stays reachable only through this password.
+/internaldict {
+    1183615869 eq { //.internaldict }{
+        /internaldict cvx /invalidaccess signalerror
+    } ifelse
+} def
+
+% key  undefinefont  -
+/undefinefont {
+    FontDirectory exch undef
+} def
+
+% GlobalFontDirectory and SharedFontDirectory, aliases for FontDirectory, are
+% named in systemdict by copyudtosd (in C), alongside FontDirectory itself,
+% rather than defined here in userdict.
+
 % key  findencoding  encoding
 /findencoding { /Encoding findresource } def
 
 % the show machinery rebinds the current font while it works through
-% a composite; rootfont answers with the font the program set. The
-% original setfont is kept in the private namespace and reached frozen.
-currentglobal true setglobal
+% a composite; rootfont answers with the font the program set
 .xpostsys /.rootsetfont /setfont load put
-setglobal
 /setfont {
     dup graphicsdict /currgstate get /rootfont 3 -1 roll put
     //.xpostsys /.rootsetfont get exec

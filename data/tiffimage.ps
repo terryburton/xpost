@@ -57,7 +57,7 @@
         16#49 b1 16#49 b1 42 b2 0 b4
         f hdr 0 8 getinterval writestring
         /e f /LZWEncode filter def
-        a e //.internaldict /.writergbrows get exec
+        a e .writergbrows
         e closefile
         /sl f fileposition 8 sub def
         8 sl add 5 sl ifdbuild
@@ -70,7 +70,7 @@
         % uncompressed, its length known up front
         16#49 b1 16#49 b1 42 b2 w h mul 3 mul 8 add b4
         f hdr 0 8 getinterval writestring
-        a f //.internaldict /.writergbrows get exec
+        a f .writergbrows
         8 w h mul 3 mul add 1 w h mul 3 mul ifdbuild
     } ifelse
     end

@@ -87,26 +87,6 @@ setglobal
 
 % Graphics State Operators -- Device Independent
 
-.xpostsys /deepcopy { % dict1 dict2 . dict2'
-    begin
-    {
-        dup type /arraytype eq
-        1 index xcheck not and {
-            dup length array
-            copy
-            def
-        }{
-            dup type /dicttype eq {
-                dup maxlength dict //.xpostsys /deepcopy get exec
-                def
-            }{
-                def
-            } ifelse
-        } ifelse
-    } forall
-    currentdict end
-} put
-
 .xpostsys /gstatecopy { % dict1 dict2 . dict2'
     begin
     { % key val
@@ -278,6 +258,24 @@ currentglobal true setglobal
 /ColorRendering defineresource pop
 setglobal
 
+% flag  setstrokeadjust  -   (recorded only)
+/setstrokeadjust {
+    graphicsdict /currgstate get exch /strokeadjust exch put
+} def
+/currentstrokeadjust {
+    graphicsdict /currgstate get /strokeadjust 2 copy known
+        { get }{ pop pop false } ifelse
+} def
+
+% num  setsmoothness  -   (recorded only)
+/setsmoothness {
+    graphicsdict /currgstate get exch /smoothness exch put
+} def
+/currentsmoothness {
+    graphicsdict /currgstate get /smoothness 2 copy known
+        { get }{ pop pop 0.02 } ifelse
+} def
+
 % redproc greenproc blueproc grayproc  setcolortransfer  -
 % record one transfer procedure per component; the grey channel
 % shares its slot with settransfer, and is the one painting applies
@@ -299,7 +297,9 @@ setglobal
 
 % copy the grey screen to the colour channels: setscreen installs one
 % screen for every component
-.xpostsys /.spreadgrayscreen {
+currentglobal true setglobal
+.xpostsys begin
+/.spreadgrayscreen {
     graphicsdict /currgstate get
     dup dup /screenfreq get /redscreenfreq exch put
     dup dup /screenangle get /redscreenangle exch put
@@ -310,7 +310,7 @@ setglobal
     dup dup /screenfreq get /bluescreenfreq exch put
     dup dup /screenangle get /bluescreenangle exch put
     dup /screenproc get /bluescreenproc exch put
-} put
+} def
 
 % freq ang proc  .samplespot  -
 % evaluate a spot function across its halftone cell, once for each
@@ -323,7 +323,7 @@ setglobal
 % so the number of calls and the arguments match what paint later
 % sees, rather than collapsing to one sample where the cell spans a
 % single device pixel.
-.xpostsys /.samplespot {
+/.samplespot {
     18 dict begin
     /proc exch def /ang exch def /freq exch def
     freq ang //.xpostsys /.screenlattice get exec
@@ -397,7 +397,7 @@ setglobal
     currentdict /allrows get cvx
     end
     exec
-} put
+} def
 
 % The threshold cell of a screening device. A bilevel device that
 % declares /ScreenPaint takes a cell built from the current screen:
@@ -415,9 +415,9 @@ setglobal
 % and (-b,a) map every device pixel into its cell, and the whole
 % repeating tile ranks together, the lowest spot values whitening
 % first. An axis-aligned screen falls out as b = 0.
-.xpostsys /.gcd { % m n .gcd g
+/.gcd { % m n .gcd g
     { dup 0 eq { pop exit } if exch 1 index mod } loop
-} put
+} def
 
 % freq ang  .screenlattice  a b L q quad
 % the rotated integer lattice the screen tiles the device plane with:
@@ -431,7 +431,7 @@ setglobal
 % falls out as b = 0. The spot evaluation at install time and the
 % rendered threshold cell both build from this, so they sample the
 % same points.
-.xpostsys /.screenlattice {
+/.screenlattice {
     12 dict begin
     /ang exch def /freq exch def
     /n DEVICE /defaultmatrix get 0 get abs 72 mul freq div
@@ -445,7 +445,7 @@ setglobal
                 /cand bb aa atan dup 90 ge { 90 sub } if def
                 /sz aa dup mul bb dup mul add sqrt def
                 /per aa dup mul bb dup mul add
-                     aa abs bb abs //.xpostsys /.gcd get exec idiv def
+                     aa abs bb abs //.gcd exec idiv def
                 per 64 le sz 1.5 ge and {
                     /score cand th sub abs
                            sz n sub abs n div 30 mul add def
@@ -459,14 +459,14 @@ setglobal
     } for
     /a besta def /b bestb def
     /q a dup mul b dup mul add def
-    /L q a abs b abs //.xpostsys /.gcd get exec idiv def
+    /L q a abs b abs //.gcd exec idiv def
     a b L q quad
     end
-} put
-.xpostsys /.installscreencell {
+} def
+/.installscreencell {
     20 dict begin
     /proc exch def /ang exch def /freq exch def
-    freq ang //.xpostsys /.screenlattice get exec
+    freq ang //.screenlattice exec
     /quad exch def /q exch def /L exch def /b exch def /a exch def
     /vals L L mul array def
     % arguments stay strictly inside (-1 1) whatever their sign: a
@@ -519,7 +519,7 @@ setglobal
     % each cell takes every nth rank in its own value order, so a
     % shell of equal spot values splits evenly and every cell grows
     % the same dot, one pixel at a time
-    /g a abs b abs //.xpostsys /.gcd get exec def
+    /g a abs b abs //.gcd exec def
     /nc q g idiv g idiv def
     nc 1 gt {
         /ap a g idiv def
@@ -560,13 +560,13 @@ setglobal
     DEVICE /.htfreq freq put
     DEVICE /.htang ang put
     end
-} put
+} def
 
 % -  .refreshscreencell  -
 % bring a screening device's cell up to the screen in force: the
 % installed halftone dictionary's thresholds or spot function, else
 % the screen triple, rebuilt only when it has changed
-.xpostsys /.refreshscreencell {
+/.refreshscreencell {
     DEVICE /ScreenPaint known {
         4 dict begin
         /ht graphicsdict /currgstate get /halftone get //.xpostsys /.ht5component get exec def
@@ -590,7 +590,7 @@ setglobal
                     currentdict /sp get eq not {
                         ht /Frequency 2 copy known { get }{ pop pop 60 } ifelse
                         ht /Angle 2 copy known { get }{ pop pop 0 } ifelse
-                        currentdict /sp get //.xpostsys /.installscreencell get exec
+                        currentdict /sp get //.installscreencell exec
                     } if
                 }{ pop } ifelse
             } ifelse
@@ -605,12 +605,14 @@ setglobal
                 graphicsdict /currgstate get /screenfreq get
                 graphicsdict /currgstate get /screenangle get
                 graphicsdict /currgstate get /screenproc get
-                //.xpostsys /.installscreencell get exec
+                //.installscreencell exec
             } if
         } ifelse
         end
     } if
-} put
+} def
+end
+setglobal
 
 % freq angle proc  setscreen  -
 % record the halftone screen for every component and evaluate the
@@ -658,10 +660,17 @@ setglobal
     graphicsdict /currgstate get /halftone null put
 } def
 
+% halftonedict  sethalftone  -
+% record the halftone dictionary. Every screen channel then answers
+% the dictionary itself in the spot-function position: behind its own
+% frequency and angle for a type 1 dictionary, behind 60 and 0 for
+% any other type
 % ht  .ht5component  ht'
 % a type 5 dictionary carries one halftone per colorant: grey
 % rendering takes its grey component, or the required Default
-.xpostsys /.ht5component {
+currentglobal true setglobal
+.xpostsys begin
+/.ht5component {
     dup type /dicttype eq {
         dup /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse 5 eq {
             dup /Gray 2 copy known { get exch pop }{ pop pop
@@ -669,7 +678,7 @@ setglobal
             } ifelse
         } if
     } if
-} put
+} def
 
 % ht  .htreadthresholds  -
 % a threshold-array halftone may deliver its thresholds through a
@@ -677,7 +686,7 @@ setglobal
 % that data, so read it -- into a string put back in the
 % dictionary, where a screening device's cell can find it, or
 % drained when it exceeds a string
-.xpostsys /.htreadthresholds {
+/.htreadthresholds {
     4 dict begin
     /ht exch def
     ht /Thresholds 2 copy known {
@@ -696,13 +705,10 @@ setglobal
         }{ pop } ifelse
     }{ pop pop } ifelse
     end
-} put
+} def
+end
+setglobal
 
-% halftonedict  sethalftone  -
-% record the halftone dictionary. Every screen channel then answers
-% the dictionary itself in the spot-function position: behind its own
-% frequency and angle for a type 1 dictionary, behind 60 and 0 for
-% any other type
 /sethalftone {
     dup type /dicttype ne {
         /sethalftone cvx /typecheck signalerror
@@ -764,24 +770,6 @@ setglobal
     graphicsdict /currgstate get /screenfreq get
     graphicsdict /currgstate get /screenangle get
     graphicsdict /currgstate get /screenproc get
-} def
-
-% flag  setstrokeadjust  -   (recorded only)
-/setstrokeadjust {
-    graphicsdict /currgstate get exch /strokeadjust exch put
-} def
-/currentstrokeadjust {
-    graphicsdict /currgstate get /strokeadjust 2 copy known
-        { get }{ pop pop false } ifelse
-} def
-
-% num  setsmoothness  -   (recorded only)
-/setsmoothness {
-    graphicsdict /currgstate get exch /smoothness exch put
-} def
-/currentsmoothness {
-    graphicsdict /currgstate get /smoothness 2 copy known
-        { get }{ pop pop 0.02 } ifelse
 } def
 
 % num  setlinewidth  -

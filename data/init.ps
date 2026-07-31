@@ -11,27 +11,6 @@
 systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
-% .xpostsys -- the interpreter's private namespace. Internal helper procedures
-% and their static tables live here, out of the names a program may use; only
-% the dotted anchor name is visible and the helpers hide behind it. A GLOBAL
-% dictionary anchored in userdict, sealed read-only and dropped from userdict at
-% lockdown; its mutable per-render state lives in .gscratch instead. It is global
-% so a global systemdict procedure may freeze a // reference to it (a global
-% object may not reference a local one); local machinery lives in privatedict.
-%
-% Convention -- a helper h is reached through a frozen // reference, in either of
-% two forms:
-%     .xpostsys /h { ... } put       ...  //.xpostsys /h get exec   % define, call
-%     .xpostsys begin /h { ... } def ...  //h exec ... end          % define, bake
-% The // freezes the dictionary (get form) or the helper object itself (baked
-% form) into the caller at scan time, so a program cannot shadow it. The get form
-% resolves h at run time, which mutual recursion and forward references need;
-% baking costs no run-time lookup but cannot express them. Helpers that were the
-% path/clip/image/graphics family use the get form; the colour/shading/pattern/
-% halftone families bake.
-currentglobal true setglobal
-userdict /.xpostsys 400 dict put
-setglobal
 % privatedict -- the interpreter's private LOCAL machinery dictionary. Recorded
 % in the context (where the collector roots it and C reaches it) but never placed
 % on the dict stack, so a program can neither name nor enumerate its members. It
@@ -63,25 +42,34 @@ userdict /.gscratchproc [ //.gscratchdict ] cvx put
 /.gscratch dup userdict /.gscratchproc get .wrapop def
 setglobal
 
+% .xpostsys -- the interpreter's private namespace. Internal helper procedures
+% and their static tables live here, out of the names a program may use; only
+% the dotted anchor name is visible and the helpers hide behind it. A GLOBAL
+% dictionary anchored in userdict, sealed read-only and dropped from userdict at
+% lockdown; its mutable per-render state lives in .gscratch instead. It is global
+% so a global systemdict procedure may freeze a // reference to it (a global
+% object may not reference a local one); local machinery lives in privatedict.
+%
+% Convention -- a helper h is reached through a frozen // reference, in either of
+% two forms:
+%     .xpostsys /h { ... } put       ...  //.xpostsys /h get exec   % define, call
+%     .xpostsys begin /h { ... } def ...  //h exec ... end          % define, bake
+% The // freezes the dictionary (get form) or the helper object itself (baked
+% form) into the caller at scan time, so a program cannot shadow it. The get form
+% resolves h at run time, which mutual recursion and forward references need;
+% baking costs no run-time lookup but cannot express them. Helpers that were the
+% path/clip/image/graphics family use the get form; the colour/shading/pattern/
+% halftone families bake.
 currentglobal true setglobal
+userdict /.xpostsys 400 dict put
 % The private C operators live under dot-prefixed names. Near the end of
 % graphics loading they are relocated out of systemdict into .internaldict, so
 % a program sees only the standard operators in systemdict while a font program
 % still reaches them through 1183615869 internaldict. The few operators fetched
 % by name during graphics loading are seeded here first, before that pass.
 userdict /.internaldict 256 dict put
-[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows
-  /.pdfinit /.pdfput /.flatecompress ]
+[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb ]
 { dup systemdict exch get .internaldict 3 1 roll put } forall
-
-% int  internaldict  dict
-% the guarded accessor by which a font program reaches the private
-% operators; the password is part of the language folklore
-/internaldict {
-    1183615869 eq { //.internaldict }{
-        /internaldict cvx /invalidaccess signalerror
-    } ifelse
-} bind def
 
 % Debug aids and the internal context-state markers are C operators, not part of
 % the language, and must not sit in a program's lookup path. The machinery
@@ -172,14 +160,12 @@ setglobal
 /shareddict globaldict def
 
 % concatenate two strings -- a pure global helper, so it lives in .xpostsys
-currentglobal true setglobal
 .xpostsys /.strcat { % a b  .  ab
     2 copy
     length exch length exch 1 index add % a b an bn+an
     string dup 0 6 -1 roll putinterval % b an str
     dup 4 2 roll exch putinterval % (ab)
 } bind put
-setglobal
 
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
 % factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
@@ -487,6 +473,7 @@ setglobal
     {
         cvx exec        % the file object has stayed on the stack
     } stopped {
+        //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
     quit
@@ -554,7 +541,7 @@ setglobal
 % mirror the interpreter's fixed capacities (XPOST_{OPER,DICT,EXEC}_STACK_LIMIT
 % in xpost_interpreter.c) and cannot be changed.
 currentglobal true setglobal
-/.uparams << /VMReclaim 0 /VMThreshold 0 >> def
+.xpostsys /.uparams << /VMReclaim 0 /VMThreshold 0 >> put
 setglobal
 
 /setdevparams { pop pop } def
@@ -562,18 +549,18 @@ setglobal
 
 /currentuserparams {
     << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
-       /VMReclaim .uparams /VMReclaim get
-       /VMThreshold .uparams /VMThreshold get >>
+       /VMReclaim //.xpostsys /.uparams get /VMReclaim get
+       /VMThreshold //.xpostsys /.uparams get /VMThreshold get >>
 } def
 /setuserparams {
     dup /VMReclaim known {
         dup /VMReclaim get
-        dup .uparams /VMReclaim 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMReclaim 3 -1 roll put
         vmreclaim
     } if
     dup /VMThreshold known {
         dup /VMThreshold get
-        dup .uparams /VMThreshold 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMThreshold 3 -1 roll put
         setvmthreshold
     } if
     pop
@@ -711,14 +698,15 @@ setglobal
 % Named Resources: the Level 2 resource operators live in their own
 % data file
 (/resource.ps) //.xpostsys /.loadmodule get exec
+(/cid.ps) //.xpostsys /.loadmodule get exec
 
 %traceon
 %debugloadon
 
-currentglobal
-false setglobal
-% //.xpostsys /.fontsubstitutions get: findfont's substitute-face table, hidden in the private
-% global namespace where a program cannot reach it
+% .fontsubstitutions: findfont's substitute-face table -- a static map of a font
+% name to a fallback chain of host face names. Kept in the private global
+% namespace so it does not appear among userdict's names; findfont reaches it
+% through a frozen reference.
 currentglobal true setglobal
 .xpostsys /.fontsubstitutions <<
     /Times-Roman (Nimbus Roman No9 L)
@@ -736,6 +724,9 @@ currentglobal true setglobal
 >> put
 setglobal
 
+currentglobal
+false setglobal
+
 % The FontDirectory holds defined fonts; findfont dictionaries for
 % host faces state the type of the program that backs them.
 /FontDirectory
@@ -752,7 +743,11 @@ end % userdict
         {   % try the operator, which states FontType, FontMatrix
             % and FontBBox for the face behind the name
             //findfont
-            dup /Encoding 256 array put
+            % a text font's built-in encoding is the standard one; a
+            % fresh copy, so a program re-encoding in place cannot
+            % touch the shared array. A face without standard glyph
+            % names still resolves through its character map.
+            dup /Encoding StandardEncoding dup length array copy put
             dup /BuildChar {} put
         } stopped { % operator failed: 
             //.xpostsys /.fontsubstitutions get exch 2 copy known { % try substitution
@@ -767,6 +762,9 @@ end % userdict
     } ifelse
 } def
 
+% These standard operators are global; they keep no state of their own (the
+% user-object table lives in userdict).
+true setglobal
 % index any  defineuserobject  -
 % the user-object table lives in userdict, growing as indices demand
 /defineuserobject {
@@ -792,7 +790,12 @@ end % userdict
 /undefineuserobject {
     UserObjects exch null put
 } def
+false setglobal
 
+% formdict  execform  -
+% paint the form: its matrix maps form space into user space, its
+% bounding box clips, and its paint procedure takes the dictionary.
+% Every execution paints afresh -- the language permits it
 % formdict  .execformdirect  -
 % paint the form afresh: its matrix concatenates, its bounding box
 % clips, and the paint procedure runs with the dictionary at hand
@@ -850,6 +853,7 @@ setglobal
 % unwritable dictionary, an oversized raster -- paints afresh. A
 % form's own execform calls run inside its capture, so nested forms
 % cache independently.
+true setglobal
 /execform {
     dup type /dicttype ne { /execform cvx /typecheck signalerror } if
     dup /FormType 2 copy known { get 1 eq }{ pop pop false } ifelse
@@ -902,16 +906,16 @@ setglobal
                 cm2 5 cm 5 get fby sub put
                 cm2 setmatrix
                 initclip
-                rgbdev { 0 0 0 0 0 fw fh mdev //.internaldict /.fillrectrgb get exec }
-                       { 0 0 0 fw fh mdev //.internaldict /.fillrectgray get exec } ifelse
+                rgbdev { 0 0 0 0 0 fw fh mdev .fillrectrgb }
+                       { 0 0 0 fw fh mdev .fillrectgray } ifelse
                 fd //.xpostsys /.execformdirect get exec
                 /rowsa [ mdev /ImgData get {
                     dup type /stringtype eq
                         { dup length string copy }
                         { dup length array copy } ifelse
                 } forall ] def
-                rgbdev { 1 1 1 0 0 fw fh mdev //.internaldict /.fillrectrgb get exec }
-                       { 1 0 0 fw fh mdev //.internaldict /.fillrectgray get exec } ifelse
+                rgbdev { 1 1 1 0 0 fw fh mdev .fillrectrgb }
+                       { 1 0 0 fw fh mdev .fillrectgray } ifelse
                 fd //.xpostsys /.execformdirect get exec
                 grestore
                 fc length 8 ge {
@@ -920,12 +924,12 @@ setglobal
                 } if
                 fc key <<
                     /rows mdev /ImgData get
-                    /mask rowsa mdev /ImgData get //.internaldict /.formmask get exec
+                    /mask rowsa mdev /ImgData get .formmask
                 >> put
             } if
         } if
         fc key known
-        { //.internaldict /.cliprect get exec {
+        { .cliprect {
               /cy1 exch def /cx1 exch def /cy0 exch def /cx0 exch def
               fbx cx0 ge fby cy0 ge and
               fbx fw add cx1 le and fby fh add cy1 le and
@@ -933,21 +937,24 @@ setglobal
         { false } ifelse
         {
             /fe fc key get def
-            fe /rows get fe /mask get fbx fby DEVICE //.internaldict /.blitform get exec
+            fe /rows get fe /mask get fbx fby DEVICE .blitform
         }{
             fd //.xpostsys /.execformdirect get exec
         } ifelse
         end
     } ifelse
 } def
+false setglobal
 
 % User paths: the self-describing form is an executable array of the
 % path operators below; the encoded form pairs an operand source (a
 % number array or encoded number string) with a string of opcodes,
 % where an opcode of 32 or more repeats the following operator that
 % many fewer than its value times
+true setglobal
 /setbbox { pop pop pop pop } def    % the box is advisory here
 /ucache {} def
+false setglobal
 
 currentglobal true setglobal
 .xpostsys /.upathops [ /setbbox /moveto /rmoveto /lineto /rlineto /curveto
@@ -1031,6 +1038,7 @@ setglobal
 % Route document metadata to a device that can carry it (the pdfwrite
 % device collects DOCINFO into its trailer); every other mark type,
 % and marks on devices without metadata, are consumed without effect.
+true setglobal
 /pdfmark {
     counttomark 0 gt {
         dup /DOCINFO eq DEVICE /.docinfo known and {
@@ -1042,6 +1050,7 @@ setglobal
     } if
     cleartomark
 } bind def
+false setglobal
 
 %   /fontname size  selectfont  -
 % /fontname matrix  selectfont  -
@@ -1058,8 +1067,10 @@ setglobal
 } def
 
 % x y w h
-currentglobal true setglobal   % a global .xpostsys helper
-.xpostsys /rect { %ccw in device space
+currentglobal true setglobal   % global .xpostsys helpers
+% .n2a decodes an encoded-number-string into a plain array, for the numstring forms
+.xpostsys /.n2a /.numstring2array load put
+.xpostsys /.rect1 { %ccw in device space -- x y w h  appends one rectangle subpath
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
@@ -1071,13 +1082,37 @@ currentglobal true setglobal   % a global .xpostsys helper
     neg 0 rlineto
     lineto
 } put
+% the operand is either four numbers (x y w h) for a single rectangle, or a
+% numarray / numstring holding 4n numbers for n rectangles (PLRM 8.2)
+.xpostsys /rect {
+    dup type /stringtype eq { //.xpostsys /.n2a get exec } if
+    dup type /arraytype eq {
+        1 dict begin /.a exch def
+        0 4 .a length 1 sub {
+            .a exch 4 getinterval aload pop //.xpostsys /.rect1 get exec
+        } for
+        end
+    }{
+        //.xpostsys /.rect1 get exec
+    } ifelse
+} put
 setglobal
 
-% the painting pair works on its own path and leaves the caller's
-% untouched; rectclip clips by the rectangles alone and clears the
-% path, as the language specifies
+% the painting pair works on its own path and leaves the caller's untouched;
+% rectclip clips by the rectangles alone and clears the path, as the language
+% specifies. rectstroke also accepts a trailing matrix, which is concatenated
+% to the CTM after the path is built but before stroking (PLRM 8.2).
 /rectfill { gsave newpath //.xpostsys /rect get exec fill grestore } def
-/rectstroke { gsave newpath //.xpostsys /rect get exec stroke grestore } def
+/rectstroke {
+    gsave newpath
+    % a trailing matrix is a six-element array; a numarray always holds 4n
+    % numbers, so length six is unambiguously the optional stroke matrix
+    dup type /arraytype eq { dup length 6 eq }{ false } ifelse
+        { 1 dict begin /.m exch def //.xpostsys /rect get exec .m concat end }
+        { //.xpostsys /rect get exec }
+    ifelse
+    stroke grestore
+} def
 /rectclip { newpath //.xpostsys /rect get exec clip newpath } def
 
 % load graphics support. Global: the device-maker procedures baked into this
@@ -1086,6 +1121,9 @@ currentglobal true setglobal
 .xpostsys /loadgraphics {
     //.internaldict /GRAPHICS_LOADED known { }{
         (/graphics.ps) //.xpostsys /.loadmodule get exec
+        % the orchestration below (the device, the gstate template, the wrapped
+        % standard operators) builds local structures
+        false setglobal
 
     % Page device selection and configuration. Keys:
     %   /OutputDevice   name from the device table (defaults to the
@@ -1098,11 +1136,12 @@ currentglobal true setglobal
     % device features (TextAlphaBits, WhiteIsOpaque, ...) are reached.
     % Same-device requests merge over the previous ones, so a partial
     % dictionary adjusts the page; switching OutputDevice starts from
-    % the new device's defaults. The outgoing device is destroyed, the
-    % new device is installed in the graphics state template, and the
-    % page is reinitialised.
+    % the new device's defaults. The outgoing device is destroyed
+    % (freeing its buffers; a vector device's output was written by
+    % showpage's Emit), the new device is installed
+    % in the graphics state template, and the page is reinitialised.
     currentglobal true setglobal
-    .xpostsys /.devicemakers <<
+.xpostsys /.devicemakers <<
         /pgm { .privatedict /newPGMIMAGEdevice get exec }
         /pbm { .privatedict /newPBMIMAGEdevice get exec }
         /ppm { .privatedict /newPPMIMAGEdevice get exec }
@@ -1116,7 +1155,7 @@ currentglobal true setglobal
         /pngalpha { /newpngalphadevice where { pop }{ loadpngalphadevice } ifelse newpngalphadevice }
         /jpeg { /newjpegdevice where { pop }{ loadjpegdevice } ifelse newjpegdevice }
     >> put
-    setglobal
+setglobal
 
     % pagedevicedict  setpagedevice  -
     /setpagedevice {
@@ -1179,9 +1218,9 @@ currentglobal true setglobal
 
         graphicsdict /.exactpagedims [pwf phf] put
         % the new device builds under its own local name -- DEVICE
-        % everywhere means the accessor reading the graphics state, and
-        % the machinery's frozen references to it must not see the
-        % half-configured newcomer
+        % everywhere means the accessor reading the graphics state,
+        % and the machinery's frozen references to it must not see
+        % the half-configured newcomer
         /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
         graphicsdict /.exactpagedims undef
 
@@ -1196,10 +1235,8 @@ currentglobal true setglobal
                 newdev /FillRect //.internaldict /.fillrectgray get put
             } if
             newdev /nativecolorspace get /DeviceRGB eq {
-                newdev /ImgData known {
-                    newdev /FillRect get type /operatortype ne {
-                        newdev /FillRect //.internaldict /.fillrectrgb get put
-                    } if
+                newdev /FillRect get type /operatortype ne {
+                    newdev /FillRect //.internaldict /.fillrectrgb get put
                 } if
             } if
         } if
@@ -1244,7 +1281,6 @@ currentglobal true setglobal
             << /PageSize [ DEVICE /dimensions get aload pop ] >>
         } ifelse
     } def
-
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -1256,16 +1292,23 @@ currentglobal true setglobal
     graphicsdict /.wrappedprocs 128 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
+        /ufill /ueofill /ustroke /ustrokepath /uappend /upath
+        /infill /ineofill /instroke /inufill /inueofill /inustroke
         /clip /eoclip /initclip /rectclip /clippath
         /flattenpath /pathbbox /reversepath
-        /show /ashow /widthshow /awidthshow /kshow /stringwidth /charpath
-        /definefont /scalefont /makefont /setfont /findfont
-        /setcachedevice /setcharwidth
-        /setscreen /currentscreen /settransfer /currenttransfer
+        /show /ashow /widthshow /awidthshow /kshow /cshow
+        /xshow /yshow /xyshow /glyphshow /stringwidth /charpath
+        /definefont /undefinefont /scalefont /makefont /setfont
+        /selectfont /findfont /composefont
+        /setcachedevice /setcachedevice2 /setcharwidth
+        /setscreen /currentscreen /setcolorscreen /currentcolorscreen
+        /sethalftone /currenthalftone
+        /settransfer /currenttransfer /setcolortransfer /currentcolortransfer
         /setgray /setrgbcolor /sethsbcolor /setcmykcolor /setcolor /setcolorspace
         /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
         /currentcolor /currentcolorspace
-        /image /imagemask
+        /image /imagemask /colorimage
+        /shfill /makepattern /setpattern
         /showpage /copypage /erasepage /setpagedevice /currentpagedevice
         /nulldevice /gsave /grestore /grestoreall /initgraphics
     ] {
@@ -1359,11 +1402,13 @@ currentglobal true setglobal
 
     % The device makers are global procedures the sweep just carried into
     % systemdict, but a program never constructs a device by calling one -- the
-    % device is chosen through the default device or the nulldevice operator -- so
-    % they are interpreter internals. Move them on into privatedict (systemdict is
-    % still unlocked here), where the runtime device paths reach them by frozen
-    % reference. Guard per name: without graphics they were never defined, and the
-    % on-demand C-driver makers register only when their device is selected.
+    % device is chosen through setpagedevice -- so they are interpreter internals.
+    % Move them on into privatedict (systemdict is still unlocked here), where the
+    % runtime device paths reach them by frozen reference: the .devicemakers table
+    % setpagedevice consults, and the execform and glyph caches that build a
+    % scratch raster device. Guard per name: without graphics they were never
+    % defined. The on-demand C-driver makers (newpngdevice, ...) are not touched;
+    % they load and register only when their device is selected.
     [ /newPGMIMAGEdevice /newPBMIMAGEdevice /newPPMIMAGEdevice /newTIFFIMAGEdevice
       /newnulldevice /newbboxdevice /newPDFWRITEdevice /newSVGWRITEdevice
       /newDSCWRITEdevice ]
@@ -1383,15 +1428,17 @@ currentglobal true setglobal
     % machinery reference to them is now frozen -- the standard operators bound
     % above and .bindscope over the loaded procedures -- so a program
     % enumerating systemdict sees only the standard names, while a font program
-    % reaches them through 1183615869 internaldict. Two operators stay, both
-    % dotted, so no program name collides with them. The local-state accessors
-    % (.gscratch/.privatedict) are the operators the machinery reaches its
-    % per-render scratch and its private dictionary through: driver prologs and
-    % machinery name them at run time, past the reach of the bind pass, so
-    % relocating them breaks rendering (verified). The C core reaches privatedict
-    % through the context field, not by name. .sysdictunlock and .sysdictrelock
-    % relocate with the rest: the unlock has already run, and the relock below is
-    % reached through .internaldict.
+    % reaches them through 1183615869 internaldict. Six operators stay, all
+    % dotted, so no program name collides with them. The file-access sandbox api
+    % (.permitfileread/.permitfilewrite/.lockdown/.resourcefileopen) is a public
+    % interface the trusted prolog calls after lockdown-finalize but before it
+    % locks down, so it must stay reachable then; .lockdown then undefs the set
+    % from systemdict itself. The local-state accessors (.gscratch/.privatedict)
+    % are the operators the machinery reaches its per-render scratch and its
+    % private dictionary through: driver prologs and machinery name them at run
+    % time, past the reach of the bind pass, so relocating them breaks rendering
+    % (verified). .sysdictunlock and .sysdictrelock relocate with the rest: the
+    % unlock has already run, and the relock below is reached through .internaldict.
     [ systemdict {
         exch dup type /nametype eq
         2 index type /operatortype eq and

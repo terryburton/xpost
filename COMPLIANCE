@@ -246,7 +246,7 @@ Level 1 operators
  [X] pathforall
  [X] version
  [X] eexec
- [ ] internaldict
+ [X] internaldict (empty but for what programs deposit)
  [X] cachestatus
  [X] setcachelimit
 

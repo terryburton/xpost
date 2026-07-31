@@ -1,11 +1,10 @@
 //.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
 % mark c1..cn  .applytransfer  mark c1'..cn'
-% apply the transfer functions to the marked colour components: three
-% components pass through the red, green and blue transfers, four to
-% red, green, blue and grey in the CMYK order, anything else through
-% the grey transfer. The painting machinery refreshes the screening
-% cell here first, so a bilevel device screens against the current screen
+% the transfer procedures, one per channel: three components map to
+% the red, green and blue transfers, four to red, green, blue and
+% grey in the CMYK order, anything else through the grey transfer
+currentglobal true setglobal
 .xpostsys /.applytransfer {
     //.xpostsys /.refreshscreencell get exec
     counttomark 3 eq {
@@ -25,6 +24,7 @@
         counttomark { currenttransfer exec counttomark 1 roll } repeat
     } ifelse } ifelse
 } put
+setglobal
 
 % Painting Operators
 
@@ -68,47 +68,28 @@
         newpath
     }{
     flattenpath
-    %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
-    [
-        [ % mark
-        {
-            2 array astore % ... mark ... [x0 y0]
-            counttomark 1 ne {
-                counttomark 1 add 1 roll % ... [x0 y0] mark ...
-                ] exch % ... [ ... ] [x0 y0]
-                [ exch % ... [ ... ] [ [x0 y0]
-            } if % ... +++ mark [x0 y0]
-        }
-        { 2 array astore } % ... mark [x0 y0] ... [xN yN]
-        {}
-        { counttomark dup 0 ne { 1 sub index } if } % ... mark [x0 y0] ... [x0 y0]
-        //.xpostsys /.devpathforall get exec
-        ]
-        dup length 0 eq {pop} if
-    ]
+    % subpaths merged into one point list, separated by null, so that
+    % FillPoly scans them together and interior subpaths produce holes.
+    % A rectangular clip region is a single convex window: clip the fill
+    % polygon against it geometrically, so it stays whole rectangles
+    % rather than dissolving into per-scanline bands -- which a vector
+    % device would otherwise emit as one subpath per row. A disjoint or
+    % concave clip region has no single convex half-plane set, so it
+    % intersects span-by-span in the fill's own scan-conversion, exact
+    % for any region the nonzero rule can describe.
+    .cliptrivial not {
+        .cliprect { pop pop pop pop true }{ false } ifelse {
+            //.xpostsys /doclip get exec .fillpolyargs
+        }{
+            .fillpolyargs //.xpostsys /.clippolyargs get exec .clipfillpoly
+        } ifelse
+    }{
+        .fillpolyargs
+    } ifelse
     /DEBUGFILL where { pop
         (fill)=
         pstack()=
         hook
-    } if
-    % merge the subpaths, separated by null, so that FillPoly scans
-    % them together and interior subpaths produce holes
-    [ exch
-    {
-        dup length 2 gt {
-            aload pop null
-        }{
-            pop
-        } ifelse
-    } forall
-    ]
-
-    % A non-trivial clip region intersects span-by-span in the same
-    % scan-conversion the fill itself uses: exact for any region the
-    % nonzero rule can describe (disjoint windows, concave boundaries,
-    % counters), where the half-plane clipper serves only convex ones
-    .cliptrivial not {
-        //.xpostsys /.clippolyargs get exec .clipfillpoly
     } if
 
     dup length 2 gt {
@@ -176,6 +157,7 @@
 % quantum so mere boundary contact stays outside, and insideness is
 % any span surviving the intersection. The clip does not participate:
 % the test asks about the painting operator's own marks
+currentglobal true setglobal
 .xpostsys /.intest {
     4 dict begin
     /.insp exch def
@@ -192,7 +174,8 @@
     } ifelse
     gsave .insp exec exch .clipfillpoly length 2 gt grestore
     end
-} put
+} bind put
+setglobal
 
 % x y  infill  bool          x y  ineofill  bool
 % upath  infill  bool        upath  ineofill  bool
@@ -216,6 +199,7 @@
 % endpoint on the boundary stays, so a segment ending on a shared
 % tile edge still marks the boundary pixel, as the unclipped walk
 % would
+currentglobal true setglobal
 .xpostsys /.hairsegclip {
     12 dict begin
     aload pop
@@ -246,13 +230,15 @@
         true
     }{ false } ifelse
     end
-} put
+} bind put
+setglobal
 
 % x1 y1 x2 y2  .hairext  x1' y1' x2' y2'
 % lengthen the segment by the stored half-width at each end: the cap
 % of a stroke within a pixel's width, round and projecting alike
+currentglobal true setglobal
 .xpostsys /.hairext {
-    .privatedict /.hairhw get dup 0 le { pop }{
+    graphicsdict /.hairhw get dup 0 le { pop }{
         8 dict begin
         /hw exch def
         {/y2 /x2 /y1 /x1}{exch def}forall
@@ -269,6 +255,7 @@
         end
     } ifelse
 } put
+setglobal
 
 % -  stroke  -
 % draw line along current path
@@ -303,12 +290,12 @@
     dup mul exch dup mul exch add sqrt
     % a butt cap adds nothing; round and projecting reach half the
     % width past each segment end
-    .privatedict /.hairhw
+    graphicsdict /.hairhw
     2 index 2 div currentlinecap 0 eq { pop 0 } if put
     1 le
     .cliprect { 4 array astore }{ null } ifelse
-    .privatedict /.hairrect 3 -1 roll put
-    .privatedict /.hairrect get null ne and {
+    graphicsdict /.hairrect 3 -1 roll put
+    graphicsdict /.hairrect get null ne and {
         flattenpath
         //.xpostsys /dashpath get exec
         mark
@@ -319,7 +306,7 @@
         {          % ... xN-1 yN-1 xN yN
             4 copy % ... xN-1 yN-1 xN yN xN-1 yN-1 xN yN
             //.xpostsys /.hairext get exec
-            .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
+            graphicsdict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
                 //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
@@ -334,7 +321,7 @@
         {            % x0 y0 xN yN
             4 2 roll % xN yN x0 y0
             //.xpostsys /.hairext get exec
-            .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
+            graphicsdict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
                 //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
@@ -370,14 +357,14 @@
 % -  .fill  -
 % assemble the next raw row into rawrow from the source's chunks,
 % carrying any surplus in pend; a dry source leaves the tail zeroed
+currentglobal true setglobal
 .xpostsys /.fill {
     /got 0 def
     {
         got rawrow length ge { exit } if
+        % run the source on the caller's stacks: its defs are its own
+        % business, and the row dict's names stay out of its reach
         pend length 0 eq {
-            % run the source on the caller's stacks: its defs are the
-            % program's own business, and the machinery's scratch names
-            % stay out of its reach
             currentdict currentdict /datasrc get end exec exch begin
             /pend exch def
         } if
@@ -392,11 +379,13 @@
         /got got take add def
     } loop
 } put
+setglobal
 
 % -  .rownorm  -
 % unpack rawrow's rowsamples samples at depth bits into buf, one
 % byte per sample: sub-byte depths spread to the byte range, twelve
 % bits keep their high byte
+currentglobal true setglobal
 .xpostsys /.rownorm {
     bits 8 eq {
         buf 0 rawrow putinterval
@@ -435,11 +424,13 @@
         } for
     } ifelse } ifelse } ifelse } ifelse
 } put
+setglobal
 
 % src  .imgsource  proc
 % normalize an image data source: a file becomes a chunk-reading
 % procedure, a string a procedure delivering it, a procedure passes
 % through unchanged
+currentglobal true setglobal
 .xpostsys /.imgsource {
     dup type /arraytype eq 1 index xcheck not and {
         % a literal array carries one source per component
@@ -453,12 +444,14 @@
         } if
     } ifelse } ifelse
 } put
+setglobal
 
 % -  .clipspans  array
 % the clip region resolved to rectangle spans, as flat device-space
 % quads (x0 y0 x1 y1 each): the region path -- a stored user path or
 % already-resolved spans -- runs through the fill machinery's
 % scan-conversion either way
+currentglobal true setglobal
 .xpostsys /.clipspans {
     gsave
     clippath flattenpath
@@ -499,20 +492,25 @@
     ]
     end
 } put
+setglobal
 
 % v  .c255  byte
 % clamp a 0..1 component and scale it to a byte
+currentglobal true setglobal
 .xpostsys /.c255 {
     dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if
     255 mul round cvi
 } put
+setglobal
 
 % c  .sampleat  value
 % one normalized component of the pixel in hand, from its plane's
 % row buffer or the interleaved one
+currentglobal true setglobal
 .xpostsys /.sampleat {
     multi { bufs exch get x get }{ base add buf exch get } ifelse
 } put
+setglobal
 
 % width height bits mat datasrc decode ncomp mbits mranges  .imagepaintm  -
 % the shared image painter: the collectors normalize every sample
@@ -523,6 +521,7 @@
 % order (a set bit leaves the pixel unpainted), and mranges an array
 % of min,max pairs of normalized sample values (a pixel whose every
 % raw component falls within its pair is left unpainted)
+currentglobal true setglobal
 .xpostsys /.imagepaintm {
     gsave
         newpath
@@ -530,10 +529,9 @@
         //.xpostsys /.refreshscreencell get exec
         {mranges mbits ncomp decode datasrc mat bits height width}{exch def}forall
         % the dictionary image form leaves its Interpolate request in
-        % the local private dict for this one painting, out of a
-        % program's sight; anything else paints stepped
-        /interp .privatedict /.imginterp 2 copy known { get }{ pop pop false } ifelse def
-        .privatedict /.imginterp false put
+        % userdict for this one painting; anything else paints stepped
+        /interp graphicsdict /.imginterp 2 copy known { get }{ pop pop false } ifelse def
+        graphicsdict /.imginterp false put
 
         % a literal array of sources delivers each component from its
         % own plane; a single source interleaves them. The source is
@@ -818,29 +816,35 @@
         end
     grestore
 } put
+setglobal
 
+currentglobal true setglobal
 .xpostsys /.imagepaint {
     null null //.xpostsys /.imagepaintm get exec
 } put
+setglobal
 
 % raw bits  .mcscale  normalized
 % scale a raw sample value as the collectors scale samples to bytes
+currentglobal true setglobal
 .xpostsys /.mcscale {
     dup 12 eq { pop -4 bitshift }{
     dup 8 eq { pop }{
     dup 4 eq { pop 17 mul }{
     2 eq { 85 mul }{ 255 mul } ifelse } ifelse } ifelse } ifelse
 } put
+setglobal
 
 % imagedict  .imagetype4  -
 % colour-key masking: a pixel whose every raw component falls within
 % the MaskColor ranges leaves the page untouched. MaskColor holds one
 % value per component (an exact colour) or min,max pairs.
+currentglobal true setglobal
 .xpostsys /.imagetype4 {
     6 dict begin
     /d exch def
     d /Interpolate 2 copy known { get }{ pop pop false } ifelse
-    dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+    dup type /booleantype eq { graphicsdict /.imginterp 3 -1 roll put }{ pop } ifelse
     /itbits d /BitsPerComponent get def
     /itn //.xpostsys /.ncomponents get exec def
     /itrange [
@@ -857,6 +861,7 @@
     end
     //.xpostsys /.imagepaintm get exec
 } put
+setglobal
 
 % imagedict  .imagetype3  -
 % explicit masking: MaskDict describes a one-bit-deep stencil over
@@ -865,6 +870,7 @@
 % mask sample-by-sample in the one stream (1, at the image depth),
 % row-by-row in the one stream (2), or in MaskDict's own DataSource
 % (3), where the mask's grid may differ from the image's.
+currentglobal true setglobal
 .xpostsys /.it1row { % statedict  .it1row  datarow
     begin
     //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
@@ -881,7 +887,9 @@
     drow
     end
 } put
+setglobal
 
+currentglobal true setglobal
 .xpostsys /.it2row { % statedict  .it2row  datarow
     begin
     /rawrow mraw def //.xpostsys /.fill get exec
@@ -897,14 +905,16 @@
     draw
     end
 } put
+setglobal
 
+currentglobal true setglobal
 .xpostsys /.imagetype3 {
     20 dict begin
     /d exch def
     /md d /MaskDict get def
     /dd d /DataDict get def
     dd /Interpolate 2 copy known { get }{ pop pop false } ifelse
-    dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+    dup type /booleantype eq { graphicsdict /.imginterp 3 -1 roll put }{ pop } ifelse
     /il d /InterleaveType get def
     /w dd /Width get def
     /h dd /Height get def
@@ -935,7 +945,7 @@
             /iy 0 def
         end
         w h 8 dd /ImageMatrix get
-        [ st //.xpostsys /.it1row get /exec cvx ] cvx
+        [ st //.xpostsys /.it1row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{ il 2 eq {
@@ -953,7 +963,7 @@
             /iy 0 def
         end
         w h bpc dd /ImageMatrix get
-        [ st //.xpostsys /.it2row get /exec cvx ] cvx
+        [ st //.xpostsys /.it2row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{
@@ -998,6 +1008,7 @@
     end
     //.xpostsys /.imagepaintm get exec
 } put
+setglobal
 
 % width height bits/sample matrix datasrc  image  -
 %                                imagedict  image  -
@@ -1012,7 +1023,7 @@
             pop
             begin
             currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
-            dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+            dup type /booleantype eq { graphicsdict /.imginterp 3 -1 roll put }{ pop } ifelse
             Width Height BitsPerComponent ImageMatrix
             % fetch through the dictionary: a procedure source fetched
             % by name would execute instead of arriving as the operand
@@ -1041,11 +1052,13 @@
 % pixel through the shared painter, in its own colour space like the
 % five-operand image. One data source per component (multi true) is
 % unsupported and refused.
+currentglobal true setglobal
 .xpostsys /.identdecode <<
     1 [ 0 1 ]
     3 [ 0 1 0 1 0 1 ]
     4 [ 0 1 0 1 0 1 0 1 ]
 >> put
+setglobal
 /colorimage {
     4 dict begin
     /nc exch def
@@ -1083,11 +1096,13 @@
 % where such jobs spend their time. Keyed by a content hash, verified
 % against the stored copy of the mask; runs of consecutive rows
 % sharing one extent merge into taller rectangles, whose union is the
-% very region the row runs cover. The cache lives in the local private
-% dictionary: its runs and mask copies are local render objects, which
-% the global helper namespace could not hold.
+% very region the row runs cover
+currentglobal false setglobal
+.gscratch /.stencilcache 64 dict put
+setglobal
 
 % buf width height ink  .stencilruns  rects
+currentglobal true setglobal
 .xpostsys /.stencilruns {
     10 dict begin
     /kink exch def /kh exch def /kw exch def /kbuf exch def
@@ -1096,10 +1111,7 @@
         kbuf exch get hh 33 mul add 16#FFFFFF and /hh exch def
     } for
     /found null def
-    .privatedict /.stencilcache known not {
-        .privatedict /.stencilcache 64 dict put
-    } if
-    .privatedict /.stencilcache get hh 2 copy known {
+    .gscratch /.stencilcache get hh 2 copy known {
         get {
             dup 0 get kw eq 1 index 1 get kh eq and
             1 index 2 get kink eq and {
@@ -1161,21 +1173,21 @@
             rects i 4 mul 2 add rwa i get put
             rects i 4 mul 3 add rha i get put
         } for
-        .privatedict /.stencilcache get length 200 ge {
-            .privatedict /.stencilcache 64 dict put
-        } if
+        .gscratch /.stencilcache get length 200 ge { .gscratch /.stencilcache 64 dict put } if
         /tuple [ kw kh kink kbuf dup length string copy rects ] def
-        .privatedict /.stencilcache get hh 2 copy known {
+        .gscratch /.stencilcache get hh 2 copy known {
             get [ exch aload pop tuple ]
         }{
             pop pop [ tuple ]
         } ifelse
-        .privatedict /.stencilcache get hh 3 -1 roll put
+        .gscratch /.stencilcache get hh 3 -1 roll put
         rects
     } ifelse
     end
 } put
+setglobal
 
+currentglobal true setglobal
 .xpostsys /.stencilmask {
     gsave
         newpath
@@ -1220,9 +1232,6 @@
         } if
         aadone not {
         width height mul 16384 le {
-            % a small stencil's runs resolve once per distinct mask,
-            % consecutive equal-extent rows merged into taller
-            % rectangles, painted through fewer fills
             /rects buf width height ink //.xpostsys /.stencilruns get exec def
             paintpat { newpath } if
             0 4 rects length 1 sub { /i exch def
@@ -1269,6 +1278,7 @@
         end
     grestore
 } put
+setglobal
 
 % width height polarity matrix datasrc  imagemask  -
 %                                  maskdict  imagemask  -

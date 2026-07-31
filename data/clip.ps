@@ -296,7 +296,7 @@ put
     def
 
     /DEBUGCLIP where { pop
-        (//.xpostsys /doclip get exec)=
+        (doclip)=
         (PA: )print PA ==
         (CR: )print CR ==
         %hook
@@ -413,6 +413,7 @@ put
 % the clip region in the device FillPoly argument format, for the
 % span-level clipping the fill pipeline performs. .fillpolyargs reads
 % the current path, so the region stands in for it briefly.
+currentglobal true setglobal
 .xpostsys /.clippolyargs {
     graphicsdict /currgstate get /currpath get
     graphicsdict /currgstate get /currpath
@@ -420,10 +421,12 @@ put
     .fillpolyargs
     exch graphicsdict /currgstate get /currpath 3 -1 roll put
 } bind put
+setglobal
 
 % poly  .polytopath  -
 % append a null-separated polygon array (device-space point pairs) to
 % the current path
+currentglobal true setglobal
 .xpostsys /.polytopath {
     1 dict begin
     /first true def
@@ -439,6 +442,7 @@ put
     } forall
     end
 } bind put
+setglobal
 
 % -  eoclip  -
 % intersect the clip region with the even-odd interior of the current

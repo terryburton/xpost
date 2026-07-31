@@ -47,17 +47,17 @@
     currentdict end
     dup /.copydict get exec
     begin
-        currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
+        currentdict .pdfinit    % create the content accumulator (outside VM)
     currentdict
     end } bind
 
     /Destroy { % IMAGE  .  -
-        dup //.internaldict /.pdffree get exec pop
+        dup .pdffree pop
     } bind
 
     % append a string to the content accumulator (held outside VM via /Private)
     /.put { % str  .  -
-        currentdict //.internaldict /.pdfput get exec
+        currentdict .pdfput
     } bind
 
     % append a number in SVG syntax (integer, or two decimals; never
@@ -120,7 +120,7 @@
     % the subpaths as M/L commands each closed with Z, and a nonzero
     % fill rule. The per-coordinate formatting is the hot loop, so it is
     % done in C (.svgfillpoly), appending to the accumulator.
-    /FillPoly { //.internaldict /.svgfillpoly get exec } bind
+    /FillPoly { .svgfillpoly } bind
 
     % append collected path elements (coordinates then a /m /l /c /h
     % name each, from the .devpathforall walker) as SVG path commands
@@ -191,7 +191,7 @@
         /siflush {
             /sic sibp 3 idiv 3 mul def
             sic 0 gt {
-                sibuf 0 sic getinterval //.internaldict /.base64 get exec .put
+                sibuf 0 sic getinterval .base64 .put
                 sibuf 0 sibuf sic sibp sic sub getinterval putinterval
                 /sibp sibp sic sub def
             } if
@@ -230,7 +230,7 @@
             } for
             sirow siput
         } for
-        sibp 0 gt { sibuf 0 sibp getinterval //.internaldict /.base64 get exec .put } if
+        sibp 0 gt { sibuf 0 sibp getinterval .base64 .put } if
         /sibp 0 def
         ("/>\n) .put
     end }
@@ -241,7 +241,7 @@
     % the rule the flattening fill applies. The per-element formatting
     % walks the path in C (.svgfillpath), appending to the accumulator,
     % so subpath count costs no operand stack.
-    /FillPath { //.internaldict /.svgfillpath get exec } bind
+    /FillPath { .svgfillpath } bind
 
     % r g b IMAGE . -  ; stroke the current path as one path element with
     % the device-space line width and the graphics state's cap, join and
@@ -289,7 +289,7 @@
         height sy div .wnum (pt" viewBox="0 0 ) .w
         width .wnum ( ) .w height .wnum (">\n) .w
 
-        currentdict //.internaldict /.pdfchunks get exec { .w } forall
+        currentdict .pdfchunks { .w } forall
 
         (</svg>\n) .w
         F (%stdout) (w) file ne { F closefile } if
@@ -297,7 +297,7 @@
         % start the next page fresh: showpage's page clear and later
         % marks must not stack on the emitted content (a later Emit
         % rewrites the output with the then-current page)
-        currentdict //.internaldict /.pdfreset get exec
+        currentdict .pdfreset
     end }
 >> def
 
@@ -305,7 +305,7 @@
     (TESTGRAPHICS svgwrite)=
     /dev 200 200 newSVGWRITEdevice def
     0 0 0 [ [20 20] [80 20] [80 80] [20 80] ] dev dup /FillPoly get exec
-    dev //.internaldict /.pdfchunks get exec 0 get length 0 gt { (svgwrite content PASS)= }{ (svgwrite content FAIL)= } ifelse
+    dev .pdfchunks 0 get length 0 gt { (svgwrite content PASS)= }{ (svgwrite content FAIL)= } ifelse
     dev dup /Destroy get exec
 } if
 

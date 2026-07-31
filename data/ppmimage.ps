@@ -65,7 +65,7 @@
         0 1 height 1 sub {
             ImgData exch width array put
         } for
-        ImgData //.internaldict /.zerorows get exec
+        ImgData .zerorows
         setglobal
     currentdict
     end } bind
@@ -439,7 +439,7 @@
     /.writeppm { % img file
         2 dict begin
         {/f /a}{exch def}forall
-        a f //.internaldict /.writeppmrows get exec
+        a f .writeppmrows
         f (%stdout)(w) file ne {
             f closefile
         } if

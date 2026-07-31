@@ -7,14 +7,12 @@
 % private categories (typically copying /Generic as a starting point).
 % On-disk resource storage is not implemented: resourceforall
 % enumerates the defined instances only.
-%
-% The instance tables live in the private global namespace, out of a
-% program's reach; only the operators below are public. Everything here
-% is global, and global VM stays selected on return: the font machinery
-% loaded next in init.ps is defined in global VM too.
-true setglobal
 
+currentglobal true setglobal
+
+currentglobal true setglobal
 .xpostsys /.resources 32 dict put
+setglobal
 //.xpostsys /.resources get /Category 32 dict put
 % the Generic category implementation: programs copy it to seed their
 % own categories, so it need only exist and name itself
@@ -34,13 +32,17 @@ true setglobal
 % by default; the host appends entries (xpost_add_resource_dir, -I).
 .privatedict /.resourcepath [] put
 
+setglobal
+
 % category  .instof  instances
+currentglobal true setglobal
 .xpostsys /.instof {
     //.xpostsys /.resources get exch 2 copy known not {
         pop pop /findresource cvx /undefinedresource signalerror
     } if
     get
 } bind put
+setglobal
 
 % instances defined in local VM live beside the global table and go
 % away with restore, as the local dictionary holding them does
@@ -50,13 +52,18 @@ setglobal
 
 % category  .linstof  instances
 % the local table of a category, created on first use
+currentglobal true setglobal
 .xpostsys /.linstof {
     .gscratch /.lresources get exch 2 copy known not {
         2 copy 8 dict put
     } if
     get
 } bind put
+setglobal
 
+% The resource operators are global; they hold no state of their own (the
+% instance tables live in .xpostsys and the local scratch behind .gscratch).
+true setglobal
 % key instance category  defineresource  instance
 /defineresource {
     dup /Category eq {
@@ -180,6 +187,7 @@ setglobal
 % Match a name against a resourceforall template: ? matches any one
 % character, * any run (backtracking iteratively over the most recent
 % star), and \ makes the following character literal.
+currentglobal true setglobal
 .xpostsys /.wcmatch {
     8 dict begin
     /t exch def /s exch def
@@ -227,6 +235,7 @@ setglobal
     res
     end
 } bind put
+setglobal
 
 % template proc scratch category  resourceforall  -
 % Enumerate the category's instances whose names match the template,
@@ -254,6 +263,7 @@ setglobal
     } forall
     end
 } bind def
+false setglobal
 
 % In-RIP trapping (PLRM 6.3). The trapping operators are defined in the
 % Trapping procedure set; a program reaches them with
