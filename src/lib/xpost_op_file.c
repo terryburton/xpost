@@ -384,6 +384,65 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
         return 0;
     }
+    if (cname && strcmp(cname, "ReusableStreamDecode") == 0)
+    {
+        /* the dictionary may name a decode chain to run the source
+           through before buffering: layer each in order */
+        Xpost_Object flt = xpost_dict_get(ctx, dict,
+            xpost_name_cons(ctx, "Filter"));
+        Xpost_Object cur = F;
+        Xpost_Object first = xpost_object_cvlit(null);
+        int ret;
+
+        free(cname);
+        if (xpost_object_get_type(flt) == nametype)
+        {
+            ret = xpost_op_file_filter(ctx, cur, flt);
+            if (ret)
+                return ret;
+            cur = xpost_stack_pop(ctx->lo, ctx->os);
+            first = cur;
+        }
+        else if (xpost_object_get_type(flt) == arraytype)
+        {
+            unsigned int i;
+
+            for (i = 0; i < flt.comp_.sz; i++)
+            {
+                Xpost_Object fn = xpost_array_get(ctx, flt, i);
+
+                if (xpost_object_get_type(fn) != nametype)
+                    return typecheck;
+                ret = xpost_op_file_filter(ctx, cur, fn);
+                if (ret)
+                    return ret;
+                cur = xpost_stack_pop(ctx->lo, ctx->os);
+                if (i == 0)
+                    first = cur;
+            }
+        }
+        ret = xpost_op_file_filter(ctx, cur,
+            xpost_name_cons(ctx, "ReusableStreamDecode"));
+        if (ret)
+            return ret;
+        /* the reusable stream buffered everything its chain yields,
+           but an inner stage can reach its own end before the stage
+           against the file has consumed its end-of-data marker:
+           drain that stage so the file resumes past the encoding */
+        if (xpost_object_get_type(first) == filetype)
+        {
+            /* re-derive the pointer each read: a filter's read can
+               grow the memory file and move it */
+            for (;;)
+            {
+                Xpost_File *dr = xpost_file_get_file_pointer(ctx->lo, first);
+
+                if (!dr || xpost_file_getc(dr) == EOF)
+                    break;
+            }
+        }
+        return 0;
+    }
     free(cname);
     return xpost_op_file_filter(ctx, F, name);
 }
@@ -763,6 +822,10 @@ int xpost_op_file_flushfile (Xpost_Context *ctx,
     return 0;
 }
 
+/* resetfile discards a file's buffered input through fpurge. msvcrt provides
+   no fpurge equivalent (xpost_fpurge is a no-op on Windows), so the operator
+   is left out there rather than registered as one that silently does nothing;
+   a program that calls it gets undefined instead. */
 #ifndef _WIN32
 
 static
@@ -981,7 +1044,11 @@ int xpost_op_setfileposition (Xpost_Context *ctx,
                               Xpost_Object F,
                               Xpost_Object pos)
 {
-    int ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
+    int ret;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
     if (ret != 0)
         return ioerror;
     return 0;
@@ -1353,6 +1420,78 @@ int xpost_op_bool_echo (Xpost_Context *ctx,
     return 0;
 }
 
+/* dir category name  .resourcefileopen  file true | false
+   Open the resource instance <dir>/<category>/<name> for reading, confined
+   beneath dir, with category and name validated as single path components.
+   Returns the file and true, or just false when the instance is absent,
+   refused, or the names are not valid components. */
+static
+int xpost_op_resourcefileopen (Xpost_Context *ctx,
+                               Xpost_Object dir,
+                               Xpost_Object cat,
+                               Xpost_Object nam)
+{
+    char *cdir;
+    char *ccat;
+    char *cnam;
+    char rel[XPOST_PATH_MAX];
+    Xpost_Object f;
+    FILE *fp;
+    int err;
+    int n;
+
+    /* validate against the raw bytes and length (rejects embedded NUL)
+       before composing any path */
+    if (!xpost_path_safe_leaf(xpost_string_get_pointer(ctx, cat), cat.comp_.sz) ||
+        !xpost_path_safe_leaf(xpost_string_get_pointer(ctx, nam), nam.comp_.sz))
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+
+    cdir = xpost_string_allocate_cstring(ctx, dir);
+    ccat = xpost_string_allocate_cstring(ctx, cat);
+    cnam = xpost_string_allocate_cstring(ctx, nam);
+    if (!cdir || !ccat || !cnam)
+    {
+        free(cdir);
+        free(ccat);
+        free(cnam);
+        return VMerror;
+    }
+
+    n = snprintf(rel, sizeof rel, "%s/%s", ccat, cnam);
+    free(ccat);
+    free(cnam);
+    if (n < 0 || n >= (int)sizeof rel)
+    {
+        free(cdir);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+
+    fp = xpost_diskfile_fopen_beneath(cdir, rel, &err);
+    free(cdir);
+    if (!fp)
+    {
+        /* absent or refused: the caller tries the next directory */
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+
+    f = xpost_file_cons(ctx->lo, fp);
+    if (xpost_object_get_type(f) == invalidtype)
+    {
+        fclose(fp);
+        return VMerror;
+    }
+    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+}
+
 /* string  .permitfileread  -
    permit reading files within the directory tree; ignored once locked down */
 static
@@ -1464,78 +1603,6 @@ int xpost_op_string_filter_subfile (Xpost_Context *ctx,
     return xpost_op_file_filter_subfile(ctx, F, count, eod, name);
 }
 
-/* dir category name  .resourcefileopen  file true | false
-   Open the resource instance <dir>/<category>/<name> for reading, confined
-   beneath dir, with category and name validated as single path components.
-   Returns the file and true, or just false when the instance is absent,
-   refused, or the names are not valid components. */
-static
-int xpost_op_resourcefileopen (Xpost_Context *ctx,
-                               Xpost_Object dir,
-                               Xpost_Object cat,
-                               Xpost_Object nam)
-{
-    char *cdir;
-    char *ccat;
-    char *cnam;
-    char rel[XPOST_PATH_MAX];
-    Xpost_Object f;
-    FILE *fp;
-    int err;
-    int n;
-
-    /* validate against the raw bytes and length (rejects embedded NUL)
-       before composing any path */
-    if (!xpost_path_safe_leaf(xpost_string_get_pointer(ctx, cat), cat.comp_.sz) ||
-        !xpost_path_safe_leaf(xpost_string_get_pointer(ctx, nam), nam.comp_.sz))
-    {
-        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
-        return 0;
-    }
-
-    cdir = xpost_string_allocate_cstring(ctx, dir);
-    ccat = xpost_string_allocate_cstring(ctx, cat);
-    cnam = xpost_string_allocate_cstring(ctx, nam);
-    if (!cdir || !ccat || !cnam)
-    {
-        free(cdir);
-        free(ccat);
-        free(cnam);
-        return VMerror;
-    }
-
-    n = snprintf(rel, sizeof rel, "%s/%s", ccat, cnam);
-    free(ccat);
-    free(cnam);
-    if (n < 0 || n >= (int)sizeof rel)
-    {
-        free(cdir);
-        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
-        return 0;
-    }
-
-    fp = xpost_diskfile_fopen_beneath(cdir, rel, &err);
-    free(cdir);
-    if (!fp)
-    {
-        /* absent or refused: the caller tries the next directory */
-        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
-        return 0;
-    }
-
-    f = xpost_file_cons(ctx->lo, fp);
-    if (xpost_object_get_type(f) == invalidtype)
-    {
-        fclose(fp);
-        return VMerror;
-    }
-    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
-    return 0;
-}
-
 int xpost_oper_init_file_ops (Xpost_Context *ctx,
                               Xpost_Object sd)
 {
@@ -1550,13 +1617,13 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "file", (Xpost_Op_Func)xpost_op_string_mode_file, 1, 2, stringtype, stringtype);
     INSTALL;
+    op = xpost_operator_cons(ctx, ".resourcefileopen", (Xpost_Op_Func)xpost_op_resourcefileopen, 2, 3, stringtype, stringtype, stringtype);
+    INSTALL;
     op = xpost_operator_cons(ctx, ".permitfileread", (Xpost_Op_Func)xpost_op_string_permitfileread, 0, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".permitfilewrite", (Xpost_Op_Func)xpost_op_string_permitfilewrite, 0, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".lockdown", (Xpost_Op_Func)xpost_op_lockdown, 0, 0);
-    INSTALL;
-    op = xpost_operator_cons(ctx, ".resourcefileopen", (Xpost_Op_Func)xpost_op_resourcefileopen, 2, 3, stringtype, stringtype, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter, 1, 2, filetype, nametype);
     INSTALL;
@@ -1605,7 +1672,7 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "flushfile", (Xpost_Op_Func)xpost_op_file_flushfile, 0, 1, filetype);
     INSTALL;
-#ifndef _WIN32
+#ifndef _WIN32 /* no fpurge on Windows -- see xpost_op_file_resetfile */
     op = xpost_operator_cons(ctx, "resetfile", (Xpost_Op_Func)xpost_op_file_resetfile, 0, 1, filetype);
     INSTALL;
 #endif

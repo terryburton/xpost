@@ -241,6 +241,8 @@ int xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err);
  */
 int xpost_diskfile_readable(const char *path);
 
+int xpost_diskfile_stat(const char *path, long *pages, long *bytes, long *referred, long *created);
+
 /**
  * @brief Has the file-access sandbox been engaged?
  */
@@ -307,8 +309,5 @@ int xpost_file_write_byte(Xpost_Memory_File *mem, Xpost_Object f, Xpost_Object b
 /**
  * @}
  */
-
-
-int xpost_diskfile_stat(const char *path, long *pages, long *bytes, long *referred, long *created);
 
 #endif
