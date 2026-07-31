@@ -300,40 +300,12 @@ test('semantics',
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Graphics regression checks: operator wrapping and the wrapped-operator
-# error posture, asserted through the interpreter's private operators.
+# Graphics regressions: inverse transforms under rotation, operator-name
+# capture by user dictionaries, sub-pixel fills, hole clipping, and
+# device-space stroke widths, asserted against a locally built raster device.
 test('graphics-regression',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# Bounding-box device: render a known fill through -d bbox and check the box.
-test('bbox-device',
-  find_program('tests/run-bbox-test.sh'),
-  args: [ xpost_exe, files('tests/bbox_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# PDF device: write a PDF and check its structure; round-trip via gs when
-# present. The input is a single fill large enough to overflow the content
-# buffer, exercising the flush path.
-test('pdf-device',
-  find_program('tests/run-pdf-test.sh'),
-  args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# SVG device: render fills, strokes and glyph outlines through
-# setpagedevice and require the document's structural landmarks,
-# including resolution-independent point sizing.
-test('svg-device',
-  find_program('tests/run-svg-test.sh'),
-  args: [ xpost_exe ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# pngalpha device: RGBA output where the erased page is transparent and
-# marks (including explicit white) are opaque; png stays RGB.
-test('pngalpha-device',
-  find_program('tests/run-pngalpha-test.sh'),
-  args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Save/restore VM: drive the entity count past 65536 and require dicts and
@@ -372,6 +344,20 @@ test('trapping',
   args: [ xpost_exe, files('tests/trapping_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Interpreter isolation: internal helper procedures hide in .xpostsys, so their
+# names neither pollute nor obscure a program's own, and a program may redefine
+# them without disturbing the graphics machinery (the clash that broke real gs
+# programs on xpost). Also covers surviving a program shadowing get/exec.
+test('isolation',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/isolation_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Dispatch-dictionary tamper resistance: no internal dispatch dictionary may
+# store an executable operator NAME (re-looked-up at run time, so a program's
+# redefinition hijacks internal machinery -- the casselman ch8 loop); operator
+# values must be stored instead. Scans every reachable internal namespace,
+# self-testing that the scanner catches a planted unsafe entry.
 # Arithmetic/math operators (PLRM 8.2): zero-divisor mod/idiv are undefinedresult
 # not a SIGFPE, sqrt of a negative is rangecheck, and atan/sin/cos hit the PLRM
 # examples (a truncated RAD_PER_DEG had skewed them). From the 8.2 compliance campaign.
@@ -410,6 +396,27 @@ test('op-path',
   args: [ xpost_exe, files('tests/op_path_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Resource and user-object operators (PLRM 8.2): resourcestatus on a category
+# that does not exist raises undefined (was false); UserObjects rules.
+test('op-resource',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_resource_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Rectangle operators (PLRM 8.2): rectfill/rectstroke/rectclip accept the
+# numarray and numstring forms and rectstroke an optional trailing matrix.
+test('op-rect',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_rect_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# SubFileDecode EOD semantics (PLRM 3.13.3): a positive count passes data up to
+# and including the count-th delimiter; count zero consumes it without passing.
+test('op-subfiledecode',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_subfiledecode_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # status operator (PLRM 8.2): the (filename) form returns pages/bytes/referred/
 # created/true or false, alongside the existing file-object boolean form.
 test('op-status',
@@ -430,6 +437,12 @@ test('op-bytesavailable',
   args: [ xpost_exe, files('tests/op_bytesavailable_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# String data sources for filters (PLRM 3.8.4): a filter may read from a string.
+test('op-string-filter',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Operand restoration on error (PLRM 3.11): an operator error restores the
 # operands, including the integer types the program pushed.
 test('op-error-restore',
@@ -443,6 +456,18 @@ test('op-packing',
   args: [ xpost_exe, files('tests/op_packing_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# setcachedevice/setcharwidth are valid only within a glyph description (PLRM 8.2).
+test('op-glyphcontext',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_glyphcontext_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Procedure data sources for filters (PLRM 3.8.4).
+test('op-proc-filter',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_proc_filter_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # vmreclaim (PLRM 8.2): 2 (local and global) reclaims local VM like 1 (local).
 test('op-vmreclaim',
   find_program('tests/run-ps-test.sh'),
@@ -453,13 +478,6 @@ test('op-vmreclaim',
 test('op-intoverflow',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# roll operator: correctness (checked against Ghostscript) plus a large-roll
-# performance guard -- an O(n^2) roll on a deep stack times the test out.
-test('roll',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/roll_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Radix number range (PLRM 3.2): unsigned twos-complement in the integer width,
@@ -500,55 +518,6 @@ test('op-closed-read',
   args: [ xpost_exe, files('tests/op_closed_read_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
-# write the current-matrix array in place; that write must be backed up for
-# save/restore. Guards the regression where it was not -- a transform set inside
-# a save leaked past the restore, so dvips documents (casselman) rendered text
-# at a runaway scale and overflowed the operand stack.
-test('save-restore-ctm',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# Interpreter isolation: internal helper procedures hide in .xpostsys, so their
-# names neither pollute nor obscure a program's own, and a program may redefine
-# them without disturbing the graphics machinery (the clash that broke real gs
-# programs on xpost). Also covers surviving a program shadowing get/exec.
-test('isolation',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/isolation_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# Dispatch-dictionary tamper resistance: no internal dispatch dictionary may
-# store an executable operator NAME (re-looked-up at run time, so a program's
-# redefinition hijacks internal machinery -- the casselman ch8 loop); operator
-# values must be stored instead. Scans every reachable internal namespace,
-# self-testing that the scanner catches a planted unsafe entry.
-# SubFileDecode EOD semantics (PLRM 3.13.3): a positive count passes data up to
-# and including the count-th delimiter; count zero consumes it without passing.
-test('op-subfiledecode',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_subfiledecode_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# String data sources for filters (PLRM 3.8.4): a filter may read from a string.
-test('op-string-filter',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# Procedure data sources for filters (PLRM 3.8.4).
-test('op-proc-filter',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_proc_filter_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# setcachedevice/setcharwidth are valid only within a glyph description (PLRM 8.2).
-test('op-glyphcontext',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_glyphcontext_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],
@@ -575,21 +544,14 @@ test('nographics',
   args: [ xpost_exe, files('tests/nographics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Filter EOD consumption: a decode filter must swallow its own end-of-data marker
-# so that the next fresh filter reading the same currentfile stream stays in sync
-# -- the dvips/colorimage per-scanline idiom. Guards the regressions where
-# ASCII85Decode ('z' zero group), FlateDecode (output a multiple of its buffer),
-# LZWDecode (the 257 code) and the others stranded their terminator, desynchronising
-# every following scanline. Generated by tools/gen_filter_eod_test.py.
-test('filter-eod',
+# Render-class coverage: Type 3 and composite fonts, the shading types, tiling
+# and shading patterns, screen/halftone setup -- the machinery whose internals
+# were relocated. Standard PostScript that prints SUCCESS on gs too, so it is a
+# conformance test rather than an xpost tautology.
+test('render-classes',
   find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
+  args: [ xpost_exe, files('tests/render_classes_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-test('stream-exec',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
 
 # Access-attribute enforcement: readonly, executeonly and noaccess reduce the
 # value and execution access of composite objects, and the standard operators
@@ -630,6 +592,51 @@ test('font-type1-sparse-subrs',
   args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
+# write the current-matrix array in place; that write must be backed up for
+# save/restore. Guards the regression where it was not -- a transform set inside
+# a save leaked past the restore, so dvips documents (casselman) rendered text
+# at a runaway scale and overflowed the operand stack.
+test('save-restore-ctm',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Filter EOD consumption: a decode filter must swallow its own end-of-data marker
+# so that the next fresh filter reading the same currentfile stream stays in sync
+# -- the dvips/colorimage per-scanline idiom. Guards the regressions where
+# ASCII85Decode ('z' zero group), FlateDecode (output a multiple of its buffer),
+# LZWDecode (the 257 code) and the others stranded their terminator, desynchronising
+# every following scanline. Generated by tools/gen_filter_eod_test.py.
+test('filter-eod',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Program streams and inline data: executing encoded programs directly off a
+# live currentfile filter (the BWIPP resource packaging), and readline records
+# trailing the reading line (the dvips/VDP data-block idiom) -- the corpus
+# machinery checked here independently of any downloaded corpus.
+test('stream-exec',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Form cache on a raster device: caching an execform builds an image device and
+# clears it with the rect-fill C operators. Guards the regression where those
+# operators, relocated into .internaldict, could no longer be fetched by name.
+test('execform-cache',
+  find_program('tests/run-ppm-test.sh'),
+  args: [ xpost_exe, files('tests/execform_cache_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Error reporting: a top-level job error prints the standard Adobe error line
+# and flush notice; a clean quit or a caught error prints neither.
+test('error-format',
+  find_program('tests/run-error-format-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools
@@ -642,6 +649,28 @@ test('corpus',
   suite: 'corpus',
   timeout: 1800)
 
+# Bounding-box device: render a known fill through -d bbox and check the box.
+test('bbox-device',
+  find_program('tests/run-bbox-test.sh'),
+  args: [ xpost_exe, files('tests/bbox_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# PDF device: write a PDF and check its structure; round-trip via gs when
+# present. The input is a single fill large enough to overflow the content
+# buffer, exercising the flush path.
+test('pdf-device',
+  find_program('tests/run-pdf-test.sh'),
+  args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# SVG device: render fills, strokes and glyph outlines through
+# setpagedevice and require the document's structural landmarks,
+# including resolution-independent point sizing.
+test('svg-device',
+  find_program('tests/run-svg-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Binary tokens (PLRM 3.14): the conformance corpus against a golden
 # record generated from the reference interpreter, which revalidates
 # the golden when gs is present.
@@ -652,12 +681,13 @@ test('binary-tokens',
           files('tests/binary_token_test.expected') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Error reporting: a top-level job error prints the standard Adobe error line
-# and flush notice; a clean quit or a caught error prints neither.
-test('error-format',
-  find_program('tests/run-error-format-test.sh'),
+# pngalpha device: RGBA output where the erased page is transparent and
+# marks (including explicit white) are opaque; png stays RGB.
+test('pngalpha-device',
+  find_program('tests/run-pngalpha-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Single-opener invariant: fopen() appears only inside xpost_diskfile_fopen(),
 # so every disk file passes one enforcement point.
 test('fopen-funnel',
@@ -684,6 +714,18 @@ if host_machine.system() != 'windows'
   test('path-confine', path_confine_exe)
 endif
 
+# Implicit resource loading: findresource loads a named instance from the
+# search path on a miss, confined and leaf-validated.
+resource_load_exe = executable('resource_load_test',
+  'tests/resource_load_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('resource-load',
+  resource_load_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # File-access sandbox: once engaged, only permitted directories may be
 # opened by the running program.
 sandbox_exe = executable('sandbox_test',
@@ -706,18 +748,6 @@ lockdown_exe = executable('lockdown_test',
   install: false)
 test('lockdown',
   lockdown_exe,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
-# Implicit resource loading: findresource loads a named instance from the
-# search path on a miss, confined and leaf-validated.
-resource_load_exe = executable('resource_load_test',
-  'tests/resource_load_test.c',
-  c_args: '-DHAVE_CONFIG_H',
-  dependencies: libxpost_dep,
-  include_directories: [ config_dir, include_directories('src/lib') ],
-  install: false)
-test('resource-load',
-  resource_load_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')

@@ -24,7 +24,7 @@ import os, subprocess, sys
 
 XP  = os.environ.get("XPOST", "build/src/bin/xpost")
 ENV = dict(os.environ, XPOST_DATA_DIR=os.path.abspath("data"),
-           LD_LIBRARY_PATH=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(XP))),"lib"))
+           LD_LIBRARY_PATH="build/src/lib")
 
 # Dump every name key of systemdict, one per line, as a plain string.
 DUMP = r"systemdict { pop dup type /nametype eq { 128 string cvs print (\n) print }{ pop } ifelse } forall"
