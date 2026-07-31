@@ -130,7 +130,7 @@ enum typepat
 /**
  * @brief constant size of optab structure
  */
-#define MAXOPS 1024
+#define MAXOPS 512
 
 /**
  * @brief initial size of systemdict (which then grows, automatically)

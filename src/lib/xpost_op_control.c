@@ -433,7 +433,9 @@ int xpost_op_exit (Xpost_Context *ctx)
 /* record what ended the run for the embedding caller. $error is the
    authority: a program may raise through the error machinery or set
    $error and stop directly, and either way its errorname and errorinfo
-   describe the failure. */
+   describe the failure. $error is a name in systemdict (its dictionary is
+   local), read from the base of the dict stack so a program's own
+   dictionaries above it do not shadow it. */
 static
 void _record_run_error(Xpost_Context *ctx)
 {
@@ -515,6 +517,16 @@ int xpost_op_stop(Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .rundied  -
+   the run's scheduling guard caught an error that the program did not:
+   record it so the embedding caller sees the run as errored */
+static
+int xpost_op_rundied(Xpost_Context *ctx)
+{
+    _record_run_error(ctx);
+    return 0;
+}
+
 /* -  wrap.done  -
    the finish marker of a wrapped-operator call: the recorded
    procedure ran to completion, so the frame beneath the marker --
@@ -547,16 +559,6 @@ int xpost_op_wrapop(Xpost_Context *ctx,
         return unregistered;
     if (!xpost_stack_push(ctx->lo, ctx->os, o))
         return stackoverflow;
-    return 0;
-}
-
-/* -  .rundied  -
-   the run's scheduling guard caught an error that the program did not:
-   record it so the embedding caller sees the run as errored */
-static
-int xpost_op_rundied(Xpost_Context *ctx)
-{
-    _record_run_error(ctx);
     return 0;
 }
 
@@ -652,8 +654,6 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "loop", (Xpost_Op_Func)xpost_op_proc_loop, 0, 1, proctype);
     INSTALL;
     ctx->opcode_shortcuts.loop = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
-    ctx->opcode_shortcuts.wrapdone = op.mark_.padw;
     /* internal loop-continuation operators, referenced by opcode only */
     op = xpost_operator_cons(ctx, "for.iterate", (Xpost_Op_Func)xpost_op_for_iterate, 0, 0);
     ctx->opcode_shortcuts.forcont = op.mark_.padw;
@@ -661,6 +661,8 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     ctx->opcode_shortcuts.repeatcont = op.mark_.padw;
     op = xpost_operator_cons(ctx, "loop.iterate", (Xpost_Op_Func)xpost_op_loop_iterate, 0, 0);
     ctx->opcode_shortcuts.loopcont = op.mark_.padw;
+    op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
+    ctx->opcode_shortcuts.wrapdone = op.mark_.padw;
     op = xpost_operator_cons(ctx, "exit", (Xpost_Op_Func)xpost_op_exit, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "stop", (Xpost_Op_Func)xpost_op_stop, 0, 0);

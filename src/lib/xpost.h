@@ -273,18 +273,6 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx,
                                 char *defs[]);
 
 /**
- * @brief Run a context's programs without loading graphics.
- *
- * By default each xpost_run() job loads the graphics modules before
- * running. When enabled, xpost_run() selects the no-graphics start
- * procedures: the interpreter is still locked down (the language
- * relocates into systemdict and the private namespaces are sealed),
- * but the graphics modules are never loaded. Use for a program that
- * needs no graphics, or to exercise the no-graphics lockdown path.
- */
-XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable);
-
-/**
  * @brief Receives text output from the interpreter.
  *
  * @param user The pointer registered alongside the handler.
@@ -324,6 +312,18 @@ XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
  * against collection; disable the snapshots for such use.
  */
 XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable);
+
+/**
+ * @brief Run a context's programs without loading graphics.
+ *
+ * By default each xpost_run() job loads the graphics modules before
+ * running. When enabled, xpost_run() selects the no-graphics start
+ * procedures: the interpreter is still locked down (the language
+ * relocates into systemdict and the private namespaces are sealed),
+ * but the graphics modules are never loaded. Use for a program that
+ * needs no graphics, or to exercise the no-graphics lockdown path.
+ */
+XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable);
 
 /**
  * @brief File-access sandbox: permit directory trees, then engage.

@@ -381,8 +381,7 @@ int _putpix(Xpost_Context *ctx,
 
 /* C fast-path for the base-class per-pixel FillRect. erasepage clears the
    whole page through FillRect, so this is on the hot path for every page. */
-static
-int _fillrect(Xpost_Context *ctx,
+static int _fillrect(Xpost_Context *ctx,
               Xpost_Object red,
               Xpost_Object green,
               Xpost_Object blue,
@@ -625,8 +624,8 @@ int newrasterdevice(Xpost_Context *ctx,
 static
 unsigned int _loadrasterdevicecont_opcode;
 
-/* Specializes or sub-classes the .xpost_PPMIMAGE device class.
-   load .xpost_PPMIMAGE
+/* Specializes or sub-classes the PPMIMAGE device class.
+   load PPMIMAGE
    load and call ps procedure .copydict which leaves copy on stack
    call loadrasterdevicecont by continuation.
  */

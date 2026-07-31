@@ -172,8 +172,8 @@ _xpost_main_usage(const char *filename)
     printf("  -d, --device=[STRING]              device name\n");
     printf("  -Dname=token, --define name=token  add definition to userdict\n");
     printf("  -I[DIR], --include [DIR]           add a resource search directory\n");
-    printf("  --no-graphics                      lock down and run without loading graphics\n");
     printf("  --no-sandbox                       allow the program unrestricted file access\n");
+    printf("  --no-graphics                      lock down and run without loading graphics\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
     printf("  -q, --quiet                        suppress interpreter messages (default)\n");
     printf("  -v, --verbose                      do not go quiet into that good night\n");
@@ -283,8 +283,8 @@ int main(int argc, char *argv[])
     int num_defs = 0;
     char **incs = NULL;
     int num_incs = 0;
-    int no_graphics = 0;
     int no_sandbox = 0;
+    int no_graphics = 0;
     int output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
     int have_device;
     int width = -1;
@@ -429,14 +429,14 @@ int main(int argc, char *argv[])
             {
                 no_sandbox = 1;
             }
+            else if (!strcmp(argv[i], "--no-graphics"))
+            {
+                no_graphics = 1;
+            }
             else if ((!strcmp(argv[i], "-q")) ||
                      (!strcmp(argv[i], "--quiet")))
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
-            }
-            else if (!strcmp(argv[i], "--no-graphics"))
-            {
-                no_graphics = 1;
             }
             else if ((!strcmp(argv[i], "-v")) ||
                      (!strcmp(argv[i], "--verbose")))

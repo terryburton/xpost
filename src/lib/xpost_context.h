@@ -164,14 +164,6 @@ struct _Xpost_Context {
     int sysdict_load_done; /**< the graphics language has been loaded into
                              systemdict; the one-shot unlock is spent */
 
-    int es_over;              /**< the exec-stack ceiling has been reported;
-                                   holds off a re-raise until depth recedes */
-    int os_over;              /**< likewise for the operand stack */
-    int ds_over;              /**< likewise for the dictionary stack */
-    int onerr_run;            /**< consecutive errors handled without the run
-                                   reaching `stop`; a runaway error cascade
-                                   (an error raised from within the error
-                                   machinery itself) drives this without bound */
     int scanner_defer; /**< the token just scanned is a brace procedure:
                             the interpreter pushes it as data rather than
                             executing it. A binary object sequence also
@@ -185,22 +177,29 @@ struct _Xpost_Context {
     char run_error_name[48];  /**< error that ended the last run ("" if none) */
     char run_error_info[128]; /**< errorinfo detail for the same ("" if none) */
     int run_uncaught;         /**< an error unwound past every stopped context */
+    int es_over;              /**< the exec-stack ceiling has been reported;
+                                   holds off a re-raise until depth recedes */
+    int os_over;              /**< likewise for the operand stack */
+    int ds_over;              /**< likewise for the dictionary stack */
+    int onerr_run;            /**< consecutive errors handled without the run
+                                   reaching `stop`; a runaway error cascade
+                                   (an error raised from within the error
+                                   machinery itself) drives this without bound */
 
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to
                                     this depth so its scheduling frames
                                     cannot accumulate across jobs */
-    int skip_graphics; /**< run the interpreter lockdown (.finalize) without
-                            loading graphics; xpost_run selects the no-graphics
-                            start procedures so a program that needs no graphics
-                            never pays to load them, and the no-graphics lockdown
-                            path is exercised */
-
     int job_snapshots; /**< take VM snapshots around each xpost_run job
                             (restored on the quit path); disable for a
                             persistent context serving many runs, where
                             the per-run snapshots would accumulate save
                             levels and pin every run's garbage */
+    int skip_graphics; /**< run the interpreter lockdown (.finalize) without
+                            loading graphics; xpost_run selects the no-graphics
+                            start procedures so a program that needs no graphics
+                            never pays to load them, and the no-graphics lockdown
+                            path is exercised */
 
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);

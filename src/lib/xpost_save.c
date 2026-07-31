@@ -169,8 +169,8 @@ unsigned xpost_save_ent_is_saved(Xpost_Memory_File *mem,
        sav.lev + 1 (see save_save_ent) so the "already backed up" marker
        cannot be confused with an object's birth stamp, which equals its
        birth count and is therefore <= sav.lev for anything protectable. */
-    return llev <= (unsigned int)sav.save_.lev ?
-        (tlev == (unsigned int)sav.save_.lev + 1) : 1;
+    return llev <= sav.save_.lev ?
+        (tlev == sav.save_.lev + 1u) : 1;
 }
 
 /* make a clone of ent, return new ent */

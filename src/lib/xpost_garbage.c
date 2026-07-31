@@ -740,7 +740,6 @@ static void _verify_reachability(Xpost_Context *ctx, Xpost_Memory_File *mem)
 {
     unsigned int head = 0;
     int bad = 0;
-
     (void)mem;
     _vq_n = 0;
     _vseen_lo_n = ctx->lo->table.nextent; _vseen_gl_n = ctx->gl->table.nextent;

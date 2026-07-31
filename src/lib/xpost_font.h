@@ -246,17 +246,6 @@ int xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xp
  */
 int xpost_font_face_glyph_render(void *face, unsigned int glyph_index);
 
-/**
- * @brief Report a glyph outline's ink extent and advance without
- * rasterizing, in 26.6 glyph space (y-up around the pen).
- *
- * @return 1 on success; 0 when the glyph cannot load or has no
- * outline (a bitmap strike), in which case render instead.
- */
-int xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
-                                  long *xmin, long *ymin, long *xmax, long *ymax,
-                                  long *advance_x, long *advance_y);
-
 /* the glyph cache behind the rendering pair: status and limits for
    the cache operators, and keyed raster entry points for glyphs
    painted by procedure rather than by face */
@@ -275,6 +264,17 @@ int xpost_font_cache_insert_bits(const void *k1, unsigned long k2,
                                  const unsigned char *bits, int rows,
                                  int width, int pitch, int left, int top,
                                  long advance_x, long advance_y);
+
+/**
+ * @brief Report a glyph outline's ink extent and advance without
+ * rasterizing, in 26.6 glyph space (y-up around the pen).
+ *
+ * @return 1 on success; 0 when the glyph cannot load or has no
+ * outline (a bitmap strike), in which case render instead.
+ */
+int xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
+                                  long *xmin, long *ymin, long *xmax, long *ymax,
+                                  long *advance_x, long *advance_y);
 
 void xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y);
 

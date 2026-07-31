@@ -209,11 +209,13 @@ static
 int _default_matrix(Xpost_Context *ctx,
                     Xpost_Object psmat)
 {
+    Xpost_Object userdict;
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object devdic;
     Xpost_Object defmat;
 
+    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     if (xpost_object_get_type(gd) == invalidtype)
         return undefined;

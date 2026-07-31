@@ -157,7 +157,6 @@ int xpost_op_dict_begin(Xpost_Context *ctx,
 {
     if (!xpost_object_is_readable(ctx, D))
         return invalidaccess;
-
     ++ctx->namebind_gen; /* visibility changes */
 
     if (!xpost_stack_push(ctx->lo, ctx->ds, D))
@@ -497,10 +496,8 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
 {
     int err;
 
-    /* forall of an unreadable dict is invalidaccess, per the access rules */
     if (!xpost_object_is_readable(ctx, D))
         return invalidaccess;
-
     if (!_dict_forall_step(ctx, &D, &err))
         return err;
 

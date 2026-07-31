@@ -1267,8 +1267,7 @@ xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_
 /* The ink extent of a glyph's outline in 26.6 glyph space (y-up around
    the pen), without rasterizing. An empty outline (a space) reports a
    degenerate box; a glyph with no outline at all (a bitmap strike)
-   reports failure so the caller can fall back to rendering. The advance
-   comes from the same load, in 16.16 as the rendering path reports it. */
+   reports failure so the caller can fall back to rendering. */
 int
 xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
                               long *xmin, long *ymin, long *xmax, long *ymax,

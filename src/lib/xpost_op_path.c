@@ -652,9 +652,13 @@ int _rcurveto_cont(Xpost_Context *ctx,
 
 /* walk a packed path accumulating the bounding box of every stored
    coordinate pair (curve controls and close repeats included, matching
-   the behaviour of the dictionary-walking predecessors); returns 0 on
-   a malformed path or when a curve is present and curves are not
-   accepted, 2 on an empty path */
+   the behaviour of the dictionary-walking predecessors); a moveto that
+   ends the path is disregarded (PLRM pathbbox: a trailing moveto marks
+   only a pending current point, as after charpath advances it, and is
+   not part of the box); when inv is non-NULL it is an affine matrix
+   (PostScript [a b c d tx ty] layout) applied to each stored point
+   before accumulation; returns 0 on a malformed path or when a curve
+   is present and curves are not accepted, 2 on an empty path */
 static
 int _path_walk_bbox(Xpost_Context *ctx, Xpost_Object path,
                     int accept_curves, const real *inv,
@@ -1507,14 +1511,10 @@ int _arc_append(Xpost_Context *ctx,
     if (fabs(a2 - a1) > 5760)
         a2 = a1 + dir * 5760;
 
-    /* snap an endpoint that lands a hair off a quadrant boundary onto it: the
-       tangent-point arithmetic behind arct/arcto leaves a right-angle corner's
-       start/end angle a shade off 90n, which would otherwise flip a floor() and
-       emit a full quadrant plus a sub-ulp sliver instead of one segment. The
-       tolerance is set from single-precision reals (typedef float real): one ulp
-       of a degree value near 90 is 90*2^-23 ~= 7.6e-6, so an angle within 1e-5
-       (just over one ulp) of 90n is a right angle blurred by float rounding, not
-       a distinct span. Anything a full ulp or more away is left to split. */
+    /* An endpoint within 1e-5 degrees of a quadrant boundary snaps onto it, so a
+       span meeting a 90n boundary is one segment rather than a quadrant plus a
+       sub-ulp sliver. The tolerance covers single-precision rounding: one ulp of
+       a degree value near 90 is 90*2^-23 ~= 7.6e-6. */
     {
         double q1 = floor(a1 / 90.0 + 0.5) * 90.0;
         double q2 = floor(a2 / 90.0 + 0.5) * 90.0;
@@ -1700,7 +1700,6 @@ int _arcto_cont(Xpost_Context *ctx,
                         x0.real_.val, y0.real_.val, 1);
 }
 
-#define NUM(x) (xpost_object_get_type(x)==realtype?x.real_.val:(real)x.int_.val)
 /* destination for flattening: appends must be able to re-seat
    /currpath in the graphics state when the path string grows */
 typedef struct
