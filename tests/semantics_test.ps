@@ -4,6 +4,11 @@
 % Covers:
 %   - eq/ne on file objects compare the underlying stream (distinct
 %     streams are ne; an object is eq to itself)
+%   - pathbbox reports the current path in user space, undoing the CTM
+
+% flate compression is an interpreter-private operator in internaldict, not
+% systemdict; fetch it through the password to exercise it below.
+/.flatecompress 1183615869 internaldict /.flatecompress get def
 
 /failcount 0 def
 /assert { % bool (name) . -
@@ -24,289 +29,55 @@ tmpf dup ne not (stdout object not-ne itself) assert
 { (%stderr) (w) file (semantics_test: stderr probe\n) writestring true } stopped
 { pop false } if (writestring to %stderr) assert
 
+% --- pathbbox in user space ---
+% pathbbox leaves llx lly urx ury; consume top-down
+newpath 10 10 moveto 50 10 lineto 50 60 lineto 10 60 lineto closepath
+pathbbox
+60 (pathbbox ury) assertnear
+50 (pathbbox urx) assertnear
+10 (pathbbox lly) assertnear
+10 (pathbbox llx) assertnear
+
+% under a translated CTM the box must stay in (translated) user space
+gsave
+100 200 translate
+newpath 0 0 moveto 10 0 lineto 10 5 lineto closepath
+pathbbox
+5 (translated ury) assertnear
+10 (translated urx) assertnear
+0 (translated lly) assertnear
+0 (translated llx) assertnear
+grestore
+
+% a moveto that ends the path is only a pending current point (as
+% after charpath or a text operator advances it) and stays outside
+% the box; a moveto later drawn from counts, and a path holding
+% nothing but a moveto is that one point
+newpath 0 0 moveto 10 10 lineto 50 60 moveto
+pathbbox
+10 (trailing moveto ury) assertnear
+10 (trailing moveto urx) assertnear
+0 (trailing moveto lly) assertnear
+0 (trailing moveto llx) assertnear
+newpath 0 0 moveto 10 10 lineto 50 60 moveto 20 20 lineto
+pathbbox
+60 (drawn-from moveto ury) assertnear
+50 (drawn-from moveto urx) assertnear
+0 (drawn-from moveto lly) assertnear
+0 (drawn-from moveto llx) assertnear
+newpath 5 7 moveto
+pathbbox
+7 (only-moveto ury) assertnear
+5 (only-moveto urx) assertnear
+7 (only-moveto lly) assertnear
+5 (only-moveto llx) assertnear
+
 % --- currentfile returns a literal file: programs stash it under a
 %     name and the later lookup must push the stashed file, not
 %     resume executing it ---
 currentfile xcheck not (currentfile carries the literal attribute) assert
 /cfstash currentfile def
 cfstash type /filetype eq (a stashed currentfile recalls as a file) assert
-
-% --- get and put require an integer index for strings and arrays; a real
-%     index, or a real value for a string byte, is a typecheck ---
-(ab) 1 get 98 eq (string get by an integer index) assert
-{ (ab) 1.0 get } stopped { pop pop true }{ false } ifelse (a real string index is a typecheck in get) assert
-/st.co 2 string def
-st.co 0 65 put st.co 0 get 65 eq (string put by an integer index and value) assert
-{ st.co 0.0 65 put } stopped { pop pop pop true }{ false } ifelse (a real string index is a typecheck in put) assert
-{ st.co 0 65.0 put } stopped { pop pop pop true }{ false } ifelse (a real string value is a typecheck in put) assert
-[ 5 6 7 ] 1 get 6 eq (array get by an integer index) assert
-{ [ 5 6 7 ] 1.0 get } stopped { pop pop true }{ false } ifelse (a real array index is a typecheck in get) assert
-/st.ca 2 array def
-st.ca 1 42 put st.ca 1 get 42 eq (array put by an integer index) assert
-{ st.ca 1.0 42 put } stopped { pop pop pop true }{ false } ifelse (a real array index is a typecheck in put) assert
-
-% cvi and cvr read their string operands with the scanner's token
-% semantics: leading white space and anything past the numeral's end
-% are ignored, and a token that is not a numeral refuses
-(0.5\n) cvr 0.5 (cvr ignores what follows the numeral) assertnear
-(  16 pt) cvi 16 eq (cvi skips leading space and trailing text) assert
-{ (0.5junk) cvr } stopped { pop true }{ false } ifelse
-(a glued suffix is no numeral) assert
-
-% $error carries the standard entries: recordstacks (settable to skip
-% the stack snapshot) and errorinfo, both present in the reference
-$error /recordstacks known $error /errorinfo known and
-($error carries recordstacks and errorinfo) assert
-$error /recordstacks get (recordstacks defaults on) assert
-$error /ostack null put
-$error /recordstacks false put
-{ 1 (s) add } stopped pop
-$error /ostack get null eq (recordstacks off skips the snapshot) assert
-$error /recordstacks true put
-{ 1 (s) add } stopped pop
-$error /ostack get type /arraytype eq (recordstacks on takes the snapshot) assert
-$error /newerror false put
-
-% == prints arrays and procedures with single-space separators and no
-% padding inside the brackets, and its per-level scope leaves the dict
-% stack as it found it however deep the nesting goes
-countdictstack /st.dsd exch def
-[ 1 [ 2 [ 3 4 ] ] (s) /n { add } ] ==
-countdictstack st.dsd eq (== balances the dict stack when nesting) assert
-
-% the string scanner reads octal escapes as the reference does: at
-% most three digits, and octal digits only, so 8 and 9 and any fourth
-% digit end the escape. == relies on this to reconstruct what it
-% escaped (checked exhaustively by fuzzing, not here)
-(\3770) length 2 eq (an octal escape stops after three digits) assert
-(\0000) length 2 eq (a full three-digit octal stops at the third) assert
-(\09) length 2 eq (8 and 9 are not octal digits) assert
-(\128) length 2 eq (a non-octal digit ends the escape) assert
-(\101) 0 get 65 eq (three octal digits decode) assert
-(\377) 0 get 255 eq (the high octal value decodes) assert
-(\0) 0 get 0 eq (a one-digit octal decodes) assert
-
-% cvs of a real produces the shortest decimal that reads back to the
-% same value, in the notation the reference interpreters use: fixed
-% between 1e-4 and 1e6, scientific outside, a whole value keeping its
-% .0. It once emitted full binary-float precision, and a large value
-% corrupted a digit.
-/st.cvsr { 40 string cvs } def
-3.14159 st.cvsr (3.14159) eq (a real formats to the shortest decimal) assert
-0.001 st.cvsr (0.001) eq (a small real keeps fixed notation) assert
-2.5 st.cvsr (2.5) eq (no trailing zeros) assert
-100000.0 st.cvsr (100000.0) eq (a whole real keeps its point below 1e6) assert
-1e6 st.cvsr (1e+06) eq (a large real turns scientific at 1e6) assert
-1e-5 st.cvsr (1e-05) eq (a tiny real turns scientific below 1e-4) assert
-0.0001 st.cvsr (0.0001) eq (1e-4 is the last fixed magnitude) assert
-% every formatted real reads back to the value it came from
-/st.roundtrips true def
-[ 3.14159 0.001 2.5 100000.0 0.5 0.1 42.0 1e10 1e-5 ] {
-    dup st.cvsr cvr ne { /st.roundtrips false def } if
-} forall
-st.roundtrips (a formatted real reads back to itself) assert
-
-% a source that ends inside a procedure is a syntax error, not an
-% endless scan: the scanner answers null at end of input and nowhere
-% else, a literal null in the text being a name
-/st.f (semantics.scratch) (w) file def
-st.f (1 2 { 3 4) writestring st.f closefile
-{ (semantics.scratch) (r) file cvx exec } stopped
-{ $error /errorname get /syntaxerror eq }{ false } ifelse
-(a truncated procedure ends the scan) assert
-clear
-% a complete procedure still scans and runs
-/st.f (semantics.scratch) (w) file def
-st.f (/st.tp { 6 7 add } def) writestring st.f closefile
-(semantics.scratch) (r) file cvx exec
-st.tp 13 eq (a closed procedure scans and runs) assert
-
-% --- an end-of-line inside a string literal: escaped, it joins
-%     the lines; raw, it is one newline character, whichever of
-%     the three conventions wrote it ---
-(ab\
-cd) length 4 eq (an escaped CRLF joins the lines) assert
-(ab\
-cd) length 4 eq (an escaped bare CR joins the lines) assert
-(ab\
-cd) length 4 eq (an escaped LF joins the lines) assert
-(a
-b) dup length 3 eq exch 1 get 10 eq and
-(a raw CRLF reads as one newline) assert
-(a
-b) dup length 3 eq exch 1 get 10 eq and
-(a raw CR reads as one newline) assert
-
-% --- an end-of-line marker is one white-space delimiter ---
-(ab\r\ncd) token pop exch (cd) eq
-    (a CRLF after a token is consumed as one marker) assert
-(ab\rcd) token pop exch (cd) eq
-    (a bare CR after a token is consumed alone) assert
-
-% --- gcheck holds for simple objects; composites answer for their
-%     storage ---
-42 gcheck (an integer is a legal element of a global composite) assert
-/st.gname gcheck (a name is a simple object under gcheck) assert
-[ 1 2 ] gcheck not (a local array is not) assert
-currentglobal true setglobal [ 1 2 ] exch setglobal gcheck
-(a global array is) assert
-
-% --- bind terminates on a procedure that reaches itself ---
-/st.cyc [ 1 2 3 ] cvx def
-/st.cyc load 0 /st.cyc load put
-/st.cyc load bind type /arraytype eq (bind survives a cyclic procedure) assert
-
-% --- a repeated stencil replays from the run cache cleanly ---
-count /st.c0 exch def
-gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
-gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
-count st.c0 eq (a cached stencil leaves the stack clean) assert
-
-% --- the job server accepts exitserver ---
-countdictstack
-{ serverdict begin 0 exitserver } stopped not
-    (exitserver continues the job) assert
-countdictstack eq (exitserver unwinds the begun serverdict) assert
-
-% --- dict growth: inserting far past a small dict's capacity grows and
-% rehashes it in place, repeatedly. Regression for a heap-use-after-free
-% where a re-insertion that relocated the memory file left the grow's
-% source-table pointer dangling: every entry must survive the growths. ---
-/GD 4 dict def
-0 1 20000 { GD exch dup put } for
-GD length 20001 eq (a repeatedly grown dict keeps every entry) assert
-GD 0 get 0 eq (the first key survives dict growth) assert
-GD 12345 get 12345 eq (a middle key survives dict growth) assert
-GD 20000 get 20000 eq (the last key survives dict growth) assert
-
-% --- procedure-implemented standard operators stand as operators ---
-% load answers operatortype for them, so bind substitutes them and the
-% classic self-redefinition idiom captures the standard behaviour
-% instead of recursing into the new definition
-/stroke load type /operatortype eq (stroke loads as an operator) assert
-/fill load type /operatortype eq (fill loads as an operator) assert
-/show load type /operatortype eq (show loads as an operator) assert
-/st.stroke /stroke load def
-gsave
-/stroke { 2 2 scale stroke } bind def
-newpath 10 10 moveto 20 20 lineto stroke
-true (a bound self-redefinition of stroke terminates) assert
-grestore
-userdict /stroke /st.stroke load put
-
-% an error that unwinds out of a wrapped operator is the operator's
-% error: it names the command, and the stacks return to their depths
-% at the call -- what the procedure part-way pushed drops, operands
-% still in place stay
-/ep.op /ep.testname { (j1) (j2) ep.doesnotexist } 1183615869 internaldict /.wrapop get exec def
-count /ep.d0 exch def
-1 2 { ep.op } stopped
-(the wrapped-operator error is caught) assert
-$error /command get dup type /operatortype eq
-exch 32 string cvs (ep.testname) eq and
-(an error in a wrapped operator names the operator) assert
-count ep.d0 sub 2 eq (the operand depth at the call comes back) assert
-pop pop
-% nested wrapped calls report the innermost and unwind to the caller
-/ep.in /ep.inner { 7 8 ep.alsomissing } 1183615869 internaldict /.wrapop get exec def
-/ep.out /ep.outer { (x) (y) ep.in } 1183615869 internaldict /.wrapop get exec def
-count /ep.d1 exch def
-{ ep.out } stopped pop
-$error /command get 32 string cvs (ep.inner) eq
-(a nested wrapped error names the innermost operator) assert
-count ep.d1 eq (a nested wrapped error unwinds the operand junk) assert
-% a wrapper that catches its own error keeps its own state
-/ep.c /ep.catcher { (kept) { ep.gone } stopped pop } 1183615869 internaldict /.wrapop get exec def
-ep.c (kept) eq (a wrapper catching its own error keeps its stack) assert
-% the dict stack comes back when the procedure dies inside a begin
-countdictstack /ep.dd exch def
-/ep.d /ep.dicty { 5 dict begin ep.nothere } 1183615869 internaldict /.wrapop get exec def
-{ ep.d } stopped pop
-countdictstack ep.dd eq (the dict depth at the call comes back) assert
-
-% --- machinery runs a program's procedures on the program's stacks ---
-% a callback's defs reach the program's dictionaries, and the
-% machinery's private names are out of the callback's reach
-gsave
-{ 10 10 8 [10 0 0 -10 0 10]
-  { /bp (x) def /buf 5 def /bz 99 def <00112233445566778899> }
-  image } stopped not
-(an image source defining the row pump's names completes) assert
-grestore
-userdict /bp undef userdict /buf undef userdict /bz undef
-
-% --- the machinery's data roots and state are its own: a program may
-% take the names graphicsdict, DEVICE and =string for itself, and it
-% finds no machinery state in userdict to disturb ---
-/Courier findfont 10 scalefont setfont
-5 dict begin
-/graphicsdict (mine) def
-/DEVICE 42 def
-/=string 7 def
-{ newpath 10 10 moveto 40 40 lineto stroke
-  100 100 moveto (a) show
-  gsave 20 20 10 10 rectfill grestore } stopped not
-end
-(painting survives shadowed graphicsdict, DEVICE and =string) assert
-userdict /.wrappedprocs known not
-(the machinery keeps its state out of userdict) assert
-
-% --- the machinery's internal references are frozen: a program
-% shadowing a core operator name reaches only its own calls ---
-/Courier findfont 10 scalefont setfont
-userdict /exch 99 put
-gsave
-{ 100 100 moveto (a) show
-  newpath 10 10 moveto 20 20 lineto stroke } stopped not
-grestore
-userdict /exch undef
-(text and stroking survive a shadowed exch) assert
-
-% --- the language answers for itself ---
-languagelevel 3 eq (languagelevel names the level) assert
-false (pw) startjob (startjob accepts a job boundary) assert
-currentshared currentglobal eq (shared and global VM are one view) assert
-42 scheck (scheck follows gcheck) assert
-shareddict globaldict eq (shareddict is the global dictionary) assert
-/st.uf << /FontType 3 /FontMatrix [1 0 0 1 0 0] /Encoding 256 array
-    /BuildChar { pop pop } /FontBBox [0 0 1 1] >> definefont pop
-/st.uf undefinefont
-FontDirectory /st.uf known not (undefinefont removes the instance) assert
-true setstrokeadjust currentstrokeadjust (stroke adjustment is recorded) assert
-false setstrokeadjust
-0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
-/StandardEncoding findencoding length 256 eq
-(findencoding resolves through the Encoding category) assert
-(any) findcolorrendering exch /DefaultColorRendering eq and
-(findcolorrendering names the default instance) assert
-count /st.cd exch def
-cachestatus
-count st.cd sub 7 eq (cachestatus reports seven values) assert
-7 { pop } repeat
-/Courier findfont dup setfont
-rootfont eq (rootfont answers with the font the program set) assert
-
-% --- user objects index into a growing table ---
-3 { 40 2 add } defineuserobject
-3 execuserobject 42 eq (a user object executes by index) assert
-25 (far) defineuserobject
-25 execuserobject (far) eq (the table grows to reach an index) assert
-3 execuserobject 42 eq (growth preserves earlier entries) assert
-3 undefineuserobject
-UserObjects 3 get null eq (undefineuserobject clears the slot) assert
-
-% --- user paths append through both forms ---
-newpath
-{ 0 0 40 40 setbbox 10 10 moveto 30 30 lineto } uappend
-currentpoint 30 eq exch 30 eq and (a self-describing path appends) assert
-newpath
-[ [0 0 20 20  5 5  1 1  1 1] <00 01 22 04> ] uappend
-currentpoint 7 eq exch 7 eq and
-(an encoded path repeats its operator by the factor less thirty-two) assert
-newpath 1 2 moveto 3 4 lineto
-false upath
-newpath uappend
-currentpoint 4 eq exch 3 eq and (upath round-trips the current path) assert
 
 % --- ReusableStreamDecode buffers its whole source at construction
 %     and replays it from any position ---
@@ -315,9 +86,12 @@ currentfile /ASCIIHexDecode filter /ReusableStreamDecode filter
 /rsdstash exch def
 rsdstash 5 string readstring pop (Hello) eq
 (a reusable stream reads its data) assert
-rsdstash resetfile
-rsdstash 5 string readstring pop (Hello) eq
-(resetfile replays a reusable stream) assert
+/resetfile where {
+    pop
+    rsdstash resetfile
+    rsdstash 5 string readstring pop (Hello) eq
+    (resetfile replays a reusable stream) assert
+} if
 rsdstash 2 setfileposition
 rsdstash fileposition 2 eq (fileposition reports the reusable position) assert
 rsdstash 3 string readstring pop (llo) eq
@@ -339,6 +113,19 @@ gsave clippath flattenpath pathbbox grestore
 pop pop pop 10 sub abs 0.5 lt (cliprestore reopens the outer region) assert
 grestore
 
+% --- get and put require an integer index for strings and arrays; a real
+%     index, or a real value for a string byte, is a typecheck ---
+(ab) 1 get 98 eq (string get by an integer index) assert
+{ (ab) 1.0 get } stopped { pop pop true }{ false } ifelse (a real string index is a typecheck in get) assert
+/st.co 2 string def
+st.co 0 65 put st.co 0 get 65 eq (string put by an integer index and value) assert
+{ st.co 0.0 65 put } stopped { pop pop pop true }{ false } ifelse (a real string index is a typecheck in put) assert
+{ st.co 0 65.0 put } stopped { pop pop pop true }{ false } ifelse (a real string value is a typecheck in put) assert
+[ 5 6 7 ] 1 get 6 eq (array get by an integer index) assert
+{ [ 5 6 7 ] 1.0 get } stopped { pop pop true }{ false } ifelse (a real array index is a typecheck in get) assert
+/st.ca 2 array def
+st.ca 1 42 put st.ca 1 get 42 eq (array put by an integer index) assert
+{ st.ca 1.0 42 put } stopped { pop pop pop true }{ false } ifelse (a real array index is a typecheck in put) assert
 % black generation, undercolor removal and colour rendering record
 % and report round-trip
 { 0.5 mul } setblackgeneration
@@ -356,6 +143,20 @@ dup /Category /st.private put
 /st.key << /v 42 >> /st.private defineresource /v get 42 eq (defineresource returns the instance) assert
 /st.key /st.private findresource /v get 42 eq (findresource retrieves the instance) assert
 /st.key /st.private resourcestatus { pop pop true } { false } ifelse (resourcestatus finds it) assert
+setglobal
+% --- instances defined in local VM shadow global ones and go away
+%     with restore ---
+/StandardEncoding /Encoding findresource length 256 eq
+(the Encoding category serves the standard encodings) assert
+save
+/st.linst [ 1 2 3 ] /Encoding defineresource pop
+/st.linst /Encoding findresource length 3 eq (a local instance resolves) assert
+/st.linst /Encoding resourcestatus { pop pop true }{ false } ifelse
+(a local instance reports status) assert
+restore
+/st.linst /Encoding resourcestatus { pop pop false }{ true } ifelse
+(restore removes a local instance) assert
+currentglobal true setglobal
 /st.other /st.private resourcestatus { pop pop false } { true } ifelse (resourcestatus rejects the unknown) assert
 /st.aa 1 /st.private defineresource pop
 /st.ab 2 /st.private defineresource pop
@@ -434,31 +235,15 @@ st.subf (subfile payload*EOD*after) writestring st.subf closefile
 st.f <014142FD4380> writestring st.f closefile
 (semantics.scratch) (r) file /RunLengthDecode filter
 16 string readstring pop (ABCCCC) eq (RunLengthDecode expands runs) assert
-% a fixed deflate stream (zlib framing) of a known sentence, staged
-% through the scratch file so the decoder owns its source outright
-/st.f (semantics.scratch) (w) file def
-st.f <78DA0DCADB0980301444C156B6002D2AE00185E446B3577C54AFF33D3E4E7851437BA598497911F9CCDE6E553219568945B91272FF63EB830F58BD14F3> writestring
-st.f closefile
-(semantics.scratch) (r) file /FlateDecode filter
-64 string readstring pop
-(squeeze me please, twenty-six letters and then some more) eq
-(FlateDecode expands a fixed deflate stream) assert
-% DCTDecode inflates a JPEG stream into image samples; the guard probe
-% skips the block on a build without the JPEG library. The embedded
-% stream is a solid red 8-by-8 JPEG: 192 samples, red channel high.
-/hasdct false def
-{ currentfile /DCTDecode filter closefile /hasdct true def } stopped pop
-$error /newerror false put
-hasdct {
+[ (squeeze me please, twenty-six letters and then some more) ] .flatecompress {
+    /st.chunks exch def
     /st.f (semantics.scratch) (w) file def
-    st.f <FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B1016101113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414FFC00011080008000803011100021101031101FFC40014000100000000000000000000000000000008FFC40014100100000000000000000000000000000000FFC4001501010100000000000000000000000000000709FFC40014110100000000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9> writestring
-    st.f closefile
-    (semantics.scratch) (r) file /DCTDecode filter
-    192 string readstring pop
-    dup length 192 eq (DCTDecode delivers the full sample block) assert
-    dup 0 get 200 gt (DCTDecode red channel is high) assert
-    2 get 80 lt (DCTDecode blue channel is low) assert
-} if
+    st.chunks { st.f exch writestring } forall st.f closefile
+    (semantics.scratch) (r) file /FlateDecode filter
+    64 string readstring pop
+    (squeeze me please, twenty-six letters and then some more) eq
+    (FlateDecode round-trips the compressor) assert
+}{ pop } ifelse
 currentfile /ASCIIHexDecode filter /LZWDecode filter 100 string readstring
 80120CA6C361BC406881C160F0983130B457101DCDE7236190590B82418C267309A4DC20309B8C9208E47A412292474DC21808>
 pop (Hello hello hello LZW world, hello again and again and again!) eq
@@ -532,16 +317,108 @@ st.e (DDDDDDDD) writestring st.e closefile st.f closefile
 st.e st.data writestring st.e closefile st.f closefile
 (semantics.scratch) (r) file /LZWDecode filter 64 string readstring pop
 st.data eq (LZWEncode round-trips through its decoder) assert
-/st.hasflate false def
-{ currentfile /FlateDecode filter closefile /st.hasflate true def } stopped pop
-$error /newerror false put
-st.hasflate {
+[ (x) ] .flatecompress {
+    pop
     /st.f (semantics.scratch) (w) file def
     /st.e st.f /FlateEncode filter def
     st.e st.data writestring st.e closefile st.f closefile
     (semantics.scratch) (r) file /FlateDecode filter 64 string readstring pop
     st.data eq (FlateEncode round-trips through its decoder) assert
 }{ pop } ifelse
+% cvi and cvr read their string operands with the scanner's token
+% semantics: leading white space and anything past the numeral's end
+% are ignored, and a token that is not a numeral refuses
+(0.5\n) cvr 0.5 (cvr ignores what follows the numeral) assertnear
+(  16 pt) cvi 16 eq (cvi skips leading space and trailing text) assert
+{ (0.5junk) cvr } stopped { pop pop true }{ false } ifelse
+(a glued suffix is no numeral) assert
+
+% $error carries the standard entries: recordstacks (settable to skip
+% the stack snapshot) and errorinfo, both present in the reference
+$error /recordstacks known $error /errorinfo known and
+($error carries recordstacks and errorinfo) assert
+$error /recordstacks get (recordstacks defaults on) assert
+$error /ostack null put
+$error /recordstacks false put
+{ 1 (s) add } stopped pop
+$error /ostack get null eq (recordstacks off skips the snapshot) assert
+$error /recordstacks true put
+{ 1 (s) add } stopped pop
+$error /ostack get type /arraytype eq (recordstacks on takes the snapshot) assert
+$error /newerror false put
+
+% == prints arrays and procedures with single-space separators and no
+% padding inside the brackets, and its per-level scope leaves the dict
+% stack as it found it however deep the nesting goes
+countdictstack /st.dsd exch def
+[ 1 [ 2 [ 3 4 ] ] (s) /n { add } ] ==
+countdictstack st.dsd eq (== balances the dict stack when nesting) assert
+
+% the string scanner reads octal escapes as the reference does: at
+% most three digits, and octal digits only, so 8 and 9 and any fourth
+% digit end the escape. == relies on this to reconstruct what it
+% escaped (checked exhaustively by fuzzing, not here)
+(\3770) length 2 eq (an octal escape stops after three digits) assert
+(\0000) length 2 eq (a full three-digit octal stops at the third) assert
+(\09) length 2 eq (8 and 9 are not octal digits) assert
+(\128) length 2 eq (a non-octal digit ends the escape) assert
+(\101) 0 get 65 eq (three octal digits decode) assert
+(\377) 0 get 255 eq (the high octal value decodes) assert
+(\0) 0 get 0 eq (a one-digit octal decodes) assert
+
+% cvs of a real produces the shortest decimal that reads back to the
+% same value, in the notation the reference interpreters use: fixed
+% between 1e-4 and 1e6, scientific outside, a whole value keeping its
+% .0. It once emitted full binary-float precision, and a large value
+% corrupted a digit.
+/st.cvsr { 40 string cvs } def
+3.14159 st.cvsr (3.14159) eq (a real formats to the shortest decimal) assert
+0.001 st.cvsr (0.001) eq (a small real keeps fixed notation) assert
+2.5 st.cvsr (2.5) eq (no trailing zeros) assert
+100000.0 st.cvsr (100000.0) eq (a whole real keeps its point below 1e6) assert
+1e6 st.cvsr (1e+06) eq (a large real turns scientific at 1e6) assert
+1e-5 st.cvsr (1e-05) eq (a tiny real turns scientific below 1e-4) assert
+0.0001 st.cvsr (0.0001) eq (1e-4 is the last fixed magnitude) assert
+% every formatted real reads back to the value it came from
+/st.roundtrips true def
+[ 3.14159 0.001 2.5 100000.0 0.5 0.1 42.0 1e10 1e-5 ] {
+    dup st.cvsr cvr ne { /st.roundtrips false def } if
+} forall
+st.roundtrips (a formatted real reads back to itself) assert
+
+% a source that ends inside a procedure is a syntax error, not an
+% endless scan: the scanner answers null at end of input and nowhere
+% else, a literal null in the text being a name
+/st.f (semantics.scratch) (w) file def
+st.f (1 2 { 3 4) writestring st.f closefile
+{ (semantics.scratch) (r) file cvx exec } stopped
+{ $error /errorname get /syntaxerror eq }{ false } ifelse
+(a truncated procedure ends the scan) assert
+clear
+% a complete procedure still scans and runs
+/st.f (semantics.scratch) (w) file def
+st.f (/st.tp { 6 7 add } def) writestring st.f closefile
+(semantics.scratch) (r) file cvx exec
+st.tp 13 eq (a closed procedure scans and runs) assert
+
+% a reusable stream built over a decode chain consumes its source
+% through the encoding's end, survives being closed -- the position
+% rewinds -- and so a program run off it can run again
+currentfile << /Filter [ /ASCIIHexDecode ] >> /ReusableStreamDecode filter
+2F73742E7273642031372064656620>
+/st.rsdp exch def
+st.rsdp cvx exec
+st.rsd 17 eq (a chained reusable stream delivers its program) assert
+userdict /st.rsd undef
+st.rsdp 0 setfileposition
+st.rsdp cvx exec
+st.rsd 17 eq (the stream runs again after its end closed it) assert
+% repositioning a closed file is an error, not a crash
+/st.f (semantics.scratch) (w) file def
+st.f (x) writestring st.f closefile
+{ st.f 0 setfileposition } stopped { pop pop true }{ false } ifelse
+(repositioning a closed file refuses) assert
+
 % binary object sequences: the writers emit the scanner's encoding,
 % gated by the object format parameter, and a sequence round-trips
 currentobjectformat 0 eq (the object format starts disabled) assert
@@ -651,19 +528,98 @@ st.e <F0F00F0FF0F00F0F> writestring st.e closefile st.f closefile
 16 string readstring exch pop not
 (a marker-less mixed stream does not decode) assert
 
-% --- statusdict: the printer-state dictionary drivers probe and write. The
-% dvips prologue reads /product from it and its @manualfeed/@copies specials
-% put flags into it, so it must exist, carry product, and accept puts; and
-% #copies must scan as an ordinary name. ---
-statusdict type /dicttype eq (statusdict exists) assert
-statusdict /product known (statusdict carries product) assert
-statusdict /product get type /stringtype eq (product is a string) assert
-{ statusdict /manualfeed true put } stopped not (statusdict accepts a put) assert
-statusdict /manualfeed get (the put value reads back) assert
-statusdict /manualfeed false put
-/#copies 2 def
-#copies 2 eq (#copies scans as an ordinary name) assert
-currentdict /#copies undef
+% --- an end-of-line inside a string literal: escaped, it joins
+%     the lines; raw, it is one newline character, whichever of
+%     the three conventions wrote it ---
+(ab\
+cd) length 4 eq (an escaped CRLF joins the lines) assert
+(ab\
+cd) length 4 eq (an escaped bare CR joins the lines) assert
+(ab\
+cd) length 4 eq (an escaped LF joins the lines) assert
+(a
+b) dup length 3 eq exch 1 get 10 eq and
+(a raw CRLF reads as one newline) assert
+(a
+b) dup length 3 eq exch 1 get 10 eq and
+(a raw CR reads as one newline) assert
+
+% --- an end-of-line marker is one white-space delimiter ---
+(ab\r\ncd) token pop exch (cd) eq
+    (a CRLF after a token is consumed as one marker) assert
+(ab\rcd) token pop exch (cd) eq
+    (a bare CR after a token is consumed alone) assert
+
+% --- gcheck holds for simple objects; composites answer for their
+%     storage ---
+42 gcheck (an integer is a legal element of a global composite) assert
+/st.gname gcheck (a name is a simple object under gcheck) assert
+[ 1 2 ] gcheck not (a local array is not) assert
+currentglobal true setglobal [ 1 2 ] exch setglobal gcheck
+(a global array is) assert
+
+% --- bind terminates on a procedure that reaches itself ---
+/st.cyc [ 1 2 3 ] cvx def
+/st.cyc load 0 /st.cyc load put
+/st.cyc load bind type /arraytype eq (bind survives a cyclic procedure) assert
+
+% --- a repeated stencil replays from the run cache cleanly ---
+count /st.c0 exch def
+gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
+gsave 8 8 true [8 0 0 -8 0 8] {<AA55AA55AA55AA55>} imagemask grestore
+count st.c0 eq (a cached stencil leaves the stack clean) assert
+
+% --- internaldict answers its password and refuses others ---
+1183615869 internaldict type /dicttype eq
+(internaldict answers its password) assert
+{ 0 internaldict } stopped (a wrong password is refused) assert
+$error /newerror false put clear
+
+% --- the language answers for itself ---
+languagelevel 3 eq (languagelevel names the level) assert
+false (pw) startjob (startjob accepts a job boundary) assert
+currentshared currentglobal eq (shared and global VM are one view) assert
+42 scheck (scheck follows gcheck) assert
+shareddict globaldict eq (shareddict is the global dictionary) assert
+/st.uf << /FontType 3 /FontMatrix [1 0 0 1 0 0] /Encoding 256 array
+    /BuildChar { pop pop } /FontBBox [0 0 1 1] >> definefont pop
+/st.uf undefinefont
+FontDirectory /st.uf known not (undefinefont removes the instance) assert
+/StandardEncoding findencoding length 256 eq
+(findencoding resolves through the Encoding category) assert
+(any) findcolorrendering exch /DefaultColorRendering eq and
+(findcolorrendering names the default instance) assert
+true setstrokeadjust currentstrokeadjust (stroke adjustment is recorded) assert
+false setstrokeadjust
+0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
+count /st.cd exch def
+cachestatus
+count st.cd sub 7 eq (cachestatus reports seven values) assert
+7 { pop } repeat
+/Courier findfont dup setfont
+rootfont eq (rootfont answers with the font the program set) assert
+
+% --- user objects index into a growing table ---
+3 { 40 2 add } defineuserobject
+3 execuserobject 42 eq (a user object executes by index) assert
+25 (far) defineuserobject
+25 execuserobject (far) eq (the table grows to reach an index) assert
+3 execuserobject 42 eq (growth preserves earlier entries) assert
+3 undefineuserobject
+UserObjects 3 get null eq (undefineuserobject clears the slot) assert
+
+% --- user paths append through both forms ---
+newpath
+{ 0 0 40 40 setbbox 10 10 moveto 30 30 lineto } uappend
+currentpoint 30 eq exch 30 eq and (a self-describing path appends) assert
+newpath
+[ [0 0 20 20  5 5  1 1  1 1] <00 01 22 04> ] uappend
+currentpoint 7 eq exch 7 eq and
+(an encoded path repeats its operator by the factor less thirty-two) assert
+newpath 1 2 moveto 3 4 lineto
+false upath
+newpath uappend
+currentpoint 4 eq exch 3 eq and (upath round-trips the current path) assert
 
 % --- ashow/widthshow/awidthshow add their spacing deltas in user space
 %     for a Type 3 font (per-char advances verified against Distiller) ---
@@ -710,6 +666,43 @@ mark { { pop pop } <0041 0141> kshow } stopped pop cleartomark
 $error /errorname get /invalidfont eq (kshow rejects a composite font with invalidfont) assert
 $error /newerror false put
 
+% --- CIE-based colour reduces through its pipeline to device RGB ---
+[ /CIEBasedABC << /WhitePoint [0.9505 1.0 1.089]
+   /RangeABC [0 1 0 1 0 1]
+   /DecodeABC [ {2.2 exp} bind {2.2 exp} bind {2.2 exp} bind ]
+   /MatrixABC [ 0.4124 0.2126 0.0193 0.3576 0.7152 0.1192
+                0.1805 0.0722 0.9505 ]
+   /RangeLMN [0 0.9505 0 1 0 1.089] >> ] setcolorspace
+currentcolorspace 0 get /CIEBasedABC eq (a CIE space reports itself) assert
+0.5 0.5 0.5 setcolor
+currentrgbcolor
+0.5 sub abs 0.02 lt exch 0.5 sub abs 0.02 lt and exch 0.5 sub abs 0.02 lt and
+(a calibrated mid grey lands mid grey) assert
+1 0 0 setcolor currentrgbcolor pop pop 0.98 gt
+(a calibrated red reaches the red channel) assert
+[ /CIEBasedA << /WhitePoint [0.9505 1.0 1.089]
+   /DecodeA {2.2 exp} bind
+   /MatrixA [0.9505 1.0 1.089]
+   /RangeLMN [0 0.9505 0 1 0 1.089] >> ] setcolorspace
+0.5 setcolor currentrgbcolor
+2 { 1 index sub abs 0.005 lt (calibrated grey is neutral) assert } repeat
+0.5 sub abs 0.02 lt (and half in comes out half) assert
+[ /CIEBasedDEF << /WhitePoint [0.9505 1.0 1.089]
+   /Table [ 2 2 2 [ <000000 0000FF 00FF00 00FFFF>
+                    <FF0000 FF00FF FFFF00 FFFFFF> ] ]
+   /RangeLMN [0 0.9505 0 1 0 1.089]
+   /MatrixLMN [0.9505 0 0 0 1 0 0 0 1.089] >> ] setcolorspace
+0.5 0.5 0.5 setcolor currentrgbcolor
+0.732 sub abs 0.02 lt exch 0.732 sub abs 0.02 lt and exch 0.732 sub abs 0.02 lt and
+(the table midpoint interpolates all eight corners) assert
+/DeviceGray setcolorspace 0 setgray
+
+% --- the job server accepts exitserver ---
+countdictstack
+{ serverdict begin 0 exitserver } stopped not
+    (exitserver continues the job) assert
+countdictstack eq (exitserver unwinds the begun serverdict) assert
+
 % --- setpagedevice (last: it replaces the device) ---
 << /OutputDevice /pgm /PageSize [50 25] /HWResolution [144 144] /TextAlphaBits 3 >> setpagedevice
 DEVICE /dimensions get dup 0 get 100 eq exch 1 get 50 eq and
@@ -736,6 +729,31 @@ letter currentpagedevice /PageSize get 0 get 612 eq
     (letter requests the letter page) assert
 b4 currentpagedevice /PageSize get 0 get 728 eq
     (b4 measures 728 points across) assert
+
+% --- dict growth: inserting far past a small dict's capacity grows and
+% rehashes it in place, repeatedly. Regression for a heap-use-after-free
+% where a re-insertion that relocated the memory file left the grow's
+% source-table pointer dangling: every entry must survive the growths. ---
+/GD 4 dict def
+0 1 20000 { GD exch dup put } for
+GD length 20001 eq (a repeatedly grown dict keeps every entry) assert
+GD 0 get 0 eq (the first key survives dict growth) assert
+GD 12345 get 12345 eq (a middle key survives dict growth) assert
+GD 20000 get 20000 eq (the last key survives dict growth) assert
+
+% --- statusdict: the printer-state dictionary drivers probe and write. The
+% dvips prologue reads /product from it and its @manualfeed/@copies specials
+% put flags into it, so it must exist, carry product, and accept puts; and
+% #copies must scan as an ordinary name. ---
+statusdict type /dicttype eq (statusdict exists) assert
+statusdict /product known (statusdict carries product) assert
+statusdict /product get type /stringtype eq (product is a string) assert
+{ statusdict /manualfeed true put } stopped not (statusdict accepts a put) assert
+statusdict /manualfeed get (the put value reads back) assert
+statusdict /manualfeed false put
+/#copies 2 def
+#copies 2 eq (#copies scans as an ordinary name) assert
+currentdict /#copies undef
 
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush

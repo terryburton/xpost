@@ -1,12 +1,10 @@
 % Matrix/coordinate and graphics-state operator compliance (PLRM 8.2), run through
 % `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for campaign fixes:
-%   - transform/dtransform/itransform/idtransform with a matrix that is not a
-%     six-element array raised no error and read out of bounds; PLRM: rangecheck
-%   - setlinecap/setlinejoin outside 0..2, and setmiterlimit below 1, were
-%     accepted silently; PLRM: rangecheck
-%   - rotate built its matrix through a truncated RAD_PER_DEG
+% transform/dtransform/itransform/idtransform reject a matrix that is not a
+% six-element array with rangecheck; setlinecap/setlinejoin require 0..2 and
+% setmiterlimit requires at least 1, each rangecheck otherwise; rotate builds its
+% matrix to full precision.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

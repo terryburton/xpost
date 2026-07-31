@@ -1,11 +1,9 @@
 % SubFileDecode EOD semantics (PLRM 3.13.3), run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for the campaign fix: SubFileDecode with a positive count excluded
-% the EOD string from the passed-through data, but PLRM passes all data "up to
-% and including" the count-th occurrence. A count of zero consumes the first
-% occurrence without passing it, and an empty EOD string passes exactly that
-% many bytes.
+% A positive count passes all data up to and including the count-th occurrence of
+% the EOD string; a count of zero consumes the first occurrence without passing
+% it; an empty EOD string passes exactly that many bytes.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

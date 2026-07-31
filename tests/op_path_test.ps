@@ -1,8 +1,8 @@
 % Path-construction operator compliance (PLRM 8.2), run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for the campaign fix: arc/arcn built endpoints through a truncated
-% RAD_PER_DEG, so an arc's bounding box missed the axis by ~1.5e-5.
+% currentpoint tracks moveto/lineto and their relative forms; arc/arcn land their
+% endpoints on the axes so the bounding box is exact.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
@@ -48,8 +48,17 @@ initgraphics newpath 3 4 moveto 20 4 lineto 20 20 lineto closepath currentpoint
 initgraphics newpath 0 0 moveto 0 100 100 100 100 0 curveto flattenpath pathbbox bbox4
 llx 0 (flattened curve llx) assertnear  urx 100 (flattened curve urx) assertnear
 
-% --- pathbbox raises nocurrentpoint on an empty path ---
+% --- pathbbox raises nocurrentpoint on an empty path; a bare moveto still has a box ---
 { initgraphics newpath pathbbox } /nocurrentpoint (pathbbox on an empty path is nocurrentpoint) erris
+initgraphics newpath 3 4 moveto pathbbox bbox4
+llx 3 (moveto-only bbox llx) assertnear  urx 3 (moveto-only bbox urx) assertnear
+lly 4 (moveto-only bbox lly) assertnear  ury 4 (moveto-only bbox ury) assertnear
 
+% --- upath tolerates an empty path (emits 0 0 0 0 setbbox), as the reference does ---
+{ initgraphics newpath false upath pop } stopped not (upath on an empty path does not error) assert
+initgraphics newpath false upath length 0 gt (upath of an empty path yields a userpath) assert
+
+% --- setbbox takes four numbers (llx lly urx ury) ---
+{ initgraphics newpath 12 24 36 48 setbbox } stopped not (setbbox accepts four numbers) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

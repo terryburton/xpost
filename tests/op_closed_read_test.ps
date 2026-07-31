@@ -3,9 +3,8 @@
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
-/cr.f (closedread.scratch) (w) file def
-cr.f (Hi) writestring cr.f closefile
-/mkclosed { (closedread.scratch) (r) file dup closefile } def
+% "Hi" encodes as 4869 in ASCIIHex
+/mkclosed { (4869>) /ASCIIHexDecode filter dup closefile } def
 
 % every read-family operator returns false at once on a closed file
 mkclosed read not (read of a closed file is false) assert
@@ -17,8 +16,8 @@ mkclosed 20 string readline exch pop not (readline of a closed file is false) as
 % closing twice is harmless and status reports the file is closed
 mkclosed dup closefile status not (status of a closed file is false) assert
 
-% an open file still reads normally
-/g (closedread.scratch) (r) file def
+% an open filter still reads normally
+/g (4869>) /ASCIIHexDecode filter def
 g read pop 72 eq (an open file still reads a byte) assert
 g 1 string readstring exch pop (an open file still reads a string) assert
 g closefile

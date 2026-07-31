@@ -10,6 +10,8 @@
 %   - filling many sub-pixel open subpaths in one path (scan-converter
 %     parity and dropout control)
 %   - clipping with an opposite-wound inner subpath (a hole)
+%   - the even-odd rule in eofill and eoclip
+%   - line caps at the ends of open stroked subpaths
 %   - stroking with the line width transformed to device space
 %
 % Pixel assertions render into a locally constructed PGM device and
@@ -20,8 +22,9 @@
 % systemdict; fetch them deliberately through the password.
 /.fillpoly     1183615869 internaldict /.fillpoly get def
 /.fillrectgray 1183615869 internaldict /.fillrectgray get def
-/.wrapop       1183615869 internaldict /.wrapop get def
+/.fillrectrgb  1183615869 internaldict /.fillrectrgb get def
 /.zerorows     1183615869 internaldict /.zerorows get def
+/.wrapop       1183615869 internaldict /.wrapop get def
 
 % failures accumulate in a dedicated dict, so an assert that runs with
 % another dictionary begun still updates the shared counter
@@ -230,6 +233,633 @@ grestore
 25 25 inkat not (hole region is clear) assert
 2 2 inkat not (outside the window is clear) assert
 
+% --- stacked clips combine exactly ---
+% a region of two disjoint windows survives a further clip: the
+% half-plane combiner intersected the windows with each other and
+% kept nothing
+erasepage
+gsave
+newpath
+ 5  5 moveto 20  5 lineto 20 20 lineto  5 20 lineto closepath
+30 30 moveto 45 30 lineto 45 45 lineto 30 45 lineto closepath
+clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+10 10 inkat (the first window survives a stacked clip) assert
+38 38 inkat (the second window survives a stacked clip) assert
+25 25 inkat not (between the windows stays clear) assert
+% an L-shaped region then a rectangle straddling its notch
+erasepage
+gsave
+newpath
+ 5  5 moveto 45  5 lineto 45 25 lineto 25 25 lineto
+25 45 lineto  5 45 lineto closepath
+clip newpath
+10 10 moveto 40 10 lineto 40 40 lineto 10 40 lineto closepath clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+15 15 inkat (the L's arm intersects the rectangle) assert
+15 38 inkat (the L's other arm intersects the rectangle) assert
+38 38 inkat not (the L's notch stays clear through both clips) assert
+% the caller's path survives the clip and can still paint
+erasepage
+gsave
+newpath 5 5 moveto 45 5 lineto 45 45 lineto 5 45 lineto closepath
+clip fill
+grestore
+25 25 inkat (the path survives clip and fills) assert
+
+% --- eofill and eoclip resolve by the even-odd rule ---
+% two same-wound nested contours: parity separates the band between
+% them from the twice-enclosed interior, where winding does not
+erasepage
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath  % outer, CCW
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath  % inner, CCW too
+eofill
+10 10 inkat (eofill paints the singly-enclosed band) assert
+25 25 inkat not (eofill leaves the twice-enclosed interior clear) assert
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath
+fill
+25 25 inkat (the nonzero fill covers the same interior) assert
+
+erasepage
+gsave
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath
+eoclip
+newpath 0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+10 10 inkat (eoclip passes the singly-enclosed band) assert
+25 25 inkat not (eoclip masks the twice-enclosed interior) assert
+2 2 inkat not (eoclip masks outside its region) assert
+
+% --- dictionary image forms and sample unpacking ---
+% dict imagemask: Decode [1 0] paints the set bits (operand polarity
+% true), with the high-order bit leftmost
+erasepage
+gsave
+10 10 translate 40 40 scale 0 setgray
+<< /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+   /ImageMatrix [8 0 0 -8 0 8] /Decode [1 0]
+   /DataSource <F0F0F0F0F0F0F0F0> >> imagemask
+grestore
+12 30 inkat (dict imagemask paints the set bits) assert
+40 30 inkat not (dict imagemask leaves the clear bits unpainted) assert
+erasepage
+gsave
+10 10 translate 40 40 scale 0 setgray
+<< /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+   /ImageMatrix [8 0 0 -8 0 8] /Decode [0 1]
+   /DataSource <F0F0F0F0F0F0F0F0> >> imagemask
+grestore
+12 30 inkat not (dict imagemask Decode 0-1 spares the set bits) assert
+40 30 inkat (dict imagemask Decode 0-1 paints the clear bits) assert
+
+% a five-wide one-bit image: samples unpack high bit first and every
+% row starts on a byte boundary
+erasepage
+gsave
+10 10 translate 40 40 scale
+<< /ImageType 1 /Width 5 /Height 2 /BitsPerComponent 1
+   /ImageMatrix [5 0 0 -2 0 2] /Decode [0 1]
+   /DataSource <88 08> >> image
+grestore
+14 40 inkat not (one-bit image: the high bit is the left pixel) assert
+22 40 inkat (one-bit image: a clear bit paints black) assert
+46 40 inkat not (one-bit image: the row's last sample is the low nibble's top) assert
+14 20 inkat (one-bit image: the next row begins at the next byte) assert
+46 20 inkat not (one-bit image: the padded row keeps its own samples) assert
+
+% 12-bit samples: three nibbles high-first, rows byte-aligned (three
+% samples occupy four and a half bytes, padded to five per row)
+erasepage
+gsave
+10 10 translate 48 16 scale
+<< /ImageType 1 /Width 3 /Height 1 /BitsPerComponent 12
+   /ImageMatrix [3 0 0 -1 0 1] /Decode [0 1]
+   /DataSource <000FFF00 00> >> image
+grestore
+18 18 inkat (a 12-bit zero sample paints black) assert
+34 18 inkat not (a 12-bit full sample paints white) assert
+50 18 inkat (a 12-bit row is read past its half-byte) assert
+
+% dict image: Decode maps the sample range
+erasepage
+gsave
+10 10 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [1 0]
+   /DataSource <FF00> >> image
+grestore
+14 30 inkat (dict image Decode inverts a full sample to black) assert
+46 30 inkat not (dict image Decode inverts a zero sample to white) assert
+
+% Indexed colour: setcolor looks the index up in the palette and
+% paints in the base space, keeping the space as set; an indexed
+% image maps each sample through the same lookup
+erasepage
+gsave
+[/Indexed /DeviceGray 3 <FF 00 FF 00>] setcolorspace
+1 setcolor 10 10 20 20 rectfill
+2 setcolor 34 10 20 20 rectfill
+currentcolorspace dup type /arraytype eq exch 0 get /Indexed eq and
+(setcolor keeps the Indexed space current) assert
+grestore
+18 18 inkat (an indexed setcolor paints through the palette) assert
+42 18 inkat not (an indexed palette entry of white stays white) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+[/Indexed /DeviceGray 3 <00 FF 00 FF>] setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 2
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 3]
+   /DataSource <60> >> image
+grestore
+18 30 inkat not (an indexed image maps its first sample) assert
+42 30 inkat (an indexed image maps its second sample) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+[/Indexed /DeviceGray 3 { 3 div }] setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 255]
+   /DataSource <0003> >> image
+grestore
+18 30 inkat (a procedure palette maps a zero index dark) assert
+42 30 inkat not (a procedure palette maps a full index light) assert
+
+% the image operators must not mutate the caller's matrix: a Type 3
+% bitmap font reuses one matrix for every glyph
+erasepage
+/sharedmat [8 0 0 -8 0 8] def
+gsave 10 10 translate 16 16 scale 0 setgray
+8 8 true sharedmat <F0F0F0F0F0F0F0F0> imagemask grestore
+gsave 34 10 translate 16 16 scale 0 setgray
+8 8 true sharedmat <F0F0F0F0F0F0F0F0> imagemask grestore
+sharedmat 0 get 8 eq (imagemask leaves the caller's matrix unchanged) assert
+12 18 inkat (the first mask through a shared matrix paints) assert
+36 18 inkat (the second mask through the same matrix paints) assert
+
+% colorimage: interleaved samples paint in the matching device space
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <000000FFFFFF> false 3 colorimage
+grestore
+18 30 inkat (an RGB colorimage paints its black sample) assert
+42 30 inkat not (an RGB colorimage passes white through) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <00FF> false 1 colorimage
+grestore
+18 30 inkat (a one-component colorimage paints grey samples) assert
+42 30 inkat not (a one-component colorimage passes white) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <00FF> <00FF> <00FF> true 3 colorimage
+grestore
+18 30 inkat (a plane-per-component colorimage paints its black sample) assert
+42 30 inkat not (a plane-per-component colorimage passes white) assert
+
+% dict image samples arrive in the colour space current at the call
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /DataSource <000000FFFFFF> >> image
+grestore
+14 30 inkat (an RGB dictionary image paints in the current space) assert
+46 30 inkat not (an RGB dictionary image passes white through) assert
+
+% MultipleDataSources delivers each component from its own plane
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /MultipleDataSources true
+   /DataSource [ <00FF> <00FF> <00FF> ] >> image
+grestore
+18 30 inkat (planar sources assemble each pixel) assert
+42 30 inkat not (planar sources pass white through) assert
+
+% ImageType 3: an explicit one-bit mask keeps pixels unpainted; a
+% Decode of [1 0] inverts its sense
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 3 /InterleaveType 3
+   /DataDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+      /DataSource <000000000000000000000000> >>
+   /MaskDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 1
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1]
+      /DataSource <4000> >>
+>> image
+grestore
+20 40 inkat (an unmasked pixel paints) assert
+40 40 inkat not (a set mask bit keeps its pixel unpainted) assert
+20 20 inkat (the second mask row paints its left pixel) assert
+40 20 inkat (the second mask row paints its right pixel) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 3 /InterleaveType 1
+   /DataDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+      /DataSource <00000000FF000000> >>
+   /MaskDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -1 0 1] /Decode [1 0]
+      /DataSource null >>
+>> image
+grestore
+18 30 inkat not (interleaved mask samples mask under an inverted Decode) assert
+42 30 inkat (an interleaved full mask sample paints under an inverted Decode) assert
+
+% ImageType 4: pixels of the key colour leave the page untouched
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 4 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /MaskColor [ 0 0 0 ]
+   /DataSource <000000404040> >> image
+grestore
+18 30 inkat not (the key colour is not painted) assert
+42 30 inkat (other pixels paint normally) assert
+
+% a procedure DataSource in an image dictionary must arrive as the
+% operand, not execute at dictionary lookup: the stateful source is
+% the standard idiom for row-at-a-time delivery
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+/imgrow 0 def
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /DataSource { /imgrow imgrow 1 add def
+                 imgrow 1 eq { <000000000000> }{ <FFFFFFFFFFFF> } ifelse }
+>> image
+grestore
+20 40 inkat (a procedure source delivers its first row) assert
+20 20 inkat not (a procedure source advances to its next row) assert
+
+% an image under a non-rectangular clip paints exactly the region
+erasepage
+gsave
+newpath 32 32 20 0 360 arc clip
+/DeviceRGB setcolorspace
+gsave
+12 12 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /DataSource <000000000000000000000000> >> image
+grestore
+grestore
+32 32 inkat (a clipped image paints inside the region) assert
+14 14 inkat not (a clipped image stays out of the near corner) assert
+50 50 inkat not (a clipped image stays out of the far corner) assert
+
+% tiling patterns: a coloured cell tiles across the painted region,
+% anchored to the pattern space; an uncoloured cell paints the
+% underlying colour
+erasepage
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 16 16] /XStep 16 /YStep 16
+   /PaintProc { pop 0 setgray 0 0 8 8 rectfill } >> matrix makepattern
+setpattern
+0 0 64 64 rectfill
+4 4 inkat (a pattern cell paints its ink) assert
+12 12 inkat not (a pattern cell leaves its background) assert
+20 20 inkat (the cell tiles across the region) assert
+28 28 inkat not (the tiled background repeats) assert
+0 setgray
+erasepage
+/DeviceGray setcolorspace
+0
+<< /PatternType 1 /PaintType 2 /TilingType 1
+   /BBox [0 0 16 16] /XStep 16 /YStep 16
+   /PaintProc { pop 0 0 8 8 rectfill } >> matrix makepattern
+setpattern
+0 0 64 64 rectfill
+4 4 inkat (an uncoloured pattern paints the underlying colour) assert
+12 12 inkat not (an uncoloured pattern leaves its background) assert
+0 setgray
+erasepage
+
+% smooth shading: an axial gradient runs its function across its
+% axis, a radial one its circle family from the centre out, and a
+% free-form mesh blends its vertex colours
+/pixval { % ux uy . byte
+    transform floor cvi exch floor cvi exch
+    DEV dup /GetPix get exec
+} def
+erasepage
+gsave
+newpath 8 8 moveto 56 8 lineto 56 56 lineto 8 56 lineto closepath clip
+<< /ShadingType 2
+   /ColorSpace /DeviceGray
+   /Coords [ 8 0 56 0 ]
+   /Extend [ true true ]
+   /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >>
+>> shfill
+grestore
+10 32 inkat (an axial shading starts at its first colour) assert
+54 32 inkat not (an axial shading ends at its second colour) assert
+32 32 pixval dup 90 gt exch 170 lt and
+(an axial shading blends between its ends) assert
+erasepage
+gsave
+<< /ShadingType 3
+   /ColorSpace /DeviceGray
+   /Coords [ 32 32 2 32 32 24 ]
+   /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >>
+>> shfill
+grestore
+32 32 inkat (a radial shading is dark at its centre) assert
+32 53 inkat not (a radial shading lightens to its rim) assert
+12 12 inkat not (an unextended radial shading leaves the corners) assert
+erasepage
+gsave
+<< /ShadingType 4
+   /ColorSpace /DeviceGray
+   /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
+   /Decode [ 0 64 0 64 0 1 ]
+   /DataSource <000000000000 00FFFF000000 007FFFFFFFFF>
+>> shfill
+grestore
+32 4 inkat (a mesh triangle is dark along its dark edge) assert
+32 60 inkat not (a mesh triangle lightens to its light corner) assert
+30 32 pixval dup 60 gt exch 200 lt and
+(a mesh triangle blends between its vertices) assert
+4 32 inkat not (a mesh paints only its triangles) assert
+erasepage
+
+% a shading pattern (PatternType 2) paints its gradient over the
+% region the operator would have painted
+erasepage
+<< /PatternType 2
+   /Shading << /ShadingType 2 /ColorSpace /DeviceGray
+      /Coords [ 8 0 56 0 ] /Extend [ true true ]
+      /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >> >>
+>> matrix makepattern setpattern
+8 8 48 48 rectfill
+10 32 inkat (a shading pattern paints its dark end) assert
+54 32 inkat not (a shading pattern lightens to its far end) assert
+4 32 inkat not (a shading pattern stays inside the fill) assert
+0 setgray
+erasepage
+
+% DCTDecode inflates a JPEG stream into image samples, layered over
+% the hexadecimal filter here as producers layer it over ASCII85; the
+% parameter-dictionary filter form is what PDF converters emit. The
+% embedded stream is a solid red 8-by-8 JPEG; the guard probe skips
+% the block on a build without the JPEG library, draining the inline
+% data through the hexadecimal filter alone so the file stays in
+% register either way. The assertions after the data also prove the
+% decoder leaves the file positioned exactly past the stream.
+% the filter construction reads nothing (the decoder starts at the
+% first byte pulled), so probing it over currentfile is safe
+/hasdct false def
+{ currentfile << >> /DCTDecode filter closefile /hasdct true def } stopped pop
+$error /newerror false put
+erasepage
+gsave
+10 10 translate 44 44 scale
+/DeviceRGB setcolorspace
+hasdct {
+    << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+       /ImageMatrix [8 0 0 -8 0 8] /Decode [0 1 0 1 0 1]
+       /DataSource currentfile /ASCIIHexDecode filter << >> /DCTDecode filter
+    >> image
+    % feeding the decoder to its end-of-image marker drew the last hexadecimal
+    % byte through ASCIIHexDecode, which then swallowed its own closing ">" (its
+    % eager end-of-data handling), leaving currentfile past
+    % the whole stream -- no separate drain is needed
+}{
+    % without a JPEG decoder nothing reads the block, so skip it explicitly,
+    % closing delimiter and all
+    currentfile /ASCIIHexDecode filter flushfile
+} ifelse
+FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304
+030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B101610
+1113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D
+141414141414141414141414141414141414141414141414141414141414141414141414
+1414141414141414141414141414FFC00011080008000803011100021101031101FFC400
+14000100000000000000000000000000000008FFC4001410010000000000000000000000
+0000000000FFC4001501010100000000000000000000000000000709FFC4001411010000
+0000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9
+>
+grestore
+hasdct {
+    30 30 inkat (a JPEG image paints its samples) assert
+    countink 1500 ge (the JPEG fills its area) assert
+} if
+erasepage
+
+% --- line caps on open subpath ends ---
+% a thick horizontal stroke from (16,32) to (40,32), width 10: a butt
+% cap stops at the endpoint, round and square caps extend past it,
+% and only the square reaches the projected corner
+erasepage
+gsave 10 setlinewidth 0 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat not (a butt cap stops at the endpoint) assert
+13 32 inkat not (a butt cap stops at the start point) assert
+erasepage
+gsave 10 setlinewidth 1 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat (a round cap extends past the endpoint) assert
+13 32 inkat (a round cap extends past the start point) assert
+44 37 inkat not (a round cap stays within its radius) assert
+erasepage
+gsave 10 setlinewidth 2 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat (a square cap extends past the endpoint) assert
+13 32 inkat (a square cap extends past the start point) assert
+44 37 inkat (a square cap fills the projected corner) assert
+% a closed subpath ends in joins and owes no caps. The join is pinned
+% to bevel so the probe sits outside every legitimate corner shape: a
+% miter join's spike at this sharp corner covers it correctly.
+erasepage
+gsave 10 setlinewidth 2 setlinecap 2 setlinejoin
+20 20 moveto 44 20 lineto 44 44 lineto closepath stroke grestore
+15 20 inkat not (a closed subpath takes no caps) assert
+% every dash of a dashed stroke is capped
+erasepage
+gsave 6 setlinewidth 1 setlinecap [8 10] 0 setdash
+10 50 moveto 54 50 lineto stroke grestore
+20 50 inkat (a dash carries its own end cap) assert
+23 50 inkat not (capped dashes keep their gaps) assert
+
+% --- line joins at stroked corners ---
+% a right-angle corner, width 10: the miter fills the projected
+% corner, round and bevel stop short of it, and all three fill the
+% wedge between the segment ends
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat (a miter join fills the projected corner) assert
+42 14 inkat (a miter join covers the wedge) assert
+erasepage
+gsave 10 setlinewidth 1 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a round join stays within its radius) assert
+42 14 inkat (a round join covers the wedge) assert
+erasepage
+gsave 10 setlinewidth 2 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a bevel join cuts the projected corner) assert
+42 14 inkat (a bevel join covers the wedge) assert
+% the miter limit: a right angle's ratio is sqrt(2), so a limit below
+% that bevels the corner and one above keeps the miter
+erasepage
+gsave 10 setlinewidth 0 setlinejoin 1.2 setmiterlimit
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a miter past the limit falls back to bevel) assert
+erasepage
+gsave 10 setlinewidth 0 setlinejoin 1.5 setmiterlimit
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat (a miter within the limit is kept) assert
+% a closed subpath miters its corners too
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto closepath stroke grestore
+44 12 inkat (a closed subpath miters its corner) assert
+
+% --- join sides across the angle seam ---
+% a wide closed rectangle must fill all four outer corners in either
+% winding: one of its turns always crosses the atan seam at zero
+% degrees, where a raw angle difference misreads the turn's side
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 16 40 lineto 40 40 lineto 40 16 lineto closepath stroke grestore
+13 13 inkat (a clockwise rectangle fills its first outer corner) assert
+13 43 inkat (a clockwise rectangle fills its second outer corner) assert
+43 43 inkat (a clockwise rectangle fills its third outer corner) assert
+43 13 inkat (a clockwise rectangle fills its fourth outer corner) assert
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto 16 40 lineto closepath stroke grestore
+13 13 inkat (an anticlockwise rectangle fills its first outer corner) assert
+13 43 inkat (an anticlockwise rectangle fills its second outer corner) assert
+43 43 inkat (an anticlockwise rectangle fills its third outer corner) assert
+43 13 inkat (an anticlockwise rectangle fills its fourth outer corner) assert
+
+% a dash pattern set inside gsave must not survive its grestore: the
+% state copy once kept the longer stale array beneath a shorter one
+gsave 6 setlinewidth [8 10] 0 setdash grestore
+currentdash pop length 0 eq (grestore restores a shorter dash array) assert
+
+% --- the colour screen family records and round-trips ---
+gsave
+1 2 {} 3 4 {} 5 6 {} 7 8 {} setcolorscreen
+currentscreen pop 8 eq exch 7 eq and
+(currentscreen reports the grey channel of setcolorscreen) assert
+currentcolorscreen 12 array astore
+dup 0 get 1 eq (setcolorscreen keeps the red frequency) assert
+dup 4 get 4 eq (setcolorscreen keeps the green angle) assert
+dup 6 get 5 eq (setcolorscreen keeps the blue frequency) assert
+dup 9 get 7 eq (setcolorscreen keeps the grey frequency) assert
+pop
+9 10 {} setscreen
+currentcolorscreen 12 array astore
+dup 0 get 9 eq (setscreen sets the red screen alike) assert
+dup 7 get 10 eq (setscreen sets the blue angle alike) assert
+pop
+grestore
+currentscreen pop pop 60 eq (grestore restores the screen) assert
+
+% --- halftone dictionaries record and answer the screen family ---
+gsave
+<< /HalftoneType 1 /Frequency 33 /Angle 44 /SpotFunction { pop } >> sethalftone
+currenthalftone /Frequency get 33 eq (currenthalftone returns the dictionary) assert
+currentscreen type /dicttype eq
+3 1 roll 44 eq exch 33 eq and and
+(a type 1 halftone answers its frequency, angle and itself) assert
+currentcolorscreen 12 array astore
+dup 2 get type /dicttype eq (the colour channels answer the dictionary too) assert
+dup 0 get 33 eq (the colour channels answer its frequency) assert
+pop
+12 34 { pop } setscreen
+currenthalftone dup /HalftoneType get 1 eq
+exch /Frequency get 12 eq and
+(a screen-set state synthesizes a type 1 dictionary) assert
+grestore
+
+% --- setscreen evaluates the spot function across the whole halftone
+%     cell it renders through, not one sample: the call count follows
+%     the cell and grows as a coarser screen's cell does ---
+gsave
+/st.spotcount { % freq . count
+    /st.sc [0] def
+    dup 0 { pop pop st.sc 0 st.sc 0 get 1 add put } setscreen
+    st.sc 0 get
+} def
+60 st.spotcount 1 gt (setscreen samples the spot across its cell, not once) assert
+5 st.spotcount 60 st.spotcount gt (a coarser screen's larger cell takes more spot samples) assert
+/st.inrange [true] def
+30 0 {
+    dup abs 1 gt { st.inrange 0 false put } if
+    exch dup abs 1 gt { st.inrange 0 false put } if
+    add
+} setscreen
+st.inrange 0 get (the spot function sees arguments within [-1,1]) assert
+% the spot procedure runs against the caller's stacks: its defs land
+% in the caller's dictionaries, and what it leaves beyond its result
+% survives on the operand stack (a result-less procedure loses nothing)
+/st.spotdefs 0 def
+60 0 { pop pop /st.spotdefs st.spotdefs 1 add def 1 } setscreen
+st.spotdefs 0 gt (the spot procedure defines into the caller's dictionaries) assert
+count /st.d0 exch def
+60 0 { 1 } setscreen
+count st.d0 sub /st.res exch def
+st.res { pop } repeat
+st.res 0 gt (values the spot procedure leaves survive on the operand stack) assert
+grestore
+
+% --- colour transfer functions record and round-trip ---
+gsave
+{ 1 exch sub } { dup mul } { sqrt } { 2 div } setcolortransfer
+0.5 currenttransfer exec 0.25 (setcolortransfer's grey lands in currenttransfer) assertnear
+currentcolortransfer 4 array astore
+0.25 1 index 0 get exec 0.75 (the red transfer answers) assertnear
+0.25 1 index 1 get exec 0.0625 (the green transfer answers) assertnear
+0.25 1 index 3 get exec 0.125 (the grey transfer answers) assertnear
+pop
+{ 3 mul } settransfer
+currentcolortransfer 4 array astore
+0.2 1 index 0 get exec 0.6 (settransfer sets the red transfer alike) assertnear
+0.2 1 index 2 get exec 0.6 (settransfer sets the blue transfer alike) assertnear
+pop
+grestore
+
+% --- a dash element spanning several segments ---
+% the within-element branch of the dash walk only runs when a
+% subpath's segments are shorter than the element: it corrupted its
+% stack and typechecked (a dashed arc was the natural victim)
+erasepage
+gsave 4 setlinewidth
+newpath 8 32 moveto 16 32 lineto 24 32 lineto 32 32 lineto 40 32 lineto 48 32 lineto
+[30 8] 0 setdash stroke grestore
+12 32 inkat (a multi-segment dash draws its element) assert
+28 32 inkat (the dash element spans segment joints) assert
+42 32 inkat not (the gap follows the element across joints) assert
+
 % --- stroke width follows the CTM ---
 erasepage
 gsave
@@ -238,6 +868,31 @@ gsave
 newpath 5 5 moveto 20 12.5 lineto stroke
 grestore
 25 17.5 inknear (a scaled diagonal stroke marks pixels) assert
+
+% --- an anisotropic CTM makes the pen an ellipse ---
+% under 4x horizontal, 1x vertical, a width-2 stroke is 8 device
+% pixels wide on a vertical run and 2 on a horizontal run
+erasepage
+gsave
+4 1 scale
+2 setlinewidth 0 setlinecap
+newpath 8 8 moveto 8 40 lineto stroke
+grestore
+% the vertical stroke sits at device x=32; its half-width is 4 px, so
+% it fills columns 28..35 (the high edge is exclusive)
+28 24 inkat (an anisotropic vertical stroke is wide) assert
+35 24 inkat (the wide side reaches four pixels out) assert
+36 24 inkat not (but no wider than the transformed pen) assert
+erasepage
+gsave
+4 1 scale
+2 setlinewidth 0 setlinecap
+newpath 4 20 moveto 12 20 lineto stroke
+grestore
+% the horizontal stroke keeps its thin one-pixel half-width in y
+32 20 inkat (an anisotropic horizontal stroke marks its row) assert
+32 22 inkat not (the thin side stays within one pixel) assert
+32 18 inkat not (the thin side stays within one pixel below) assert
 
 % --- text rendering: sharp threshold by default, coverage blending
 %     under TextAlphaBits, /Encoding vectors honored, Type 42 font
@@ -315,6 +970,20 @@ basefont null ne {
     } ifelse
 } if
 
+% a hairline's round and projecting caps reach half the width past
+% the segment ends; a butt cap adds nothing
+erasepage
+0.9 setlinewidth
+0 setlinecap
+newpath 10.2 40 moveto 20.2 40 lineto stroke
+/capbutt countink def
+erasepage
+2 setlinecap
+newpath 10.2 40 moveto 20.2 40 lineto stroke
+countink capbutt gt (a projecting cap lengthens a hairline) assert
+0 setlinecap
+1 setlinewidth
+
 % A Type 3 glyph that declares setcachedevice builds once: repeats
 % replay its mask from the glyph cache, and the raster still lands
 erasepage
@@ -336,6 +1005,33 @@ T3Count 1 eq (a setcachedevice glyph builds once for four shows) assert
 countink 100 ge (the cached glyph still lands on the raster) assert
 2 44 moveto (AA) show
 T3Count 1 eq (later shows replay from the cache) assert
+
+% A cache replay defers one paint call per glyph pixel through the
+% execution stack: a big glyph walks it across a segment boundary,
+% where a device method ending in a conditional once lost its
+% parked continuation (the bilevel device's screening PutPix)
+/DEV4 64 64 .privatedict /newPBMIMAGEdevice get exec def
+DEV4 begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+graphicsdict /currgstate get /device DEV4 put
+matrix setmatrix
+0 setgray
+/T3CacheFont findfont 64 scalefont setfont
+4 6 moveto (A) show      % build and capture
+4 6 moveto (A) show      % replay through the deferred queue
+/t3big.ink 0 def
+0 1 63 { /yy exch def 0 1 63 { /xx exch def
+    xx yy DEV4 dup /GetPix get exec 128 lt {
+        /t3big.ink t3big.ink 1 add def
+    } if
+} for } for
+t3big.ink 1000 gt
+(a big cached glyph replays intact across an exec segment boundary) assert
+graphicsdict /currgstate get /device DEV put
+initgraphics
 
 basefont null ne {
     % the glyph cache fills on first rendering and replays after:
@@ -458,23 +1154,12 @@ basefont null ne {
     2 24 moveto (A) show
     wantsnap snapshot snapeq not (the base font still renders its own glyph) assert
 
-    % a font's /Metrics dictionary overrides a glyph's advance by name,
-    % mapped from character space through the font matrix (the encoding
-    % must name the glyph for the width to be found)
-    basefont dup length dict copy
-    dup /Encoding StandardEncoding put
-    dup /Metrics << /A 900 >> put
-    /MetricsTest exch definefont 100 scalefont setfont
-    (A) stringwidth pop 90 sub abs 1 lt (a Metrics entry overrides the glyph advance) assert
-    basefont 100 scalefont setfont
-    (A) stringwidth pop 90 sub abs 1 ge (the base font keeps its own advance) assert
-    basefont 20 scalefont setfont
-
-    % a base font publishes its glyph complement in /CharStrings, as
-    % re-encoding programs expect: they size tables from its length,
-    % test membership with known, and enumerate its keys
-    basefont /CharStrings known (a base font carries CharStrings) assert
-    basefont /CharStrings known {
+    % a Type 1 or CFF base font publishes its glyph complement in
+    % /CharStrings, as re-encoding programs expect: they size tables from
+    % its length, test membership with known, and enumerate its keys. A
+    % TrueType (Type 42) face carries its glyphs in the sfnt instead.
+    basefont /FontType get dup 1 eq exch 2 eq or {
+        basefont /CharStrings known (a base font carries CharStrings) assert
         basefont /CharStrings get
         dup type /dicttype eq (CharStrings is a dictionary) assert
         dup length 100 ge (CharStrings covers the face's glyphs) assert
@@ -696,6 +1381,144 @@ FontDirectory /SubsetT42Test known {
     erasepage
 } if
 
+% Per-channel transfer procedures reach a colour raster: with the
+% red transfer inverting and the rest passing, green paint arrives
+% yellow. A separate colour device keeps the grey harness untouched
+/DEV2 8 8 .privatedict /newPPMIMAGEdevice get exec def
+DEV2 begin
+    /defaultmatrix [ 1 0 0 -1 0 8 ] def
+    /FillPoly /.fillpoly load def
+end
+graphicsdict /currgstate get /device DEV2 put
+matrix setmatrix
+{1 exch sub} {} {} {} setcolortransfer
+0 1 0 setrgbcolor
+0 0 8 8 rectfill
+0 0 DEV2 dup /GetPix get exec
+60 lt exch 195 gt and exch 195 gt and
+(per-channel transfers reach the colour raster) assert
+
+% The compiled colour rect fill and raster zeroing write the packed
+% rows as PutPix would: channels scaled by 255 and truncated,
+% inclusive end coordinates, untouched pixels left alone
+DEV2 /ImgData get .zerorows
+0.5 0.25 1 1 1 5 2 DEV2 .fillrectrgb
+1 1 DEV2 dup /GetPix get exec
+255 eq exch 63 eq and exch 127 eq and
+(colour FillRect packs truncated channels) assert
+6 3 DEV2 dup /GetPix get exec
+255 eq exch 63 eq and exch 127 eq and
+(colour FillRect ends inclusively) assert
+7 4 DEV2 dup /GetPix get exec
+0 eq exch 0 eq and exch 0 eq and
+(zeroed raster outside the fill) assert
+{} settransfer
+0 setgray
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+% A bilevel device screens every grey through the halftone in force:
+% a mid grey lands as a mix, the extremes stay themselves
+/DEV3 8 8 .privatedict /newPBMIMAGEdevice get exec def
+DEV3 begin
+    /defaultmatrix [ 1 0 0 -1 0 8 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+graphicsdict /currgstate get /device DEV3 put
+matrix setmatrix
+36 0 { add 2 div } setscreen
+0.5 setgray 0 0 8 8 rectfill
+/htblack 0 def /htwhite 0 def
+0 1 7 { /yy exch def 0 1 7 { /xx exch def
+    xx yy DEV3 dup /GetPix get exec
+    128 lt { /htblack htblack 1 add def }{ /htwhite htwhite 1 add def } ifelse
+} for } for
+htblack 0 gt htwhite 0 gt and (a mid grey screens to a mix) assert
+1 setgray 0 0 8 8 rectfill
+0 0 DEV3 dup /GetPix get exec 128 ge
+(white stays white through the screen) assert
+0 setgray 0 0 8 8 rectfill
+3 3 DEV3 dup /GetPix get exec 128 lt (black stays black) assert
+
+% The screen angle tiles a rotated lattice: at forty-five degrees the
+% pattern largely repeats along the diagonal lattice vector -- here
+% (3 3); the whole repeating tile ranks together, so the cells in it
+% may differ by the odd growing pixel -- and inverts along the axis,
+% half a cell out of phase
+18 45 { 180 mul cos exch 180 mul cos add 2 div } setscreen
+0.5 setgray 0 0 8 8 rectfill
+/diageq 0 def /axiseq 0 def
+0 1 4 { /yy exch def 0 1 4 { /xx exch def
+    xx yy DEV3 dup /GetPix get exec 128 lt
+    xx 3 add yy 3 add DEV3 dup /GetPix get exec 128 lt
+    eq { /diageq diageq 1 add def } if
+    xx yy DEV3 dup /GetPix get exec 128 lt
+    xx 3 add yy DEV3 dup /GetPix get exec 128 lt
+    eq { /axiseq axiseq 1 add def } if
+} for } for
+diageq 18 ge (a rotated screen repeats along its lattice vector) assert
+axiseq 12 le (a rotated screen does not repeat along the axis) assert
+
+% A program may fold a sign flip into its spot function before
+% installing it: the sampled arguments stay strictly inside the
+% domain, so a spot that indexes a table never reads past the end
+/bstr8 <0102030405060708> def
+{ 18 0 { neg exch neg exch
+         1 add 2 div 8 mul cvi bstr8 exch get
+         exch 1 add 2 div 8 mul cvi bstr8 exch get
+         add 510 div } setscreen
+  0.5 setgray 0 0 8 8 rectfill
+} stopped not
+(a sign-flipped indexing spot stays inside its table) assert
+
+% A threshold-array halftone whitens a pixel when the grey level, on
+% the 0..256 halftone scale, reaches its threshold byte: a threshold
+% of 1 opens at the first step above black, one of 255 just before
+% solid white, and the extremes stay solid
+<< /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone
+/.countblack { % gray  .countblack  n
+    setgray 0 0 8 8 rectfill
+    /nb 0 def
+    0 1 7 { /yy exch def 0 1 7 { /xx exch def
+        xx yy DEV3 dup /GetPix get exec 128 lt { /nb nb 1 add def } if
+    } for } for
+    nb
+} def
+0        .countblack 64 eq (solid black stays solid through thresholds) assert
+1 255 div .countblack 48 eq (a threshold of one opens above black) assert
+128 255 div .countblack 32 eq (a mid grey reaches the mid threshold) assert
+254 255 div .countblack 0 eq (the top threshold opens before solid white) assert
+1        .countblack 0 eq (solid white stays solid through thresholds) assert
+
+% a type 5 dictionary carries one halftone per colorant: grey
+% rendering screens through its grey component, and currenthalftone
+% answers the container itself
+<< /HalftoneType 5
+   /Gray << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >>
+   /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+               /SpotFunction { pop pop 0.5 } >>
+>> sethalftone
+128 255 div .countblack 32 eq
+(a type 5 halftone screens through its grey component) assert
+currenthalftone /HalftoneType get 5 eq
+(currenthalftone answers the type 5 container) assert
+
+% A two-valued spot function -- the pattern-cell idiom -- splits its
+% cell exactly at the boundary grey: the black pixels are the
+% pattern's one bits, no more and no fewer
+/patbits <F0F0F0F000000000> def   % 16 bits set of 64
+{ 9 0 { /py exch def /px exch def
+        patbits py 1 add 2 div 8 mul cvi get
+        1 7 px 1 add 2 div 8 mul cvi sub bitshift and 0 ne
+        { 1 }{ 0 } ifelse } setscreen
+} stopped not (a bitmap spot installs) assert
+0.75 .countblack 16 eq (a bitmap spot splits its cell at the boundary grey) assert
+
+60 45 { 180 mul cos exch 180 mul cos add 2 div } setscreen
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
 % A CIDFontType 0 descendant: its charstrings arrive in the StartData
 % block -- read from the file itself, so this stands at the top level
 % -- and the face assembles from the written-back resource file,
@@ -846,52 +1669,6 @@ countink 50 ge (BuildChar serves glyphshow through the Encoding) assert
 currentpoint pop 26 sub abs 0.5 le (the BuildChar width advances the pen) assert
 erasepage
 
-% --- procedure-implemented standard operators stand as operators ---
-% load answers operatortype for them, so bind substitutes them and the
-% classic self-redefinition idiom captures the standard behaviour
-% instead of recursing into the new definition
-/stroke load type /operatortype eq (stroke loads as an operator) assert
-/fill load type /operatortype eq (fill loads as an operator) assert
-/show load type /operatortype eq (show loads as an operator) assert
-gsave
-/bnd.st /stroke load def
-/stroke { 2 2 scale stroke } bind def
-newpath 10 10 moveto 20 20 lineto stroke
-userdict /stroke undef   % drop the shadow; the standard stroke returns
-userdict /bnd.st undef
-true (a bound self-redefinition of stroke terminates) assert
-grestore
-
-% an error that unwinds out of a wrapped operator is the operator's
-% error: it names the command, and the stacks return to their depths
-% at the call -- what the procedure part-way pushed drops, operands
-% still in place stay
-/ep.op /ep.testname { (j1) (j2) ep.doesnotexist } .wrapop def
-count /ep.d0 exch def
-1 2 { ep.op } stopped
-(the wrapped-operator error is caught) assert
-$error /command get dup type /operatortype eq
-exch 32 string cvs (ep.testname) eq and
-(an error in a wrapped operator names the operator) assert
-count ep.d0 sub 2 eq (the operand depth at the call comes back) assert
-pop pop
-% nested wrapped calls report the innermost and unwind to the caller
-/ep.in /ep.inner { 7 8 ep.alsomissing } .wrapop def
-/ep.out /ep.outer { (x) (y) ep.in } .wrapop def
-count /ep.d1 exch def
-{ ep.out } stopped pop
-$error /command get 32 string cvs (ep.inner) eq
-(a nested wrapped error names the innermost operator) assert
-count ep.d1 eq (a nested wrapped error unwinds the operand junk) assert
-% a wrapper that catches its own error keeps its own state
-/ep.c /ep.catcher { (kept) { ep.gone } stopped pop } .wrapop def
-ep.c (kept) eq (a wrapper catching its own error keeps its stack) assert
-% the dict stack comes back when the procedure dies inside a begin
-countdictstack /ep.dd exch def
-/ep.d /ep.dicty { 5 dict begin ep.nothere } .wrapop def
-{ ep.d } stopped pop
-countdictstack ep.dd eq (the dict depth at the call comes back) assert
-
 % --- charpath appends glyph outlines: the path carries curves, fills
 %     with its counters intact, and clips like any other path ---
 basefont null ne {
@@ -922,11 +1699,200 @@ basefont null ne {
     10 34 inknear (charpath clip admits the ring) assert
 } if
 
+% a many-segment convex clip window (a closed contour ends on its own
+% start; the degenerate closing edge must not poison the half-planes)
+erasepage
+gsave
+newpath 32 32 20 0 360 arc closepath clip
+newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+grestore
+32 32 inkat (a circular clip window admits its centre) assert
+countink dup
+900 ge (circular clip covers the disk) assert
+1600 le (circular clip stays within the disk) assert
+
+% two rectangle clips intersect to a rectangle, and the region still
+% answers as one through clippath
+gsave
+newpath 10 10 40 40 rectclip 20 20 40 40 rectclip
+clippath pathbbox 4 array astore
+dup 0 get 20 sub abs 0.02 le
+1 index 1 get 20 sub abs 0.02 le and
+1 index 2 get 50 sub abs 0.02 le and
+exch 3 get 50 sub abs 0.02 le and
+(two rectangle clips intersect to the rectangle) assert
+grestore
+
+% the procedures a program hands pathforall run in the caller's
+% environment: a def made inside one must land in the caller's
+% dictionary -- the Blue Book's centred-dash program accumulates its
+% path length this way
+/pfsum 0 def
+newpath 10 10 moveto 30 40 lineto 50 10 lineto
+{ pop pop } { pop pop /pfsum pfsum 1 add def } { 6 { pop } repeat } { }
+pathforall
+pfsum 2 eq (pathforall procedures def into the caller's dictionary) assert
+
+% --- arc semantics: sweep direction, current point, segmentation ---
+% arc sweeps counterclockwise from angle1 to angle2 and leaves the
+% current point at angle2; arcn mirrors. Probed through pathforall,
+% independent of any device.
+/apd 8 dict def
+newpath 30 30 10 0 90 arc
+currentpoint
+40 (arc leaves the current point at angle2, y) assertnear
+30 (arc leaves the current point at angle2, x) assertnear
+newpath 30 30 10 90 0 arcn
+currentpoint
+30 (arcn leaves the current point at angle2, y) assertnear
+40 (arcn leaves the current point at angle2, x) assertnear
+
+% counterclockwise from (40,30): the first control point leads upward
+apd /c1y null put
+newpath 30 30 10 0 90 arc
+{ pop pop } { pop pop }
+{ pop pop pop pop exch pop
+  apd /c1y get null eq { apd /c1y 3 -1 roll put }{ pop } ifelse }
+{} pathforall
+apd /c1y get 30 gt (arc sweeps counterclockwise) assert
+
+% a full circle is one moveto and four quadrant curves, nothing else
+apd /m 0 put apd /l 0 put apd /c 0 put
+newpath 40 40 12 0 360 arc
+{ pop pop apd /m 2 copy get 1 add put }
+{ pop pop apd /l 2 copy get 1 add put }
+{ pop pop pop pop pop pop apd /c 2 copy get 1 add put }
+{} pathforall
+apd /m get 1 eq (a full circle starts with one moveto) assert
+apd /l get 0 eq (a full circle has no linetos) assert
+apd /c get 4 eq (a full circle is four quadrant curves) assert
+
+% a partial arc splits at the quadrant boundaries it crosses
+apd /c 0 put
+newpath 40 40 12 45 200 arc
+{ pop pop } { pop pop }
+{ pop pop pop pop pop pop apd /c 2 copy get 1 add put }
+{} pathforall
+apd /c get 3 eq (a partial arc splits at quadrant boundaries) assert
+
+% --- arct/arcto: tangent geometry, degenerate forms, errors ---
+% arcto reports both tangent points and leaves the current point at
+% the second; the results arrive as xt1 yt1 xt2 yt2
+newpath 0 0 moveto 100 0 100 100 50 arcto
+50 (arcto second tangent point y) assertnear
+100 (arcto second tangent point x) assertnear
+0 (arcto first tangent point y) assertnear
+50 (arcto first tangent point x) assertnear
+currentpoint
+50 (arcto leaves the current point at the second tangent, y) assertnear
+100 (arcto leaves the current point at the second tangent, x) assertnear
+
+% arct builds the same path and reports nothing
+count /precount exch def
+newpath 0 0 moveto 100 0 100 100 50 arct
+count precount eq (arct leaves no results) assert
+currentpoint
+50 (arct leaves the current point at the second tangent, y) assertnear
+100 (arct leaves the current point at the second tangent, x) assertnear
+
+% one moveto, the straight tangent segment, one quadrant curve
+apd /m 0 put apd /l 0 put apd /c 0 put
+newpath 0 0 moveto 100 0 100 100 50 arct
+{ pop pop apd /m 2 copy get 1 add put }
+{ pop pop apd /l 2 copy get 1 add put }
+{ pop pop pop pop pop pop apd /c 2 copy get 1 add put }
+{} pathforall
+apd /m get 1 eq (arct starts from the existing current point) assert
+apd /l get 1 eq (arct appends the tangent line) assert
+apd /c get 1 eq (a 90-degree arct corner is one curve) assert
+
+% the arct path agrees with its explicit lineto+arc expansion (the
+% bounding box spans the curves' control hulls, so it checks the
+% control points too)
+newpath 0 0 moveto 100 0 100 100 50 arct
+pathbbox /aury exch def /aurx exch def /ally exch def /allx exch def
+newpath 0 0 moveto 50 0 lineto 50 50 50 -90 0 arc
+pathbbox
+aury (arct matches lineto+arc, ury) assertnear
+aurx (arct matches lineto+arc, urx) assertnear
+ally (arct matches lineto+arc, lly) assertnear
+allx (arct matches lineto+arc, llx) assertnear
+
+% a right-hand turn sweeps the corner clockwise
+newpath 0 0 moveto 100 0 100 -100 50 arct
+currentpoint
+-50 (clockwise arct current point y) assertnear
+100 (clockwise arct current point x) assertnear
+
+% collinear rays degenerate to the straight segment, both tangent
+% points collapsing onto the corner
+newpath 0 0 moveto 50 0 100 0 25 arcto
+0 (collinear arcto yt2) assertnear
+50 (collinear arcto xt2) assertnear
+0 (collinear arcto yt1) assertnear
+50 (collinear arcto xt1) assertnear
+apd /l 0 put apd /c 0 put
+newpath 0 0 moveto 50 0 100 0 25 arct
+{ pop pop } { pop pop apd /l 2 copy get 1 add put }
+{ pop pop pop pop pop pop apd /c 2 copy get 1 add put }
+{} pathforall
+apd /l get 1 eq (collinear arct is a line) assert
+apd /c get 0 eq (collinear arct has no curve) assert
+
+% errors: a missing current point, a directionless tangent ray, a
+% negative radius (a caught continuation leaves its operands: mark
+% and clear around each)
+mark newpath { 1 2 3 4 5 arct } stopped
+/caught exch def cleartomark
+caught (arct without a current point is caught) assert
+$error /errorname get /nocurrentpoint eq (arct raises nocurrentpoint) assert
+mark newpath 0 0 moveto { 0 0 10 10 5 arct } stopped
+/caught exch def cleartomark
+caught (arct on a degenerate ray is caught) assert
+$error /errorname get /undefinedresult eq (arct raises undefinedresult) assert
+mark newpath 0 0 moveto { 100 0 100 100 -5 arcto } stopped
+/caught exch def cleartomark
+caught (arcto with a negative radius is caught) assert
+$error /errorname get /rangecheck eq (arcto raises rangecheck) assert
+$error /newerror false put
+
+% a rounded rectangle built from four arct corners: filled inside,
+% clipped away at the square corner
+erasepage
+newpath 32 8 moveto
+56 8 56 32 16 arct
+56 56 32 56 16 arct
+8 56 8 32 16 arct
+8 8 32 8 16 arct
+closepath fill
+32 32 inkat (rounded rectangle fills its centre) assert
+32 10 inkat (rounded rectangle fills its edge midpoints) assert
+10 10 inkat not (rounded rectangle excludes the square corner) assert
+54 54 inkat not (rounded rectangle excludes the opposite corner) assert
+2 32 inkat not (rounded rectangle stays inside its frame) assert
+
+% pen advances scale linearly: a run of one character is as wide as
+% the sum of its parts (the hinter must not round each step)
+/Courier findfont 13 scalefont setfont
+(iiiiiiiiiiiiiiiiiiii) stringwidth pop
+(i) stringwidth pop 20 mul
+sub abs 0.01 lt (advances accumulate without per-glyph rounding) assert
+
+% the PostScript style-variant names reach a styled face: bold covers
+% more area than regular at the same size
+erasepage
+/Helvetica findfont 24 scalefont setfont
+newpath 4 20 moveto (HHHH) show
+countink /apreg exch def
+erasepage
+/Helvetica-Bold findfont 24 scalefont setfont
+newpath 4 20 moveto (HHHH) show
+countink apreg gt (Helvetica-Bold resolves to a bold face) assert
+
 % --- text metrics: stringwidth reports the scaled glyph advances ---
 % a bold digit spans roughly half its em -- far from the rounded-to-a-
 % whole-pixel failure mode of one em per glyph -- and the reported
 % width scales linearly with the font size, including sub-unit sizes
-basefont null ne {
 /Helvetica-Bold findfont 13 scalefont setfont
 (23) stringwidth pop /w13 exch def
 w13 13 div dup 0.8 gt exch 1.6 lt and ((23) width is a plausible em fraction) assert
@@ -944,20 +1910,41 @@ erasepage
 newpath 4 20 moveto (23) show
 currentpoint pop 4 sub
 w13 (show advances the pen by stringwidth) assertnear
-} if
+
+% --- text colour: glyphs mark in the current colour ---
+% white text knocks its ink out of a black field regardless of the
+% space the colour was set in, and composite black marks like any fill
+erasepage
+0 setgray newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+countink /fieldink exch def
+0 0 0 0 setcmykcolor
+/Helvetica-Bold findfont 24 scalefont setfont
+newpath 4 20 moveto (HHH) show
+countink fieldink lt (white cmyk text cuts ink out of a black field) assert
+0 setgray newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+1 1 1 setrgbcolor
+newpath 4 20 moveto (HHH) show
+countink fieldink lt (white rgb text cuts ink out of a black field) assert
+erasepage
+0 0 0 1 setcmykcolor
+newpath 4 20 moveto (HHH) show
+countink 20 gt (full-black cmyk text marks the page) assert
+0 setgray
 
 % --- font identity: scalefont and makefont build dictionaries ---
 % scaling a font returns a new dictionary carrying the size in its
-% FontMatrix and leaves the operand font untouched. The base follows
-% the Type 1 convention (0.001: 1000 character-space units per em),
-% so the scaled copy carries size/1000
-basefont null ne {
-/Helvetica-Bold findfont dup 13 scalefont
+% FontMatrix and leaves the operand font untouched. Read the operand's
+% own base scale rather than assume one, so the check holds whichever
+% face the name resolves to (a Type 1's 0.001 or a TrueType face's em
+% scale): the copy carries the size times that base.
+/Helvetica-Bold findfont
+dup /FontMatrix get 0 get /basefm exch def
+dup 13 scalefont
 2 copy eq not (scalefont returns a new dictionary) assert
 exch /FontMatrix get 0 get
-0.001 (scalefont leaves the operand font unscaled) assertnear
+basefm (scalefont leaves the operand font unscaled) assertnear
 /FontMatrix get 0 get
-0.013 (scalefont carries the size in the copy's FontMatrix) assertnear
+basefm 13 mul (scalefont carries the size in the copy's FontMatrix) assertnear
 
 % two sizes of one face coexist: measuring through one dictionary must
 % not disturb the other
@@ -1038,7 +2025,6 @@ grestore
 14 32 inkat (ring clip admits the band on the other axis) assert
 32 32 inkat not (ring clip excludes the hole) assert
 32 4 inkat not (ring clip excludes outside the outer circle) assert
-} if
 
 % Insideness testing: the probe pixel or aperture region intersects
 % the spans the painting operator would mark. Point results at edges
@@ -1080,13 +2066,117 @@ newpath 10 10 moveto 20 10 lineto
 inufill (inufill inside the triangle) assert
 2 7 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
 inufill not (inufill outside the triangle) assert
+15 11.4 { 10 10 20 12 setbbox 10 10 moveto 20 10 lineto } [1 0 0 4 0 0]
+inustroke (inustroke shapes the pen by the matrix) assert
 15 11.4 { 10 10 20 12 setbbox 10 10 moveto 20 10 lineto }
 inustroke not (inustroke without the matrix keeps the pen) assert
-% inustroke's optional matrix concatenates before strokepath; a matrix
-% that shapes the pen anisotropically is not exercised here, as this
-% interpreter approximates the pen from the transform's leading column
-% and so keeps it isotropic
 newpath
+
+% Smooth shading of the function-based and patch types reaches the
+% raster with each declared corner colour in its corner; a mesh
+% carrying a Function maps its parametric values through it
+/shbuf 200 string def
+/shp 0 def
+/pb { shbuf shp 3 -1 roll put /shp shp 1 add def } def
+/pw { dup 256 idiv pb 256 mod pb } def
+/ppt { % x y (user units, 0..8)
+    exch 8 div 65535 mul round cvi pw
+    8 div 65535 mul round cvi pw
+} def
+/rgbat { % x y . r g b
+    DEV2 dup /GetPix get exec
+} def
+graphicsdict /currgstate get /device DEV2 put
+matrix setmatrix
+
+% type 6: a square patch with straight edges, corners RGBY
+/shp 0 def
+0 pb
+0 0 ppt  0 8 3 div ppt  0 16 3 div ppt  0 8 ppt
+8 3 div 8 ppt  16 3 div 8 ppt  8 8 ppt
+8 16 3 div ppt  8 8 3 div ppt  8 0 ppt
+16 3 div 0 ppt  8 3 div 0 ppt
+255 pb 0 pb 0 pb   0 pb 255 pb 0 pb
+0 pb 0 pb 255 pb   255 pb 255 pb 0 pb
+DEV2 /ImgData get .zerorows
+<<
+  /ShadingType 6 /ColorSpace /DeviceRGB
+  /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
+  /Decode [0 8 0 8 0 1 0 1 0 1]
+  /DataSource shbuf 0 shp getinterval
+>> shfill
+1 1 rgbat 100 lt exch 100 lt and exch 150 gt and
+(the Coons corner c1 is red) assert
+1 6 rgbat 100 lt exch 150 gt and exch 100 lt and
+(the Coons corner c2 is green) assert
+6 6 rgbat 150 gt exch 100 lt and exch 100 lt and
+(the Coons corner c3 is blue) assert
+6 1 rgbat 100 lt exch 150 gt and exch 150 gt and
+(the Coons corner c4 is yellow) assert
+
+% type 7: the same square as a tensor patch, interior at the thirds
+/shp 0 def
+0 pb
+0 0 ppt  0 8 3 div ppt  0 16 3 div ppt  0 8 ppt
+8 3 div 8 ppt  16 3 div 8 ppt  8 8 ppt
+8 16 3 div ppt  8 8 3 div ppt  8 0 ppt
+16 3 div 0 ppt  8 3 div 0 ppt
+8 3 div 8 3 div ppt  8 3 div 16 3 div ppt
+16 3 div 16 3 div ppt  16 3 div 8 3 div ppt
+255 pb 0 pb 0 pb   0 pb 255 pb 0 pb
+0 pb 0 pb 255 pb   255 pb 255 pb 0 pb
+DEV2 /ImgData get .zerorows
+<<
+  /ShadingType 7 /ColorSpace /DeviceRGB
+  /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
+  /Decode [0 8 0 8 0 1 0 1 0 1]
+  /DataSource shbuf 0 shp getinterval
+>> shfill
+1 1 rgbat 100 lt exch 100 lt and exch 150 gt and
+(the tensor corner c1 is red) assert
+6 6 rgbat 150 gt exch 100 lt and exch 100 lt and
+(the tensor corner c3 is blue) assert
+
+% type 1: a sampled two-input function, corner samples RGBY
+DEV2 /ImgData get .zerorows
+<<
+  /ShadingType 1 /ColorSpace /DeviceRGB
+  /Domain [0 1 0 1] /Matrix [8 0 0 8 0 0]
+  /Function <<
+    /FunctionType 0 /Domain [0 1 0 1] /Range [0 1 0 1 0 1]
+    /Size [2 2] /BitsPerSample 8
+    /DataSource <ff000000ff000000ffffff00>
+  >>
+>> shfill
+0 0 rgbat 100 lt exch 100 lt and exch 150 gt and
+(the function shading corner is red) assert
+7 0 rgbat 100 lt exch 150 gt and exch 100 lt and
+(the function shading corner is green) assert
+0 7 rgbat 150 gt exch 100 lt and exch 100 lt and
+(the function shading corner is blue) assert
+7 7 rgbat 100 lt exch 150 gt and exch 150 gt and
+(the function shading corner is yellow) assert
+
+% type 5 with a Function: parametric values map through it
+/shp 0 def
+0 0 ppt 0 pb   8 0 ppt 0 pb
+0 8 ppt 255 pb 8 8 ppt 255 pb
+DEV2 /ImgData get .zerorows
+<<
+  /ShadingType 5 /ColorSpace /DeviceRGB /VerticesPerRow 2
+  /BitsPerCoordinate 16 /BitsPerComponent 8
+  /Decode [0 8 0 8 0 1]
+  /Function << /FunctionType 2 /Domain [0 1] /N 1
+               /C0 [1 0 0] /C1 [0 0 1] >>
+  /DataSource shbuf 0 shp getinterval
+>> shfill
+4 0 rgbat 100 lt exch 100 lt and exch 150 gt and
+(a Function mesh starts at C0) assert
+4 7 rgbat 150 gt exch 100 lt and exch 100 lt and
+(a Function mesh ends at C1) assert
+
+graphicsdict /currgstate get /device DEV put
+initgraphics
 
 % Byte-mapped composite fonts: each mapping hands the declared
 % descendant the right code, shown by the descendants' distinct
@@ -1144,57 +2234,86 @@ exch 2 get 11 sub abs 0.01 lt and
 newpath
 <41> /Fm4 fm.w 7 (stringwidth measures without a currentpoint) assertnear
 
-% a font dictionary's entries carry the attributes a program reads:
-% the matrix is data, the bounding box answers executable as the
-% reference interpreters do, and the encoding is data
-basefont null ne {
-    basefont /FontMatrix get xcheck not
-    (a font matrix is literal) assert
-    basefont /FontBBox get xcheck
-    (a font bounding box is executable) assert
-    basefont /Encoding get xcheck not
-    (a font encoding is literal) assert
-} if
+% colorimage pulls its procedure source once per row, not once for
+% the image: the last row's colour arrives only if every call
+% happened (a bare name fetch once ran the procedure and left its
+% first chunk standing in for the whole image)
+graphicsdict /currgstate get /device DEV2 put
+matrix setmatrix
+DEV2 /ImgData get .zerorows
+/ci.data 192 string def
+0 1 167 { ci.data exch 0 put } for
+168 1 191 { ci.data exch dup 168 sub 3 mod 1 eq { 255 }{ 0 } ifelse put } for
+userdict /ci.pos 0 put
+gsave
+8 8 scale
+8 8 8 [8 0 0 -8 0 8]
+{ ci.data userdict /ci.pos get 24 getinterval
+  userdict /ci.pos 2 copy get 24 add put }
+false 3 colorimage
+grestore
+userdict /ci.pos get 192 eq (colorimage consumes every row's chunk) assert
+4 0 rgbat 100 lt exch 150 gt and exch 100 lt and
+(the last row's colour reaches the raster) assert
+4 7 rgbat 100 lt exch 100 lt and exch 100 lt and
+(the first row stays its own colour) assert
+graphicsdict /currgstate get /device DEV put
+initgraphics
 
-% --- machinery runs a program's procedures on the program's stacks ---
-% a callback's defs reach the program's dictionaries, and names the
-% machinery uses privately (str, proc, i, pend...) are out of reach:
-% defining them in a callback must not corrupt the machinery
-/Courier findfont 10 scalefont setfont
+% Interpolate reaches the planar, masked and clipped image shapes:
+% samples ramp between their neighbours while a mask still decides
+% each pixel by its nearest sample
+graphicsdict /currgstate get /device DEV2 put
+matrix setmatrix
+DEV2 /ImgData get .zerorows
+/DeviceRGB setcolorspace
 gsave
-100 100 moveto
-{ pop pop /str (mine) def /proc 7 def /iso.k true def } (ab) kshow
+8 8 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /Interpolate true /MultipleDataSources true
+   /DataSource [ <00 ff 00 ff> <00 00 ff ff> <80 80 80 80> ]
+>> image
 grestore
-iso.k (a kshow procedure runs on the caller's stacks) assert
-str (mine) eq (a kshow procedure's defs reach the caller) assert
-userdict /str undef userdict /proc undef userdict /iso.k undef
-count /iso.kd exch def
-gsave 100 100 moveto { pop pop (k) } (abc) kshow grestore
-count iso.kd sub 2 eq (a kshow procedure's stack results survive) assert
-pop pop
-/iso.c 0 def
-gsave 100 100 moveto
-{ pop pop pop /iso.c iso.c 1 add def } (ab) cshow
-grestore
-iso.c 2 eq (a cshow procedure runs per character on the caller's stacks) assert
-userdict /iso.c undef
+1 4 rgbat pop pop /ip.l exch def
+6 4 rgbat pop pop /ip.r exch def
+ip.r ip.l sub 100 gt (a planar image ramps under Interpolate) assert
+4 4 rgbat pop pop dup 40 gt exch 215 lt and
+(the ramp passes through the blend) assert
+DEV2 /ImgData get .zerorows
 gsave
-{ 10 10 8 [10 0 0 -10 0 10]
-  { /pend (x) def /rawrow 5 def /got 99 def <00112233445566778899> }
-  image } stopped not
-(an image source defining the row pump's names completes) assert
+8 8 scale
+<< /ImageType 3 /InterleaveType 3
+   /DataDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+      /Interpolate true
+      /DataSource <00ff00 ff0000 0000ff 00ff00> >>
+   /MaskDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 1
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1]
+      /DataSource <80 00> >>
+>> image
 grestore
-userdict /pend undef userdict /rawrow undef userdict /got undef
+1 6 rgbat 5 lt exch 5 lt and exch 5 lt and
+(the masked corner stays unpainted) assert
+5 6 rgbat pop pop /ip.a exch def
+7 6 rgbat pop pop /ip.b exch def
+ip.a ip.b ne (the unmasked cells ramp rather than step) assert
+DEV2 /ImgData get .zerorows
 gsave
-<< /PatternType 1 /PaintType 1 /TilingType 1
-   /BBox [0 0 10 10] /XStep 10 /YStep 10
-   /PaintProc { pop /i 999 def /pat (mine) def /iso.p true def
-                newpath 0 0 moveto 5 0 lineto 5 5 lineto closepath fill }
->> matrix makepattern setpattern
-newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath fill
+newpath 0 0 moveto 8 0 lineto 0 8 lineto closepath clip
+8 8 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /Interpolate true
+   /DataSource <ff0000 00ff00 0000ff ffff00>
+>> image
 grestore
-iso.p (a pattern paint procedure runs on the caller's stacks) assert
-userdict /i undef userdict /pat undef userdict /iso.p undef
+1 1 rgbat 100 gt 3 1 roll pop pop
+(the clipped interpolated image paints inside) assert
+7 7 rgbat 5 lt exch 5 lt and exch 5 lt and
+(the clipped interpolated image spares outside) assert
+graphicsdict /currgstate get /device DEV put
+initgraphics
 
 % The TIFF device frames the rgb raster as a baseline TIFF: the
 % little-endian header, a directory whose width entry answers, and
@@ -1317,6 +2436,167 @@ FmPlain execform
 FmPlain execform
 userdict /fm.m get 2 eq (an unwritable form paints directly each time) assert
 initgraphics
+
+% a font dictionary's entries carry the attributes a program reads:
+% the matrix is data, the bounding box answers executable as the
+% reference interpreters do, and the encoding is data
+basefont null ne {
+    basefont /FontMatrix get xcheck not
+    (a font matrix is literal) assert
+    basefont /FontBBox get xcheck
+    (a font bounding box is executable) assert
+    basefont /Encoding get xcheck not
+    (a font encoding is literal) assert
+} if
+% --- procedure-implemented standard operators stand as operators ---
+% load answers operatortype for them, so bind substitutes them and the
+% classic self-redefinition idiom captures the standard behaviour
+% instead of recursing into the new definition
+/stroke load type /operatortype eq (stroke loads as an operator) assert
+/fill load type /operatortype eq (fill loads as an operator) assert
+/show load type /operatortype eq (show loads as an operator) assert
+gsave
+/bnd.st /stroke load def
+/stroke { 2 2 scale stroke } bind def
+newpath 10 10 moveto 20 20 lineto stroke
+userdict /stroke undef   % drop the shadow; the standard stroke returns
+userdict /bnd.st undef
+true (a bound self-redefinition of stroke terminates) assert
+grestore
+
+% an error that unwinds out of a wrapped operator is the operator's
+% error: it names the command, and the stacks return to their depths
+% at the call -- what the procedure part-way pushed drops, operands
+% still in place stay
+/ep.op /ep.testname { (j1) (j2) ep.doesnotexist } .wrapop def
+count /ep.d0 exch def
+1 2 { ep.op } stopped
+(the wrapped-operator error is caught) assert
+$error /command get dup type /operatortype eq
+exch 32 string cvs (ep.testname) eq and
+(an error in a wrapped operator names the operator) assert
+count ep.d0 sub 2 eq (the operand depth at the call comes back) assert
+pop pop
+% nested wrapped calls report the innermost and unwind to the caller
+/ep.in /ep.inner { 7 8 ep.alsomissing } .wrapop def
+/ep.out /ep.outer { (x) (y) ep.in } .wrapop def
+count /ep.d1 exch def
+{ ep.out } stopped pop
+$error /command get 32 string cvs (ep.inner) eq
+(a nested wrapped error names the innermost operator) assert
+count ep.d1 eq (a nested wrapped error unwinds the operand junk) assert
+% a wrapper that catches its own error keeps its own state
+/ep.c /ep.catcher { (kept) { ep.gone } stopped pop } .wrapop def
+ep.c (kept) eq (a wrapper catching its own error keeps its stack) assert
+% the dict stack comes back when the procedure dies inside a begin
+countdictstack /ep.dd exch def
+/ep.d /ep.dicty { 5 dict begin ep.nothere } .wrapop def
+{ ep.d } stopped pop
+countdictstack ep.dd eq (the dict depth at the call comes back) assert
+
+% --- runaway recursion meets the execution-stack ceiling ---
+% a procedure that calls itself without limit, and a wrapped operator
+% doing the same, raise a catchable execstackoverflow instead of
+% consuming memory without bound
+/eso.p { eso.p 1 pop } def
+{ eso.p } stopped
+(runaway procedure recursion is caught) assert
+$error /errorname get 32 string cvs (execstackoverflow) eq
+(runaway procedure recursion raises execstackoverflow) assert
+/eso.w /eso.w { eso.w } .wrapop def
+{ eso.w } stopped
+(runaway wrapped recursion is caught) assert
+$error /errorname get 32 string cvs (execstackoverflow) eq
+(runaway wrapped recursion raises execstackoverflow) assert
+% the other stacks have ceilings too: a loop pushing operands without
+% bound overflows the operand stack, one beginning dicts without end
+% overflows the dictionary stack, and both errors are catchable
+{ { 1 } loop } stopped
+(a runaway operand-pushing loop is caught) assert
+$error /errorname get 32 string cvs (stackoverflow) eq
+(a runaway operand-pushing loop raises stackoverflow) assert
+clear
+countdictstack /eso.dd exch def
+{ { 1 dict begin } loop } stopped
+(a runaway dict-begin loop is caught) assert
+$error /errorname get 32 string cvs (dictstackoverflow) eq
+(a runaway dict-begin loop raises dictstackoverflow) assert
+countdictstack eso.dd sub { end } repeat
+clear % the interrupted loop's pending operands
+
+% --- machinery runs a program's procedures on the program's stacks ---
+% a callback's defs reach the program's dictionaries, and names the
+% machinery uses privately (str, proc, i, pend...) are out of reach:
+% defining them in a callback must not corrupt the machinery
+/Courier findfont 10 scalefont setfont
+gsave
+100 100 moveto
+{ pop pop /str (mine) def /proc 7 def /iso.k true def } (ab) kshow
+grestore
+iso.k (a kshow procedure runs on the caller's stacks) assert
+str (mine) eq (a kshow procedure's defs reach the caller) assert
+userdict /str undef userdict /proc undef userdict /iso.k undef
+count /iso.kd exch def
+gsave 100 100 moveto { pop pop (k) } (abc) kshow grestore
+count iso.kd sub 2 eq (a kshow procedure's stack results survive) assert
+pop pop
+/iso.c 0 def
+gsave 100 100 moveto
+{ pop pop pop /iso.c iso.c 1 add def } (ab) cshow
+grestore
+iso.c 2 eq (a cshow procedure runs per character on the caller's stacks) assert
+userdict /iso.c undef
+
+% --- the machinery's internal references are frozen: a program
+% shadowing a core operator name reaches only its own calls ---
+userdict /exch 99 put
+gsave
+{ 100 100 moveto (a) show
+  newpath 10 10 moveto 20 20 lineto stroke } stopped not
+grestore
+userdict /exch undef
+(text and stroking survive a shadowed exch) assert
+/iso.g /gsave load def
+userdict /gsave (shadowed) put
+{ newpath 30 30 moveto 40 40 lineto 30 40 lineto closepath eofill } stopped not
+userdict /gsave undef   % drop the shadow; the standard gsave returns
+(painting survives a shadowed gsave) assert
+userdict /iso.g undef
+
+% --- the machinery's data roots and state are its own: a program may
+% take the names graphicsdict, DEVICE and =string for itself, and it
+% finds no machinery state in userdict to disturb ---
+5 dict begin
+/graphicsdict (mine) def
+/DEVICE 42 def
+/=string 7 def
+{ newpath 10 10 moveto 40 40 lineto stroke
+  100 100 moveto (a) show
+  gsave 20 20 10 10 rectfill grestore } stopped not
+end
+(painting survives shadowed graphicsdict, DEVICE and =string) assert
+userdict /.wrappedprocs known not
+userdict /.imginterp known not and
+userdict /.fontserial known not and
+userdict /.hairhw known not and
+(the machinery keeps its state out of userdict) assert
+gsave
+{ 10 10 8 [10 0 0 -10 0 10]
+  { /pend (x) def /rawrow 5 def /got 99 def <00112233445566778899> }
+  image } stopped not
+(an image source defining the row pump's names completes) assert
+grestore
+userdict /pend undef userdict /rawrow undef userdict /got undef
+gsave
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 10 10] /XStep 10 /YStep 10
+   /PaintProc { pop /i 999 def /pat (mine) def /iso.p true def
+                newpath 0 0 moveto 5 0 lineto 5 5 lineto closepath fill }
+>> matrix makepattern setpattern
+newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath fill
+grestore
+iso.p (a pattern paint procedure runs on the caller's stacks) assert
+userdict /i undef userdict /pat undef userdict /iso.p undef
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

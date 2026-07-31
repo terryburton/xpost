@@ -1,10 +1,9 @@
 % status operator, both forms (PLRM 8.2), run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
-% Regression for the campaign fix: only the "file status bool" form existed; the
-% "(filename) status pages bytes referred created true | false" form raised
-% typecheck. The byte size is checked exactly; pages and the timestamps are
-% implementation-defined, so only their type and presence are asserted.
+% A file object gives a boolean; a filename gives pages bytes referred created
+% true, or false when the file is absent. The byte size is checked exactly; pages
+% and the timestamps are implementation-defined, so only their type is asserted.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def

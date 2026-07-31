@@ -5,8 +5,6 @@
 % integer"; rangecheck is the only Errors-list code that fits an out-of-range
 % count), not a silent no-op.
 
-% for's control value is an integer when initial and increment are integers,
-
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
 /erris { 3 dict begin /tag exch def /want exch def
