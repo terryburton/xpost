@@ -1287,16 +1287,23 @@ currentglobal true setglobal
     graphicsdict /.wrappedprocs 128 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
+        /ufill /ueofill /ustroke /ustrokepath /uappend /upath
+        /infill /ineofill /instroke /inufill /inueofill /inustroke
         /clip /eoclip /initclip /rectclip /clippath
         /flattenpath /pathbbox /reversepath
-        /show /ashow /widthshow /awidthshow /kshow /stringwidth /charpath
-        /definefont /scalefont /makefont /setfont /findfont
-        /setcachedevice /setcharwidth
-        /setscreen /currentscreen /settransfer /currenttransfer
+        /show /ashow /widthshow /awidthshow /kshow /cshow
+        /xshow /yshow /xyshow /glyphshow /stringwidth /charpath
+        /definefont /undefinefont /scalefont /makefont /setfont
+        /selectfont /findfont /composefont
+        /setcachedevice /setcachedevice2 /setcharwidth
+        /setscreen /currentscreen /setcolorscreen /currentcolorscreen
+        /sethalftone /currenthalftone
+        /settransfer /currenttransfer /setcolortransfer /currentcolortransfer
         /setgray /setrgbcolor /sethsbcolor /setcmykcolor /setcolor /setcolorspace
         /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
         /currentcolor /currentcolorspace
-        /image /imagemask
+        /image /imagemask /colorimage
+        /shfill /makepattern /setpattern
         /showpage /copypage /erasepage /setpagedevice /currentpagedevice
         /nulldevice /gsave /grestore /grestoreall /initgraphics
     ] {
