@@ -1040,7 +1040,11 @@ int xpost_op_setfileposition (Xpost_Context *ctx,
                               Xpost_Object F,
                               Xpost_Object pos)
 {
-    int ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
+    int ret;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
     if (ret != 0)
         return ioerror;
     return 0;
