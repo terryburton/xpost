@@ -411,6 +411,26 @@ xpost_fd_realpath(int fd, char *buf, size_t buflen)
     return 1;
 }
 
+int
+xpost_unlinkat_beneath(const char *root, const char *rel, int *supported)
+{
+    (void)root; (void)rel;
+    *supported = 0;
+    errno = ENOSYS;
+    return -1;
+}
+
+int
+xpost_renameat_beneath(const char *oldroot, const char *oldrel,
+                       const char *newroot, const char *newrel,
+                       int *supported)
+{
+    (void)oldroot; (void)oldrel; (void)newroot; (void)newrel;
+    *supported = 0;
+    errno = ENOSYS;
+    return -1;
+}
+
 /*============================================================================*
  *                                   API                                      *
  *============================================================================*/
