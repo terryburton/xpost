@@ -232,8 +232,20 @@ xpost_fopen_errno(int e)
     switch (e)
     {
         case EACCES:
+#ifdef EPERM
+        case EPERM:
+#endif
+#ifdef ELOOP
+        case ELOOP:
+#endif
+#ifdef EXDEV
+        case EXDEV:
+#endif
             return invalidfileaccess;
         case ENOENT:
+#ifdef ENOTDIR
+        case ENOTDIR:
+#endif
             return undefinedfilename;
         default:
             return unregistered;
