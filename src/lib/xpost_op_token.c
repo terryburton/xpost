@@ -212,6 +212,35 @@ int grok(Xpost_Context *ctx,
     }
     s[ns] = '\0';  //fsm_check & xpost_name_cons  terminate on \0
 
+    { /* plain decimal integers dominate; scan them without the fsms */
+        char *p = s;
+        if (*p == '+' || *p == '-')
+            p++;
+        if (isdigit((unsigned char)*p))
+        {
+            do { p++; } while (isdigit((unsigned char)*p));
+            if (p - s == ns)
+            {
+                long num;
+                errno = 0;
+                num = strtol(s, NULL, 10);
+                if (errno == ERANGE || (long)(integer)num != num)
+                {
+                    /* beyond the integer range: PLRM 3.3.2 makes it a real */
+                    *retval = xpost_real_cons((real)strtod(s, NULL));
+                    return 0;
+                }
+                *retval = xpost_int_cons(num);
+                return 0;
+            }
+        }
+    }
+
+    /* a token that does not start with a digit, sign or dot cannot
+       match any of the numeric forms */
+    if (!isdigit((unsigned char)*s) && *s != '+' && *s != '-' && *s != '.')
+        goto not_a_number;
+
     if (fsm_check(s, ns, fsm_dec, accept_dec))
     {
         long num;
@@ -277,6 +306,7 @@ int grok(Xpost_Context *ctx,
     }
 
     else
+      not_a_number:
         switch(*s)
         {
             case '(':
@@ -619,7 +649,7 @@ int toke(Xpost_Context *ctx,
          void (*back)(Xpost_Context *ctx, int c, Xpost_Object *src),
          Xpost_Object *retval)
 {
-    char buf[NBUF] = "";
+    char buf[NBUF]; /* grok() NUL-terminates at the token length */
     int sta;  // status, and size
     Xpost_Object o;
     int ret;

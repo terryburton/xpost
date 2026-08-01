@@ -93,15 +93,36 @@ static
 int Icopy(Xpost_Context *ctx,
           Xpost_Object n)
 {
+    int nn = n.int_.val;
+    Xpost_Object *src;
     int i;
-    if (n.int_.val < 0)
+
+    if (nn < 0)
         return rangecheck;
-    if (n.int_.val > xpost_stack_count(ctx->lo, ctx->os))
+    if (nn > xpost_stack_count(ctx->lo, ctx->os))
         return stackunderflow;
-    for (i=0; i < n.int_.val; i++)
-        if (!xpost_stack_push(ctx->lo, ctx->os,
-                              xpost_stack_topdown_fetch(ctx->lo, ctx->os, n.int_.val - 1)))
+    if (nn == 0)
+        return 0;
+
+    /* Snapshot the top n operands in one pass, then push the copies. The
+       former loop re-fetched a fixed deep index (n-1) on every push, and each
+       fetch walked O(n) stack segments, so copy was O(n^2) on a deep stack.
+       Snapshot before pushing because a push may grow and move the memory
+       file, invalidating any cached base pointer. src[0] is the topmost, so
+       pushing src[n-1]..src[0] restores the operands' order above the copy. */
+    src = malloc((size_t)nn * sizeof(Xpost_Object));
+    if (!src)
+        return VMerror;
+    xpost_stack_peek_top(ctx->lo, ctx->os, nn, src);
+    for (i = nn - 1; i >= 0; i--)
+    {
+        if (!xpost_stack_push(ctx->lo, ctx->os, src[i]))
+        {
+            free(src);
             return stackoverflow;
+        }
+    }
+    free(src);
     return 0;
 }
 
@@ -129,50 +150,53 @@ int IIroll(Xpost_Context *ctx,
            Xpost_Object N,
            Xpost_Object J)
 {
-    Xpost_Object *t;
-    Xpost_Object r;
-    int i;
+    Xpost_Object *src;
+    unsigned char *base;
+    Xpost_Stack *root, *top, *seg;
     int n = N.int_.val;
     int j = J.int_.val;
+    int got;
     if (n < 0)
         return rangecheck;
     if (n == 0) return 0;
+    if (n > xpost_stack_count(ctx->lo, ctx->os))
+        return stackunderflow;
     if (j < 0) j = n - ((- j) % n);
     j %= n;
     if (j == 0) return 0;
 
-    t = malloc((n - j) * sizeof(Xpost_Object));
-    if (!t)
+    /* roll touches each of the top n operands a constant number of times,
+       so it is inherently O(n). The former per-element topdown_fetch /
+       topdown_replace each walked O(index) stack segments, making a roll of
+       a deep stack O(n^2). Snapshot the top n operands in a single top-down
+       pass (src[0] is the topmost), then write them back rotated in one more
+       pass: element at top-down position i receives the operand that was at
+       position (i + j) mod n. Neither pass allocates VM, so the cached
+       base/segment pointers stay valid throughout. */
+    src = malloc((size_t)n * sizeof(Xpost_Object));
+    if (!src)
         return VMerror;
-    for (i = 0; i < n-j; i++)
+
+    xpost_stack_peek_top(ctx->lo, ctx->os, n, src);
+
+    base = ctx->lo->base;
+    root = (Xpost_Stack *)(base + ctx->os);
+    top = (Xpost_Stack *)(base + root->prevseg);
+
+    seg = top; got = 0;
+    while (got < n)
     {
-        r = xpost_stack_topdown_fetch(ctx->lo, ctx->os, n - 1 - i);
-        if (xpost_object_get_type(r) == invalidtype){
-	    free(t);
-            return stackunderflow;
-	}
-        t[i] = r;
+        int t = (int)seg->top;
+        int put = (n - got < t) ? (n - got) : t;
+        int m;
+        for (m = 0; m < put; m++)
+            seg->data[t - 1 - m] = src[(got + m + j) % n];
+        got += put;
+        if (got < n)
+            seg = (Xpost_Stack *)(base + seg->prevseg);
     }
-    for (i = 0; i < j; i++)
-    {
-        r = xpost_stack_topdown_fetch(ctx->lo, ctx->os, j - 1 - i);
-        if (xpost_object_get_type(r) == invalidtype){
-	    free(t);
-            return stackunderflow;
-	}
-        if (!xpost_stack_topdown_replace(ctx->lo, ctx->os, n - 1 - i, r)){
-	    free(t);
-            return stackunderflow;
-	}
-    }
-    for (i = 0; i < n-j; i++)
-    {
-        if (!xpost_stack_topdown_replace(ctx->lo, ctx->os, n - j - 1 - i, t[i])){
-	    free(t);
-            return stackunderflow;
-	}
-    }
-    free(t);
+
+    free(src);
     return 0;
 }
 
@@ -250,18 +274,23 @@ int xpost_oper_init_stack_ops(Xpost_Context *ctx,
     //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
     //optab = (void *)(ctx->gl->base + optadr);
     op = xpost_operator_cons(ctx, "pop", (Xpost_Op_Func)Apop, 0, 1, anytype);
+    ctx->opcode_shortcuts.oppop = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "exch", (Xpost_Op_Func)AAexch, 2, 2, anytype, anytype);
+    ctx->opcode_shortcuts.opexch = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "dup", (Xpost_Op_Func)Adup, 2, 1, anytype);
+    ctx->opcode_shortcuts.opdup = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)Icopy, 0, 1, integertype);
     INSTALL;
     op = xpost_operator_cons(ctx, "index", (Xpost_Op_Func)Iindex, 1, 1, integertype);
+    ctx->opcode_shortcuts.opindex = op.mark_.padw;
     INSTALL;
     //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     op = xpost_operator_cons(ctx, "roll", (Xpost_Op_Func)IIroll, 0, 2, integertype, integertype);
     INSTALL;
+    ctx->opcode_shortcuts.oproll = op.mark_.padw;
     op = xpost_operator_cons(ctx, "clear", (Xpost_Op_Func)Zclear, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "count", (Xpost_Op_Func)Zcount, 1, 0);

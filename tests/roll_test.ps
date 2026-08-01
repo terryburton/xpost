@@ -1,0 +1,74 @@
+% roll and copy operators: correctness + O(n) performance guard, run through
+% `xpost -d null` by run-ps-test.sh; prints SUCCESS iff every assertion
+% holds. Both shuffle or duplicate the top n operands and are inherently
+% O(n), but a former implementation walked O(index) stack segments per
+% element (roll fetched/replaced per index; copy re-fetched a fixed deep
+% index on every push), making either O(n^2) on a deep stack -- a large roll
+% or copy then dominated any job that built a deep operand stack. The
+% big-roll and big-copy cases below must stay fast; a return to O(n^2)
+% surfaces as a run-time timeout in meson/make-check.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% 5 2 roll: 0 1 2 3 4 -> 3 4 0 1 2 (top-to-bottom 2 1 0 4 3)
+0 1 2 3 4  5 2 roll
+2 eq (5 2 roll pos0) assert   1 eq (5 2 roll pos1) assert
+0 eq (5 2 roll pos2) assert   4 eq (5 2 roll pos3) assert
+3 eq (5 2 roll pos4) assert
+
+% 5 -2 roll: 0 1 2 3 4 -> 2 3 4 0 1 (top-to-bottom 1 0 4 3 2)
+0 1 2 3 4  5 -2 roll
+1 eq (5 -2 roll pos0) assert  0 eq (5 -2 roll pos1) assert
+4 eq (5 -2 roll pos2) assert  3 eq (5 -2 roll pos3) assert
+2 eq (5 -2 roll pos4) assert
+
+% j larger than n/2: 8 -5 roll: 0..7 -> 5 6 7 0 1 2 3 4 (top 4 3 2 1 0 7 6 5)
+0 1 2 3 4 5 6 7  8 -5 roll
+4 eq (8 -5 roll pos0) assert  3 eq (8 -5 roll pos1) assert
+2 eq (8 -5 roll pos2) assert  1 eq (8 -5 roll pos3) assert
+0 eq (8 -5 roll pos4) assert  7 eq (8 -5 roll pos5) assert
+6 eq (8 -5 roll pos6) assert  5 eq (8 -5 roll pos7) assert
+
+% n 0 roll is the identity
+7 8 9  3 0 roll
+9 eq (3 0 roll pos0) assert   8 eq (3 0 roll pos1) assert
+7 eq (3 0 roll pos2) assert
+
+% a roll larger than one 1000-element stack segment leaves the count intact
+count /before exch def
+20000 { 9 } repeat  20000 7000 roll  20000 -7000 roll
+count before 20000 add eq (multi-segment roll preserves count) assert
+clear
+
+% performance guard: a large roll on a deep stack must finish quickly. At
+% O(n^2) this stalls and the test times out; at O(n) it is instant.
+mark 200000 { 0 } repeat
+200000 99999 roll
+cleartomark
+
+% copy duplicates the top n operands, preserving order (top-down)
+1 2 3  3 copy
+3 eq (copy pos0) assert  2 eq (copy pos1) assert  1 eq (copy pos2) assert
+3 eq (copy pos3) assert  2 eq (copy pos4) assert  1 eq (copy pos5) assert
+5 1 copy  5 eq (1 copy dup) assert  5 eq (1 copy orig) assert
+9 0 copy  9 eq (0 copy leaves top) assert
+
+% a copy spanning several 1000-element stack segments keeps count and order
+20000 { 3 } repeat  20000 copy  count 40000 eq (multi-segment copy count) assert
+clear
+
+% performance guard: a large copy on a deep stack must finish quickly. At
+% O(n^2) copy re-walks the stack per element and the test times out.
+200000 { 0 } repeat  200000 copy  clear
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

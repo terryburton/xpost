@@ -77,7 +77,7 @@ typedef struct Xpost_Magic_Pair
 /**
  * @brief yields the number of real entries in the table for a dict of size n
  */
-#define DICTABN(n) ((n)+1)
+#define DICTABN(n) (2*(n)+1)
 
 /**
  * @brief yields the size in bytes of the table for a dict of size n
@@ -162,6 +162,10 @@ Xpost_Object xpost_dict_get_memory(Xpost_Context *ctx, /*@dependent@*/ Xpost_Mem
    lookup value using key in banked dictionary
 */
 Xpost_Object xpost_dict_get(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
+
+Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
+                                 Xpost_Object d,
+                                 Xpost_Object k);
 
 /**
    store key and value in dictionary

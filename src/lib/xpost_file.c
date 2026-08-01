@@ -486,6 +486,7 @@ disk_readch(Xpost_File *file)
      */
 
 #ifdef HAVE_SYS_SELECT_H
+    if (df->poll_before_read)
     {
         FILE *fp;
         fd_set reads, writes, excepts;
@@ -514,7 +515,15 @@ disk_readch(Xpost_File *file)
     }
 #endif
 
+    /* the interpreter is single-threaded, so the unlocked fast path is safe;
+       unistd.h is present on mingw but does not declare getc_unlocked there */
+#if defined(_WIN32)
+    return _getc_nolock(df->file);
+#elif defined(HAVE_UNISTD_H)
+    return getc_unlocked(df->file);
+#else
     return fgetc(df->file);
+#endif
 }
 
 static int
@@ -598,8 +607,14 @@ xpost_diskfile_open(const FILE *fp)
 
     if (df)
     {
+        struct stat st;
+
         df->methods.methods = &disk_methods;
         df->file = (FILE*)fp;
+        /* reads from a regular file never block, so only poll fds that
+           can stall (pipes, terminals, sockets) */
+        df->poll_before_read = !(fstat(fileno(df->file), &st) == 0 &&
+                                 S_ISREG(st.st_mode));
     }
 
     return &df->methods;

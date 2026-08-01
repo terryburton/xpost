@@ -222,6 +222,10 @@ unsigned int hash(Xpost_Object k)
             + ((unsigned int)xpost_object_get_ent(k) << 7)
             + (k.comp_.off << 5);
     /* h = xpost_object_get_type(k); /\* test collisions. *\/ */
+    /* mix bits so the modulo by the table size spreads keys across
+       all slots for any size */
+    h *= 2654435761u; /* Knuth multiplicative hash (golden ratio) */
+    h ^= h >> 16;
 #ifdef DEBUGDIC
     printf("\nhash(");
     xpost_object_dump(k);
@@ -546,11 +550,24 @@ Xpost_Object clean_key (Xpost_Context *ctx,
     return k;
 }
 
+/* keys are overwhelmingly names: equal iff same bank and name index.
+   decided inline to spare a function call per probe */
+static inline int
+_keys_equal(Xpost_Context *ctx, Xpost_Object a, Xpost_Object b)
+{
+    if (xpost_object_get_type(a) == nametype &&
+        xpost_object_get_type(b) == nametype)
+        return ((a.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ==
+                (b.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)) &&
+               a.mark_.padw == b.mark_.padw;
+    return xpost_dict_compare_objects(ctx, a, b) == 0;
+}
+
 /* repeated loop body from the lookup function */
 #define RETURN_TAB_I_IF_EQ_K_OR_NULL    \
     if (xpost_object_get_type(tp[i].key) == nulltype \
         || (hashval == tp[i].hash \
-            && xpost_dict_compare_objects(ctx, tp[i].key, k) == 0)) \
+            && _keys_equal(ctx, tp[i].key, k))) \
         return tp + i
 
 static dicrec invalidrec[] = {{ 0, {0}, {0}}};
@@ -660,6 +677,61 @@ Xpost_Object xpost_dict_get(Xpost_Context *ctx,
         Xpost_Object k)
 {
     return xpost_dict_get_memory (ctx, xpost_context_select_memory(ctx, d), d, k);
+}
+
+/*
+   Get value from dict with a name key.
+
+   names are already canonical dict keys, so the key normalisation and
+   generality of the full lookup are unnecessary; magic values and any
+   irregularity fall back to the full path. */
+Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
+        Xpost_Object d,
+        Xpost_Object k)
+{
+    Xpost_Memory_File *mem = xpost_context_select_memory(ctx, d);
+    unsigned int ent = xpost_object_get_ent(d);
+    unsigned int ad;
+    dichead *dp;
+    dicrec *tp;
+    unsigned int sz;
+    unsigned int hashval;
+    unsigned int h;
+    unsigned int i;
+
+    if (ent >= mem->table.nextent)
+        return invalid;
+    ad = mem->table.tab[ent].adr;
+    dp = (void *)(mem->base + ad);
+    tp = (void *)(mem->base + ad + sizeof(dichead));
+    sz = DICTABN(dp->sz);
+
+    hashval = hash(k);
+    h = hashval % sz;
+
+    for (i = h; i < sz; i++)
+    {
+        if (xpost_object_get_type(tp[i].key) == nulltype)
+            return invalid;
+        if (hashval == tp[i].hash && _keys_equal(ctx, tp[i].key, k))
+        {
+            if (xpost_object_get_type(tp[i].value) == magictype)
+                return xpost_dict_get_memory(ctx, mem, d, k);
+            return tp[i].value;
+        }
+    }
+    for (i = 0; i < h; i++)
+    {
+        if (xpost_object_get_type(tp[i].key) == nulltype)
+            return invalid;
+        if (hashval == tp[i].hash && _keys_equal(ctx, tp[i].key, k))
+        {
+            if (xpost_object_get_type(tp[i].value) == magictype)
+                return xpost_dict_get_memory(ctx, mem, d, k);
+            return tp[i].value;
+        }
+    }
+    return invalid;
 }
 
 /*
@@ -783,6 +855,8 @@ int xpost_dict_put(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->hold, k);
     xpost_stack_push(ctx->lo, ctx->hold, v);
 
+    ++ctx->namebind_gen; /* a binding may change: invalidate name cache */
+
     return xpost_dict_put_memory(ctx, xpost_context_select_memory(ctx, d), d, k, v);
 }
 
@@ -804,6 +878,8 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
     unsigned int hashnull;
     unsigned int i;
     unsigned int j;
+
+    ++ctx->namebind_gen;
 
     if (!xpost_save_ent_is_saved(mem, xpost_object_get_ent(d)))
         if (!xpost_save_save_ent(mem, dicttype, 0, xpost_object_get_ent(d)))
