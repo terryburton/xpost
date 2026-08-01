@@ -753,7 +753,11 @@ end % userdict
         {   % try the operator, which states FontType, FontMatrix
             % and FontBBox for the face behind the name
             //findfont
-            dup /Encoding 256 array put
+            % a text font's built-in encoding is the standard one; a
+            % fresh copy, so a program re-encoding in place cannot
+            % touch the shared array. A face without standard glyph
+            % names still resolves through its character map.
+            dup /Encoding StandardEncoding dup length array copy put
             dup /BuildChar {} put
         } stopped { % operator failed: 
             //.xpostsys /.fontsubstitutions get exch 2 copy known { % try substitution
