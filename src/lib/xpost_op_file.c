@@ -822,8 +822,11 @@ int xpost_op_file_flushfile (Xpost_Context *ctx,
     return 0;
 }
 
-#ifndef _WIN32
-
+/* file  resetfile  -
+   discard the file's buffered characters (PLRM). A reusable, filter or
+   in-memory stream rewinds to the start of its held data; a disk file
+   flushes its standard-I/O buffer, which is a no-op where the platform
+   offers no way to purge one. */
 static
 int xpost_op_file_resetfile (Xpost_Context *ctx,
                              Xpost_Object F)
@@ -834,8 +837,6 @@ int xpost_op_file_resetfile (Xpost_Context *ctx,
     xpost_file_purge(f);
     return 0;
 }
-
-#endif
 
 /* file  status  bool
    return bool indicating whether file object is active or closed */
@@ -1668,10 +1669,8 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "flushfile", (Xpost_Op_Func)xpost_op_file_flushfile, 0, 1, filetype);
     INSTALL;
-#ifndef _WIN32
     op = xpost_operator_cons(ctx, "resetfile", (Xpost_Op_Func)xpost_op_file_resetfile, 0, 1, filetype);
     INSTALL;
-#endif
     op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_file_status, 1, 1, filetype);
     INSTALL;
     op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_string_status, 5, 1, stringtype);

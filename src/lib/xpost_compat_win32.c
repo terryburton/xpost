@@ -126,8 +126,17 @@ xpost_compat_quit(void)
 void
 xpost_fpurge(FILE *f)
 {
-    /* no __fpurge() or fpurge functionos on Windows */
-    (void)f;
+    /* Windows has no fpurge()/__fpurge(). On the MSVCRT runtime the mingw
+       toolchains build against, fflush() on a stream open for input discards
+       the buffered but unread characters -- the same discard-and-skip effect
+       __fpurge() has on POSIX, on both regular files and pipes (measured
+       identical on the two runtimes). resetfile purges the input side
+       (currentfile), which is what this serves. Two boundaries, both harmless
+       here: on an output stream fflush() writes the buffer rather than
+       discarding it, but the disk files xpost opens for writing (the device
+       writers) are never reset; and under the UCRT, fflush() on input is a
+       conformant no-op, which is exactly the behaviour this replaces. */
+    fflush(f);
 }
 
 long long
