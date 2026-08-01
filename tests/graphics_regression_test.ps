@@ -230,6 +230,308 @@ grestore
 25 25 inkat not (hole region is clear) assert
 2 2 inkat not (outside the window is clear) assert
 
+
+% --- stacked clips combine exactly ---
+% a region of two disjoint windows survives a further clip: the
+% half-plane combiner intersected the windows with each other and
+% kept nothing
+erasepage
+gsave
+newpath
+ 5  5 moveto 20  5 lineto 20 20 lineto  5 20 lineto closepath
+30 30 moveto 45 30 lineto 45 45 lineto 30 45 lineto closepath
+clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+10 10 inkat (the first window survives a stacked clip) assert
+38 38 inkat (the second window survives a stacked clip) assert
+25 25 inkat not (between the windows stays clear) assert
+% an L-shaped region then a rectangle straddling its notch
+erasepage
+gsave
+newpath
+ 5  5 moveto 45  5 lineto 45 25 lineto 25 25 lineto
+25 45 lineto  5 45 lineto closepath
+clip newpath
+10 10 moveto 40 10 lineto 40 40 lineto 10 40 lineto closepath clip newpath
+0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+15 15 inkat (the L's arm intersects the rectangle) assert
+15 38 inkat (the L's other arm intersects the rectangle) assert
+38 38 inkat not (the L's notch stays clear through both clips) assert
+% the caller's path survives the clip and can still paint
+erasepage
+gsave
+newpath 5 5 moveto 45 5 lineto 45 45 lineto 5 45 lineto closepath
+clip fill
+grestore
+25 25 inkat (the path survives clip and fills) assert
+
+% --- eofill and eoclip resolve by the even-odd rule ---
+% two same-wound nested contours: parity separates the band between
+% them from the twice-enclosed interior, where winding does not
+erasepage
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath  % outer, CCW
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath  % inner, CCW too
+eofill
+10 10 inkat (eofill paints the singly-enclosed band) assert
+25 25 inkat not (eofill leaves the twice-enclosed interior clear) assert
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath
+fill
+25 25 inkat (the nonzero fill covers the same interior) assert
+
+erasepage
+gsave
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath
+15 15 moveto 35 15 lineto 35 35 lineto 15 35 lineto closepath
+eoclip
+newpath 0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+10 10 inkat (eoclip passes the singly-enclosed band) assert
+25 25 inkat not (eoclip masks the twice-enclosed interior) assert
+2 2 inkat not (eoclip masks outside its region) assert
+
+% --- dictionary image forms and sample unpacking ---
+% dict imagemask: Decode [1 0] paints the set bits (operand polarity
+% true), with the high-order bit leftmost
+erasepage
+gsave
+10 10 translate 40 40 scale 0 setgray
+<< /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+   /ImageMatrix [8 0 0 -8 0 8] /Decode [1 0]
+   /DataSource <F0F0F0F0F0F0F0F0> >> imagemask
+grestore
+12 30 inkat (dict imagemask paints the set bits) assert
+40 30 inkat not (dict imagemask leaves the clear bits unpainted) assert
+erasepage
+gsave
+10 10 translate 40 40 scale 0 setgray
+<< /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+   /ImageMatrix [8 0 0 -8 0 8] /Decode [0 1]
+   /DataSource <F0F0F0F0F0F0F0F0> >> imagemask
+grestore
+12 30 inkat not (dict imagemask Decode 0-1 spares the set bits) assert
+40 30 inkat (dict imagemask Decode 0-1 paints the clear bits) assert
+
+% a five-wide one-bit image: samples unpack high bit first and every
+% row starts on a byte boundary
+erasepage
+gsave
+10 10 translate 40 40 scale
+<< /ImageType 1 /Width 5 /Height 2 /BitsPerComponent 1
+   /ImageMatrix [5 0 0 -2 0 2] /Decode [0 1]
+   /DataSource <88 08> >> image
+grestore
+14 40 inkat not (one-bit image: the high bit is the left pixel) assert
+22 40 inkat (one-bit image: a clear bit paints black) assert
+46 40 inkat not (one-bit image: the row's last sample is the low nibble's top) assert
+14 20 inkat (one-bit image: the next row begins at the next byte) assert
+46 20 inkat not (one-bit image: the padded row keeps its own samples) assert
+
+% 12-bit samples: three nibbles high-first, rows byte-aligned (three
+% samples occupy four and a half bytes, padded to five per row)
+erasepage
+gsave
+10 10 translate 48 16 scale
+<< /ImageType 1 /Width 3 /Height 1 /BitsPerComponent 12
+   /ImageMatrix [3 0 0 -1 0 1] /Decode [0 1]
+   /DataSource <000FFF00 00> >> image
+grestore
+18 18 inkat (a 12-bit zero sample paints black) assert
+34 18 inkat not (a 12-bit full sample paints white) assert
+50 18 inkat (a 12-bit row is read past its half-byte) assert
+
+% dict image: Decode maps the sample range
+erasepage
+gsave
+10 10 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [1 0]
+   /DataSource <FF00> >> image
+grestore
+14 30 inkat (dict image Decode inverts a full sample to black) assert
+46 30 inkat not (dict image Decode inverts a zero sample to white) assert
+
+% Indexed colour: setcolor looks the index up in the palette and
+% paints in the base space, keeping the space as set; an indexed
+% image maps each sample through the same lookup
+erasepage
+gsave
+[/Indexed /DeviceGray 3 <FF 00 FF 00>] setcolorspace
+1 setcolor 10 10 20 20 rectfill
+2 setcolor 34 10 20 20 rectfill
+currentcolorspace dup type /arraytype eq exch 0 get /Indexed eq and
+(setcolor keeps the Indexed space current) assert
+grestore
+18 18 inkat (an indexed setcolor paints through the palette) assert
+42 18 inkat not (an indexed palette entry of white stays white) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+[/Indexed /DeviceGray 3 <00 FF 00 FF>] setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 2
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 3]
+   /DataSource <60> >> image
+grestore
+18 30 inkat not (an indexed image maps its first sample) assert
+42 30 inkat (an indexed image maps its second sample) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+[/Indexed /DeviceGray 3 { 3 div }] setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 255]
+   /DataSource <0003> >> image
+grestore
+18 30 inkat (a procedure palette maps a zero index dark) assert
+42 30 inkat not (a procedure palette maps a full index light) assert
+
+% the image operators must not mutate the caller's matrix: a Type 3
+% bitmap font reuses one matrix for every glyph
+erasepage
+/sharedmat [8 0 0 -8 0 8] def
+gsave 10 10 translate 16 16 scale 0 setgray
+8 8 true sharedmat <F0F0F0F0F0F0F0F0> imagemask grestore
+gsave 34 10 translate 16 16 scale 0 setgray
+8 8 true sharedmat <F0F0F0F0F0F0F0F0> imagemask grestore
+sharedmat 0 get 8 eq (imagemask leaves the caller's matrix unchanged) assert
+12 18 inkat (the first mask through a shared matrix paints) assert
+36 18 inkat (the second mask through the same matrix paints) assert
+
+% colorimage: interleaved samples paint in the matching device space
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <000000FFFFFF> false 3 colorimage
+grestore
+18 30 inkat (an RGB colorimage paints its black sample) assert
+42 30 inkat not (an RGB colorimage passes white through) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <00FF> false 1 colorimage
+grestore
+18 30 inkat (a one-component colorimage paints grey samples) assert
+42 30 inkat not (a one-component colorimage passes white) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+2 1 8 [2 0 0 -1 0 1] <00FF> <00FF> <00FF> true 3 colorimage
+grestore
+18 30 inkat (a plane-per-component colorimage paints its black sample) assert
+42 30 inkat not (a plane-per-component colorimage passes white) assert
+
+% dict image samples arrive in the colour space current at the call
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /DataSource <000000FFFFFF> >> image
+grestore
+14 30 inkat (an RGB dictionary image paints in the current space) assert
+46 30 inkat not (an RGB dictionary image passes white through) assert
+
+% MultipleDataSources delivers each component from its own plane
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /MultipleDataSources true
+   /DataSource [ <00FF> <00FF> <00FF> ] >> image
+grestore
+18 30 inkat (planar sources assemble each pixel) assert
+42 30 inkat not (planar sources pass white through) assert
+
+% ImageType 3: an explicit one-bit mask keeps pixels unpainted; a
+% Decode of [1 0] inverts its sense
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 3 /InterleaveType 3
+   /DataDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+      /DataSource <000000000000000000000000> >>
+   /MaskDict << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 1
+      /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1]
+      /DataSource <4000> >>
+>> image
+grestore
+20 40 inkat (an unmasked pixel paints) assert
+40 40 inkat not (a set mask bit keeps its pixel unpainted) assert
+20 20 inkat (the second mask row paints its left pixel) assert
+40 20 inkat (the second mask row paints its right pixel) assert
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 3 /InterleaveType 1
+   /DataDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+      /DataSource <00000000FF000000> >>
+   /MaskDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8
+      /ImageMatrix [2 0 0 -1 0 1] /Decode [1 0]
+      /DataSource null >>
+>> image
+grestore
+18 30 inkat not (interleaved mask samples mask under an inverted Decode) assert
+42 30 inkat (an interleaved full mask sample paints under an inverted Decode) assert
+
+% ImageType 4: pixels of the key colour leave the page untouched
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+<< /ImageType 4 /Width 2 /Height 1 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -1 0 1] /Decode [0 1 0 1 0 1]
+   /MaskColor [ 0 0 0 ]
+   /DataSource <000000404040> >> image
+grestore
+18 30 inkat not (the key colour is not painted) assert
+42 30 inkat (other pixels paint normally) assert
+
+% a procedure DataSource in an image dictionary must arrive as the
+% operand, not execute at dictionary lookup: the stateful source is
+% the standard idiom for row-at-a-time delivery
+erasepage
+gsave
+10 10 translate 40 40 scale
+/DeviceRGB setcolorspace
+/imgrow 0 def
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /DataSource { /imgrow imgrow 1 add def
+                 imgrow 1 eq { <000000000000> }{ <FFFFFFFFFFFF> } ifelse }
+>> image
+grestore
+20 40 inkat (a procedure source delivers its first row) assert
+20 20 inkat not (a procedure source advances to its next row) assert
+
+% an image under a non-rectangular clip paints exactly the region
+erasepage
+gsave
+newpath 32 32 20 0 360 arc clip
+/DeviceRGB setcolorspace
+gsave
+12 12 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1 0 1 0 1]
+   /DataSource <000000000000000000000000> >> image
+grestore
+grestore
+32 32 inkat (a clipped image paints inside the region) assert
+14 14 inkat not (a clipped image stays out of the near corner) assert
+50 50 inkat not (a clipped image stays out of the far corner) assert
+
 % --- stroke width follows the CTM ---
 erasepage
 gsave
