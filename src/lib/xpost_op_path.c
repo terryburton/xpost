@@ -652,9 +652,13 @@ int _rcurveto_cont(Xpost_Context *ctx,
 
 /* walk a packed path accumulating the bounding box of every stored
    coordinate pair (curve controls and close repeats included, matching
-   the behaviour of the dictionary-walking predecessors); returns 0 on
-   a malformed path or when a curve is present and curves are not
-   accepted, 2 on an empty path */
+   the behaviour of the dictionary-walking predecessors); a moveto that
+   ends the path is disregarded (PLRM pathbbox: a trailing moveto marks
+   only a pending current point, as after charpath advances it, and is
+   not part of the box); when inv is non-NULL it is an affine matrix
+   (PostScript [a b c d tx ty] layout) applied to each stored point
+   before accumulation; returns 0 on a malformed path or when a curve
+   is present and curves are not accepted, 2 on an empty path */
 static
 int _path_walk_bbox(Xpost_Context *ctx, Xpost_Object path,
                     int accept_curves, const real *inv,
