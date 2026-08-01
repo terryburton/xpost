@@ -4180,11 +4180,12 @@ rsd_unreadch(Xpost_File *f, int c)
 static int
 rsd_close(Xpost_File *f)
 {
+    /* a reusable stream survives closing: the position rewinds and
+       the data stays, so a program run off the stream -- which the
+       interpreter closes at its end -- can run again */
     Xpost_RsdFile *ff = (Xpost_RsdFile *)f;
 
-    free(ff->data);
-    ff->data = NULL;
-    ff->len = ff->pos = 0;
+    ff->pos = 0;
     return 0;
 }
 
