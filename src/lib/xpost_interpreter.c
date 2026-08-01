@@ -1440,6 +1440,7 @@ void _onerror(Xpost_Context *ctx,
     {
         fprintf(stderr, "runaway error cascade (%s)\nabort\n",
                 errorname[err]);
+        ctx->run_uncaught = 1;
         ++ctx->quit;
         return;
     }
