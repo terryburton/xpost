@@ -394,8 +394,14 @@ int _destroy(Xpost_Context *ctx,
                      sizeof(private), &private);
 
     free(private.buf);
-    fclose(private.f);
-
+    private.buf = NULL;
+    if (private.f)
+        fclose(private.f);
+    private.f = NULL;
+    /* store the cleared pointers back so a repeated destroy is a no-op */
+    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                     xpost_object_get_ent(privatestr), 0,
+                     sizeof(private), &private);
     return 0;
 }
 

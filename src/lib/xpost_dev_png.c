@@ -564,20 +564,26 @@ int _destroy(Xpost_Context *ctx,
                      sizeof(private), &private);
 
     free(private.buf);
+    private.buf = NULL;
     /* a device destroyed without a page emitted (an error ended the
        job first) has no image to finalise, and libpng would reject the
        trailer; aim its longjmp here either way, so a write error while
        finalising cannot jump into the dead frame that created the
        device */
-    if (setjmp(png_jmpbuf(private.png_ptr)) == 0)
+    if (private.png_ptr && setjmp(png_jmpbuf(private.png_ptr)) == 0)
     {
         if (private.emitted)
             png_write_end(private.png_ptr, private.info_ptr);
     }
     png_destroy_write_struct(&private.png_ptr, (png_infopp) & private.info_ptr);
     png_destroy_info_struct(private.png_ptr, (png_infopp) & private.info_ptr);
-    fclose(private.f);
-
+    if (private.f)
+        fclose(private.f);
+    private.f = NULL;
+    /* store the cleared pointers back so a repeated destroy is a no-op */
+    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                     xpost_object_get_ent(privatestr), 0,
+                     sizeof(private), &private);
     return 0;
 }
 
