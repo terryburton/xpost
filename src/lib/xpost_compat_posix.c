@@ -460,6 +460,138 @@ xpost_fd_realpath(int fd, char *buf, size_t buflen)
 #endif
 }
 
+#if defined(__linux__) && defined(SYS_openat2)
+/* Open the parent directory of rel beneath root (confined), returning its
+   descriptor and, in leaf, the final path component to act on. -1/errno on
+   failure; sets *supported per xpost_openat2_beneath. */
+static int
+xpost_open_parent_beneath(const char *root, const char *rel,
+                          char *leaf, size_t leaflen, int *supported)
+{
+    const char *slash;
+    char subdir[XPOST_PATH_MAX];
+    int rootfd;
+    int dirfd;
+    struct { uint64_t flags; uint64_t mode; uint64_t resolve; } how;
+
+    *supported = 0;
+    if (!root || !rel || !*rel)
+    {
+        errno = ENOENT;
+        return -1;
+    }
+    slash = strrchr(rel, '/');
+    if (slash)
+    {
+        size_t dl = (size_t)(slash - rel);
+
+        if (dl == 0 || dl >= sizeof subdir)
+        {
+            errno = ENOENT;
+            return -1;
+        }
+        memcpy(subdir, rel, dl);
+        subdir[dl] = '\0';
+        slash++;
+    }
+    else
+    {
+        subdir[0] = '.';
+        subdir[1] = '\0';
+        slash = rel;
+    }
+    /* a control op must name a real leaf, never "" / "." / ".." */
+    if (!*slash || strcmp(slash, ".") == 0 || strcmp(slash, "..") == 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    if (strlen(slash) >= leaflen)
+    {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    rootfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+    if (rootfd < 0)
+        return -1; /* supported stays 0 */
+    how.flags = (uint64_t)(O_PATH | O_DIRECTORY | O_CLOEXEC);
+    how.mode = 0;
+    how.resolve = XPOST_RESOLVE_BENEATH | XPOST_RESOLVE_NO_SYMLINKS;
+    dirfd = (int)syscall(SYS_openat2, rootfd, subdir, &how, sizeof how);
+    close(rootfd);
+    if (dirfd < 0 && errno == ENOSYS)
+        return -1; /* supported stays 0 */
+    *supported = 1;
+    if (dirfd < 0)
+        return -1;
+    strcpy(leaf, slash);
+    return dirfd;
+}
+#endif
+
+int
+xpost_unlinkat_beneath(const char *root, const char *rel, int *supported)
+{
+    *supported = 0;
+#if defined(__linux__) && defined(SYS_openat2)
+    {
+        char leaf[XPOST_PATH_MAX];
+        int dirfd = xpost_open_parent_beneath(root, rel, leaf, sizeof leaf,
+                                              supported);
+        int ret;
+
+        if (!*supported || dirfd < 0)
+            return -1;
+        ret = unlinkat(dirfd, leaf, 0);
+        close(dirfd);
+        return ret;
+    }
+#else
+    (void)root; (void)rel;
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
+int
+xpost_renameat_beneath(const char *oldroot, const char *oldrel,
+                       const char *newroot, const char *newrel,
+                       int *supported)
+{
+    *supported = 0;
+#if defined(__linux__) && defined(SYS_openat2)
+    {
+        char oldleaf[XPOST_PATH_MAX];
+        char newleaf[XPOST_PATH_MAX];
+        int oldfd;
+        int newfd;
+        int ret;
+
+        oldfd = xpost_open_parent_beneath(oldroot, oldrel, oldleaf,
+                                          sizeof oldleaf, supported);
+        if (!*supported || oldfd < 0)
+            return -1;
+        newfd = xpost_open_parent_beneath(newroot, newrel, newleaf,
+                                          sizeof newleaf, supported);
+        if (!*supported || newfd < 0)
+        {
+            int e = errno;
+            close(oldfd);
+            errno = e;
+            return -1;
+        }
+        ret = renameat(oldfd, oldleaf, newfd, newleaf);
+        close(oldfd);
+        close(newfd);
+        return ret;
+    }
+#else
+    (void)oldroot; (void)oldrel; (void)newroot; (void)newrel;
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
 /*============================================================================*
  *                                   API                                      *
  *============================================================================*/

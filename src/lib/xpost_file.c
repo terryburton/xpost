@@ -407,10 +407,42 @@ xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
 int
 xpost_diskfile_remove(const char *path, int *err)
 {
-    if (xpost_path_control_engaged && !xpost_path_permitted(path, 1))
+    if (xpost_path_control_engaged)
     {
-        *err = invalidfileaccess;
-        return -1;
+        char full[XPOST_PATH_MAX];
+        int idx;
+        const char *rel;
+        int supported;
+        int ret;
+
+        if (!xpost_path_canonical_target(path, 1, full, sizeof full) ||
+            (idx = xpost_path_within_idx(full, xpost_permit_write_dir,
+                                         xpost_permit_write_cnt)) < 0)
+        {
+            *err = invalidfileaccess;
+            return -1;
+        }
+        rel = xpost_path_after_root(full, xpost_permit_write_dir[idx]);
+        if (!*rel)
+        {
+            *err = invalidfileaccess;
+            return -1;
+        }
+        /* delete relative to the parent resolved beneath the permitted root,
+           so the name cannot be repointed after the check */
+        ret = xpost_unlinkat_beneath(xpost_permit_write_dir[idx], rel,
+                                     &supported);
+        if (supported)
+        {
+            if (ret != 0)
+            {
+                *err = errno == ENOENT ? undefinedfilename : ioerror;
+                return -1;
+            }
+            *err = 0;
+            return 0;
+        }
+        /* otherwise fall through: the name check above stands */
     }
     if (remove(path) != 0)
     {
@@ -424,11 +456,48 @@ xpost_diskfile_remove(const char *path, int *err)
 int
 xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err)
 {
-    if (xpost_path_control_engaged
-        && !(xpost_path_permitted(oldpath, 1) && xpost_path_permitted(newpath, 1)))
+    if (xpost_path_control_engaged)
     {
-        *err = invalidfileaccess;
-        return -1;
+        char oldfull[XPOST_PATH_MAX];
+        char newfull[XPOST_PATH_MAX];
+        int oidx;
+        int nidx;
+        const char *orel;
+        const char *nrel;
+        int supported;
+        int ret;
+
+        if (!xpost_path_canonical_target(oldpath, 1, oldfull, sizeof oldfull) ||
+            (oidx = xpost_path_within_idx(oldfull, xpost_permit_write_dir,
+                                          xpost_permit_write_cnt)) < 0 ||
+            !xpost_path_canonical_target(newpath, 1, newfull, sizeof newfull) ||
+            (nidx = xpost_path_within_idx(newfull, xpost_permit_write_dir,
+                                          xpost_permit_write_cnt)) < 0)
+        {
+            *err = invalidfileaccess;
+            return -1;
+        }
+        orel = xpost_path_after_root(oldfull, xpost_permit_write_dir[oidx]);
+        nrel = xpost_path_after_root(newfull, xpost_permit_write_dir[nidx]);
+        if (!*orel || !*nrel)
+        {
+            *err = invalidfileaccess;
+            return -1;
+        }
+        ret = xpost_renameat_beneath(xpost_permit_write_dir[oidx], orel,
+                                     xpost_permit_write_dir[nidx], nrel,
+                                     &supported);
+        if (supported)
+        {
+            if (ret != 0)
+            {
+                *err = errno == ENOENT ? undefinedfilename : ioerror;
+                return -1;
+            }
+            *err = 0;
+            return 0;
+        }
+        /* otherwise fall through: the name checks above stand */
     }
     if (rename(oldpath, newpath) != 0)
     {
