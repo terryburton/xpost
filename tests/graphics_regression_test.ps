@@ -669,6 +669,100 @@ hasdct {
 } if
 erasepage
 
+% --- line caps on open subpath ends ---
+% a thick horizontal stroke from (16,32) to (40,32), width 10: a butt
+% cap stops at the endpoint, round and square caps extend past it,
+% and only the square reaches the projected corner
+erasepage
+gsave 10 setlinewidth 0 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat not (a butt cap stops at the endpoint) assert
+13 32 inkat not (a butt cap stops at the start point) assert
+erasepage
+gsave 10 setlinewidth 1 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat (a round cap extends past the endpoint) assert
+13 32 inkat (a round cap extends past the start point) assert
+44 37 inkat not (a round cap stays within its radius) assert
+erasepage
+gsave 10 setlinewidth 2 setlinecap
+16 32 moveto 40 32 lineto stroke grestore
+43 32 inkat (a square cap extends past the endpoint) assert
+13 32 inkat (a square cap extends past the start point) assert
+44 37 inkat (a square cap fills the projected corner) assert
+% a closed subpath ends in joins and owes no caps. The join is pinned
+% to bevel so the probe sits outside every legitimate corner shape: a
+% miter join's spike at this sharp corner covers it correctly.
+erasepage
+gsave 10 setlinewidth 2 setlinecap 2 setlinejoin
+20 20 moveto 44 20 lineto 44 44 lineto closepath stroke grestore
+15 20 inkat not (a closed subpath takes no caps) assert
+% every dash of a dashed stroke is capped
+erasepage
+gsave 6 setlinewidth 1 setlinecap [8 10] 0 setdash
+10 50 moveto 54 50 lineto stroke grestore
+20 50 inkat (a dash carries its own end cap) assert
+23 50 inkat not (capped dashes keep their gaps) assert
+
+% --- line joins at stroked corners ---
+% a right-angle corner, width 10: the miter fills the projected
+% corner, round and bevel stop short of it, and all three fill the
+% wedge between the segment ends
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat (a miter join fills the projected corner) assert
+42 14 inkat (a miter join covers the wedge) assert
+erasepage
+gsave 10 setlinewidth 1 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a round join stays within its radius) assert
+42 14 inkat (a round join covers the wedge) assert
+erasepage
+gsave 10 setlinewidth 2 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a bevel join cuts the projected corner) assert
+42 14 inkat (a bevel join covers the wedge) assert
+% the miter limit: a right angle's ratio is sqrt(2), so a limit below
+% that bevels the corner and one above keeps the miter
+erasepage
+gsave 10 setlinewidth 0 setlinejoin 1.2 setmiterlimit
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat not (a miter past the limit falls back to bevel) assert
+erasepage
+gsave 10 setlinewidth 0 setlinejoin 1.5 setmiterlimit
+16 16 moveto 40 16 lineto 40 40 lineto stroke grestore
+44 12 inkat (a miter within the limit is kept) assert
+% a closed subpath miters its corners too
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto closepath stroke grestore
+44 12 inkat (a closed subpath miters its corner) assert
+
+% --- join sides across the angle seam ---
+% a wide closed rectangle must fill all four outer corners in either
+% winding: one of its turns always crosses the atan seam at zero
+% degrees, where a raw angle difference misreads the turn's side
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 16 40 lineto 40 40 lineto 40 16 lineto closepath stroke grestore
+13 13 inkat (a clockwise rectangle fills its first outer corner) assert
+13 43 inkat (a clockwise rectangle fills its second outer corner) assert
+43 43 inkat (a clockwise rectangle fills its third outer corner) assert
+43 13 inkat (a clockwise rectangle fills its fourth outer corner) assert
+erasepage
+gsave 10 setlinewidth 0 setlinejoin
+16 16 moveto 40 16 lineto 40 40 lineto 16 40 lineto closepath stroke grestore
+13 13 inkat (an anticlockwise rectangle fills its first outer corner) assert
+13 43 inkat (an anticlockwise rectangle fills its second outer corner) assert
+43 43 inkat (an anticlockwise rectangle fills its third outer corner) assert
+43 13 inkat (an anticlockwise rectangle fills its fourth outer corner) assert
+
+% a dash pattern set inside gsave must not survive its grestore: the
+% state copy once kept the longer stale array beneath a shorter one
+gsave 6 setlinewidth [8 10] 0 setdash grestore
+currentdash pop length 0 eq (grestore restores a shorter dash array) assert
+
 % --- stroke width follows the CTM ---
 erasepage
 gsave
