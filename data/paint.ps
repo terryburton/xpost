@@ -916,7 +916,7 @@
             /iy 0 def
         end
         w h 8 dd /ImageMatrix get
-        [ st //.xpostsys /.it1row get /exec cvx ] cvx
+        [ st //.xpostsys /.it1row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{ il 2 eq {
@@ -934,7 +934,7 @@
             /iy 0 def
         end
         w h bpc dd /ImageMatrix get
-        [ st //.xpostsys /.it2row get /exec cvx ] cvx
+        [ st //.xpostsys /.it2row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{
