@@ -532,6 +532,143 @@ grestore
 14 14 inkat not (a clipped image stays out of the near corner) assert
 50 50 inkat not (a clipped image stays out of the far corner) assert
 
+% tiling patterns: a coloured cell tiles across the painted region,
+% anchored to the pattern space; an uncoloured cell paints the
+% underlying colour
+erasepage
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 16 16] /XStep 16 /YStep 16
+   /PaintProc { pop 0 setgray 0 0 8 8 rectfill } >> matrix makepattern
+setpattern
+0 0 64 64 rectfill
+4 4 inkat (a pattern cell paints its ink) assert
+12 12 inkat not (a pattern cell leaves its background) assert
+20 20 inkat (the cell tiles across the region) assert
+28 28 inkat not (the tiled background repeats) assert
+0 setgray
+erasepage
+/DeviceGray setcolorspace
+0
+<< /PatternType 1 /PaintType 2 /TilingType 1
+   /BBox [0 0 16 16] /XStep 16 /YStep 16
+   /PaintProc { pop 0 0 8 8 rectfill } >> matrix makepattern
+setpattern
+0 0 64 64 rectfill
+4 4 inkat (an uncoloured pattern paints the underlying colour) assert
+12 12 inkat not (an uncoloured pattern leaves its background) assert
+0 setgray
+erasepage
+
+% smooth shading: an axial gradient runs its function across its
+% axis, a radial one its circle family from the centre out, and a
+% free-form mesh blends its vertex colours
+/pixval { % ux uy . byte
+    transform floor cvi exch floor cvi exch
+    DEV dup /GetPix get exec
+} def
+erasepage
+gsave
+newpath 8 8 moveto 56 8 lineto 56 56 lineto 8 56 lineto closepath clip
+<< /ShadingType 2
+   /ColorSpace /DeviceGray
+   /Coords [ 8 0 56 0 ]
+   /Extend [ true true ]
+   /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >>
+>> shfill
+grestore
+10 32 inkat (an axial shading starts at its first colour) assert
+54 32 inkat not (an axial shading ends at its second colour) assert
+32 32 pixval dup 90 gt exch 170 lt and
+(an axial shading blends between its ends) assert
+erasepage
+gsave
+<< /ShadingType 3
+   /ColorSpace /DeviceGray
+   /Coords [ 32 32 2 32 32 24 ]
+   /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >>
+>> shfill
+grestore
+32 32 inkat (a radial shading is dark at its centre) assert
+32 53 inkat not (a radial shading lightens to its rim) assert
+12 12 inkat not (an unextended radial shading leaves the corners) assert
+erasepage
+gsave
+<< /ShadingType 4
+   /ColorSpace /DeviceGray
+   /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
+   /Decode [ 0 64 0 64 0 1 ]
+   /DataSource <000000000000 00FFFF000000 007FFFFFFFFF>
+>> shfill
+grestore
+32 4 inkat (a mesh triangle is dark along its dark edge) assert
+32 60 inkat not (a mesh triangle lightens to its light corner) assert
+30 32 pixval dup 60 gt exch 200 lt and
+(a mesh triangle blends between its vertices) assert
+4 32 inkat not (a mesh paints only its triangles) assert
+erasepage
+
+% a shading pattern (PatternType 2) paints its gradient over the
+% region the operator would have painted
+erasepage
+<< /PatternType 2
+   /Shading << /ShadingType 2 /ColorSpace /DeviceGray
+      /Coords [ 8 0 56 0 ] /Extend [ true true ]
+      /Function << /FunctionType 2 /Domain [ 0 1 ] /C0 [ 0 ] /C1 [ 1 ] /N 1 >> >>
+>> matrix makepattern setpattern
+8 8 48 48 rectfill
+10 32 inkat (a shading pattern paints its dark end) assert
+54 32 inkat not (a shading pattern lightens to its far end) assert
+4 32 inkat not (a shading pattern stays inside the fill) assert
+0 setgray
+erasepage
+
+% DCTDecode inflates a JPEG stream into image samples, layered over
+% the hexadecimal filter here as producers layer it over ASCII85; the
+% parameter-dictionary filter form is what PDF converters emit. The
+% embedded stream is a solid red 8-by-8 JPEG; the guard probe skips
+% the block on a build without the JPEG library, draining the inline
+% data through the hexadecimal filter alone so the file stays in
+% register either way. The assertions after the data also prove the
+% decoder leaves the file positioned exactly past the stream.
+% the filter construction reads nothing (the decoder starts at the
+% first byte pulled), so probing it over currentfile is safe
+/hasdct false def
+{ currentfile << >> /DCTDecode filter closefile /hasdct true def } stopped pop
+$error /newerror false put
+erasepage
+gsave
+10 10 translate 44 44 scale
+/DeviceRGB setcolorspace
+hasdct {
+    << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+       /ImageMatrix [8 0 0 -8 0 8] /Decode [0 1 0 1 0 1]
+       /DataSource currentfile /ASCIIHexDecode filter << >> /DCTDecode filter
+    >> image
+    % feeding the decoder to its end-of-image marker drew the last hexadecimal
+    % byte through ASCIIHexDecode, which then swallowed its own closing ">" (its
+    % eager end-of-data handling), leaving currentfile past
+    % the whole stream -- no separate drain is needed
+}{
+    % without a JPEG decoder nothing reads the block, so skip it explicitly,
+    % closing delimiter and all
+    currentfile /ASCIIHexDecode filter flushfile
+} ifelse
+FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304
+030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B101610
+1113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D
+141414141414141414141414141414141414141414141414141414141414141414141414
+1414141414141414141414141414FFC00011080008000803011100021101031101FFC400
+14000100000000000000000000000000000008FFC4001410010000000000000000000000
+0000000000FFC4001501010100000000000000000000000000000709FFC4001411010000
+0000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9
+>
+grestore
+hasdct {
+    30 30 inkat (a JPEG image paints its samples) assert
+    countink 1500 ge (the JPEG fills its area) assert
+} if
+erasepage
+
 % --- stroke width follows the CTM ---
 erasepage
 gsave
