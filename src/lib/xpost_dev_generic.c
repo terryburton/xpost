@@ -1568,7 +1568,7 @@ _blit_decode_row(const unsigned char *src, unsigned char *const *planes,
         }
         else
         {
-            int v[4];
+            int v[4] = { 0, 0, 0, 0 };
 
             for (c = 0; c < ncomp; c++)
                 v[c] = dlut[c][DECSAMP(x, c)];
