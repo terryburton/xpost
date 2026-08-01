@@ -555,7 +555,7 @@ setglobal
 % mirror the interpreter's fixed capacities (XPOST_{OPER,DICT,EXEC}_STACK_LIMIT
 % in xpost_interpreter.c) and cannot be changed.
 currentglobal true setglobal
-/.uparams << /VMReclaim 0 /VMThreshold 0 >> def
+.xpostsys /.uparams << /VMReclaim 0 /VMThreshold 0 >> put
 setglobal
 
 /setdevparams { pop pop } def
@@ -563,18 +563,18 @@ setglobal
 
 /currentuserparams {
     << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
-       /VMReclaim .uparams /VMReclaim get
-       /VMThreshold .uparams /VMThreshold get >>
+       /VMReclaim //.xpostsys /.uparams get /VMReclaim get
+       /VMThreshold //.xpostsys /.uparams get /VMThreshold get >>
 } def
 /setuserparams {
     dup /VMReclaim known {
         dup /VMReclaim get
-        dup .uparams /VMReclaim 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMReclaim 3 -1 roll put
         vmreclaim
     } if
     dup /VMThreshold known {
         dup /VMThreshold get
-        dup .uparams /VMThreshold 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMThreshold 3 -1 roll put
         setvmthreshold
     } if
     pop
