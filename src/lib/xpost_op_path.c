@@ -1376,7 +1376,7 @@ static
 int _pathbbox(Xpost_Context *ctx)
 {
     Xpost_Object path;
-    Xpost_Object userdict, gd, gs, psmat;
+    Xpost_Object gd, gs, psmat;
     real m[6], inv[6], det;
     const real *invp = NULL;
     real minx = 0, miny = 0, maxx = 0, maxy = 0;
@@ -1384,7 +1384,6 @@ int _pathbbox(Xpost_Context *ctx)
 
     /* fetch the CTM and build its inverse; on any irregularity fall
        back to the raw device-space box rather than erroring */
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
