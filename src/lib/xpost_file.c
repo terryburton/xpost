@@ -138,9 +138,11 @@ xpost_path_control_engage(void)
     xpost_path_control_engaged = 1;
 }
 
-/* does canon sit within one of the cnt permitted directories? */
+/* Index of the permitted entry that contains the canonical path `full`, or
+   -1 if none does. A permitted directory contains `full` when it is a prefix
+   ending at a path separator (or the whole of `full`). */
 static int
-xpost_path_within(const char *canon, char *const *tab, int cnt)
+xpost_path_within_idx(const char *full, char *const *tab, int cnt)
 {
     int i;
 
@@ -151,32 +153,34 @@ xpost_path_within(const char *canon, char *const *tab, int cnt)
 #ifdef _WIN32
         /* Windows paths are case-insensitive and GetFullPathName yields
            backslash separators (mirrors the beneath-root check) */
-        if (_strnicmp(canon, tab[i], rl) == 0 &&
-            (canon[rl] == '\\' || canon[rl] == '/' || canon[rl] == '\0'))
-            return 1;
+        if (_strnicmp(full, tab[i], rl) == 0 &&
+            (full[rl] == '\\' || full[rl] == '/' || full[rl] == '\0'))
+            return i;
 #else
-        if (strncmp(canon, tab[i], rl) == 0 &&
-            (canon[rl] == '/' || canon[rl] == '\0'))
-            return 1;
+        if (strncmp(full, tab[i], rl) == 0 &&
+            (full[rl] == '/' || full[rl] == '\0'))
+            return i;
 #endif
     }
-    return 0;
+    return -1;
 }
 
-/* Is opening `path` (for writing when `write`) permitted? Resolves the
-   path -- or, for a not-yet-existent write target, its parent directory
-   with the leaf reattached -- and checks it against the permit list. */
+/* Resolve `path` to an absolute, symlink-free target in `buf`. An existing
+   path resolves directly; for a not-yet-existent write target the parent is
+   resolved and the leaf reattached, so a symlinked access directory (e.g.
+   /tmp -> /private/tmp) still lands on its canonical form. Returns 1 on
+   success, 0 when the path (or its parent, for a create) cannot be resolved. */
 static int
-xpost_path_permitted(const char *path, int write)
+xpost_path_canonical_target(const char *path, int write, char *buf, size_t buflen)
 {
     char *canon = xpost_realpath(path);
-    int ok;
 
     if (canon)
     {
-        ok = write
-             ? xpost_path_within(canon, xpost_permit_write_dir, xpost_permit_write_cnt)
-             : xpost_path_within(canon, xpost_permit_read_dir, xpost_permit_read_cnt);
+        int ok = strlen(canon) < buflen;
+
+        if (ok)
+            strcpy(buf, canon);
         free(canon);
         return ok;
     }
@@ -185,62 +189,83 @@ xpost_path_permitted(const char *path, int write)
     if (!write)
         return 0;
     {
-        char buf[XPOST_PATH_MAX];
-        char full[XPOST_PATH_MAX];
-        char *slash;
+        char tmp[XPOST_PATH_MAX];
+        char *sep;
         char *cdir;
         const char *parent;
         const char *base;
+        int ok;
 
-        if (strlen(path) >= sizeof buf)
+        if (strlen(path) >= sizeof tmp)
             return 0;
-        strcpy(buf, path);
-        slash = strrchr(buf, '/');
-        if (slash)
+        strcpy(tmp, path);
+        sep = strrchr(tmp, '/');
+#ifdef _WIN32
+        /* accept either separator when splitting off the leaf */
         {
-            *slash = '\0';
-            parent = buf[0] ? buf : "/";
-            base = slash + 1;
+            char *bs = strrchr(tmp, '\\');
+
+            if (bs && (!sep || bs > sep))
+                sep = bs;
+        }
+#endif
+        if (sep)
+        {
+            *sep = '\0';
+            parent = tmp[0] ? tmp : "/";
+            base = sep + 1;
         }
         else
         {
             parent = ".";
-            base = buf;
+            base = tmp;
         }
         cdir = xpost_realpath(parent);
         if (!cdir)
             return 0;
-        ok = (snprintf(full, sizeof full, "%s/%s", cdir, base) < (int)sizeof full) &&
-             xpost_path_within(full, xpost_permit_write_dir, xpost_permit_write_cnt);
+        ok = snprintf(buf, buflen, "%s/%s", cdir, base) < (int)buflen;
         free(cdir);
         return ok;
     }
 }
 
-/* The single path-to-stream opener for disk-backed files: every disk file
-   the interpreter opens is created here, so file-access policy has one
-   enforcement point. internal marks a trusted interpreter-managed path
-   (temporary scratch) rather than one derived from the running program.
-   Access policy is not yet applied; the parameter fixes the call sites so
-   that only this function changes when it is. */
-FILE *
-xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
+/* Is opening `path` (for writing when `write`) permitted? Kept for the
+   filesystem-control operations (delete/rename/enumerate) that decide access
+   from a name rather than an opened descriptor. */
+static int
+xpost_path_permitted(const char *path, int write)
+{
+    char full[XPOST_PATH_MAX];
+
+    if (!xpost_path_canonical_target(path, write, full, sizeof full))
+        return 0;
+    return xpost_path_within_idx(full,
+               write ? xpost_permit_write_dir : xpost_permit_read_dir,
+               write ? xpost_permit_write_cnt : xpost_permit_read_cnt) >= 0;
+}
+
+/* map an fopen/openat2 errno to a PostScript file error */
+static int
+xpost_fopen_errno(int e)
+{
+    switch (e)
+    {
+        case EACCES:
+            return invalidfileaccess;
+        case ENOENT:
+            return undefinedfilename;
+        default:
+            return unregistered;
+    }
+}
+
+/* The sole fopen call: every disk open the interpreter performs funnels
+   here, whether or not the sandbox is engaged. */
+static FILE *
+xpost_raw_fopen(const char *path, const char *mode, int *err)
 {
     char bmode[8];
     FILE *fp;
-
-    /* a program-driven open under the engaged sandbox must lie within a
-       permitted directory; trusted interpreter-managed opens are exempt */
-    if (!internal && xpost_path_control_engaged)
-    {
-        int write = strchr(mode, 'w') || strchr(mode, 'a') || strchr(mode, '+');
-
-        if (!xpost_path_permitted(path, write))
-        {
-            *err = invalidfileaccess;
-            return NULL;
-        }
-    }
 
     /* PostScript files are binary byte streams; force binary mode so that
        Windows text translation -- CRLF rewriting and a 0x1A byte read as
@@ -258,20 +283,121 @@ xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
             mode = bmode;
         }
     }
-
     fp = fopen(path, mode);
+
     if (!fp)
     {
-        switch (errno)
-        {
-            case EACCES: *err = invalidfileaccess; break;
-            case ENOENT: *err = undefinedfilename; break;
-            default:     *err = unregistered; break;
-        }
+        *err = xpost_fopen_errno(errno);
         return NULL;
     }
     *err = 0;
     return fp;
+}
+
+/* Advance past the separator(s) joining a permitted root to the path within
+   it, given a canonical `full` known to sit inside `root`. */
+static const char *
+xpost_path_after_root(const char *full, const char *root)
+{
+    const char *rel = full + strlen(root);
+
+    while (*rel == '/'
+#ifdef _WIN32
+           || *rel == '\\'
+#endif
+          )
+        rel++;
+    return rel;
+}
+
+/* Open a program-driven path under the engaged sandbox without a
+   check-then-open race. The target's permitted root is identified, then the
+   open is anchored there and resolved atomically beneath it by the kernel
+   (openat2), so a path repointed after the check cannot escape. Where that
+   primitive is unavailable the earlier name check stands and the opened
+   descriptor's real location is re-verified, keeping the decision on the
+   object actually opened rather than on a re-resolved name. */
+static FILE *
+xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
+{
+    char full[XPOST_PATH_MAX];
+    char *const *tab = write ? xpost_permit_write_dir : xpost_permit_read_dir;
+    int cnt = write ? xpost_permit_write_cnt : xpost_permit_read_cnt;
+    int idx;
+    int access;
+    int supported;
+    const char *rel;
+    FILE *fp;
+
+    if (!xpost_path_canonical_target(path, write, full, sizeof full) ||
+        (idx = xpost_path_within_idx(full, tab, cnt)) < 0)
+    {
+        *err = invalidfileaccess;
+        return NULL;
+    }
+
+    /* the portion of the canonical target beyond the permitted root is what
+       is resolved beneath that root */
+    rel = xpost_path_after_root(full, tab[idx]);
+    if (!*rel) /* the permitted directory itself, not a file within it */
+    {
+        *err = invalidfileaccess;
+        return NULL;
+    }
+
+    access = 0;
+    if (strchr(mode, '+')) access |= XPOST_OPEN_WRITE | XPOST_OPEN_RDWR;
+    else if (write)        access |= XPOST_OPEN_WRITE;
+    if (strchr(mode, 'w')) access |= XPOST_OPEN_CREATE | XPOST_OPEN_TRUNC;
+    if (strchr(mode, 'a')) access |= XPOST_OPEN_CREATE | XPOST_OPEN_APPEND;
+
+    fp = xpost_openat2_beneath(tab[idx], rel, mode, access, &supported);
+    if (supported)
+    {
+        if (!fp)
+            *err = xpost_fopen_errno(errno);
+        else
+            *err = 0;
+        return fp;
+    }
+
+    /* portable fallback: the name check above already passed. Open, then --
+       where the platform can report it -- re-verify the descriptor's true
+       location, so a swap between check and open is still caught. */
+    fp = xpost_raw_fopen(path, mode, err);
+    if (!fp)
+        return NULL;
+    {
+        char idbuf[XPOST_PATH_MAX];
+
+        if (xpost_fd_realpath(fileno(fp), idbuf, sizeof idbuf) &&
+            xpost_path_within_idx(idbuf, tab, cnt) < 0)
+        {
+            fclose(fp);
+            *err = invalidfileaccess;
+            return NULL;
+        }
+    }
+    *err = 0;
+    return fp;
+}
+
+/* The single path-to-stream opener for disk-backed files: every disk file
+   the interpreter opens is created here, so file-access policy has one
+   enforcement point. internal marks a trusted interpreter-managed path
+   (temporary scratch) rather than one derived from the running program;
+   such opens bypass the sandbox. */
+FILE *
+xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
+{
+    if (!internal && xpost_path_control_engaged)
+    {
+        int write = strchr(mode, 'w') || strchr(mode, 'a') || strchr(mode, '+');
+
+        return xpost_confined_fopen(path, mode, write, err);
+    }
+
+    return xpost_raw_fopen(path, mode, err);
 }
 
 /* deletefile and renamefile modify the filesystem at the target path(s)
