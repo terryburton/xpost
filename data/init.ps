@@ -487,6 +487,7 @@ setglobal
     {
         cvx exec        % the file object has stayed on the stack
     } stopped {
+        //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
     quit
