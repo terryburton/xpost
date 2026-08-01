@@ -169,6 +169,35 @@ char *xpost_realpath(const char *path);
  */
 FILE *xpost_open_beneath(const char *root, const char *rel);
 
+/* Access requested of xpost_openat2_beneath, mapped to open(2) flags inside
+   the compat layer so callers need not reference O_* (absent on Windows). */
+#define XPOST_OPEN_WRITE  0x01  /* the stream may be written */
+#define XPOST_OPEN_RDWR   0x02  /* opened for both reading and writing */
+#define XPOST_OPEN_CREATE 0x04  /* create the target if absent */
+#define XPOST_OPEN_TRUNC  0x08  /* truncate an existing target */
+#define XPOST_OPEN_APPEND 0x10  /* position writes at end of file */
+
+/*
+ * Open @p rel beneath @p root as xpost_open_beneath does, but with the access
+ * described by @p access (a mask of XPOST_OPEN_*), using the kernel's atomic
+ * beneath-root resolution so no name is resolved twice (no check-then-open
+ * race). @p mode is the stdio mode for the returned stream. On success sets
+ * *@p supported to 1 and returns the stream (or NULL with errno on a genuine
+ * failure). Where the atomic primitive is unavailable (older kernel, or any
+ * non-Linux build) sets *@p supported to 0 and returns NULL without touching
+ * the filesystem, so the caller may apply a portable fallback.
+ */
+FILE *xpost_openat2_beneath(const char *root, const char *rel,
+                            const char *mode, int access, int *supported);
+
+/*
+ * Write the canonical path of the object behind descriptor @p fd into @p buf.
+ * Resolves the file actually open rather than a name, so the result is stable
+ * against a concurrent rename or symlink swap. Returns 1 on success, 0 where
+ * the identity cannot be established on this platform.
+ */
+int xpost_fd_realpath(int fd, char *buf, size_t buflen);
+
 /**
  * @}
  */

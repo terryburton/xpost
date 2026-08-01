@@ -356,6 +356,110 @@ xpost_open_beneath(const char *root, const char *rel)
     }
 }
 
+#if defined(__linux__) && defined(SYS_openat2)
+/* translate the XPOST_OPEN_* mask into open(2) flags */
+static int
+xpost_open_oflags(int access)
+{
+    int oflags;
+
+    if (access & XPOST_OPEN_RDWR)       oflags = O_RDWR;
+    else if (access & XPOST_OPEN_WRITE) oflags = O_WRONLY;
+    else                                oflags = O_RDONLY;
+    if (access & XPOST_OPEN_CREATE) oflags |= O_CREAT;
+    if (access & XPOST_OPEN_TRUNC)  oflags |= O_TRUNC;
+    if (access & XPOST_OPEN_APPEND) oflags |= O_APPEND;
+    return oflags;
+}
+
+/* openat2 with resolution confined beneath rootfd; -1/errno on failure,
+   ENOSYS when the running kernel predates the syscall */
+static int
+xpost_openat2_raw(int rootfd, const char *rel, int oflags, unsigned int cmode)
+{
+    struct { uint64_t flags; uint64_t mode; uint64_t resolve; } how;
+
+    how.flags = (uint64_t)(oflags | O_CLOEXEC);
+    how.mode = (oflags & O_CREAT) ? (uint64_t)cmode : 0;
+    how.resolve = XPOST_RESOLVE_BENEATH | XPOST_RESOLVE_NO_SYMLINKS;
+    return (int)syscall(SYS_openat2, rootfd, rel, &how, sizeof how);
+}
+#endif
+
+FILE *
+xpost_openat2_beneath(const char *root, const char *rel, const char *mode,
+                      int access, int *supported)
+{
+    *supported = 0;
+#if defined(__linux__) && defined(SYS_openat2)
+    {
+        int rootfd;
+        int fd;
+        FILE *fp;
+
+        if (!root || !rel || !*rel)
+        {
+            errno = ENOENT;
+            return NULL;
+        }
+        rootfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+        if (rootfd < 0)
+            return NULL; /* supported stays 0: caller uses the fallback */
+        fd = xpost_openat2_raw(rootfd, rel, xpost_open_oflags(access), 0666);
+        close(rootfd);
+        if (fd < 0 && errno == ENOSYS)
+            return NULL; /* supported stays 0 */
+        *supported = 1;
+        if (fd < 0)
+            return NULL; /* a genuine failure; errno already set */
+        fp = fdopen(fd, mode);
+        if (!fp)
+        {
+            int e = errno;
+            close(fd);
+            errno = e;
+        }
+        return fp;
+    }
+#else
+    (void)root; (void)rel; (void)mode; (void)access;
+    errno = ENOSYS;
+    return NULL;
+#endif
+}
+
+int
+xpost_fd_realpath(int fd, char *buf, size_t buflen)
+{
+#if defined(__APPLE__) && defined(F_GETPATH)
+    char tmp[PATH_MAX];
+
+    if (fcntl(fd, F_GETPATH, tmp) != 0)
+        return 0;
+    if (strlen(tmp) >= buflen)
+        return 0;
+    strcpy(buf, tmp);
+    return 1;
+#elif defined(__linux__)
+    char link[64];
+    ssize_t n;
+
+    snprintf(link, sizeof link, "/proc/self/fd/%d", fd);
+    n = readlink(link, buf, buflen - 1);
+    if (n < 0 || (size_t)n >= buflen)
+        return 0;
+    buf[n] = '\0';
+    /* a since-unlinked file reads back as "<path> (deleted)": not a location
+       we can meaningfully test, so report indeterminate */
+    if (n >= 10 && strcmp(buf + n - 10, " (deleted)") == 0)
+        return 0;
+    return 1;
+#else
+    (void)fd; (void)buf; (void)buflen;
+    return 0;
+#endif
+}
+
 /*============================================================================*
  *                                   API                                      *
  *============================================================================*/
