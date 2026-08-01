@@ -4,8 +4,11 @@
     .privatedict /.xpost_DSCWRITE get dup /Create get exec
 } def
 
-% .xpost_DSCWRITE writes a single-page DSC-conforming PostScript program of
-% the marks the page received, in the manner of a distiller: flat
+% .xpost_DSCWRITE writes a DSC-conforming PostScript program of the marks the
+% pages received, in the manner of a distiller: a multi-page job collects every
+% page into one document by default -- each showpage appends a %%Page section
+% (.emitpage) and Destroy writes the %%Trailer -- and a %d in the output name
+% selects a file per page instead. Flat
 % path construction and painting under a prolog of short operator
 % names. It is the .xpost_PDFWRITE device wearing another wrapper -- the
 % marking methods and the content accumulator are inherited whole,
@@ -27,9 +30,17 @@
 % ordinary methods rather than reference objects Emit never writes
 .xpost_DSCWRITE /PaintImage undef
 
-.xpost_DSCWRITE /Emit { % IMAGE  .  -
+% A showpage emits the page. Without a %d in the output name the pages
+% accumulate into the one DSC program opened at Create (.emitpage), closed at
+% Destroy; with a %d each page is written whole to its own numbered file
+% (.emitwhole). Create, the Emit dispatcher, Destroy and the shared record are
+% inherited from the PDF device; only the three writers differ.
+
+.xpost_DSCWRITE /.emitwhole { % IMAGE  .  -
 begin
-    /F /OutputFileName where { pop OutputFileName (w) file }{ (%stdout) (w) file } ifelse def
+    % a %d in the output name is replaced with the page number, so each page
+    % lands in its own file
+    /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
     /.w { F exch writestring } def
     /.wnum { % num  .  -   (two decimals at most, never exponential)
         dup 0 lt { (-) .w neg } if
@@ -94,6 +105,96 @@ begin
     % marks must not stack on the emitted content (a later Emit
     % rewrites the output with the then-current page)
     currentdict .pdfreset
+end } put
+
+% write a number to the accumulating file in two decimals at most
+.xpost_DSCWRITE /.vwnum { % num  .  -
+    dup 0 lt { (-) .vw neg } if
+    100 mul round cvi
+    dup 100 idiv 20 string cvs .vw
+    100 mod dup 0 ne {
+        (.) .vw dup 10 lt { (0) .vw } if 20 string cvs .vw
+    }{ pop } ifelse
+} put
+
+% Append one page to the accumulating DSC program: the prolog of short
+% operator names once, then this page's %%Page section and its marks under the
+% matrix taking the accumulator's y-down device units back to the page. The
+% content is read here, as the page is emitted, before any restore the job runs.
+.xpost_DSCWRITE /.emitpage { % IMAGE  .  -
+begin
+    % page size in points from the resolution fixup
+    /sx 1 def /sy 1 def
+    currentdict /defaultmatrix 2 copy known {
+        get dup 0 get /sx exch def 3 get neg /sy exch def
+    }{ pop pop } ifelse
+
+    % header and prolog once, at the first page (the resolution fixup is ready)
+    //.xpostsys /.vecout get /headered get not {
+        (%!PS-Adobe-3.0\n) .vw
+        (%%Creator: Xpost\n) .vw
+        (%%BoundingBox: 0 0 ) .vw
+        width sx div ceiling cvi 20 string cvs .vw ( ) .vw
+        height sy div ceiling cvi 20 string cvs .vw (\n) .vw
+        (%%Pages: \(atend\)\n) .vw
+        (%%DocumentData: Clean7Bit\n) .vw
+        (%%LanguageLevel: 1\n) .vw
+        (%%EndComments\n) .vw
+        (%%BeginProlog\n) .vw
+        (/m { moveto } bind def\n) .vw
+        (/l { lineto } bind def\n) .vw
+        (/c { curveto } bind def\n) .vw
+        (/h { closepath } bind def\n) .vw
+        (/re { 4 2 roll moveto 1 index 0 rlineto\n) .vw
+        (     0 exch rlineto neg 0 rlineto closepath } bind def\n) .vw
+        (/f { fill } bind def\n) .vw
+        (/S { stroke } bind def\n) .vw
+        (/w { setlinewidth } bind def\n) .vw
+        (/J { setlinecap } bind def\n) .vw
+        (/j { setlinejoin } bind def\n) .vw
+        (/M { setmiterlimit } bind def\n) .vw
+        (/g { setgray } bind def\n) .vw
+        (/rg { setrgbcolor } bind def\n) .vw
+        (/k { setcmykcolor } bind def\n) .vw
+        (/G /g load def /RG /rg load def /K /k load def\n) .vw
+        (/cm { 6 array astore concat } bind def\n) .vw
+        (%%EndProlog\n) .vw
+        //.xpostsys /.vecout get /headered true put
+    } if
+
+    % this page (label and ordinal both the running page number)
+    //.xpostsys /.vecout get /np get 1 add /pn exch def
+    (%%Page: ) .vw pn 20 string cvs .vw ( ) .vw pn 20 string cvs .vw (\n) .vw
+    (%%PageBoundingBox: 0 0 ) .vw
+    width sx div ceiling cvi 20 string cvs .vw ( ) .vw
+    height sy div ceiling cvi 20 string cvs .vw (\n) .vw
+    % the marks position themselves: the accumulator opens with the matrix
+    % taking its y-down device units to the page. A device resolution above
+    % one-to-one unscales first, so the output page stays in points
+    sx 1 ne sy 1 ne or {
+        1 sx div .vwnum ( ) .vw 1 sy div .vwnum ( scale\n) .vw
+    } if
+    currentdict //.internaldict /.pdfchunks get exec { .vw } forall
+    (showpage\n) .vw
+    (%%PageTrailer\n) .vw
+
+    % advance the page count; start the next page fresh
+    //.xpostsys /.vecout get dup /np get 1 add /np exch put
+    currentdict //.internaldict /.pdfreset get exec
+end } put
+
+% Close the accumulating DSC program: the trailer carries the real page count
+% the header deferred with (atend).
+.xpost_DSCWRITE /.endfile { % IMAGE  .  -
+begin
+    //.xpostsys /.vecout get /headered get not {
+        (%!PS-Adobe-3.0\n%%Creator: Xpost\n%%Pages: \(atend\)\n%%EndComments\n) .vw
+        //.xpostsys /.vecout get /headered true put
+    } if
+    (%%Trailer\n) .vw
+    (%%Pages: ) .vw //.xpostsys /.vecout get /np get 20 string cvs .vw (\n) .vw
+    (%%EOF\n) .vw
+    //.xpostsys /.vecout get /F get dup (%stdout) (w) file ne { closefile }{ pop } ifelse
 end } put
 
 //.internaldict /QUIET known { }{ (eof dscwrite.ps\n)print } ifelse

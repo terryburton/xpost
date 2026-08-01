@@ -4,8 +4,12 @@
     .privatedict /.xpost_PDFWRITE get dup /Create get exec
 } def
 
-% .xpost_PDFWRITE writes a single-page vector PDF: the marking methods append
-% content-stream operators and Emit wraps them in the PDF file structure.
+% .xpost_PDFWRITE writes a vector PDF: the marking methods append content-stream
+% operators and the device wraps them in the PDF file structure. A multi-page
+% job collects every page into one document by default -- each showpage appends
+% a page (Emit) and Destroy closes the page tree, cross-reference table and
+% trailer; a %d in the output name selects a file per page instead. See Create,
+% Emit and .endfile for the two forms.
 % This is a clean-room implementation from the published PDF format (operators
 % g/G/rg/RG/k/K/m/l/re/f/S/cm and the object/xref/trailer layout); no
 % rasterizing.
@@ -72,20 +76,111 @@
         % first content op: the device matrix mapping device coords to PDF
         % user space (y-up). Part of the content so it compresses with the rest.
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
+        % choose the output form and, when the name is already set, open the
+        % single-file output now -- before the job's first per-page save -- so
+        % restore cannot close it (a handle opened after a save is closed by
+        % that restore)
+        //.xpostsys /.vecout get /ready false put
+        currentdict dup /.setupoutput get exec
     currentdict
     end } bind
 
+    % Decide the output form from the name and, for the single-file form, open
+    % the file. Without a %d the pages accumulate into one file (finalised at
+    % Destroy); with a %d each page is written whole to its own numbered file
+    % and this record stays idle. Runs at Create; when the output name is not
+    % on the device yet (a device made bare, its name set afterward), it runs
+    % again at the first Emit, by which point the name is set. The single-file
+    % file opens as early as the name is known -- at Create in the page-device
+    % flow, before any per-page save.
+    /.setupoutput { % IMAGE  .  -
+    begin
+        //.xpostsys /.vecout get /ready get not {
+            currentdict /OutputFileName known {
+                currentglobal true setglobal
+                OutputFileName (%d) search { pop pop pop false }{ pop true } ifelse
+                {
+                    % single-file: open the accumulating file now, before any
+                    % per-page save, so restore cannot close it. A name that
+                    % cannot be opened here -- a platform's null sink, say --
+                    % is left to the first Emit, where the per-file writer
+                    % reports the failure as it always has, rather than the
+                    % open aborting the page-device setup.
+                    mark { OutputFileName (w) file } stopped {
+                        cleartomark
+                        //.xpostsys /.vecout get /single false put
+                    }{
+                        exch pop
+                        //.xpostsys /.vecout get dup /F 4 -1 roll put
+                        dup /single true put
+                        dup /nextobj 3 put
+                        dup /sepsdone 0 put
+                        dup /headered false put
+                        dup /np 0 put
+                        dup /off 256 dict put
+                        dup /pobj 64 dict put
+                        dup /sobj 16 dict put
+                        /ready true put
+                    } ifelse
+                }{
+                    % a %d selects the per-file writer, which opens each page's
+                    % own file at Emit; this record stays idle
+                    //.xpostsys /.vecout get dup /single false put /ready true put
+                } ifelse
+                setglobal
+            } if
+        } if
+    end } bind
+
     /Destroy { % IMAGE  .  -
+        % finalise the accumulating file (page tree, cross-reference and
+        % trailer) before releasing the content accumulator
+        % .endfile `begin`s the device, so it needs its own copy (get consumes
+        % one, begin the other) while leaving the device for .pdffree
+        //.xpostsys /.vecout get /single get { dup dup /.endfile get exec } if
         dup //.internaldict /.pdffree get exec pop
     } bind
 
     % the zero pad for xref offsets is a shared read-only constant, kept in the
-    % global private dictionary rather than leaking a name into userdict
-    currentglobal true setglobal .xpostsys /.zeros (0000000000) put setglobal
+    % global private dictionary rather than leaking a name into userdict. The
+    % paginated single-file path keeps its across-page bookkeeping (the open
+    % file, the running object number, each object's byte offset, the page
+    % list) beside it in a writable global dictionary, so it survives the
+    % save/restore a job wraps around each page; a slot in the local device
+    % dictionary would be rewound by restore. One output device paginates at a
+    % time, so a single shared record serves.
+    currentglobal true setglobal
+        .xpostsys /.zeros (0000000000) put
+        .xpostsys /.vecout 16 dict put
+        .xpostsys /.vecout get /single false put
+        .xpostsys /.vecout get /ready false put
+    setglobal
 
     % append a string to the content accumulator (held outside VM via /Private)
     /.put { % str  .  -
         currentdict //.internaldict /.pdfput get exec
+    } bind
+
+    % append a string to the paginated single-file output (its open file lives
+    % in the shared record); byte offsets are read back with fileposition
+    /.vw { % str  .  -
+        //.xpostsys /.vecout get /F get exch writestring
+    } bind
+    % write a byte offset as a 10-digit zero-padded field
+    /.vwoff { % n  .  -
+        20 string cvs
+        //.xpostsys /.zeros get 0 10 2 index length sub getinterval .vw
+        .vw
+    } bind
+    % take the next object number, advancing the shared counter
+    /.nextobj { % -  .  n
+        //.xpostsys /.vecout get dup /nextobj get
+        dup 1 add 3 -1 roll /nextobj 3 -1 roll put
+    } bind
+    % record the file's current byte offset as object n's position
+    /.recordoff { % n  .  -
+        //.xpostsys /.vecout get /off get exch
+        //.xpostsys /.vecout get /F get fileposition put
     } bind
 
     % append a number in PDF syntax (integer, or two decimals; never
@@ -451,12 +546,26 @@
         } ifelse
     end }
 
+    % A showpage emits the page. Without a %d in the output name the pages
+    % accumulate into the one file opened at Create (.emitpage), finalised at
+    % Destroy; with a %d each page is written whole to its own numbered file
+    % (.emitwhole).
     /Emit { % IMAGE  .  -
+        % .setupoutput and the writer each `begin` the device, so each needs
+        % its own copy (get consumes one, begin the other)
+        dup dup /.setupoutput get exec
+        //.xpostsys /.vecout get /single get
+        { dup /.emitpage get exec }{ dup /.emitwhole get exec } ifelse
+    } bind
+
+    /.emitwhole { % IMAGE  .  -
     begin
         /Chunks currentdict //.internaldict /.pdfchunks get exec def
         % deflate the content stream (falls back to uncompressed without zlib)
         Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
-        /F /OutputFileName where { pop OutputFileName (w) file }{ (%stdout) (w) file } ifelse def
+        % a %d in the output name is replaced with the page number, so each
+        % page lands in its own file
+        /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
         /BytePos 0 def
 
         /hs height .pdfnumstr def
@@ -594,6 +703,176 @@
         /.pdfimages 0 array def
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
     end }
+
+    % Append one page to the accumulating file: the content stream, any
+    % separation function objects registered since the previous page, this
+    % page's image objects, and the page object naming them. Objects 1 and 2
+    % (the catalog and the page tree) are reserved for Destroy, so page objects
+    % run from 3 upward; each object's offset is filed for the closing
+    % cross-reference table. The content, separations and images are read here,
+    % as the page is emitted, before any restore the job runs -- so none of
+    % them need to outlive the page.
+    /.emitpage { % IMAGE  .  -
+    begin
+        //.xpostsys /.vecout get /headered get not {
+            (%PDF-1.4\n) .vw
+            //.xpostsys /.vecout get /headered true put
+        } if
+        /Chunks currentdict //.internaldict /.pdfchunks get exec def
+        Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
+        /clen 0 def Chunks { length /clen exch clen add def } forall
+        /hs height .pdfnumstr def
+        /ws width .pdfnumstr def
+        /nseps currentdict //.internaldict /.pdfsepcount get exec def
+        /nimg .pdfimages length def
+
+        % content stream object
+        /coobj .nextobj def
+        coobj .recordoff
+        coobj 20 string cvs .vw ( 0 obj\n<< /Length ) .vw clen 20 string cvs .vw
+        flated { ( /Filter /FlateDecode) .vw } if
+        ( >>\nstream\n) .vw
+        Chunks { .vw } forall
+        (\nendstream\nendobj\n) .vw
+
+        % separation function objects new since the previous page (the registry
+        % is cumulative and deduped by name); map each index to its object so a
+        % separation shared across pages is written once and referenced by all
+        //.xpostsys /.vecout get /sepsdone get 1 nseps 1 sub {
+            /si exch def
+            /so .nextobj def
+            so .recordoff
+            so 20 string cvs .vw ( 0 obj\n) .vw
+            si currentdict //.internaldict /.pdfsepget get exec exch pop .vw
+            (\nendobj\n) .vw
+            //.xpostsys /.vecout get /sobj get si so put
+        } for
+        //.xpostsys /.vecout get /sepsdone nseps put
+
+        % this page's image objects; remember their numbers for the resources
+        /imgobjs nimg array def
+        0 1 nimg 1 sub {
+            /ii exch def
+            /ime .pdfimages ii get def
+            /io .nextobj def io .recordoff
+            imgobjs ii io put
+            ime /rows get //.internaldict /.flatecompress get exec /imf exch def /imc exch def
+            /imlen 0 def imc { length imlen add /imlen exch def } forall
+            io 20 string cvs .vw ( 0 obj\n) .vw
+            (<< /Type /XObject /Subtype /Image /Width ) .vw ime /w get 20 string cvs .vw
+            ( /Height ) .vw ime /h get 20 string cvs .vw
+            ( /BitsPerComponent 8 /ColorSpace ) .vw
+            ime /nc get dup 1 eq { pop (/DeviceGray) }{
+                4 eq { (/DeviceCMYK) }{ (/DeviceRGB) } ifelse } ifelse .vw
+            /imid true def
+            0 2 ime /dec get length 2 sub {
+                /imk exch def
+                ime /dec get imk get 0 ne
+                ime /dec get imk 1 add get 1 ne or { /imid false def } if
+            } for
+            imid not {
+                ( /Decode [) .vw ime /dec get { .pdfnumstr .vw ( ) .vw } forall (]) .vw
+            } if
+            ime /int get { ( /Interpolate true) .vw } if
+            ( /Length ) .vw imlen 20 string cvs .vw
+            imf { ( /Filter /FlateDecode) .vw } if
+            ( >>\nstream\n) .vw imc { .vw } forall (\nendstream\nendobj\n) .vw
+        } for
+
+        % the page object, referencing the content, every registered
+        % separation and this page's images; its parent is the page tree
+        /pgobj .nextobj def
+        pgobj .recordoff
+        pgobj 20 string cvs .vw ( 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ) .vw
+        ws .vw ( ) .vw hs .vw (] /Contents ) .vw coobj 20 string cvs .vw
+        ( 0 R /Resources <<) .vw
+        nseps 0 gt {
+            ( /ColorSpace <<) .vw
+            0 1 nseps 1 sub {
+                /si exch def
+                ( /CS) .vw si 20 string cvs .vw ( [) .vw
+                si currentdict //.internaldict /.pdfsepget get exec pop .vw
+                ( ) .vw //.xpostsys /.vecout get /sobj get si get 20 string cvs .vw ( 0 R]) .vw
+            } for
+            ( >>) .vw
+        } if
+        nimg 0 gt {
+            ( /XObject <<) .vw
+            0 1 nimg 1 sub {
+                /ii exch def
+                ( /Im) .vw ii 20 string cvs .vw
+                ( ) .vw imgobjs ii get 20 string cvs .vw ( 0 R) .vw
+            } for
+            ( >>) .vw
+        } if
+        ( >> >>\nendobj\n) .vw
+
+        % record the page in the tree's Kids list and bump the count
+        //.xpostsys /.vecout get /pobj get //.xpostsys /.vecout get /np get pgobj put
+        //.xpostsys /.vecout get dup /np get 1 add /np exch put
+
+        % start the next page fresh
+        currentdict //.internaldict /.pdfreset get exec
+        /.pdfimages 0 array def
+        (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
+    end } bind
+
+    % Close the accumulating file: the page tree over every page (object 2),
+    % the catalog (object 1), the document info if any DOCINFO arrived, then
+    % the cross-reference table and trailer. Runs with the device dictionary
+    % current, for the document info.
+    /.endfile { % IMAGE  .  -
+    begin
+        //.xpostsys /.vecout get /headered get not {
+            (%PDF-1.4\n) .vw //.xpostsys /.vecout get /headered true put
+        } if
+
+        % object 2: the page tree over every emitted page
+        2 .recordoff
+        (2 0 obj\n<< /Type /Pages /Kids [) .vw
+        0 1 //.xpostsys /.vecout get /np get 1 sub {
+            //.xpostsys /.vecout get /pobj get exch get 20 string cvs .vw ( 0 R ) .vw
+        } for
+        (] /Count ) .vw //.xpostsys /.vecout get /np get 20 string cvs .vw ( >>\nendobj\n) .vw
+
+        % object 1: the catalog
+        1 .recordoff
+        (1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n) .vw
+
+        % document info from DOCINFO pdfmarks, if any
+        /haveinfo .docinfo length 0 gt def
+        haveinfo {
+            /infoobj .nextobj def
+            infoobj .recordoff
+            infoobj 20 string cvs .vw ( 0 obj\n<<) .vw
+            .docinfo {
+                exch ( /) .vw 127 string cvs .vw ( ) .vw
+                dup type /stringtype eq {
+                    (\() .vw
+                    { dup 40 eq 1 index 41 eq or 1 index 92 eq or { (\\) .vw } if
+                      1 string dup 0 4 -1 roll put .vw } forall
+                    (\)) .vw
+                }{
+                    127 string cvs .vw
+                } ifelse
+            } forall
+            ( >>\nendobj\n) .vw
+        } if
+
+        % cross-reference table and trailer
+        /maxobj //.xpostsys /.vecout get /nextobj get 1 sub def
+        /xoff //.xpostsys /.vecout get /F get fileposition def
+        (xref\n0 ) .vw maxobj 1 add 20 string cvs .vw (\n0000000000 65535 f \n) .vw
+        1 1 maxobj {
+            //.xpostsys /.vecout get /off get exch get .vwoff ( 00000 n \n) .vw
+        } for
+        (trailer\n<< /Size ) .vw maxobj 1 add 20 string cvs .vw ( /Root 1 0 R) .vw
+        haveinfo { ( /Info ) .vw infoobj 20 string cvs .vw ( 0 R) .vw } if
+        ( >>\nstartxref\n) .vw xoff 20 string cvs .vw (\n%%EOF\n) .vw
+
+        % close the file unless it is stdout
+        //.xpostsys /.vecout get /F get dup (%stdout) (w) file ne { closefile }{ pop } ifelse
+    end } bind
 >> def
 
 /TESTGRAPHICS where {pop

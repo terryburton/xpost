@@ -2353,6 +2353,9 @@ tf.rt 2 8 mul 2 add 3 mul 2 add get 0 eq and
 DEVP /OutputFileName (graphics.scratch) put
 0.5 10 10 30 20 DEVP dup /FillRect get exec
 DEVP dup /Emit get exec
+% the distilled program spans pages, so Destroy writes the trailer that closes
+% the document; read the completed file after it
+DEVP dup /Destroy get exec
 /pw.s (graphics.scratch) (r) file 4096 string readstring pop def
 pw.s (%!PS-Adobe-3.0) anchorsearch { pop pop true }{ pop false } ifelse
 (the distilled page opens with its DSC header) assert
@@ -2360,7 +2363,6 @@ pw.s (re\nf\n) search { pop pop pop true }{ pop false } ifelse
 (the recorded rectangle reaches the page) assert
 pw.s (%%EOF) search { pop pop pop true }{ pop false } ifelse
 (the distilled page closes with its trailer) assert
-DEVP dup /Destroy get exec
 
 % The vector writers take whole sampled images: the pdf device files
 % an image object the page references, and the svg device embeds the
@@ -2375,6 +2377,9 @@ gsave 10 10 translate 40 40 scale
    /DataSource <11 55 aa ee> >> image
 grestore
 DEVV dup /Emit get exec
+% the pdf spans pages, so Destroy writes the cross-reference table and trailer
+% that close the document; read the completed file after it
+DEVV dup /Destroy get exec
 /vw.s (graphics.scratch) (r) file 4096 string readstring pop def
 vw.s (%PDF-1.4) anchorsearch { pop pop true }{ pop false } ifelse
 (the pdf page opens with its header) assert
@@ -2382,7 +2387,6 @@ vw.s (/Subtype /Image) search { pop pop pop true }{ pop false } ifelse
 (the sampled image files as an image object) assert
 vw.s (/XObject) search { pop pop pop true }{ pop false } ifelse
 (the page resources reference the image) assert
-DEVV dup /Destroy get exec
 /DEVW 100 100 .privatedict /newSVGWRITEdevice get exec def
 DEVW /OutputFileName (graphics.scratch) put
 graphicsdict /currgstate get /device DEVW put
