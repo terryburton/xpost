@@ -474,6 +474,13 @@ test('op-packing',
   args: [ xpost_exe, files('tests/op_packing_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# bind (PLRM 8.2): bind rewrites packed arrays and descends into nested ones,
+# but leaves ordinary read-only arrays untouched -- and freezes the operators.
+test('bind-packed',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/bind_packed_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # vmreclaim (PLRM 8.2): 2 (local and global) reclaims local VM like 1 (local).
 test('op-vmreclaim',
   find_program('tests/run-ps-test.sh'),

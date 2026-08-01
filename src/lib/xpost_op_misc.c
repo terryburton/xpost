@@ -82,6 +82,16 @@ Xpost_Object bind(Xpost_Context *ctx,
     unsigned int ent;
     int i, j, z;
 
+    /* a plain read-only procedure -- one made read-only after creation
+       rather than by the packing machinery -- is left exactly as it is:
+       bind neither rewrites its names nor descends into it. bind does
+       rewrite a packed array (it carries the packed flag), matching the
+       reference implementations, which bind packed arrays but not
+       ordinary read-only arrays. */
+    if (!xpost_object_is_packed(p)
+     && xpost_object_get_access(ctx, p) < XPOST_OBJECT_TAG_ACCESS_UNLIMITED)
+        return p;
+
     ent = xpost_object_get_ent(p);
     for (i = 0; i < seen->n; i++)
         if (seen->ents[i] == ent)
@@ -120,11 +130,11 @@ Xpost_Object bind(Xpost_Context *ctx,
                 }
                 break;
             case arraytype:
-                /* recursion reaches procedures with unrestricted
-                   access only (PLRM): an already-bound, read-only
-                   procedure keeps its finished contents */
-                if (xpost_object_is_exe(t)
-                 && xpost_object_get_access(ctx, t) >= XPOST_OBJECT_TAG_ACCESS_UNLIMITED)
+                /* descend into every executable sub-procedure; bind()
+                   rewrites the packed and writable ones in place and
+                   leaves a plain read-only one (an already-bound
+                   procedure keeps its finished contents) untouched */
+                if (xpost_object_is_exe(t))
                 {
                     t = bind(ctx, t, seen);
                     xpost_array_put(ctx, p, i, t);

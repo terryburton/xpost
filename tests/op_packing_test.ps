@@ -1,8 +1,8 @@
 % Array packing mode (setpacking / currentpacking, PLRM 8.2), run through
 % `xpost -d null` by run-ps-test.sh. A packed array is read-only, so packing is
-% observed through wcheck: xpost represents a packed array as an ordinary
-% read-only array, so its type is arraytype, whereas Ghostscript and Adobe
-% Distiller report a distinct packedarraytype.
+% observed through wcheck. xpost stores a packed array as a read-only array but
+% tags it, so -- like Ghostscript and Adobe Distiller -- the type operator
+% reports a distinct packedarraytype and an ordinary read-only array does not.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
@@ -13,12 +13,18 @@ true setpacking currentpacking (setpacking true is reported by currentpacking) a
 % a procedure built while packing is on is read-only, executable, and runs
 { 10 20 add } dup xcheck (a packed procedure is executable) assert
 dup wcheck not (a packed procedure is read-only) assert
+dup type /packedarraytype eq (a packed procedure has type packedarraytype) assert
 exec 30 eq (a packed procedure executes correctly) assert
 
-% with packing off a procedure is writable again
+% with packing off a procedure is writable and is an ordinary array
 false setpacking
 { 10 20 add } wcheck (an unpacked procedure is writable) assert
+{ 10 20 add } type /arraytype eq (an unpacked procedure has type arraytype) assert
 currentpacking not (setpacking false is reported) assert
+
+% a read-only array is NOT a packed array: read-only alone does not pack
+{ 10 20 add } readonly type /arraytype eq
+  (a plain read-only array is arraytype, not packedarraytype) assert
 
 % the mode is save/restore-subject in both directions
 false setpacking
@@ -41,6 +47,8 @@ pk 6 eq (a packed procedure survives collection) assert
 clear
 1 2 3 3 packedarray length 3 eq
   (packedarray builds an array of the requested length) assert
+1 2 3 3 packedarray type /packedarraytype eq
+  (packedarray builds a packedarraytype) assert
 
 false setpacking
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
