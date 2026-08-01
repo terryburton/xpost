@@ -9,6 +9,11 @@
 set -u
 xpost=$1
 script=$2
+# Temp files below are created only inside the Ghostscript-oracle blocks;
+# predeclare them so the EXIT trap cleanup stays valid under set -u when a
+# block is skipped (gs absent).
+textps= textpdf= strokeps= strokepdf= ra= rb= infops= infopdf=
+colorps= colorpdf= craster=
 pdf=$(mktemp)
 trap 'rm -f "$pdf"' EXIT
 
@@ -65,11 +70,66 @@ EOF
         echo "FAIL: text left no marks"; exit 1
     fi
 
+    # glyph colour: text must mark in the current colour, not
+    # unconditional black. White text over a black field must cut
+    # visible holes: the dark-pixel count of the consumer's raster
+    # falls measurably short of the untouched field.
+    colorps=$(mktemp)
+    colorpdf=$(mktemp)
+    craster=$(mktemp)
+    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster"' EXIT
+    cat > "$colorps" <<'EOF'
+0 setgray
+20 40 moveto 300 40 lineto 300 100 lineto 20 100 lineto closepath fill
+0 0 0 0 setcmykcolor
+/Helvetica findfont 40 scalefont setfont
+30 55 moveto (WHITE) show
+showpage
+EOF
+    "$xpost" -q -d pdfwrite -o "$colorpdf" "$colorps" </dev/null >/dev/null 2>&1
+    gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=pgmraw -g320x160 -r72 -o "$craster" "$colorpdf" 2>/dev/null
+    dark=$(tail -c 51200 "$craster" | od -An -v -tu1 \
+           | awk '{for(i=1;i<=NF;i++) if($i+0<128) n++} END{print n+0}')
+    echo "glyph colour dark pixels: $dark"
+    # the field alone is 280x60 = 16800 dark pixels: white glyphs must
+    # carve out well over a thousand of them, black glyphs none
+    [ "$dark" -ge 10000 ] && [ "$dark" -le 16000 ] \
+        || { echo "FAIL: text did not mark in the current colour"; exit 1; }
+    echo "gs glyph colour OK"
+
+    # vector strokes: a bent polyline must reach the PDF as one path with
+    # the requested width and the graphics state's join, not as separate
+    # butt-capped segments at the consumer's default width. The defect is
+    # sub-pixel at screen resolution, so rasterize our PDF and the original
+    # drawing through gs at 288dpi and require near-identical rasters (a
+    # small byte budget absorbs coordinate rounding at 1/100 point).
+    strokeps=$(mktemp)
+    strokepdf=$(mktemp)
+    ra=$(mktemp)
+    rb=$(mktemp)
+    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb"' EXIT
+    cat > "$strokeps" <<'EOF'
+0.75 setlinewidth
+100 100 moveto 105 103.5 lineto 100 107 lineto
+120 100 moveto 130 110 lineto 140 100 lineto
+stroke
+showpage
+EOF
+    "$xpost" -q -d pdfwrite -o "$strokepdf" "$strokeps" </dev/null >/dev/null 2>&1
+    gsr() { gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=pbmraw -g2448x3168 -r288 -o "$2" "$1" 2>/dev/null; }
+    gsr "$strokepdf" "$ra"
+    gsr "$strokeps" "$rb"
+    diffbytes=$(cmp -l "$ra" "$rb" 2>/dev/null | wc -l)
+    echo "stroke raster diff: $diffbytes bytes"
+    [ -s "$ra" ] && grep -q '[^\o000]' "$ra" || { echo "FAIL: stroke left no marks"; exit 1; }
+    [ "$diffbytes" -le 8 ] || { echo "FAIL: stroked joints diverge from the original drawing"; exit 1; }
+    echo "gs stroke round-trip OK"
+
     # document metadata: a DOCINFO pdfmark must land in the trailer's
     # Info dictionary, readable by the consumer
     infops=$(mktemp)
     infopdf=$(mktemp)
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf"' EXIT
+    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf"' EXIT
     cat > "$infops" <<'EOF'
 [ /Creator (pdf-device check) /DOCINFO pdfmark
 100 100 moveto 200 100 lineto 200 200 lineto closepath fill
@@ -80,50 +140,102 @@ EOF
     creator=$(gs -q -dNODISPLAY -dPDFINFO -dBATCH -dNOPAUSE "$infopdf" </dev/null 2>&1 | grep '^Creator:')
     [ "$creator" = "Creator: pdf-device check" ] || { echo "FAIL: gs reads Creator as '$creator'"; exit 1; }
     echo "gs DOCINFO round-trip OK"
+else
+    echo "gs not found: skipping round-trip check"
+fi
 
-    # process colour model: /ProcessColorModel /DeviceCMYK makes every mark
-    # separate in CMYK -- an explicit CMYK colour passes through, a gray or
-    # RGB source converts (RGB with undercolor removal), strokes emit K and
-    # glyph outlines emit k. The content stream is deflate-compressed, so
-    # decompress with mutool to read the colour operators when it is present.
-    cmykps=$(mktemp)
-    cmykpdf=$(mktemp)
-    cmykdec="$cmykpdf.dec.pdf"   # mutool clean picks its output format by extension
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf" "$cmykps" "$cmykpdf" "$cmykdec"' EXIT
-    cat > "$cmykps" <<'EOF'
-<< /PageSize [100 100] /ProcessColorModel /DeviceCMYK >> setpagedevice
-0.1 0.2 0.3 0.4 setcmykcolor newpath 10 10 moveto 30 0 rlineto 0 30 rlineto -30 0 rlineto closepath fill
-1 0 0 setrgbcolor newpath 50 10 moveto 30 0 rlineto 0 30 rlineto -30 0 rlineto closepath fill
-0 setgray 2 setlinewidth newpath 10 60 moveto 80 80 lineto stroke
-/Courier findfont 12 scalefont setfont 10 80 moveto (K) show
+# colour-space preservation: by default each paint reaches the content
+# stream in the space it was set in -- grey as g/G, RGB as rg, CMYK as
+# k -- for fills, strokes and glyphs alike, so a press workflow receives
+# pure-K ink as pure K rather than a converted black.
+# Probed through the uncompressed accumulator, no consumer needed.
+cspps=$(mktemp)
+cat > "$cspps" <<'EOF'
+<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] >> setpagedevice
+0.5 setgray newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+0 0 0 1 setcmykcolor newpath 70 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+0 setgray 2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
+/Courier findfont 12 scalefont setfont
+0 1 0 0 setcmykcolor 10 80 moveto (K) show
+0.25 setgray 40 80 moveto (g) show
+% the accumulator probe reads the private .pdfchunks operator, which lives in
+% internaldict rather than systemdict; fetch it once through the password
+/.pdfchunks 1183615869 internaldict /.pdfchunks get def
+/probe { % (needle) (name)  .  -
+    exch DEVICE .pdfchunks 0 get exch search
+    { pop pop pop (ok ) print print (\n) print }
+    { pop (MISSING ) print print (\n) print } ifelse
+} def
+(0.5 g\n) (grey fill preserved as g) probe
+(1 0 0 rg\n) (RGB fill preserved as rg) probe
+(0 0 0 1 k\n) (pure-K CMYK fill preserved as k) probe
+(0 G\n) (grey stroke preserved as G) probe
+(0 1 0 0 k\n) (CMYK glyph preserved as k) probe
+(0.25 g\n) (grey glyph preserved as g) probe
 showpage
+<< /OutputDevice /null >> setpagedevice
+quit
 EOF
-    "$xpost" -q -d pdfwrite -o "$cmykpdf" "$cmykps" </dev/null >/dev/null 2>&1
-    cbb=$(gsbb "$cmykpdf")
-    [ -n "$cbb" ] || { echo "FAIL: process-CMYK output left no marks"; exit 1; }
-    if command -v mutool >/dev/null 2>&1; then
-        mutool clean -d "$cmykpdf" "$cmykdec" >/dev/null 2>&1
-        grep -aq ' k$' "$cmykdec"       || { echo "FAIL: no CMYK fill (k) in process-CMYK output"; exit 1; }
-        grep -aq ' K$' "$cmykdec"       || { echo "FAIL: no CMYK stroke (K) in process-CMYK output"; exit 1; }
-        grep -aq '0 1 1 0 k' "$cmykdec" || { echo "FAIL: RGB red not converted with undercolor removal"; exit 1; }
-        grep -aq ' rg$' "$cmykdec"      && { echo "FAIL: an RGB operator leaked into process-CMYK output"; exit 1; }
-    fi
-    echo "CMYK process colour model OK"
+out=$("$xpost" -q -d null -o /dev/null "$cspps" </dev/null 2>&1)
+rm -f "$cspps"
+printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: colour-space preservation probes"; exit 1; }
+n=$(printf '%s\n' "$out" | grep -c '^ok ')
+[ "$n" = 6 ] || { echo "FAIL: expected 6 preservation probes, saw $n"; exit 1; }
+echo "colour-space preservation OK"
 
-    # separation colour spaces: a [/Separation name alt tint] space set through
-    # setcolorspace/setcolor paints as /CS<i> cs t scn (CS/SCN for strokes) with
-    # the space preserved in the page's /ColorSpace resources (grep-able in the
-    # uncompressed page object) and the tint transform embedded as a function --
-    # Type 4 calculator source when the procedure stays within that operator set,
-    # sampled Type 0 otherwise. A gsave/grestore round-trip re-selects the
-    # separation after a process-colour interlude; registration survives an
-    # intervening save/restore.
-    sepps=$(mktemp)
-    seppdf=$(mktemp)
-    sepdec="$seppdf.dec.pdf"
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf" "$cmykps" "$cmykpdf" "$cmykdec" "$sepps" "$seppdf" "$sepdec"' EXIT
-    cat > "$sepps" <<'EOF'
-<< /PageSize [100 100] >> setpagedevice
+# process colour model: under /ProcessColorModel /DeviceCMYK every mark
+# separates in CMYK -- default black (a DeviceGray source) and RGB black
+# as pure K, explicit CMYK passed through, strokes as K, glyphs as k.
+# Probed through the uncompressed accumulator, no consumer needed.
+cmykps=$(mktemp)
+cat > "$cmykps" <<'EOF'
+<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] /ProcessColorModel /DeviceCMYK >> setpagedevice
+newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
+0 setgray 2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
+/Courier findfont 12 scalefont setfont 10 80 moveto (K) show
+% the accumulator probe reads the private .pdfchunks operator, which lives in
+% internaldict rather than systemdict; fetch it once through the password
+/.pdfchunks 1183615869 internaldict /.pdfchunks get def
+/probe { % (needle) (name)  .  -
+    exch DEVICE .pdfchunks 0 get exch search
+    { pop pop pop (ok ) print print (\n) print }
+    { pop (MISSING ) print print (\n) print } ifelse
+} def
+(0 0 0 1 k\n) (gray-black fill as pure K) probe
+(0 1 1 0 k\n) (rgb red converted with undercolor removal) probe
+(0 0 0 1 K\n) (stroke in CMYK) probe
+( rg\n) (no RGB operators remain) exch DEVICE .pdfchunks 0 get exch search
+    { pop pop pop (MISSING ) print print (\n) print }
+    { pop (ok ) print print (\n) print } ifelse
+showpage
+<< /OutputDevice /null >> setpagedevice
+quit
+EOF
+out=$("$xpost" -q -d null -o /dev/null "$cmykps" </dev/null 2>&1)
+rm -f "$cmykps"
+printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: CMYK separation probes"; exit 1; }
+n=$(printf '%s\n' "$out" | grep -c '^ok ')
+[ "$n" = 4 ] || { echo "FAIL: expected 4 CMYK probes, saw $n"; exit 1; }
+echo "CMYK process colour model OK"
+
+# separation colour spaces: a [/Separation name alt tint] space set through
+# setcolorspace/setcolor paints as /CS<i> cs t scn (CS/SCN for strokes) with
+# the space preserved in the page's /ColorSpace resources and the tint
+# transform embedded as a function -- Type 4 calculator source when the
+# procedure stays within that operator set, sampled Type 0 otherwise (the
+# second space's procedure reads a variable). Registration survives an
+# intervening restore, and a gsave/grestore round-trip re-selects the
+# separation after a process-colour interlude.
+sepps=$(mktemp)
+# A relative path resolves to the same file for the shell and for the
+# interpreter, which is embedded in the program below and need not share the
+# shell's view of an absolute path (e.g. a native binary under a POSIX shell).
+seppdf=./sep-$$.pdf
+trap 'rm -f "$pdf" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
+cat > "$sepps" <<EOF
+<< /OutputDevice /pdfwrite /OutputFile ($seppdf) /PageSize [100 100] >> setpagedevice
 [/Separation (Spot A) /DeviceCMYK {dup 0 exch dup 0.5 mul exch 0.25 mul}] setcolorspace
 0.8 setcolor
 newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
@@ -133,61 +245,60 @@ newpath 40 10 moveto 10 0 rlineto 0 10 rlineto -10 0 rlineto closepath fill
 /half 0.5 def
 [/Separation /SpotB /DeviceGray {half mul 1 exch sub}] setcolorspace
 save 1.0 setcolor newpath 50 50 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill restore
+% the accumulator probe reads the private .pdfchunks operator, which lives in
+% internaldict rather than systemdict; fetch it once through the password
+/.pdfchunks 1183615869 internaldict /.pdfchunks get def
+/probe { % (needle) (name)  .  -
+    exch DEVICE .pdfchunks 0 get exch search
+    { pop pop pop (ok ) print print (\n) print }
+    { pop (MISSING ) print print (\n) print } ifelse
+} def
+(/CS0 cs 0.8 scn\n) (fill in the separation) probe
+(/CS0 CS 0.8 SCN\n) (stroke in the separation) probe
+(0 g\n) (process interlude inside gsave) probe
+(/CS1 cs 1 scn\n) (registration survives restore) probe
 showpage
+<< /OutputDevice /null >> setpagedevice
+quit
 EOF
-    "$xpost" -q -d pdfwrite -o "$seppdf" "$sepps" </dev/null >/dev/null 2>&1
-    grep -aq '/CS0 \[/Separation /Spot#20A /DeviceCMYK 5 0 R\]' "$seppdf" || { echo "FAIL: no escaped Spot A colour space resource"; exit 1; }
-    grep -aq '/CS1 \[/Separation /SpotB /DeviceGray 6 0 R\]' "$seppdf"    || { echo "FAIL: no SpotB colour space resource"; exit 1; }
-    grep -aq '/FunctionType 4' "$seppdf" || { echo "FAIL: no Type 4 tint transform"; exit 1; }
-    grep -aq '/FunctionType 0' "$seppdf" || { echo "FAIL: no sampled Type 0 tint transform"; exit 1; }
-    if command -v mutool >/dev/null 2>&1; then
-        mutool clean -d "$seppdf" "$sepdec" >/dev/null 2>&1
-        grep -aq '/CS0 cs 0.8 scn' "$sepdec" || { echo "FAIL: fill not painted in the separation"; exit 1; }
-        grep -aq '/CS0 CS 0.8 SCN' "$sepdec" || { echo "FAIL: stroke not painted in the separation"; exit 1; }
-        grep -aq '^0 g$' "$sepdec"           || { echo "FAIL: no process-colour interlude inside gsave"; exit 1; }
-        grep -aq '/CS1 cs 1 scn' "$sepdec"   || { echo "FAIL: registration did not survive restore"; exit 1; }
-    fi
-    echo "separation colour spaces OK"
+out=$("$xpost" -q -d null -o /dev/null "$sepps" </dev/null 2>&1)
+rm -f "$sepps"
+printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: separation content probes"; exit 1; }
+n=$(printf '%s\n' "$out" | grep -c '^ok ')
+[ "$n" = 4 ] || { echo "FAIL: expected 4 separation probes, saw $n"; exit 1; }
+sepdump() { echo "  seppdf=$seppdf ($(wc -c < "$seppdf" 2>/dev/null) bytes)"; grep -an 'Separation\|FunctionType\|0 obj' "$seppdf" 2>/dev/null | head -20; }
+grep -aq '/CS0 \[/Separation /Spot#20A /DeviceCMYK 5 0 R\]' "$seppdf" || { echo "FAIL: no escaped Spot A colour space resource"; sepdump; exit 1; }
+grep -aq '/CS1 \[/Separation /SpotB /DeviceGray 6 0 R\]' "$seppdf"   || { echo "FAIL: no SpotB colour space resource"; sepdump; exit 1; }
+grep -aq '/FunctionType 4' "$seppdf" || { echo "FAIL: no Type 4 tint transform"; sepdump; exit 1; }
+grep -aq '/FunctionType 0' "$seppdf" || { echo "FAIL: no sampled Type 0 tint transform"; sepdump; exit 1; }
+echo "separation colour spaces OK"
 
-    # independent oracle: a separating consumer images each separation as its
-    # own plate, named as given
+# independent oracle: a separating consumer must image each separation as
+# its own plate, named as given
+if command -v gs >/dev/null 2>&1; then
     platedir=$(mktemp -d)
     gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=tiffsep -o "$platedir/p%d.tif" "$seppdf" >/dev/null 2>&1
-    if [ -f "$platedir/p1(Spot A).tif" ] && [ -f "$platedir/p1(SpotB).tif" ]; then
-        echo "gs separation plates OK"
-    else
-        ls "$platedir"; rm -rf "$platedir"; echo "FAIL: gs did not image the separations as plates"; exit 1
-    fi
+    [ -f "$platedir/p1(Spot A).tif" ] || { ls "$platedir"; rm -rf "$platedir"; echo "FAIL: no Spot A plate"; exit 1; }
+    [ -f "$platedir/p1(SpotB).tif" ]  || { ls "$platedir"; rm -rf "$platedir"; echo "FAIL: no SpotB plate"; exit 1; }
     rm -rf "$platedir"
-
-    # colour-space preservation: by default each paint reaches the content
-    # stream in the space it was set in -- grey as g/G, RGB as rg, CMYK as k --
-    # for fills, strokes and glyphs alike, so a press workflow receives pure-K
-    # ink as pure K rather than a converted black. The content stream is
-    # deflate-compressed, so decompress with mutool to read the operators.
-    if command -v mutool >/dev/null 2>&1; then
-        cspps=$(mktemp)
-        csppdf=$(mktemp)
-        cspdec="$csppdf.dec.pdf"
-        trap 'rm -f "$pdf" "$textps" "$textpdf" "$infops" "$infopdf" "$cmykps" "$cmykpdf" "$cmykdec" "$sepps" "$seppdf" "$sepdec" "$cspps" "$csppdf" "$cspdec"' EXIT
-        cat > "$cspps" <<'EOF'
-<< /PageSize [100 100] >> setpagedevice
-0.5 setgray newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
-1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
-0 0 0 1 setcmykcolor newpath 70 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
-0 setgray 2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
-/Courier findfont 12 scalefont setfont
-0 1 0 0 setcmykcolor 10 80 moveto (K) show
-0.25 setgray 40 80 moveto (g) show
-showpage
-EOF
-        "$xpost" -q -d pdfwrite -o "$csppdf" "$cspps" </dev/null >/dev/null 2>&1
-        mutool clean -d "$csppdf" "$cspdec" >/dev/null 2>&1
-        for probe in '0.5 g' '1 0 0 rg' '0 0 0 1 k' '0 G' '0 1 0 0 k' '0.25 g'; do
-            grep -aq "^$probe\$" "$cspdec" || { echo "FAIL: colour-space not preserved: $probe"; exit 1; }
-        done
-        echo "colour-space preservation OK"
-    fi
-else
-    echo "gs not found: skipping round-trip check"
+    echo "gs separation plates OK"
 fi
+
+# a program's redefinition of fill must not capture the machinery's
+# internal references: eofill on a vector device resolves through the
+# nonzero fill, and a redefined fill that itself invokes eofill would
+# otherwise recurse without bound
+recps=$(mktemp)
+cat > "$recps" <<'EOF'
+<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] >> setpagedevice
+/fill { 0.5 setgray eofill } def
+newpath 10 10 moveto 80 10 lineto 45 80 lineto closepath eofill
+(eofill-under-redefined-fill OK\n) print
+showpage
+<< /OutputDevice /null >> setpagedevice
+quit
+EOF
+out=$("$xpost" -q -d null -o /dev/null "$recps" </dev/null 2>&1)
+rm -f "$recps"
+printf '%s\n' "$out" | grep -q 'eofill-under-redefined-fill OK' || { echo "FAIL: eofill under a redefined fill"; exit 1; }
+echo "eofill under redefined fill OK"
