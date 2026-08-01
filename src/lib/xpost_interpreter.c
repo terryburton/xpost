@@ -307,12 +307,15 @@ int evalfunc(Xpost_Context *ctx, Xpost_Object t);
 /* The stacks grow by VM segments without any structural bound, so a
    runaway loop or recursion would grind through memory rather than
    fail. Execution past these depths raises the stack's overflow
-   error, checked in the interpreter loop where depth accumulates. A
-   latch per stack raises once per crossing, so the error machinery
-   runs (and the program recovers) above the ceiling without
-   retriggering it, and rearms when the depth recedes. The ceilings
-   sit far beyond any legitimate job's depth while keeping the error
-   path's walk over the stacks cheap. */
+   error, checked at the two places depth accumulates: evalarray's
+   internal procedure call and the interpreter loop. A latch per
+   stack raises once per crossing, so the error machinery runs (and
+   the program recovers) above the ceiling without retriggering it,
+   and rearms when the depth recedes. The ceilings sit far beyond any
+   legitimate job's depth while keeping the error path's walk over
+   the stacks cheap. The exec ceiling leaves room for the
+   deferred-paint queues the devices stage there: a vector device
+   decomposes a large fill into very many queued spans. */
 #define XPOST_EXEC_STACK_LIMIT 1000000
 #define XPOST_OPER_STACK_LIMIT 1000000
 #define XPOST_DICT_STACK_LIMIT 5000
@@ -1027,7 +1030,18 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     else if (xpost_object_get_type(x) == arraytype)
                     {
                         /* a procedure call: continue stepping it here,
-                           leaving the current interval behind on es */
+                           leaving the current interval behind on es.
+                           Recursion deepens the stacks through this
+                           site without ever surfacing to the
+                           interpreter loop, so the ceilings are kept
+                           here */
+                        int over = _stack_ceilings(ctx);
+                        if (over)
+                        {
+                            ctx->currentobject = b;
+                            EVALARRAY_SYNC_SLOT();
+                            return over;
+                        }
                         EVALARRAY_SYNC_SLOT();
                         have_tail = 0;
                         a = x;
