@@ -763,6 +763,101 @@ gsave 10 setlinewidth 0 setlinejoin
 gsave 6 setlinewidth [8 10] 0 setdash grestore
 currentdash pop length 0 eq (grestore restores a shorter dash array) assert
 
+% --- the colour screen family records and round-trips ---
+gsave
+1 2 {} 3 4 {} 5 6 {} 7 8 {} setcolorscreen
+currentscreen pop 8 eq exch 7 eq and
+(currentscreen reports the grey channel of setcolorscreen) assert
+currentcolorscreen 12 array astore
+dup 0 get 1 eq (setcolorscreen keeps the red frequency) assert
+dup 4 get 4 eq (setcolorscreen keeps the green angle) assert
+dup 6 get 5 eq (setcolorscreen keeps the blue frequency) assert
+dup 9 get 7 eq (setcolorscreen keeps the grey frequency) assert
+pop
+9 10 {} setscreen
+currentcolorscreen 12 array astore
+dup 0 get 9 eq (setscreen sets the red screen alike) assert
+dup 7 get 10 eq (setscreen sets the blue angle alike) assert
+pop
+grestore
+currentscreen pop pop 60 eq (grestore restores the screen) assert
+
+% --- halftone dictionaries record and answer the screen family ---
+gsave
+<< /HalftoneType 1 /Frequency 33 /Angle 44 /SpotFunction { pop } >> sethalftone
+currenthalftone /Frequency get 33 eq (currenthalftone returns the dictionary) assert
+currentscreen type /dicttype eq
+3 1 roll 44 eq exch 33 eq and and
+(a type 1 halftone answers its frequency, angle and itself) assert
+currentcolorscreen 12 array astore
+dup 2 get type /dicttype eq (the colour channels answer the dictionary too) assert
+dup 0 get 33 eq (the colour channels answer its frequency) assert
+pop
+12 34 { pop } setscreen
+currenthalftone dup /HalftoneType get 1 eq
+exch /Frequency get 12 eq and
+(a screen-set state synthesizes a type 1 dictionary) assert
+grestore
+
+% --- setscreen evaluates the spot function across the whole halftone
+%     cell it renders through, not one sample: the call count follows
+%     the cell and grows as a coarser screen's cell does ---
+gsave
+/st.spotcount { % freq . count
+    /st.sc [0] def
+    dup 0 { pop pop st.sc 0 st.sc 0 get 1 add put } setscreen
+    st.sc 0 get
+} def
+60 st.spotcount 1 gt (setscreen samples the spot across its cell, not once) assert
+5 st.spotcount 60 st.spotcount gt (a coarser screen's larger cell takes more spot samples) assert
+/st.inrange [true] def
+30 0 {
+    dup abs 1 gt { st.inrange 0 false put } if
+    exch dup abs 1 gt { st.inrange 0 false put } if
+    add
+} setscreen
+st.inrange 0 get (the spot function sees arguments within [-1,1]) assert
+% the spot procedure runs against the caller's stacks: its defs land
+% in the caller's dictionaries, and what it leaves beyond its result
+% survives on the operand stack (a result-less procedure loses nothing)
+/st.spotdefs 0 def
+60 0 { pop pop /st.spotdefs st.spotdefs 1 add def 1 } setscreen
+st.spotdefs 0 gt (the spot procedure defines into the caller's dictionaries) assert
+count /st.d0 exch def
+60 0 { 1 } setscreen
+count st.d0 sub /st.res exch def
+st.res { pop } repeat
+st.res 0 gt (values the spot procedure leaves survive on the operand stack) assert
+grestore
+
+% --- colour transfer functions record and round-trip ---
+gsave
+{ 1 exch sub } { dup mul } { sqrt } { 2 div } setcolortransfer
+0.5 currenttransfer exec 0.25 (setcolortransfer's grey lands in currenttransfer) assertnear
+currentcolortransfer 4 array astore
+0.25 1 index 0 get exec 0.75 (the red transfer answers) assertnear
+0.25 1 index 1 get exec 0.0625 (the green transfer answers) assertnear
+0.25 1 index 3 get exec 0.125 (the grey transfer answers) assertnear
+pop
+{ 3 mul } settransfer
+currentcolortransfer 4 array astore
+0.2 1 index 0 get exec 0.6 (settransfer sets the red transfer alike) assertnear
+0.2 1 index 2 get exec 0.6 (settransfer sets the blue transfer alike) assertnear
+pop
+grestore
+
+% --- a dash element spanning several segments ---
+% the within-element branch of the dash walk only runs when a
+% subpath's segments are shorter than the element: it corrupted its
+% stack and typechecked (a dashed arc was the natural victim)
+erasepage
+gsave 4 setlinewidth
+newpath 8 32 moveto 16 32 lineto 24 32 lineto 32 32 lineto 40 32 lineto 48 32 lineto
+[30 8] 0 setdash stroke grestore
+12 32 inkat (a multi-segment dash draws its element) assert
+28 32 inkat (the dash element spans segment joints) assert
+42 32 inkat not (the gap follows the element across joints) assert
+
 % --- stroke width follows the CTM ---
 erasepage
 gsave
