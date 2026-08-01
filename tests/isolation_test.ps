@@ -259,6 +259,14 @@ PAINTNAMES { { (PROGRAM-OWNED) } def } forall
     grestore
 } stopped not (fill, image and imagemask survive redefined helper names) assert
 
+% device switching through setpagedevice reaches its maker through
+% privatedict too, surviving a program that has taken the maker names
+{
+    << /OutputDevice /bbox /PageSize [40 40] >> setpagedevice
+    newpath 5 5 moveto 30 30 lineto 30 5 lineto closepath fill
+    gsave nulldevice newpath 0 0 moveto 10 10 lineto stroke grestore
+} stopped not (device switch and nulldevice survive redefined maker names) assert
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush
