@@ -66,25 +66,6 @@
 #include "xpost_error.h"  /* file functions may throw errors */
 #include "xpost_file.h"  /* double-check prototypes */
 
-/* Report on a named regular file for the string form of status. Returns 1 and
-   fills the fields when the file exists, 0 otherwise. bytes is the size; pages
-   is an implementation-defined block count; referred and created are the
-   access and modification times in seconds. */
-int
-xpost_diskfile_stat(const char *path, long *pages, long *bytes,
-                    long *referred, long *created)
-{
-    struct stat st;
-
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
-        return 0;
-    *bytes = (long)st.st_size;
-    *pages = (long)((st.st_size + 1023) / 1024);
-    *referred = (long)st.st_atime;
-    *created = (long)st.st_mtime;
-    return 1;
-}
-
 /* --- file-access sandbox -------------------------------------------------
    A process-wide, one-way latch. Before engaging, disk access is
    unrestricted; once engaged, an open by the running program is denied
@@ -515,6 +496,27 @@ int
 xpost_diskfile_readable(const char *path)
 {
     return !xpost_path_control_engaged || xpost_path_permitted(path, 0);
+}
+
+/* Report on a named regular file for the string form of status. Returns 1 and
+   fills the fields when the file exists and the path sandbox permits it, 0
+   otherwise. bytes is the size; pages is an implementation-defined block count;
+   referred and created are the access and modification times in seconds. */
+int
+xpost_diskfile_stat(const char *path, long *pages, long *bytes,
+                    long *referred, long *created)
+{
+    struct stat st;
+
+    if (xpost_path_control_engaged && !xpost_path_permitted(path, 0))
+        return 0;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
+        return 0;
+    *bytes = (long)st.st_size;
+    *pages = (long)((st.st_size + 1023) / 1024);
+    *referred = (long)st.st_atime;
+    *created = (long)st.st_mtime;
+    return 1;
 }
 
 /* Has the file-access sandbox been engaged? Environment access is refused
