@@ -68,6 +68,7 @@ cleartomark
 mark { (no.such.file.xyz) (r) file } stopped
     (a raised error unwinds to a stopped context) assert
 cleartomark
+/Generic /Category findresource type /dicttype eq (resources work) assert
 
 % a program may freely define the now-absent graphics names for its own use
 /ravec { 42 } def ravec 42 eq (program may use a freed helper name) assert
