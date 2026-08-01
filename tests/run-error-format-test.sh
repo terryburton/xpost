@@ -43,6 +43,8 @@ printf '%s\n' "$out" | grep -Fq 'done' || exit 1
 #    bounds the run, so a failure to abort surfaces as a test timeout.
 printf 'errordict /undefinedresult { 1 0 div } put 1 0 div\n' > "$tmp".cascade.ps
 out=$("$xpost" -q --no-sandbox -d null "$tmp".cascade.ps </dev/null 2>&1)
+rc=$?
 printf '%s\n' "$out" | grep -Fq 'runaway error cascade' || exit 1
+[ "$rc" -ne 0 ] || exit 1
 
 exit 0
