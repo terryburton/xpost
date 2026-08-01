@@ -503,10 +503,10 @@ setglobal
                 code
                 dc curf get
                 1 string dup 0 code put
-                //.xpostsys /.cshmeasure get currentdict /exe get
-                dc curf get //.xpostsys /.cshsetfont get currentdict /exe get
+                //.xpostsys /.cshmeasure get exec currentdict /exe get
+                dc curf get //.xpostsys /.cshsetfont get exec currentdict /exe get
                 currentdict /proc get currentdict /exe get
-                currentdict /fnt get //.xpostsys /.cshsetfont get currentdict /exe get
+                currentdict /fnt get //.xpostsys /.cshsetfont get exec currentdict /exe get
             } if
             /p p w add def
         } loop
@@ -529,10 +529,10 @@ setglobal
             cid
             currentdict /bw get
             1 string dup 0 cid 255 and put
-            //.xpostsys /.cshmeasure get currentdict /exe get
-            currentdict /bw get //.xpostsys /.cshsetfont get currentdict /exe get
+            //.xpostsys /.cshmeasure get exec currentdict /exe get
+            currentdict /bw get //.xpostsys /.cshsetfont get exec currentdict /exe get
             currentdict /proc get currentdict /exe get
-            currentdict /fnt get //.xpostsys /.cshsetfont get currentdict /exe get
+            currentdict /fnt get //.xpostsys /.cshsetfont get exec currentdict /exe get
             /p p w add def
         } loop
         ] cvx
@@ -548,7 +548,7 @@ setglobal
             str p get
             currentdict /fnt get
             str p 1 getinterval
-            //.xpostsys /.cshmeasure get currentdict /exe get
+            //.xpostsys /.cshmeasure get exec currentdict /exe get
             currentdict /proc get currentdict /exe get
         } for
         ] cvx
