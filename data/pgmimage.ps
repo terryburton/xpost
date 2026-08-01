@@ -1,22 +1,22 @@
-/QUIET where { pop }{ (loading pgmimage.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading pgmimage.ps...)print } ifelse
 
-DATA_DIR(/qsort.ps)strcat run
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
-    PGMIMAGE dup /Create get exec
+    .privatedict /.xpost_PGMIMAGE get dup /Create get exec
 } def
 
-% PGMIMAGE device handles 8bit images.
+% .xpost_PGMIMAGE device handles 8bit images.
 %
 % It uses the full range 0-255 of values and does not calculate
 % the actual maximum value in the data before transmitting. MaxVal
 % is always 255.
 %
-% In the list of procedures below, PGMIMAGE is the Class dictionary,
+% In the list of procedures below, .xpost_PGMIMAGE is the Class dictionary,
 % IMAGE is an instance returned by Create.
 %
 % procedures:
-%           width height PGMIMAGE  Create  ->  IMAGE
+%           width height .xpost_PGMIMAGE  Create  ->  IMAGE
 %                   val x y IMAGE  PutPix  ->  -
 %                       x y IMAGE  GetPix  ->  val
 %           val x1 y1 x2 y2 IMAGE  DrawLine  ->  -
@@ -33,7 +33,7 @@ DATA_DIR(/qsort.ps)strcat run
 % PS> dev dup /Emit get exec
 %
 
-/PGMIMAGE <<
+/.xpost_PGMIMAGE <<
     /nativecolorspace /DeviceGray
     /dimensions [0 0]
 
@@ -182,8 +182,8 @@ DATA_DIR(/qsort.ps)strcat run
 		/w w x add def
 
         {
-            /USEDRAWLINE where { pop
-                USEDRAWLINE {
+            //.internaldict /USEDRAWLINE known {
+                //.internaldict /USEDRAWLINE get {
                     (using DrawLine)=
                     y 1 h {
                         val exch 
@@ -337,7 +337,7 @@ DATA_DIR(/qsort.ps)strcat run
                 exch 1 get
                 lt             % (y1 < y2)
             } ifelse
-        } qsort   % [sorted-list-of-intersections]
+        } //.xpostsys /qsort get exec   % [sorted-list-of-intersections]
         } pop
         dup .yxsort
         /DEBUGFILL where { pop
@@ -352,8 +352,8 @@ DATA_DIR(/qsort.ps)strcat run
             3 2 roll aload pop
 
             {
-                /USEDRAWLINE where { 
-                    USEDRAWLINE {
+                //.internaldict /USEDRAWLINE known {
+                    //.internaldict /USEDRAWLINE get {
                         val 5 1 roll
                         currentdict DrawLine
                         exit
@@ -585,7 +585,7 @@ end } def
             exch 1 get
             lt
         } ifelse
-    } qsort   % [sorted-list-of-intersections]
+    } //.xpostsys /qsort get exec   % [sorted-list-of-intersections]
     %pstack
 
     aload length 2 idiv { % repeat
@@ -611,4 +611,4 @@ end } def
 } pop
 
 
-/QUIET where { pop }{ (eof pgmimage.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof pgmimage.ps\n)print } ifelse

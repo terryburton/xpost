@@ -127,6 +127,33 @@ _xpost_main_version(const char *filename)
     printf("%s %d.%d.%d\n", filename, maj, min, mic);
 }
 
+/* permit the directory containing `path`, for writing when `forwrite` */
+static void
+_xpost_permit_file_dir(const char *path, int forwrite)
+{
+    char buf[4096];
+    char *slash;
+
+    if (!path || strlen(path) >= sizeof buf)
+        return;
+    strcpy(buf, path);
+    slash = strrchr(buf, '/');
+    if (slash)
+    {
+        *slash = '\0';
+        if (buf[0] == '\0')
+            strcpy(buf, "/");
+    }
+    else
+    {
+        strcpy(buf, ".");
+    }
+    if (forwrite)
+        xpost_path_permit_write(buf);
+    else
+        xpost_path_permit_read(buf);
+}
+
 static void
 _xpost_main_usage(const char *filename)
 {
@@ -138,6 +165,8 @@ _xpost_main_usage(const char *filename)
     printf("  -o, --output=[FILE]                output file\n");
     printf("  -d, --device=[STRING]              device name\n");
     printf("  -Dname=token, --define name=token  add definition to userdict\n");
+    printf("  --no-graphics                      lock down and run without loading graphics\n");
+    printf("  --no-sandbox                       allow the program unrestricted file access\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
     printf("  -q, --quiet                        suppress interpreter messages (default)\n");
     printf("  -v, --verbose                      do not go quiet into that good night\n");
@@ -245,6 +274,8 @@ int main(int argc, char *argv[])
     const char *define = NULL;
     char **defs = NULL;
     int num_defs = 0;
+    int no_graphics = 0;
+    int no_sandbox = 0;
     int output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
     int have_device;
     int width = -1;
@@ -356,10 +387,18 @@ int main(int argc, char *argv[])
                     defs[num_defs++] = strdup(define);
                 }
             }
+            else if (!strcmp(argv[i], "--no-sandbox"))
+            {
+                no_sandbox = 1;
+            }
             else if ((!strcmp(argv[i], "-q")) ||
                      (!strcmp(argv[i], "--quiet")))
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
+            }
+            else if (!strcmp(argv[i], "--no-graphics"))
+            {
+                no_graphics = 1;
             }
             else if ((!strcmp(argv[i], "-v")) ||
                      (!strcmp(argv[i], "--verbose")))
@@ -448,6 +487,9 @@ int main(int argc, char *argv[])
         goto quit_xpost;
     }
 
+    if (no_graphics)
+        xpost_skip_graphics_set(ctx, 1);
+
     XPOST_LOG_INFO("defs=%p", (void*)defs);
     if (defs){
         xpost_add_definitions(ctx, num_defs, defs);
@@ -460,12 +502,40 @@ int main(int argc, char *argv[])
         num_defs = 0;
     }
 
-    xpost_run(ctx, XPOST_INPUT_FILENAME, ps_file, 0);
-    xpost_destroy(ctx);
+    /* confine the program to its working area unless --no-sandbox: the
+       current and temporary directories, the input file's directory
+       (read) and the output file's directory (write). The interpreter's
+       own start-up files have already loaded, so they need no
+       permitting here. */
+    if (!no_sandbox)
+    {
+        const char *tmp = getenv("TMPDIR");
 
-    xpost_quit();
+        if (!tmp || !*tmp)
+            tmp = "/tmp";
+        xpost_path_permit_read(".");
+        xpost_path_permit_write(".");
+        xpost_path_permit_read(tmp);
+        xpost_path_permit_write(tmp);
+        _xpost_permit_file_dir(ps_file, 0);
+        if (output_file)
+            _xpost_permit_file_dir(output_file, 1);
+        xpost_path_control_engage();
+    }
 
-    return EXIT_SUCCESS;
+    {
+        Xpost_Run_Status status;
+
+        status = xpost_run(ctx, XPOST_INPUT_FILENAME, ps_file, 0);
+        xpost_destroy(ctx);
+
+        xpost_quit();
+
+        /* a job that ended in an uncaught error is a failed job,
+           whatever was flushed or rendered along the way */
+        return status == XPOST_RUN_COMPLETE || status == XPOST_RUN_YIELDED
+             ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
 
   quit_xpost:
     xpost_quit();

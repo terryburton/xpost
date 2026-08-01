@@ -277,10 +277,29 @@ test('interpreter',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# Embedding contract: run-status outcomes and error identity across a
+# persistent context.
+run_status_exe = executable('run_status_test',
+  'tests/run_status_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('run-status',
+  run_status_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Graphics regression checks: operator wrapping and the wrapped-operator
+# error posture, asserted through the interpreter's private operators.
+test('graphics-regression',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Save/restore VM: drive the entity count past 65536 and require dicts and
@@ -288,6 +307,14 @@ test('semantics',
 test('save-restore',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/save_restore_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Local/global VM integrity: the put operators reject a local value entering a
+# global container and accept the reverse; a characterisation guard records
+# that literal construction ([ ] and { }) skips the check, unlike gs.
+test('vm',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/vm_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # counttomark and the [ ] / << >> constructors built on it: correctness plus
@@ -428,11 +455,120 @@ test('save-restore-ctm',
   args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Interpreter isolation: internal helper procedures hide in .xpostsys, so their
+# names neither pollute nor obscure a program's own, and a program may redefine
+# them without disturbing the graphics machinery (the clash that broke real gs
+# programs on xpost). Also covers surviving a program shadowing get/exec.
+test('isolation',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/isolation_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Dispatch-dictionary tamper resistance: no internal dispatch dictionary may
+# store an executable operator NAME (re-looked-up at run time, so a program's
+# redefinition hijacks internal machinery -- the casselman ch8 loop); operator
+# values must be stored instead. Scans every reachable internal namespace,
+# self-testing that the scanner catches a planted unsafe entry.
+test('tamper-dispatch',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Startup namespace cleanliness: after startup userdict and globaldict are empty
+# and systemdict exposes precisely the golden key set, so no internal operator or
+# procedure can leak into a userland-visible dictionary unnoticed. A deliberate
+# change to systemdict's public surface fails this until the golden set is
+# regenerated (tools/gen_namespace_test.py), making every such change reviewed.
+test('namespace',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/namespace_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# No-graphics lockdown: --no-graphics selects the no-graphics start procedures,
+# which run .finalize (the interpreter lockdown) without loadgraphics. The
+# language still relocates into systemdict and the private namespaces are still
+# sealed and hidden, while the graphics modules are never loaded and the
+# interpreter stays functional -- so loading graphics is genuinely optional, not
+# a prerequisite for a hardened interpreter.
+test('nographics',
+  find_program('tests/run-nographics-test.sh'),
+  args: [ xpost_exe, files('tests/nographics_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Access-attribute enforcement: readonly, executeonly and noaccess reduce the
+# value and execution access of composite objects, and the standard operators
+# raise invalidaccess (or the access operators typecheck) accordingly, across
+# arrays, strings and dictionaries. Standard PostScript that prints SUCCESS on
+# gs too, so it is a conformance test rather than an xpost tautology.
+test('access',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/access_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Every output device renders: the rest of the suite runs under -d null,
+# which never loads the graphics/device stack, so a device that fails to
+# initialise or emit a page would otherwise be invisible. Render a trivial
+# page through each built device and require non-empty output.
+test('devices',
+  find_program('tests/run-devices-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Error reporting: a top-level job error prints the standard Adobe error line
 # and flush notice; a clean quit or a caught error prints neither.
 test('error-format',
   find_program('tests/run-error-format-test.sh'),
   args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# Single-opener invariant: fopen() appears only inside xpost_diskfile_fopen(),
+# so every disk file passes one enforcement point.
+test('fopen-funnel',
+  find_program('tests/check-fopen-funnel.sh'),
+  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+
+# Machinery stays born in its final home: every registered private-namespace
+# member keeps its dictionary and every graphics-state template slot survives,
+# per the register in tests/dict_homes.golden.
+test('dict-homes',
+  find_program('tests/check-dict-homes.sh'),
+  args: [ meson.current_source_dir() ])
+
+# Path-component validation and beneath-root confinement: traversal and
+# symlink-escape attempts are refused. POSIX-only: the escape probe builds
+# its test tree with symlink(), which the Windows CRT does not provide.
+if host_machine.system() != 'windows'
+  path_confine_exe = executable('path_confine_test',
+    'tests/path_confine_test.c',
+    c_args: '-DHAVE_CONFIG_H',
+    dependencies: libxpost_dep,
+    include_directories: [ config_dir, include_directories('src/lib') ],
+    install: false)
+  test('path-confine', path_confine_exe)
+endif
+
+# File-access sandbox: once engaged, only permitted directories may be
+# opened by the running program.
+sandbox_exe = executable('sandbox_test',
+  'tests/sandbox_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('sandbox',
+  sandbox_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# From-PostScript lockdown: .permitfileread/.permitfilewrite/.lockdown raise
+# the sandbox from within a program and freeze the permit set.
+lockdown_exe = executable('lockdown_test',
+  'tests/lockdown_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('lockdown',
+  lockdown_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')

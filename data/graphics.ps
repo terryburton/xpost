@@ -1,37 +1,55 @@
-/QUIET where { pop }{ (loading graphics.ps...\n)print } ifelse
+//.internaldict /QUIET known { }{ (loading graphics.ps...\n)print } ifelse
 
-% implement xpost-specifics
-% to test on ghostscript
-/DATA_DIR where {pop}{
-    /DATA_DIR{}def
+% fallback definitions so this file can run standalone; in the normal flow
+% DATA_DIR lives in privatedict, so test for it there
+.privatedict /DATA_DIR known {}{
+    .privatedict /DATA_DIR {} put
     /strcat{1 1 index length 1 sub getinterval}def
     /breakhere{}def
 }ifelse
 
-false setglobal
+true setglobal
 userdict begin
 
     %/CONSTRAINFLATNESS null def
 
+    % graphicsdict holds the live per-render graphics state -- currgstate and
+    % the gstack of local gstate copies -- so it and its accessors stay in
+    % local VM.
+    currentglobal false setglobal
     /graphicsdict <<
         /currgstate 12 dict
         /gstackarray 100 array
         /gptr -1
     >> def
+    % The machinery reaches its state dictionary and its device
+    % through operators, promoted here before any machinery file
+    % loads: every procedure binding as it loads freezes these
+    % references, and a program may take either name for itself.
+    % The implementation procedures anchor under reserved names so
+    % the collector keeps them.
+    .privatedict /.graphicsdict graphicsdict put   % the C operators' direct road in, off the dict stack
+    /.graphicsdictproc [ //graphicsdict ] cvx def
+    /graphicsdict dup /.graphicsdictproc load .wrapop def
+    /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
+    /DEVICE dup /.DEVICEproc load .wrapop def
+    setglobal
 
     %breakhere
-    DATA_DIR (/device.ps) strcat run %loads and uses (/image.ps)
-    DATA_DIR (/gstate.ps) strcat run
-    %DATA_DIR (/matrix.ps) strcat run % moved to xpost_op_matrix.c
-    DATA_DIR (/color.ps) strcat run
-    DATA_DIR (/path.ps) strcat run
-    DATA_DIR (/clip.ps) strcat run
-    DATA_DIR (/paint.ps) strcat run
-    DATA_DIR (/font.ps) strcat run
-    DATA_DIR (/pattern.ps) strcat run
+    (/device.ps) //.xpostsys /.loadmodule get exec %loads and uses (/image.ps)
+    (/gstate.ps) //.xpostsys /.loadmodule get exec
+    %(/matrix.ps) //.xpostsys /.loadmodule get exec % moved to xpost_op_matrix.c
+    (/color.ps) //.xpostsys /.loadmodule get exec
+    (/path.ps) //.xpostsys /.loadmodule get exec
+    (/clip.ps) //.xpostsys /.loadmodule get exec
+    (/paint.ps) //.xpostsys /.loadmodule get exec
+    (/font.ps) //.xpostsys /.loadmodule get exec
+    (/pattern.ps) //.xpostsys /.loadmodule get exec
 
-graphicsdict /currgstate get /device DEVICE put
-/DEVICE { graphicsdict /currgstate get /device get } def
+
+% The binding pass below rebinds userdict and systemdict in place; it runs in
+% local VM (the [ currentdict systemdict ] array it builds is local).
+false setglobal
 
 % The graphics machinery is implemented in PostScript and runs in the
 % middle of user programs, whose dictionaries are then on the dict
@@ -57,7 +75,7 @@ graphicsdict /currgstate get /device DEVICE put
 
 end %userdict
 
-/QUIET where { pop }{ (eof graphics.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof graphics.ps\n)print } ifelse
 
 /TESTGRAPHICS where {pop}{ currentfile flushfile} ifelse
 (TESTGRAPHICS graphics)=
@@ -158,7 +176,7 @@ newpath
 closepath
 
 (doclip)=
-doclip
+//.xpostsys /doclip get exec
 (pathforall)=
 { (moveto) 3 args }
 { (lineto) 3 args }

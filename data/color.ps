@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading color.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading color.ps...)print } ifelse
 
 
 /setcolorspace {
@@ -15,37 +15,42 @@
     graphicsdict /currgstate get /colorspace get
 } bind def
 
-/setcolordict <<
+.xpostsys /setcolordict <<
     /DeviceGray /setgray cvx
     /DeviceRGB /setrgbcolor cvx
     /DeviceCMYK /setcmykcolor cvx
     /Pattern { pop }
->> def
+>> put
 /setcolor {
-    //setcolordict currentcolorspace get exec
+    //.xpostsys /setcolordict get currentcolorspace get exec
 } bind def
 
-/currentcolordict <<
+.xpostsys /currentcolordict <<
     /DeviceGray /currentgray cvx
     /DeviceRGB /currentrgbcolor cvx
     /DeviceCMYK /currentcmykcolor cvx
->> def
+>> put
 /currentcolor {
-    //currentcolordict currentcolorspace get exec
+    //.xpostsys /currentcolordict get currentcolorspace get exec
 } bind def
 
-/.min { % x y  . x (if x < y)
+currentglobal true setglobal
+.xpostsys /.min { % x y  . x (if x < y)
         %        y (otherwise)
     2 copy gt{exch}if pop
-} bind def
+} bind put
+setglobal
 % component  .c01  real in [0,1]
 % a colour component is clamped to the unit range (PLRM: values outside
-% 0 to 1 are adjusted to the nearest valid value)
-/.c01 {
+% 0 to 1 are adjusted to the nearest valid value). A pure global helper, so it
+% lives in .xpostsys beside .min and the colour conversions that freeze it in.
+currentglobal true setglobal
+.xpostsys /.c01 {
     cvr dup 0.0 lt { pop 0.0 } if dup 1.0 gt { pop 1.0 } if
-} bind def
+} bind put
+setglobal
 
-/ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
+.xpostsys /ColorConversion << % <</dest <</source {source-to-dest conversion}>> >>
     /DeviceGray <<
         /DeviceGray {
             graphicsdict /currgstate get /colorcomp1 get
@@ -68,7 +73,7 @@
             .11 mul add
             graphicsdict /currgstate get /colorcomp4 get
             add
-            1 .min sub
+            1 //.xpostsys /.min get exec sub
         } bind
     >>
     /DeviceRGB <<
@@ -85,11 +90,11 @@
         /DeviceCMYK {
             graphicsdict /currgstate get /colorcomp4 get % k
             1 graphicsdict /currgstate get /colorcomp1 get % k 1 c
-            2 index add 1 .min sub % k 1-min(1,c+k)
+            2 index add 1 //.xpostsys /.min get exec sub % k 1-min(1,c+k)
             1 graphicsdict /currgstate get /colorcomp2 get % k R 1 m
-            3 index add 1 .min sub % k R 1-min(1,m+k)
+            3 index add 1 //.xpostsys /.min get exec sub % k R 1-min(1,m+k)
             1 graphicsdict /currgstate get /colorcomp3 get % k R G 1 y
-            5 4 roll add 1 .min sub % R G 1-min(1,y+k)
+            5 4 roll add 1 //.xpostsys /.min get exec sub % R G 1-min(1,y+k)
         } bind
     >>
     /DeviceCMYK <<
@@ -104,8 +109,8 @@
             % component moves entirely into the black channel, so black
             % separates as pure K rather than four inks
             1 graphicsdict /currgstate get /colorcomp1 get sub
-            1 graphicsdict /currgstate get /colorcomp2 get sub .min
-            1 graphicsdict /currgstate get /colorcomp3 get sub .min  % k
+            1 graphicsdict /currgstate get /colorcomp2 get sub //.xpostsys /.min get exec
+            1 graphicsdict /currgstate get /colorcomp3 get sub //.xpostsys /.min get exec  % k
             dup dup dup                                              % k k k k
             1 graphicsdict /currgstate get /colorcomp1 get sub exch sub % k k k c'
             4 1 roll                                                 % c' k k k
@@ -121,28 +126,28 @@
             graphicsdict /currgstate get /colorcomp4 get
         } bind
     >>
->> def
+>> put
 
 /setgray {
     graphicsdict /currgstate get /colorspace /DeviceGray put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentgray {
-    ColorConversion /DeviceGray get
+    //.xpostsys /ColorConversion get /DeviceGray get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
 
 /setrgbcolor {
     graphicsdict /currgstate get /colorspace /DeviceRGB put
-    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentrgbcolor {
-    ColorConversion /DeviceRGB get
+    //.xpostsys /ColorConversion get /DeviceRGB get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
@@ -154,7 +159,7 @@
 % clamped to [0,1] first, as the reference interpreters clamp hue rather
 % than wrap it.
 /sethsbcolor {
-    3 { .c01 3 1 roll } repeat
+    3 { //.xpostsys /.c01 get exec 3 1 roll } repeat
     7 dict begin
     {/b /s /h}{exch def}forall
     /h h h truncate sub 6 mul def       % scale hue to sector 0-5 (1 maps to 0)
@@ -194,14 +199,14 @@
 
 /setcmykcolor {
     graphicsdict /currgstate get /colorspace /DeviceCMYK put
-    graphicsdict /currgstate get exch .c01 /colorcomp4 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp3 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp2 exch put
-    graphicsdict /currgstate get exch .c01 /colorcomp1 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp4 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
+    graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
 } bind def
 
 /currentcmykcolor {
-    ColorConversion /DeviceCMYK get
+    //.xpostsys /ColorConversion get /DeviceCMYK get
         graphicsdict /currgstate get /colorspace get
         get exec
 } bind def
@@ -216,4 +221,23 @@
     setcolor
 } bind def
 
-/QUIET where { pop }{ (eof color\n)print } ifelse
+% setcolordict and currentcolordict dispatch a device colour through the
+% operator named for its space. They were built holding those names as `cvx`
+% values, which a running dispatch re-looks-up on the dict stack -- so a program
+% redefining setgray/setrgbcolor/setcmykcolor (or the current* readers) would
+% reach its own definition through the interpreter's internal dispatch. `bind`
+% freezes operator names in a procedure body but not names held as data in a
+% dispatch dictionary, so capture the real operators here by value, now that they
+% are defined and before any program can redefine them -- the idiom font.ps uses
+% for show and setfont. The machinery then always reaches the real operators,
+% while a program's own set*/current* calls still see its redefinition.
+.xpostsys /setcolordict get
+    dup /DeviceGray  /setgray      load put
+    dup /DeviceRGB   /setrgbcolor   load put
+        /DeviceCMYK  /setcmykcolor  load put
+.xpostsys /currentcolordict get
+    dup /DeviceGray  /currentgray      load put
+    dup /DeviceRGB   /currentrgbcolor   load put
+        /DeviceCMYK  /currentcmykcolor  load put
+
+//.internaldict /QUIET known { }{ (eof color\n)print } ifelse

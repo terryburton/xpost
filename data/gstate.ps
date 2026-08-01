@@ -1,9 +1,11 @@
-/QUIET where { pop }{ (loading gstate.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading gstate.ps...)print } ifelse
 
-% gstatetemplate yields a freshly-initialized dictionary
+% .gstatetemplate yields a freshly-initialized dictionary
 % with the following values. currmatrix and scratchmatrix
-% are newly-allocated arrays.
-/gstatetemplate <<
+% are newly-allocated arrays. The template embeds local objects (the initial
+% path storage and the device), so it and its accessor stay in local VM.
+currentglobal false setglobal
+/.gstatetemplate <<
     /colorspace /DeviceGray
     /colorcomp1 0.0
     /colorcomp2 0.0
@@ -26,16 +28,20 @@
     /currfont 1 dict
     /device DEVICE
 >> def
-/gstatetemplate { //gstatetemplate % use template
+% the template proc lives in privatedict, off the dict stack; it freezes the
+% template dictionary defined above, so that dictionary needs no userdict anchor
+% and .finalize drops it. Callers reach the proc through .privatedict.
+.privatedict /.gstatetemplate { //.gstatetemplate % use template
     dup /currmatrix [ 1 0 0 1 0 0 ] put  % allocate fresh arrays
     dup /scratchmatrix [ 1 0 0 1 0 0 ] put
-} def
+} put
+setglobal
 
 
 
 % Graphics State Operators -- Device Independent
 
-/deepcopy { % dict1 dict2 . dict2'
+.xpostsys /deepcopy { % dict1 dict2 . dict2'
     begin
     {
         dup type /arraytype eq
@@ -45,7 +51,7 @@
             def
         }{
             dup type /dicttype eq {
-                dup maxlength dict deepcopy
+                dup maxlength dict //.xpostsys /deepcopy get exec
                 def
             }{
                 def
@@ -53,9 +59,9 @@
         } ifelse
     } forall
     currentdict end
-} def
+} put
 
-/gstatecopy { % dict1 dict2 . dict2'
+.xpostsys /gstatecopy { % dict1 dict2 . dict2'
     begin
     { % key val
         %pstack()= %1 index =
@@ -103,7 +109,7 @@
         } ifelse
     } forall
     currentdict end
-} def
+} put
 
 % -  gsave  -
 % push graphics state
@@ -112,7 +118,7 @@ graphicsdict begin
     /gptr gptr 1 add def
     gptr gstackarray length ge { /gsave cvx /limitcheck signalerror } if
     gstackarray gptr gstate currentgstate put % push copy on stack
-    currgstate /currpath 2 copy get 1 dict deepcopy put % make a new working copy of path
+    currgstate /currpath 2 copy get 1 dict //.xpostsys /deepcopy get exec put % make a new working copy of path
 end
 } def
 
@@ -123,7 +129,7 @@ graphicsdict begin
     gptr -1 gt {
         gstackarray gptr get
             %dup {exch = ==} forall
-        currgstate gstatecopy pop
+        currgstate //.xpostsys /gstatecopy get exec pop
         gptr 0 gt { %discard all but one element, for grestoreall
             gstackarray gptr null put % discard stack copy
         } if
@@ -138,17 +144,16 @@ end
 graphicsdict begin
     /gptr -1 def
     gstackarray 0 get
-    currgstate gstatecopy pop
+    currgstate //.xpostsys /gstatecopy get exec pop
 end
 } def
 
 % -  initgraphics  -
 % reset graphics state parameters
 /initgraphics {
-    break
     gstate setgstate
     initmatrix
-    /QUIET where { pop }{ matrix currentmatrix == } ifelse
+    //.internaldict /QUIET known { }{ matrix currentmatrix == } ifelse
     %(initclip)=
     initclip
     %(erasepage)=
@@ -160,7 +165,7 @@ end
 % -  gstate  gstate
 % create graphics state object
 /gstate {
-    gstatetemplate dup length dict copy
+    .privatedict /.gstatetemplate get exec dup length dict copy
 } def
 
 % gstate  setgstate  -
@@ -172,7 +177,7 @@ end
 % gstate  currentgstate  gstate
 % copy current graphics state into given gstate object
 /currentgstate {
-    graphicsdict /currgstate get exch gstatecopy
+    graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec
 } def
 
 % -  currentfont  dict
@@ -288,4 +293,4 @@ end
 } def
 
 
-/QUIET where { pop }{ (eof gstate.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof gstate.ps\n)print } ifelse

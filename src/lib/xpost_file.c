@@ -75,6 +75,358 @@ xpost_diskfile_stat(const char *path, long *pages, long *bytes,
     return 1;
 }
 
+/* --- file-access sandbox -------------------------------------------------
+   A process-wide, one-way latch. Before engaging, disk access is
+   unrestricted; once engaged, an open by the running program is denied
+   unless the path resolves within a permitted directory. This is defence
+   in depth around the operating-system confinement of the host process,
+   not a substitute for it. Resource-file loading is separately confined
+   (see xpost_diskfile_fopen_beneath) and does not consult this. */
+
+#define XPOST_PATH_PERMIT_MAX 64
+
+static char *xpost_permit_read_dir[XPOST_PATH_PERMIT_MAX];
+static int xpost_permit_read_cnt = 0;
+static char *xpost_permit_write_dir[XPOST_PATH_PERMIT_MAX];
+static int xpost_permit_write_cnt = 0;
+static int xpost_path_control_engaged = 0;
+
+static int
+xpost_path_permit_add(char **tab, int *cnt, const char *dir)
+{
+    char *rp;
+
+    if (xpost_path_control_engaged) /* the permit set is frozen once engaged */
+        return 0;
+    if (*cnt >= XPOST_PATH_PERMIT_MAX)
+        return 0;
+    rp = xpost_realpath(dir);
+    if (!rp)
+        return 0;
+    tab[*cnt] = rp;
+    ++*cnt;
+    return 1;
+}
+
+int
+xpost_path_permit_read(const char *dir)
+{
+    return xpost_path_permit_add(xpost_permit_read_dir,
+                                 &xpost_permit_read_cnt, dir);
+}
+
+int
+xpost_path_permit_write(const char *dir)
+{
+    return xpost_path_permit_add(xpost_permit_write_dir,
+                                 &xpost_permit_write_cnt, dir);
+}
+
+void
+xpost_path_control_engage(void)
+{
+    xpost_path_control_engaged = 1;
+}
+
+/* does canon sit within one of the cnt permitted directories? */
+static int
+xpost_path_within(const char *canon, char *const *tab, int cnt)
+{
+    int i;
+
+    for (i = 0; i < cnt; i++)
+    {
+        size_t rl = strlen(tab[i]);
+
+#ifdef _WIN32
+        /* Windows paths are case-insensitive and GetFullPathName yields
+           backslash separators (mirrors the beneath-root check) */
+        if (_strnicmp(canon, tab[i], rl) == 0 &&
+            (canon[rl] == '\\' || canon[rl] == '/' || canon[rl] == '\0'))
+            return 1;
+#else
+        if (strncmp(canon, tab[i], rl) == 0 &&
+            (canon[rl] == '/' || canon[rl] == '\0'))
+            return 1;
+#endif
+    }
+    return 0;
+}
+
+/* Is opening `path` (for writing when `write`) permitted? Resolves the
+   path -- or, for a not-yet-existent write target, its parent directory
+   with the leaf reattached -- and checks it against the permit list. */
+static int
+xpost_path_permitted(const char *path, int write)
+{
+    char *canon = xpost_realpath(path);
+    int ok;
+
+    if (canon)
+    {
+        ok = write
+             ? xpost_path_within(canon, xpost_permit_write_dir, xpost_permit_write_cnt)
+             : xpost_path_within(canon, xpost_permit_read_dir, xpost_permit_read_cnt);
+        free(canon);
+        return ok;
+    }
+
+    /* the path does not resolve: only a create (write) is meaningful */
+    if (!write)
+        return 0;
+    {
+        char buf[XPOST_PATH_MAX];
+        char full[XPOST_PATH_MAX];
+        char *slash;
+        char *cdir;
+        const char *parent;
+        const char *base;
+
+        if (strlen(path) >= sizeof buf)
+            return 0;
+        strcpy(buf, path);
+        slash = strrchr(buf, '/');
+        if (slash)
+        {
+            *slash = '\0';
+            parent = buf[0] ? buf : "/";
+            base = slash + 1;
+        }
+        else
+        {
+            parent = ".";
+            base = buf;
+        }
+        cdir = xpost_realpath(parent);
+        if (!cdir)
+            return 0;
+        ok = (snprintf(full, sizeof full, "%s/%s", cdir, base) < (int)sizeof full) &&
+             xpost_path_within(full, xpost_permit_write_dir, xpost_permit_write_cnt);
+        free(cdir);
+        return ok;
+    }
+}
+
+/* The single path-to-stream opener for disk-backed files: every disk file
+   the interpreter opens is created here, so file-access policy has one
+   enforcement point. internal marks a trusted interpreter-managed path
+   (temporary scratch) rather than one derived from the running program.
+   Access policy is not yet applied; the parameter fixes the call sites so
+   that only this function changes when it is. */
+FILE *
+xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err)
+{
+    char bmode[8];
+    FILE *fp;
+
+    /* a program-driven open under the engaged sandbox must lie within a
+       permitted directory; trusted interpreter-managed opens are exempt */
+    if (!internal && xpost_path_control_engaged)
+    {
+        int write = strchr(mode, 'w') || strchr(mode, 'a') || strchr(mode, '+');
+
+        if (!xpost_path_permitted(path, write))
+        {
+            *err = invalidfileaccess;
+            return NULL;
+        }
+    }
+
+    /* PostScript files are binary byte streams; force binary mode so that
+       Windows text translation -- CRLF rewriting and a 0x1A byte read as
+       end-of-file -- cannot corrupt or truncate them. On POSIX 'b' is a
+       no-op. */
+    if (!strchr(mode, 'b'))
+    {
+        size_t n = strlen(mode);
+
+        if (n + 1 < sizeof bmode)
+        {
+            memcpy(bmode, mode, n);
+            bmode[n] = 'b';
+            bmode[n + 1] = '\0';
+            mode = bmode;
+        }
+    }
+
+    fp = fopen(path, mode);
+    if (!fp)
+    {
+        switch (errno)
+        {
+            case EACCES: *err = invalidfileaccess; break;
+            case ENOENT: *err = undefinedfilename; break;
+            default:     *err = unregistered; break;
+        }
+        return NULL;
+    }
+    *err = 0;
+    return fp;
+}
+
+/* deletefile and renamefile modify the filesystem at the target path(s)
+   rather than opening a stream, so they do not pass through the opener
+   above; route them through the same policy. Under the engaged sandbox
+   each affected path must be write-permitted. */
+int
+xpost_diskfile_remove(const char *path, int *err)
+{
+    if (xpost_path_control_engaged && !xpost_path_permitted(path, 1))
+    {
+        *err = invalidfileaccess;
+        return -1;
+    }
+    if (remove(path) != 0)
+    {
+        *err = errno == ENOENT ? undefinedfilename : ioerror;
+        return -1;
+    }
+    *err = 0;
+    return 0;
+}
+
+int
+xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err)
+{
+    if (xpost_path_control_engaged
+        && !(xpost_path_permitted(oldpath, 1) && xpost_path_permitted(newpath, 1)))
+    {
+        *err = invalidfileaccess;
+        return -1;
+    }
+    if (rename(oldpath, newpath) != 0)
+    {
+        *err = errno == ENOENT ? undefinedfilename : ioerror;
+        return -1;
+    }
+    *err = 0;
+    return 0;
+}
+
+/* May the running program see `path`? Directory enumeration is filtered to
+   the files it could actually open, so a listing does not disclose names
+   outside the permitted set. */
+int
+xpost_diskfile_readable(const char *path)
+{
+    return !xpost_path_control_engaged || xpost_path_permitted(path, 0);
+}
+
+/* Has the file-access sandbox been engaged? Environment access is refused
+   once it has, since the environment is neither read nor written through
+   the opener. */
+int
+xpost_path_control_is_engaged(void)
+{
+    return xpost_path_control_engaged;
+}
+
+/* Is s[0..len) a safe single path component ("leaf")? Externally-derived
+   resource names are validated with this so they cannot express a path:
+   rejected are separators of either platform, ':' (drive letter / NTFS
+   stream), NUL and other control bytes, '.' and '..', a leading dot or
+   space, a trailing dot or space (which Windows strips), and the reserved
+   Windows device names. Bytes are otherwise restricted to [A-Za-z0-9._-].
+   Returns 1 if safe, 0 otherwise. */
+int
+xpost_path_safe_leaf(const char *s, size_t len)
+{
+    static const char *const reserved[] = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+    size_t i;
+    size_t stem;
+    size_t r;
+
+    if (len == 0)
+        return 0;
+    if (s[0] == '.' || s[0] == ' ')                 /* leading dot ('.', '..',
+                                                       hidden) or space */
+        return 0;
+    if (s[len - 1] == '.' || s[len - 1] == ' ')     /* trailing dot or space */
+        return 0;
+    for (i = 0; i < len; i++)
+    {
+        unsigned char c = (unsigned char)s[i];
+
+        if (c < 0x20 || c == 0x7f)                  /* NUL and control bytes */
+            return 0;
+        if (c == '/' || c == '\\' || c == ':')      /* separators, drive/ADS */
+            return 0;
+        if (!((c >= 'A' && c <= 'Z') ||
+              (c >= 'a' && c <= 'z') ||
+              (c >= '0' && c <= '9') ||
+              c == '.' || c == '_' || c == '-'))
+            return 0;
+    }
+    /* reserved device name: the stem before the first '.', case-insensitive */
+    for (stem = 0; stem < len && s[stem] != '.'; stem++)
+        ;
+    for (r = 0; r < sizeof reserved / sizeof reserved[0]; r++)
+    {
+        size_t rl = strlen(reserved[r]);
+        size_t k;
+
+        if (rl != stem)
+            continue;
+        for (k = 0; k < rl; k++)
+        {
+            unsigned char c = (unsigned char)s[k];
+
+            if (c >= 'a' && c <= 'z')
+                c = (unsigned char)(c - 32);
+            if (c != (unsigned char)reserved[r][k])
+                break;
+        }
+        if (k == rl)
+            return 0;
+    }
+    return 1;
+}
+
+/* Open rel for reading beneath root, with the OS confining resolution to
+   root (see xpost_open_beneath), mapping the failure to an error code.
+   rel should already be composed of xpost_path_safe_leaf components. */
+FILE *
+xpost_diskfile_fopen_beneath(const char *root, const char *rel, int *err)
+{
+    FILE *fp = xpost_open_beneath(root, rel);
+
+    if (!fp)
+    {
+        switch (errno)
+        {
+            case EACCES:
+            case EPERM:
+#ifdef ELOOP
+            case ELOOP:
+#endif
+#ifdef EXDEV
+            case EXDEV:
+#endif
+                *err = invalidfileaccess;
+                break;
+            case ENOENT:
+            case ENOTDIR:
+                *err = undefinedfilename;
+                break;
+#ifdef ENAMETOOLONG
+            case ENAMETOOLONG:
+                *err = limitcheck;
+                break;
+#endif
+            default:
+                *err = unregistered;
+                break;
+        }
+        return NULL;
+    }
+    *err = 0;
+    return fp;
+}
+
 #ifdef _WIN32
 /*
  * FIXME: maybe use a WIN32 API for all this. See FIXME in xpost_op_file.c
@@ -111,7 +463,10 @@ f_tmpfile(void)
 #ifdef DEBUG_FILE
     printf("fopen\n");
 #endif
-    return fopen(buf, "w+bD");
+    {
+        int err;
+        return xpost_diskfile_fopen(buf, "w+bD", 1, &err);
+    }
 }
 #else
 # define f_tmpfile tmpfile
@@ -250,6 +605,14 @@ xpost_diskfile_open(const FILE *fp)
     return &df->methods;
 }
 
+
+/* the underlying stdio stream of a disk-backed file, or NULL */
+FILE *xpost_file_stdio_stream_get(Xpost_File *f)
+{
+    if (f && f->methods == &disk_methods)
+        return ((Xpost_DiskFile *)f)->file;
+    return NULL;
+}
 
 static int
 memory_readch(Xpost_File *f)
@@ -419,7 +782,7 @@ xpost_memoryfile_open_write(void)
    caller must set access for a readable file,
    default is writable.
    eg.
-    FILE *fp = fopen(...);
+    FILE *fp = xpost_diskfile_fopen(path, mode, 0, &err);
     Xpost_Object f = readonly(xpost_file_cons(fp)).
  */
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
@@ -701,40 +1064,9 @@ int xpost_file_open(Xpost_Memory_File *mem,
 #ifdef DEBUG_FILE
         printf("fopen\n");
 #endif
-        /* PostScript files are binary byte streams; force binary mode so that
-           Windows text translation -- CRLF rewriting and a 0x1A byte read as
-           end-of-file -- cannot corrupt or truncate them. On POSIX 'b' is a
-           no-op. The caller's mode string stays as given: the access
-           attributes below match against it. */
-        {
-            char bmode[8];
-            const char *fmode = mode;
-            size_t n = strlen(mode);
-
-            if (!strchr(mode, 'b') && n + 1 < sizeof bmode)
-            {
-                memcpy(bmode, mode, n);
-                bmode[n] = 'b';
-                bmode[n + 1] = '\0';
-                fmode = bmode;
-            }
-            fp = fopen(fn, fmode);
-        }
+        fp = xpost_diskfile_fopen(fn, mode, 0, &ret);
         if (fp == NULL)
-        {
-            switch (errno)
-            {
-                case EACCES:
-                    return invalidfileaccess;
-                    break;
-                case ENOENT:
-                    return undefinedfilename;
-                    break;
-                default:
-                    return unregistered;
-                    break;
-            }
-        }
+            return ret;
         f = xpost_file_cons(mem, fp);
         if (strcmp(mode, "r") == 0)
         {

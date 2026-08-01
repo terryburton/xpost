@@ -169,6 +169,66 @@ Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem, unsigned char *s
 Xpost_Object xpost_file_cons_writebuffer(Xpost_Memory_File *mem);
 
 /**
+ * @brief The single path-to-stream opener for disk-backed files.
+ *
+ * Every disk file the interpreter opens passes through here, so
+ * file-access policy has one enforcement point. Returns an open stream,
+ * or NULL with *err set to a suitable error code. @p internal marks a
+ * trusted interpreter-managed path (temporary scratch) rather than one
+ * derived from the running program.
+ */
+FILE *xpost_diskfile_fopen(const char *path, const char *mode, int internal, int *err);
+
+/**
+ * @brief Delete @p path, subject to the file-access sandbox.
+ *
+ * A filesystem-control operation rather than a stream open. Under the
+ * engaged sandbox @p path must be write-permitted. Returns 0 on success,
+ * -1 with *err set otherwise.
+ */
+int xpost_diskfile_remove(const char *path, int *err);
+
+/**
+ * @brief Rename @p oldpath to @p newpath, subject to the sandbox.
+ *
+ * Under the engaged sandbox both paths must be write-permitted. Returns 0
+ * on success, -1 with *err set otherwise.
+ */
+int xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err);
+
+/**
+ * @brief May the running program see @p path (to open or enumerate it)?
+ *
+ * True when the sandbox is not engaged or @p path is read-permitted. Used
+ * to filter directory enumeration to the visible files.
+ */
+int xpost_diskfile_readable(const char *path);
+
+/**
+ * @brief Has the file-access sandbox been engaged?
+ */
+int xpost_path_control_is_engaged(void);
+
+/**
+ * @brief Validate that s[0..len) is a safe single path component.
+ *
+ * Rejects path separators, ':' , NUL and control bytes, '.' and '..', a
+ * leading dot or space, a trailing dot or space, and reserved device
+ * names, so an externally-derived name cannot express a path. Returns 1
+ * if safe, 0 otherwise.
+ */
+int xpost_path_safe_leaf(const char *s, size_t len);
+
+/**
+ * @brief Open @p rel for reading beneath directory @p root.
+ *
+ * The operating system confines resolution to @p root (no escape via ".."
+ * or a symlink). @p rel should already be composed of safe leaves. Returns
+ * an open stream, or NULL with *err set.
+ */
+FILE *xpost_diskfile_fopen_beneath(const char *root, const char *rel, int *err);
+
+/**
  * @brief Open and construct a file object given filename and mode.
  */
 int xpost_file_open(Xpost_Memory_File *mem, char *fn, char *mode, Xpost_Object *retval);
@@ -195,6 +255,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem, Xpost_Object f);
 
 int xpost_file_read(char *buf, int size, int count, Xpost_File *fp);
 int xpost_file_write(const char *buf, int size, int count, Xpost_File *fp);
+FILE *xpost_file_stdio_stream_get(Xpost_File *fp);
 
 /**
  * @brief Read a byte from file object.

@@ -127,6 +127,8 @@ static
 int xpost_op_dict_length(Xpost_Context *ctx,
                          Xpost_Object D)
 {
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_int_cons(xpost_dict_length_memory(xpost_context_select_memory(ctx, D) /*D.tag&FBANK?ctx->gl:ctx->lo*/,
                                                              D)));
@@ -139,6 +141,8 @@ static
 int xpost_op_dict_maxlength(Xpost_Context *ctx,
                             Xpost_Object D)
 {
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_int_cons(xpost_dict_requested_length_memory(xpost_context_select_memory(ctx, D),
                                                                  D)));
@@ -151,6 +155,9 @@ static
 int xpost_op_dict_begin(Xpost_Context *ctx,
                         Xpost_Object D)
 {
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
+
     if (!xpost_stack_push(ctx->lo, ctx->ds, D))
         return dictstackoverflow;
     return 0;
@@ -236,6 +243,20 @@ int xpost_op_any_load(Xpost_Context *ctx,
     return undefined;
 }
 
+/* Like xpost_op_any_load, but resolves the key in the interpreter's private
+   machinery dictionary (privatedict), which is off the dict stack. The device
+   drivers reach the device class dictionaries this way: the classes live in
+   privatedict, not on the dict stack, so a dict-stack load would not find them. */
+int xpost_op_privatedict_load(Xpost_Context *ctx,
+                              Xpost_Object K)
+{
+    Xpost_Object x = xpost_dict_get(ctx, ctx->privatedict, K);
+    if (xpost_object_get_type(x) == invalidtype)
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, x);
+    return 0;
+}
+
 /* key value  store  -
    replace topmost definition of key */
 static
@@ -265,6 +286,8 @@ int xpost_op_dict_any_get(Xpost_Context *ctx,
 {
     Xpost_Object v;
 
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
     v = xpost_dict_get(ctx, D, K);
     if (xpost_object_get_type(v) == invalidtype)
         return undefined;
@@ -290,6 +313,8 @@ int xpost_op_dict_any_undef(Xpost_Context *ctx,
                             Xpost_Object D,
                             Xpost_Object K)
 {
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
     XPOST_LOG_WARN("FIXME: undef doesn't adequately fix the chain");
     xpost_dict_undef(ctx, D, K);
     return 0;
@@ -347,6 +372,10 @@ int xpost_op_dict_copy(Xpost_Context *ctx,
     dicrec *tp;
     int ret;
 
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
     mem = xpost_context_select_memory(ctx, S);
     sz = xpost_dict_max_length_memory (mem, S);
     ret = xpost_memory_table_get_addr(mem, xpost_object_get_ent(S), &ad);
@@ -379,6 +408,8 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
 {
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, D);
     assert(mem->base);
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
     D.comp_.sz = xpost_dict_max_length_memory (mem, D); // cache size locally
     if (D.comp_.off < DICTABN(D.comp_.sz)) // resume unless cursor is past the table
     {

@@ -243,7 +243,7 @@ int _setfont(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
 
     xpost_dict_put(ctx, gs, xpost_name_cons(ctx, "currfont"), fontdict);
@@ -499,7 +499,7 @@ int _show(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)
@@ -607,7 +607,7 @@ int _ashow(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)
@@ -719,7 +719,7 @@ int _widthshow(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)
@@ -836,7 +836,7 @@ int _awidthshow(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)
@@ -943,7 +943,7 @@ int _stringwidth(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)
@@ -1066,7 +1066,7 @@ int _kshow(Xpost_Context *ctx,
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
         return dictstackunderflow;
-    gd = xpost_dict_get(ctx, userdict, xpost_name_cons(ctx, "graphicsdict"));
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
     if (xpost_object_get_type(fontdict) == invalidtype)

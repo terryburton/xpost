@@ -1,0 +1,64 @@
+% Local/global VM integrity checks, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% PLRM's VM rule: a global composite object may not hold a reference to a
+% local one, so a local object can never outlive the restore that reclaims it
+% while something global still points at it. The rule is enforced uniformly --
+% by the put operators AND by literal construction ([ ] and the { } procedure
+% builder, which share the array-from-mark path). This file runs identically
+% on the reference interpreters: every assertion here also holds on gs.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/probe { { exec } stopped } bind def    % proc . did-it-raise-an-error?
+
+% --- enforced: a local value may not enter a global container -------------
+clear false setglobal /Ld 4 dict def
+true setglobal /Gd 4 dict def
+{ Gd /k Ld put } probe (a local value is rejected from a global dict) assert
+
+clear true setglobal /Ga 1 array def
+false setglobal /La 4 dict def
+true setglobal
+{ Ga 0 La put } probe (a local value is rejected from a global array) assert
+
+% construction is checked too: gs and xpost both raise invalidaccess building
+% [ local ] under global VM (the { //local } procedure builder shares this path)
+clear false setglobal /Lc 4 dict def
+true setglobal
+{ [ Lc ] pop } probe (a local value is rejected from a global array literal) assert
+
+% --- allowed: a global value may enter a local container; same-VM is fine --
+clear false setglobal /Ld2 4 dict def
+true setglobal /Gd2 4 dict def
+false setglobal
+{ Ld2 /k Gd2 put } probe not (a global value is accepted into a local dict) assert
+
+clear false setglobal /La2 1 array def
+true setglobal /Gd3 4 dict def
+false setglobal
+{ La2 0 Gd3 put } probe not (a global value is accepted into a local array) assert
+
+clear true setglobal /Gd4 4 dict def /Gd5 4 dict def
+false setglobal
+{ Gd4 /k Gd5 put } probe not (global into global is accepted) assert
+
+clear false setglobal /Ld6 4 dict def /Ld7 4 dict def
+{ Ld6 /k Ld7 put } probe not (local into local is accepted) assert
+
+% a local array literal may of course hold a local element
+clear false setglobal /Lc2 4 dict def
+{ [ Lc2 ] pop } probe not (a local array literal accepts a local element) assert
+
+clear false setglobal
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
+flush
+quit

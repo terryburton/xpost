@@ -45,7 +45,10 @@
 #include "xpost_stack.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
+#include <string.h>
+
 #include "xpost_name.h"
+#include "xpost_string.h"
 #include "xpost_array.h"
 #include "xpost_dict.h"
 
@@ -59,6 +62,12 @@ static
 int xpost_op_any_exec (Xpost_Context *ctx,
                        Xpost_Object O)
 {
+    word type = xpost_object_get_type(O);
+    /* executing an array or string reads its contents, which a
+       no-access object forbids; dicts are merely pushed, so are exempt */
+    if ((type == arraytype || type == stringtype)
+        && xpost_object_get_access(ctx, O) == XPOST_OBJECT_TAG_ACCESS_NONE)
+        return invalidaccess;
     if (!xpost_stack_push(ctx->lo, ctx->es, O))
         return execstackoverflow;
     return 0;
@@ -284,6 +293,48 @@ int xpost_op_exit (Xpost_Context *ctx)
     return 0;
 }
 
+/* record what ended the run for the embedding caller. $error is the
+   authority: a program may raise through the error machinery or set
+   $error and stop directly, and either way its errorname and errorinfo
+   describe the failure. */
+static
+void _record_run_error(Xpost_Context *ctx)
+{
+    {
+        Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+        Xpost_Object derr = xpost_dict_get(ctx, sd,
+                xpost_name_cons(ctx, "$error"));
+        if (xpost_object_get_type(derr) == dicttype)
+        {
+            Xpost_Object nm = xpost_dict_get(ctx, derr,
+                    xpost_name_cons(ctx, "errorname"));
+            Xpost_Object info = xpost_dict_get(ctx, derr,
+                    xpost_name_cons(ctx, "errorinfo"));
+            if (xpost_object_get_type(nm) == nametype)
+                nm = xpost_name_get_string(ctx, nm);
+            if (xpost_object_get_type(nm) == stringtype)
+            {
+                unsigned int n = nm.comp_.sz;
+                if (n > sizeof ctx->run_error_name - 1)
+                    n = sizeof ctx->run_error_name - 1;
+                memcpy(ctx->run_error_name,
+                       xpost_string_get_pointer(ctx, nm), n);
+                ctx->run_error_name[n] = '\0';
+            }
+            if (xpost_object_get_type(info) == stringtype)
+            {
+                unsigned int n = info.comp_.sz;
+                if (n > sizeof ctx->run_error_info - 1)
+                    n = sizeof ctx->run_error_info - 1;
+                memcpy(ctx->run_error_info,
+                       xpost_string_get_pointer(ctx, info), n);
+                ctx->run_error_info[n] = '\0';
+            }
+        }
+    }
+    ctx->run_uncaught = 1;
+}
+
 /* The stopped context is a boolean 'false' on the exec stack,
    so normal execution simply falls through and pushes the
    false onto the operand stack. 'stop' then merely has to
@@ -321,8 +372,54 @@ int xpost_op_stop(Xpost_Context *ctx)
        errordict, whose handlers themselves finish with `stop`,
        recursing without bound. */
     XPOST_LOG_ERR("no stopped context in 'stop'");
-    if (getenv("XPOST_TRAP_NOSTOP")) abort(); /* P0 TEMP */
+    if (getenv("XPOST_TRAP_NOSTOP")) abort();
+    _record_run_error(ctx);
     ctx->quit = 1;
+    return 0;
+}
+
+/* -  wrap.done  -
+   the finish marker of a wrapped-operator call: the recorded
+   procedure ran to completion, so the frame beneath the marker --
+   the dict and operand depths at the call and the operator itself
+   -- leaves the exec stack with it */
+static
+int xpost_op_wrapdone(Xpost_Context *ctx)
+{
+    (void)xpost_stack_pop(ctx->lo, ctx->es);
+    (void)xpost_stack_pop(ctx->lo, ctx->es);
+    (void)xpost_stack_pop(ctx->lo, ctx->es);
+    return 0;
+}
+
+/* name proc  .wrapop  operator
+   install an operator that runs the procedure. A procedure that
+   implements a standard operator becomes indistinguishable from a
+   C-coded one: load answers operatortype and bind substitutes it.
+   The procedure must stay reachable elsewhere; the operator table
+   is outside the collector's view. */
+static
+int xpost_op_wrapop(Xpost_Context *ctx,
+                    Xpost_Object name,
+                    Xpost_Object proc)
+{
+    Xpost_Object o;
+
+    o = xpost_operator_cons_wrapped(ctx, name, proc);
+    if (xpost_object_get_type(o) != operatortype)
+        return unregistered;
+    if (!xpost_stack_push(ctx->lo, ctx->os, o))
+        return stackoverflow;
+    return 0;
+}
+
+/* -  .rundied  -
+   the run's scheduling guard caught an error that the program did not:
+   record it so the embedding caller sees the run as errored */
+static
+int xpost_op_rundied(Xpost_Context *ctx)
+{
+    _record_run_error(ctx);
     return 0;
 }
 
@@ -416,9 +513,17 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "loop", (Xpost_Op_Func)xpost_op_proc_loop, 0, 1, proctype);
     INSTALL;
     ctx->opcode_shortcuts.loop = op.mark_.padw;
+    op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
+    ctx->opcode_shortcuts.wrapdone = op.mark_.padw;
     op = xpost_operator_cons(ctx, "exit", (Xpost_Op_Func)xpost_op_exit, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "stop", (Xpost_Op_Func)xpost_op_stop, 0, 0);
+    if (xpost_object_get_type(op) == invalidtype)
+        return VMerror;
+    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, ".rundied"),
+        xpost_operator_cons(ctx, ".rundied", (Xpost_Op_Func)xpost_op_rundied, 0, 0));
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "stopped", (Xpost_Op_Func)xpost_op_any_stopped, 0, 1, anytype);
     INSTALL;

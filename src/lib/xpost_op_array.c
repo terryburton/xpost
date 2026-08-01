@@ -124,7 +124,15 @@ int xpost_op_array_to_mark (Xpost_Context *ctx)
         v = xpost_stack_pop(ctx->lo, ctx->os);
         if (xpost_object_get_type(v) == invalidtype)
             return stackunderflow;
-        xpost_array_put(ctx, a, i-1, v);
+        {
+            /* propagate the VM check: a global array (or procedure, built
+               through this same path) may not hold a local element, matching
+               the put operators -- array_put raised it but the result was
+               discarded, silently dropping the element */
+            int ret = xpost_array_put(ctx, a, i-1, v);
+            if (ret)
+                return ret;
+        }
     }
     (void)xpost_stack_pop(ctx->lo, ctx->os); // pop mark
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(a));
@@ -138,6 +146,8 @@ static
 int xpost_op_array_length (Xpost_Context *ctx,
                            Xpost_Object A)
 {
+    if (!xpost_object_is_readable(ctx, A))
+        return invalidaccess;
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(A.comp_.sz)))
         return stackoverflow;
 
@@ -152,6 +162,8 @@ int xpost_op_array_int_get (Xpost_Context *ctx,
                             Xpost_Object I)
 {
     Xpost_Object t;
+    if (!xpost_object_is_readable(ctx, A))
+        return invalidaccess;
     if (I.int_.val < 0)
         return rangecheck;
     t = xpost_array_get(ctx, A, I.int_.val);
@@ -170,6 +182,8 @@ int xpost_op_array_int_any_put(Xpost_Context *ctx,
                                Xpost_Object I,
                                Xpost_Object O)
 {
+    if (!xpost_object_is_writeable(ctx, A))
+        return invalidaccess;
     if (I.int_.val < 0)
         return rangecheck;
     return xpost_array_put(ctx, A, I.int_.val, O);
@@ -184,6 +198,8 @@ int xpost_op_array_int_int_getinterval (Xpost_Context *ctx,
                                         Xpost_Object L)
 {
     Xpost_Object subarr;
+    if (!xpost_object_is_readable(ctx, A))
+        return invalidaccess;
     if (I.int_.val < 0)
         return rangecheck;
     subarr = xpost_object_get_interval(A, I.int_.val, L.int_.val);
@@ -202,6 +218,10 @@ int xpost_op_array_int_array_putinterval (Xpost_Context *ctx,
                                           Xpost_Object S)
 {
     Xpost_Object subarr;
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
     if (I.int_.val < 0)
         return rangecheck;
     if (I.int_.val + S.comp_.sz > D.comp_.sz)
@@ -221,6 +241,8 @@ int xpost_op_array_aload (Xpost_Context *ctx,
 {
     int i;
 
+    if (!xpost_object_is_readable(ctx, A))
+        return invalidaccess;
     for (i = 0; i < A.comp_.sz; i++)
         if (!xpost_stack_push(ctx->lo, ctx->os, xpost_array_get(ctx, A, i)))
             return stackoverflow;
@@ -240,6 +262,8 @@ int xpost_op_anyn_array_astore (Xpost_Context *ctx,
     unsigned int cnt;
     int ret;
 
+    if (!xpost_object_is_writeable(ctx, A))
+        return invalidaccess;
     cnt = xpost_stack_count(ctx->lo, ctx->os);
     if (cnt < A.comp_.sz)
         return stackunderflow;
@@ -264,6 +288,10 @@ int xpost_op_array_copy (Xpost_Context *ctx,
                          Xpost_Object D)
 {
     Xpost_Object subarr;
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    if (!xpost_object_is_writeable(ctx, D))
+        return invalidaccess;
     if (D.comp_.sz < S.comp_.sz)
         return rangecheck;
     _xpost_op_array_copy_aux(ctx, S, D);
@@ -283,6 +311,8 @@ int xpost_op_array_proc_forall(Xpost_Context *ctx,
 {
     Xpost_Object interval;
     Xpost_Object element;
+    if (!xpost_object_is_readable(ctx, A))
+        return invalidaccess;
     if (A.comp_.sz == 0)
         return 0;
 

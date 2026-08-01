@@ -1,22 +1,22 @@
-/QUIET where { pop }{ (loading ppmimage.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading ppmimage.ps...)print } ifelse
 
-DATA_DIR(/qsort.ps)strcat run
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 /newPPMIMAGEdevice { % width height  .  IMAGE-device-dict
-    PPMIMAGE dup /Create get exec
+    .privatedict /.xpost_PPMIMAGE get dup /Create get exec
 } def
 
-% PPMIMAGE device handles 24bit rgb images.
+% .xpost_PPMIMAGE device handles 24bit rgb images.
 %
 % It uses the full range 0-255 of values and does not calculate
 % the actual maximum value in the data before transmitting. MaxVal
 % is always 255.
 %
-% In the list of procedures below, PPMIMAGE is the Class dictionary,
+% In the list of procedures below, .xpost_PPMIMAGE is the Class dictionary,
 % IMAGE is an instance returned by Create.
 %
 % procedures:
-%           width height PPMIMAGE  Create  ->  IMAGE
+%           width height .xpost_PPMIMAGE  Create  ->  IMAGE
 %                 r g b x y IMAGE  PutPix  ->  -
 %                       x y IMAGE  GetPix  ->  r g b
 %         r g b x1 y1 x2 y2 IMAGE  DrawLine  ->  -
@@ -33,7 +33,7 @@ DATA_DIR(/qsort.ps)strcat run
 % PS> dev dup /Emit get exec
 %
 
-/PPMIMAGE <<
+/.xpost_PPMIMAGE <<
     /nativecolorspace /DeviceRGB
     /dimensions [0 0]
 
@@ -207,8 +207,8 @@ DATA_DIR(/qsort.ps)strcat run
 		/w w x add def
 
         {
-            /USEDRAWLINE where { pop
-                USEDRAWLINE {
+            //.internaldict /USEDRAWLINE known {
+                //.internaldict /USEDRAWLINE get {
                     %(Using DrawLine\n) print
                     y 1 h {
                         %dup =only ( )print
@@ -378,7 +378,7 @@ DATA_DIR(/qsort.ps)strcat run
                 exch 1 get
                 lt             % (y1 < y2)
             } ifelse
-        } qsort   % [sorted-list-of-intersections]
+        } //.xpostsys /qsort get exec   % [sorted-list-of-intersections]
         } pop
         dup .yxsort
         /DEBUGFILL where { pop
@@ -395,8 +395,8 @@ DATA_DIR(/qsort.ps)strcat run
             3 2 roll aload pop
 
             {
-                /USEDRAWLINE where { pop
-                    USEDRAWLINE {
+                //.internaldict /USEDRAWLINE known {
+                    //.internaldict /USEDRAWLINE get {
                         r g b 7 3 roll
                         currentdict DrawLine
                         exit
@@ -492,4 +492,4 @@ DATA_DIR(/qsort.ps)strcat run
 
 } if
 
-/QUIET where { pop }{ (eof ppmimage.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof ppmimage.ps\n)print } ifelse

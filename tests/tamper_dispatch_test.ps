@@ -1,0 +1,80 @@
+% Dispatch-dictionary tamper resistance, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff no internal dispatch dictionary stores an
+% executable NAME where an operator value belongs.
+%
+% The interpreter's machinery must be immune to a program redefining standard
+% operators. `bind` (via init.ps .bindscope) freezes the operator names inside
+% every stored procedure, but a name held as DATA in a dispatch dictionary is
+% re-looked-up on the dictionary stack each time it executes -- so an entry like
+%     /DeviceRGB /setrgbcolor cvx
+% reaches a program's redefinition of setrgbcolor instead of the operator (the
+% casselman ch8 execstackoverflow: its setrgbcolor re-enters setcolor). The safe
+% idiom stores the VALUE: /DeviceRGB /setrgbcolor load. This test walks every
+% reachable internal namespace and flags executable-name entries, so the class
+% stays closed as dispatch tables are added.
+%
+% .xpostsys itself is hidden from name lookup after lockdown; it is recovered
+% here by walking the bound procedures privatedict anchors, which carry the
+% dictionary baked in by their // immediate references. (Internals remain
+% reachable this way by design -- the hiding is hygiene, not a sandbox.)
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse
+} def
+
+% --- recover .xpostsys from a privatedict-anchored bound procedure ---
+% (values are taken cvlit: a walked element may be an operator or an
+% executable name, and a bare variable reference would execute it)
+/found null def
+/probe { % obj depth
+  2 dict begin
+  /d exch def /o exch cvlit def
+  d 0 gt found null eq and {
+    o type /dicttype eq { { o /.strcat known { /found o store } if } stopped pop }
+    { o type /arraytype eq o rcheck and {
+        0 1 o length 1 sub { o exch get d 1 sub probe } for } if } ifelse
+  } if
+  end
+} def
+.privatedict { exch pop dup type /arraytype eq { 6 probe }{ pop } ifelse } forall
+found null ne (the .xpostsys namespace is recoverable for scanning) assert
+
+% --- the scanner: count executable-name values in a dict, recursing into
+%     sub-dictionaries ---
+/nbad 0 def
+/scan { % dict label depth
+  4 dict begin
+  /d exch def /label exch def /dct exch cvlit def
+  { dct {
+      exch cvlit /k exch def
+      dup xcheck /vx exch def cvlit /v exch def
+      v type /nametype eq vx and {
+        (  executable-name entry: ) print label print (/) print
+        k 128 string cvs print ( -> ) print v 128 string cvs print (\n) print
+        /nbad nbad 1 add store
+      } if
+      v type /dicttype eq d 0 gt and { v label d 1 sub scan } if
+  } forall } stopped { pop pop } if
+  end
+} def
+
+% the scanner must actually catch the unsafe idiom before its zero means anything
+/nbad 0 def
+<< /good /setgray load  /bad /setgray cvx >> (selftest) 0 scan
+nbad 1 eq (the scanner flags a planted executable-name entry) assert
+
+% --- the real sweep: every reachable internal namespace ---
+/nbad 0 def
+found null ne { found (.xpostsys) 2 scan } if
+1183615869 internaldict (.internaldict) 2 scan
+.gscratch (.gscratch) 2 scan
+errordict (errordict) 1 scan
+statusdict (statusdict) 1 scan
+found null ne {
+    .privatedict /.graphicsdict get dup type /dicttype eq
+        { (graphicsdict) 2 scan }{ pop } ifelse
+} if
+nbad 0 eq (no internal dispatch dictionary stores an executable name) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

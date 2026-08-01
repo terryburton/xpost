@@ -3,11 +3,22 @@
 % It also implements the Showpage Semantics behavior
 % specified in the call to xpost_create().
 
-/QUIET where { pop }{ (loading device.ps...\n)print } ifelse
+//.internaldict /QUIET known { }{ (loading device.ps...\n)print } ifelse
 
-DATA_DIR (/image.ps) strcat run  % image.ps implements device base classes
-DATA_DIR (/nulldev.ps) strcat run  % nulldevice
-DATA_DIR (/pdfwrite.ps) strcat run  % pdf device
+(/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
+(/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
+(/pdfwrite.ps) //.xpostsys /.loadmodule get exec  % pdf device
+
+% Mirror the device class dictionaries into privatedict, where the makers and
+% the C drivers reach them, before the default device is made below. They stay
+% in userdict too, for the load-time methods still to come, until .finalize
+% replaces them with local copies in privatedict and drops the userdict anchors.
+[ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
+  /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+{ dup userdict exch known
+    { dup userdict exch get .privatedict 3 1 roll put }
+    { pop } ifelse
+} forall
 
 %/newdefaultdevice load ==
 newdefaultdevice % defined in xpost_interpreter.c:setlocalconfig()
@@ -26,13 +37,13 @@ DEVICE begin
     % rasterizing into the null device would burn the whole render
     % cost of a page to discard every span
     currentdict /NoOutput known not {
-        /FillPoly /.fillpoly load def
-        % grayscale array-of-strings devices (PGMIMAGE) get the compiled
+        /FillPoly //.internaldict /.fillpoly get def
+        % grayscale array-of-strings devices (.xpost_PGMIMAGE) get the compiled
         % FillRect too; erasepage clears the page through it. Fetch the
         % value with get: some devices store nativecolorspace as an
         % executable name, which a bare reference would try to execute.
         currentdict /nativecolorspace get /DeviceGray eq {
-            /FillRect /.fillrectgray load def
+            /FillRect //.internaldict /.fillrectgray get def
         } if
     } if
 end
@@ -43,7 +54,7 @@ end
     } if
 } bind def
 
-/ShowpageSemanticsDict <<
+.xpostsys /ShowpageSemanticsDict <<
 
     % XPOST_SHOWPAGE_DEFAULT
     0 {
@@ -67,13 +78,13 @@ end
     % XPOST_SHOWPAGE_RETURN
     2 {
         returntocaller
-    } 
->> def
+    }
+>> put
 
 /showpage {
     DEVICE dup /Emit get exec
 
-    ShowpageSemanticsDict ShowpageSemantics get exec
+    //.xpostsys /ShowpageSemanticsDict get ShowpageSemantics get exec
 } bind def
 
 /copypage {
@@ -85,4 +96,4 @@ end
 
 } bind def
 
-/QUIET where { pop }{ (eof device.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof device.ps\n)print } ifelse

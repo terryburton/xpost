@@ -1,4 +1,4 @@
-/QUIET where { pop }{ (loading paint.ps...)print } ifelse
+//.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
 % Painting Operators
 
@@ -14,7 +14,7 @@
     gsave
         %(1 setgray\n) print
         1 setgray
-        [ currentcolordict DEVICE /nativecolorspace get
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         %dup =
         get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
@@ -32,7 +32,7 @@
 /fill {
     closepath
     flattenpath
-    doclip
+    //.xpostsys /doclip get exec
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
         [ % mark
@@ -47,7 +47,7 @@
         { 2 array astore } % ... mark [x0 y0] ... [xN yN]
         {}
         { counttomark dup 0 ne { 1 sub index } if } % ... mark [x0 y0] ... [x0 y0]
-        .devpathforall
+        //.xpostsys /.devpathforall get exec
         ]
         dup length 0 eq {pop} if
     ]
@@ -69,7 +69,7 @@
     ]
 
     dup length 2 gt {
-        [ currentcolordict DEVICE /nativecolorspace get get exec
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         counttomark { currenttransfer exec counttomark 1 roll } repeat
         counttomark 2 add -1 roll
         DEVICE dup /FillPoly get exec
@@ -88,7 +88,9 @@
 % the scanline pairing in FillPoly is even-odd, so this
 % coincides with fill
 /eofill {
-    fill
+    % this implementation's own fill, immune to a program's
+    % redefinition of the name (which may itself invoke eofill)
+    //fill exec
 } def
 
 % -  stroke  -
@@ -98,8 +100,8 @@
     dup mul exch dup mul exch add sqrt
         1 le {
         flattenpath
-        dashpath
-        doclip
+        //.xpostsys /dashpath get exec
+        //.xpostsys /doclip get exec
         mark
         {          % x0 y0 
             2 copy % x0 y0 x0 y0
@@ -107,7 +109,7 @@
         }
         {          % ... xN-1 yN-1 xN yN
             4 copy % ... xN-1 yN-1 xN yN xN-1 yN-1 xN yN
-            [ currentcolordict DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
@@ -119,7 +121,7 @@
         {}
         {            % x0 y0 xN yN
             4 2 roll % xN yN x0 y0
-            [ currentcolordict DEVICE /nativecolorspace get get exec
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
             counttomark { currenttransfer exec counttomark 1 roll } repeat
             counttomark 5 add -4 roll
             %5 1 roll % gray xN yN x0 y0
@@ -127,22 +129,25 @@
             DEVICE dup /DrawLine get exec  % -
             pop
         }
-        .devpathforall
+        //.xpostsys /.devpathforall get exec
         cleartomark
         flushpage
     }{
         strokepath
-        fill
+        //fill exec
     } ifelse
 
     newpath
 } bind def
 
-/bitsdict <<
+.xpostsys /bitsdict <<
     1 {
         {
             bp bz ge {exit} if
-            datasrc % src
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
                 8 {
                     dup % char char
@@ -158,7 +163,10 @@
     2 {
         {
             bp bz ge {exit} if
-            datasrc % src
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
 
                 4 {
@@ -194,7 +202,10 @@
     4 {
         {
             bp bz ge {exit} if
-            datasrc % str
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             { % char
                 0 exch dup % 0 char char
 
@@ -213,7 +224,10 @@
     8 {
         {
             bp bz ge {exit} if
-            datasrc
+            % run the source on the caller's stacks: its defs are its
+            % own business, and the scratch dict's names stay out of
+            % its reach
+            currentdict currentdict /datasrc get end exec exch begin
             buf exch bp exch
             dup length
             %pstack()=
@@ -223,7 +237,7 @@
     }
     12 {
     }
->> def
+>> put
 
 % width height bits/sample matrix datasrc  image  -
 /image {
@@ -240,7 +254,7 @@
         /buf bz string def
         /bp 0 def
 
-        bitsdict bits get exec
+        //.xpostsys /bitsdict get bits get exec
 
         mat mat invertmatrix concat
         %vdx vdy scale
@@ -267,4 +281,4 @@
     end
 } def
 
-/QUIET where { pop }{ (eof paint.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof paint.ps\n)print } ifelse

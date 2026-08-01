@@ -11,29 +11,148 @@
 systemdict begin % make these definitions in systemdict
 true setglobal   % systemdict is global, so these allocations must be global
 
-/statusdict <<
+% .xpostsys -- the interpreter's private namespace. Internal helper procedures
+% and their static tables live here, out of the names a program may use; only
+% the dotted anchor name is visible and the helpers hide behind it. A GLOBAL
+% dictionary anchored in userdict, sealed read-only and dropped from userdict at
+% lockdown; its mutable per-render state lives in .gscratch instead. It is global
+% so a global systemdict procedure may freeze a // reference to it (a global
+% object may not reference a local one); local machinery lives in privatedict.
+%
+% Convention -- a helper h is reached through a frozen // reference, in either of
+% two forms:
+%     .xpostsys /h { ... } put       ...  //.xpostsys /h get exec   % define, call
+%     .xpostsys begin /h { ... } def ...  //h exec ... end          % define, bake
+% The // freezes the dictionary (get form) or the helper object itself (baked
+% form) into the caller at scan time, so a program cannot shadow it. The get form
+% resolves h at run time, which mutual recursion and forward references need;
+% baking costs no run-time lookup but cannot express them. Helpers that were the
+% path/clip/image/graphics family use the get form; the colour/shading/pattern/
+% halftone families bake.
+currentglobal true setglobal
+userdict /.xpostsys 400 dict put
+setglobal
+% privatedict -- the interpreter's private LOCAL machinery dictionary. Recorded
+% in the context (where the collector roots it and C reaches it) but never placed
+% on the dict stack, so a program can neither name nor enumerate its members. It
+% is LOCAL because it holds local objects (the device class dictionaries, the
+% graphics scratch and template, the wrapped-operator anchor procedures) that a
+% global private dictionary may not hold. Reached from PostScript through the
+% .privatedict operator.
+currentglobal false setglobal
+256 dict .setprivatedict
+setglobal
+% DATA_DIR, the directory the interpreter loads its .ps modules from, is set by
+% the bootstrap into userdict before this file runs. Move it into privatedict so
+% it does not sit among the program's names; the loader reaches it there.
+userdict /DATA_DIR known {
+    .privatedict /DATA_DIR userdict /DATA_DIR get put
+    userdict /DATA_DIR undef
+} if
+% .gscratch returns the local scratch dictionary the machinery mutates each
+% render (strokedict, caches, local resources); it is a LOCAL object the
+% collector reclaims. A bound reference to the operator resists shadowing.
+% Defined before any module loads.
+currentglobal false setglobal
+userdict /.gscratchdict 64 dict put
+% .gscratchproc freezes the local scratch dictionary, so it is itself a local
+% object and lives in userdict, where the operator table keeps it reachable; a
+% global home would hold a local reference. Only the .gscratch operator that
+% wraps it is a simple object fit for systemdict.
+userdict /.gscratchproc [ //.gscratchdict ] cvx put
+/.gscratch dup userdict /.gscratchproc get .wrapop def
+setglobal
+
+currentglobal true setglobal
+% The private C operators live under dot-prefixed names. Near the end of
+% graphics loading they are relocated out of systemdict into .internaldict, so
+% a program sees only the standard operators in systemdict while a font program
+% still reaches them through 1183615869 internaldict. The few operators fetched
+% by name during graphics loading are seeded here first, before that pass.
+userdict /.internaldict 256 dict put
+[ /.fillpoly /.fillrectgray ]
+{ dup systemdict exch get .internaldict 3 1 roll put } forall
+
+% int  internaldict  dict
+% the guarded accessor by which a font program reaches the private
+% operators; the password is part of the language folklore
+/internaldict {
+    1183615869 eq { //.internaldict }{
+        /internaldict cvx /invalidaccess signalerror
+    } ifelse
+} bind def
+
+% Debug aids and the internal context-state markers are C operators, not part of
+% the language, and must not sit in a program's lookup path. The machinery
+% operators above are relocated near the end of graphics loading, once the bind
+% pass has frozen the procedures that use them; these are graphics-independent
+% and used by nothing, so they move into .internaldict here, during init, and are
+% hidden whether or not graphics is ever loaded.
+1 dict begin
+[ /dumpnames /dumpvm /debugloadon /debugloadoff /breakhere
+  /_i_am_zombie_ /_i_am_free_ ]
+{ /nm exch def
+    systemdict nm known {
+        .internaldict nm systemdict nm get put
+        systemdict nm undef
+    } if
+} forall
+end
+
+% QUIET, the -q startup flag, is handed in through systemdict by the C -- the
+% only dictionary that exists that early. It guards the interpreter's own
+% load-time progress messages and a program never needs it, so move it into
+% .internaldict now, before any banner guard runs. The guards below read it
+% through a frozen //.internaldict reference that no program can see or shadow.
+systemdict /QUIET known
+    { .internaldict /QUIET systemdict /QUIET get put systemdict /QUIET undef }
+if
+setglobal
+
+% statusdict holds device/product status a program may change, so it is a local
+% dictionary -- save and restore isolate a job's changes -- that systemdict names
+% (copyudtosd), like $error, errordict and userdict. Ghostscript keeps statusdict
+% local as well.
+currentglobal false setglobal
+userdict /statusdict <<
     /manualfeed false
     /product (Xpost)
->> def
+>> put
+setglobal
 
 % the job server's dictionary. exitserver ends the encapsulated job,
 % announces that permanent state may change, and execution continues
 % with the definitions made so far outliving the job -- the idiom
 % every driver prolog uses. xpost runs jobs unencapsulated, so
 % announcing and unwinding the begun dictionary is the whole of it.
-/serverdict 2 dict def
+% serverdict is likewise a local dictionary named in systemdict.
+currentglobal false setglobal
+userdict /serverdict 2 dict put
 serverdict /exitserver {
     pop
     (%%[ exitserver: permanent state may be changed ]%%\n) print flush
     currentdict serverdict eq { end } if
 } put
+setglobal
 
-/strcat {
+% concatenate two strings -- a pure global helper, so it lives in .xpostsys
+currentglobal true setglobal
+.xpostsys /.strcat { % a b  .  ab
     2 copy
     length exch length exch 1 index add % a b an bn+an
     string dup 0 6 -1 roll putinterval % b an str
     dup 4 2 roll exch putinterval % (ab)
-} bind def
+} bind put
+setglobal
+
+% .loadmodule -- pull in one of the interpreter's own .ps files by name,
+% factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
+% the machinery. In .xpostsys like every other helper, and global with it.
+currentglobal true setglobal
+.xpostsys /.loadmodule { % (/name.ps)  .  -
+    .privatedict /DATA_DIR get exch //.xpostsys /.strcat get exec run
+} bind put
+setglobal
 
 %% predefined in xpost_interpreter.c:setlocalconfig()
 %%
@@ -64,7 +183,7 @@ serverdict /exitserver {
 %def
 
 %(EXE_DIR =) print EXE_DIR print (\n) print
-/QUIET where { pop }{ (DATA_DIR =) print DATA_DIR print (\n) print } ifelse
+//.internaldict /QUIET known { }{ (DATA_DIR =) print .privatedict /DATA_DIR get print (\n) print } ifelse
 
 %(1\n)print
 %/product (Xpost) def % now an operator in xpost_op_misc.c
@@ -72,10 +191,17 @@ serverdict /exitserver {
 %/revision 0 def % now an operator in xpost_op_misc.c
 /run { (r) file cvx exec } def
 /Run { (\() print dup =print (\) run\n) print flush run } def
-/interrupt { stop } def
 
 %(2\n)print
 /=string 128 string def
+% the scratch string serves every cvs in the machinery: as an operator
+% pushing it, procedures binding as they load freeze the reference,
+% and a program may take the name for itself. Anchor the pusher procedure in
+% internaldict rather than systemdict so a program enumerating systemdict does
+% not see it; .wrapop freezes the procedure into the =string operator, and
+% internaldict keeps it alive thereafter.
+.internaldict /.=stringproc [ //=string ] cvx put
+/=string dup .internaldict /.=stringproc get .wrapop def
 /=print {
     dup type /stringtype ne {
         //=string cvs
@@ -102,10 +228,7 @@ serverdict /exitserver {
 %(../../data)
 
 %(4\n)print
-DATA_DIR
-(/err.ps)
-strcat
-run
+(/err.ps) //.xpostsys /.loadmodule get exec
 
 %(5\n)print
 /stack { count dup 1 add copy //= repeat pop } def
@@ -238,7 +361,8 @@ end
     currentglobal
     false setglobal
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         handleerror
@@ -251,7 +375,7 @@ end
         %exit
         //execdict /quitflag true put
         $error /newerror false put
-        interrupt
+        stop
     } put
     setglobal
 
@@ -264,18 +388,24 @@ end
 % occurred, not on a normal quit -- the notice that the rest of the job
 % is flushed to end of file. An interactive executive keeps going, so it
 % reports without this line.
-/.handlejoberror {
+% in the private global namespace, reached by the start procedures below through
+% a frozen reference, so it does not sit visible in systemdict
+currentglobal true setglobal
+.xpostsys /.handlejoberror {
     $error /newerror get
     handleerror
-    { (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
+    { //.internaldict /.rundied get exec
+      (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
       print flush } if
-} def
+} put
+setglobal
 
 % execute postscript program from stdin, and handle errors,
 % but do not assume an interactive session
 /startstdin {
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
@@ -283,25 +413,25 @@ end
     {
         (%stdin) run
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
 
 % execute postscript program from a named file, and handle errors.
 /startfilename { % (filename)
-    /inputfilename exch def
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
     } if
     {
-        inputfilename (r) file cvx exec
+        (r) file cvx exec        % (filename) has stayed on the stack
         executive
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -310,18 +440,65 @@ end
 % execute a postscript program from a file object, which may represent
 % a stream with no associated "name".
 /startfile { % file-object
-    /QUIET where { pop }{ (startfile\n)print } ifelse
-    /inputfile exch def
+    //.internaldict /QUIET known { }{ (startfile\n)print } ifelse
     {
-        loadgraphics
+        //.xpostsys /loadgraphics get exec
+        //.xpostsys /.finalize get exec
     } stopped {
         (unable to load graphics)print
         quit
     } if
     {
-        inputfile cvx exec
+        cvx exec        % the file object has stayed on the stack
     } stopped {
-        .handlejoberror
+        //.xpostsys /.handlejoberror get exec
+    } if
+    quit
+} def
+
+% No-graphics start procedures, selected by --no-graphics. Each mirrors its
+% graphics-loading counterpart above but runs .finalize alone, without
+% loadgraphics: the interpreter is still locked down -- the language relocates
+% into systemdict and the private namespaces are sealed and hidden -- while the
+% graphics modules are never loaded. This exercises the path in which loadgraphics
+% is genuinely optional, and lets a program that needs no graphics avoid the cost.
+/startstdinnographics {
+    { //.xpostsys /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        (%stdin) run
+    } stopped {
+        //.xpostsys /.handlejoberror get exec
+    } if
+    quit
+} def
+
+/startfilenamenographics { % (filename)
+    { //.xpostsys /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        (r) file cvx exec        % (filename) has stayed on the stack
+        executive
+    } stopped {
+        //.xpostsys /.handlejoberror get exec
+    } if
+    quit
+} def
+
+/startfilenographics { % file-object
+    { //.xpostsys /.finalize get exec } stopped {
+        (unable to lock down interpreter)print
+        quit
+    } if
+    {
+        cvx exec        % the file object has stayed on the stack
+    } stopped {
+        //.internaldict /.rundied get exec
+        //.xpostsys /.handlejoberror get exec
     } if
     quit
 } def
@@ -383,17 +560,31 @@ setglobal
     >>
 } def
 
+% Move the start procedures into privatedict, off the dict stack: the C fetches
+% them there (through ctx->privatedict) to prime a run, so a program never sees
+% them among systemdict's names. They bind with the rest of privatedict in
+% .finalize, before any program can shadow the operator names they call.
+[ /start /startstdin /startfilename /startfile
+  /startstdinnographics /startfilenamenographics /startfilenographics ]
+{ dup systemdict exch known
+    { dup dup systemdict exch get .privatedict 3 1 roll put systemdict exch undef }
+    { pop } ifelse
+} forall
 
 end % systemdict
 
 userdict begin
 false setglobal
 
+% executive is a global procedure in systemdict. It reaches $error by name,
+% not with a frozen reference: $error is a name in systemdict for a dictionary
+% in local VM, and a global procedure may not freeze a local object.
+currentglobal true setglobal
 /executive {
     //execdict begin
 
     /execdepth execdepth 1 add def
-    /QUIET where { pop }{
+    //.internaldict /QUIET known { }{
         product print
         ( version ) print version print
         (.) print revision =print
@@ -402,7 +593,7 @@ false setglobal
 
     { %loop
         /quitflag false def
-        //$error /newerror false put
+        $error /newerror false put
         /prompt load stopped {
             (Error during prompt execution\n) print
             handleerror
@@ -413,12 +604,12 @@ false setglobal
             /stmtfile (%statementedit) (r) file def
         } stopped {
             cleartomark
-            //$error /newerror get {
-                //$error /errorname get 
+            $error /newerror get {
+                $error /errorname get
                 /undefinedfilename ne { % ^d at prompt
                     handleerror
                 } if
-                //$error /newerror false put
+                $error /newerror false put
                 exit
             } if
         }{
@@ -436,39 +627,21 @@ false setglobal
     //execdict /execdepth 2 copy get 1 sub put
 
     end
-    //$error /doclose false put
-    interrupt
+    $error /doclose false put
+    stop
 } bind
 def
+setglobal
 
 
-DATA_DIR (/qsort.ps) strcat
-run
+(/qsort.ps) //.xpostsys /.loadmodule get exec
 
 % (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
-/ncat {        % s1 s2 s3 .. sN n
-    dup 1 add  % s1 s2 s3 .. sN n n+1 
-    copy       % s1 s2 s3 .. sN n  s1 s2 s3 .. sN n
-    0 exch     % s1 s2 s3 .. sN n  s1 s2 s3 .. sN 0 n 
-    {   
-        exch length add 
-    } repeat             % s1 s2 s3 .. sN  n   len 
-    string exch          % s1 s2 s3 .. sN str   n   
-    0 exch               % s1 s2 s3 .. sN str  off  n
-    -1 1 {               % s1 s2 s3 .. sN str  off  n
-        2 add -1 roll       % s2 s3 .. sN str  off s1
-        3 copy putinterval  % s2 s3 .. sN str' off s1
-        length add          % s2 s3 .. sN str' off+len(s1)
-                            % s2 s3 .. sN str' off'
-    } for                               % str' off'
-    pop  % str'
-} def 
 
 
 % Named Resources
 true setglobal
-globaldict begin
-/globalresourcedict <<
+.privatedict /globalresourcedict <<
     /Category <<
         /Generic <<
             /DefineResource { % key instance 
@@ -484,18 +657,15 @@ globaldict begin
     >>
     /ProcSet <<
     >>
->> def
-end
+>> put
 
 false setglobal
-userdict begin
-/localresourcedict <<
+.privatedict /localresourcedict <<
     /Encoding <<
         /StandardEncoding [ ]
         /ISOLatin1Encoding [ ]
     >>
->> def
-end
+>> put
 true setglobal
 
 % key instance category  defineresource  instance
@@ -521,12 +691,12 @@ true setglobal
     %get
 } def
 
-/DIRSEP (/) def
+.privatedict /DIRSEP (/) put
 
 % key category  findresource  instance
 /findresource {
     dup /Category eq {
-        globaldict /globalresourcedict get
+        .privatedict /globalresourcedict get
     }{
     } ifelse
 } def
@@ -535,10 +705,10 @@ true setglobal
     /findresource {
         {   %attempt to load from dictionary
             currentglobal { % global vm mode: only check globaldict
-                globaldict /globalresourcedict get % k c d
+                .privatedict /globalresourcedict get % k c d
                 1 index 2 copy known % k c d c b
             }{ % local vm mode: check userdict and globaldict
-                userdict /localresourcedict get % k c d
+                .privatedict /localresourcedict get % k c d
                 1 index 2 copy known % k c d c b
             } ifelse
 
@@ -557,9 +727,9 @@ true setglobal
 
             2 index dup length string cvs % c cat k (category)
             1 index dup length string cvx % c cat k (category) (key)
-            DATA_DIR (/Resources) strcat
-            DIRSEP 4 3 roll % c cat k (key) (Res)(/)(cat)
-            DIRSEP 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
+            .privatedict /DATA_DIR get (/Resources) //.xpostsys /.strcat get exec
+            .privatedict /DIRSEP get 4 3 roll % c cat k (key) (Res)(/)(cat)
+            .privatedict /DIRSEP get 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
             (*) 6 ncat % c cat k (Res/cat/key*)
             [ exch
             {dup length string copy} 128 string filenameforall
@@ -576,7 +746,10 @@ true setglobal
 
 currentglobal
 false setglobal
-/fontsubstitutions <<
+% //.xpostsys /.fontsubstitutions get: findfont's substitute-face table, hidden in the private
+% global namespace where a program cannot reach it
+currentglobal true setglobal
+.xpostsys /.fontsubstitutions <<
     /Times-Roman (Nimbus Roman No9 L)
     dup (URW Bookman L)
 
@@ -589,7 +762,8 @@ false setglobal
     dup (Nimbus Sans L)
 
     /Palatino-Roman (URW Palladio L)
->> def
+>> put
+setglobal
 
 % For the moment, we consider any fonts handled by FreeType to be Type 1.
 % The FontDirectory will merely hold defined Type 3 fonts.
@@ -611,7 +785,7 @@ end % userdict
             dup /Encoding 256 array put
             dup /BuildChar {} put
         } stopped { % operator failed: 
-            fontsubstitutions exch 2 copy known { % try substitution
+            //.xpostsys /.fontsubstitutions get exch 2 copy known { % try substitution
                 get
                 findfont % call proc (tail-)recursively 
             }{
@@ -638,73 +812,294 @@ end % userdict
 } def
 
 % x y w h
-/rect { %ccw in device space
+currentglobal true setglobal   % a global .xpostsys helper
+.xpostsys /rect { %ccw in device space
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
-    idtransform 4 2 roll itransform 
+    idtransform 4 2 roll itransform
     2 copy 6 2 roll
     moveto
     1 index 0 rlineto
     0 exch rlineto
     neg 0 rlineto
     lineto
-} def
+} put
+setglobal
 
 % the painting pair works on its own path and leaves the caller's
 % untouched; rectclip clips by the rectangles alone and clears the
 % path, as the language specifies
-/rectfill { gsave newpath rect fill grestore } def
-/rectstroke { gsave newpath rect stroke grestore } def
-/rectclip { newpath rect clip newpath } def
+/rectfill { gsave newpath //.xpostsys /rect get exec fill grestore } def
+/rectstroke { gsave newpath //.xpostsys /rect get exec stroke grestore } def
+/rectclip { newpath //.xpostsys /rect get exec clip newpath } def
 
-/runtest {
-    DATA_DIR (/test.ps) strcat run
-} def
-
-% load graphics support
-/loadgraphics {
-    /GRAPHICS_LOADED where { pop }{
-        DATA_DIR (/graphics.ps) strcat run
-        userdict /GRAPHICS_LOADED true put
-        /QUIET where { pop }{ (graphics loaded, calling initgraphics\n)print } ifelse
-        userdict /USEDRAWLINE true put
-        initgraphics
+% load graphics support. Global: the device-maker procedures baked into this
+% body are global, matching the global .xpostsys their table installs into.
+currentglobal true setglobal
+.xpostsys /loadgraphics {
+    //.internaldict /GRAPHICS_LOADED known { }{
+        (/graphics.ps) //.xpostsys /.loadmodule get exec
+    % Promote the procedure-implemented standard operators to real
+    % operators: load answers operatortype for them and bind
+    % substitutes them, so the classic self-redefinition idiom
+    % /stroke { 1 2 scale stroke } bind def captures the standard
+    % behaviour instead of recursing into itself. Only names holding
+    % executable arrays promote; the procedures stay defed in
+    % .wrappedprocs, keeping them inside the collector's view (the
+    % operator table is outside it).
+    graphicsdict /.wrappedprocs 128 dict put
+    [
+        /fill /eofill /stroke /strokepath /rectfill /rectstroke
+        /clip /eoclip /initclip /rectclip /clippath
+        /flattenpath /pathbbox /reversepath
+        /show /ashow /widthshow /awidthshow /kshow /stringwidth /charpath
+        /definefont /scalefont /makefont /setfont /findfont
+        /setcachedevice /setcharwidth
+        /setscreen /currentscreen /settransfer /currenttransfer
+        /setgray /setrgbcolor /sethsbcolor /setcmykcolor /setcolor /setcolorspace
+        /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
+        /currentcolor /currentcolorspace
+        /image /imagemask
+        /showpage /copypage /erasepage
+        /nulldevice /gsave /grestore /grestoreall /initgraphics
+    ] {
+        dup userdict exch known {
+            dup userdict exch get
+            dup type /arraytype eq 1 index xcheck and {
+                % bind the procedure before wrapping it: a wrapped operator's
+                % body is not reached by the later .bindscope pass, so freezing
+                % its operator references (the get and exec of an internal
+                % helper call, among the rest) has to happen here, or a program
+                % that shadows an operator name reaches into the machinery.
+                bind
+                graphicsdict /.wrappedprocs get 2 index 2 index put
+                1 index exch .wrapop
+                userdict 3 1 roll put
+            }{ pop pop } ifelse
+        }{ pop } ifelse
+    } forall
     } ifelse
-} def
+} put
 
-/testfont {
-    loadgraphics
-    /Courier findfont
-    40 scalefont
-    setfont
-    100 100 moveto
-    (Hello World!) show
-} def
+% The interpreter lockdown. Runs once, after loadgraphics has loaded whatever it
+% is going to (or on its own if graphics is never loaded), when every helper the
+% machinery needs has been defined. It freezes the machinery's operator
+% references, relocates the language into systemdict and the private C operators
+% into .internaldict, seals and hides the private namespaces, and returns the
+% device classes to local VM. loadgraphics does the loading; this does the
+% locking down -- so nothing unrelated to graphics is tied to loading it. The
+% shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
+.xpostsys /.finalize {
+    //.internaldict /GRAPHICS_LOADED known { }{
+        % Open a writeable window on systemdict so the standard operators can be
+        % relocated into it; the matching relock below closes it.
+        .sysdictunlock
+    % With the standard operators now operator-typed, freeze the
+    % machinery's own references to them: bind substitutes an
+    % operator wherever a name in a loaded procedure currently
+    % resolves to one, so a program's later redefinition governs
+    % what the program calls, never what the machinery calls.
+    % Names holding procedures or dictionaries stay dynamic -- bind
+    % passes them by. One level of dictionary descent reaches the
+    % procedure tables: the wrapped implementations, the device
+    % makers, the graphics state template, the error handlers.
+    /.bindone { % value  .bindone  -
+        dup type /arraytype eq 1 index xcheck and { bind } if pop
+    } def
+    /.bindscope { % dict  .bindscope  -
+        dup { exch pop .bindone } forall
+        { exch pop
+            dup type /dicttype eq {
+                { exch pop .bindone } forall
+            }{ pop } ifelse
+        } forall
+    } def
+    systemdict .bindscope
+    userdict .bindscope
+    % graphicsdict exists only once graphics has loaded; without it there is
+    % nothing to bind and this step is simply skipped
+    /graphicsdict where { pop graphicsdict .bindscope } if
+    errordict .bindscope
+    % the private helper namespace too, so a helper's own operator references
+    % (the get and exec of //.xpostsys /h get exec, and everything else) freeze
+    % and survive a program shadowing an operator name
+    .xpostsys .bindscope
+    % the mutable scratch holds procedure tables too (the stroke switch
+    % handlers live inside strokedict); bind them so they survive a program
+    % shadowing the operator names they call
+    .gscratch .bindscope
+    % privatedict holds machinery procedures too -- the gstate-template accessor,
+    % the device class methods -- so bind them against a shadowed operator name
+    % the same way. The anchor procedures moved here below were bound in userdict
+    % before the move, so they carry their frozen references with them.
+    .privatedict .bindscope
+
+    % Move the standard operators from userdict into the unlocked systemdict,
+    % leaving userdict for the program. Only global operator-valued names move;
+    % the local error state, the font directories and the interactive helpers
+    % stay. Machinery references to these names are already frozen (binding and
+    % .bindscope over the loaded procedures), and a runtime lookup finds them
+    % one dictionary further down the stack.
+    [ userdict {
+        exch dup type /nametype eq
+        1 index 60 string cvs 0 get 46 ne and   % not a private dotted name
+        % an operator, a bound procedure, or a standard array (the encodings)
+        2 index dup xcheck exch type /arraytype eq or and
+        2 index gcheck and
+        { exch pop }{ pop pop } ifelse
+    } forall ]
+    dup { dup userdict exch get systemdict 3 1 roll put } forall
+    { userdict exch undef } forall
+
+    % The device makers are global procedures the sweep just carried into
+    % systemdict, but a program never constructs a device by calling one -- the
+    % device is chosen through the default device or the nulldevice operator -- so
+    % they are interpreter internals. Move them on into privatedict (systemdict is
+    % still unlocked here), where the runtime device paths reach them by frozen
+    % reference. Guard per name: without graphics they were never defined, and the
+    % on-demand C-driver makers register only when their device is selected.
+    [ /newPGMIMAGEdevice /newPBMIMAGEdevice /newPPMIMAGEdevice /newTIFFIMAGEdevice
+      /newnulldevice /newbboxdevice /newPDFWRITEdevice /newSVGWRITEdevice
+      /newDSCWRITEdevice ]
+    { dup systemdict exch known
+        { dup systemdict 1 index get .privatedict 3 1 roll put systemdict exch undef }
+        { pop } ifelse
+    } forall
+
+    % userdict, errordict, $error and FontDirectory are names in systemdict for
+    % local dictionaries; the userdict copies are dropped so each name resolves
+    % in systemdict.
+    [ /userdict /errordict /$error /FontDirectory /statusdict /serverdict ] {
+        dup systemdict exch known { userdict exch undef }{ pop } ifelse
+    } forall
+
+    % Relocate the private C operators from systemdict into .internaldict. Every
+    % machinery reference to them is now frozen -- the standard operators bound
+    % above and .bindscope over the loaded procedures -- so a program
+    % enumerating systemdict sees only the standard names, while a font program
+    % reaches them through 1183615869 internaldict. Two operators stay, both
+    % dotted, so no program name collides with them. The local-state accessors
+    % (.gscratch/.privatedict) are the operators the machinery reaches its
+    % per-render scratch and its private dictionary through: driver prologs and
+    % machinery name them at run time, past the reach of the bind pass, so
+    % relocating them breaks rendering (verified). The C core reaches privatedict
+    % through the context field, not by name. .sysdictunlock and .sysdictrelock
+    % relocate with the rest: the unlock has already run, and the relock below is
+    % reached through .internaldict.
+    [ systemdict {
+        exch dup type /nametype eq
+        2 index type /operatortype eq and
+        { dup 60 string cvs 0 get 46 eq
+          1 index /.lockdown ne and
+          1 index /.permitfileread ne and
+          1 index /.permitfilewrite ne and
+          1 index /.gscratch ne and
+          1 index /.privatedict ne and
+        }{ false } ifelse
+        { exch pop }{ pop pop } ifelse
+    } forall ]
+    dup { dup systemdict exch get .internaldict 3 1 roll put } forall
+    { systemdict exch undef } forall
+    % newdefaultdevice is the device-bootstrap string the C builds for /start. It
+    % ran during graphics loading, before this pass, and nothing calls it again,
+    % so drop it from systemdict while systemdict is still unlocked.
+    systemdict /newdefaultdevice known { systemdict /newdefaultdevice undef } if
+    % The load latch and the internal draw-line flag are interpreter state a
+    % program has no use for; both go into .internaldict, out of a program's
+    % sight, while it is still writable here. .internaldict is sealed below, so
+    % the latch cannot be removed or overwritten afterwards.
+    .internaldict /GRAPHICS_LOADED true put
+    .internaldict /USEDRAWLINE true put
+    .internaldict /.sysdictrelock get exec
+    userdict /.bindone undef
+    userdict /.bindscope undef
+
+    % Seal the private namespaces. They are fully populated now -- init and the
+    % graphics modules have defined every helper, and the C operators have just
+    % been relocated into .internaldict -- and the machinery only reads them
+    % hereafter, always through a frozen // reference to the object. Freeze each
+    % read-only so a program cannot overwrite a helper, and drop its userdict
+    % anchor so a program cannot reach or even enumerate it. The frozen
+    % references keep the objects alive and working; .gscratchdict stays writable
+    % and anchored, as the machinery mutates it every render.
+    userdict /.internaldict get readonly pop
+    userdict /.xpostsys get readonly pop
+    userdict /.internaldict undef
+    userdict /.xpostsys undef
+
+    % Return the device class dictionaries to local VM. setpagedevice records the
+    % page geometry into them at run time, and that state must be subject to save
+    % and restore -- a restore to before a setpagedevice reinstates the earlier
+    % device -- so a job's page setup does not leak into the next. In local VM the
+    % ordinary save/restore reverts those writes; a global home does not. (They
+    % were local until the language moved into global VM and were swept along.)
+    % Rebind each to a local copy in privatedict now that the device modules have
+    % finished loading, with headroom for the parameters setpagedevice adds, and
+    % drop the userdict anchor: the classes leave the program's namespace entirely
+    % and the makers, the C drivers and setpagedevice reach them through
+    % privatedict.
+    currentglobal false setglobal
+    [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
+      /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+    { userdict 1 index known
+        { dup userdict 1 index get dup length 16 add dict copy   % name name localcopy
+          .privatedict 3 1 roll put                              % name (privatedict/name = localcopy)
+          userdict exch undef }                                  % drop the userdict anchor
+        { pop } ifelse
+    } forall
+    % Move the remaining local machinery anchors into privatedict as well: the
+    % graphics scratch and the wrapped-operator anchor procedures. These are
+    % reached only through frozen references and the operator table, both of
+    % which the privatedict root keeps alive, so the objects move by reference
+    % (no copy) and dropping the userdict anchor hides them without breaking a
+    % thing.
+    [ /.gscratchdict /.gscratchproc /.graphicsdictproc /.DEVICEproc /.error ]
+    { dup userdict exch known
+        { dup dup userdict exch get .privatedict 3 1 roll put userdict exch undef }
+        { pop } ifelse
+    } forall
+    % the gstate-template dictionary is frozen into its accessor proc (already in
+    % privatedict), so only its userdict anchor remains -- drop it
+    userdict /.gstatetemplate known { userdict /.gstatetemplate undef } if
+    setglobal
+
+        % initgraphics needs a device, so it runs only when graphics has loaded;
+        % locking down without graphics leaves no graphics state to initialise
+        /graphicsdict where {
+            pop
+            //.internaldict /QUIET known { }{ (graphics loaded, calling initgraphics\n)print } ifelse
+            initgraphics
+        } if
+    } ifelse
+} put
+setglobal
 
 $error/initializing false put % ready to go!
 false setglobal
 
-% debug ps functions
-/break{ /hook /pause load def } def
-/clearhook{ /hook {} store } def
-/doprompt{
+% debug ps functions -- interpreter aids, not language operators, so private
+currentglobal true setglobal
+.xpostsys /doprompt {
     (\nbreak>)print flush
     (%lineedit)(r)file
-    cvx {exec}stopped pop } def
-/pause{ doprompt } def
-/hook{ } def
+    cvx {exec}stopped pop } put
+.xpostsys /pause { //.xpostsys /doprompt get exec } put
+setglobal
 
-/.dir {
+currentglobal true setglobal
+.xpostsys /.dir {
     (*) { = } 128 string filenameforall
-} def
+} put
+setglobal
 
-/xpost {
-    (Xpost is running. Please type a command:\n)print
-    (Would you like to 'runtest' or 'testfont' or '(filename)run'?\n)print
-} def
+currentglobal true setglobal
+.xpostsys /xpost {
+    (Xpost is running. Type '(filename)run' to run a program.\n)print
+} put
+setglobal
 
-DATA_DIR (/prepr.ps) strcat run  % use nifty preview prompt!
+(/prepr.ps) //.xpostsys /.loadmodule get exec  % use nifty preview prompt!
 
-/QUIET where { pop }{ (eof init.ps\n)print } ifelse
+//.internaldict /QUIET known { }{ (eof init.ps\n)print } ifelse
 %loadgraphics %called by start* procs

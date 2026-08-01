@@ -7,8 +7,11 @@
 %      array proc  qsort  -
 % sort array contents in-place using proc or `lt` for comparisons
 
-/qsort where { pop currentfile flushfile } if
+% qsort, with its qsortdict helpers, lives in the private .xpostsys namespace
+% in global VM; call sites reach it as //.xpostsys /qsort get exec.
+.xpostsys /qsort known { currentfile flushfile } if
 
+currentglobal true setglobal
 7 dict begin
 /qsortdict currentdict def
 
@@ -79,7 +82,8 @@
     end
 } bind
 end % qsortdict
-def
+.xpostsys 3 1 roll put
+setglobal
 
 currentfile flushfile %comment-out this line to test
 

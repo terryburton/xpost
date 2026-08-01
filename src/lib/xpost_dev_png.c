@@ -47,6 +47,7 @@
 #include "xpost_stack.h"  /* push results on stack */
 #include "xpost_context.h" /* state */
 #include "xpost_error.h"
+#include "xpost_file.h" /* the checked disk-file opener */
 #include "xpost_dict.h" /* get/put values in dicts */
 #include "xpost_string.h" /* get/put values in strings */
 #include "xpost_array.h"
@@ -165,7 +166,10 @@ int _create_cont(Xpost_Context *ctx,
         return unregistered;
     }
 
-    private.f = fopen(filename, "wb");
+    {
+        int err;
+        private.f = xpost_diskfile_fopen(filename, "wb", 0, &err);
+    }
     free(filename);
     if (!private.f)
     {
@@ -498,8 +502,8 @@ int newpngdevice(Xpost_Context *ctx,
 static
 unsigned int _loadpngdevicecont_opcode;
 
-/* Specializes or sub-classes the PPMIMAGE device class.
-   load PPMIMAGE
+/* Specializes or sub-classes the .xpost_PPMIMAGE device class.
+   load .xpost_PPMIMAGE
    load and call ps procedure .copydict which leaves copy on stack
    call loadpngdevicecont by continuation.
  */
@@ -509,7 +513,7 @@ int loadpngdevice(Xpost_Context *ctx)
     Xpost_Object classdic;
     int ret;
 
-    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "PPMIMAGE"));
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_PPMIMAGE"));
     if (ret)
         return ret;
     classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);

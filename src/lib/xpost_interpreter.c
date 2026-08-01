@@ -726,8 +726,23 @@ void _onerror(Xpost_Context *ctx,
 
     if (err > unknownerror) err = unknownerror;
 
+    strncpy(ctx->run_error_name, errorname[err], sizeof ctx->run_error_name - 1);
+    ctx->run_error_name[sizeof ctx->run_error_name - 1] = '\0';
+
     if (!validate_context(ctx))
         XPOST_LOG_ERR("context not valid");
+
+    /* if a fault interrupts loading the graphics language into systemdict,
+       restore systemdict to read-only so the writeable window never outlives
+       the load */
+    if (ctx->sysdict_unlocked)
+    {
+        xpost_object_set_access(ctx,
+                xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
+                XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+        ctx->sysdict_unlocked = 0;
+        ctx->sysdict_load_done = 1;
+    }
 
     if (itpdata->in_onerror > 5)
     {
@@ -775,6 +790,107 @@ void _onerror(Xpost_Context *ctx,
             if (idx < n)
                 xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
                         ctx->op_restore_val[i]);
+        }
+    }
+
+    /* An error leaving a wrapped operator is the operator's error.
+       Each live call left its frame on the exec stack -- the operator
+       and the operand and dict depths at the call, under the finish
+       marker -- so the frames above the nearest stopped context are
+       exactly the calls the coming stop will unwind out of: the
+       innermost names the command, and the stacks go back to their
+       depths at the calls -- dropping what the calls part-way pushed,
+       though what they had already consumed stays consumed. A call
+       whose frame sits below the stopped context is left alone: its
+       procedure keeps running and its stacks are its own business. */
+    {
+        Xpost_Object fmark = xpost_bool_cons(0);
+        int found = 0;
+        int minos = 0, minds = 0;
+        unsigned int cmdop = 0;
+        /* Walk the exec stack top-down in a SINGLE pass over its
+           segments -- O(depth), not the O(depth^2) that repeated
+           topdown_fetch would cost. A deep stack at error time (a
+           runaway or a cascading error handler) would otherwise make
+           error handling itself the bottleneck. Stop at the nearest
+           stopped context (a bool false); above it, each wrapped
+           call's finish marker is followed, deeper, by its ds, os
+           and opcode integers. */
+        Xpost_Stack *esroot = (Xpost_Stack *)(ctx->lo->base + ctx->es);
+        Xpost_Stack *seg = esroot->prevseg
+            ? (Xpost_Stack *)(ctx->lo->base + esroot->prevseg) : esroot;
+        int p = (int)seg->top - 1;
+        int pending = 0; /* frame ints still to read: 3->ds 2->os 1->opcode */
+        int fds = 0, fos = 0;
+
+        for (;;)
+        {
+            Xpost_Object x;
+            if (p < 0)
+            {
+                if (seg == esroot)
+                    break;
+                seg = (Xpost_Stack *)(ctx->lo->base + seg->prevseg);
+                p = (int)seg->top - 1;
+                continue;
+            }
+            x = seg->data[p];
+            p--;
+            if (pending)
+            {
+                if (xpost_object_get_type(x) != integertype)
+                {
+                    pending = 0; /* malformed frame -- ignore it */
+                    continue;
+                }
+                if (pending == 3)
+                    fds = (int)x.int_.val;
+                else if (pending == 2)
+                    fos = (int)x.int_.val;
+                else
+                {
+                    if (!found)
+                    {
+                        found = 1;
+                        cmdop = (unsigned int)x.int_.val;
+                        minos = fos;
+                        minds = fds;
+                    }
+                    else
+                    {
+                        if (fos < minos) minos = fos;
+                        if (fds < minds) minds = fds;
+                    }
+                }
+                --pending;
+                continue;
+            }
+            if (xpost_dict_compare_objects(ctx, fmark, x) == 0)
+                break; /* the coming stop unwinds to here */
+            if (xpost_object_get_type(x) == operatortype &&
+                x.mark_.padw == (unsigned int)ctx->opcode_shortcuts.wrapdone)
+                pending = 3;
+        }
+        if (found)
+        {
+            int oscount, dscount;
+
+            ctx->currentobject = xpost_operator_cons_opcode(cmdop);
+            oscount = xpost_stack_count(ctx->lo, ctx->os);
+            while (oscount > minos)
+            {
+                (void)xpost_stack_pop(ctx->lo, ctx->os);
+                --oscount;
+            }
+            dscount = xpost_stack_count(ctx->lo, ctx->ds);
+            if (dscount > minds && minds >= 3)
+            {
+                while (dscount > minds)
+                {
+                    (void)xpost_stack_pop(ctx->lo, ctx->ds);
+                    --dscount;
+                }
+            }
         }
     }
 
@@ -1040,7 +1156,8 @@ void setlocalconfig(Xpost_Context *ctx,
         { NULL, NULL, NULL }
     };
     const char *strtemplate = "currentglobal false setglobal "
-                        "%s userdict /DEVICE %s %s put "
+                        "%s graphicsdict /currgstate get /device %s %s put "
+                        "graphicsdict /.outputdevice /%s put "
                         "setglobal";
     Xpost_Object namenewdev;
     Xpost_Object newdevstr;
@@ -1079,13 +1196,15 @@ void setlocalconfig(Xpost_Context *ctx,
         dimensions = x;
     }
     newdevstr = xpost_string_cons(ctx,
-                                  strlen(strtemplate) - 6
+                                  strlen(strtemplate) - 8
                                   + strlen(device_strings[i][1])
                                   + strlen(dimensions)
-                                  + strlen(device_strings[i][2]) + 1,
+                                  + strlen(device_strings[i][2])
+                                  + strlen(device_strings[i][0]) + 1,
                                   NULL);
     sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
-            device_strings[i][1], dimensions, device_strings[i][2]);
+            device_strings[i][1], dimensions, device_strings[i][2],
+            device_strings[i][0]);
     --newdevstr.comp_.sz; /* trim the '\0' */
 
     namenewdev = xpost_name_cons(ctx, "newdefaultdevice");
@@ -1136,7 +1255,6 @@ void loadinitps(Xpost_Context *ctx)
 
     assert(ctx->gl->base);
     xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "quit", NULL,0,0));
-    ctx->ignoreinvalidaccess = 1;
 
 #define XPOST_PATH_INIT \
     do \
@@ -1207,30 +1325,48 @@ void loadinitps(Xpost_Context *ctx)
 
     ctx->quit = 0;
     mainloop(ctx);
-    ctx->ignoreinvalidaccess = 0;
 }
 
 
-/* copy userdict names to systemdict
-    Problem: This is clearly an invalidaccess,
-    and yet is required by the PLRM. Discussion:
-https://groups.google.com/d/msg/comp.lang.postscript/VjCI0qxkGY4/y0urjqRA1IoJ
-    The ignoreinvalidaccess exception has been isolated to this one case.
- */
+/* Name the standard local dictionaries in systemdict. systemdict is global, so
+   holding a reference to a local dictionary would be an invalidaccess; the PLRM
+   sanctions exactly this exception (section 3.7.2), naming userdict, errordict,
+   $error and FontDirectory in systemdict so a program reaches each by name. The
+   ignoreinvalidaccess window is isolated to these puts; the rest of the
+   interpreter, initialisation included, obeys the local/global rule. */
 static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
 {
-    Xpost_Object ed, de;
+    Xpost_Object ed, de, fd, st, sv;
 
     ctx->ignoreinvalidaccess = 1;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
     ed = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "errordict"));
     if (xpost_object_get_type(ed) == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = 0;
         return undefined;
+    }
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "errordict"), ed);
     de = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "$error"));
     if (xpost_object_get_type(de) == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = 0;
         return undefined;
+    }
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "$error"), de);
+    /* FontDirectory is likewise a name in systemdict for a local dictionary
+       (PLRM). It exists in userdict by the time this runs. */
+    fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
+    if (xpost_object_get_type(fd) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+    /* statusdict and serverdict are local dictionaries a program mutates, so
+       save/restore isolates a job's changes; systemdict names them (PLRM). */
+    st = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "statusdict"));
+    if (xpost_object_get_type(st) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "statusdict"), st);
+    sv = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "serverdict"));
+    if (xpost_object_get_type(sv) == dicttype)
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serverdict"), sv);
     ctx->ignoreinvalidaccess = 0;
     return 0;
 }
@@ -1319,10 +1455,15 @@ XPAPI Xpost_Context *xpost_create(const char *device,
                    device, outfile, bufferin, bufferout,
                    semantics, set_size, width, height);
 
+    xpost_ctx->quiet = quiet;
     if (quiet)
     {
-        /* a boolean, matching the convention of other interpreters:
-           programs test both `/QUIET where` and the value itself */
+        /* Hand the quiet flag to the boot code through systemdict -- the only
+           dictionary that exists this early. init.ps relocates QUIET into the
+           private .internaldict as soon as that dictionary is built, so the
+           load-time banner guards read it through a frozen reference and a
+           program can neither see nor shadow it. GS drives the same flag from
+           -dQUIET and its own init reads it the same way. */
         xpost_dict_put(xpost_ctx,
                        sd /*xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)*/ ,
                        xpost_name_cons(xpost_ctx, "QUIET"),
@@ -1402,11 +1543,31 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
     return 1;
 }
 
+XPAPI const char *xpost_error_name_get(Xpost_Context *ctx)
+{
+    return ctx->run_uncaught ? ctx->run_error_name : "";
+}
+
+XPAPI const char *xpost_error_info_get(Xpost_Context *ctx)
+{
+    return ctx->run_uncaught ? ctx->run_error_info : "";
+}
+
 /*
    execute ps program until quit, fall-through to quit,
    SHOWPAGE_RETURN semantic, or error (default action: message, purge and quit).
  */
-XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
+/* The start procedures live in privatedict, off the dict stack, so a program
+   cannot name them. Fetch the one named and push it, executable, onto the exec
+   stack to prime the run. */
+static void push_start_proc(Xpost_Context *ctx, const char *name)
+{
+    xpost_stack_push(ctx->lo, ctx->es,
+        xpost_object_cvx(xpost_dict_get(ctx, ctx->privatedict,
+                                        xpost_name_cons(ctx, name))));
+}
+
+XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
     Xpost_Object lsav = null;
     int llev = 0;
@@ -1426,6 +1587,11 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
         case XPOST_INPUT_STRING:
             ps_str = inputptr;
             ps_file_ptr = tmpfile();
+            if (ps_file_ptr == NULL)
+            {
+                XPOST_LOG_ERR("cannot create temporary file for program");
+                return XPOST_RUN_FAILED;
+            }
             if (set_size)
                 fwrite(ps_str, 1, set_size, (FILE*)ps_file_ptr);
             else
@@ -1436,13 +1602,19 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
             ps_file_ptr = inputptr;
             break;
         case XPOST_INPUT_RESUME: /* resuming a returned session, skip startup */
-            /* the resumed run restarts the cascade count */
+            /* the resumed run restarts the cascade count and error record */
             ctx->onerr_run = 0;
+            ctx->run_error_name[0] = '\0';
+            ctx->run_error_info[0] = '\0';
+            ctx->run_uncaught = 0;
             goto run;
     }
 
-    /* a fresh run starts with a clean cascade count */
+    /* a fresh run starts with a clean cascade count and error record */
     ctx->onerr_run = 0;
+    ctx->run_error_name[0] = '\0';
+    ctx->run_error_info[0] = '\0';
+    ctx->run_uncaught = 0;
 
     /* prime the exec stack
        so it starts with a 'start*' procedure,
@@ -1461,27 +1633,33 @@ XPAPI int xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void 
        if ps_file is not NULL:
        'startfile' executes a named file wrapped in a stopped context with handleerror
     */
+    /* with skip_graphics set, dispatch to the no-graphics start procedures,
+       which run the interpreter lockdown without loading the graphics modules.
+       The interactive (tty) session always loads graphics. */
     if (ps_file)
     {
         /*printf("ps_file\n"); */
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_string_cons(ctx, strlen(ps_file), ps_file)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startfilename")));
+        push_start_proc(ctx, ctx->skip_graphics ? "startfilenamenographics" : "startfilename");
     }
     else if (ps_file_ptr)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr)));
-        xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startfile")));
+        push_start_proc(ctx, ctx->skip_graphics ? "startfilenographics" : "startfile");
     }
     else
     {
         if (xpost_isatty(fileno(stdin)))
-            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "start")));
+            push_start_proc(ctx, "start");
         else
-            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "startstdin")));
+            push_start_proc(ctx, ctx->skip_graphics ? "startstdinnographics" : "startstdin");
     }
 
-    (void) xpost_save_create_snapshot_object(ctx->gl);
-    lsav = xpost_save_create_snapshot_object(ctx->lo);
+    if (ctx->job_snapshots)
+    {
+        (void) xpost_save_create_snapshot_object(ctx->gl);
+        lsav = xpost_save_create_snapshot_object(ctx->lo);
+    }
 
     /* Run! */
 run:
@@ -1494,24 +1672,31 @@ run:
                   xpost_name_cons(ctx, "ShowpageSemantics"));
     if (semantic.int_.val == XPOST_SHOWPAGE_RETURN)
     {
-        if (ret != 1)
-        {
-            /* the run stops at its quit operator, leaving the frames
-               beneath it -- the run's own scheduling tail -- on the
-               exec stack. A persistent context serving many runs
-               accumulates them, and an error unwind can later walk
-               down into a stale frame and execute it out of context.
-               Discard everything this run left behind. */
-            while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
-                (void)xpost_stack_pop(ctx->lo, ctx->es);
-        }
-        return ret == 1 ? yieldtocaller : 0;
+        if (ret == 1)
+            return XPOST_RUN_YIELDED;
+
+        /* the run stops at its quit operator, leaving the frames
+           beneath it -- the run's own scheduling tail -- on the
+           exec stack. A persistent context serving many runs
+           accumulates them, and an error unwind can later walk
+           down into a stale frame and execute it out of context.
+           Discard everything this run left behind, for errored
+           runs just as for completed ones. */
+        while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
+            (void)xpost_stack_pop(ctx->lo, ctx->es);
+
+        return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
     }
 
     XPOST_LOG_INFO("destroying device");
-    device = xpost_dict_get(ctx,
-            xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2),
-            xpost_name_cons(ctx, "DEVICE"));
+    /* the device lives in the graphics state; the DEVICE name is an
+       accessor operator and no longer holds the dictionary itself */
+    device = xpost_dict_get(ctx, ctx->privatedict,
+            xpost_name_cons(ctx, ".graphicsdict"));
+    if (xpost_object_get_type(device) == dicttype)
+        device = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "currgstate"));
+    if (xpost_object_get_type(device) == dicttype)
+        device = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "device"));
     XPOST_LOG_INFO("device type=%s", xpost_object_type_names[xpost_object_get_type(device)]);
     /*xpost_operator_dump(ctx, 1); // is this pointer value constant? */
     if (xpost_object_get_type(device) == arraytype){
@@ -1550,7 +1735,8 @@ run:
 	}
     }
 
-    xpost_save_restore_snapshot(ctx->gl);
+    if (ctx->job_snapshots)
+        xpost_save_restore_snapshot(ctx->gl);
     xpost_memory_table_get_addr(ctx->lo,
                                 XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
     if (xpost_object_get_type(lsav) == savetype)
@@ -1563,7 +1749,34 @@ run:
         }
     }
 
-    return noerror;
+    return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
+}
+
+XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable)
+{
+    ctx->skip_graphics = enable;
+}
+
+/* enable or disable per-job VM snapshots for a context */
+XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable)
+{
+    ctx->job_snapshots = enable;
+}
+
+XPAPI void xpost_stdout_handler_set(Xpost_Context *ctx,
+                                    Xpost_Output_Fn fn,
+                                    void *user)
+{
+    ctx->stdout_fn = fn;
+    ctx->stdout_user = user;
+}
+
+XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
+                                    Xpost_Output_Fn fn,
+                                    void *user)
+{
+    ctx->stderr_fn = fn;
+    ctx->stderr_user = user;
 }
 
 /*
@@ -1573,7 +1786,7 @@ run:
 XPAPI void xpost_destroy(Xpost_Context *ctx)
 {
 
-    if (!xpost_dict_known_key(ctx, ctx->gl, xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0), xpost_name_cons(ctx, "QUIET")))
+    if (!ctx->quiet)
     {
         printf("bye!\n");
         fflush(NULL);

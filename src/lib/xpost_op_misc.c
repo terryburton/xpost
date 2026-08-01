@@ -52,6 +52,7 @@
 #include "xpost_stack.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
+#include "xpost_file.h"  /* the sandbox denies environment access once engaged */
 #include "xpost_name.h"
 #include "xpost_string.h"
 #include "xpost_array.h"
@@ -184,6 +185,8 @@ int Sgetenv(Xpost_Context *ctx,
 {
     char *str;
     char *r;
+    if (xpost_path_control_is_engaged())
+        return invalidaccess;
     str = xpost_string_allocate_cstring(ctx, S);
     r = getenv(str);
     if (r)
@@ -213,6 +216,8 @@ int SSputenv(Xpost_Context *ctx,
              Xpost_Object S)
 {
     char *n, *s, *r;
+    if (xpost_path_control_is_engaged())
+        return invalidaccess;
     n = xpost_string_get_pointer(ctx, N);
     if (xpost_object_get_type(S) == nulltype)
     {
@@ -315,6 +320,60 @@ int returntocaller(Xpost_Context *ctx)
     return yieldtocaller;
 }
 
+/* -  .sysdictunlock  -
+   Make systemdict writeable so the graphics language can define into it. This
+   is a one-shot: once the language is loaded (.sysdictrelock has run), it does
+   nothing, so a program that reaches the name cannot reopen systemdict. The
+   window it opens runs only the interpreter's own graphics files, before any
+   program, and the error handler relocks systemdict if a load faults. */
+static
+int op_sysdictunlock(Xpost_Context *ctx)
+{
+    Xpost_Object sd;
+    if (ctx->sysdict_load_done)
+        return 0;
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
+    ctx->sysdict_unlocked = 1;
+    return 0;
+}
+
+/* -  .sysdictrelock  -
+   Restore systemdict to read-only after the graphics language has loaded, and
+   spend the one-shot. */
+static
+int op_sysdictrelock(Xpost_Context *ctx)
+{
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    ctx->sysdict_unlocked = 0;
+    ctx->sysdict_load_done = 1;
+    return 0;
+}
+
+/* dict  .setprivatedict  -
+   Record the interpreter's private local machinery dictionary in the context,
+   where the collector roots it and the C reaches it, without it ever going on
+   the dict stack. Called once from init.ps. */
+static
+int op_setprivatedict(Xpost_Context *ctx,
+                      Xpost_Object D)
+{
+    ctx->privatedict = D;
+    return 0;
+}
+
+/* -  .privatedict  dict
+   Push the private local machinery dictionary. Like .gscratch, it hands a local
+   object to whatever asks; a global procedure may use the result transiently
+   without holding a local reference. */
+static
+int op_privatedict(Xpost_Context *ctx)
+{
+    xpost_stack_push(ctx->lo, ctx->os, ctx->privatedict);
+    return 0;
+}
+
 int xpost_oper_init_misc_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
 {
@@ -332,6 +391,14 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     //optab = (void *)(ctx->gl->base + optadr);
 
     op = xpost_operator_cons(ctx, "bind", (Xpost_Op_Func)Pbind, 1, 1, proctype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".sysdictunlock", (Xpost_Op_Func)op_sysdictunlock, 0, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".setprivatedict", (Xpost_Op_Func)op_setprivatedict, 0, 1, dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".privatedict", (Xpost_Op_Func)op_privatedict, 1, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".sysdictrelock", (Xpost_Op_Func)op_sysdictrelock, 0, 0);
     INSTALL;
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "null"), null);
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "version"),

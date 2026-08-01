@@ -72,6 +72,7 @@ struct _Xpost_Context {
         int itransform;
         int rotate;
         int concatmatrix;
+        int wrapdone;
     } opcode_shortcuts;  /**< opcodes for internal use, to avoid lookups */
 
     Xpost_Object currentobject;  /**< currently-executing object, for error() */
@@ -104,9 +105,28 @@ struct _Xpost_Context {
 
     Xpost_Object event_handler;
     Xpost_Object window_device;
+    /**< privatedict -- a LOCAL dictionary that holds the interpreter's local
+         machinery (the device class dictionaries, the wrapped-operator anchor
+         procedures, the graphics scratch and template). Rooted here so the
+         collector keeps it and its contents, but never pushed on the dict
+         stack, so a program can neither name nor enumerate its members. The
+         C reaches the device classes through it; PostScript through a frozen
+         reference. Set from init.ps by .setprivatedict. */
+    Xpost_Object privatedict;
     const char *device_str;
 
+    int quiet; /**< the -q/--quiet startup flag, retained so the shutdown
+                    message can honour it without reading a PostScript name:
+                    QUIET lives in the private .internaldict, out of a program's
+                    reach, once init.ps has relocated it there. */
+
     int ignoreinvalidaccess; //briefly allow invalid access to put userdict in systemdict (per PLRM)
+
+    int sysdict_unlocked; /**< systemdict is temporarily writeable while the
+                            graphics language loads into it; the error handler
+                            relocks it if a load faults */
+    int sysdict_load_done; /**< the graphics language has been loaded into
+                             systemdict; the one-shot unlock is spent */
 
     int es_over;              /**< the exec-stack ceiling has been reported;
                                    holds off a re-raise until depth recedes */
@@ -116,11 +136,30 @@ struct _Xpost_Context {
                                    reaching `stop`; a runaway error cascade
                                    (an error raised from within the error
                                    machinery itself) drives this without bound */
+    size_t (*stdout_fn)(void *, const char *, size_t); /**< divert %stdout text */
+    void *stdout_user;
+    size_t (*stderr_fn)(void *, const char *, size_t); /**< divert %stderr text */
+    void *stderr_user;
+
+    char run_error_name[48];  /**< error that ended the last run ("" if none) */
+    char run_error_info[128]; /**< errorinfo detail for the same ("" if none) */
+    int run_uncaught;         /**< an error unwound past every stopped context */
 
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to
                                     this depth so its scheduling frames
                                     cannot accumulate across jobs */
+    int skip_graphics; /**< run the interpreter lockdown (.finalize) without
+                            loading graphics; xpost_run selects the no-graphics
+                            start procedures so a program that needs no graphics
+                            never pays to load them, and the no-graphics lockdown
+                            path is exercised */
+
+    int job_snapshots; /**< take VM snapshots around each xpost_run job
+                            (restored on the quit path); disable for a
+                            persistent context serving many runs, where
+                            the per-run snapshots would accumulate save
+                            levels and pin every run's garbage */
 
     int (*xpost_interpreter_cid_init)(unsigned int *cid);
     Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void);
