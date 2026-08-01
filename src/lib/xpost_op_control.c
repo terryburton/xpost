@@ -433,7 +433,9 @@ int xpost_op_exit (Xpost_Context *ctx)
 /* record what ended the run for the embedding caller. $error is the
    authority: a program may raise through the error machinery or set
    $error and stop directly, and either way its errorname and errorinfo
-   describe the failure. */
+   describe the failure. $error is a name in systemdict (its dictionary is
+   local), read from the base of the dict stack so a program's own
+   dictionaries above it do not shadow it. */
 static
 void _record_run_error(Xpost_Context *ctx)
 {
