@@ -651,14 +651,15 @@ setglobal
 } bind def
 
 % setcolordict and currentcolordict dispatch a device colour through the
-% operator named for its space. They were built holding those names as `cvx`
-% values, which a running dispatch re-looks-up on the dict stack -- so a program
-% redefining setgray/setrgbcolor/setcmykcolor (or the current* readers) would
-% reach its own definition through the interpreter's internal dispatch. `bind`
-% freezes operator names in a procedure body but not names held as data in a
-% dispatch dictionary, so capture the real operators here by value, now that they
-% are defined and before any program can redefine them -- the idiom font.ps uses
-% for show and setfont. The machinery then always reaches the real operators,
+% operator named for its space. A program may redefine setgray/setrgbcolor/
+% setcmykcolor (and the current* readers) -- a common trick for remapping the
+% colours a document paints -- and where such a redefinition re-enters the colour
+% machinery (as casselman ch8's setrgbcolor does, mapping RGB back into a DeviceN
+% space) the internal reduction of an Indexed, Separation or DeviceN colour loops
+% until the exec stack overflows. `bind` freezes the operator names in a procedure
+% body, but not names held as data in a dispatch dictionary; so capture the real
+% operators here by value, before any redefinition, the way font.ps does for show
+% and setfont. The internal reduction then always reaches the real operators,
 % while a program's own set*/current* calls still see its redefinition.
 .xpostsys /setcolordict get
     dup /DeviceGray  /setgray      load put
