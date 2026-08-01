@@ -53,7 +53,8 @@
 #include "xpost_op_array.h"
 #include "xpost_op_packedarray.h"
 
-/* a packed array is just a regular array with readonly */
+/* a packed array is stored as a read-only array carrying the packed flag,
+   which sets it apart from a plainly read-only array for bind and type */
 
 static
 int packedarray(Xpost_Context *ctx,
@@ -78,7 +79,9 @@ int packedarray(Xpost_Context *ctx,
             return stackunderflow;
         xpost_array_put(ctx, a, i-1, v);
     }
-    a = xpost_object_set_access(ctx, xpost_object_cvlit(a), XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    a = xpost_object_set_packed(
+            xpost_object_set_access(ctx, xpost_object_cvlit(a),
+                XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
     xpost_stack_push(ctx->lo, ctx->os, a);
     return 0;
 }

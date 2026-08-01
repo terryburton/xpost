@@ -130,6 +130,7 @@ typedef enum
     XPOST_OBJECT_TAG_DATA_EXTENDED_INT_OFFSET,
     XPOST_OBJECT_TAG_DATA_EXTENDED_REAL_OFFSET,
     XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD_OFFSET,
+    XPOST_OBJECT_TAG_DATA_FLAG_PACKED_OFFSET,
     XPOST_OBJECT_TAG_DATA_EXTRA_BITS,
     XPOST_OBJECT_TAG_DATA_NBITS = XPOST_OBJECT_TAG_DATA_EXTRA_BITS,  /* this MUST be < 16, the size of the tag field */
 
@@ -150,8 +151,15 @@ typedef enum
         01 << XPOST_OBJECT_TAG_DATA_EXTENDED_REAL_OFFSET,
             /**< extended object was real */
     XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD =
-        01 << XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD_OFFSET
+        01 << XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD_OFFSET,
             /**< for _onerror to reset stack */
+    XPOST_OBJECT_TAG_DATA_FLAG_PACKED =
+        01 << XPOST_OBJECT_TAG_DATA_FLAG_PACKED_OFFSET
+            /**< the array was produced by the packing machinery
+                 (setpacking true, or the packedarray operator). It is
+                 read-only like any packed array, but -- unlike a plain
+                 read-only array -- bind descends into and rewrites it,
+                 and the type operator reports packedarraytype. */
 } Xpost_Object_Tag_Data;
 
 /**
@@ -524,6 +532,27 @@ int xpost_object_is_exe(Xpost_Object obj);
  * a double-NOT to normalize the value to the range [0..1].
  */
 int xpost_object_is_lit(Xpost_Object obj);
+
+/**
+ * @brief Determine whether the array was produced by array packing.
+ *
+ * @param[in] obj The object.
+ * @return 1 if the object carries the packed flag, 0 otherwise.
+ *
+ * A packed array is stored as a read-only array but tagged with
+ * #XPOST_OBJECT_TAG_DATA_FLAG_PACKED so it can be distinguished from an
+ * ordinary read-only array: bind rewrites a packed array (and descends
+ * into nested ones) and the type operator reports packedarraytype.
+ */
+int xpost_object_is_packed(Xpost_Object obj);
+
+/**
+ * @brief Mark the array as produced by array packing.
+ *
+ * @param[in] obj The object.
+ * @return The object with #XPOST_OBJECT_TAG_DATA_FLAG_PACKED set.
+ */
+Xpost_Object xpost_object_set_packed(Xpost_Object obj);
 
 /**
  * @brief install specialized access getter functions

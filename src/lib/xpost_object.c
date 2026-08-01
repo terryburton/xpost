@@ -204,6 +204,18 @@ int xpost_object_is_lit(Xpost_Object obj)
     return !!(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_LIT);
 }
 
+int xpost_object_is_packed(Xpost_Object obj)
+{
+    return !!(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_PACKED);
+}
+
+Xpost_Object xpost_object_set_packed(Xpost_Object obj)
+{
+    obj.tag |= XPOST_OBJECT_TAG_DATA_FLAG_PACKED;
+
+    return obj;
+}
+
 static
 Xpost_Object_Tag_Access (*xpost_object_dict_get_access)(Xpost_Context *, Xpost_Object) = NULL;
 

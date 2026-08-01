@@ -605,10 +605,13 @@ int grok(Xpost_Context *ctx,
                     {
                         Xpost_Object proc = xpost_stack_pop(ctx->lo, ctx->os);
                         /* in packing mode a procedure is built read-only, which
-                           is how xpost represents a packed array */
+                           is how xpost represents a packed array; the packed
+                           flag tells it apart from a plain read-only array so
+                           bind and type treat it as the packed array it is */
                         if (ctx->packing)
-                            proc = xpost_object_set_access(ctx, proc,
-                                    XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+                            proc = xpost_object_set_packed(
+                                    xpost_object_set_access(ctx, proc,
+                                        XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
                         *retval = xpost_object_cvx(proc);
                     }
                 }

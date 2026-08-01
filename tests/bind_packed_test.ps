@@ -1,0 +1,67 @@
+% bind on packed vs read-only procedures (PLRM 8.2, `bind`), run through
+% `xpost -d null` by run-ps-test.sh. The reference implementations (Ghostscript
+% and Adobe Distiller, the authority) treat a PACKED array as bindable -- bind
+% rewrites its executable operator names and descends into nested packed
+% procedures -- while leaving an ordinary read-only array (one made read-only
+% after the fact) completely untouched. xpost tags a packed array so it can draw
+% the same distinction even though a packed array is stored as a read-only array.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+% -- bind rewrites operator names in a packed procedure ----------------------
+true setpacking /pk { 2 3 add } def false setpacking
+/pk /pk load bind def
+/pk load 2 get type /operatortype eq
+  (bind rewrites an operator name in a packed procedure) assert
+
+% -- bind descends into a NESTED packed procedure (the freezing that keeps
+%    BWIPP's packed encoders fast) ------------------------------------------
+true setpacking /outerp { { 2 3 add } } def false setpacking
+/outerp /outerp load bind def
+/outerp load 0 get 2 get type /operatortype eq
+  (bind descends into a nested packed procedure) assert
+
+% -- readonly bind does NOT bind (top level) --------------------------------
+% a procedure made read-only after creation is not packed; bind leaves it alone.
+/ro { 2 3 add } readonly def
+/ro /ro load bind def
+/ro load 2 get type /nametype eq
+  (readonly bind does not bind a read-only procedure) assert
+
+% -- readonly bind does NOT descend into a nested read-only procedure --------
+false setpacking
+/inner { 2 3 add } readonly def
+/outerro [ /inner load ] cvx def          % writable outer holding the read-only inner
+/outerro /outerro load bind def
+/outerro load 0 get 2 get type /nametype eq
+  (readonly bind does not descend into a nested read-only procedure) assert
+
+% -- a writable procedure binds (the contrasting case) -----------------------
+/w { 2 3 add } def
+/w /w load bind def
+/w load 2 get type /operatortype eq
+  (bind rewrites an operator name in a writable procedure) assert
+
+% -- bind FREEZES the operator: a later redefinition of the name is ignored ---
+true setpacking /fz { 2 3 add } def false setpacking
+/fz /fz load bind def
+/checkadd { 1 dict begin /add { pop pop 999 } def fz end } def
+checkadd 5 eq
+  (bind freezes a packed operator against later redefinition) assert
+
+% -- freezing reaches operators inside a nested packed procedure --------------
+true setpacking /fzn { { 2 3 add } exec } def false setpacking
+/fzn /fzn load bind def
+/checkaddn { 1 dict begin /add { pop pop 999 } def fzn end } def
+checkaddn 5 eq
+  (bind freezes an operator inside a nested packed procedure) assert
+
+% -- a bound packed procedure is still a packed array, still read-only --------
+/fz load type /packedarraytype eq
+  (a bound packed procedure is still packedarraytype) assert
+/fz load wcheck not
+  (a bound packed procedure is still read-only) assert
+
+false setpacking
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
