@@ -4772,6 +4772,7 @@ static Xpost_File *_owned_memory_source(Xpost_File *f)
 
     if (m != &a85_methods && m != &hex_methods && m != &rle_methods
         && m != &subfile_methods && m != &lzw_methods && m != &fax_methods
+        && m != &eexec_methods
 #ifdef HAVE_ZLIB
         && m != &flate_methods
 #endif
