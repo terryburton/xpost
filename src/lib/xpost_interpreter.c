@@ -1327,9 +1327,6 @@ int eval(Xpost_Context *ctx)
     Xpost_Stack *es_top;
     Xpost_Object_Type type;
 
-    if (!validate_context(ctx))
-        return unregistered;
-
     /* pop the next object, directly off the top segment when possible */
     es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
     es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg);
