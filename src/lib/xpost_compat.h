@@ -198,6 +198,23 @@ FILE *xpost_openat2_beneath(const char *root, const char *rel,
  */
 int xpost_fd_realpath(int fd, char *buf, size_t buflen);
 
+/*
+ * Delete (unlink) @p rel beneath @p root, resolving the parent directory
+ * atomically beneath @p root before acting, so the target cannot be repointed
+ * after a check. Sets *@p supported as xpost_openat2_beneath does; returns 0
+ * on success or -1 with errno.
+ */
+int xpost_unlinkat_beneath(const char *root, const char *rel, int *supported);
+
+/*
+ * Rename @p oldrel beneath @p oldroot to @p newrel beneath @p newroot, with
+ * both parents resolved atomically beneath their roots. Sets *@p supported as
+ * xpost_openat2_beneath does; returns 0 on success or -1 with errno.
+ */
+int xpost_renameat_beneath(const char *oldroot, const char *oldrel,
+                           const char *newroot, const char *newrel,
+                           int *supported);
+
 /**
  * @}
  */
