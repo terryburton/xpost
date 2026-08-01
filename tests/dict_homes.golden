@@ -20,7 +20,7 @@
 .privatedict /.hairrect
 .privatedict /.imginterp
 .privatedict /newnulldevice
-.privatedict /.stencilcache
+.gscratch /.stencilcache
 .privatedict /.xpost
 .xpostsys /arcbez
 .xpostsys /.c01
