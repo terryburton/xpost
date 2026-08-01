@@ -642,6 +642,17 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Multi-page output: a save...showpage...restore job (the separation-plate
+# idiom, which rewinds local virtual memory between pages) must land each page
+# in its own file when the output name carries a %d, and keep only the last
+# page when it does not. Guards the page counter living in a global dictionary
+# rather than the local device dict, where restore would rewind it.
+test('multipage',
+  find_program('tests/run-multipage-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Embedded Type 1 with a no-access Private: definefont must reach the loader and
 # read Subrs out of Private in C, not raise invalidaccess at a PostScript-level
 # read. Guards the regression where access enforcement broke every embedded

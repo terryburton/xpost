@@ -102,11 +102,16 @@ end
 % counting pages in the device the caller has begun; without the
 % marker every page writes the same file, last page standing
 currentglobal true setglobal
+% the page counter lives in a global dict so it survives the save/restore
+% a program wraps around each page (the separation-plate idiom); a counter
+% kept in the local device dictionary is rewound by restore, and every page
+% then reuses the same %d number
+.xpostsys /.pagestate 1 dict put
 .xpostsys /.pagefilename {
     dup (%d) search {
         exch pop
-        currentdict /.pageno 2 copy known { get }{ pop pop 1 } ifelse
-        dup 1 add /.pageno exch def
+        //.xpostsys /.pagestate get /.pageno 2 copy known { get }{ pop pop 1 } ifelse
+        dup 1 add //.xpostsys /.pagestate get exch /.pageno exch put
         10 string cvs
         //.xpostsys /.strcat get exec exch //.xpostsys /.strcat get exec
         exch pop

@@ -271,7 +271,10 @@
 
     /Emit { % IMAGE  .  -
     begin
-        /F /OutputFileName where { pop OutputFileName (w) file }{ (%stdout) (w) file } ifelse def
+        % an SVG document holds one page, so successive pages are written to
+        % separate files: a %d in the output name is replaced with the page
+        % number, and without one every page rewrites the same file
+        /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
         /.w { F exch writestring } def
 
         % page size in points: unscale the device resolution carried in

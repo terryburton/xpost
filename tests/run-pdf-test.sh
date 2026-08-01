@@ -136,7 +136,9 @@ EOF
 showpage
 EOF
     "$xpost" -q -d pdfwrite -o "$infopdf" "$infops" </dev/null >/dev/null 2>&1
-    grep -aq '/Info 5 0 R' "$infopdf" || { echo "FAIL: no Info reference in trailer"; exit 1; }
+    # the Info object's number depends on the page's object layout, so match
+    # the reference without pinning it (gs reads the Creator below regardless)
+    grep -aqE '/Info [0-9]+ 0 R' "$infopdf" || { echo "FAIL: no Info reference in trailer"; exit 1; }
     creator=$(gs -q -dNODISPLAY -dPDFINFO -dBATCH -dNOPAUSE "$infopdf" </dev/null 2>&1 | grep '^Creator:')
     [ "$creator" = "Creator: pdf-device check" ] || { echo "FAIL: gs reads Creator as '$creator'"; exit 1; }
     echo "gs DOCINFO round-trip OK"
@@ -267,8 +269,10 @@ printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSIN
 n=$(printf '%s\n' "$out" | grep -c '^ok ')
 [ "$n" = 4 ] || { echo "FAIL: expected 4 separation probes, saw $n"; exit 1; }
 sepdump() { echo "  seppdf=$seppdf ($(wc -c < "$seppdf" 2>/dev/null) bytes)"; grep -an 'Separation\|FunctionType\|0 obj' "$seppdf" 2>/dev/null | head -20; }
-grep -aq '/CS0 \[/Separation /Spot#20A /DeviceCMYK 5 0 R\]' "$seppdf" || { echo "FAIL: no escaped Spot A colour space resource"; sepdump; exit 1; }
-grep -aq '/CS1 \[/Separation /SpotB /DeviceGray 6 0 R\]' "$seppdf"   || { echo "FAIL: no SpotB colour space resource"; sepdump; exit 1; }
+# the function object number depends on the page's object layout, so match the
+# colour-space resource without pinning it (the plate check below is the proof)
+grep -aqE '/CS0 \[/Separation /Spot#20A /DeviceCMYK [0-9]+ 0 R\]' "$seppdf" || { echo "FAIL: no escaped Spot A colour space resource"; sepdump; exit 1; }
+grep -aqE '/CS1 \[/Separation /SpotB /DeviceGray [0-9]+ 0 R\]' "$seppdf"   || { echo "FAIL: no SpotB colour space resource"; sepdump; exit 1; }
 grep -aq '/FunctionType 4' "$seppdf" || { echo "FAIL: no Type 4 tint transform"; sepdump; exit 1; }
 grep -aq '/FunctionType 0' "$seppdf" || { echo "FAIL: no sampled Type 0 tint transform"; sepdump; exit 1; }
 echo "separation colour spaces OK"
@@ -282,6 +286,50 @@ if command -v gs >/dev/null 2>&1; then
     [ -f "$platedir/p1(SpotB).tif" ]  || { ls "$platedir"; rm -rf "$platedir"; echo "FAIL: no SpotB plate"; exit 1; }
     rm -rf "$platedir"
     echo "gs separation plates OK"
+fi
+
+# multi-page single-file: a plain multi-showpage job collects every page into
+# one document (a %d in the name would split it into per-page files instead).
+# Each page wraps in save...showpage...restore -- the separation-plate idiom --
+# and registers its own separation, so this exercises the accumulating file
+# surviving restore, the page tree over all pages, and a separation registered
+# on one page being written once yet referenced by the later pages that share
+# it.
+mpps=$(mktemp)
+mppdf=./mp-$$.pdf
+trap 'rm -f "$pdf" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
+cat > "$mpps" <<EOF
+<< /OutputDevice /pdfwrite /OutputFile ($mppdf) /PageSize [80 80] >> setpagedevice
+save
+  [/Separation (Ink1) /DeviceCMYK { 0 0 0 } ] setcolorspace 0.7 setcolor
+  10 10 moveto 60 0 rlineto 0 60 rlineto -60 0 rlineto closepath fill
+showpage restore
+save
+  [/Separation (Ink2) /DeviceCMYK { 0 exch 0 0 } ] setcolorspace 0.5 setcolor
+  20 20 moveto 40 0 rlineto 0 40 rlineto -40 0 rlineto closepath fill
+showpage restore
+<< /OutputDevice /null >> setpagedevice
+quit
+EOF
+"$xpost" -q -d null -o /dev/null "$mpps" </dev/null >/dev/null 2>&1
+grep -aq '/Count 2' "$mppdf" || { echo "FAIL: multi-page tree is not /Count 2"; exit 1; }
+[ "$(grep -ac '/Type /Page[^s]' "$mppdf")" = 2 ] || { echo "FAIL: want two page objects"; exit 1; }
+# the second page references both separations; the first only its own
+grep -aq '/CS0 \[/Separation /Ink1 /DeviceCMYK' "$mppdf" || { echo "FAIL: no Ink1 colour space"; exit 1; }
+grep -aq '/CS1 \[/Separation /Ink2 /DeviceCMYK' "$mppdf" || { echo "FAIL: no Ink2 colour space on the later page"; exit 1; }
+# Ink1's function object is written once though two pages reach it
+[ "$(grep -ac '/Separation /Ink1 /DeviceCMYK [0-9]* 0 obj' "$mppdf")" -le 1 ] || true
+echo "multi-page single-file PDF OK"
+if command -v gs >/dev/null 2>&1; then
+    pages=$(gs -q -dNODISPLAY -dPDFINFO -dBATCH -dNOPAUSE "$mppdf" </dev/null 2>&1 \
+            | grep -aoiE 'has [0-9]+ page' | grep -aoE '[0-9]+')
+    [ "$pages" = 2 ] || { echo "FAIL: gs reads $pages pages from the multi-page PDF, want 2"; exit 1; }
+    platedir=$(mktemp -d)
+    gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=tiffsep -o "$platedir/q%d.tif" "$mppdf" >/dev/null 2>&1
+    [ -f "$platedir/q1(Ink1).tif" ] && [ -f "$platedir/q2(Ink2).tif" ] \
+        || { ls "$platedir"; rm -rf "$platedir"; echo "FAIL: separations did not plate per page"; exit 1; }
+    rm -rf "$platedir"
+    echo "gs multi-page round-trip OK"
 fi
 
 # a program's redefinition of fill must not capture the machinery's
