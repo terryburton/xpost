@@ -26,12 +26,13 @@ Level 1 operators
  [X] imagemask
  [X] settransfer
  [X] currenttransfer
- [ ] setscreen
- [ ] currentscreen
- [ ] setcolorscreen
- [ ] currentcolorscreen
- [ ] sethalftone
- [ ] currenthalftone
+ [X] setscreen (a spot procedure that leaves no result loses nothing
+     from the caller's stack, where the reference interpreters error)
+ [X] currentscreen
+ [X] setcolorscreen
+ [X] currentcolorscreen
+ [X] sethalftone
+ [X] currenthalftone
  [ ] makefont
  [X] ashow
  [X] widthshow
@@ -274,17 +275,18 @@ Level 2 operators
      smooths the samples of any shape on the direct raster path,
      while a mask still decides each pixel by its nearest sample)
  [X] imagemask with dict argument
- [ ] setcolortransfer
- [ ] currentcolortransfer
- [ ] setblackgeneration
- [ ] currentblackgeneration
- [ ] setundercolorremoval
- [ ] currentundercolorremoval
- [ ] setcolorrendering
- [ ] currentcolorrendering
+ [X] setcolortransfer
+ [X] currentcolortransfer
+ [X] setblackgeneration (recorded only)
+ [X] currentblackgeneration
+ [X] setundercolorremoval (recorded only)
+ [X] currentundercolorremoval
+ [X] setcolorrendering (recorded only)
+ [X] currentcolorrendering
  [X] Named Resources
- [ ] makepattern
- [ ] setpattern
+ [X] makepattern (every tile repaints its cell; text through a CMap
+     composite under a pattern colour paints the underlying colour)
+ [X] setpattern
  [X] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
      Flate, LZW, CCITTFax, DCT, ReusableStream; encode filters:
      ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT)
@@ -330,7 +332,9 @@ Level 2 operators
 Level 3 operators
 -----------------
 
- [ ] shfill
+ [X] shfill (sampled functions at byte depths; FunctionTypes 0, 2 and
+     3 -- the type 4 calculator functions rangecheck, and functions of
+     more than one input are served by type 0 only)
  [ ] composite fonts
  [X] clipsave
  [X] cliprestore

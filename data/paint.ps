@@ -1,5 +1,31 @@
 //.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
+% mark c1..cn  .applytransfer  mark c1'..cn'
+% apply the transfer functions to the marked colour components: three
+% components pass through the red, green and blue transfers, four to
+% red, green, blue and grey in the CMYK order, anything else through
+% the grey transfer. The painting machinery refreshes the screening
+% cell here first, so a bilevel device screens against the current screen
+.xpostsys /.applytransfer {
+    //.xpostsys /.refreshscreencell get exec
+    counttomark 3 eq {
+        graphicsdict /currgstate get /bluetransfer get exec
+        3 1 roll
+        graphicsdict /currgstate get /greentransfer get exec
+        3 1 roll
+        graphicsdict /currgstate get /redtransfer get exec
+        3 1 roll
+    }{
+    counttomark 4 eq {
+        currenttransfer exec 4 1 roll
+        graphicsdict /currgstate get /bluetransfer get exec 4 1 roll
+        graphicsdict /currgstate get /greentransfer get exec 4 1 roll
+        graphicsdict /currgstate get /redtransfer get exec 4 1 roll
+    }{
+        counttomark { currenttransfer exec counttomark 1 roll } repeat
+    } ifelse } ifelse
+} put
+
 % Painting Operators
 
 % -  erasepage  -
@@ -17,7 +43,7 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         %dup =
         get exec
-        counttomark { currenttransfer exec counttomark 1 roll } repeat
+        //.xpostsys /.applytransfer get exec
         %(FillRect\n) print
         0 0 DEVICE /dimensions get aload pop
         DEVICE dup /FillRect get exec
@@ -30,6 +56,7 @@
 % -  fill  -
 % fill current path with current color
 /fill {
+    //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
     flattenpath
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
@@ -77,7 +104,7 @@
 
     dup length 2 gt {
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-        counttomark { currenttransfer exec counttomark 1 roll } repeat
+        //.xpostsys /.applytransfer get exec
         counttomark 2 add -1 roll
         DEVICE dup /FillPoly get exec
         pop
@@ -88,6 +115,7 @@
 
     flushpage
     newpath
+    } ifelse
 } bind def
 
 % -  eofill  -
@@ -99,6 +127,7 @@
 % whole paths through FillPath still receives the nonzero
 % approximation, as before.
 /eofill {
+    //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
         //fill exec
     }{
@@ -111,7 +140,7 @@
 
         dup length 2 gt {
             [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-            counttomark { currenttransfer exec counttomark 1 roll } repeat
+            //.xpostsys /.applytransfer get exec
             counttomark 2 add -1 roll
             DEVICE dup /FillPoly get exec
             pop
@@ -121,6 +150,7 @@
 
         flushpage
         newpath
+    } ifelse
     } ifelse
 } bind def
 
@@ -219,6 +249,9 @@
 % -  stroke  -
 % draw line along current path
 /stroke {
+    //.xpostsys /.patternactive get exec {
+        strokepath //.xpostsys /.patternfill get exec
+    }{
     % the hairline walk clips each segment against the rectangular
     % clip region before plotting it: a complex clip takes the outline
     % fill below, whose span intersection is exact for any region
@@ -244,7 +277,7 @@
             //.xpostsys /.hairext get exec
             .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
                 %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
                 %pstack(L)=
@@ -259,7 +292,7 @@
             //.xpostsys /.hairext get exec
             .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
                 [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                //.xpostsys /.applytransfer get exec
                 counttomark 5 add -4 roll
                 %5 1 roll % gray xN yN x0 y0
                 %pstack(C)=
@@ -276,6 +309,7 @@
     } ifelse
 
     newpath
+    } ifelse
 } bind def
 
 % Row machinery: image data arrives from datasrc in arbitrary
@@ -448,6 +482,7 @@
     gsave
         newpath
         24 dict begin
+        //.xpostsys /.refreshscreencell get exec
         {mranges mbits ncomp decode datasrc mat bits height width}{exch def}forall
         % the dictionary image form leaves its Interpolate request in
         % the local private dict for this one painting, out of a
@@ -530,6 +565,22 @@
                 v 255 div currenttransfer exec //.xpostsys /.c255 get exec
                 put
             } for
+            nat 3 eq {
+                /tlutr 256 string def
+                /tlutg 256 string def
+                /tlutb 256 string def
+                0 1 255 { /v exch def
+                    tlutr v v 255 div
+                        graphicsdict /currgstate get /redtransfer get exec
+                        //.xpostsys /.c255 get exec put
+                    tlutg v v 255 div
+                        graphicsdict /currgstate get /greentransfer get exec
+                        //.xpostsys /.c255 get exec put
+                    tlutb v v 255 div
+                        graphicsdict /currgstate get /bluetransfer get exec
+                        //.xpostsys /.c255 get exec put
+                } for
+            } if
             ncomp 1 eq {
                 /lut 256 nat mul string def
                 0 1 255 { /v exch def
@@ -537,9 +588,9 @@
                     //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
                     nat 3 eq {
                         /bb exch def /gg exch def /rr exch def
-                        lut v 3 mul       tlut rr //.xpostsys /.c255 get exec get put
-                        lut v 3 mul 1 add tlut gg //.xpostsys /.c255 get exec get put
-                        lut v 3 mul 2 add tlut bb //.xpostsys /.c255 get exec get put
+                        lut v 3 mul       tlutr rr //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 1 add tlutg gg //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 2 add tlutb bb //.xpostsys /.c255 get exec get put
                     }{
                         lut v 3 -1 roll //.xpostsys /.c255 get exec tlut exch get put
                     } ifelse
@@ -583,6 +634,16 @@
                 bd /dluts dluts put
             } ifelse
             bd /tlut tlut put
+            DEVICE /.htcell known {
+                bd /.htcell DEVICE /.htcell get put
+                bd /.htw DEVICE /.htw get put
+                bd /.hth DEVICE /.hth get put
+            } if
+            nat 3 eq {
+                bd /tlutr tlutr put
+                bd /tlutg tlutg put
+                bd /tlutb tlutb put
+            } if
             bd /y 0 put
             /interpok interp def
             interpok {
@@ -1058,26 +1119,55 @@
         % shared matrix per glyph is the classic case)
         mat matrix invertmatrix concat
         /ink polarity {1}{0} ifelse def
+        % consecutive set samples paint as one run; under a pattern
+        % colour the runs assemble into a single path so the tiling
+        % runs once over the whole stencil
+        /paintpat //.xpostsys /.patternactive get exec def
         width height mul 16384 le {
             % a small stencil's runs resolve once per distinct mask,
             % consecutive equal-extent rows merged into taller
             % rectangles, painted through fewer fills
             /rects buf width height ink //.xpostsys /.stencilruns get exec def
+            paintpat { newpath } if
             0 4 rects length 1 sub { /i exch def
                 rects i get rects i 1 add get
                 rects i 2 add get rects i 3 add get
-                rectfill
+                paintpat {
+                    /rh exch def /rw exch def /ry exch def /rx exch def
+                    rx ry moveto rx rw add ry lineto
+                    rx rw add ry rh add lineto rx ry rh add lineto closepath
+                }{
+                    rectfill
+                } ifelse
             } for
+            paintpat { //.xpostsys /.patternfill get exec } if
         }{
-            0 1 height 1 sub { /y exch def
-                0 1 width 1 sub { /x exch def
-                    buf y rowbytes mul x 8 idiv add get
-                    x 8 mod 7 sub bitshift 1 and
-                    ink eq {
-                        x y 1 1 rectfill
-                    } if
-                } for
-            } for
+        paintpat { newpath } if
+        0 1 height 1 sub { /y exch def
+            /x 0 def
+            {
+                x width ge { exit } if
+                buf y rowbytes mul x 8 idiv add get
+                x 8 mod 7 sub bitshift 1 and ink eq {
+                    /x0 x def
+                    {
+                        /x x 1 add def
+                        x width ge { exit } if
+                        buf y rowbytes mul x 8 idiv add get
+                        x 8 mod 7 sub bitshift 1 and ink ne { exit } if
+                    } loop
+                    paintpat {
+                        x0 y moveto x y lineto
+                        x y 1 add lineto x0 y 1 add lineto closepath
+                    }{
+                        x0 y x x0 sub 1 rectfill
+                    } ifelse
+                }{
+                    /x x 1 add def
+                } ifelse
+            } loop
+        } for
+        paintpat { //.xpostsys /.patternfill get exec } if
         } ifelse
         end
     grestore

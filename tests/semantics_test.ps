@@ -306,6 +306,13 @@ gsave clippath flattenpath pathbbox grestore
 pop pop pop 10 sub abs 0.5 lt (cliprestore reopens the outer region) assert
 grestore
 
+% black generation, undercolor removal and colour rendering record
+% and report round-trip
+{ 0.5 mul } setblackgeneration
+4 currentblackgeneration exec 2 eq (blackgeneration round-trips) assert
+{ 0.25 mul } setundercolorremoval
+8 currentundercolorremoval exec 2 eq (undercolorremoval round-trips) assert
+
 % --- resource machinery: instances per category, private categories
 %     registered by defining into /Category ---
 currentglobal true setglobal

@@ -869,6 +869,27 @@ _channel(Xpost_Object v, double max)
     return d * max;
 }
 
+/* The device's halftone threshold cell, when paint screens through
+   one: a bilevel device carries .htcell/.htw/.hth and every grey
+   written compares against the threshold under its pixel. */
+static const unsigned char *
+_ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
+{
+    Xpost_Object c = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htcell"));
+    Xpost_Object wo = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htw"));
+    Xpost_Object ho = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".hth"));
+
+    if (xpost_object_get_type(c) != stringtype
+     || xpost_object_get_type(wo) != integertype
+     || xpost_object_get_type(ho) != integertype)
+        return NULL;
+    *w = wo.int_.val;
+    *h = ho.int_.val;
+    if (*w < 1 || *h < 1 || (unsigned int)(*w * *h) > c.comp_.sz)
+        return NULL;
+    return (const unsigned char *)xpost_string_get_pointer(ctx, c);
+}
+
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
    PGMIMAGE. Writes the ImgData row strings directly rather than looping over
    PutPix in PostScript; erasepage clears the whole page through FillRect, so
@@ -890,7 +911,11 @@ int _fillrectgray(Xpost_Context *ctx,
     double dx, dy, dw, dh;
     int height, iy, iy0, iy1, ix0, ix1;
     unsigned char b;
+    int bht;
+    const unsigned char *cell;
+    int hw = 0, hh = 0;
 
+    cell = _ht_cell(ctx, devdic, &hw, &hh);
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
         return undefined;
@@ -898,6 +923,11 @@ int _fillrectgray(Xpost_Context *ctx,
 
     /* value -> byte, matching PGMIMAGE PutPix "255 mul cvi put" */
     b = (unsigned char)(int)_channel(val, 255.0);
+    /* the halftone comparison runs on a 0..256 scale: a pixel is
+       white when the level reaches its threshold, so a threshold of
+       255 whitens just before solid white and solid black stays
+       solid */
+    bht = (int)(_channel(val, 256.0) + 0.5);
 
     dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
     dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
@@ -924,8 +954,21 @@ int _fillrectgray(Xpost_Context *ctx,
         cx0 = ix0 < 0 ? 0 : ix0;
         cx1 = ix1 > width - 1 ? width - 1 : ix1;
         if (cx0 <= cx1)
-            memset(xpost_string_get_pointer(ctx, row) + cx0, b,
-                   (size_t)(cx1 - cx0 + 1));
+        {
+            unsigned char *p = (unsigned char *)
+                xpost_string_get_pointer(ctx, row);
+
+            if (cell)
+            {
+                const unsigned char *crow = cell + (iy % hh) * hw;
+                int ix;
+
+                for (ix = cx0; ix <= cx1; ix++)
+                    p[ix] = bht >= crow[ix % hw] ? 255 : 0;
+            }
+            else
+                memset(p + cx0, b, (size_t)(cx1 - cx0 + 1));
+        }
     }
 
     return 0;
@@ -1164,7 +1207,10 @@ static void
 _blit_decode_row(const unsigned char *src, unsigned char *const *planes,
                  int w, int ncomp,
                  const unsigned char *lut, unsigned char *const dlut[4],
-                 const unsigned char *tlut, int cmyk, int nat, int *out)
+                 const unsigned char *tlut,
+                 const unsigned char *tlr, const unsigned char *tlg,
+                 const unsigned char *tlb,
+                 int cmyk, int nat, int *out)
 {
     int x, c;
 
@@ -1200,7 +1246,14 @@ _blit_decode_row(const unsigned char *src, unsigned char *const *planes,
             }
             if (nat == 3)
             {
-                r = tlut[r]; g = tlut[g]; b = tlut[b];
+                if (tlr)
+                {
+                    r = tlr[r]; g = tlg[g]; b = tlb[b];
+                }
+                else
+                {
+                    r = tlut[r]; g = tlut[g]; b = tlut[b];
+                }
             }
             else
                 r = g = b = tlut[(r * 30 + g * 59 + b * 11) / 100];
@@ -1267,12 +1320,16 @@ int _blitrow(Xpost_Context *ctx,
              Xpost_Object dict)
 {
     Xpost_Object rows, bufo, luto, dlutso, tluto, mbitso, mrangeso;
+    Xpost_Object tro, tgo, tbo;
     Xpost_Object cspans;
     unsigned char *plane[4] = { NULL, NULL, NULL, NULL };
     int ncspans = 0, have_cspans = 0, have_planes = 0;
     double ivl[512][2];
     int nivl = 0;
     unsigned char *buf, *lut = NULL, *tlut = NULL, *mbits = NULL;
+    unsigned char *tlr = NULL, *tlg = NULL, *tlb = NULL;
+    const unsigned char *htc = NULL;
+    int htw = 0, hth = 0;
     unsigned char *dlut[4] = { NULL, NULL, NULL, NULL };
     int mranges[8];
     int devw, devh, nat, packed, w, ncomp, y, cmyk, mrowb = 0;
@@ -1304,6 +1361,12 @@ int _blitrow(Xpost_Context *ctx,
 #undef GETI
 #undef GETR
 #undef GETB
+
+    /* a screening device thresholds every grey written; the caller
+       copies the cell into the blit dictionary when the device has
+       one. Fetched ahead of both writers so the interpolated path,
+       which returns before the stepped one, screens through it too */
+    htc = _ht_cell(ctx, dict, &htw, &hth);
 
     rows = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "rows"));
     if (xpost_object_get_type(rows) != arraytype)
@@ -1361,6 +1424,17 @@ int _blitrow(Xpost_Context *ctx,
             dlut[c] = (unsigned char *)xpost_string_get_pointer(ctx, d);
         }
         tlut = (unsigned char *)xpost_string_get_pointer(ctx, tluto);
+        tro = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "tlutr"));
+        tgo = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "tlutg"));
+        tbo = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "tlutb"));
+        if (xpost_object_get_type(tro) == stringtype && tro.comp_.sz >= 256
+         && xpost_object_get_type(tgo) == stringtype && tgo.comp_.sz >= 256
+         && xpost_object_get_type(tbo) == stringtype && tbo.comp_.sz >= 256)
+        {
+            tlr = (unsigned char *)xpost_string_get_pointer(ctx, tro);
+            tlg = (unsigned char *)xpost_string_get_pointer(ctx, tgo);
+            tlb = (unsigned char *)xpost_string_get_pointer(ctx, tbo);
+        }
     }
 
     mbitso = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "mbits"));
@@ -1462,9 +1536,11 @@ int _blitrow(Xpost_Context *ctx,
                 pc = cols;
                 cc = cols + w * 3;
                 _blit_decode_row(prevsamp, have_planes ? prevplane : NULL,
-                                 w, ncomp, lut, dlut, tlut, cmyk, nat, pc);
+                                 w, ncomp, lut, dlut, tlut,
+                                 tlr, tlg, tlb, cmyk, nat, pc);
                 _blit_decode_row(buf, have_planes ? plane : NULL,
-                                 w, ncomp, lut, dlut, tlut, cmyk, nat, cc);
+                                 w, ncomp, lut, dlut, tlut,
+                                 tlr, tlg, tlb, cmyk, nat, cc);
 
                 bandlo[0] = y == 0 ? yoff : yoff + (y - 0.5) * yscale;
                 bandhi[0] = yoff + (y + 0.5) * yscale;
@@ -1602,6 +1678,10 @@ int _blitrow(Xpost_Context *ctx,
                             if (packed)
                                 xpost_array_put(ctx, row, dx,
                                     xpost_int_cons(px[0] << 16 | px[1] << 8 | px[2]));
+                            else if (htc)
+                                rowp[dx] = (256 * px[0] + 127) / 255
+                                           >= htc[(dy % hth) * htw + dx % htw]
+                                         ? 255 : 0;
                             else
                                 rowp[dx] = (unsigned char)px[0];
                         }
@@ -1704,7 +1784,14 @@ int _blitrow(Xpost_Context *ctx,
                 }
                 if (nat == 3)
                 {
-                    r = tlut[r]; g = tlut[g]; b = tlut[b];
+                    if (tlr)
+                    {
+                        r = tlr[r]; g = tlg[g]; b = tlb[b];
+                    }
+                    else
+                    {
+                        r = tlut[r]; g = tlut[g]; b = tlut[b];
+                    }
                 }
                 else
                     gray = tlut[(r * 30 + g * 59 + b * 11) / 100];
@@ -1736,6 +1823,10 @@ int _blitrow(Xpost_Context *ctx,
                         if (packed)
                             xpost_array_put(ctx, row, dx,
                                             xpost_int_cons(r << 16 | g << 8 | b));
+                        else if (htc)
+                            rowp[dx] = (256 * gray + 127) / 255
+                                       >= htc[(dy % hth) * htw + dx % htw]
+                                     ? 255 : 0;
                         else
                             rowp[dx] = (unsigned char)gray;
                     }

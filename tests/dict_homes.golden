@@ -87,6 +87,21 @@
 .xpostsys /.strcat
 .xpostsys /.wcmatch
 .xpostsys /xpost
+.xpostsys /.applytransfer
+.xpostsys /.spreadgrayscreen
+.xpostsys /.samplespot
+.xpostsys /.gcd
+.xpostsys /.screenlattice
+.xpostsys /.installscreencell
+.xpostsys /.refreshscreencell
+.xpostsys /.ht5component
+.xpostsys /.htreadthresholds
+.xpostsys /.patternactive
+.xpostsys /.patternfill
+.xpostsys /.patterneofill
+.xpostsys /.fneval
+.xpostsys /.fneval2
+.xpostsys /.gtri
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
 gstate /colorspace
@@ -94,7 +109,13 @@ gstate /colorcomp1
 gstate /colorcomp2
 gstate /colorcomp3
 gstate /colorcomp4
+gstate /blackgen
+gstate /ucr
+gstate /colorrendering
 gstate /transfer
+gstate /redtransfer
+gstate /greentransfer
+gstate /bluetransfer
 gstate /currpath
 gstate /clipregion
 gstate /flat
@@ -107,3 +128,19 @@ gstate /dasharray
 gstate /dashoffset
 gstate /currfont
 gstate /device
+gstate /screenfreq
+gstate /screenangle
+gstate /screenproc
+gstate /redscreenfreq
+gstate /redscreenangle
+gstate /redscreenproc
+gstate /greenscreenfreq
+gstate /greenscreenangle
+gstate /greenscreenproc
+gstate /bluescreenfreq
+gstate /bluescreenangle
+gstate /bluescreenproc
+gstate /halftone
+gstate /patdict
+gstate /patbase
+gstate /patcomps
