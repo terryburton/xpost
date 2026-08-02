@@ -245,14 +245,10 @@ unsigned int hash(Xpost_Object k)
 Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
                unsigned int sz)
 {
-    Xpost_Memory_Table *tab;
     Xpost_Object d;
-    unsigned int rent;
-    unsigned int cnt;
     dichead *dp;
     dicrec *tp;
     unsigned int i;
-    unsigned int vs;
     unsigned int ent;
     unsigned int hashnull;
 
@@ -273,14 +269,7 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     //d.comp_.ent = ent;
     d = xpost_object_set_ent(d, ent);
 
-    tab = &mem->table;
-    rent = ent;
-    xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-    cnt = xpost_stack_count(mem, vs);
-    tab->tab[rent].mark = ( (0 << XPOST_MEMORY_TABLE_MARK_DATA_MARK_OFFSET)
-            | (0 << XPOST_MEMORY_TABLE_MARK_DATA_REFCOUNT_OFFSET)
-            | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
-            | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET) );
+    xpost_save_stamp_birth(mem, ent);
 
     dp = xpost_ent_ptr(mem, ent); /* clear header */
     dp->tag = d.tag;

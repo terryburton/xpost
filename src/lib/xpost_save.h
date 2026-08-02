@@ -86,6 +86,13 @@ unsigned xpost_save_ent_is_saved(Xpost_Memory_File *mem, unsigned ent);
 int xpost_save_save_ent(Xpost_Memory_File *mem, unsigned tag, unsigned pad, unsigned ent);
 
 /*
+ * @brief stamp a fresh entity's mark word with the current save level
+ * (both save-level fields); called by every composite constructor right
+ * after allocation.
+ */
+void xpost_save_stamp_birth(Xpost_Memory_File *mem, unsigned int ent);
+
+/*
  * @brief rewind the stack 1 level, reverting memory to previous snapshot.
  */
 void xpost_save_restore_snapshot(Xpost_Memory_File *mem);

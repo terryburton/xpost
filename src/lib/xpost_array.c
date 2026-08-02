@@ -67,12 +67,8 @@ Xpost_Object xpost_array_cons_memory(Xpost_Memory_File *mem,
                                      unsigned int sz)
 {
     unsigned int ent;
-    unsigned int rent;
-    unsigned int cnt;
-    Xpost_Memory_Table *tab;
     Xpost_Object o;
     unsigned int i;
-    unsigned int vs;
 
     assert(mem->base);
 
@@ -90,15 +86,7 @@ Xpost_Object xpost_array_cons_memory(Xpost_Memory_File *mem,
             XPOST_LOG_ERR("cannot allocate array");
             return null;
         }
-        tab = &mem->table;
-        rent = ent;
-        xpost_memory_table_get_addr(mem,
-                                    XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-        cnt = xpost_stack_count(mem, vs);
-        tab->tab[rent].mark = ( (0 << XPOST_MEMORY_TABLE_MARK_DATA_MARK_OFFSET)
-                | (0 << XPOST_MEMORY_TABLE_MARK_DATA_REFCOUNT_OFFSET)
-                | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
-                | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET) );
+        xpost_save_stamp_birth(mem, ent);
 
         /* fill array with the null object */
         for (i = 0; i < sz; i++)

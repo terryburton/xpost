@@ -83,6 +83,27 @@ int xpost_save_init(Xpost_Memory_File *mem)
     return 1;
 }
 
+/* stamp a fresh entity with the current save level in both save-level
+   fields of its mark word: the composite was born at this depth, so
+   restore's guards can tell it from one predating the save. Every
+   composite constructor performs this immediately after allocation. */
+void xpost_save_stamp_birth(Xpost_Memory_File *mem, unsigned int ent)
+{
+    unsigned int vs;
+    unsigned int cnt;
+
+    if (!xpost_memory_table_get_addr(mem,
+                                     XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs))
+    {
+        XPOST_LOG_ERR("cannot load save stack");
+        return;
+    }
+    cnt = xpost_stack_count(mem, vs);
+    mem->table.tab[ent].mark =
+          (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
+        | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET);
+}
+
 /* push a new save object on the save stack
    this object is itself a stack (contains a stackadr) */
 Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)

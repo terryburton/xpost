@@ -246,14 +246,7 @@ _path_cons(Xpost_Context *ctx, unsigned int cap)
        composite constructors do, so the save/restore guard in
        _path_append can tell a path predating a save from one created
        inside it */
-    {
-        unsigned int vs, cnt;
-        xpost_memory_table_get_addr(ctx->lo, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-        cnt = xpost_stack_count(ctx->lo, vs);
-        ctx->lo->table.tab[ent].mark =
-            (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET) |
-            (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET);
-    }
+    xpost_save_stamp_birth(ctx->lo, ent);
     s.tag = stringtype |
         (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     /* nonzero sentinel: the extent lives in the header, but sz must
@@ -790,25 +783,20 @@ static Xpost_Object
 _rawarray_cons(Xpost_Context *ctx, unsigned int sz, Xpost_Object **payload)
 {
     Xpost_Memory_File *mem = ctx->lo;
-    unsigned int ent, vs, cnt, adr;
+    unsigned int ent;
     Xpost_Object o;
 
     if (!xpost_memory_table_alloc(mem, sz * sizeof(Xpost_Object), arraytype, &ent))
         return invalid;
     /* stamp as saved at the current level, as the constructor would */
-    xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-    cnt = xpost_stack_count(mem, vs);
-    mem->table.tab[ent].mark =
-        (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET) |
-        (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET);
+    xpost_save_stamp_birth(mem, ent);
     o.tag = arraytype |
         (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     o.comp_.sz = sz;
     o.comp_.off = 0;
     o = xpost_object_set_ent(o, ent);
     o = xpost_object_cvlit(o);
-    xpost_memory_table_get_addr(mem, ent, &adr);
-    *payload = (Xpost_Object *)(mem->base + adr);
+    *payload = xpost_ent_ptr(mem, ent);
     return o;
 }
 
