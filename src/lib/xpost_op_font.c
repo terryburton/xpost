@@ -48,6 +48,7 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_font.h"
+#include "xpost_strbuf.h"
 #include "xpost_file.h"
 #include "xpost_save.h"
 #include "xpost_context.h"
@@ -2131,30 +2132,26 @@ static void _sfnt_put32(unsigned char *p, unsigned int v)
 static int
 _cid_emit(char **buf, size_t *len, size_t *cap, const char *fmt, ...)
 {
+    Xpost_String_Buffer b;
     va_list ap;
-    int n;
+    int n, ret;
 
-    for (;;)
+    b.s = *buf; b.len = *len; b.cap = *cap;
+    va_start(ap, fmt);
+    n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        return -1;
+    ret = xpost_strbuf_reserve(&b, (size_t)n + 1);
+    if (ret == 0)
     {
         va_start(ap, fmt);
-        n = vsnprintf(*buf + *len, *cap - *len, fmt, ap);
+        vsnprintf(b.s + b.len, b.cap - b.len, fmt, ap);
         va_end(ap);
-        if (n < 0)
-            return -1;
-        if (*len + (size_t)n < *cap)
-        {
-            *len += (size_t)n;
-            return 0;
-        }
-        {
-            char *nb = realloc(*buf, *cap * 2);
-
-            if (!nb)
-                return -1;
-            *buf = nb;
-            *cap *= 2;
-        }
+        b.len += (size_t)n;
     }
+    *buf = b.s; *len = b.len; *cap = b.cap;
+    return ret;
 }
 
 static int
@@ -2412,19 +2409,13 @@ _t1_emit_bin(Xpost_Context *ctx, char **buf, size_t *len, size_t *cap,
              Xpost_Object s)
 {
     char *p = xpost_string_get_pointer(ctx, s);
+    Xpost_String_Buffer b;
+    int ret;
 
-    while (*len + s.comp_.sz + 1 >= *cap)
-    {
-        char *nb = realloc(*buf, *cap * 2);
-
-        if (!nb)
-            return -1;
-        *buf = nb;
-        *cap *= 2;
-    }
-    memcpy(*buf + *len, p, s.comp_.sz);
-    *len += s.comp_.sz;
-    return 0;
+    b.s = *buf; b.len = *len; b.cap = *cap;
+    ret = xpost_strbuf_append(&b, p, s.comp_.sz);
+    *buf = b.s; *len = b.len; *cap = b.cap;
+    return ret;
 }
 
 static
