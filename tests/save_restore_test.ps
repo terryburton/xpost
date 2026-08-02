@@ -83,6 +83,26 @@ g /b known not (a key added under save is gone) assert
 /blk 4000 array def 0 1 3999 { blk exch 3 array put } for
 g /a get 1 eq (the reverted dict is intact after a collection) assert
 
+% --- the string exception, asserted positively ---
+% PLRM 3.7.3: restore resets all composite objects in local VM EXCEPT
+% strings. A character put and a putinterval into a pre-save string must
+% SURVIVE the restore; reverting them would be the deviation (verified
+% against gs 10.02.1, which agrees).
+/xs (hello) def
+save
+    xs 0 72 put            % (Hello)
+    xs 3 (LO) putinterval  % (HelLO)
+restore
+xs (HelLO) eq (string contents survive restore, per the PLRM string exception) assert
+
+% KNOWN DEVIATION (TODO, not asserted): restore should raise
+% /invalidrestore when a composite object created after the save remains
+% on the operand, dictionary or execution stack (PLRM; gs raises it).
+% xpost currently restores without the check:
+%     save (fresh) exch restore  =>  no error, dangling string
+% Locking the absent error in would freeze non-compliance, so it is
+% recorded here for the C-side save/restore work rather than tested.
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

@@ -139,6 +139,12 @@ char *xpost_string_get_pointer(Xpost_Context *ctx,
 /*
    put a value at index into a string using specified memory file
    (string must be valid for this memory file)
+
+   No copy-on-write here, deliberately: PLRM 3.7.3 exempts strings from
+   save/restore ("resets the values of all composite objects in local VM,
+   except strings"), so unlike the array and dict mutators no
+   xpost_save_ent call precedes the write and a written character
+   survives restore.
  */
 int xpost_string_put_memory(Xpost_Memory_File *mem,
                             Xpost_Object s,
