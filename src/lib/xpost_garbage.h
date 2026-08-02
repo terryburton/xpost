@@ -55,6 +55,17 @@
  */
 int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall);
 
+/*
+ * The environment-gated collector diagnostics (xpost_garbage_diag.c):
+ * the independent reachability verifier (XPOST_GC_VERIFY, with an
+ * entity census under XPOST_GC_CENSUS) and the cross-bank scan for
+ * global containers referencing a dying local entity
+ * (XPOST_GC_XBANK_CHECK). The collector calls them only when the
+ * variable is set.
+ */
+void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem);
+void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem);
+
 #if 0
 /**
  * @brief perform a short functionality test

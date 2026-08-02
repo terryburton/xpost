@@ -18,6 +18,7 @@ libxpost_src = files([
   'xpost_font.c',
   'xpost_free.c',
   'xpost_garbage.c',
+  'xpost_garbage_diag.c',
   'xpost_interpreter.c',
   'xpost_log.c',
   'xpost_main.c',

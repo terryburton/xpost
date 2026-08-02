@@ -24,6 +24,7 @@ src/lib/xpost_file.c \
 src/lib/xpost_font.c \
 src/lib/xpost_free.c \
 src/lib/xpost_garbage.c \
+src/lib/xpost_garbage_diag.c \
 src/lib/xpost_interpreter.c \
 src/lib/xpost_log.c \
 src/lib/xpost_main.c \
