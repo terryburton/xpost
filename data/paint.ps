@@ -124,41 +124,148 @@
     } ifelse
 } bind def
 
+% x y proc  .intest  bool
+% The insideness core: proc resolves the subject region -- the spans
+% the corresponding painting operator would mark -- and the probe is
+% the device pixel holding the point, inset by the fill grid's quantum
+% so mere boundary contact stays outside, and insideness is any span
+% surviving the intersection. The clip does not participate: the test
+% asks about the painting operator's own marks. The user-path aperture
+% probe waits on the user-path operators.
+.xpostsys /.intest {
+    4 dict begin
+    /.insp exch def
+    transform
+    floor 0.00390625 add /.iny exch def
+    floor 0.00390625 add /.inx exch def
+    [ [.inx .iny]
+      [.inx 0.9921875 add .iny]
+      [.inx 0.9921875 add .iny 0.9921875 add]
+      [.inx .iny 0.9921875 add] ]
+    gsave .insp exec exch .clipfillpoly length 2 gt grestore
+    end
+} put
+
+% x y  infill  bool          x y  ineofill  bool
+% would fill (eofill) of the current path mark the point's pixel
+/infill { { flattenpath .fillpolyargs } //.xpostsys /.intest get exec } bind def
+/ineofill { { closepath flattenpath .fillpolyargs .eospanpoly } //.xpostsys /.intest get exec } bind def
+
+% the stroke form wraps infill: the stroke outline becomes the current
+% path inside a gsave and fills by the nonzero rule, the probe beneath
+/instroke { gsave strokepath infill grestore } bind def
+
+% x1 y1 x2 y2 rect  .hairsegclip  x1' y1' x2' y2' true
+%                                 false
+% the portion of the segment within the rectangle [x0 y0 x1 y1],
+% found by walking the parameter range against each edge; an
+% endpoint on the boundary stays, so a segment ending on a shared
+% tile edge still marks the boundary pixel, as the unclipped walk
+% would
+.xpostsys /.hairsegclip {
+    12 dict begin
+    aload pop
+    /ey exch def
+    /ex exch def
+    /by exch def /bx exch def
+    /qy exch def /qx exch def /py exch def /px exch def
+    /dx qx px sub def /dy qy py sub def
+    /t0 0 def /t1 1 def /ok true def
+    [ [ dx neg px bx sub ] [ dx ex px sub ]
+      [ dy neg py by sub ] [ dy ey py sub ] ]
+    {
+        aload pop /q exch def /p exch def
+        p 0 eq {
+            q 0 lt { /ok false def } if
+        }{
+            /r q p div def
+            p 0 lt {
+                r t1 gt { /ok false def }{ r t0 gt { /t0 r def } if } ifelse
+            }{
+                r t0 lt { /ok false def }{ r t1 lt { /t1 r def } if } ifelse
+            } ifelse
+        } ifelse
+    } forall
+    ok t0 t1 le and {
+        px dx t0 mul add py dy t0 mul add
+        px dx t1 mul add py dy t1 mul add
+        true
+    }{ false } ifelse
+    end
+} put
+
+% x1 y1 x2 y2  .hairext  x1' y1' x2' y2'
+% lengthen the segment by the stored half-width at each end: the cap
+% of a stroke within a pixel's width, round and projecting alike
+.xpostsys /.hairext {
+    .privatedict /.hairhw get dup 0 le { pop }{
+        8 dict begin
+        /hw exch def
+        {/y2 /x2 /y1 /x1}{exch def}forall
+        /dx x2 x1 sub def
+        /dy y2 y1 sub def
+        /len dx dup mul dy dup mul add sqrt def
+        len 0 gt {
+            /ux dx len div hw mul def
+            /uy dy len div hw mul def
+            x1 ux sub y1 uy sub x2 ux add y2 uy add
+        }{
+            x1 y1 x2 y2
+        } ifelse
+        end
+    } ifelse
+} put
+
 % -  stroke  -
 % draw line along current path
 /stroke {
+    % the hairline walk clips each segment against the rectangular
+    % clip region before plotting it: a complex clip takes the outline
+    % fill below, whose span intersection is exact for any region
     currentlinewidth 0 dtransform
     dup mul exch dup mul exch add sqrt
-        1 le {
+    % a butt cap adds nothing; round and projecting reach half the
+    % width past each segment end
+    .privatedict /.hairhw
+    2 index 2 div currentlinecap 0 eq { pop 0 } if put
+    1 le
+    .cliprect { 4 array astore }{ null } ifelse
+    .privatedict /.hairrect 3 -1 roll put
+    .privatedict /.hairrect get null ne and {
         flattenpath
         //.xpostsys /dashpath get exec
-        //.xpostsys /doclip get exec
         mark
-        {          % x0 y0 
+        {          % x0 y0
             2 copy % x0 y0 x0 y0
             %pstack(M)=
         }
         {          % ... xN-1 yN-1 xN yN
             4 copy % ... xN-1 yN-1 xN yN xN-1 yN-1 xN yN
-            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-            counttomark { currenttransfer exec counttomark 1 roll } repeat
-            counttomark 5 add -4 roll
-            %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
-            %pstack(L)=
-            DEVICE dup /DrawLine get exec  % ... xN-1 yN-1 xN yN
-            pop
+            //.xpostsys /.hairext get exec
+            .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
+                [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                counttomark 5 add -4 roll
+                %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
+                %pstack(L)=
+                DEVICE dup /DrawLine get exec  % ... xN-1 yN-1 xN yN
+                pop
+            } if
             4 2 roll pop pop % ... xN yN
         }
         {}
         {            % x0 y0 xN yN
             4 2 roll % xN yN x0 y0
-            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-            counttomark { currenttransfer exec counttomark 1 roll } repeat
-            counttomark 5 add -4 roll
-            %5 1 roll % gray xN yN x0 y0
-            %pstack(C)=
-            DEVICE dup /DrawLine get exec  % -
-            pop
+            //.xpostsys /.hairext get exec
+            .privatedict /.hairrect get //.xpostsys /.hairsegclip get exec {
+                [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+                counttomark { currenttransfer exec counttomark 1 roll } repeat
+                counttomark 5 add -4 roll
+                %5 1 roll % gray xN yN x0 y0
+                %pstack(C)=
+                DEVICE dup /DrawLine get exec  % -
+                pop
+            } if
         }
         //.xpostsys /.devpathforall get exec
         cleartomark
@@ -171,145 +278,831 @@
     newpath
 } bind def
 
-.xpostsys /bitsdict <<
-    1 {
-        {
-            bp bz ge {exit} if
-            % run the source on the caller's stacks: its defs are its
-            % own business, and the scratch dict's names stay out of
-            % its reach
+% Row machinery: image data arrives from datasrc in arbitrary
+% chunks; .fill assembles exact raw rows and .rownorm unpacks a
+% row's samples to one byte per sample. Samples pack high-order
+% first within each byte, and every row of samples begins on a byte
+% boundary (PLRM 4.10), so a sub-byte depth unpacks per row and the
+% pad bits fall off with the row's tail. Both run inside a
+% dictionary holding datasrc, pend, rawrow, buf, bits and
+% rowsamples; rows keep the raster within the string size limit
+% however large the image.
+
+% -  .fill  -
+% assemble the next raw row into rawrow from the source's chunks,
+% carrying any surplus in pend; a dry source leaves the tail zeroed
+.xpostsys /.fill {
+    /got 0 def
+    {
+        got rawrow length ge { exit } if
+        pend length 0 eq {
+            % run the source on the caller's stacks: its defs are the
+            % program's own business, and the machinery's scratch names
+            % stay out of its reach
             currentdict currentdict /datasrc get end exec exch begin
-            { % char
-                8 {
-                    dup % char char
-                    -1 bitshift exch % char>1 char
-                    1 and % char>1 c0
-                    255 mul % char>1 c0'
-                    buf exch bp exch put /bp bp 1 add def
-                } repeat
-                pop
-            } forall
-        } loop
-    }
-    2 {
+            /pend exch def
+        } if
+        pend length 0 eq {
+            got 1 rawrow length 1 sub { rawrow exch 0 put } for
+            exit
+        } if
+        /take pend length rawrow length got sub
+              2 copy gt { exch } if pop def
+        rawrow got pend 0 take getinterval putinterval
+        /pend pend take pend length take sub getinterval def
+        /got got take add def
+    } loop
+} put
+
+% -  .rownorm  -
+% unpack rawrow's rowsamples samples at depth bits into buf, one
+% byte per sample: sub-byte depths spread to the byte range, twelve
+% bits keep their high byte
+.xpostsys /.rownorm {
+    bits 8 eq {
+        buf 0 rawrow putinterval
+    }{ bits 1 eq {
+        0 1 rowsamples 1 sub { /s exch def
+            buf s
+            rawrow s 8 idiv get 7 s 7 and sub neg bitshift 1 and 255 mul
+            put
+        } for
+    }{ bits 2 eq {
+        0 1 rowsamples 1 sub { /s exch def
+            buf s
+            rawrow s 4 idiv get 3 s 3 and sub 2 mul neg bitshift 3 and 85 mul
+            put
+        } for
+    }{ bits 4 eq {
+        0 1 rowsamples 1 sub { /s exch def
+            buf s
+            rawrow s 2 idiv get s 1 and 0 eq { -4 bitshift }{ 15 and } ifelse
+            17 mul
+            put
+        } for
+    }{
+        % twelve bits: an even sample owns a byte and the next
+        % nibble, an odd one the low nibble and the next byte
+        0 1 rowsamples 1 sub { /s exch def
+            /k s 3 mul 2 idiv def
+            buf s
+            s 1 and 0 eq {
+                rawrow k get
+            }{
+                rawrow k get 15 and 4 bitshift
+                rawrow k 1 add get -4 bitshift or
+            } ifelse
+            put
+        } for
+    } ifelse } ifelse } ifelse } ifelse
+} put
+
+% src  .imgsource  proc
+% normalize an image data source: a file becomes a chunk-reading
+% procedure, a string a procedure delivering it, a procedure passes
+% through unchanged
+.xpostsys /.imgsource {
+    dup type /arraytype eq 1 index xcheck not and {
+        % a literal array carries one source per component
+        [ exch { //.xpostsys /.imgsource get exec } forall ]
+    }{
+    dup type /filetype eq {
+        [ exch 4096 string /readstring cvx /pop cvx ] cvx
+    }{
+        dup type /stringtype eq {
+            [ exch ] cvx
+        } if
+    } ifelse } ifelse
+} put
+
+% -  .clipspans  array
+% the clip region resolved to rectangle spans, as flat device-space
+% quads (x0 y0 x1 y1 each): the region path -- a stored user path or
+% already-resolved spans -- runs through the fill machinery's
+% scan-conversion either way
+.xpostsys /.clipspans {
+    gsave
+    clippath flattenpath
+    % resolve by the nonzero rule: the region may hold overlapping
+    % subpaths (a stencil's adjacent runs under magnification), which
+    % the even-odd resolver would cancel; intersecting with the page
+    % rectangle scan-converts the region as the fills themselves do
+    .fillpolyargs
+    [ [0 0]
+      [DEVICE /dimensions get 0 get 0]
+      [DEVICE /dimensions get 0 get DEVICE /dimensions get 1 get]
+      [0 DEVICE /dimensions get 1 get] ]
+    .clipfillpoly
+    grestore
+    6 dict begin
+    /q exch def
+    [
+    /i 0 def
+    {
+        i q length ge { exit } if
+        /mnx 9e99 def /mny 9e99 def /mxx -9e99 def /mxy -9e99 def
+        /got false def
         {
-            bp bz ge {exit} if
-            % run the source on the caller's stacks: its defs are its
-            % own business, and the scratch dict's names stay out of
-            % its reach
-            currentdict currentdict /datasrc get end exec exch begin
-            { % char
-
-                4 {
-                    dup % char char
-                    -2 bitshift exch % char>2 char
-                    3 and % char>2 c01
-                    85 mul  % char>2 c01'
-                    buf exch bp exch put /bp bp 1 add def
-                } repeat
-
-                %dup % char>2 char>2
-                %-2 bitshift exch % char>4 char>2
-                %3 and % char>4 c23
-                %85 mul  % char>4 c23'
-                %buf exch bp exch put /bp bp 1 add def
-
-                %dup % char>4 char>4
-                %-2 bitshift exch % char>6 char>4
-                %3 and % char>6 c45
-                %85 mul  % char>6 c45'
-                %buf exch bp exch put /bp bp 1 add def
-
-                %dup % char>6 char>6
-                %-2 bitshift exch % char>8 c67
-                %85 mul
-                %buf exch bp exch put /bp bp 1 add def
-
-                pop
-
-            } forall
+            i q length ge { exit } if
+            q i get dup type /nulltype eq { pop /i i 1 add def exit } if
+            aload pop
+            dup mny lt { dup /mny exch def } if
+            dup mxy gt { dup /mxy exch def } if
+            pop
+            dup mnx lt { dup /mnx exch def } if
+            dup mxx gt { dup /mxx exch def } if
+            pop
+            /got true def
+            /i i 1 add def
         } loop
-    }
-    4 {
-        {
-            bp bz ge {exit} if
-            % run the source on the caller's stacks: its defs are its
-            % own business, and the scratch dict's names stay out of
-            % its reach
-            currentdict currentdict /datasrc get end exec exch begin
-            { % char
-                0 exch dup % 0 char char
+        got { mnx mny mxx mxy } if
+    } loop
+    ]
+    end
+} put
 
-                2 {
-                    15 and % char  lo
-                    17 mul % char lo'
-                    buf exch bp exch put /bp bp 1 add def
-                    -4 bitshift % hi
-                } repeat % 0
+% v  .c255  byte
+% clamp a 0..1 component and scale it to a byte
+.xpostsys /.c255 {
+    dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if
+    255 mul round cvi
+} put
 
-                pop
+% c  .sampleat  value
+% one normalized component of the pixel in hand, from its plane's
+% row buffer or the interleaved one
+.xpostsys /.sampleat {
+    multi { bufs exch get x get }{ base add buf exch get } ifelse
+} put
 
-            } forall
-        } loop
-    }
-    8 {
-        {
-            bp bz ge {exit} if
-            % run the source on the caller's stacks: its defs are its
-            % own business, and the scratch dict's names stay out of
-            % its reach
-            currentdict currentdict /datasrc get end exec exch begin
-            buf exch bp exch
-            dup length
-            %pstack()=
-            bp add /bp exch def
-            putinterval
-        } loop
-    }
-    12 {
-    }
->> put
-
-% width height bits/sample matrix datasrc  image  -
-/image {
-    %pstack()=
+% width height bits mat datasrc decode ncomp mbits mranges  .imagepaintm  -
+% the shared image painter: the collectors normalize every sample
+% depth to one byte, so each pixel reads ncomp bytes, maps each
+% through its Decode range, and delivers the components to setcolor
+% in the current colour space. Two masking controls, null when
+% unused: mbits is a string of one bit per pixel in byte-padded row
+% order (a set bit leaves the pixel unpainted), and mranges an array
+% of min,max pairs of normalized sample values (a pixel whose every
+% raw component falls within its pair is left unpainted)
+.xpostsys /.imagepaintm {
     gsave
         newpath
-        10 dict begin
-        {datasrc mat bits height width}{exch def}forall
+        24 dict begin
+        {mranges mbits ncomp decode datasrc mat bits height width}{exch def}forall
+        % the dictionary image form leaves its Interpolate request in
+        % the local private dict for this one painting, out of a
+        % program's sight; anything else paints stepped
+        /interp .privatedict /.imginterp 2 copy known { get }{ pop pop false } ifelse def
+        .privatedict /.imginterp false put
 
-        /vdx 1 width div def
-        /vdy 1 height div def
-        /DeviceGray setcolorspace
-        /bz width height mul def
-        /buf bz string def
-        /bp 0 def
+        % a literal array of sources delivers each component from its
+        % own plane; a single source interleaves them. The source is
+        % loaded through the dictionary, never by name: an executable
+        % array is a procedure and a bare lookup would run it.
+        /multi currentdict /datasrc get
+               dup type /arraytype eq exch xcheck not and def
+        multi {
+            /rowsamples width def
+            /prb width bits mul 7 add 8 idiv def
+            /srcs currentdict /datasrc get def
+            /rawrows [ ncomp { prb string } repeat ] def
+            /bufs [ ncomp { width string } repeat ] def
+            /pends [ ncomp { () } repeat ] def
+        }{
+            /rowsamples width ncomp mul def
+            /rawrow rowsamples bits mul 7 add 8 idiv string def
+            /buf rowsamples string def
+            /pend () def
+        } ifelse
+        /mrow width 7 add 8 idiv def
 
-        //.xpostsys /bitsdict get bits get exec
+        % per-component decode as base + sample x scale over 0..255
+        /dbase ncomp array def
+        /dscale ncomp array def
+        0 1 ncomp 1 sub { /c exch def
+            /dmin decode c 2 mul get def
+            dbase c dmin put
+            dscale c decode c 2 mul 1 add get dmin sub 255 div put
+        } for
 
-        mat mat invertmatrix concat
-        %vdx vdy scale
+        % direct raster path: an axis-aligned mapping, a rectangular
+        % clip region and a raster device with a page buffer let each
+        % row write straight into the raster through .blitrow, the
+        % colour pipeline baked into tables up front: a one-component
+        % space bakes decode, colour conversion and transfer into one
+        % table by running each of its 256 samples through the
+        % interpreter's own machinery; RGB and CMYK samples take
+        % per-component decode tables, convert in the operator and
+        % pass through the transfer table after
+        /blitok false def
+        DEVICE /ImgData known {
+            DEVICE /nativecolorspace get
+            dup /DeviceRGB eq exch /DeviceGray eq or {
+                /m mat matrix invertmatrix matrix currentmatrix
+                   matrix concatmatrix def
+                m 1 get abs 0.000001 lt m 2 get abs 0.000001 lt and {
+                    /cspansv null def
+                    .cliprect {
+                        /ccy1 exch def /ccx1 exch def
+                        /ccy0 exch def /ccx0 exch def
+                    }{
+                        % a non-rectangular region: its resolved spans
+                        % clamp each raster write instead
+                        /ccx0 0 def /ccy0 0 def
+                        /ccx1 DEVICE /dimensions get 0 get def
+                        /ccy1 DEVICE /dimensions get 1 get def
+                        /cspansv //.xpostsys /.clipspans get exec def
+                    } ifelse
+                    /csname currentcolorspace
+                        dup type /arraytype eq { 0 get } if def
+                    ncomp 1 eq
+                    ncomp 3 eq csname /DeviceRGB eq and or
+                    ncomp 4 eq csname /DeviceCMYK eq and or
+                    { /blitok true def } if
+                } if
+            } if
+        } if
+        blitok {
+            /nat DEVICE /nativecolorspace get /DeviceRGB eq { 3 }{ 1 } ifelse def
+            /tlut 256 string def
+            0 1 255 { /v exch def
+                tlut v
+                v 255 div currenttransfer exec //.xpostsys /.c255 get exec
+                put
+            } for
+            ncomp 1 eq {
+                /lut 256 nat mul string def
+                0 1 255 { /v exch def
+                    v dscale 0 get mul dbase 0 get add setcolor
+                    //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+                    nat 3 eq {
+                        /bb exch def /gg exch def /rr exch def
+                        lut v 3 mul       tlut rr //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 1 add tlut gg //.xpostsys /.c255 get exec get put
+                        lut v 3 mul 2 add tlut bb //.xpostsys /.c255 get exec get put
+                    }{
+                        lut v 3 -1 roll //.xpostsys /.c255 get exec tlut exch get put
+                    } ifelse
+                } for
+            }{
+                /dluts [ ncomp { 256 string } repeat ] def
+                0 1 ncomp 1 sub { /c exch def
+                    /dl dluts c get def
+                    0 1 255 { /v exch def
+                        dl v
+                        v dscale c get mul dbase c get add //.xpostsys /.c255 get exec
+                        put
+                    } for
+                } for
+            } ifelse
+            /bd 24 dict def
+            bd /rows DEVICE /ImgData get put
+            bd /devw DEVICE /dimensions get 0 get put
+            bd /devh DEVICE /dimensions get 1 get put
+            bd /nat nat put
+            bd /packed nat 3 eq put
+            bd /w width put
+            bd /ncomp ncomp put
+            multi { bd /bufs bufs put }{ bd /buf buf put } ifelse
+            bd /xoff m 4 get put
+            bd /xscale m 0 get put
+            bd /yoff m 5 get put
+            bd /yscale m 3 get put
+            bd /cx0 ccx0 put
+            bd /cy0 ccy0 put
+            bd /cx1 ccx1 put
+            bd /cy1 ccy1 put
+            cspansv null ne { bd /cspans cspansv put } if
+            bd /mbits currentdict /mbits get put
+            bd /mrowb mrow put
+            bd /mranges currentdict /mranges get put
+            bd /cmyk ncomp 4 eq put
+            ncomp 1 eq {
+                bd /lut lut put
+            }{
+                bd /dluts dluts put
+            } ifelse
+            bd /tlut tlut put
+            bd /y 0 put
+            /interpok interp def
+            interpok {
+                bd /interp true put
+                multi {
+                    /pbufs [ ncomp { width string } repeat ] def
+                    bd /prevs pbufs put
+                }{
+                    /pbuf rowsamples string def
+                    bd /prev pbuf put
+                } ifelse
+                % keep this row's samples for the next call's blend
+                /.keeprow {
+                    multi {
+                        0 1 ncomp 1 sub { /c exch def
+                            pbufs c get 0 bufs c get putinterval
+                        } for
+                    }{
+                        pbuf 0 buf putinterval
+                    } ifelse
+                } def
+            } if
+            0 1 height 1 sub { /y exch def
+                multi {
+                    0 1 ncomp 1 sub { /c exch def
+                        /datasrc srcs c get def
+                        /pend pends c get def
+                        /rawrow rawrows c get def
+                        /buf bufs c get def
+                        //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+                        pends c pend put
+                    } for
+                }{
+                    //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+                } ifelse
+                bd /y y put
+                interpok {
+                    y 0 eq { .keeprow } if
+                    bd /last y height 1 sub eq put
+                } if
+                bd .blitrow
+                interpok { .keeprow } if
+            } for
+        }{
+        % invert into a fresh matrix: the operand matrix belongs to
+        % the caller, who may reuse it (a Type 3 font mutating one
+        % shared matrix per glyph is the classic case)
+        mat matrix invertmatrix concat
         0 1 height 1 sub { /y exch def
+            multi {
+                0 1 ncomp 1 sub { /c exch def
+                    /datasrc srcs c get def
+                    /pend pends c get def
+                    /rawrow rawrows c get def
+                    /buf bufs c get def
+                    //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+                    pends c pend put
+                } for
+            }{
+                //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+            } ifelse
             0 1 width 1 sub { /x exch def
-                buf y width mul x add get 255 div
-                setcolor
-                x %vdx mul
-                y %vdy mul %mat itransform
-                1 1 %vdx vdy %mat idtransform
-                %pstack()=
-                rectfill
+                /base x ncomp mul def
+                /paintit true def
+                mbits null ne {
+                    mbits y mrow mul x 8 idiv add get
+                    7 x 7 and sub neg bitshift 1 and 1 eq
+                    { /paintit false def } if
+                } if
+                paintit mranges null ne and {
+                    /inrange true def
+                    0 1 ncomp 1 sub { /c exch def
+                        c //.xpostsys /.sampleat get exec
+                        dup mranges c 2 mul get lt
+                        exch mranges c 2 mul 1 add get gt or
+                        { /inrange false def } if
+                    } for
+                    inrange { /paintit false def } if
+                } if
+                paintit {
+                    0 1 ncomp 1 sub { /c exch def
+                        c //.xpostsys /.sampleat get exec dscale c get mul dbase c get add
+                    } for
+                    setcolor
+                    x y 1 1 rectfill
+                } if
             } for
         } for
+        } ifelse
 
         end
     grestore
+} put
+
+.xpostsys /.imagepaint {
+    null null //.xpostsys /.imagepaintm get exec
+} put
+
+% raw bits  .mcscale  normalized
+% scale a raw sample value as the collectors scale samples to bytes
+.xpostsys /.mcscale {
+    dup 12 eq { pop -4 bitshift }{
+    dup 8 eq { pop }{
+    dup 4 eq { pop 17 mul }{
+    2 eq { 85 mul }{ 255 mul } ifelse } ifelse } ifelse } ifelse
+} put
+
+% imagedict  .imagetype4  -
+% colour-key masking: a pixel whose every raw component falls within
+% the MaskColor ranges leaves the page untouched. MaskColor holds one
+% value per component (an exact colour) or min,max pairs.
+.xpostsys /.imagetype4 {
+    6 dict begin
+    /d exch def
+    d /Interpolate 2 copy known { get }{ pop pop false } ifelse
+    dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+    /itbits d /BitsPerComponent get def
+    /itn //.xpostsys /.ncomponents get exec def
+    /itrange [
+        d /MaskColor get length itn eq {
+            d /MaskColor get { itbits //.xpostsys /.mcscale get exec dup } forall
+        }{
+            d /MaskColor get { itbits //.xpostsys /.mcscale get exec } forall
+        } ifelse
+    ] def
+    d /Width get d /Height get itbits d /ImageMatrix get
+    d /DataSource get //.xpostsys /.imgsource get exec
+    d /Decode get
+    itn null itrange
+    end
+    //.xpostsys /.imagepaintm get exec
+} put
+
+% imagedict  .imagetype3  -
+% explicit masking: MaskDict describes a one-bit-deep stencil over
+% the same image space as DataDict's samples; a mask value decoding
+% to 1 leaves the pixel unpainted. The three interleaves place the
+% mask sample-by-sample in the one stream (1, at the image depth),
+% row-by-row in the one stream (2), or in MaskDict's own DataSource
+% (3), where the mask's grid may differ from the image's.
+.xpostsys /.it1row { % statedict  .it1row  datarow
+    begin
+    //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+    0 1 iw 1 sub { /i exch def
+        /mv buf i nc 1 add mul get def
+        iminv { /mv 255 mv sub def } if
+        mv 127 gt {
+            imbits iy imrow mul i 8 idiv add 2 copy get
+            128 i 7 and neg bitshift or put
+        } if
+        drow i nc mul buf i nc 1 add mul 1 add nc getinterval putinterval
+    } for
+    /iy iy 1 add def
+    drow
+    end
+} put
+
+.xpostsys /.it2row { % statedict  .it2row  datarow
+    begin
+    /rawrow mraw def //.xpostsys /.fill get exec
+    iminv {
+        0 1 mraw length 1 sub { /k exch def
+            imbits iy imrow mul k add mraw k get 255 xor put
+        } for
+    }{
+        imbits iy imrow mul mraw putinterval
+    } ifelse
+    /rawrow draw def //.xpostsys /.fill get exec
+    /iy iy 1 add def
+    draw
+    end
+} put
+
+.xpostsys /.imagetype3 {
+    20 dict begin
+    /d exch def
+    /md d /MaskDict get def
+    /dd d /DataDict get def
+    dd /Interpolate 2 copy known { get }{ pop pop false } ifelse
+    dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+    /il d /InterleaveType get def
+    /w dd /Width get def
+    /h dd /Height get def
+    /bpc dd /BitsPerComponent get def
+    /n //.xpostsys /.ncomponents get exec def
+    /mw md /Width get def
+    /mh md /Height get def
+    /minv md /Decode 2 copy known { get }{ pop pop [0 1] } ifelse
+           0 get 1 eq def
+    /mrow w 7 add 8 idiv def
+    /mbits mrow h mul string def
+    il 1 eq {
+        % one stream, a mask sample at the image depth before each
+        % pixel's components: a row procedure de-interleaves as the
+        % painter pulls, filing each mask row and yielding the data
+        % row normalized (the painter reads it at eight bits)
+        /st 16 dict def
+        st begin
+            /datasrc dd /DataSource get //.xpostsys /.imgsource get exec def
+            /pend () def
+            /bits bpc def
+            /rowsamples w n 1 add mul def
+            /rawrow rowsamples bpc mul 7 add 8 idiv string def
+            /buf rowsamples string def
+            /drow w n mul string def
+            /iw w def /nc n def /imrow mrow def
+            /imbits mbits def /iminv minv def
+            /iy 0 def
+        end
+        w h 8 dd /ImageMatrix get
+        [ st //.xpostsys /.it1row get /exec cvx ] cvx
+        dd /Decode get n
+        mbits null
+    }{ il 2 eq {
+        % one stream, a byte-aligned one-bit mask row before each
+        % byte-aligned image row: the row procedure files the mask
+        % row and yields the raw image row
+        /st 12 dict def
+        st begin
+            /datasrc dd /DataSource get //.xpostsys /.imgsource get exec def
+            /pend () def
+            /mraw mrow string def
+            /draw w n mul bpc mul 7 add 8 idiv string def
+            /imrow mrow def
+            /imbits mbits def /iminv minv def
+            /iy 0 def
+        end
+        w h bpc dd /ImageMatrix get
+        [ st //.xpostsys /.it2row get /exec cvx ] cvx
+        dd /Decode get n
+        mbits null
+    }{
+        % separate streams: read the whole one-bit mask up front,
+        % then map its grid over the image's when the two differ
+        /mrb mw 7 add 8 idiv def
+        /mall mrb mh mul string def
+        /datasrc md /DataSource get //.xpostsys /.imgsource get exec def
+        /pend () def
+        /rawrow mrb string def
+        0 1 mh 1 sub { /my exch def
+            //.xpostsys /.fill get exec
+            mall my mrb mul rawrow putinterval
+        } for
+        mw w eq mh h eq and {
+            minv {
+                0 1 mall length 1 sub { /k exch def
+                    mbits k mall k get 255 xor put
+                } for
+            }{
+                mbits 0 mall putinterval
+            } ifelse
+        }{
+            0 1 h 1 sub { /y exch def
+                /sy y mh mul h idiv def
+                0 1 w 1 sub { /x exch def
+                    /sx x mw mul w idiv def
+                    mall sy mrb mul sx 8 idiv add get
+                    7 sx 7 and sub neg bitshift 1 and 1 eq
+                    minv { not } if {
+                        mbits y mrow mul x 8 idiv add 2 copy get
+                        128 x 7 and neg bitshift or put
+                    } if
+                } for
+            } for
+        } ifelse
+        w h bpc dd /ImageMatrix get
+        dd /DataSource get //.xpostsys /.imgsource get exec
+        dd /Decode get n
+        mbits null
+    } ifelse } ifelse
+    end
+    //.xpostsys /.imagepaintm get exec
+} put
+
+% width height bits/sample matrix datasrc  image  -
+%                                imagedict  image  -
+% The five-operand form paints grey samples; the dictionary forms
+% paint samples in the colour space current when image is invoked:
+% ImageType 1 plainly, 3 under an explicit mask, 4 under colour-key
+% masking
+/image {
+    dup type /dicttype eq {
+        dup /ImageType get
+        dup 1 eq {
+            pop
+            begin
+            currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
+            dup type /booleantype eq { .privatedict /.imginterp 3 -1 roll put }{ pop } ifelse
+            Width Height BitsPerComponent ImageMatrix
+            % fetch through the dictionary: a procedure source fetched
+            % by name would execute instead of arriving as the operand
+            currentdict /DataSource get //.xpostsys /.imgsource get exec
+            Decode
+            end
+            //.xpostsys /.ncomponents get exec //.xpostsys /.imagepaint get exec
+        }{ dup 3 eq {
+            pop //.xpostsys /.imagetype3 get exec
+        }{ 4 eq {
+            //.xpostsys /.imagetype4 get exec
+        }{
+            pop /image cvx /rangecheck signalerror
+        } ifelse } ifelse } ifelse
+    }{
+        gsave
+        /DeviceGray setcolorspace
+        //.xpostsys /.imgsource get exec [ 0 1 ] 1 //.xpostsys /.imagepaint get exec
+        grestore
+    } ifelse
 } def
 
-% width height polarity matrix datasrc  imagemask  -
-/imagemask {
-    10 dict begin
-    {datasrc mat polarity height width}{exch def}forall
+% width height bits matrix datasrc false ncomp  colorimage  -
+% paint interleaved samples in the device space matching the
+% component count: one grey, three RGB or four CMYK components per
+% pixel through the shared painter, in its own colour space like the
+% five-operand image. One data source per component (multi true) is
+% unsupported and refused.
+.xpostsys /.identdecode <<
+    1 [ 0 1 ]
+    3 [ 0 1 0 1 0 1 ]
+    4 [ 0 1 0 1 0 1 0 1 ]
+>> put
+/colorimage {
+    4 dict begin
+    /nc exch def
+    /msrc exch def
+    nc //.xpostsys /.identdecode get exch known not {
+        end /colorimage cvx /rangecheck signalerror
+    } if
+    msrc {
+        % gather the per-component sources into one literal array
+        /srcs nc array def
+        nc 1 sub -1 0 { srcs exch 3 -1 roll //.xpostsys /.imgsource get exec put } for
+    }{
+        /srcs exch //.xpostsys /.imgsource get exec def
+    } ifelse
+    gsave
+    nc 4 eq { /DeviceCMYK }{
+    nc 3 eq { /DeviceRGB }{ /DeviceGray } ifelse } ifelse
+    setcolorspace
+    % the source loads through the dictionary, never by name: an
+    % executable array is a procedure and a bare lookup would run it,
+    % leaving its first chunk standing in for the whole image
+    currentdict /srcs get //.xpostsys /.identdecode get nc get nc
     end
+    null null //.xpostsys /.imagepaintm get exec
+    grestore
+} def
+
+% width height polarity matrix datasrc interp  .stencilmask  -
+% paint the current colour through a one-bit stencil: samples equal to
+% the polarity mark unit squares of image space, the rest leave the
+% page untouched. Each row of samples begins on a byte boundary.
+% the runs of small stencils, resolved once per distinct mask: text
+% shown through Type 3 bitmap fonts paints the same few masks over
+% and over, and scanning their bits again for every occurrence is
+% where such jobs spend their time. Keyed by a content hash, verified
+% against the stored copy of the mask; runs of consecutive rows
+% sharing one extent merge into taller rectangles, whose union is the
+% very region the row runs cover. The cache lives in the local private
+% dictionary: its runs and mask copies are local render objects, which
+% the global helper namespace could not hold.
+
+% buf width height ink  .stencilruns  rects
+.xpostsys /.stencilruns {
+    10 dict begin
+    /kink exch def /kh exch def /kw exch def /kbuf exch def
+    /hh kw 31 mul kh add 33 mul kink add def
+    0 1 kbuf length 1 sub {
+        kbuf exch get hh 33 mul add 16#FFFFFF and /hh exch def
+    } for
+    /found null def
+    .privatedict /.stencilcache known not {
+        .privatedict /.stencilcache 64 dict put
+    } if
+    .privatedict /.stencilcache get hh 2 copy known {
+        get {
+            dup 0 get kw eq 1 index 1 get kh eq and
+            1 index 2 get kink eq and {
+                dup 3 get kbuf eq {
+                    4 get /found exch def exit
+                } if
+            } if
+            pop
+        } forall
+    }{ pop pop } ifelse
+    found null ne {
+        found
+    }{
+        /rowbytes kw 7 add 8 idiv def
+        /cap kw 2 idiv 1 add kh mul def
+        /rxa cap array def /rya cap array def
+        /rwa cap array def /rha cap array def
+        /rn 0 def
+        /prev 0 dict def
+        0 1 kh 1 sub { /y exch def
+            /cur 8 dict def
+            /x 0 def
+            {
+                x kw ge { exit } if
+                kbuf y rowbytes mul x 8 idiv add get
+                x 8 mod 7 sub bitshift 1 and kink eq {
+                    /x0 x def
+                    {
+                        /x x 1 add def
+                        x kw ge { exit } if
+                        kbuf y rowbytes mul x 8 idiv add get
+                        x 8 mod 7 sub bitshift 1 and kink ne { exit } if
+                    } loop
+                    /rl x x0 sub def
+                    /ext false def
+                    prev x0 2 copy known {
+                        get dup rwa exch get rl eq {
+                            dup rha exch 2 copy get 1 add put
+                            cur x0 3 -1 roll put
+                            /ext true def
+                        }{ pop } ifelse
+                    }{ pop pop } ifelse
+                    ext not {
+                        rxa rn x0 put rya rn y put
+                        rwa rn rl put rha rn 1 put
+                        cur x0 rn put
+                        /rn rn 1 add def
+                    } if
+                }{
+                    /x x 1 add def
+                } ifelse
+            } loop
+            /prev cur def
+        } for
+        /rects rn 4 mul array def
+        0 1 rn 1 sub { /i exch def
+            rects i 4 mul       rxa i get put
+            rects i 4 mul 1 add rya i get put
+            rects i 4 mul 2 add rwa i get put
+            rects i 4 mul 3 add rha i get put
+        } for
+        .privatedict /.stencilcache get length 200 ge {
+            .privatedict /.stencilcache 64 dict put
+        } if
+        /tuple [ kw kh kink kbuf dup length string copy rects ] def
+        .privatedict /.stencilcache get hh 2 copy known {
+            get [ exch aload pop tuple ]
+        }{
+            pop pop [ tuple ]
+        } ifelse
+        .privatedict /.stencilcache get hh 3 -1 roll put
+        rects
+    } ifelse
+    end
+} put
+
+.xpostsys /.stencilmask {
+    gsave
+        newpath
+        10 dict begin
+        {datasrc mat polarity height width}{exch def}forall
+        /rowbytes width 7 add 8 idiv def
+        /buf rowbytes height mul string def
+        /bp 0 def
+        { % collect the sample data
+            bp buf length ge {exit} if
+            datasrc
+            dup length 0 eq {pop exit} if
+            dup length bp add buf length gt {
+                0 buf length bp sub getinterval
+            } if
+            buf exch bp exch
+            dup length bp add /bp exch def
+            putinterval
+        } loop
+        % invert into a fresh matrix: the operand matrix belongs to
+        % the caller, who may reuse it (a Type 3 font mutating one
+        % shared matrix per glyph is the classic case)
+        mat matrix invertmatrix concat
+        /ink polarity {1}{0} ifelse def
+        width height mul 16384 le {
+            % a small stencil's runs resolve once per distinct mask,
+            % consecutive equal-extent rows merged into taller
+            % rectangles, painted through fewer fills
+            /rects buf width height ink //.xpostsys /.stencilruns get exec def
+            0 4 rects length 1 sub { /i exch def
+                rects i get rects i 1 add get
+                rects i 2 add get rects i 3 add get
+                rectfill
+            } for
+        }{
+            0 1 height 1 sub { /y exch def
+                0 1 width 1 sub { /x exch def
+                    buf y rowbytes mul x 8 idiv add get
+                    x 8 mod 7 sub bitshift 1 and
+                    ink eq {
+                        x y 1 1 rectfill
+                    } if
+                } for
+            } for
+        } ifelse
+        end
+    grestore
+} put
+
+% width height polarity matrix datasrc  imagemask  -
+%                                  maskdict  imagemask  -
+% The dictionary form (ImageType 1) states its polarity through
+% Decode: [1 0] paints where the sample is one, as operand polarity
+% true does; [0 1] paints the zeroes
+/imagemask {
+    dup type /dicttype eq {
+        begin
+        ImageType 1 ne { end /imagemask cvx /rangecheck signalerror } if
+        Width Height
+        Decode 0 get 0 ne
+        ImageMatrix
+        % fetch through the dictionary: a procedure source fetched by
+        % name would execute instead of arriving as the operand
+        currentdict /DataSource get //.xpostsys /.imgsource get exec
+        end
+    }{
+        //.xpostsys /.imgsource get exec
+    } ifelse
+    //.xpostsys /.stencilmask get exec
 } def
 
 //.internaldict /QUIET known { }{ (eof paint.ps\n)print } ifelse

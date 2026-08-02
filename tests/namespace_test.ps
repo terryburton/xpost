@@ -16,7 +16,7 @@
 userdict   length 0 ne { userdict   length (userdict not empty)   bad } if
 globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
 
-% the 323 name keys every build exposes
+% the 330 name keys every build exposes
 /golden <<
   ($error) true  (.gscratch) true  (.lockdown) true  (.permitfileread) true
   (.permitfilewrite) true  (.privatedict) true  (.resourcefileopen) true  (.uparams) true
@@ -24,14 +24,14 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (=only) true  (=print) true  (=string) true  (>>) true
   (DEVICE) true  (FontDirectory) true  (GlobalFontDirectory) true  (ISOLatin1Encoding) true
   (Run) true  (SharedFontDirectory) true  (ShowpageSemantics) true  ([) true
-  (]) true  (abs) true  (add) true
-  (aload) true  (anchorsearch) true  (and) true  (arc) true
-  (arcn) true  (arct) true  (arcto) true  (array) true
-  (ashow) true  (astore) true  (atan) true  (awidthshow) true
-  (begin) true  (bind) true  (bitshift) true  (bytesavailable) true
-  (ceiling) true  (charpath) true
-  (clear) true  (cleardictstack) true  (cleartomark) true  (clip) true
-  (clippath) true  (cliprestore) true  (clipsave) true  (closefile) true  (closepath) true  (concat) true
+  (]) true  (abs) true  (add) true  (aload) true
+  (anchorsearch) true  (and) true  (arc) true  (arcn) true
+  (arct) true  (arcto) true  (array) true  (ashow) true
+  (astore) true  (atan) true  (awidthshow) true  (begin) true
+  (bind) true  (bitshift) true  (bytesavailable) true  (ceiling) true
+  (charpath) true  (clear) true  (cleardictstack) true  (cleartomark) true
+  (clip) true  (clippath) true  (cliprestore) true  (clipsave) true
+  (closefile) true  (closepath) true  (colorimage) true  (concat) true
   (concatmatrix) true  (copy) true  (copypage) true  (cos) true
   (count) true  (countdictstack) true  (countexecstack) true  (counttomark) true
   (currentcmykcolor) true  (currentcolor) true  (currentcolorspace) true  (currentcontext) true
@@ -45,9 +45,9 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (cvi) true  (cvlit) true  (cvn) true  (cvr) true
   (cvrs) true  (cvs) true  (cvx) true  (def) true
   (defaultmatrix) true  (definefont) true  (defineresource) true  (deletefile) true
-  (detach) true  (dict) true  (dictstack) true
-  (div) true  (dtransform) true  (dup) true  (echo) true
-  (end) true  (eoclip) true  (eofill) true  (eq) true  (erasepage) true
+  (detach) true  (dict) true  (dictstack) true  (div) true
+  (dtransform) true  (dup) true  (echo) true  (end) true
+  (eoclip) true  (eofill) true  (eq) true  (erasepage) true
   (errordict) true  (exch) true  (exec) true  (execdict) true
   (execstack) true  (executeonly) true  (executive) true  (exit) true
   (exp) true  (false) true  (file) true  (filenameforall) true
@@ -55,18 +55,18 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (findresource) true  (flattenpath) true  (floor) true  (flush) true
   (flushfile) true  (flushpage) true  (for) true  (forall) true
   (fork) true  (gcheck) true  (ge) true  (get) true
-  (getenv) true  (getinterval) true  (globaldict) true
-  (globalvmstatus) true  (graphicsdict) true  (grestore) true  (grestoreall) true
-  (gsave) true  (gstate) true  (gt) true  (handleerror) true
-  (identmatrix) true  (idiv) true  (idtransform) true  (if) true
-  (ifelse) true  (image) true  (imagemask) true  (index) true
-  (initclip) true  (initgraphics) true  (initmatrix) true  (internaldict) true
-  (invertmatrix) true  (itransform) true  (join) true  (known) true
-  (kshow) true  (languagelevel) true  (le) true  (length) true
-  (lineto) true  (ln) true  (load) true  (loadbgrdevice) true
-  (loadrasterdevice) true  (log) true  (loop) true  (lt) true
-  (makefont) true  (makepattern) true  (mark) true  (matrix) true
-  (maxlength) true  (mod) true
+  (getenv) true  (getinterval) true  (globaldict) true  (globalvmstatus) true
+  (graphicsdict) true  (grestore) true  (grestoreall) true  (gsave) true
+  (gstate) true  (gt) true  (handleerror) true  (identmatrix) true
+  (idiv) true  (idtransform) true  (if) true  (ifelse) true
+  (image) true  (imagemask) true  (index) true  (ineofill) true
+  (infill) true  (initclip) true  (initgraphics) true  (initmatrix) true
+  (instroke) true  (internaldict) true  (invertmatrix) true  (itransform) true
+  (join) true  (known) true  (kshow) true  (languagelevel) true
+  (le) true  (length) true  (lineto) true  (ln) true
+  (load) true  (loadbgrdevice) true  (loadrasterdevice) true  (log) true
+  (loop) true  (lt) true  (makefont) true  (makepattern) true
+  (mark) true  (matrix) true  (maxlength) true  (mod) true
   (moveto) true  (mul) true  (ne) true  (neg) true
   (newpath) true  (noaccess) true  (not) true  (null) true
   (nulldevice) true  (or) true  (packedarray) true  (pathbbox) true
@@ -94,13 +94,13 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (srand) true  (stack) true  (startjob) true  (status) true
   (statusdict) true  (stop) true  (stopped) true  (store) true
   (string) true  (stringwidth) true  (stroke) true  (strokepath) true
-  (sub) true  (systemdict) true  (token) true
-  (transform) true  (translate) true  (true) true  (truncate) true
-  (type) true  (undef) true  (undefinefont) true  (undefineresource) true
-  (userdict) true  (usertime) true  (version) true  (vmreclaim) true
-  (vmstatus) true  (wcheck) true  (where) true  (widthshow) true
-  (write) true  (writehexstring) true  (writeobject) true  (writestring) true
-  (xcheck) true  (xor) true  (yield) true
+  (sub) true  (systemdict) true  (token) true  (transform) true
+  (translate) true  (true) true  (truncate) true  (type) true
+  (undef) true  (undefinefont) true  (undefineresource) true  (userdict) true
+  (usertime) true  (version) true  (vmreclaim) true  (vmstatus) true
+  (wcheck) true  (where) true  (widthshow) true  (write) true
+  (writehexstring) true  (writeobject) true  (writestring) true  (xcheck) true
+  (xor) true  (yield) true
 >> def
 
 % names present only when an optional library or the platform provides them

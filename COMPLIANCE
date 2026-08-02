@@ -22,8 +22,8 @@ Level 1 operators
  [X] currentlinejoin
  [X] setlinecap
  [X] currentlinecap
- [/] image
- [ ] imagemask
+ [X] image (12-bit samples render at the raster's 8-bit depth)
+ [X] imagemask
  [X] settransfer
  [X] currenttransfer
  [ ] setscreen
@@ -222,8 +222,8 @@ Level 1 operators
  [X] stroke
  [X] strokepath
  [X] reversepath
- [/] image
- [ ] imagemask
+ [X] image
+ [X] imagemask
  [X] showpage
  [X] copypage
  [X] setfont
@@ -269,9 +269,11 @@ Level 2 operators
  [ ] yshow
  [ ] xyshow
  [ ] glyphshow
- [ ] colorimage
- [ ] image with dict argument
- [ ] imagemask with dict argument
+ [X] colorimage
+ [X] image with dict argument (ImageTypes 1, 3 and 4; Interpolate
+     smooths the samples of any shape on the direct raster path,
+     while a mask still decides each pixel by its nearest sample)
+ [X] imagemask with dict argument
  [ ] setcolortransfer
  [ ] currentcolortransfer
  [ ] setblackgeneration
