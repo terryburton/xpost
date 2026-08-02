@@ -288,14 +288,14 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
         if ((mem->threshold -= sz) <= 0)
         {
             mem->threshold = _xpost_free_gc_threshold();
-            return 2;
+            return XPOST_FREE_WANT_COLLECTION;
         }
 #else
         //(void)threshold;
         if (--mem->period == 0) /* check garbage-collection control */
         {
             mem->period = XPOST_GARBAGE_COLLECTION_PERIOD;
-            return 2; /* not found, request garbage-collection and try-again */
+            return XPOST_FREE_WANT_COLLECTION; /* not found; try again after collecting */
             /* collect(mem, 1, 0); */
             /* goto try_again; */
         }
@@ -340,7 +340,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 for (bb = 0; bb < XPOST_FREE_NBUCKETS; bb++)
                     xpost_memory_put(mem, 0, bb * sizeof(unsigned int),
                                      sizeof zero, &zero);
-                return 2; /* request collection to fill the list */
+                return XPOST_FREE_WANT_COLLECTION; /* refill the list first */
             }
             ret = xpost_memory_table_get_size(mem, e, &tsz);
             if (!ret)

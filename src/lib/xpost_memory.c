@@ -67,6 +67,7 @@
 #include "xpost_compat.h"
 #include "xpost_error.h"
 #include "xpost_memory.h"
+#include "xpost_free.h" /* the installed allocator's answer codes */
 #include "xpost_object.h"
 
 
@@ -686,7 +687,7 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
             mem->table.tab[*entity].used = sz;
             return 1;
         }
-        else if (ret == 2)
+        else if (ret == XPOST_FREE_WANT_COLLECTION)
         {
             /* collection is due, but running it here would sweep any
                object the current operator holds only in C variables

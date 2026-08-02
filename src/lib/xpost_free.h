@@ -120,7 +120,18 @@ int xpost_free_init(Xpost_Memory_File *mem);
 void xpost_free_dump(Xpost_Memory_File *mem);
 
 /**
- * @brief  allocate data, re-using garbage if possible
+ * The allocator's answer when a collection should run before retrying:
+ * not a success (1) and not a plain failure (0) -- the caller records
+ * the request and falls back to fresh allocation, and the interpreter
+ * collects at its next safe point.
+ */
+#define XPOST_FREE_WANT_COLLECTION 2
+
+/**
+ * @brief  allocate data, re-using garbage if possible.
+ * @return 1 = allocated from the free list into @p entity;
+ *         0 = nothing suitable, fall back to fresh allocation;
+ *         #XPOST_FREE_WANT_COLLECTION = as 0, and a collection is due.
  */
 int xpost_free_alloc(Xpost_Memory_File *mem,
                      unsigned int sz,

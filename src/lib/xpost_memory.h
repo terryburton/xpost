@@ -40,6 +40,11 @@
  * @file xpost_memory.h
  * @brief The memory management data structures, #Xpost_Memory_File and
  * #Xpost_Memory_Table.
+ *
+ * Return convention: the functions of this module answer 1 for success
+ * and 0 for failure (the object-mutator modules answer the opposite --
+ * 0 for no-error, nonzero for the PostScript error to raise; each
+ * header states which convention it uses).
  */
 
 

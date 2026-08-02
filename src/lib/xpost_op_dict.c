@@ -343,11 +343,13 @@ int xpost_op_dict_any_undef(Xpost_Context *ctx,
                             Xpost_Object D,
                             Xpost_Object K)
 {
+    int ret;
     if (!xpost_object_is_writeable(ctx, D))
         return invalidaccess;
-    XPOST_LOG_WARN("FIXME: undef doesn't adequately fix the chain");
-    xpost_dict_undef(ctx, D, K);
-    return 0;
+    ret = xpost_dict_undef(ctx, D, K);
+    if (ret == undefined)
+        return 0; /* PLRM: undef of an unknown key has no effect */
+    return ret;
 }
 
 /* dict key  known  bool

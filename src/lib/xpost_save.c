@@ -325,7 +325,14 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
 
         rec = xpost_stack_pop(mem, sav.save_.stk);
         if (xpost_object_get_type(rec) == invalidtype)
+        {
+            /* the record stack ended early: the VM is now only partially
+               reverted, which nothing can repair -- say so rather than
+               return as if the restore completed */
+            XPOST_LOG_ERR("save-record stack exhausted mid-restore: "
+                          "%u records unreverted", cnt + 1);
             return;
+        }
         sent = XPOST_SAVEREC_SRC(rec);
         cent = XPOST_SAVEREC_CPY(rec);
         XPOST_LOG_INFO("replacing ent %u with copy ent %u", sent, cent);

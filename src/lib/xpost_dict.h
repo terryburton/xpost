@@ -35,6 +35,11 @@
  * @file di.h
  * @brief dictionary functions
  *
+ * Return convention: the mutators of this module answer 0 for no-error
+ * and otherwise the PostScript error code to raise (the memory-layer
+ * modules answer the opposite -- 1 for success, 0 for failure; each
+ * header states which convention it uses).
+ *
  * A dictionary object is 8 bytes
  * consisting of 4 16bit fields common to composite objects:
 
@@ -184,8 +189,10 @@ int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Obj
 int xpost_dict_undef_memory(Xpost_Context *ctx, Xpost_Memory_File *mem, Xpost_Object d, Xpost_Object k);
 
 /**
-   undefine key in banked dictionary; an unknown key is not an error
+   undefine key in banked dictionary. Returns 0 or the error to raise;
+   `undefined` reports an absent key, which the undef operator ignores
+   (PLRM: undef of an unknown key has no effect).
 */
-void xpost_dict_undef(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
+int xpost_dict_undef(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
 
 #endif

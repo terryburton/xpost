@@ -894,11 +894,11 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
 }
 
 /* undefine key from banked dict */
-void xpost_dict_undef(Xpost_Context *ctx,
+int xpost_dict_undef(Xpost_Context *ctx,
         Xpost_Object d,
         Xpost_Object k)
 {
-    xpost_dict_undef_memory(ctx, xpost_context_select_memory(ctx, d), d, k);
+    return xpost_dict_undef_memory(ctx, xpost_context_select_memory(ctx, d), d, k);
 }
 
 

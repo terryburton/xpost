@@ -1477,7 +1477,7 @@ _undef_sandbox_ops (Xpost_Context *ctx)
     size_t i;
 
     for (i = 0; i < sizeof names / sizeof names[0]; i++)
-        xpost_dict_undef(ctx, sd, xpost_name_cons(ctx, names[i]));
+        (void)xpost_dict_undef(ctx, sd, xpost_name_cons(ctx, names[i]));
 }
 
 /* -  .lockdown  -
