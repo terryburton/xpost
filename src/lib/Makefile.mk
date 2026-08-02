@@ -65,6 +65,7 @@ src/lib/xpost_dict.h \
 src/lib/xpost_error.h \
 src/lib/xpost_file.h \
 src/lib/xpost_font.h \
+src/lib/xpost_strbuf.h \
 src/lib/xpost_free.h \
 src/lib/xpost_garbage.h \
 src/lib/xpost_log.h \
