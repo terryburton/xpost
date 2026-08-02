@@ -31,6 +31,8 @@
 #ifndef XPOST_SAVE_H
 #define XPOST_SAVE_H
 
+#include "xpost_error.h" /* the cow helper reports VMerror */
+
 /**
  *  @file xpost_save
  *
@@ -87,6 +89,27 @@ int xpost_save_save_ent(Xpost_Memory_File *mem, unsigned tag, unsigned pad, unsi
  * @brief rewind the stack 1 level, reverting memory to previous snapshot.
  */
 void xpost_save_restore_snapshot(Xpost_Memory_File *mem);
+
+/*
+ * @brief copy-on-write an ent into the current snapshot before a write.
+ *
+ * The incantation every array and dict mutator must perform: if the ent
+ * is not yet under the current save, back it up now, so restore can
+ * revert the write. Returns 0 on success, else the error to raise
+ * (VMerror). May move the memory file: any held pointer into @p mem is
+ * stale after a successful call. Strings deliberately never call this
+ * (PLRM 3.7.3 exempts string contents from restore).
+ */
+static inline int xpost_save_cow(Xpost_Memory_File *mem,
+                                 unsigned int tag,
+                                 unsigned int pad,
+                                 unsigned int ent)
+{
+    if (!xpost_save_ent_is_saved(mem, ent))
+        if (!xpost_save_save_ent(mem, tag, pad, ent))
+            return VMerror;
+    return 0;
+}
 
 /* A saverec records two entity numbers, src and cpy. An entity number
    can exceed the 16-bit `word` that saverec_.src / saverec_.cpy provide

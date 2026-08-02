@@ -301,9 +301,8 @@ _path_append(Xpost_Context *ctx, Xpost_Object gstate, Xpost_Object *pathp,
        save_save_ent may move the memory file, so *pathp's pointer is
        derived afterwards. */
     pent = xpost_object_get_ent(*pathp);
-    if (!xpost_save_ent_is_saved(ctx->lo, pent))
-        if (!xpost_save_save_ent(ctx->lo, stringtype, 0, pent))
-            return VMerror;
+    if (xpost_save_cow(ctx->lo, stringtype, 0, pent))
+        return VMerror;
 
     p = xpost_string_get_pointer(ctx, *pathp);
     used = _path_get_u32(p, 0);
@@ -1313,9 +1312,8 @@ int _retagclose(Xpost_Context *ctx)
        as _path_append does (see the note there) */
     {
         unsigned int pent = xpost_object_get_ent(path);
-        if (!xpost_save_ent_is_saved(ctx->lo, pent))
-            if (!xpost_save_save_ent(ctx->lo, stringtype, 0, pent))
-                return VMerror;
+        if (xpost_save_cow(ctx->lo, stringtype, 0, pent))
+            return VMerror;
     }
     p = xpost_string_get_pointer(ctx, path);
     used = _path_get_u32(p, 0);

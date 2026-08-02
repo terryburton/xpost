@@ -159,9 +159,9 @@ int xpost_array_put_memory(Xpost_Memory_File *mem,
                            Xpost_Object o)
 {
     int ret;
-    if (!xpost_save_ent_is_saved(mem, xpost_object_get_ent(a)))
-        if (!xpost_save_save_ent(mem, arraytype, a.comp_.sz, xpost_object_get_ent(a)))
-            return VMerror;
+    ret = xpost_save_cow(mem, arraytype, a.comp_.sz, xpost_object_get_ent(a));
+    if (ret)
+        return ret;
     if (i >= a.comp_.sz)
     {
         XPOST_LOG_ERR("cannot put value in array (rangecheck) %u >= [%u]", i, a.comp_.sz);

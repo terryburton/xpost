@@ -228,6 +228,31 @@ xpost_ent_ptr_checked(Xpost_Memory_File *mem, unsigned int ent)
     return xpost_ent_ptr(mem, ent);
 }
 
+/**
+ * @brief exchange the storage identity of two entities.
+ *
+ * An ent's (adr, sz, used) travel together: a composite that GREW under
+ * a save (growth reallocates and swaps in a larger allocation) otherwise
+ * keeps its grown sz while pointing at the smaller backup, its byte range
+ * overrunning the entities that follow. Every identity exchange -- the
+ * restore revert and dictionary growth alike -- goes through here so the
+ * triple can never be swapped piecemeal again.
+ */
+static inline void
+xpost_ent_swap(Xpost_Memory_File *mem, unsigned int a, unsigned int b)
+{
+    unsigned int hold;
+    hold = mem->table.tab[a].adr;
+           mem->table.tab[a].adr = mem->table.tab[b].adr;
+                                   mem->table.tab[b].adr = hold;
+    hold = mem->table.tab[a].sz;
+           mem->table.tab[a].sz = mem->table.tab[b].sz;
+                                  mem->table.tab[b].sz = hold;
+    hold = mem->table.tab[a].used;
+           mem->table.tab[a].used = mem->table.tab[b].used;
+                                    mem->table.tab[b].used = hold;
+}
+
 /*
  *
  * Variables

@@ -150,8 +150,7 @@ int _xmat2psmat(Xpost_Context *ctx,
        xpost_array_put does per element. Without this a matrix modified inside a
        save -- the CTM, under scale/concat/rotate -- is not reverted by the
        matching restore, so a transform set inside a save leaks past it. */
-    if (!xpost_save_ent_is_saved(mem, ent))
-        xpost_save_save_ent(mem, arraytype, psm.comp_.sz, ent);
+    (void)xpost_save_cow(mem, arraytype, psm.comp_.sz, ent);
     xpost_memory_put(mem, ent, 0, sizeof arr, arr);
     return 0;
 }

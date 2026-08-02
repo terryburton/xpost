@@ -402,28 +402,12 @@ int dicgrow(Xpost_Context *ctx,
 #endif
 
     {   /* exchange entities */
-        Xpost_Memory_Table *tab = &mem->table;
         unsigned int dent, nent;
-        unsigned int hold;
 
         dent = xpost_object_get_ent(d);
         nent = xpost_object_get_ent(n);
 
-        /* exchange the whole storage identity, as restore's swap does: an
-           ent's (adr, sz, used) travel together, and a swap that leaves
-           `used` behind gives each ent a byte count belonging to the
-           other's allocation */
-        hold = tab->tab[dent].adr;
-               tab->tab[dent].adr = tab->tab[nent].adr;
-                                    tab->tab[nent].adr = hold;
-
-        hold = tab->tab[dent].sz;
-               tab->tab[dent].sz = tab->tab[nent].sz;
-                                   tab->tab[nent].sz = hold;
-
-        hold = tab->tab[dent].used;
-               tab->tab[dent].used = tab->tab[nent].used;
-                                     tab->tab[nent].used = hold;
+        xpost_ent_swap(mem, dent, nent);
 
 #if 0
         if (xpost_free_memory_ent(mem, nent) < 0)
@@ -756,9 +740,9 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
     if (xpost_object_get_type(k) == invalidtype)
         return VMerror;
 
-    if (!xpost_save_ent_is_saved(mem, xpost_object_get_ent(d)))
-        if (!xpost_save_save_ent(mem, dicttype, 0, xpost_object_get_ent(d)))
-            return VMerror;
+    ret = xpost_save_cow(mem, dicttype, 0, xpost_object_get_ent(d));
+    if (ret)
+        return ret;
 
     r = diclookup(ctx, mem, d, k);
 
@@ -866,12 +850,13 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
     unsigned int hashnull;
     unsigned int i;
     unsigned int j;
+    int ret;
 
     ++ctx->namebind_gen;
 
-    if (!xpost_save_ent_is_saved(mem, xpost_object_get_ent(d)))
-        if (!xpost_save_save_ent(mem, dicttype, 0, xpost_object_get_ent(d)))
-            return VMerror;
+    ret = xpost_save_cow(mem, dicttype, 0, xpost_object_get_ent(d));
+    if (ret)
+        return ret;
 
     k = clean_key(ctx, k); /* may allocate: derive pointers after */
     if (xpost_object_get_type(k) == invalidtype)
