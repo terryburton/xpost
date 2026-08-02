@@ -399,7 +399,7 @@ static
 int Rlog(Xpost_Context *ctx,
          Xpost_Object x)
 {
-    xpost_stack_push(ctx->lo, ctx->es, xpost_real_cons((real)log10(x.real_.val)));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)log10(x.real_.val)));
     return 0;
 }
 
@@ -413,7 +413,7 @@ int Zrand(Xpost_Context *ctx)
     x = ctx->rand_next << 16;
     ctx->rand_next = ctx->rand_next * 1103515245 + 12345;
     x |= ctx->rand_next & 0xffff;
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons(x & 0x7fffffff)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x & 0x7fffffff)))
         return stackoverflow;
     return 0;
 }
@@ -433,7 +433,7 @@ int Isrand(Xpost_Context *ctx,
 static
 int Zrrand(Xpost_Context *ctx)
 {
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons(ctx->rand_next)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->rand_next)))
         return stackoverflow;
     return 0;
 }

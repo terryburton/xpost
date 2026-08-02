@@ -78,4 +78,21 @@
 % --- integer add overflowing to real (value; representation is impl-defined) ---
 2000000000 2000000000 add 4.0e9 (int add overflow -> real) assertnear
 
+% --- results land on the operand stack in the same interpreter cycle ---
+% A result misrouted to the exec stack only reaches the operand stack a cycle
+% later, so an operator immediately following in the same procedure underflows.
+% proc  immediateok  bool -- true iff proc runs without error and leaves
+% exactly one true on the operand stack
+/immediateok {
+    mark exch stopped
+    { cleartomark false }
+    { counttomark 1 eq { true eq exch pop }{ cleartomark false } ifelse } ifelse
+} def
+
+{ 100 log 2 mul 4.0 eq } immediateok (log result is consumable in its own procedure) assert
+{ 100.0 log 2 mul 4.0 eq } immediateok (log of a real is consumable in its own procedure) assert
+{ rand type /integertype eq } immediateok (rand result is consumable in its own procedure) assert
+{ rand 0 ge } immediateok (rand yields a nonnegative integer) assert
+{ 42 srand rrand 42 eq } immediateok (rrand result is consumable in its own procedure) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
