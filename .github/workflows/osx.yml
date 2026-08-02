@@ -9,6 +9,10 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        object: [small, large]
+    name: osx - ${{ matrix.object }}-object
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
@@ -16,7 +20,7 @@ jobs:
       run: |
         brew install meson ninja fontconfig freetype libpng jpeg-turbo xcb-util xcb-util-image xcb-util-wm
     - name: configure
-      run: meson setup builddir
+      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: make
       run: ninja -C builddir
     - name: meson test
