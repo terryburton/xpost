@@ -989,7 +989,9 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
     else
     {
         /* iteration is complete and the reference has already been popped:
-           release the matched paths and the container filenameforall allocated */
+           drop the sentinel the loop frame keeps beneath the continuation,
+           then release the matched paths and their container */
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
         xpost_glob_free(globbuf);
         free(globbuf);
     }
@@ -1027,9 +1029,21 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     oglob.glob_.off = 0;
     oglob.glob_.ptr = globbuf;
 
-    xpost_op_contfilenameforall(ctx, oglob, Proc, xpost_object_cvlit(Scr));
+    /* loop frame: the sentinel loop operator (which exit searches for)
+       stays beneath the per-iteration continuation until iteration
+       completes or exit finds it */
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.filenameforall)))
+    {
+        xpost_glob_free(globbuf);
+        free(globbuf);
+        free(tmpbuf);
+        return execstackoverflow;
+    }
+
+    ret = xpost_op_contfilenameforall(ctx, oglob, Proc, xpost_object_cvlit(Scr));
     free(tmpbuf);
-    return 0;
+    return ret;
 }
 
 //#endif
@@ -1687,6 +1701,7 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "contfilenameforall", (Xpost_Op_Func)xpost_op_contfilenameforall, 0, 3, globtype, proctype, stringtype);
     ctx->opcode_shortcuts.contfilenameforall = op.mark_.padw;
     op = xpost_operator_cons(ctx, "filenameforall", (Xpost_Op_Func)xpost_op_filenameforall, 0, 3, stringtype, proctype, stringtype);
+    ctx->opcode_shortcuts.filenameforall = op.mark_.padw;
     INSTALL;
 //#endif
     op = xpost_operator_cons(ctx, "setfileposition", (Xpost_Op_Func)xpost_op_setfileposition, 0, 2, filetype, integertype);

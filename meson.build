@@ -404,6 +404,14 @@ test('op-control',
   args: [ xpost_exe, files('tests/op_control_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# exit across every PLRM looping context, including filenameforall, whose loop
+# frame must carry the sentinel exit searches for so an exit inside its
+# procedure ends that loop (and only that loop) and releases the glob results.
+test('loop-exit',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/loop_exit_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Matrix/coordinate and graphics-state operators (PLRM 8.2): a bad-length matrix
 # is rangecheck (was an out-of-bounds read), setlinecap/join outside 0..2 and
 # setmiterlimit below 1 are rangecheck, and rotate uses full-precision degrees.

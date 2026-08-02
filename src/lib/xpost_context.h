@@ -61,6 +61,7 @@ struct _Xpost_Context {
     struct
     {
         int contfilenameforall;
+        int filenameforall;
         int cvx;
         int opfor;
         int forall;

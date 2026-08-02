@@ -1,0 +1,74 @@
+% exit must terminate every PLRM looping context -- for (integer and real),
+% repeat, loop, forall over array/dict/string, and filenameforall -- and must
+% unwind only the innermost loop. Run through `xpost -q --no-sandbox -d null`
+% by run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% filenameforall is the load-bearing case: its loop frame historically lacked
+% the sentinel that exit searches the exec stack for, so an exit inside its
+% procedure fell through the frame into any enclosing loop (or underflowed
+% the exec stack), and the glob results leaked.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+% --- exit terminates each simple looping context ---
+/n 0 def
+0 1 9 { pop /n n 1 add def n 3 eq { exit } if } for
+n 3 eq (exit terminates integer for) assert
+
+/n 0 def
+0.0 0.5 9.0 { pop /n n 1 add def n 4 eq { exit } if } for
+n 4 eq (exit terminates real for) assert
+
+/n 0 def
+10 { /n n 1 add def n 2 eq { exit } if } repeat
+n 2 eq (exit terminates repeat) assert
+
+/n 0 def
+{ /n n 1 add def n 2 eq { exit } if } loop
+n 2 eq (exit terminates loop) assert
+
+/n 0 def
+[ 1 2 3 4 ] { pop /n n 1 add def n 2 eq { exit } if } forall
+n 2 eq (exit terminates array forall) assert
+
+/n 0 def
+<< /a 1 /b 2 /c 3 >> { pop pop /n n 1 add def exit } forall
+n 1 eq (exit terminates dict forall) assert
+
+/n 0 def
+(abcd) { pop /n n 1 add def n 2 eq { exit } if } forall
+n 2 eq (exit terminates string forall) assert
+
+% --- exit unwinds only the innermost loop ---
+/inner 0 def /outer 0 def
+3 { /outer outer 1 add def [ 1 2 3 ] { pop /inner inner 1 add def exit } forall } repeat
+outer 3 eq inner 3 eq and (exit stops only the innermost loop) assert
+
+% --- filenameforall ---
+% create two files the template is guaranteed to match
+(t_loopexit_a.tmp) (w) file closefile
+(t_loopexit_b.tmp) (w) file closefile
+
+% normal completion visits every match
+/n 0 def
+(t_loopexit_*.tmp) { pop /n n 1 add def } 128 string filenameforall
+n 2 eq (filenameforall visits every match) assert
+
+% exit terminates filenameforall after the first match
+/n 0 def
+(t_loopexit_*.tmp) { pop /n n 1 add def exit } 128 string filenameforall
+n 1 eq (exit terminates filenameforall) assert
+
+% and unwinds only the filenameforall frame, not the enclosing loop
+/outer 0 def
+3 { /outer outer 1 add def (t_loopexit_*.tmp) { pop exit } 128 string filenameforall } repeat
+outer 3 eq (exit from filenameforall spares the enclosing loop) assert
+
+% the operand stack is left balanced by all of the above
+count 0 eq (operand stack is balanced after the loop-exit tests) assert
+
+(t_loopexit_a.tmp) deletefile
+(t_loopexit_b.tmp) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

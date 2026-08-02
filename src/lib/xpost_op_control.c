@@ -51,6 +51,7 @@
 #include "xpost_string.h"
 #include "xpost_array.h"
 #include "xpost_dict.h"
+#include "xpost_compat.h" /* glob_t: filenameforall state freed when unwound */
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
@@ -395,6 +396,7 @@ int xpost_op_exit (Xpost_Context *ctx)
     Xpost_Object oploop = xpost_operator_cons_opcode(ctx->opcode_shortcuts.loop);
     //Xpost_Object opforall = xpost_operator_cons(ctx, "forall", NULL,0,0);
     Xpost_Object opforall = xpost_operator_cons_opcode(ctx->opcode_shortcuts.forall);
+    Xpost_Object opfilenameforall = xpost_operator_cons_opcode(ctx->opcode_shortcuts.filenameforall);
     Xpost_Object x;
 
 #if 0
@@ -414,10 +416,20 @@ int xpost_op_exit (Xpost_Context *ctx)
         if (xpost_object_get_type(x) == invalidtype)
             return execstackunderflow;
         //xpost_object_dump(x);
+        if (xpost_object_get_type(x) == globtype)
+        {
+            /* filenameforall state unwinding with its frame: the matched
+               paths are malloc'd, not in VM, so free them here or never */
+            glob_t *globbuf = x.glob_.ptr;
+            xpost_glob_free(globbuf);
+            free(globbuf);
+            continue;
+        }
         if ((xpost_dict_compare_objects(ctx, x, opfor)    == 0) ||
             (xpost_dict_compare_objects(ctx, x, oprepeat) == 0) ||
             (xpost_dict_compare_objects(ctx, x, oploop)   == 0) ||
-            (xpost_dict_compare_objects(ctx, x, opforall) == 0))
+            (xpost_dict_compare_objects(ctx, x, opforall) == 0) ||
+            (xpost_dict_compare_objects(ctx, x, opfilenameforall) == 0))
         {
             break;
         }
@@ -500,6 +512,15 @@ int xpost_op_stop(Xpost_Context *ctx)
         x = xpost_stack_pop(ctx->lo, ctx->es);
         if (xpost_object_get_type(x) == invalidtype)
             break;
+        if (xpost_object_get_type(x) == globtype)
+        {
+            /* a filenameforall frame unwinding with the stopped context:
+               free its malloc'd glob results as exit does */
+            glob_t *globbuf = x.glob_.ptr;
+            xpost_glob_free(globbuf);
+            free(globbuf);
+            continue;
+        }
         if(xpost_dict_compare_objects(ctx, f, x) == 0) {
             if (!xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1)))
                 return stackoverflow;
