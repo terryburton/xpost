@@ -500,6 +500,14 @@ test('interrupt',
   args: [ xpost_exe, files('tests/interrupt_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Composite-size limits: the small-object build holds Appendix B.1's 65,535
+# ceiling with limitcheck; the large-object build carries composites to
+# memory. The test probes the build and holds it to its own contract.
+test('large-object',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/large_object_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
 # is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
 test('scanner-eof',

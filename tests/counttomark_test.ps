@@ -41,19 +41,27 @@ dup /c get 3 eq (dict build c) assert
 length 3 eq (dict build length) assert
 << >> length 0 eq (empty dict build length) assert
 
-% --- construction past the 65535 composite-size cap raises a clean limitcheck ---
-% The array `[ ]` and dict `<< >>` constructors must reject an over-cap length
-% the same way the array/dict operators do -- with a single limitcheck -- rather
-% than let array_cons/dict_cons truncate the 16-bit size and then fault putting
-% each discarded element (a rangecheck error storm).
-{ [ 65536 { 0 } repeat ] } stopped
-    { $error /errorname get /limitcheck eq (array over cap -> limitcheck) assert }
-    { false (array over cap should raise limitcheck) assert } ifelse
-clear
-{ << 32768 { /k 0 } repeat >> } stopped   % 32768 pairs = 65536 objects
-    { $error /errorname get /limitcheck eq (dict over cap -> limitcheck) assert }
-    { false (dict over cap should raise limitcheck) assert } ifelse
-clear
+% --- construction across the composite-size cap ---
+% The small-object build caps composites at 65,535 elements: the array `[ ]`
+% and dict `<< >>` constructors must reject an over-cap length the same way
+% the array/dict operators do -- with a single limitcheck -- rather than let
+% array_cons/dict_cons truncate the 16-bit size and then fault putting each
+% discarded element (a rangecheck error storm). The large-object build
+% carries the same construction through whole.
+/widesz { 70000 array pop true } stopped { pop false } if def
+widesz {
+    [ 65536 { 0 } repeat ] length 65536 eq (array across the narrow cap builds) assert
+    << 32768 { /k 0 } repeat >> length 1 ge (dict across the narrow cap builds) assert
+}{
+    { [ 65536 { 0 } repeat ] } stopped
+        { $error /errorname get /limitcheck eq (array over cap -> limitcheck) assert }
+        { false (array over cap should raise limitcheck) assert } ifelse
+    clear
+    { << 32768 { /k 0 } repeat >> } stopped   % 32768 pairs = 65536 objects
+        { $error /errorname get /limitcheck eq (dict over cap -> limitcheck) assert }
+        { false (dict over cap should raise limitcheck) assert } ifelse
+    clear
+} ifelse
 [ 65535 { 0 } repeat ] length 65535 eq (array at the cap still builds) assert
 
 % --- a count that spans several 1000-element stack segments ---
