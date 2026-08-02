@@ -134,32 +134,9 @@ Xpost_Object xpost_real_cons (real r)
    Type and Tag Manipulation
 */
 
-int xpost_object_is_composite (Xpost_Object obj)
-{
-    switch (xpost_object_get_type(obj))
-    {
-        case stringtype: /*@fallthrough@*/
-        case arraytype: /*@fallthrough@*/
-        case dicttype:
-            return 1;
-        default: break;
-    }
-    return 0;
-}
+/* moved to xpost_object.h as a static inline accessor */
 
-int xpost_object_get_ent(Xpost_Object obj)
-{
-    if (!xpost_object_is_composite(obj))
-        return -1;
-    /* a word of unsigned int width (or wider) holds the entity whole;
-       the tag lends bits only to a narrower ent field, and the shift
-       counts stay below the operand width either way */
-    if (sizeof(word) >= sizeof(unsigned int))
-        return (int)obj.comp_.ent;
-    return (unsigned int)obj.comp_.ent +
-        ((obj.comp_.tag >> XPOST_OBJECT_TAG_DATA_EXTRA_BITS)
-         << ((8*sizeof(word)) % (8*sizeof(unsigned int))));
-}
+/* moved to xpost_object.h as a static inline accessor */
 
 Xpost_Object xpost_object_set_ent(Xpost_Object obj,
                                   unsigned int ent)
@@ -202,15 +179,9 @@ Xpost_Object xpost_object_get_interval(Xpost_Object a,
     return a;
 }
 
-int xpost_object_is_exe(Xpost_Object obj)
-{
-    return !(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_LIT);
-}
+/* moved to xpost_object.h as a static inline accessor */
 
-int xpost_object_is_lit(Xpost_Object obj)
-{
-    return !!(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_LIT);
-}
+/* moved to xpost_object.h as a static inline accessor */
 
 int xpost_object_is_packed(Xpost_Object obj)
 {
@@ -308,19 +279,9 @@ int xpost_object_is_writeable (Xpost_Context *ctx, Xpost_Object obj)
     }
 }
 
-Xpost_Object xpost_object_cvx (Xpost_Object obj)
-{
-    obj.tag &= ~ XPOST_OBJECT_TAG_DATA_FLAG_LIT;
+/* moved to xpost_object.h as a static inline accessor */
 
-    return obj;
-}
-
-Xpost_Object xpost_object_cvlit (Xpost_Object obj)
-{
-    obj.tag |= XPOST_OBJECT_TAG_DATA_FLAG_LIT;
-
-    return obj;
-}
+/* moved to xpost_object.h as a static inline accessor */
 
 /**
  * @cond LOCAL

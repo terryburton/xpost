@@ -493,7 +493,18 @@ static inline Xpost_Object_Type xpost_object_get_type(Xpost_Object obj)
  * This function returns 1 if the object @p obj is one of the composite
  * types (arraytype, stringtype, or dicttype), 0 otherwise.
  */
-int xpost_object_is_composite(Xpost_Object obj);
+static inline int xpost_object_is_composite(Xpost_Object obj)
+{
+    switch (xpost_object_get_type(obj))
+    {
+        case stringtype: /*@fallthrough@*/
+        case arraytype: /*@fallthrough@*/
+        case dicttype:
+            return 1;
+        default: break;
+    }
+    return 0;
+}
 
 /**
  * @brief Yield the ent number (memory table index)
@@ -502,7 +513,19 @@ int xpost_object_is_composite(Xpost_Object obj);
  *
  * filetype objects bypass these functions and use the dword field .mark_.padw
  */
-int xpost_object_get_ent(Xpost_Object obj);
+static inline int xpost_object_get_ent(Xpost_Object obj)
+{
+    if (!xpost_object_is_composite(obj))
+        return -1;
+    /* a word of unsigned int width (or wider) holds the entity whole;
+       the tag lends bits only to a narrower ent field, and the shift
+       counts stay below the operand width either way */
+    if (sizeof(word) >= sizeof(unsigned int))
+        return (int)obj.comp_.ent;
+    return (unsigned int)obj.comp_.ent +
+        ((obj.comp_.tag >> XPOST_OBJECT_TAG_DATA_EXTRA_BITS)
+         << ((8*sizeof(word)) % (8*sizeof(unsigned int))));
+}
 
 /**
  * @brief set the ent number in the object.
@@ -530,7 +553,10 @@ Xpost_Object xpost_object_get_interval(Xpost_Object a,
  * a logical NOT. Ie. executable means NOT having the
  * #XPOST_OBJECT_TAG_DATA_FLAG_LIT flag set.
  */
-int xpost_object_is_exe(Xpost_Object obj);
+static inline int xpost_object_is_exe(Xpost_Object obj)
+{
+    return !(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_LIT);
+}
 
 /**
  * @brief Determine whether the object is literal or not.
@@ -544,7 +570,10 @@ int xpost_object_is_exe(Xpost_Object obj);
  * Masks the #XPOST_OBJECT_TAG_DATA_FLAG_LIT with the tag and performs
  * a double-NOT to normalize the value to the range [0..1].
  */
-int xpost_object_is_lit(Xpost_Object obj);
+static inline int xpost_object_is_lit(Xpost_Object obj)
+{
+    return !!(obj.tag & XPOST_OBJECT_TAG_DATA_FLAG_LIT);
+}
 
 /**
  * @brief Determine whether the array was produced by array packing.
@@ -659,7 +688,12 @@ int xpost_object_is_writeable(Xpost_Context *ctx, Xpost_Object obj);
  * cvx is the name of the Postscript operator which performs
  * this function.
  */
-Xpost_Object xpost_object_cvx(Xpost_Object obj);
+static inline Xpost_Object xpost_object_cvx(Xpost_Object obj)
+{
+    obj.tag &= ~ XPOST_OBJECT_TAG_DATA_FLAG_LIT;
+
+    return obj;
+}
 
 /**
  * @brief Convert object to literal.
@@ -671,7 +705,12 @@ Xpost_Object xpost_object_cvx(Xpost_Object obj);
  * cvlit is the name of the Postscript operator which performs
  * this function.
  */
-Xpost_Object xpost_object_cvlit(Xpost_Object obj);
+static inline Xpost_Object xpost_object_cvlit(Xpost_Object obj)
+{
+    obj.tag |= XPOST_OBJECT_TAG_DATA_FLAG_LIT;
+
+    return obj;
+}
 
 
 /*
