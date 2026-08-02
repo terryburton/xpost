@@ -85,7 +85,7 @@ int xpost_op_int_array (Xpost_Context *ctx,
 
     if (I.int_.val < 0)
         return rangecheck;
-    if (I.int_.val > 65535) /* sz field is 16 bits; PLRM minimum limit */
+    if (I.int_.val > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full */
         return limitcheck;
 
     t = xpost_array_cons(ctx, I.int_.val);
@@ -114,7 +114,7 @@ int xpost_op_array_to_mark (Xpost_Context *ctx)
     if (xpost_object_get_type(t) == invalidtype)
         return stackunderflow;
     i = t.int_.val;
-    if (i > 65535) /* sz field is 16 bits, as the array operator enforces:
+    if (i > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full, as the array operator enforces:
                       raise limitcheck rather than let array_cons truncate the
                       length and then fault putting the discarded elements */
         return limitcheck;

@@ -65,7 +65,7 @@ int packedarray(Xpost_Context *ctx,
 
     if (n.int_.val < 0)
         return rangecheck;
-    if (n.int_.val > 65535) /* sz field is 16 bits; PLRM minimum limit */
+    if (n.int_.val > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full */
         return limitcheck;
 
     a = xpost_array_cons(ctx, n.int_.val);
