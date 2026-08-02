@@ -394,6 +394,13 @@ int grok(Xpost_Context *ctx,
                     }
                     else *sp++ = c;
                 }
+                if (defer)
+                {
+                    /* the closing parenthesis never arrived: an
+                       unterminated string literal is not a token */
+                    XPOST_LOG_ERR("end of input inside a string literal");
+                    return syntaxerror;
+                }
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
                     return VMerror;
@@ -493,6 +500,12 @@ int grok(Xpost_Context *ctx,
                         for (k = 0; k < nbytes; k++)
                             *sp++ = (tuple >> (24 - 8 * k)) & 0xff;
                     }
+                    if (c == EOF)
+                    {
+                        /* the ~> terminator never arrived */
+                        XPOST_LOG_ERR("end of input inside a base-85 string literal");
+                        return syntaxerror;
+                    }
                     obj = xpost_string_cons(ctx, sp - s, s);
                     if (xpost_object_get_type(obj) == nulltype)
                         return VMerror;
@@ -532,6 +545,12 @@ int grok(Xpost_Context *ctx,
                         return limitcheck;
                     }
                     *sp++ = d;
+                }
+                if (c == EOF)
+                {
+                    /* the > terminator never arrived */
+                    XPOST_LOG_ERR("end of input inside a hex string literal");
+                    return syntaxerror;
                 }
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
