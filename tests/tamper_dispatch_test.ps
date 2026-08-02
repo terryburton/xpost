@@ -77,4 +77,72 @@ found null ne {
 } if
 nbad 0 eq (no internal dispatch dictionary stores an executable name) assert
 
+% --- the nested-table bound-ness sweep: a procedure stored inside a NESTED
+%     dispatch dictionary (a table within a table, like the per-space entries
+%     of ColorConversion) must not carry an executable name that resolves to
+%     a standard operator. The lockdown's .bindscope descends recursively, so
+%     these are frozen structurally; a regression to fixed-depth descent, or
+%     a new nested table added without a per-procedure bind, resurfaces here.
+%     Top-level machinery procedures are exempt: many were bound while the
+%     graphics operators were still procedure-valued (before wrapped-operator
+%     promotion), where bind leaves the reference dynamic by design. The
+%     wrapped operators themselves (recorded in graphicsdict /.wrappedprocs)
+%     are exempt everywhere for the same reason: they were procedures
+%     whenever binding ran, so their dynamic dispatch is the design, and the
+%     procedures carrying them are read-only now. ---
+/wrapped
+  .privatedict /.graphicsdict get dup type /dicttype eq
+  { /.wrappedprocs 2 copy known { get }{ pop pop 0 dict } ifelse }
+  { pop 0 dict } ifelse
+def
+/nunbound 0 def
+/pscan { % proc label depth  -  (flag exec-name elements resolving to operators)
+  4 dict begin
+  /d exch def /label exch def /p exch cvlit def
+  p rcheck {
+    0 1 p length 1 sub {
+      p exch get
+      dup xcheck exch cvlit /v exch def /vx exch def
+      v type /nametype eq vx and {
+        systemdict v 2 copy known { get type /operatortype eq }{ pop pop false } ifelse
+        wrapped v known not and {
+          (  unbound operator reference: ) print label print ( -> ) print
+          v 128 string cvs print (\n) print
+          /nunbound nunbound 1 add store
+        } if
+      } if
+      v type /arraytype eq vx and d 0 gt and { v label d 1 sub pscan } if
+    } for
+  } if
+  end
+} def
+/bscan { % dict label depth inner  -   (inner: procs of this dict are scanned)
+  5 dict begin
+  /inner exch def /d exch def /label exch def /dct exch cvlit def
+  { dct {
+      exch pop
+      dup xcheck exch cvlit /v exch def /vx exch def
+      v type /arraytype eq vx and inner and { v label 6 pscan } if
+      v type /dicttype eq d 0 gt and { v label d 1 sub true bscan } if
+  } forall } stopped { pop pop } if
+  end
+} def
+
+% the scanner must catch a planted unbound reference before its zero counts
+% (the plant is assembled at run time: a source-literal procedure here would
+% carry this test file's own unbound tokens and inflate the count)
+/nunbound 0 def
+<< /table << /planted [ /add cvx ] cvx >> >> (selftest) 2 false bscan
+nunbound 1 eq (the bound-ness scanner flags a planted unbound reference) assert
+
+/nunbound 0 def
+found null ne { found (.xpostsys) 6 false bscan } if
+1183615869 internaldict (.internaldict) 6 false bscan
+.gscratch (.gscratch) 6 false bscan
+found null ne {
+    .privatedict /.graphicsdict get dup type /dicttype eq
+        { (graphicsdict) 6 false bscan }{ pop } ifelse
+} if
+nunbound 0 eq (no nested dispatch table carries an unbound operator reference) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

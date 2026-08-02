@@ -23,6 +23,9 @@
 .gscratch /.stencilcache
 .privatedict /.xpost
 .xpostsys /arcbez
+.xpostsys /.bindone
+.xpostsys /.bindscope
+.xpostsys /.bindscoped
 .xpostsys /.c01
 .xpostsys /.c255
 .xpostsys /.clipspans

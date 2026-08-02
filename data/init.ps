@@ -190,6 +190,39 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% The bind sweep the module loaders and the lockdown share. .bindone freezes
+% one value: bind substitutes an operator wherever a name in a procedure
+% currently resolves to one, so a program's later redefinition governs what
+% the program calls, never what the machinery calls; names holding procedures
+% or dictionaries stay dynamic, and non-procedures pass through untouched.
+% .bindscope descends nested dictionaries recursively, so a dispatch table
+% inside a dispatch table is covered structurally rather than by a remembered
+% per-procedure bind at its definition; the depth cap bounds the sweep on any
+% cyclic dictionary graph. Init-time helpers only -- nothing calls them while
+% a program runs.
+currentglobal true setglobal
+.xpostsys /.bindone { % value  .  -
+    dup type /arraytype eq 1 index xcheck and { bind } if pop
+} bind put
+.xpostsys /.bindscoped { % dict depth  .  -
+    exch {
+        exch pop
+        dup type /dicttype eq {
+            1 index 0 gt
+            { 1 index 1 sub //.xpostsys /.bindscoped get exec }
+            { pop }
+            ifelse
+        }{
+            //.xpostsys /.bindone get exec
+        } ifelse
+    } forall
+    pop
+} bind put
+.xpostsys /.bindscope { % dict  .  -
+    8 //.xpostsys /.bindscoped get exec
+} bind put
+setglobal
+
 %% predefined in xpost_interpreter.c:setlocalconfig()
 %%
 %/DATA_DIR 
@@ -1342,44 +1375,30 @@ currentglobal true setglobal
         % relocated into it; the matching relock below closes it.
         .sysdictunlock
     % With the standard operators now operator-typed, freeze the
-    % machinery's own references to them: bind substitutes an
-    % operator wherever a name in a loaded procedure currently
-    % resolves to one, so a program's later redefinition governs
-    % what the program calls, never what the machinery calls.
-    % Names holding procedures or dictionaries stay dynamic -- bind
-    % passes them by. One level of dictionary descent reaches the
-    % procedure tables: the wrapped implementations, the device
-    % makers, the graphics state template, the error handlers.
-    /.bindone { % value  .bindone  -
-        dup type /arraytype eq 1 index xcheck and { bind } if pop
-    } def
-    /.bindscope { % dict  .bindscope  -
-        dup { exch pop .bindone } forall
-        { exch pop
-            dup type /dicttype eq {
-                { exch pop .bindone } forall
-            }{ pop } ifelse
-        } forall
-    } def
-    systemdict .bindscope
-    userdict .bindscope
+    % machinery's own references to them with the shared recursive
+    % sweep: every procedure table it can reach through nested
+    % dictionaries -- the wrapped implementations, the device makers,
+    % the graphics state template, the error handlers, and any table
+    % inside a table -- has its operator references resolved now.
+    systemdict //.xpostsys /.bindscope get exec
+    userdict //.xpostsys /.bindscope get exec
     % graphicsdict exists only once graphics has loaded; without it there is
     % nothing to bind and this step is simply skipped
-    /graphicsdict where { pop graphicsdict .bindscope } if
-    errordict .bindscope
+    /graphicsdict where { pop graphicsdict //.xpostsys /.bindscope get exec } if
+    errordict //.xpostsys /.bindscope get exec
     % the private helper namespace too, so a helper's own operator references
     % (the get and exec of //.xpostsys /h get exec, and everything else) freeze
     % and survive a program shadowing an operator name
-    .xpostsys .bindscope
+    .xpostsys //.xpostsys /.bindscope get exec
     % the mutable scratch holds procedure tables too (the stroke switch
     % handlers live inside strokedict); bind them so they survive a program
     % shadowing the operator names they call
-    .gscratch .bindscope
+    .gscratch //.xpostsys /.bindscope get exec
     % privatedict holds machinery procedures too -- the gstate-template accessor,
     % the device class methods -- so bind them against a shadowed operator name
     % the same way. The anchor procedures moved here below were bound in userdict
     % before the move, so they carry their frozen references with them.
-    .privatedict .bindscope
+    .privatedict //.xpostsys /.bindscope get exec
 
     % Move the standard operators from userdict into the unlocked systemdict,
     % leaving userdict for the program. Only global operator-valued names move;
@@ -1459,8 +1478,6 @@ currentglobal true setglobal
     .internaldict /GRAPHICS_LOADED true put
     .internaldict /USEDRAWLINE true put
     .internaldict /.sysdictrelock get exec
-    userdict /.bindone undef
-    userdict /.bindscope undef
 
     % Seal the private namespaces. They are fully populated now -- init and the
     % graphics modules have defined every helper, and the C operators have just
