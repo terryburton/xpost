@@ -13,12 +13,9 @@
 .internaldict /.sysdictrelock
 .internaldict /USEDRAWLINE
 .privatedict /DATA
-.privatedict /DIRSEP
 .privatedict /.error
-.privatedict /globalresourcedict
 .privatedict /.graphicsdict
 .privatedict /.gstatetemplate
-.privatedict /localresourcedict
 .privatedict /newnulldevice
 .privatedict /.xpost
 .xpostsys /arcbez
@@ -47,6 +44,7 @@
 .xpostsys /.handlejoberror
 .xpostsys /hodgman
 .xpostsys /initial
+.xpostsys /.instof
 .xpostsys /loadgraphics
 .xpostsys /.loadmodule
 .xpostsys /magang
@@ -61,10 +59,12 @@
 .xpostsys /qsort
 .xpostsys /ravec
 .xpostsys /rect
+.xpostsys /.resources
 .xpostsys /reversedict
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.strcat
+.xpostsys /.wcmatch
 .xpostsys /xpost
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.

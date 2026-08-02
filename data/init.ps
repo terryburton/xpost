@@ -700,107 +700,9 @@ setglobal
 % (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
 
 
-% Named Resources
-true setglobal
-.privatedict /globalresourcedict <<
-    /Category <<
-        /Generic <<
-            /DefineResource { % key instance 
-            } % instance
-            /UndefineResource { }
-            /FindResource { }
-            /ResourceStatus { }
-            /ResourceForAll { }
-            %/Category name % <filled-in by DefineResource>
-            %/InstanceType typename % <optional>
-            %/ResourceFileName { } % <optional>
-        >>
-    >>
-    /ProcSet <<
-    >>
->> put
-
-false setglobal
-.privatedict /localresourcedict <<
-    /Encoding <<
-        /StandardEncoding [ ]
-        /ISOLatin1Encoding [ ]
-    >>
->> put
-true setglobal
-
-% key instance category  defineresource  instance
-/defineresource {
-    %1. obtain catdict, the implementation for the category
-    %2. catdict begin
-    %3.   DefineResource
-    %4. end
-
-    /Category findresource
-    begin
-        DefineResource
-    end
-
-    %userdict /resourcesdict get
-    %exch 2 copy known not {
-    %    2 copy 5 dict put
-    %} if
-    %get
-    %3 1 roll % d k i
-    %readonly 
-    %dup 4 1 roll % i d k i
-    %get
-} def
-
-.privatedict /DIRSEP (/) put
-
-% key category  findresource  instance
-/findresource {
-    dup /Category eq {
-        .privatedict /globalresourcedict get
-    }{
-    } ifelse
-} def
-
-    {
-    /findresource {
-        {   %attempt to load from dictionary
-            currentglobal { % global vm mode: only check globaldict
-                .privatedict /globalresourcedict get % k c d
-                1 index 2 copy known % k c d c b
-            }{ % local vm mode: check userdict and globaldict
-                .privatedict /localresourcedict get % k c d
-                1 index 2 copy known % k c d c b
-            } ifelse
-
-            userdict /resourcedict get % k c d
-            exch % k d c
-            dup 4 1 roll % c k d c
-            2 copy known not { % c k d c
-                2 copy 5 dict put
-            } if
-            get % c k category
-            exch % c cat k
-            2 copy known not {stop} if
-            get % c i
-            exch pop % i
-        } stopped {   %load from disk! % c cat k
-
-            2 index dup length string cvs % c cat k (category)
-            1 index dup length string cvx % c cat k (category) (key)
-            .privatedict /DATA_DIR get (/Resources) //.xpostsys /.strcat get exec
-            .privatedict /DIRSEP get 4 3 roll % c cat k (key) (Res)(/)(cat)
-            .privatedict /DIRSEP get 5 4 roll % c cat k (Res)(/)(cat)(/)(key)
-            (*) 6 ncat % c cat k (Res/cat/key*)
-            [ exch
-            {dup length string copy} 128 string filenameforall
-            ] % [list-of-potential-resources]
-            dup {gt} qsort % [sorted-list]
-            0 get % greatest-sorted-key-match
-            run
-        } if
-    } def
-    } pop
+% Named Resources: the Level 2 resource operators live in their own
+% data file
+(/resource.ps) //.xpostsys /.loadmodule get exec
 
 %traceon
 %debugloadon
@@ -1055,6 +957,7 @@ currentglobal true setglobal
           1 index /.lockdown ne and
           1 index /.permitfileread ne and
           1 index /.permitfilewrite ne and
+          1 index /.resourcefileopen ne and
           1 index /.gscratch ne and
           1 index /.privatedict ne and
         }{ false } ifelse
