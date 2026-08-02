@@ -538,12 +538,12 @@ int _fillrect(Xpost_Context *ctx,
     /* adjust ranges */
     if (width.int_.val < 0)
     {
-        width.int_.val = abs(width.int_.val);
+        width.int_.val = abs((int)(width.int_.val));
         x.int_.val -= width.int_.val;
     }
     if (height.int_.val < 0)
     {
-        height.int_.val = abs(height.int_.val);
+        height.int_.val = abs((int)(height.int_.val));
         y.int_.val -= height.int_.val;
     }
     if (x.int_.val < 0) x.int_.val = 0;
