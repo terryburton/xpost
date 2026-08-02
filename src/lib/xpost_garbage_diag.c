@@ -70,17 +70,12 @@ static void _verify_push(Xpost_Context *ctx, Xpost_Object o,
 static void _verify_stack(Xpost_Context *ctx, Xpost_Memory_File *mem,
                           unsigned int stackadr)
 {
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *s;
     unsigned int i;
-    for (;;)
-    {
+    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+         s = xpost_stack_next_segment(mem, s))
         for (i = 0; i < s->top; i++)
             _verify_push(ctx, s->data[i], 0xFFFFFFFF, 2);
-        if (s->top == XPOST_STACK_SEGMENT_SIZE && s->nextseg)
-            s = (Xpost_Stack *)(mem->base + s->nextseg);
-        else
-            break;
-    }
 }
 
 void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)

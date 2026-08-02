@@ -413,30 +413,22 @@ int _xpost_garbage_mark_names(Xpost_Context *ctx,
                               unsigned int stackadr,
                               int markall)
 {
-    int start = 1;
+    unsigned int start = 1; /* skip 0::BOGUSNAME */
+    Xpost_Stack *s;
+    unsigned int i;
     if (!mem) return 0;
 
-    {
-        Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
-        unsigned int i;
-
 #ifdef DEBUG_GC
-        printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-next:
+    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+         s = xpost_stack_next_segment(mem, s), start = 0)
+    {
         for (i = start; i < s->top; i++)
         {
             if (!_xpost_garbage_mark_object(ctx, mem, s->data[i], markall))
                 return 0;
-        }
-        if (i == XPOST_STACK_SEGMENT_SIZE) /* ie. s->top == XPOST_STACK_SEGMENT_SIZE */
-        {
-            if (s->nextseg == 0)
-                return 1; /* final segment exactly full: walk complete */
-            s = (Xpost_Stack *)(mem->base + s->nextseg);
-            start = 0;
-            goto next;
         }
     }
 
@@ -451,17 +443,17 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
                               unsigned int stackadr,
                               int markall)
 {
+    Xpost_Stack *s;
+    unsigned int i;
     if (!mem) return 0;
 
-    {
-        Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
-        unsigned int i;
-
 #ifdef DEBUG_GC
-        printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-next:
+    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+         s = xpost_stack_next_segment(mem, s))
+    {
         for (i = 0; i < s->top; i++)
         {
             Xpost_Memory_File *objmem;
@@ -469,13 +461,6 @@ next:
             if (objmem == mem || markall)
                 if (!_xpost_garbage_mark_object(ctx, objmem, s->data[i], markall))
                     return 0;
-        }
-        if (i == XPOST_STACK_SEGMENT_SIZE) /* ie. s->top == XPOST_STACK_SEGMENT_SIZE */
-        {
-            if (s->nextseg == 0)
-                return 1; /* final segment exactly full: walk complete */
-            s = (Xpost_Stack *)(mem->base + s->nextseg);
-            goto next;
         }
     }
 
@@ -491,7 +476,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
     if (!mem) return 0;
 
     {
-        Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+        Xpost_Stack *s;
         unsigned int i;
         unsigned int ad;
         int ret;
@@ -501,7 +486,9 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
         printf("marking saverec stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-next:
+    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+         s = xpost_stack_next_segment(mem, s))
+    {
         for (i = 0; i < s->top; i++)
         {
             /* saverec entity numbers may exceed a word; decode their full
@@ -568,13 +555,7 @@ next:
                     return 0;
             }
         }
-        if (i == XPOST_STACK_SEGMENT_SIZE) /* ie. s->top == XPOST_STACK_SEGMENT_SIZE */
-        {
-            if (s->nextseg == 0)
-                return 1; /* final segment exactly full: walk complete */
-            s = (Xpost_Stack *)(mem->base + s->nextseg);
-            goto next;
-        }
+    }
     }
 
     return 1;
@@ -586,29 +567,21 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
                              Xpost_Memory_File *mem,
                              unsigned int stackadr)
 {
+    Xpost_Stack *s;
+    unsigned int i;
     if (!mem) return 0;
-    {
-
-        Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
-        unsigned int i;
 
 #ifdef DEBUG_GC
-        printf("marking save stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking save stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-    next:
+    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+         s = xpost_stack_next_segment(mem, s))
+    {
         for (i = 0; i < s->top; i++)
         {
-            /* _xpost_garbage_mark_object(ctx, mem, s->data[i]); */
             if (!_xpost_garbage_mark_save_stack(ctx, mem, s->data[i].save_.stk))
                 return 0;
-        }
-        if (i == XPOST_STACK_SEGMENT_SIZE) /* ie. s->top == XPOST_STACK_SEGMENT_SIZE */
-        {
-            if (s->nextseg == 0)
-                return 1; /* final segment exactly full: walk complete */
-            s = (void *)(mem->base + s->nextseg);
-            goto next;
         }
     }
     return 1;

@@ -75,6 +75,26 @@ typedef struct
 } Xpost_Stack;
 
 /**
+ * @brief the next segment of a full walk, or NULL when the walk is done.
+ *
+ * The termination rule for walking a segmented stack, in one place: a
+ * segment shorter than full is the stack's top and ends the walk; an
+ * exactly-full segment continues into its successor if it has one. Walk
+ * a whole stack as
+ *     for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+ *          s = xpost_stack_next_segment(mem, s))
+ *         for (i = 0; i < s->top; i++) ... s->data[i] ...
+ * The usual caveat applies: an allocation in @p mem invalidates @p s.
+ */
+static inline Xpost_Stack *
+xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
+{
+    if (s->top == XPOST_STACK_SEGMENT_SIZE && s->nextseg)
+        return (Xpost_Stack *)(mem->base + s->nextseg);
+    return NULL;
+}
+
+/**
  * @brief Create a stack data structure, returns vm address in addr.
  */
 XPCHECKAPI int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
