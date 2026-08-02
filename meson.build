@@ -493,6 +493,13 @@ test('op-intoverflow',
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Unterminated string literals: end of input inside (...), <...> or <~...~>
+# is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
+test('scanner-eof',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/scanner_eof_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Radix number range (PLRM 3.2): unsigned twos-complement in the integer width,
 # limitcheck beyond it. Integer-width-specific, so xpost-only (see the file).
 test('op-radix',
