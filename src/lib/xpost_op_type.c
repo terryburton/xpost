@@ -511,11 +511,11 @@ int AScvs (Xpost_Context *ctx,
                the most negative integer does not exist */
             char *s = xpost_string_get_pointer(ctx, str);
             char t[24];
-            unsigned int u;
+            dword u;
             int neg = any.int_.val < 0;
             int len = 0;
 
-            u = neg ? -(unsigned int)any.int_.val : (unsigned int)any.int_.val;
+            u = neg ? -(dword)any.int_.val : (dword)any.int_.val;
             do { t[len++] = (char)(0x30 + u % 10); u /= 10; } while (u);
             n = neg + len;
             if (n > (int)str.comp_.sz)
