@@ -86,8 +86,7 @@ g /a get 1 eq (the reverted dict is intact after a collection) assert
 % --- the string exception, asserted positively ---
 % PLRM 3.7.3: restore resets all composite objects in local VM EXCEPT
 % strings. A character put and a putinterval into a pre-save string must
-% SURVIVE the restore; reverting them would be the deviation (verified
-% against gs 10.02.1, which agrees).
+% SURVIVE the restore; reverting them would be the deviation.
 /xs (hello) def
 save
     xs 0 72 put            % (Hello)
@@ -95,9 +94,9 @@ save
 restore
 xs (HelLO) eq (string contents survive restore, per the PLRM string exception) assert
 
-% KNOWN DEVIATION (TODO, not asserted): restore should raise
+% KNOWN DEVIATION (TODO, not asserted): the PLRM has restore raise
 % /invalidrestore when a composite object created after the save remains
-% on the operand, dictionary or execution stack (PLRM; gs raises it).
+% on the operand, dictionary or execution stack.
 % xpost currently restores without the check:
 %     save (fresh) exch restore  =>  no error, dangling string
 % Locking the absent error in would freeze non-compliance, so it is
