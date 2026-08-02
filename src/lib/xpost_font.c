@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h> /* sqrt */
 
 #ifdef HAVE_FONTCONFIG
 # include <fontconfig/fontconfig.h>
@@ -764,6 +765,34 @@ xpost_font_face_scale(void *face, real scale)
             return base;
         }
     }
+    if (f->num_fixed_sizes > 0)
+    {
+        /* a fixed-size face serves its nearest strike; the residual
+           ratio to the requested size rides in the face transform,
+           and the strike's raster and advance are scaled by it when
+           the glyph is served */
+        int i, best = 0;
+        double want = scale, bestd = -1.0;
+
+        for (i = 0; i < f->num_fixed_sizes; i++)
+        {
+            double got = f->available_sizes[i].y_ppem / 64.0;
+            double d = got > want ? got - want : want - got;
+
+            if (bestd < 0.0 || d < bestd)
+            {
+                bestd = d;
+                best = i;
+            }
+        }
+        if (FT_Select_Size(f, best) == 0)
+        {
+            long sz = (long)f->available_sizes[best].y_ppem;
+
+            gcache_state_set(face, NULL, &sz);
+            return (real)(f->available_sizes[best].y_ppem / 64.0);
+        }
+    }
     FT_Set_Char_Size(f, 0, (FT_F26Dot6)(scale * 64 + 0.5), 72, 72);
     {
         long sz = (long)(scale * 64.0 + 0.5);
@@ -1200,6 +1229,8 @@ _glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
 
     if (lin == 0)
     {
+        /* a strike's advance rides here (26.6), already carrying the
+           face transform: FreeType exempts only the raster itself */
         *advance_x = slot->advance.x << 10;   /* 26.6 -> 16.16 */
         *advance_y = slot->advance.y << 10;
         return;
@@ -1308,12 +1339,101 @@ xpost_font_face_glyph_extents(void *face, unsigned int glyph_index,
 #endif
 }
 
+#ifdef HAVE_FREETYPE2
+/* a fixed-size face's strike raster, resampled by the residual ratio
+   the face transform carries (FreeType applies that transform to
+   scalable formats only); serves the current glyph when the cache
+   declines it */
+static struct
+{
+    unsigned char *bits;
+    int rows, width, pitch;
+    char pixel_mode;
+    int left, top;
+    int valid;
+} _strike_scaled;
+
+/* scale the loaded strike bitmap by the face transform's column norms
+   (a rotation is not applied: a strike raster has no orientation to
+   give). Fills _strike_scaled and returns 1 when scaling was needed
+   and possible. */
+static int
+_strike_resample(FT_Face f, const long m[4], long ax, long ay)
+{
+    FT_Bitmap *b = &f->glyph->bitmap;
+    double sx = sqrt((double)m[0] * m[0] + (double)m[2] * m[2]) / 65536.0;
+    double sy = sqrt((double)m[1] * m[1] + (double)m[3] * m[3]) / 65536.0;
+    int dw, dh, dpitch, i, j;
+    unsigned char *bits;
+
+    (void)ax;
+    (void)ay;
+    if (sx > 0.996 && sx < 1.004 && sy > 0.996 && sy < 1.004)
+        return 0;
+    if (b->pixel_mode != FT_PIXEL_MODE_MONO
+     && b->pixel_mode != FT_PIXEL_MODE_GRAY)
+        return 0;
+    if (sx <= 0.0 || sy <= 0.0 || b->width == 0 || b->rows == 0)
+        return 0;
+
+    dw = (int)(b->width * sx + 0.5);
+    dh = (int)(b->rows * sy + 0.5);
+    if (dw < 1) dw = 1;
+    if (dh < 1) dh = 1;
+    if (dw > 4096 || dh > 4096)
+        return 0;
+    dpitch = b->pixel_mode == FT_PIXEL_MODE_MONO ? (dw + 7) / 8 : dw;
+    bits = calloc((size_t)dpitch, (size_t)dh);
+    if (!bits)
+        return 0;
+
+    for (i = 0; i < dh; i++)
+    {
+        int si = (int)(i / sy);
+        const unsigned char *srow;
+
+        if (si >= (int)b->rows) si = (int)b->rows - 1;
+        srow = b->buffer + si * b->pitch;
+        for (j = 0; j < dw; j++)
+        {
+            int sj = (int)(j / sx);
+            unsigned int pix;
+
+            if (sj >= (int)b->width) sj = (int)b->width - 1;
+            if (b->pixel_mode == FT_PIXEL_MODE_MONO)
+            {
+                pix = (srow[sj / 8] >> (7 - (sj % 8))) & 1;
+                if (pix)
+                    bits[i * dpitch + j / 8] |= (unsigned char)(0x80 >> (j % 8));
+            }
+            else
+                bits[i * dpitch + j] = srow[sj];
+        }
+    }
+
+    free(_strike_scaled.bits);
+    _strike_scaled.bits = bits;
+    _strike_scaled.rows = dh;
+    _strike_scaled.width = dw;
+    _strike_scaled.pitch = dpitch;
+    _strike_scaled.pixel_mode = (char)b->pixel_mode;
+    _strike_scaled.left = (int)(f->glyph->bitmap_left * sx
+                                + (f->glyph->bitmap_left < 0 ? -0.5 : 0.5));
+    _strike_scaled.top = (int)(f->glyph->bitmap_top * sy
+                               + (f->glyph->bitmap_top < 0 ? -0.5 : 0.5));
+    _strike_scaled.valid = 1;
+    return 1;
+}
+#endif
+
 int
 xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 {
 #ifdef HAVE_FREETYPE2
     FT_Error err;
     long m[4], size;
+
+    _strike_scaled.valid = 0;
 
     /* a cached raster stands in for the rasterization whole: the key
        carries every input the rasterizer would see, so the replay is
@@ -1343,15 +1463,27 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
             long ax, ay;
 
             _glyph_linear_advance((FT_Face)face, &ax, &ay);
-            gcache_serving = gcache_insert(face, glyph_index, m, size,
-                                           slot->bitmap.buffer,
-                                           (int)slot->bitmap.rows,
-                                           (int)slot->bitmap.width,
-                                           slot->bitmap.pitch,
-                                           (char)slot->bitmap.pixel_mode,
-                                           slot->bitmap_left,
-                                           slot->bitmap_top,
-                                           ax, ay);
+            if (!FT_IS_SCALABLE((FT_Face)face)
+             && _strike_resample((FT_Face)face, m, ax, ay))
+                gcache_serving = gcache_insert(face, glyph_index, m, size,
+                                               _strike_scaled.bits,
+                                               _strike_scaled.rows,
+                                               _strike_scaled.width,
+                                               _strike_scaled.pitch,
+                                               _strike_scaled.pixel_mode,
+                                               _strike_scaled.left,
+                                               _strike_scaled.top,
+                                               ax, ay);
+            else
+                gcache_serving = gcache_insert(face, glyph_index, m, size,
+                                               slot->bitmap.buffer,
+                                               (int)slot->bitmap.rows,
+                                               (int)slot->bitmap.width,
+                                               slot->bitmap.pitch,
+                                               (char)slot->bitmap.pixel_mode,
+                                               slot->bitmap_left,
+                                               slot->bitmap_top,
+                                               ax, ay);
         }
         return 1;
     }
@@ -1382,6 +1514,18 @@ xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, 
         *top = gcache_serving->top;
         *advance_x = gcache_serving->advance_x;
         *advance_y = gcache_serving->advance_y;
+        return;
+    }
+    if (_strike_scaled.valid)
+    {
+        *buffer = _strike_scaled.bits;
+        *rows = _strike_scaled.rows;
+        *width = _strike_scaled.width;
+        *pitch = _strike_scaled.pitch;
+        *pixel_mode = _strike_scaled.pixel_mode;
+        *left = _strike_scaled.left;
+        *top = _strike_scaled.top;
+        _glyph_linear_advance((FT_Face)face, advance_x, advance_y);
         return;
     }
     *buffer = ((FT_Face)face)->glyph->bitmap.buffer;
