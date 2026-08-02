@@ -178,14 +178,13 @@ int xpost_dict_put_memory(Xpost_Context *ctx, /*@dependent@*/ Xpost_Memory_File 
 int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Object v);
 
 /**
-   undefine key in dictionary
-   NOT IMPLEMENTED
+   undefine key in dictionary, re-slotting any later entry whose probe
+   chain ran through the vacated slot (Knuth 6.4R deletion)
 */
 int xpost_dict_undef_memory(Xpost_Context *ctx, Xpost_Memory_File *mem, Xpost_Object d, Xpost_Object k);
 
 /**
-   undefine key in banked dictionary
-   NOT IMPLEMENTED
+   undefine key in banked dictionary; an unknown key is not an error
 */
 void xpost_dict_undef(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
 

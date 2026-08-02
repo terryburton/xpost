@@ -48,22 +48,6 @@
  *
  */
 
-/**
- * @def XPOST_MEMORY_TABLE_SIZE
- * @brief Number of entries in a single segment of the
- * Xpost_Memory_Table.
- *
- * This parameter may be tuned for performance.
- *
- * Most VM access (composite object data) has to go through the
- * #Xpost_Memory_Table, which is segmented. So depending on the number
- * of live entries (k), accessing data from an object may require
- * chasing through k/#XPOST_MEMORY_TABLE_SIZE tables before finding the
- * right one. This isn't a lengthy operation, but it is a complicated
- * address calcuation that may not be pipeline-friendly.
- */
-#define XPOST_MEMORY_TABLE_SIZE 2000
-
 
 /*
  *
@@ -83,6 +67,8 @@ typedef enum
 {
     XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK       = 0x7F000000,
     XPOST_MEMORY_TABLE_MARK_DATA_MARK_OFFSET     =     24,
+    /* reserved: always written 0, read only by the table dumps; kept so
+       the LOWLEVEL/TOPLEVEL save-level fields keep their positions */
     XPOST_MEMORY_TABLE_MARK_DATA_REFCOUNT_MASK   = 0x00FF0000,
     XPOST_MEMORY_TABLE_MARK_DATA_REFCOUNT_OFFSET =       16,
     XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK   = 0x0000FF00,

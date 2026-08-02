@@ -23,14 +23,11 @@
     { pop } ifelse
 } forall
 
-%/newdefaultdevice load ==
-newdefaultdevice % defined in xpost_interpreter.c:setlocalconfig()
-                 % as similar to one of these:
-%                /DEVICE 50 50 newPGMIMAGEdevice def
-%loadxcbdevice   /DEVICE 400 300 newxcbdevice def
-%loadwin32device /DEVICE 400 300 newwin32device def
-
-%DEVICE {pop =} forall
+% defined in xpost_interpreter.c:setlocalconfig() from the -d selection:
+% it runs the chosen maker (newPGMIMAGEdevice, newrasterdevice, ...) at
+% the configured page size and stores the instance as the graphics
+% state's /device -- the DEVICE wrapped operator below reads it back
+newdefaultdevice
 
 DEVICE begin
     % a window device that adopted a smaller, scaled window records the
@@ -102,7 +99,6 @@ end
     }
 >> put
 
-% a b  .strcat  ab
 % name  .pagefilename  name'
 % substitute the page number for a %d marker in an output file name,
 % counting pages in the device the caller has begun; without the

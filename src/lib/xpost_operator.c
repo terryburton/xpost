@@ -651,7 +651,9 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
 
     int k;
 
-    assert(n < XPOST_MEMORY_TABLE_SIZE);
+    /* the hold stack is cracked as a single segment below, so an
+       operator's declared arity must fit one segment */
+    assert(n < XPOST_STACK_SEGMENT_SIZE);
 
     /* when all args sit in the stack's top segment, copy them into the
        hold segment directly, sparing a segment walk per fetch/push/pop */
