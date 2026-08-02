@@ -9,6 +9,10 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        object: [small, large]
+    name: linux - ${{ matrix.object }}-object
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
@@ -17,7 +21,7 @@ jobs:
         sudo apt-get -qq update
         sudo apt install build-essential libpng-dev libjpeg-dev libfreetype6-dev libfontconfig1-dev meson ninja-build
     - name: meson
-      run: meson setup builddir
+      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: ninja
       run: ninja -C builddir
     - name: meson test

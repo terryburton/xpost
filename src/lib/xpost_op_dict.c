@@ -67,7 +67,7 @@ int xpost_op_int_dict(Xpost_Context *ctx,
 
     if (I.int_.val < 0)
         return rangecheck;
-    if (I.int_.val > 65535) /* sz field is 16 bits; PLRM minimum limit */
+    if (I.int_.val > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full */
         return limitcheck;
 
     dic = xpost_dict_cons (ctx, I.int_.val);
@@ -98,7 +98,7 @@ int xpost_op_dict_to_mark(Xpost_Context *ctx)
     i = t.int_.val;
     if ((i % 2) == 1)
         return rangecheck;
-    if (i > 65535) /* sz field is 16 bits, as the dict operator enforces:
+    if (i > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full, as the dict operator enforces:
                       raise limitcheck rather than let dict_cons truncate the
                       capacity and then fault putting the discarded pairs */
         return limitcheck;

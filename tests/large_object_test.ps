@@ -1,0 +1,57 @@
+% Composite-size limits, run through `xpost -d null` by run-ps-test.sh.
+%
+% The small-object build holds composites to 65,535 elements -- the
+% architectural limit PLRM Appendix B.1 documents -- and reports
+% limitcheck beyond it. The large-object build widens the size field:
+% composites grow to memory, matching the interpreters that exceed the
+% appendix's typical limits. The build is probed, and each personality
+% is held to its own contract.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+/widesz { 70000 array pop true } stopped { pop false } if def
+
+widesz {
+    % --- arrays past the 16-bit horizon ---
+    /a 100000 array def
+    a length 100000 eq (a 100000 array reports its length) assert
+    a 99999 42 put
+    a 99999 get 42 eq (the last element stores and loads) assert
+    a 70000 7 put
+    a 65536 34464 getinterval dup length 34464 eq (an interval beyond 65535 has its length) assert
+    34463 get 42 eq (an interval beyond 65535 reads through) assert
+    /n 0 def a { pop /n n 1 add def } forall
+    n 100000 eq (forall visits every element) assert
+    a 0 a length getinterval length 100000 eq (a full-length interval survives) assert
+
+    % --- strings past the horizon ---
+    /s 1000000 string def
+    s length 1000000 eq (a million-byte string reports its length) assert
+    s 999999 65 put
+    s 999999 get 65 eq (the last byte stores and loads) assert
+    s 500000 (hello) putinterval
+    s 500000 5 getinterval (hello) eq (putinterval lands mid-string) assert
+    s 0 999999 getinterval length 999999 eq (a wide interval carries its size) assert
+
+    % --- a dictionary past the horizon ---
+    /d 100000 dict def
+    0 1 99999 { d exch dup put } for
+    d length 100000 eq (a 100000-entry dictionary holds them all) assert
+    d 99999 get 99999 eq (the last insertion reads back) assert
+    d 12345 get 12345 eq (a middle insertion reads back) assert
+
+    % --- copy and cvs across the width ---
+    /b 100000 array def
+    a b copy length 100000 eq (copy moves the whole width) assert
+    b 99999 get 42 eq (copy carries the far elements) assert
+}{
+    % --- the small build holds the documented ceiling ---
+    { 70000 array } stopped { $error /errorname get /limitcheck eq }{ pop false } ifelse
+    (an over-limit array is limitcheck) assert
+    { 70000 string } stopped { $error /errorname get /limitcheck eq }{ pop false } ifelse
+    (an over-limit string is limitcheck) assert
+    65535 array length 65535 eq (the limit itself is reachable) assert
+} ifelse
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

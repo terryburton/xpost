@@ -64,7 +64,7 @@ The postscript object contains 4 fields if it's a composite object which must
     ent
     offset
 
-In the 32bit configuration, these are 16-bits each. In the untested LARGE_OBJECT
+In the 32bit configuration, these are 16-bits each. In the LARGE_OBJECT
 configuration, these are 32-bits each.
 
 The tag contains a type bitfield which identifies the kind of data (string, array,

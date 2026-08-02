@@ -128,7 +128,12 @@ static unsigned int _arcto_cont_opcode;
 
 #define NUM(x) (xpost_object_get_type(x)==realtype?x.real_.val:(real)x.int_.val)
 
-#define PATH_HDR 32
+/* The header holds four u32 fields (extent, flags, last-element offset,
+   capacity) and the four bbox reals; the bbox slots are real-sized, so
+   the header widens with the build's real type. */
+#define PATH_BBOX_OFF 16
+#define PATH_BBOX(i) (PATH_BBOX_OFF + (unsigned int)((i) * sizeof(real)))
+#define PATH_HDR (PATH_BBOX_OFF + (unsigned int)(4 * sizeof(real)))
 #define PATH_CMD_MOVE 0
 #define PATH_CMD_LINE 1
 #define PATH_CMD_CURVE 2
@@ -264,10 +269,10 @@ _path_cons(Xpost_Context *ctx, unsigned int cap)
     _path_set_u32(p, 4, 0);
     _path_set_u32(p, 8, 0);
     _path_set_u32(p, 12, cap);
-    _path_set_f32(p, 16, FLT_MAX);
-    _path_set_f32(p, 20, FLT_MAX);
-    _path_set_f32(p, 24, -FLT_MAX);
-    _path_set_f32(p, 28, -FLT_MAX);
+    _path_set_f32(p, PATH_BBOX(0), FLT_MAX);
+    _path_set_f32(p, PATH_BBOX(1), FLT_MAX);
+    _path_set_f32(p, PATH_BBOX(2), -FLT_MAX);
+    _path_set_f32(p, PATH_BBOX(3), -FLT_MAX);
     return s;
 }
 
@@ -361,10 +366,10 @@ _path_append(Xpost_Context *ctx, Xpost_Object gstate, Xpost_Object *pathp,
         int k;
         for (k = 0; k + 1 < ncoords; k += 2)
         {
-            if (co[k] < _path_get_f32(p, 16)) _path_set_f32(p, 16, co[k]);
-            if (co[k + 1] < _path_get_f32(p, 20)) _path_set_f32(p, 20, co[k + 1]);
-            if (co[k] > _path_get_f32(p, 24)) _path_set_f32(p, 24, co[k]);
-            if (co[k + 1] > _path_get_f32(p, 28)) _path_set_f32(p, 28, co[k + 1]);
+            if (co[k] < _path_get_f32(p, PATH_BBOX(0))) _path_set_f32(p, PATH_BBOX(0), co[k]);
+            if (co[k + 1] < _path_get_f32(p, PATH_BBOX(1))) _path_set_f32(p, PATH_BBOX(1), co[k + 1]);
+            if (co[k] > _path_get_f32(p, PATH_BBOX(2))) _path_set_f32(p, PATH_BBOX(2), co[k]);
+            if (co[k + 1] > _path_get_f32(p, PATH_BBOX(3))) _path_set_f32(p, PATH_BBOX(3), co[k + 1]);
         }
     }
     return 0;
@@ -952,10 +957,10 @@ int _cliptrivial(Xpost_Context *ctx)
            control hulls contain their curves); an empty path is
            accepted, there being nothing to clip */
         char *p = xpost_string_get_pointer(ctx, path);
-        pminx = _path_get_f32(p, 16);
-        pminy = _path_get_f32(p, 20);
-        pmaxx = _path_get_f32(p, 24);
-        pmaxy = _path_get_f32(p, 28);
+        pminx = _path_get_f32(p, PATH_BBOX(0));
+        pminy = _path_get_f32(p, PATH_BBOX(1));
+        pmaxx = _path_get_f32(p, PATH_BBOX(2));
+        pmaxy = _path_get_f32(p, PATH_BBOX(3));
         accept = _path_get_u32(p, 0) <= PATH_HDR ||
                  (pminx >= cminx && pmaxx <= cmaxx &&
                   pminy >= cminy && pmaxy <= cmaxy);

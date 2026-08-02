@@ -291,7 +291,20 @@ typedef struct
                     object offset in array,
                     index in dict (only during `forall` operator) */
 } Xpost_Object_Comp;
-#define XPOST_OBJECT_COMP_MAX_ENT ((1 << (sizeof(word)*8 + XPOST_OBJECT_TAG_EXTRA_BITS_SIZE)) - 1)
+/* The widest entity number an object can carry: the ent field plus the
+   tag's spare bits, clamped so a wide-word build -- whose ent field
+   already spans the table -- neither overflows the shift nor borrows
+   from the tag. */
+#define XPOST_OBJECT_COMP_ENT_BITS \
+    (sizeof(word)*8 + XPOST_OBJECT_TAG_EXTRA_BITS_SIZE > 31 \
+        ? 31 : sizeof(word)*8 + XPOST_OBJECT_TAG_EXTRA_BITS_SIZE)
+#define XPOST_OBJECT_COMP_MAX_ENT ((1u << XPOST_OBJECT_COMP_ENT_BITS) - 1)
+
+/* The widest element count a composite can carry: the sz field's own
+   width. The narrow build's 65,535 is the architectural limit PLRM
+   Appendix B.1 documents; the wide build carries composites to
+   memory. */
+#define XPOST_OBJECT_COMP_MAX_SZ ((dword)(word)~(word)0)
 
 /**
  * @struct Xpost_Object_Save
