@@ -156,7 +156,10 @@ cont:
         case invalidtype: return 0;
 
         case booleantype: /*@fallthrough@*/
-        case integertype: return L.int_.val - R.int_.val;
+        /* three-way compare: a subtraction can overflow the return
+           type and flip the verdict */
+        case integertype: return L.int_.val < R.int_.val ? -1 :
+                                 L.int_.val > R.int_.val ? 1 : 0;
 
         /* numbers compare exactly: this function also backs
            the relational operators */
@@ -170,7 +173,8 @@ cont:
             return l < r ? -1 : l > r ? 1 : 0;
         }
 
-        case operatortype:  return L.mark_.padw - R.mark_.padw;
+        case operatortype:  return L.mark_.padw < R.mark_.padw ? -1 :
+                                   L.mark_.padw > R.mark_.padw ? 1 : 0;
 
         case nametype: return (L.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK)==(R.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK)?
                                 (signed)(L.mark_.padw - R.mark_.padw):
