@@ -17,6 +17,17 @@ mkclosed 20 string readline exch pop not (readline of a closed file is false) as
 % closing twice is harmless and status reports the file is closed
 mkclosed dup closefile status not (status of a closed file is false) assert
 
+% the position operators raise ioerror on a closed file instead of
+% touching the dead handle (fileposition once dereferenced it and crashed)
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+{ mkclosed fileposition } /ioerror (fileposition of a closed file is ioerror) erris
+{ mkclosed 0 setfileposition } /ioerror (setfileposition of a closed file is ioerror) erris
+
 % an open file still reads normally
 /g (closedread.scratch) (r) file def
 g read pop 72 eq (an open file still reads a byte) assert

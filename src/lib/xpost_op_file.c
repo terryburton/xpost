@@ -1072,6 +1072,8 @@ int xpost_op_fileposition (Xpost_Context *ctx,
                            Xpost_Object F)
 {
     long pos;
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
     pos = xpost_file_tell(xpost_file_get_file_pointer(ctx->lo, F));
     if (pos == -1)
         return ioerror;
