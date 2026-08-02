@@ -35,6 +35,7 @@
 #endif
 
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -270,6 +271,17 @@ _xpost_geometry_parse(const char *geometry, int *width, int *height, int *xoffse
     return 1;
 }
 
+static void
+_xpost_main_interrupt(int sig)
+{
+    (void)sig;
+#ifdef _WIN32
+    /* the C runtime resets the disposition before the handler runs */
+    signal(SIGINT, _xpost_main_interrupt);
+#endif
+    xpost_interrupt();
+}
+
 int main(int argc, char *argv[])
 {
     Xpost_Context *ctx;
@@ -330,6 +342,22 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Fail to initialize xpost\n");
         return -1;
     }
+
+    /* control-C requests the PostScript interrupt error rather than
+       killing the process; a blocked read resumes and the request
+       lands at the next evaluation step */
+#ifdef _WIN32
+    signal(SIGINT, _xpost_main_interrupt);
+#else
+    {
+        struct sigaction sa;
+
+        memset(&sa, 0, sizeof sa);
+        sa.sa_handler = _xpost_main_interrupt;
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGINT, &sa, NULL);
+    }
+#endif
 
     if (argc == 1)
     {

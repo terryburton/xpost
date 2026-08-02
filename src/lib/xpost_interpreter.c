@@ -34,6 +34,7 @@
 #endif
 
 #include <assert.h>
+#include <signal.h> /* sig_atomic_t */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,15 @@ static Xpost_Object nameerrordict;
 
 int _xpost_interpreter_is_tracing = 0;             /* output trace log */
 Xpost_Interpreter *itpdata;  /* the global interpreter instance, containing all contexts and memory files */
+
+/* an external interrupt request: raised from a signal handler,
+   consumed between evaluation steps */
+static volatile sig_atomic_t _interrupt_pending = 0;
+
+void xpost_interrupt(void)
+{
+    _interrupt_pending = 1;
+}
 static int _initializing = 1;  /* garbage collect does not run while _initializing is true.
                                   a getter function is exported in the memory file struct
                                   for the gc to access this global without #include'ing interpreter.h
@@ -1704,6 +1714,13 @@ ctxswitch:
             ctx->lo->garbage_collect_pending = 0;
             if (ctx->lo->garbage_collect_is_installed)
                 (void)ctx->lo->garbage_collect(ctx->lo, 1, 1);
+        }
+        if (_interrupt_pending)
+        {
+            /* an external interrupt request lands between operations */
+            _interrupt_pending = 0;
+            _onerror(ctx, interrupt);
+            continue;
         }
         if ((++evalcount & 1023) == 0)
         {

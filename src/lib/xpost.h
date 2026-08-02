@@ -106,6 +106,16 @@ XPAPI int xpost_init(void);
 XPAPI int xpost_quit(void);
 
 /**
+ * @brief Request a PostScript-level interrupt.
+ *
+ * Raises the interrupt error at the interpreter's next evaluation
+ * step, as the language specifies for an external interrupt request
+ * such as control-C. Only a flag is set, so this function is safe to
+ * call from a signal handler.
+ */
+XPAPI void xpost_interrupt(void);
+
+/**
  * @brief Retrieve the version of the library.
  *
  * @param[out] maj The major version.
