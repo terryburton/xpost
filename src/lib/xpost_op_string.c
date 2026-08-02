@@ -58,7 +58,7 @@ int Istring(Xpost_Context *ctx,
 
     if (I.int_.val < 0)
         return rangecheck;
-    if (I.int_.val > 65535) /* sz field is 16 bits; PLRM minimum limit */
+    if (I.int_.val > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full */
         return limitcheck;
 
     str = xpost_string_cons(ctx, I.int_.val, NULL);
