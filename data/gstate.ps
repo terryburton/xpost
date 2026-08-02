@@ -6,17 +6,23 @@
 % path storage and the device), so it and its accessor stay in local VM.
 currentglobal false setglobal
 /.gstatetemplate <<
+    % the space as set (what currentcolorspace reports; may be an array)
+    /setspace /DeviceGray
+    % the space the colour components below are recorded in
     /colorspace /DeviceGray
     /colorcomp1 0.0
     /colorcomp2 0.0
     /colorcomp3 0.0
     /colorcomp4 0.0
+    % the tints a Separation or DeviceN colour was set with, for currentcolor
+    % (the component values above hold the tint-transformed alternate colour)
+    /tintcomps null
     /transfer {}
     %/currmatrix DEVICE /defaultmatrix get matrix copy
     %/currmatrix [ 1 0 0 1 0 0 ]
     %/scratchmatrix [ 1 0 0 1 0 0 ] % ??
-    /currpath 1 dict
-    /clipregion 1 dict
+    /currpath .newpathstr
+    /clipregion .newpathstr
     /flat 1.0
     /linewidth 1.0
     /linecap 0
@@ -118,7 +124,7 @@ graphicsdict begin
     /gptr gptr 1 add def
     gptr gstackarray length ge { /gsave cvx /limitcheck signalerror } if
     gstackarray gptr gstate currentgstate put % push copy on stack
-    currgstate /currpath 2 copy get 1 dict //.xpostsys /deepcopy get exec put % make a new working copy of path
+    currgstate /currpath 2 copy get .copypath put % make a new working copy of path
 end
 } def
 

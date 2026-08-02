@@ -126,6 +126,29 @@ MAKERNAMES { { (PROGRAM-OWNED) } def } forall
 
 startupudlen 0 eq (userdict was empty at startup) assert
 
+% The CIE converter family lives in the global .xpostsys and is baked into its
+% callers (//.cie... exec), so the names are invisible to a program and a
+% program redefining them cannot reach the colour machinery.
+/CIENAMES [
+    /.cieclamp /.ciexyzrgb /.cielmnxyzrgb /.cieabcrgb /.ciearpgb /.cietblpos
+    /.cietblval /.ciedefrgb /.ciedefgrgb /.ciergb /.ciefams
+] def
+CIENAMES {
+    dup where { pop (CIE-VISIBLE: ) print == false }{ pop true } ifelse
+    (CIE converter name is hidden) assert
+} forall
+CIENAMES { { (PROGRAM-OWNED) } def } forall
+{
+    [ /CIEBasedABC <<
+        /MatrixABC [ 0.9 0.1 0 0.1 0.8 0.1 0 0.2 0.9 ]
+        /DecodeABC [ {dup mul} {dup mul} {dup mul} ]
+        /MatrixLMN [ 0.4 0.2 0.02 0.35 0.7 0.12 0.18 0.1 0.95 ]
+        /WhitePoint [ 0.9505 1.0 1.089 ]
+    >> ] setcolorspace
+    0.6 0.3 0.8 setcolor
+    newpath 20 20 moveto 180 20 lineto 180 180 lineto closepath fill
+} stopped not (CIE colour survives redefined converter names) assert
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

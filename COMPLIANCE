@@ -14,13 +14,13 @@ Level 1 operators
  [X] setdash
  [X] currentdash
  [X] arcto
- [ ] fill with complex paths
- [ ] eofill
- [ ] clip with complex paths
- [ ] eoclip
- [/] setlinejoin
+ [X] fill with complex paths
+ [X] eofill
+ [X] clip with complex paths
+ [X] eoclip
+ [X] setlinejoin
  [X] currentlinejoin
- [ ] setlinecap
+ [X] setlinecap
  [X] currentlinecap
  [/] image
  [ ] imagemask
@@ -215,10 +215,10 @@ Level 1 operators
  [X] pathbbox
  [X] initclip
  [X] clip
- [ ] eoclip
+ [X] eoclip
  [X] erasepage
  [X] fill
- [ ] eofill
+ [X] eofill
  [X] stroke
  [X] strokepath
  [X] reversepath
@@ -256,7 +256,10 @@ Level 2 operators
  [X] rectstroke
  [X] rectclip
  [X] selectfont
- [/] setcolorspace
+ [/] setcolorspace (device spaces, Separation, DeviceN, Indexed,
+     Pattern and the CIE-based families, rendered through fixed
+     daylight primaries; colour rendering dictionaries are recorded
+     and take no part)
  [X] currentcolorspace
  [X] setcolor
  [X] currentcolor
@@ -327,8 +330,8 @@ Level 3 operators
 
  [ ] shfill
  [ ] composite fonts
- [ ] clipsave
- [ ] cliprestore
+ [X] clipsave
+ [X] cliprestore
  [X] setsmoothness, currentsmoothness (recorded only)
  [ ] findcolorrendering
 
@@ -362,7 +365,7 @@ Typical output devices
  [X] ppm
  [ ] pbm
  [ ] tiff
- [ ] jpeg
+ [X] jpeg
  [ ] png
  [ ] pdf
  [ ] svg

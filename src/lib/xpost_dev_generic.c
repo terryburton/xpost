@@ -32,6 +32,7 @@
 # include <config.h>
 #endif
 
+#include <stdio.h> /* snprintf */
 #include <stdlib.h> /* abs */
 #include <stddef.h>
 
@@ -50,6 +51,7 @@
 #include "xpost_string.h" /* get/put values in strings */
 #include "xpost_array.h"
 #include "xpost_name.h" /* create names */
+#include "xpost_file.h" /* raster emission */
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
@@ -77,6 +79,7 @@ static Xpost_Object namerepeat;
 static Xpost_Object namecvx;
 static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
+static Xpost_Object nameFillRect;
 
 char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
 {
@@ -173,142 +176,326 @@ int _yxsort (Xpost_Context *ctx, Xpost_Object arr)
     return 0;
 }
 
-/*
-   feq is applied to determine if two pixel coordinates
-   are "close enough" to be considered equal.
-   It is used to reject cases in _intersect,
-   and to control the checking of both coordinates
-   when sorting (x,y) pairs in a y|x sort.
-   These values are device-space points derived from user-input,
-   so they are ultimately quantized to integers to address the raster,
-   but here we consider them quantized to a small fraction of unity,
-   somewhere between 1 and the true floating-point epsilon.
- */
-#ifdef _WANT_LARGE_OBJECT
-# define PIXEL_TOLERANCE 0.0001
-#else
-# define PIXEL_TOLERANCE 0.0001f
-#endif
-
-static inline
-int feq(real dif)
+/* One boundary-chain passage through a pixel-row band: the x extent
+   [lo, hi] the chain covers within the band (row b covers device
+   b <= y < b+1) and the chain's y direction (+1 rising, -1 falling) */
+struct band_span
 {
-#ifdef _WANT_LARGE_OBJECT
-    if (fabs(dif) < PIXEL_TOLERANCE)
-        return 1;
-#else
-    if (fabsf(dif) < PIXEL_TOLERANCE)
-        return 1;
-#endif
+    int band;
+    int dirn;
+    real lo, hi;
+};
+
+static
+int _bandspancomp (const void *left, const void *right)
+{
+    const struct band_span *lt = left;
+    const struct band_span *rt = right;
+
+    if (lt->band != rt->band)
+        return lt->band < rt->band ? -1 : 1;
+    if (lt->lo != rt->lo)
+        return lt->lo < rt->lo ? -1 : 1;
+    if (lt->hi != rt->hi)
+        return lt->hi < rt->hi ? -1 : 1;
+    return lt->dirn - rt->dirn;
+}
+
+/* append a span, growing the array as needed; 0 on success */
+static
+int _span_push(struct band_span **spans, int *cap, int *n,
+               int band, int dirn, real lo, real hi)
+{
+    if (*n == *cap)
+    {
+        struct band_span *tmp;
+        int newcap = *cap ? *cap * 2 : 64;
+
+        tmp = realloc(*spans, newcap * sizeof *tmp);
+        if (!tmp)
+            return VMerror;
+        *spans = tmp;
+        *cap = newcap;
+    }
+    (*spans)[*n].band = band;
+    (*spans)[*n].dirn = dirn;
+    (*spans)[*n].lo = lo;
+    (*spans)[*n].hi = hi;
+    ++*n;
     return 0;
 }
 
-static
-int _intersect(real ax, real ay,  real bx, real by,
-               real cx, real cy,  real dx, real dy,
-               real *rx, real *ry)
+/* a winding-resolved fill span: the x extent the region covers within
+   one pixel-row band, still in real device coordinates */
+struct rspan
 {
-    real distAB;
-    real theCos;
-    real theSin;
-    real newX;
-    real ABpos;
+    int band;
+    real lo, hi;
+};
 
-    //printf("%f %f  %f %f  %f %f  %f %f\n",
-    //        ax, ay,  bx, by,  cx, cy,  dx, dy);
-
-    /* reject degenerate line */
-    if ((feq(ax - bx) && feq(ay - by)) ||
-        (feq(cx - dx) && feq(cy - dy)))
+static
+int _rspan_push(struct rspan **rsp, int *cap, int *n,
+                int band, real lo, real hi)
+{
+    if (*n == *cap)
     {
-        return 0;
-        /*
-        if (ax == cx && ay == cy && ax != 0.0 && ay != 0.0)
-        {
-            *rx = ax;
-            *ry = ay;
-            return 1;
-        }
-        */
+        struct rspan *tmp;
+        int newcap = *cap ? *cap * 2 : 64;
+
+        tmp = realloc(*rsp, newcap * sizeof *tmp);
+        if (!tmp)
+            return VMerror;
+        *rsp = tmp;
+        *cap = newcap;
     }
-
-    /* reject coinciding endpoints */
-    if ((feq(ax - cx) && feq(ay - cy)) ||
-        (feq(bx - cx) && feq(by - cy)) ||
-        (feq(ax - dx) && feq(ay - dy)) ||
-        (feq(bx - dx) && feq(by - dy)))
-    {
-        return 0;
-        /*
-        *rx = ax;
-        *ry = ay;
-        return 1;
-        */
-    }
-
-    /* translate by -ax, -ay */
-    bx -= ax;  by -= ay;
-    cx -= ax;  cy -= ay;
-    dx -= ax;  dy -= ay;
-
-    distAB = (real)sqrt(bx * bx + by * by);
-
-    /* rotate AB to x-axis */
-    theCos = bx / distAB;
-    theSin = by / distAB;
-    newX = cx * theCos + cy * theSin;
-    cy = cy * theCos - cx * theSin;
-    cx = newX;
-    newX = dx * theCos + dy * theSin;
-    dy = dy * theCos - dx * theSin;
-    dx = newX;
-
-    /* no intersection */
-    if (((cy < 0) && (dy < 0)) || ((cy > 0) && (dy > 0)))
-        return 0;
-
-    if (feq(dy - cy)) return 0;
-
-    ABpos = dx + ((cx - dx) * dy) / (dy - cy);
-    if ((ABpos < 0) || (ABpos > distAB))
-        return 0;
-
-    *rx = ax + ABpos * theCos;
-    *ry = ay + ABpos * theSin;
-
-    XPOST_LOG_INFO(">< %f %f", *rx, *ry);
-
-    return 1;
+    (*rsp)[*n].band = band;
+    (*rsp)[*n].lo = lo;
+    (*rsp)[*n].hi = hi;
+    ++*n;
+    return 0;
 }
 
+/* Scan-convert a null-separated polygon array to winding-resolved
+   band spans (the shared middle of the fill pipeline: vertices in,
+   sorted boundary passages accumulated to filled extents out).
+   evenodd selects the insideness rule: 0 accumulates winding numbers
+   to zero (nonzero rule), 1 counts boundary passages by parity
+   (even-odd rule). The caller owns the returned buffer.
+   0 on success. */
 static
-int _cyxcomp (const void *left, const void *right)
+int _poly_resolved_spans(Xpost_Context *ctx,
+                         Xpost_Object poly,
+                         struct rspan **out,
+                         int *nout,
+                         int evenodd)
 {
-    const struct point *lt = left;
-    const struct point *rt = right;
+    struct point *points;
+    struct band_span *spans;
+    int nspans, spancap;
+    struct rspan *rsp;
+    int nrsp, rspcap;
+    int i;
 
-    if (feq(lt->y - rt->y))
+    *out = NULL;
+    *nout = 0;
+
+    /* extract polygon vertices from ps array;
+       null elements separate subpaths */
+    points = malloc(poly.comp_.sz * sizeof *points);
+    if (!points)
+        return VMerror;
+    for (i = 0; i < poly.comp_.sz; i++)
     {
-        if (lt->x < rt->x)
+        Xpost_Object pair, x, y;
+
+        pair = xpost_array_get(ctx, poly, i);
+        if (xpost_object_get_type(pair) != arraytype)
         {
-            return 1;
+            points[i].x = SUBPATH_BREAK;
+            points[i].y = SUBPATH_BREAK;
+            continue;
         }
-        else if (lt->x > rt->x)
+        x = xpost_array_get(ctx, pair, 0);
+        y = xpost_array_get(ctx, pair, 1);
+        if (xpost_object_get_type(x) == integertype)
+            x = xpost_real_cons((real)x.int_.val);
+        if (xpost_object_get_type(y) == integertype)
+            y = xpost_real_cons((real)y.int_.val);
+        /* quantize to a 1/256 pixel device grid: geometry meant to lie
+           on a pixel boundary arrives with accumulated float noise, and
+           unsnapped it would classify to the wrong side of the boundary */
+        points[i].x = (real)(floor(x.real_.val * 256.0 + 0.5) / 256.0);
+        points[i].y = (real)(floor(y.real_.val * 256.0 + 0.5) / 256.0);
+    }
+
+    /* Scan-convert under the any-part-of-pixel rule (PLRM 7.5): a
+       pixel is painted when the filled region meets its interior.
+       Device space divides into unit pixel-row bands (row b covers
+       b <= y < b+1). Each subpath boundary is cut into y-monotone
+       chains -- walking from a least-y vertex, so a chain never wraps
+       the start/end seam -- and each chain deposits, for every band it
+       passes through, the x extent of its passage tagged with its y
+       direction. Horizontal travel widens the open extent, except
+       travel exactly on a band boundary, which meets no band interior
+       (an integer-aligned bottom edge must not leak into the band
+       below). Sorting each band's extents by left edge and
+       accumulating winding numbers then yields the fill spans. */
+    spans = NULL;
+    nspans = 0;
+    spancap = 0;
+    i = 0;
+    for (;;)
+    {
+        int s0, nv, base, k;
+        int dirn, ib, code;
+        real lo, hi, submin, submax;
+
+        while (i < poly.comp_.sz && points[i].x == SUBPATH_BREAK)
+            i++;
+        if (i == poly.comp_.sz)
+            break;
+        s0 = i;
+        while (i < poly.comp_.sz && points[i].x != SUBPATH_BREAK)
+            i++;
+        nv = i - s0;
+
+        base = 0;
+        for (k = 1; k < nv; k++)
+            if (points[s0 + k].y < points[s0 + base].y)
+                base = k;
+
+        /* chain state: the open extent, its band, and its direction
+           (0 until the first non-horizontal edge; starting at a
+           least-y vertex the first direction can only be upward) */
+        dirn = 0;
+        ib = (int)floor(points[s0 + base].y);
+        lo = hi = points[s0 + base].x;
+        submin = submax = lo;
+        code = 0;
+
+        for (k = 0; k < nv && code == 0; k++)
         {
-            return -1;
+            struct point P = points[s0 + (base + k) % nv];
+            struct point Q = points[s0 + (base + k + 1) % nv];
+            int d, eb;
+
+            if (Q.x < submin) submin = Q.x;
+            if (Q.x > submax) submax = Q.x;
+
+            if (P.y == Q.y)
+            {
+                if (P.y == (real)floor(P.y))
+                {
+                    /* on a band boundary: deposits nothing; until the
+                       chain has a direction just track the position */
+                    if (dirn == 0)
+                        lo = hi = Q.x;
+                }
+                else
+                {
+                    if (Q.x < lo) lo = Q.x;
+                    if (Q.x > hi) hi = Q.x;
+                }
+                continue;
+            }
+
+            d = Q.y > P.y ? 1 : -1;
+            /* the band this edge starts in: a start exactly on a band
+               boundary belongs to the band ahead of travel */
+            eb = (int)floor(P.y);
+            if (d < 0 && (real)eb == P.y)
+                eb--;
+
+            if (d != dirn)
+            {
+                /* direction reversal: the vertex row holds two passages */
+                if (dirn != 0)
+                {
+                    code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                    lo = hi = P.x;
+                }
+                dirn = d;
+                ib = eb;
+            }
+            else if (eb != ib)
+            {
+                /* the previous edge ended exactly on our starting boundary */
+                code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                lo = hi = P.x;
+                ib = eb;
+            }
+
+            /* walk the edge band to band, cutting at each boundary */
+            while (code == 0)
+            {
+                real yb = (real)(d > 0 ? ib + 1 : ib);
+
+                if (d > 0 ? Q.y > yb : Q.y < yb)
+                {
+                    real xb = P.x + (Q.x - P.x) * ((yb - P.y) / (Q.y - P.y));
+
+                    if (xb < lo) lo = xb;
+                    if (xb > hi) hi = xb;
+                    code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                    ib += d;
+                    lo = hi = xb;
+                }
+                else
+                {
+                    if (Q.x < lo) lo = Q.x;
+                    if (Q.x > hi) hi = Q.x;
+                    break;
+                }
+            }
         }
-        else
+
+        if (code == 0)
         {
-            return 0;
+            if (dirn != 0)
+                code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+            else
+            {
+                /* no vertical travel at all: the subpath still meets its
+                   row; deposit a balanced pair over its whole x extent */
+                code = _span_push(&spans, &spancap, &nspans, ib, 1, submin, submax);
+                if (code == 0)
+                    code = _span_push(&spans, &spancap, &nspans, ib, -1, submin, submax);
+            }
+        }
+        if (code)
+        {
+            free(points);
+            free(spans);
+            return code;
         }
     }
-    else
+    free(points);
+
+    /* nspans can be zero for a degenerate row, leaving spans NULL; passing a
+       null pointer to qsort is undefined even for a zero count, and there is
+       nothing to order below two spans anyway */
+    if (nspans > 1)
+        qsort(spans, nspans, sizeof *spans, _bandspancomp);
+
+    /* Walk each band accumulating winding: a span opens at the first
+       extent's left edge and closes where the winding count returns to
+       zero (or the band runs out), covering the rightmost extent seen. */
+    rsp = NULL;
+    nrsp = 0;
+    rspcap = 0;
     {
-        if (lt->y < rt->y)
-            return -1;
-        else
-            return 1;
+        int s = 0;
+
+        while (s < nspans)
+        {
+            int b = spans[s].band;
+            int wind = 0;
+            real L = spans[s].lo, R = spans[s].hi;
+            int code;
+
+            do
+            {
+                if (spans[s].hi > R)
+                    R = spans[s].hi;
+                wind += spans[s].dirn;
+                s++;
+            } while ((evenodd ? (wind & 1) : wind) != 0
+                     && s < nspans && spans[s].band == b);
+
+            code = _rspan_push(&rsp, &rspcap, &nrsp, b, L, R);
+            if (code)
+            {
+                free(spans);
+                free(rsp);
+                return code;
+            }
+        }
     }
+    free(spans);
+
+    *out = rsp;
+    *nout = nrsp;
+    return 0;
 }
 
 static
@@ -322,14 +509,11 @@ int _fillpoly(Xpost_Context *ctx,
     int numlines;
     /* Xpost_Object x1, y1, x2, y2; */
     Xpost_Object drawline;
-    struct point *points, *intersections, *tmp;
-    int i, j;
-    int cap;
-    real yscan;
-    real minx = (real)0x7ffffff;
-    real miny = minx;
-    real maxx = -minx;
-    real maxy = maxx;
+    Xpost_Object fillrect;
+    int usefillrect;
+    struct rspan *rsp;
+    int nrsp;
+    int i;
     //int width;
 
     //printf("_fillpoly\n");
@@ -354,111 +538,52 @@ int _fillpoly(Xpost_Context *ctx,
         return unregistered;
     }
 
-    /* extract polygon vertices from ps array;
-       null elements separate subpaths */
-    points = malloc(poly.comp_.sz * sizeof *points);
-    for (i = 0; i < poly.comp_.sz; i++)
     {
-        Xpost_Object pair, x, y;
+        int code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 0);
 
-        pair = xpost_array_get(ctx, poly, i);
-        if (xpost_object_get_type(pair) != arraytype)
+        if (code)
+            return code;
+    }
+
+    /* A fill scanline is a horizontal span. When the device provides a
+       compiled FillRect, render each span through it (the per-pixel plotting
+       then happens in C rather than a PostScript DrawLine/PutPix loop);
+       otherwise fall back to DrawLine unchanged. Both take the same colour
+       components plus four numbers, so the loop body and colour roll below are
+       identical either way. */
+    fillrect = xpost_dict_get(ctx, devdic, nameFillRect);
+    usefillrect = xpost_object_get_type(fillrect) == operatortype;
+
+    /* Paint columns [floor(lo), ceil(hi)): every pixel whose interior
+       the span reaches, and exactly the geometry when the span lies on
+       pixel boundaries. FillRect fills the inclusive box [x, x+w] on
+       row y (a fill span is height 0); DrawLine plots from its first
+       point (included) toward its second (excluded); both therefore
+       cover [xlo, xhi-1]. */
+    numlines = 0;
+    for (i = 0; i < nrsp; i++)
+    {
+        integer xlo = (integer)floor(rsp[i].lo);
+        integer xhi = (integer)ceil(rsp[i].hi);
+        int b = rsp[i].band;
+
+        if (xhi <= xlo)
+            continue;
+        if (usefillrect)
         {
-            points[i].x = SUBPATH_BREAK;
-            points[i].y = SUBPATH_BREAK;
-            continue;
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xhi - xlo - 1));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0)); /* h */
         }
-        x = xpost_array_get(ctx, pair, 0);
-        y = xpost_array_get(ctx, pair, 1);
-        if (xpost_object_get_type(x) == integertype)
-            x = xpost_real_cons((real)x.int_.val);
-        if (xpost_object_get_type(y) == integertype)
-            y = xpost_real_cons((real)y.int_.val);
-
-        //points[i].x = x.real_.val;
-        //points[i].y = y.real_.val;
-        points[i].x = (real)floor(x.real_.val + 0.5);
-        points[i].y = (real)floor(y.real_.val + 0.5);
-    }
-
-    /* find bounding box */
-    for (i = 0; i < poly.comp_.sz; i++)
-    {
-        if (points[i].x == SUBPATH_BREAK)
-            continue;
-        if (points[i].x < minx)
-            minx = points[i].x;
-        if (points[i].x > maxx)
-            maxx = points[i].x;
-        if (points[i].y < miny)
-            miny = points[i].y;
-        if (points[i].y > maxy)
-            maxy = points[i].y;
-    }
-
-    /* an empty or flat polygon spans no scanlines and paints nothing;
-       an empty one would also leave the bounding box at its sentinel
-       values, making the allocation count below hugely negative */
-    if (maxy - miny < 1)
-    {
-        free(points);
-        return 0;
-    }
-
-    /* a complex polygon may cross a scanline many times; grow as needed */
-    cap = 4 * ((int)(maxy - miny) + 1);
-    intersections = calloc(cap, sizeof *intersections);
-    if (!intersections)
-    {
-        free(points);
-        return VMerror;
-    }
-
-    /* intersect polygon edges with scanlines */
-    for (i = 0, j = 0; i < poly.comp_.sz - 1; i++)
-    {
-        real rx, ry;
-
-        if (points[i].x == SUBPATH_BREAK || points[i+1].x == SUBPATH_BREAK)
-            continue;
-        for (yscan = (real)(miny + 0.5); yscan < maxy; yscan += 1.0)
+        else
         {
-            if (_intersect(points[i].x, points[i].y,
-                           points[i+1].x, points[i+1].y,
-                           (real)(minx - 0.5), yscan,
-                           (real)(maxx + 0.5), yscan,
-                           &rx, &ry))
-            {
-                if (j == cap)
-                {
-                    cap *= 2;
-                    tmp = realloc(intersections, cap * sizeof *intersections);
-                    if (!tmp)
-                    {
-                        free(points);
-                        free(intersections);
-                        return VMerror;
-                    }
-                    intersections = tmp;
-                }
-                intersections[j].x = rx;
-                intersections[j].y = ry;
-                j++;
-            }
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xhi));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
         }
-    }
-    numlines = j / 2;
-
-    /* sort intersection points */
-    qsort(intersections, j, sizeof *intersections, _cyxcomp);
-
-    /* arrange ((x1,y1),(x2,y2)) pairs */
-    for (i = 0; i < numlines * 2; i += 2)
-    {
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].x)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i].y)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].x)));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)floor(intersections[i+1].y)));
+        numlines++;
     }
 
     /*call the device's DrawLine generically with continuations.
@@ -525,12 +650,19 @@ int _fillpoly(Xpost_Context *ctx,
        */
 
     xpost_stack_push(ctx->lo, ctx->os, devdic);
-    drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
-    xpost_stack_push(ctx->lo, ctx->os, drawline);
+    if (usefillrect)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, fillrect);
+    }
+    else
+    {
+        drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
+        xpost_stack_push(ctx->lo, ctx->os, drawline);
 
-    /*if drawline is a procedure, we also need to call exec */
-    if (xpost_object_get_type(drawline) == arraytype)
-        xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+        /*if drawline is a procedure, we also need to call exec */
+        if (xpost_object_get_type(drawline) == arraytype)
+            xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+    }
 
     /*--the rest of the code here calls-back to postscript (by "continuation")
         by pushing executable names on the execution-stack, and then returns.
@@ -571,9 +703,170 @@ int _fillpoly(Xpost_Context *ctx,
     /*performance could be increased by factoring-out calls to xpost_name_cons()  ... DONE!
       or using opcode shortcuts for Rbracket & cvx (or just the arrtomark() function) and repeat.
      */
-    free(points);
-    free(intersections);
+    free(rsp);
     return 0;
+}
+
+/* Build a null-separated polygon array of pixel-band rectangles, one
+   per resolved span, in the FillPoly argument format: winding-uniform
+   output any consumer may treat by either insideness rule. Consumes
+   nothing; pushes the array on the operand stack. 0 on success. */
+static
+int _rspans_to_poly(Xpost_Context *ctx,
+                    struct rspan *out,
+                    int nout)
+{
+    Xpost_Object result;
+    int i;
+
+    if (5 * (long)nout > 65535)
+        /* too many spans for a single backing array (the object size
+           field is 16 bits) */
+        return limitcheck;
+
+    result = xpost_array_cons(ctx, 5 * nout);
+    if (xpost_object_get_type(result) == invalidtype)
+        return VMerror;
+    for (i = 0; i < nout; i++)
+    {
+        static const int xsel[4] = { 0, 1, 1, 0 };  /* lo hi hi lo */
+        static const int ysel[4] = { 0, 0, 1, 1 };  /* b  b  b+1 b+1 */
+        int k;
+
+        for (k = 0; k < 4; k++)
+        {
+            Xpost_Object pair = xpost_array_cons(ctx, 2);
+
+            if (xpost_object_get_type(pair) == invalidtype)
+                return VMerror;
+            xpost_array_put(ctx, pair, 0,
+                xpost_real_cons(xsel[k] ? out[i].hi : out[i].lo));
+            xpost_array_put(ctx, pair, 1,
+                xpost_real_cons((real)(out[i].band + ysel[k])));
+            xpost_array_put(ctx, result, 5 * i + k, pair);
+        }
+        xpost_array_put(ctx, result, 5 * i + 4, null);
+    }
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(result));
+    return 0;
+}
+
+/* subjectpoly clippoly  .clipfillpoly  spanpoly
+   Intersect two filled regions, each a null-separated polygon array in
+   the FillPoly argument format, under the nonzero winding rule, and
+   return the intersection as one such array of pixel-band rectangles.
+   This is the exact boolean the clip machinery needs for regions the
+   half-plane clipper cannot express -- many disjoint windows, concave
+   boundaries, counters -- resolved span-by-span at device resolution:
+   both operands scan-convert to winding-resolved band extents, and
+   each band contributes the pairwise overlaps of its extents. */
+static
+int _clipfillpoly(Xpost_Context *ctx,
+                  Xpost_Object subj,
+                  Xpost_Object clip)
+{
+    struct rspan *S = NULL, *C = NULL, *out = NULL;
+    int nS, nC, nout, outcap;
+    int si, ci;
+    int code;
+
+    code = _poly_resolved_spans(ctx, subj, &S, &nS, 0);
+    if (code)
+        return code;
+    code = _poly_resolved_spans(ctx, clip, &C, &nC, 0);
+    if (code)
+    {
+        free(S);
+        return code;
+    }
+
+    nout = 0;
+    outcap = 0;
+    si = ci = 0;
+    while (si < nS && ci < nC)
+    {
+        if (S[si].band < C[ci].band)
+            si++;
+        else if (C[ci].band < S[si].band)
+            ci++;
+        else
+        {
+            /* one shared band: both extent runs are disjoint and
+               ascending, so a linear merge finds every overlap */
+            int b = S[si].band;
+            int i2 = si, j2 = ci;
+
+            while (i2 < nS && S[i2].band == b && j2 < nC && C[j2].band == b)
+            {
+                real L = S[i2].lo > C[j2].lo ? S[i2].lo : C[j2].lo;
+                real R = S[i2].hi < C[j2].hi ? S[i2].hi : C[j2].hi;
+
+                if (L < R)
+                {
+                    code = _rspan_push(&out, &outcap, &nout, b, L, R);
+                    if (code)
+                    {
+                        free(S);
+                        free(C);
+                        free(out);
+                        return code;
+                    }
+                }
+                if (S[i2].hi < C[j2].hi)
+                    i2++;
+                else
+                    j2++;
+            }
+            while (si < nS && S[si].band == b)
+                si++;
+            while (ci < nC && C[ci].band == b)
+                ci++;
+        }
+    }
+    free(S);
+    free(C);
+
+    code = _rspans_to_poly(ctx, out, nout);
+    free(out);
+    return code;
+}
+
+/* poly  .eospanpoly  spanpoly
+   The even-odd interior of a filled region, returned as pixel-band
+   rectangles in the FillPoly argument format. The rectangles are
+   winding-uniform, so downstream nonzero machinery (the span
+   intersection, the device fill) treats them exactly: this is how
+   eofill and eoclip obtain the rule the nonzero pipeline lacks. */
+static
+int _eospanpoly(Xpost_Context *ctx,
+                Xpost_Object poly)
+{
+    struct rspan *rsp = NULL;
+    int nrsp;
+    int code;
+
+    code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 1);
+    if (code)
+        return code;
+
+    code = _rspans_to_poly(ctx, rsp, nrsp);
+    free(rsp);
+    return code;
+}
+
+/* A colour component scaled to a 0..max channel value. The component is
+   clamped to [0,1] first: the colour pipeline can hand a device an
+   out-of-range component, and unclamped it would wrap the byte or shift
+   sign bits across the packed pixel. */
+static double
+_channel(Xpost_Object v, double max)
+{
+    double d = xpost_object_get_type(v) == realtype
+             ? v.real_.val : (double)v.int_.val;
+    if (d < 0.0) d = 0.0;
+    if (d > 1.0) d = 1.0;
+    return d * max;
 }
 
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
@@ -604,8 +897,7 @@ int _fillrectgray(Xpost_Context *ctx,
     height = imgdata.comp_.sz;
 
     /* value -> byte, matching PGMIMAGE PutPix "255 mul cvi put" */
-    b = (unsigned char)(int)((xpost_object_get_type(val) == realtype
-                              ? val.real_.val : (double)val.int_.val) * 255.0);
+    b = (unsigned char)(int)_channel(val, 255.0);
 
     dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
     dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
@@ -639,6 +931,232 @@ int _fillrectgray(Xpost_Context *ctx,
     return 0;
 }
 
+/* Fill a rectangle of a packed-integer rgb device (each row an array
+   of r<<16|g<<8|b). Mirrors PPMIMAGE PutPix handling: each channel
+   scaled by 255 and truncated, coordinates floored, negative extents
+   normalised, inclusive end coordinates, and bounds clipping. The rgb
+   devices render continuous tone, so no halftone cell applies. */
+static
+int _fillrectrgb(Xpost_Context *ctx,
+                 Xpost_Object r,
+                 Xpost_Object g,
+                 Xpost_Object b,
+                 Xpost_Object x,
+                 Xpost_Object y,
+                 Xpost_Object w,
+                 Xpost_Object h,
+                 Xpost_Object devdic)
+{
+    Xpost_Object imgdata, row;
+    double dx, dy, dw, dh;
+    int height, iy, ix, iy0, iy1, ix0, ix1;
+    int packed;
+
+    imgdata = xpost_dict_get(ctx, devdic, nameImgData);
+    if (xpost_object_get_type(imgdata) != arraytype)
+        return undefined;
+    height = imgdata.comp_.sz;
+
+    packed = ((int)_channel(r, 255.0) << 16)
+           | ((int)_channel(g, 255.0) << 8)
+           |  (int)_channel(b, 255.0);
+
+    dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
+    dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
+    dw = xpost_object_get_type(w) == realtype ? w.real_.val : (double)w.int_.val;
+    dh = xpost_object_get_type(h) == realtype ? h.real_.val : (double)h.int_.val;
+
+    /* normalise negative extents, then form inclusive end coords */
+    if (dw < 0) { dw = -dw; dx -= dw; }
+    if (dh < 0) { dh = -dh; dy -= dh; }
+    ix0 = (int)floor(dx);
+    iy0 = (int)floor(dy);
+    ix1 = (int)floor(dx + dw);
+    iy1 = (int)floor(dy + dh);
+
+    /* clip rows to the device */
+    if (iy0 < 0) iy0 = 0;
+    if (iy1 > height - 1) iy1 = height - 1;
+
+    for (iy = iy0; iy <= iy1; iy++)
+    {
+        int width, cx0, cx1;
+        row = xpost_array_get(ctx, imgdata, iy);
+        if (xpost_object_get_type(row) != arraytype)
+            return undefined;
+        width = row.comp_.sz;
+        cx0 = ix0 < 0 ? 0 : ix0;
+        cx1 = ix1 > width - 1 ? width - 1 : ix1;
+        for (ix = cx0; ix <= cx1; ix++)
+            xpost_array_put(ctx, row, ix, xpost_int_cons(packed));
+    }
+
+    return 0;
+}
+
+/* Set every pixel of a packed-integer raster (an array of row arrays)
+   to integer zero. Devices call this once from Create; initialising
+   each element from PostScript costs an interpreter loop per pixel. */
+static
+int _zerorows(Xpost_Context *ctx, Xpost_Object imgdata)
+{
+    int iy, ix;
+
+    for (iy = 0; iy < imgdata.comp_.sz; iy++)
+    {
+        Xpost_Object row = xpost_array_get(ctx, imgdata, iy);
+        if (xpost_object_get_type(row) != arraytype)
+            return typecheck;
+        for (ix = 0; ix < row.comp_.sz; ix++)
+            xpost_array_put(ctx, row, ix, xpost_int_cons(0));
+    }
+    return 0;
+}
+
+/* Write bytes to an emission target, routing through the registered
+   stdout/stderr handler when one has claimed the stream, as the
+   writestring operator does. */
+static
+int _emit_write(Xpost_Context *ctx, Xpost_File *f,
+                const unsigned char *buf, size_t len)
+{
+    FILE *stream = xpost_file_stdio_stream_get(f);
+
+    if (stream == stdout && ctx->stdout_fn)
+        return ctx->stdout_fn(ctx->stdout_user, (const char *)buf, len) == len ? 0 : -1;
+    if (stream == stderr && ctx->stderr_fn)
+        return ctx->stderr_fn(ctx->stderr_user, (const char *)buf, len) == len ? 0 : -1;
+    return xpost_file_write((const char *)buf, 1, (int)len, f) == (int)len ? 0 : -1;
+}
+
+/* Emit a grayscale array-of-strings raster as a binary P4 PBM:
+   header, then each row's bytes thresholded at half coverage (black
+   below 128) and packed most significant bit first. */
+static
+int _writepbmrows(Xpost_Context *ctx,
+                  Xpost_Object imgdata,
+                  Xpost_Object F)
+{
+    Xpost_File *f;
+    Xpost_Object row;
+    unsigned char *buf;
+    char head[32];
+    int width, height, rb, iy, ix, hn;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    if (!xpost_object_is_writeable(ctx, F))
+        return invalidaccess;
+    f = xpost_file_get_file_pointer(ctx->lo, F);
+
+    height = imgdata.comp_.sz;
+    if (height == 0)
+        return rangecheck;
+    row = xpost_array_get(ctx, imgdata, 0);
+    if (xpost_object_get_type(row) != stringtype)
+        return typecheck;
+    width = row.comp_.sz;
+    rb = (width + 7) / 8;
+
+    hn = snprintf(head, sizeof head, "P4\n%d %d\n", width, height);
+    if (_emit_write(ctx, f, (unsigned char *)head, (size_t)hn) < 0)
+        return ioerror;
+
+    buf = malloc((size_t)rb);
+    if (!buf)
+        return VMerror;
+    for (iy = 0; iy < height; iy++)
+    {
+        const unsigned char *p;
+
+        row = xpost_array_get(ctx, imgdata, iy);
+        if (xpost_object_get_type(row) != stringtype
+            || row.comp_.sz != width)
+        {
+            free(buf);
+            return typecheck;
+        }
+        p = (unsigned char *)xpost_string_get_pointer(ctx, row);
+        memset(buf, 0, (size_t)rb);
+        for (ix = 0; ix < width; ix++)
+            if (p[ix] < 128)
+                buf[ix / 8] |= 0x80 >> (ix % 8);
+        if (_emit_write(ctx, f, buf, (size_t)rb) < 0)
+        {
+            free(buf);
+            return ioerror;
+        }
+    }
+    free(buf);
+    return 0;
+}
+
+/* Emit a packed-integer rgb raster as a binary P6 PPM: header, then
+   three bytes per pixel unpacked from each row's r<<16|g<<8|b
+   integers. Emitting from PostScript costs several string operations
+   per pixel, which dominates page output time. */
+static
+int _writeppmrows(Xpost_Context *ctx,
+                  Xpost_Object imgdata,
+                  Xpost_Object F)
+{
+    Xpost_File *f;
+    Xpost_Object row;
+    unsigned char *buf;
+    char head[32];
+    int width, height, iy, ix, hn;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    if (!xpost_object_is_writeable(ctx, F))
+        return invalidaccess;
+    f = xpost_file_get_file_pointer(ctx->lo, F);
+
+    height = imgdata.comp_.sz;
+    if (height == 0)
+        return rangecheck;
+    row = xpost_array_get(ctx, imgdata, 0);
+    if (xpost_object_get_type(row) != arraytype)
+        return typecheck;
+    width = row.comp_.sz;
+
+    hn = snprintf(head, sizeof head, "P6\n%d %d\n255\n", width, height);
+    if (_emit_write(ctx, f, (unsigned char *)head, (size_t)hn) < 0)
+        return ioerror;
+
+    buf = malloc((size_t)width * 3);
+    if (!buf)
+        return VMerror;
+    for (iy = 0; iy < height; iy++)
+    {
+        row = xpost_array_get(ctx, imgdata, iy);
+        if (xpost_object_get_type(row) != arraytype
+            || row.comp_.sz != width)
+        {
+            free(buf);
+            return typecheck;
+        }
+        for (ix = 0; ix < width; ix++)
+        {
+            Xpost_Object pix = xpost_array_get(ctx, row, ix);
+            int packed = xpost_object_get_type(pix) == integertype
+                       ? pix.int_.val : 0;
+
+            buf[ix * 3]     = (unsigned char)((packed >> 16) & 0xff);
+            buf[ix * 3 + 1] = (unsigned char)((packed >> 8) & 0xff);
+            buf[ix * 3 + 2] = (unsigned char)(packed & 0xff);
+        }
+        if (_emit_write(ctx, f, buf, (size_t)width * 3) < 0)
+        {
+            free(buf);
+            return ioerror;
+        }
+    }
+    free(buf);
+    return 0;
+}
+
+
 int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                                        Xpost_Object sd)
 {
@@ -653,9 +1171,21 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 0, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 0, 2, arraytype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".clipfillpoly", (Xpost_Op_Func)_clipfillpoly, 1, 2, arraytype, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 0, 8,
+                             numbertype, numbertype, numbertype, numbertype,
+                             numbertype, numbertype, numbertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".zerorows", (Xpost_Op_Func)_zerorows, 0, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 0, 2,
+                             arraytype, filetype); INSTALL;
+    op = xpost_operator_cons(ctx, ".writepbmrows", (Xpost_Op_Func)_writepbmrows, 0, 2,
+                             arraytype, filetype); INSTALL;
     if (xpost_object_get_type((nameImgData = xpost_name_cons(ctx, "ImgData"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;
