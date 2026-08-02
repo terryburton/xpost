@@ -620,20 +620,6 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
             free it.
    return reclaimed size
  */
-/* free list bucket helpers shared with xpost_free.c */
-#define XPOST_FREE_NBUCKETS 16
-static unsigned int _sweep_bucket(unsigned int sz)
-{
-    unsigned int b = 0;
-    unsigned int s = sz >> 5;
-    while (s && b < XPOST_FREE_NBUCKETS - 1)
-    {
-        s >>= 1;
-        b++;
-    }
-    return b;
-}
-
 static
 unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
 {
@@ -670,7 +656,7 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
             unsigned int bz;
             unsigned int b;
             mem->table.tab[i].tag = 0;
-            b = _sweep_bucket(mem->table.tab[i].sz);
+            b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;
             bz = z + b * sizeof(unsigned int);
             memcpy(mem->base + mem->table.tab[i].adr, mem->base + bz, sizeof(unsigned int));

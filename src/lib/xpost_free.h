@@ -87,6 +87,28 @@ typedef enum
 #define XPOST_FREE_ACCEPT_DENOM 2
 
 /**
+ * The free list is bucketed by allocation size: ent 0's data area holds
+ * XPOST_FREE_NBUCKETS list-head words, and a freed ent's first word
+ * links to the next ent in its bucket. The allocator and the collector's
+ * sweep both address the buckets through this one size-to-bucket map,
+ * so the layout cannot drift between them.
+ */
+#define XPOST_FREE_NBUCKETS 16
+
+static inline unsigned int
+xpost_free_bucket_for_size(unsigned int sz)
+{
+    unsigned int b = 0;
+    unsigned int s = sz >> 5;
+    while (s && b < XPOST_FREE_NBUCKETS - 1)
+    {
+        s >>= 1;
+        b++;
+    }
+    return b;
+}
+
+/**
  * @brief  initialize the FREE special entity which points
  *         to the head of the free list
  */

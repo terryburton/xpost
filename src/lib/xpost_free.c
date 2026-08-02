@@ -69,19 +69,7 @@ static int _xpost_free_gc_threshold(void)
    Bucket b holds entities with size in [2^(b+4), 2^(b+5)), clamped to
    the first and last buckets. The head words live in the FREE special
    entity's data area. */
-#define XPOST_FREE_NBUCKETS 16
-
-static unsigned int _xpost_free_bucket(unsigned int sz)
-{
-    unsigned int b = 0;
-    unsigned int s = sz >> 5;
-    while (s && b < XPOST_FREE_NBUCKETS - 1)
-    {
-        s >>= 1;
-        b++;
-    }
-    return b;
-}
+/* the bucket map and count live in xpost_free.h, shared with the sweep */
 
 int xpost_free_init(Xpost_Memory_File *mem)
 {
@@ -210,7 +198,7 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("unable to load free list head");
         return -1;
     }
-    z += _xpost_free_bucket(sz) * sizeof(unsigned int);
+    z += xpost_free_bucket_for_size(sz) * sizeof(unsigned int);
 
     /* push onto the bucket: link word lives in the ent's data area */
     memcpy(mem->base + a, mem->base + z, sizeof(unsigned int));
@@ -325,7 +313,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
     unsigned int b;
     unsigned int headz = z;
 
-    for (b = _xpost_free_bucket(sz); b < XPOST_FREE_NBUCKETS; b++)
+    for (b = xpost_free_bucket_for_size(sz); b < XPOST_FREE_NBUCKETS; b++)
     {
         unsigned int best = 0, bestz = 0, bestsz = 0;
 
