@@ -114,7 +114,12 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
     }
     else
     {
-        xpost_stack_init(mem, &v.save_.stk);
+        /* the stack address is narrower than the save object's stk
+           field on a wide-word build: land it whole */
+        unsigned int stk;
+
+        xpost_stack_init(mem, &stk);
+        v.save_.stk = stk;
     }
     xpost_stack_push(mem, vs, v);
     return v;
