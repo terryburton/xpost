@@ -177,6 +177,9 @@ struct _Xpost_Context {
                             the interpreter pushes it as data rather than
                             executing it. A binary object sequence also
                             scans to an executable array but executes. */
+    int scan_proc_depth; /**< the scanner's live brace-procedure nesting,
+                              bounded against C-stack exhaustion; zero
+                              between scans */
 
     size_t (*stdout_fn)(void *, const char *, size_t); /**< divert %stdout text */
     void *stdout_user;

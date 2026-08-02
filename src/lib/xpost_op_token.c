@@ -582,15 +582,16 @@ int grok(Xpost_Context *ctx,
                 /* each level is a toke() frame carrying a 64 KB token buffer;
                    cap the nesting well within the C stack and raise
                    limitcheck beyond it. The counter unwinds on the single
-                   exit below, so scans stay balanced. */
+                   exit below, so scans stay balanced. It lives in the
+                   context, not process-global state: a scan never yields
+                   today, but each context is its own interpreter. */
                 enum { PROC_NEST_MAX = 100 };
-                static int depth = 0;
                 int ret;
                 Xpost_Object tail;
 
-                if (++depth > PROC_NEST_MAX)
+                if (++ctx->scan_proc_depth > PROC_NEST_MAX)
                 {
-                    --depth;
+                    --ctx->scan_proc_depth;
                     XPOST_LOG_ERR("procedure nesting too deep");
                     return limitcheck;
                 }
@@ -634,7 +635,7 @@ int grok(Xpost_Context *ctx,
                         *retval = xpost_object_cvx(proc);
                     }
                 }
-                --depth;
+                --ctx->scan_proc_depth;
                 return ret;
             }
 
