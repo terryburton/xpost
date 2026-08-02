@@ -1132,7 +1132,7 @@ int evalstring(Xpost_Context *ctx, Xpost_Object s)
             return stackunderflow;
         if (!xpost_stack_push(ctx->lo, ctx->es, s))
             return execstackoverflow;
-        if (xpost_object_get_type(t)==arraytype)
+        if (xpost_object_get_type(t)==arraytype && ctx->scanner_defer)
         {
             if (!xpost_stack_push(ctx->lo, ctx->os , t))
                 return stackoverflow;
@@ -1172,7 +1172,7 @@ int evalfile(Xpost_Context *ctx, Xpost_Object f)
         t = xpost_stack_pop(ctx->lo, ctx->os);
         if (!xpost_stack_push(ctx->lo, ctx->es, f))
             return execstackoverflow;
-        if (xpost_object_get_type(t)==arraytype)
+        if (xpost_object_get_type(t)==arraytype && ctx->scanner_defer)
         {
             if (!xpost_stack_push(ctx->lo, ctx->os, t))
                 return stackoverflow;
@@ -2015,7 +2015,13 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
        (PLRM). It exists in userdict by the time this runs. */
     fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
     if (xpost_object_get_type(fd) == dicttype)
+    {
         xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+        /* the aliases name the same local directory, in systemdict rather
+           than userdict so the program's dictionary stays clear */
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "GlobalFontDirectory"), fd);
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SharedFontDirectory"), fd);
+    }
     /* statusdict and serverdict are local dictionaries a program mutates, so
        save/restore isolates a job's changes; systemdict names them (PLRM). */
     st = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "statusdict"));

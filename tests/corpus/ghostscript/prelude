@@ -1,0 +1,15 @@
+% Ghostscript's own examples assume a few operators that Ghostscript
+% provides -- as public extensions (min, max) or internal operators
+% (.min, .max) -- but the PostScript Language Reference Manual does not
+% define. Supplying them here, to both the reference and xpost so the
+% comparison stays fair, lets the pristine examples run without editing
+% them. These are not xpost operators and their absence is not a defect.
+/min where { pop } { /min { 2 copy gt { exch } if pop } bind def } ifelse
+/max where { pop } { /max { 2 copy lt { exch } if pop } bind def } ifelse
+/.min where { pop } { /.min /min load def } ifelse
+/.max where { pop } { /.max /max load def } ifelse
+% Ghostscript also keeps a /QUIET boolean in systemdict (true under -q), which
+% waterfal.ps consults unguarded to gate its console chatter. xpost's own quiet
+% flag is deliberately interpreter-private, so supply a visible stand-in; the
+% chatter goes to the log either way and leaves no marks on the page.
+/QUIET where { pop } { /QUIET false def } ifelse

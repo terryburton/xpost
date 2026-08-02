@@ -256,6 +256,318 @@ grestore
 userdict /exch undef
 (text and stroking survive a shadowed exch) assert
 
+% --- the language answers for itself ---
+languagelevel 3 eq (languagelevel names the level) assert
+false (pw) startjob (startjob accepts a job boundary) assert
+currentshared currentglobal eq (shared and global VM are one view) assert
+42 scheck (scheck follows gcheck) assert
+shareddict globaldict eq (shareddict is the global dictionary) assert
+/st.uf << /FontType 3 /FontMatrix [1 0 0 1 0 0] /Encoding 256 array
+    /BuildChar { pop pop } /FontBBox [0 0 1 1] >> definefont pop
+/st.uf undefinefont
+FontDirectory /st.uf known not (undefinefont removes the instance) assert
+true setstrokeadjust currentstrokeadjust (stroke adjustment is recorded) assert
+false setstrokeadjust
+0.5 setsmoothness currentsmoothness 0.5 eq (smoothness is recorded) assert
+% --- ReusableStreamDecode buffers its whole source at construction
+%     and replays it from any position ---
+currentfile /ASCIIHexDecode filter /ReusableStreamDecode filter
+48656C6C6F>
+/rsdstash exch def
+rsdstash 5 string readstring pop (Hello) eq
+(a reusable stream reads its data) assert
+rsdstash resetfile
+rsdstash 5 string readstring pop (Hello) eq
+(resetfile replays a reusable stream) assert
+rsdstash 2 setfileposition
+rsdstash fileposition 2 eq (fileposition reports the reusable position) assert
+rsdstash 3 string readstring pop (llo) eq
+(setfileposition repositions a reusable stream) assert
+
+% --- ASCII base-85 string literals decode in the scanner ---
+<~87cURD]hD=6i~> (Hello CID) eq (a base-85 literal decodes) assert
+<~z~> <00000000> eq (z abbreviates four zero bytes) assert
+
+% --- binary tokens (PLRM 3.14.2): every encoding a packaged program
+%     body uses, plus the sibling byte orders ---
+<8820> cvx exec 32 eq (int8) assert
+<88E0> cvx exec -32 eq (int8 negative) assert
+<860100> cvx exec 256 eq (int16 high order) assert
+<870001> cvx exec 256 eq (int16 low order) assert
+<8400010000> cvx exec 65536 eq (int32 high order) assert
+<8500000100> cvx exec 65536 eq (int32 low order) assert
+<84FFFFFFFF> cvx exec -1 eq (int32 negative) assert
+<8A3F800000> cvx exec 1.0 eq (real IEEE high order) assert
+<8B0000803F> cvx exec 1.0 eq (real IEEE low order) assert
+<8D01> cvx exec true eq (boolean) assert
+<8E03414243> cvx exec (ABC) eq (string, 1-byte length) assert
+<8F0003414243> cvx exec (ABC) eq (string, 2-byte length) assert
+<9100> cvx exec /abs eq (literal system name) assert
+-5 <9200> cvx exec 5 eq (executable system name executes) assert
+% a binary token byte delimits the token it follows
+<747275658820> cvx exec 32 eq exch true eq and (binary byte delimits a name token) assert
+% inside a deferred procedure body
+<7B20880A203320616464207D> cvx exec exec 13 eq (binary token inside a procedure) assert
+
+% --- ASCII85Decode filter over the executing file: the program resumes
+%     after the end-of-data marker, as packaged bodies require ---
+currentfile /ASCII85Decode filter cvx exec
+04?gtE,ol+AKY282BXt<+?))!3%uI70O5f3AS)8~>
+a85probe length 5 eq (filtered definition arrived) assert
+a85probe 0 get 66 eq (filtered content decodes) assert
+% and a binary token delivered through the filter
+currentfile /ASCII85Decode filter cvx exec
+04?gt@VK_%DegJO.Ni85AdS~>
+a85bintok 42 eq (binary token through the filter) assert
+
+% --- decode filters ---
+currentfile /ASCIIHexDecode filter cvx exec
+2F73742E68657876616C2034322064656620>
+st.hexval 42 eq (ASCIIHexDecode delivers and the file resumes after the marker) assert
+% SubFileDecode passes data up to and INCLUDING the count-th EOD string (PLRM),
+% and a count of zero consumes the first occurrence without passing it
+/st.subf (semantics.scratch) (w) file def
+st.subf (subfile payload*EOD*after) writestring st.subf closefile
+(semantics.scratch) (r) file 1 (*EOD*) /SubFileDecode filter
+40 string readstring pop (subfile payload*EOD*) eq
+    (SubFileDecode passes data up to and including the delimiter) assert
+(semantics.scratch) (r) file 0 (*EOD*) /SubFileDecode filter
+40 string readstring pop (subfile payload) eq
+    (SubFileDecode with count zero consumes the delimiter without passing it) assert
+/st.f (semantics.scratch) (w) file def
+st.f <014142FD4380> writestring st.f closefile
+(semantics.scratch) (r) file /RunLengthDecode filter
+16 string readstring pop (ABCCCC) eq (RunLengthDecode expands runs) assert
+% a fixed deflate stream (zlib framing) of a known sentence, staged
+% through the scratch file so the decoder owns its source outright
+/st.f (semantics.scratch) (w) file def
+st.f <78DA0DCADB0980301444C156B6002D2AE00185E446B3577C54AFF33D3E4E7851437BA598497911F9CCDE6E553219568945B91272FF63EB830F58BD14F3> writestring
+st.f closefile
+(semantics.scratch) (r) file /FlateDecode filter
+64 string readstring pop
+(squeeze me please, twenty-six letters and then some more) eq
+(FlateDecode expands a fixed deflate stream) assert
+% DCTDecode inflates a JPEG stream into image samples; the guard probe
+% skips the block on a build without the JPEG library. The embedded
+% stream is a solid red 8-by-8 JPEG: 192 samples, red channel high.
+/hasdct false def
+{ currentfile /DCTDecode filter closefile /hasdct true def } stopped pop
+$error /newerror false put
+hasdct {
+    /st.f (semantics.scratch) (w) file def
+    st.f <FFD8FFE000104A46494600010100000000000000FFDB0043000302020302020303030304030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B1016101113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414FFC00011080008000803011100021101031101FFC40014000100000000000000000000000000000008FFC40014100100000000000000000000000000000000FFC4001501010100000000000000000000000000000709FFC40014110100000000000000000000000000000000FFDA000C03010002110311003F003A03154DFFD9> writestring
+    st.f closefile
+    (semantics.scratch) (r) file /DCTDecode filter
+    192 string readstring pop
+    dup length 192 eq (DCTDecode delivers the full sample block) assert
+    dup 0 get 200 gt (DCTDecode red channel is high) assert
+    2 get 80 lt (DCTDecode blue channel is low) assert
+} if
+currentfile /ASCIIHexDecode filter /LZWDecode filter 100 string readstring
+80120CA6C361BC406881C160F0983130B457101DCDE7236190590B82418C267309A4DC20309B8C9208E47A412292474DC21808>
+pop (Hello hello hello LZW world, hello again and again and again!) eq
+(LZWDecode expands a compressed stream and the file resumes after it) assert
+% the same 340-byte ramp encoded both ways around the point where the
+% code width grows from nine to ten bits: the default widens one code
+% early, EarlyChange 0 exactly when the table requires it
+/st.lzwsum { 0 exch { add } forall } def
+currentfile /ASCIIHexDecode filter /LZWDecode filter 400 string readstring
+800000E0E0A870462A188E07E4626950B662349C0EE7E42A31269A50AA15EB65EB1196D26CB8
+1CEEE7ABF0060A088603E26168D0764224940AE5E329B0E67A40A211E964EA9156B25CB018EC
+E6AB71C6EA78BE1FE06068503622148C06E3E22930A65A309A0DE763EA1116924CA814EAE5AA
+F186CA68B61BEE676BD1F602048402E1E128B0663A209209E562E990D6723CA010E8E4AA7146
+AA58AE17EC666B51B6E274BC1EEFE02830261A108A05E361E91096522C980CE6E3A9F1068A48
+A613EA656AD176C264B41AEDE72BB1E6FA008201E160E89056321C9008E4E2A970C66A389E0F
+E8646A5136A254AC16EBE62B31A6DA70BA1DEF67E81016120C8804E2E1A8F0864A28960BE663
+69D0F68244A412E9E52AB166BA60B219ED66EB91D6791F281208832108521887220892288B23
+08D2388F24091248932509525897260992689B2709D2789F280A1288A3290A5298A72A0A92A8
+8080>
+pop dup length 340 eq exch st.lzwsum 42450 eq and
+(LZWDecode widens its code early crossing the table boundary) assert
+currentfile /ASCIIHexDecode filter << /EarlyChange 0 >> /LZWDecode filter
+400 string readstring
+800000E0E0A870462A188E07E4626950B662349C0EE7E42A31269A50AA15EB65EB1196D26CB8
+1CEEE7ABF0060A088603E26168D0764224940AE5E329B0E67A40A211E964EA9156B25CB018EC
+E6AB71C6EA78BE1FE06068503622148C06E3E22930A65A309A0DE763EA1116924CA814EAE5AA
+F186CA68B61BEE676BD1F602048402E1E128B0663A209209E562E990D6723CA010E8E4AA7146
+AA58AE17EC666B51B6E274BC1EEFE02830261A108A05E361E91096522C980CE6E3A9F1068A48
+A613EA656AD176C264B41AEDE72BB1E6FA008201E160E89056321C9008E4E2A970C66A389E0F
+E8646A5136A254AC16EBE62B31A6DA70BA1DEF67E81016120C8804E2E1A8F0864A28960BE663
+69D0F68244A412E9E52AB166BA60B219ED66EB91D6F23E502411064210A4310E441124511646
+11A4711E48122491264A12A4B12E4C1324D1364E13A4F13E50142511465214A5314E54152551
+01>
+pop dup length 340 eq exch st.lzwsum 42450 eq and
+(EarlyChange 0 defers the wider code to the table boundary) assert
+currentfile /ASCIIHexDecode filter
+<< /K -1 /Columns 16 /Rows 4 >> /CCITTFaxDecode filter 16 string readstring
+26AE6DCCDC90C0040040>
+pop <0FFFF0FFFF0FFFF0> eq
+(CCITTFaxDecode expands the two-dimensional coding) assert
+currentfile /ASCIIHexDecode filter
+<< /K 0 /Columns 16 /Rows 4 /BlackIs1 true >> /CCITTFaxDecode filter
+16 string readstring
+35645B9CDD90C0040040040040040040>
+pop <F0000F0000F0000F> eq
+(the one-dimensional coding honours BlackIs1) assert
+% --- encode filters: the write-side counterparts ---
+/st.f (semantics.scratch) (w) file def
+/st.e st.f /ASCIIHexEncode filter def
+st.e (Hello) writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file 16 string readstring pop
+(48656C6C6F>) eq (ASCIIHexEncode writes hex and the closing marker) assert
+/st.f (semantics.scratch) (w) file def
+/st.e st.f /ASCII85Encode filter def
+st.e <00000000010203> writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file 16 string readstring pop
+(z!<N?~>) eq (ASCII85Encode abbreviates zeros and closes the partial group) assert
+/st.f (semantics.scratch) (w) file def
+/st.e st.f 0 /RunLengthEncode filter def
+st.e (AAAABCCCCC) writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file 16 string readstring pop
+<FD410042FC4380> eq (RunLengthEncode packs runs and literals) assert
+/st.f (semantics.scratch) (w) file def
+/st.e st.f 4 /RunLengthEncode filter def
+st.e (DDDDDDDD) writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file 16 string readstring pop
+<FD44FD4480> eq (records bound the runs in RunLengthEncode) assert
+/st.data (the rain in spain stays mainly in the plain) def
+/st.f (semantics.scratch) (w) file def
+/st.e st.f /LZWEncode filter def
+st.e st.data writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file /LZWDecode filter 64 string readstring pop
+st.data eq (LZWEncode round-trips through its decoder) assert
+/st.hasflate false def
+{ currentfile /FlateDecode filter closefile /st.hasflate true def } stopped pop
+$error /newerror false put
+st.hasflate {
+    /st.f (semantics.scratch) (w) file def
+    /st.e st.f /FlateEncode filter def
+    st.e st.data writestring st.e closefile st.f closefile
+    (semantics.scratch) (r) file /FlateDecode filter 64 string readstring pop
+    st.data eq (FlateEncode round-trips through its decoder) assert
+}{ pop } ifelse
+% binary object sequences: the writers emit the scanner's encoding,
+% gated by the object format parameter, and a sequence round-trips
+currentobjectformat 0 eq (the object format starts disabled) assert
+{ (x) 0 printobject } stopped { pop pop true }{ false } ifelse
+(a disabled format refuses the writers) assert
+2 setobjectformat
+currentobjectformat 2 eq (setobjectformat records the format) assert
+/st.f (semantics.scratch) (w) file def
+/st.arr 6 array def
+st.arr 0 42 put
+st.arr 1 3.25 put
+st.arr 2 (hi) put
+st.arr 3 /nm put
+st.arr 4 [ true null ] put
+st.arr 5 mark put
+st.f st.arr 7 writeobject
+st.f closefile
+/st.b (semantics.scratch) (r) file 200 string readstring pop def
+st.b 0 get 16#81 eq st.b 1 get 1 eq and
+(the sequence heads with its format and count) assert
+st.b 2 get st.b 3 get 256 mul add st.b length eq
+(the header length spans the sequence) assert
+st.b 5 get 7 eq (the tag rides the top-level record) assert
+(semantics.scratch) (r) file token
+{
+    0 get
+    dup 0 get 42 eq
+    1 index 1 get 3.25 sub abs 0.001 lt and
+    1 index 2 get (hi) eq and
+    1 index 3 get /nm eq and
+    1 index 4 get dup 0 get true eq exch 1 get null eq and and
+    1 index 5 get mark eq and
+    exch pop
+}{ false } ifelse
+(a sequence round-trips through the scanner) assert
+0 setobjectformat
+
+% DCTEncode, where the JPEG library is present: the stream carries
+% the interchange markers, a smooth ramp survives the lossy
+% round-trip within a few counts, and a colour image keeps its
+% component count
+mark
+{ /st.f (semantics.scratch) (w) file def
+  /st.e st.f << /Columns 16 /Rows 16 /Colors 1 >> /DCTEncode filter def
+} stopped { cleartomark false }{ pop true } ifelse
+{
+    /st.data 256 string def
+    0 1 255 { /i exch def
+        st.data i i 16 mod i 16 idiv add 8 mul put
+    } for
+    st.e st.data writestring st.e closefile st.f closefile
+    /st.j (semantics.scratch) (r) file 4096 string readstring pop def
+    st.j 0 get 16#FF eq st.j 1 get 16#D8 eq and
+    st.j dup length 2 sub get 16#FF eq and
+    st.j dup length 1 sub get 16#D9 eq and
+    (DCTEncode writes a JPEG interchange stream) assert
+    /st.rt 256 string def
+    (semantics.scratch) (r) file /DCTDecode filter
+    st.rt readstring pop pop
+    /st.md 0 def
+    0 1 255 { /i exch def
+        st.rt i get st.data i get sub abs
+        dup st.md gt { /st.md exch def }{ pop } ifelse
+    } for
+    st.md 8 le (a smooth ramp survives the lossy round-trip) assert
+    /st.f (semantics.scratch) (w) file def
+    /st.e st.f << /Columns 8 /Rows 8 /Colors 3 >> /DCTEncode filter def
+    /st.data 192 string def
+    0 3 189 { /i exch def
+        st.data i 10 put
+        st.data i 1 add 200 put
+        st.data i 2 add 60 put
+    } for
+    st.e st.data writestring st.e closefile st.f closefile
+    /st.rt 192 string def
+    (semantics.scratch) (r) file /DCTDecode filter
+    dup st.rt readstring pop length 192 eq
+    exch read not and
+    (a colour image keeps its component count) assert
+    st.rt 96 get 10 sub abs 6 le
+    st.rt 97 get 200 sub abs 6 le and
+    st.rt 98 get 60 sub abs 6 le and
+    (a flat colour survives the transform and quantization) assert
+} if
+/st.f (semantics.scratch) (w) file def
+/st.e st.f << /K -1 /Columns 16 /Rows 4 >> /CCITTFaxEncode filter def
+st.e <0FFFF0FFFF0FFFF0> writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file 16 string readstring pop
+<26AE6DCCDC90C0040040> eq
+(CCITTFaxEncode writes the two-dimensional coding) assert
+% the mixed coding types each row by a tag bit behind its
+% end-of-line marker, and round-trips behind them
+/st.f (semantics.scratch) (w) file def
+/st.e st.f << /K 2 /Columns 16 /Rows 4 /EndOfLine true >> /CCITTFaxEncode filter def
+st.e <F0F00F0FF0F00F0F> writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file
+<< /K 2 /Columns 16 /Rows 4 >> /CCITTFaxDecode filter
+16 string readstring pop <F0F00F0FF0F00F0F> eq
+(the mixed coding round-trips behind its markers) assert
+% without markers a mixed row carries no tag naming its coding,
+% and the stream does not decode
+/st.f (semantics.scratch) (w) file def
+/st.e st.f << /K 2 /Columns 16 /Rows 4 >> /CCITTFaxEncode filter def
+st.e <F0F00F0FF0F00F0F> writestring st.e closefile st.f closefile
+(semantics.scratch) (r) file
+<< /K 2 /Columns 16 /Rows 4 >> /CCITTFaxDecode filter
+16 string readstring exch pop not
+(a marker-less mixed stream does not decode) assert
+
+% --- statusdict: the printer-state dictionary drivers probe and write. The
+% dvips prologue reads /product from it and its @manualfeed/@copies specials
+% put flags into it, so it must exist, carry product, and accept puts; and
+% #copies must scan as an ordinary name. ---
+statusdict type /dicttype eq (statusdict exists) assert
+statusdict /product known (statusdict carries product) assert
+statusdict /product get type /stringtype eq (product is a string) assert
+{ statusdict /manualfeed true put } stopped not (statusdict accepts a put) assert
+statusdict /manualfeed get (the put value reads back) assert
+statusdict /manualfeed false put
+/#copies 2 def
+#copies 2 eq (#copies scans as an ordinary name) assert
+currentdict /#copies undef
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit

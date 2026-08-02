@@ -98,6 +98,318 @@ int xpost_op_string_mode_file (Xpost_Context *ctx,
     return 0;
 }
 
+/* file /FilterName  filter  file'
+   layer a decoding filter over a readable file */
+static
+int xpost_op_file_filter (Xpost_Context *ctx,
+                          Xpost_Object F,
+                          Xpost_Object name)
+{
+    Xpost_Object namestr;
+    char *cname;
+    Xpost_Object f;
+
+    namestr = xpost_name_get_string(ctx, name);
+    cname = xpost_string_allocate_cstring(ctx, namestr);
+    if (!cname)
+        return VMerror;
+    {
+        size_t len = strlen(cname);
+
+        if (len > 6 && strcmp(cname + len - 6, "Encode") == 0)
+        {
+            if (!xpost_object_is_writeable(ctx, F))
+            {
+                free(cname);
+                return invalidaccess;
+            }
+            if (strcmp(cname, "ASCIIHexEncode") == 0)
+                f = xpost_file_cons_filter_enc_hex(ctx->lo, F);
+            else if (strcmp(cname, "ASCII85Encode") == 0)
+                f = xpost_file_cons_filter_enc_a85(ctx->lo, F);
+            else if (strcmp(cname, "NullEncode") == 0)
+                f = xpost_file_cons_filter_enc_null(ctx->lo, F);
+            else if (strcmp(cname, "RunLengthEncode") == 0)
+                f = xpost_file_cons_filter_enc_rle(ctx->lo, F, 0);
+            else if (strcmp(cname, "LZWEncode") == 0)
+                f = xpost_file_cons_filter_enc_lzw(ctx->lo, F, 1);
+            else if (strcmp(cname, "CCITTFaxEncode") == 0)
+                f = xpost_file_cons_filter_enc_ccitt(ctx->lo, F, 0, 1728, 0, 0, 0, 0, 1);
+#ifdef HAVE_ZLIB
+            else if (strcmp(cname, "FlateEncode") == 0)
+                f = xpost_file_cons_filter_enc_flate(ctx->lo, F);
+#endif
+            else
+            {
+                XPOST_LOG_ERR("unsupported filter %s", cname);
+                free(cname);
+                return undefined;
+            }
+            free(cname);
+            if (xpost_object_get_type(f) == invalidtype)
+                return ioerror;
+            f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+            f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+            xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+            return 0;
+        }
+    }
+    if (!xpost_object_is_readable(ctx, F))
+    {
+        free(cname);
+        return invalidaccess;
+    }
+    if (strcmp(cname, "ASCII85Decode") == 0)
+        f = xpost_file_cons_filter_a85(ctx->lo, F);
+    else if (strcmp(cname, "ASCIIHexDecode") == 0)
+        f = xpost_file_cons_filter_hex(ctx->lo, F);
+    else if (strcmp(cname, "RunLengthDecode") == 0)
+        f = xpost_file_cons_filter_rle(ctx->lo, F);
+    else if (strcmp(cname, "ReusableStreamDecode") == 0)
+        f = xpost_file_cons_filter_rsd(ctx->lo, F);
+    else if (strcmp(cname, "LZWDecode") == 0)
+        f = xpost_file_cons_filter_lzw(ctx->lo, F, 1);
+    else if (strcmp(cname, "CCITTFaxDecode") == 0)
+        f = xpost_file_cons_filter_ccitt(ctx->lo, F, 0, 1728, 0, 0, 0, 0, 1);
+#ifdef HAVE_ZLIB
+    else if (strcmp(cname, "FlateDecode") == 0)
+        f = xpost_file_cons_filter_flate(ctx->lo, F);
+#endif
+#ifdef HAVE_LIBJPEG
+    else if (strcmp(cname, "DCTDecode") == 0)
+        f = xpost_file_cons_filter_dct(ctx->lo, F);
+#endif
+    else
+    {
+        XPOST_LOG_ERR("unsupported filter %s", cname);
+        free(cname);
+        return undefined;
+    }
+    free(cname);
+    if (xpost_object_get_type(f) == invalidtype)
+        return ioerror;
+    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+    return 0;
+}
+
+static
+int _dict_int (Xpost_Context *ctx, Xpost_Object dict, const char *key, int def)
+{
+    Xpost_Object v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, key));
+
+    if (xpost_object_get_type(v) == integertype)
+        return v.int_.val;
+    if (xpost_object_get_type(v) == booleantype)
+        return v.int_.val != 0;
+    return def;
+}
+
+/* file recordsize /RunLengthEncode  filter  file'
+   records bound the runs; zero means no record structure */
+static
+int xpost_op_file_filter_int (Xpost_Context *ctx,
+                              Xpost_Object F,
+                              Xpost_Object rec,
+                              Xpost_Object name)
+{
+    Xpost_Object namestr, f;
+    char *cname;
+
+    namestr = xpost_name_get_string(ctx, name);
+    cname = xpost_string_allocate_cstring(ctx, namestr);
+    if (!cname)
+        return VMerror;
+    if (strcmp(cname, "RunLengthEncode") != 0)
+    {
+        free(cname);
+        return typecheck;
+    }
+    free(cname);
+    if (!xpost_object_is_writeable(ctx, F))
+        return invalidaccess;
+    if (rec.int_.val < 0)
+        return rangecheck;
+    f = xpost_file_cons_filter_enc_rle(ctx->lo, F, rec.int_.val);
+    if (xpost_object_get_type(f) == invalidtype)
+        return ioerror;
+    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+    return 0;
+}
+
+/* file dict /FilterName  filter  file'
+   the optional parameter dictionary form. LZWDecode reads its
+   EarlyChange switch and CCITTFaxDecode its coding layout from the
+   dictionary; the other decode filters take no parameter that
+   changes their output here (DCTDecode reads its layout from the
+   stream itself), so it is otherwise set aside */
+static
+int xpost_op_file_filter_dict (Xpost_Context *ctx,
+                               Xpost_Object F,
+                               Xpost_Object dict,
+                               Xpost_Object name)
+{
+    Xpost_Object namestr;
+    char *cname;
+
+    namestr = xpost_name_get_string(ctx, name);
+    cname = xpost_string_allocate_cstring(ctx, namestr);
+    if (cname && (strcmp(cname, "CCITTFaxDecode") == 0
+               || strcmp(cname, "CCITTFaxEncode") == 0))
+    {
+        Xpost_Object f;
+
+        int enc = cname[8] == 'E';
+        int access = enc ? XPOST_OBJECT_TAG_ACCESS_FILE_WRITE
+                         : XPOST_OBJECT_TAG_ACCESS_FILE_READ;
+
+        free(cname);
+        if (enc ? !xpost_object_is_writeable(ctx, F)
+                : !xpost_object_is_readable(ctx, F))
+            return invalidaccess;
+        f = (enc ? xpost_file_cons_filter_enc_ccitt
+                 : xpost_file_cons_filter_ccitt)(ctx->lo, F,
+                _dict_int(ctx, dict, "K", 0),
+                _dict_int(ctx, dict, "Columns", 1728),
+                _dict_int(ctx, dict, "Rows", 0),
+                _dict_int(ctx, dict, "BlackIs1", 0),
+                _dict_int(ctx, dict, "EncodedByteAlign", 0),
+                _dict_int(ctx, dict, "EndOfLine", 0),
+                _dict_int(ctx, dict, "EndOfBlock", 1));
+        if (xpost_object_get_type(f) == invalidtype)
+            return ioerror;
+        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        f.tag |= (unsigned int)access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+        return 0;
+    }
+#ifdef HAVE_LIBJPEG
+    if (cname && strcmp(cname, "DCTEncode") == 0)
+    {
+        Xpost_Object f, v;
+        int hs[4] = { 1, 1, 1, 1 }, vs[4] = { 1, 1, 1, 1 };
+        int cols = _dict_int(ctx, dict, "Columns", 0);
+        int rows = _dict_int(ctx, dict, "Rows", 0);
+        int colors = _dict_int(ctx, dict, "Colors", 0);
+        int ct = _dict_int(ctx, dict, "ColorTransform", colors == 3);
+        double qf = 1.0;
+        int i;
+
+        free(cname);
+        if (!xpost_object_is_writeable(ctx, F))
+            return invalidaccess;
+        if (cols < 1 || rows < 1 || colors < 1 || colors > 4)
+            return rangecheck;
+        v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "QFactor"));
+        if (xpost_object_get_type(v) == realtype)
+            qf = v.real_.val;
+        else if (xpost_object_get_type(v) == integertype)
+            qf = (double)v.int_.val;
+        if (qf <= 0.0)
+            return rangecheck;
+        v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "HSamples"));
+        if (xpost_object_get_type(v) == arraytype && v.comp_.sz >= colors)
+            for (i = 0; i < colors; i++)
+            {
+                Xpost_Object e = xpost_array_get(ctx, v, i);
+
+                if (xpost_object_get_type(e) == integertype
+                    && e.int_.val >= 1 && e.int_.val <= 4)
+                    hs[i] = e.int_.val;
+            }
+        v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "VSamples"));
+        if (xpost_object_get_type(v) == arraytype && v.comp_.sz >= colors)
+            for (i = 0; i < colors; i++)
+            {
+                Xpost_Object e = xpost_array_get(ctx, v, i);
+
+                if (xpost_object_get_type(e) == integertype
+                    && e.int_.val >= 1 && e.int_.val <= 4)
+                    vs[i] = e.int_.val;
+            }
+        f = xpost_file_cons_filter_enc_dct(ctx->lo, F, cols, rows, colors,
+                                           qf, ct, hs, vs);
+        if (xpost_object_get_type(f) == invalidtype)
+            return ioerror;
+        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        f.tag |= XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+        return 0;
+    }
+#endif
+    if (cname && (strcmp(cname, "LZWDecode") == 0
+               || strcmp(cname, "LZWEncode") == 0))
+    {
+        Xpost_Object ec, f;
+        int early = 1;
+        int enc = cname[3] == 'E';
+        int access = enc ? XPOST_OBJECT_TAG_ACCESS_FILE_WRITE
+                         : XPOST_OBJECT_TAG_ACCESS_FILE_READ;
+
+        free(cname);
+        if (enc ? !xpost_object_is_writeable(ctx, F)
+                : !xpost_object_is_readable(ctx, F))
+            return invalidaccess;
+        ec = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EarlyChange"));
+        if (xpost_object_get_type(ec) == integertype)
+            early = ec.int_.val;
+        f = (enc ? xpost_file_cons_filter_enc_lzw
+                 : xpost_file_cons_filter_lzw)(ctx->lo, F, early);
+        if (xpost_object_get_type(f) == invalidtype)
+            return ioerror;
+        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        f.tag |= (unsigned int)access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+        return 0;
+    }
+    free(cname);
+    return xpost_op_file_filter(ctx, F, name);
+}
+
+/* file count string /SubFileDecode  filter  file'
+   pass bytes through until the delimiter string has occurred count
+   times (an empty string makes count a plain byte count) */
+static
+int xpost_op_file_filter_subfile (Xpost_Context *ctx,
+                                  Xpost_Object F,
+                                  Xpost_Object count,
+                                  Xpost_Object eod,
+                                  Xpost_Object name)
+{
+    Xpost_Object namestr;
+    char *cname;
+    int match;
+    Xpost_Object f;
+    char eodbuf[64];
+
+    if (!xpost_object_is_readable(ctx, F))
+        return invalidaccess;
+    namestr = xpost_name_get_string(ctx, name);
+    cname = xpost_string_allocate_cstring(ctx, namestr);
+    if (!cname)
+        return VMerror;
+    match = strcmp(cname, "SubFileDecode") == 0;
+    if (!match)
+        XPOST_LOG_ERR("unsupported filter %s with count and string", cname);
+    free(cname);
+    if (!match)
+        return undefined;
+    if (eod.comp_.sz > sizeof(eodbuf))
+        return rangecheck;
+    memcpy(eodbuf, xpost_string_get_pointer(ctx, eod), eod.comp_.sz);
+
+    f = xpost_file_cons_filter_subfile(ctx->lo, F, count.int_.val, eodbuf, (int)eod.comp_.sz);
+    if (xpost_object_get_type(f) == invalidtype)
+        return ioerror;
+    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+    return 0;
+}
+
 /* file  closefile  -
    close file object */
 static
@@ -692,6 +1004,322 @@ int xpost_op_string_print (Xpost_Context *ctx,
     return 0;
 }
 
+
+/* Binary object sequences (PLRM 3.14.6), the writing half of the
+   scanner's reader: a header names the format, one top-level record
+   carries the operand and its tag, subsidiary records and text
+   follow, every offset relative to the records' start. The object
+   format parameter chooses the number representation; disabled (the
+   default) the writers refuse with undefined. */
+
+static
+int _objfmt_get(Xpost_Context *ctx)
+{
+    Xpost_Object ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+    Xpost_Object v = xpost_dict_get(ctx, ud,
+        xpost_name_cons(ctx, ".objectformat"));
+
+    return xpost_object_get_type(v) == integertype ? v.int_.val : 0;
+}
+
+static
+int xpost_op_int_setobjectformat(Xpost_Context *ctx,
+                                 Xpost_Object n)
+{
+    Xpost_Object ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+
+    if (n.int_.val < 0 || n.int_.val > 4)
+        return rangecheck;
+    return xpost_dict_put(ctx, ud,
+        xpost_name_cons(ctx, ".objectformat"), n);
+}
+
+static
+int xpost_op_currentobjectformat(Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons(_objfmt_get(ctx))))
+        return stackoverflow;
+    return 0;
+}
+
+static
+int _bos_measure(Xpost_Context *ctx,
+                 Xpost_Object o,
+                 int depth,
+                 unsigned int *recs,
+                 unsigned int *data)
+{
+    unsigned int i;
+    int ret;
+
+    if (depth > 32)
+        return limitcheck;
+    switch (xpost_object_get_type(o))
+    {
+        case nulltype:
+        case integertype:
+        case realtype:
+        case booleantype:
+        case marktype:
+            *recs += 8;
+            return 0;
+        case nametype:
+        {
+            Xpost_Object str = xpost_name_get_string(ctx, o);
+
+            if (str.comp_.sz > 127)
+                return limitcheck;
+            *recs += 8;
+            *data += str.comp_.sz;
+            return 0;
+        }
+        case stringtype:
+            *recs += 8;
+            *data += o.comp_.sz;
+            return 0;
+        case arraytype:
+            *recs += 8;
+            for (i = 0; i < o.comp_.sz; i++)
+            {
+                ret = _bos_measure(ctx, xpost_array_get(ctx, o, i),
+                                   depth + 1, recs, data);
+                if (ret)
+                    return ret;
+            }
+            return 0;
+        default:
+            return typecheck;
+    }
+}
+
+typedef struct
+{
+    Xpost_Context *ctx;
+    unsigned char *buf;
+    unsigned int base;      /* records' start: the header length */
+    unsigned int nextrec;   /* free record space, relative to base */
+    unsigned int nextdata;  /* free text space, relative to base */
+    int le;
+} Bos;
+
+static void
+_bos_put16(const Bos *b, unsigned char *p, unsigned int v)
+{
+    if (b->le) { p[0] = v & 0xff; p[1] = (v >> 8) & 0xff; }
+    else       { p[0] = (v >> 8) & 0xff; p[1] = v & 0xff; }
+}
+
+static void
+_bos_put32(const Bos *b, unsigned char *p, unsigned int v)
+{
+    if (b->le)
+    {
+        p[0] = v & 0xff; p[1] = (v >> 8) & 0xff;
+        p[2] = (v >> 16) & 0xff; p[3] = (v >> 24) & 0xff;
+    }
+    else
+    {
+        p[0] = (v >> 24) & 0xff; p[1] = (v >> 16) & 0xff;
+        p[2] = (v >> 8) & 0xff; p[3] = v & 0xff;
+    }
+}
+
+static
+int _bos_emit(Bos *b,
+              Xpost_Object o,
+              int tag,
+              unsigned int recoff)
+{
+    unsigned char *p = b->buf + b->base + recoff;
+    unsigned char x = xpost_object_is_exe(o) ? 0x80 : 0;
+    unsigned int i;
+    int ret;
+
+    p[1] = (unsigned char)tag;
+    switch (xpost_object_get_type(o))
+    {
+        case nulltype:
+            p[0] = 0;
+            break;
+        case marktype:
+            p[0] = 10;
+            break;
+        case integertype:
+            p[0] = 1;
+            _bos_put32(b, p + 4, (unsigned int)o.int_.val);
+            break;
+        case booleantype:
+            p[0] = 4;
+            _bos_put32(b, p + 4, o.int_.val ? 1 : 0);
+            break;
+        case realtype:
+            /* the native-real formats travel in the sequence's byte
+               order all the same: the deployed writers agree on that
+               reading of native, and interchange follows them */
+            p[0] = 2;
+            {
+                float f = (float)o.real_.val;
+                unsigned int v;
+
+                memcpy(&v, &f, 4);
+                _bos_put32(b, p + 4, v);
+            }
+            break;
+        case nametype:
+        {
+            Xpost_Object str = xpost_name_get_string(b->ctx, o);
+
+            p[0] = 3 | x;
+            _bos_put16(b, p + 2, str.comp_.sz);
+            _bos_put32(b, p + 4, b->nextdata);
+            memcpy(b->buf + b->base + b->nextdata,
+                   xpost_string_get_pointer(b->ctx, str), str.comp_.sz);
+            b->nextdata += str.comp_.sz;
+            break;
+        }
+        case stringtype:
+            p[0] = 5 | x;
+            _bos_put16(b, p + 2, o.comp_.sz);
+            _bos_put32(b, p + 4, b->nextdata);
+            if (o.comp_.sz)
+                memcpy(b->buf + b->base + b->nextdata,
+                       xpost_string_get_pointer(b->ctx, o), o.comp_.sz);
+            b->nextdata += o.comp_.sz;
+            break;
+        case arraytype:
+        {
+            unsigned int block = b->nextrec;
+
+            p[0] = 9 | x;
+            _bos_put16(b, p + 2, o.comp_.sz);
+            _bos_put32(b, p + 4, block);
+            b->nextrec += o.comp_.sz * 8;
+            for (i = 0; i < o.comp_.sz; i++)
+            {
+                ret = _bos_emit(b, xpost_array_get(b->ctx, o, i),
+                                0, block + i * 8);
+                if (ret)
+                    return ret;
+            }
+            break;
+        }
+        default:
+            return typecheck;
+    }
+    return 0;
+}
+
+/* build the sequence for one top-level object; the caller frees */
+static
+int _bos_build(Xpost_Context *ctx,
+               Xpost_Object o,
+               int tag,
+               unsigned char **out,
+               unsigned int *outlen)
+{
+    Bos b;
+    unsigned int recs = 0, data = 0, hdrlen, total;
+    int fmt = _objfmt_get(ctx);
+    int ret;
+
+    if (fmt < 1 || fmt > 4)
+        return undefined;
+    if (tag < 0 || tag > 255)
+        return rangecheck;
+    ret = _bos_measure(ctx, o, 0, &recs, &data);
+    if (ret)
+        return ret;
+    hdrlen = 4 + recs + data <= 65535 ? 4 : 8;
+    total = hdrlen + recs + data;
+    b.ctx = ctx;
+    b.buf = calloc(total, 1);
+    if (!b.buf)
+        return VMerror;
+    b.base = hdrlen;
+    b.nextrec = 8;
+    b.nextdata = recs;
+    b.le = fmt == 2 || fmt == 4;
+    b.buf[0] = (unsigned char)(127 + fmt);
+    if (hdrlen == 4)
+    {
+        b.buf[1] = 1;
+        _bos_put16(&b, b.buf + 2, total);
+    }
+    else
+    {
+        b.buf[1] = 0;
+        _bos_put16(&b, b.buf + 2, 1);
+        _bos_put32(&b, b.buf + 4, total);
+    }
+    ret = _bos_emit(&b, o, tag, 0);
+    if (ret)
+    {
+        free(b.buf);
+        return ret;
+    }
+    *out = b.buf;
+    *outlen = total;
+    return 0;
+}
+
+/* obj tag  printobject  -
+   write obj's binary object sequence to the standard output */
+static
+int xpost_op_any_printobject(Xpost_Context *ctx,
+                             Xpost_Object o,
+                             Xpost_Object tag)
+{
+    unsigned char *buf;
+    unsigned int len;
+    int ret = _bos_build(ctx, o, tag.int_.val, &buf, &len);
+
+    if (ret)
+        return ret;
+    if (ctx->stdout_fn)
+    {
+        if (ctx->stdout_fn(ctx->stdout_user, (char *)buf, len) != len)
+            ret = ioerror;
+    }
+    else if (fwrite(buf, 1, len, stdout) != len)
+        ret = ioerror;
+    free(buf);
+    return ret;
+}
+
+/* file obj tag  writeobject  -
+   write obj's binary object sequence to file */
+static
+int xpost_op_any_writeobject(Xpost_Context *ctx,
+                             Xpost_Object F,
+                             Xpost_Object o,
+                             Xpost_Object tag)
+{
+    Xpost_File *f;
+    unsigned char *buf;
+    unsigned int len;
+    int ret;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    if (!xpost_object_is_writeable(ctx, F))
+        return invalidaccess;
+    ret = _bos_build(ctx, o, tag.int_.val, &buf, &len);
+    if (ret)
+        return ret;
+    f = xpost_file_get_file_pointer(ctx->lo, F);
+    {
+        int d = _divert_output(ctx, f, (char *)buf, len);
+
+        if (d < 0)
+            ret = ioerror;
+        else if (!d && xpost_file_write((char *)buf, 1, (int)len, f) != (int)len)
+            ret = ioerror;
+    }
+    free(buf);
+    return ret;
+}
+
 /* bool  echo  -
    enable/disable terminal echoing of input characters */
 static
@@ -765,6 +1393,58 @@ int xpost_op_lockdown (Xpost_Context *ctx)
     return 0;
 }
 
+/* The string forms of filter: a private copy of the string becomes a readable
+   file, and the file-source machinery runs over it. The wrapping filter owns
+   and releases that source when it is closed (xpost_file_object_close). */
+static
+Xpost_Object _string_source(Xpost_Context *ctx, Xpost_Object S)
+{
+    Xpost_Object F;
+
+    F = xpost_file_cons_readstring(ctx->lo,
+            (const unsigned char *)xpost_string_get_pointer(ctx, S), S.comp_.sz);
+    if (xpost_object_get_type(F) == filetype)
+    {
+        F.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        F.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                  << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    }
+    return F;
+}
+
+static
+int xpost_op_string_filter (Xpost_Context *ctx,
+                            Xpost_Object S,
+                            Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter(ctx, F, name);
+}
+
+static
+int xpost_op_string_filter_dict (Xpost_Context *ctx,
+                                 Xpost_Object S,
+                                 Xpost_Object dict,
+                                 Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_dict(ctx, F, dict, name);
+}
+
+static
+int xpost_op_string_filter_subfile (Xpost_Context *ctx,
+                                    Xpost_Object S,
+                                    Xpost_Object count,
+                                    Xpost_Object eod,
+                                    Xpost_Object name)
+{
+    Xpost_Object F = _string_source(ctx, S);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_subfile(ctx, F, count, eod, name);
+}
+
 int xpost_oper_init_file_ops (Xpost_Context *ctx,
                               Xpost_Object sd)
 {
@@ -779,12 +1459,33 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "file", (Xpost_Op_Func)xpost_op_string_mode_file, 1, 2, stringtype, stringtype);
     INSTALL;
-    /* filter */
     op = xpost_operator_cons(ctx, ".permitfileread", (Xpost_Op_Func)xpost_op_string_permitfileread, 0, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".permitfilewrite", (Xpost_Op_Func)xpost_op_string_permitfilewrite, 0, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".lockdown", (Xpost_Op_Func)xpost_op_lockdown, 0, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter, 1, 2, filetype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter_dict, 1, 3,
+            filetype, dicttype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter_subfile, 1, 4,
+            filetype, integertype, stringtype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_file_filter_int, 1, 3,
+            filetype, integertype, nametype);
+    INSTALL;
+    /* longest pattern first: the subfile form's EOD-string operand would
+       otherwise let the two-operand form match a four-operand call */
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter_subfile, 1, 4,
+            stringtype, integertype, stringtype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter_dict, 1, 3,
+            stringtype, dicttype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter, 1, 2,
+            stringtype, nametype);
     INSTALL;
     op = xpost_operator_cons(ctx, "closefile", (Xpost_Op_Func)xpost_op_file_closefile, 0, 1, filetype);
     INSTALL;
@@ -840,11 +1541,15 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     /* =: see init.ps
      * ==: see init.ps
      * stack: see init.ps
-     * pstack: see init.ps
-     * printobject
-     * writeobject
-     * setobjectformat
-     * currentobjectformat */
+     * pstack: see init.ps */
+    op = xpost_operator_cons(ctx, "printobject", (Xpost_Op_Func)xpost_op_any_printobject, 0, 2, anytype, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "writeobject", (Xpost_Op_Func)xpost_op_any_writeobject, 0, 3, filetype, anytype, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "setobjectformat", (Xpost_Op_Func)xpost_op_int_setobjectformat, 0, 1, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "currentobjectformat", (Xpost_Op_Func)xpost_op_currentobjectformat, 1, 0);
+    INSTALL;
     op = xpost_operator_cons(ctx, "echo", (Xpost_Op_Func)xpost_op_bool_echo, 0, 1, booleantype);
     INSTALL;
 
