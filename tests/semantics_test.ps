@@ -877,6 +877,19 @@ letter currentpagedevice /PageSize get 0 get 612 eq
 b4 currentpagedevice /PageSize get 0 get 728 eq
     (b4 measures 728 points across) assert
 
+% --- names carry every byte of their string, embedded nuls included
+% (PLRM cvn: a name lexically the same as the string; gs and Distiller
+% agree) ---
+<00> cvn () cvn ne (a one-nul name differs from the empty name) assert
+<00> cvn length 1 eq (a one-nul name has length 1) assert
+<610062> cvn (ab) cvn ne (an embedded nul is not a terminator) assert
+<610062> cvn length 3 eq (an embedded-nul name keeps its length) assert
+<610062> cvn 16 string cvs <610062> eq (cvs round-trips an embedded nul) assert
+<610062> cvn <610062> cvn eq (an embedded-nul name interns stably) assert
+2 dict dup <00> cvn 42 put dup () cvn 7 put
+dup <00> cvn get 42 eq (a nul name keys its own dictionary slot) assert
+() cvn get 7 eq (the empty name keys a distinct slot) assert
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
