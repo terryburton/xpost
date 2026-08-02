@@ -493,6 +493,13 @@ test('op-intoverflow',
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# SIGINT raises the PostScript interrupt error between evaluation steps;
+# errordict's handler stops the job and the interpreter exits. POSIX-only.
+test('interrupt',
+  find_program('tests/run-interrupt-test.sh'),
+  args: [ xpost_exe, files('tests/interrupt_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
 # is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
 test('scanner-eof',

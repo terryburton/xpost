@@ -1,0 +1,47 @@
+#!/bin/sh
+# An external interrupt request (SIGINT) raises the PostScript
+# interrupt error at the next evaluation step: errordict's handler
+# executes stop, the job unwinds, and the interpreter exits instead of
+# spinning. POSIX-only: Windows delivers console breaks differently.
+#   $1  path to the built xpost binary
+#   $2  path to interrupt_test.ps
+set -u
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) echo "skipped: no POSIX SIGINT delivery"; exit 77;;
+esac
+xpost=$1
+prog=$2
+out=$(mktemp)
+trap 'rm -f "$out"' EXIT
+
+"$xpost" -q -d null "$prog" </dev/null >"$out" 2>&1 &
+pid=$!
+
+# wait for the program to announce it is inside the loop
+i=0
+while [ $i -lt 50 ]; do
+    grep -q START "$out" 2>/dev/null && break
+    kill -0 "$pid" 2>/dev/null || break
+    i=$((i+1)); sleep 0.1
+done
+grep -q START "$out" || { echo "FAIL: program never reached the loop"; cat "$out"; exit 1; }
+
+kill -INT "$pid"
+
+# the interpreter must exit by itself
+i=0
+while [ $i -lt 100 ]; do
+    kill -0 "$pid" 2>/dev/null || break
+    i=$((i+1)); sleep 0.1
+done
+if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid"
+    echo "FAIL: still running after SIGINT"; cat "$out"; exit 1
+fi
+wait "$pid" 2>/dev/null
+
+# stop unwound the job: nothing after the loop may have run
+if grep -q AFTER "$out"; then
+    echo "FAIL: execution continued past the interrupted loop"; cat "$out"; exit 1
+fi
+echo SUCCESS
