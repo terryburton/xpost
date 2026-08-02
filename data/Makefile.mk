@@ -16,10 +16,7 @@ data/pdfwrite.ps \
 data/svgwrite.ps \
 data/dscwrite.ps \
 data/gstate.ps \
-data/matrix.ps \
 data/path.ps \
-data/arc.ps \
-data/arcdist.ps \
 data/paint.ps \
 data/resource.ps \
 data/pattern.ps \
@@ -36,14 +33,8 @@ data/s.ps \
 data/readstring.ps \
 data/test.ps \
 data/testdraw.ps \
-data/tea1.ps \
-data/mat.ps \
-data/teapot \
 data/sin1x.ps \
-data/dancingmen.ps \
-data/teamath.ps \
-data/bitfont.ps \
-data/class.ps
+data/dancingmen.ps
 
 psfilesdir = $(pkgdatadir)
 
@@ -64,10 +55,7 @@ data/pdfwrite.ps \
 data/svgwrite.ps \
 data/dscwrite.ps \
 data/gstate.ps \
-data/matrix.ps \
 data/path.ps \
-data/arc.ps \
-data/arcdist.ps \
 data/paint.ps \
 data/resource.ps \
 data/pattern.ps \
@@ -84,12 +72,6 @@ data/s.ps \
 data/readstring.ps \
 data/test.ps \
 data/testdraw.ps \
-data/tea1.ps \
-data/mat.ps \
-data/teapot \
 data/sin1x.ps \
-data/dancingmen.ps \
-data/teamath.ps \
-data/bitfont.ps \
-data/class.ps
+data/dancingmen.ps
 

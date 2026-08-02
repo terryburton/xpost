@@ -87,26 +87,6 @@ setglobal
 
 % Graphics State Operators -- Device Independent
 
-.xpostsys /deepcopy { % dict1 dict2 . dict2'
-    begin
-    {
-        dup type /arraytype eq
-        1 index xcheck not and {
-            dup length array
-            copy
-            def
-        }{
-            dup type /dicttype eq {
-                dup maxlength dict //.xpostsys /deepcopy get exec
-                def
-            }{
-                def
-            } ifelse
-        } ifelse
-    } forall
-    currentdict end
-} put
-
 .xpostsys /gstatecopy { % dict1 dict2 . dict2'
     begin
     { % key val
@@ -146,12 +126,7 @@ setglobal
                 pop
             } ifelse
         }{  % not arraytype
-            1 index /currpath eq {
-                %1 dict deepcopy % perform deep copy on path dict
-                def
-            }{
-                def
-            } ifelse
+            def
         } ifelse
     } forall
     currentdict end

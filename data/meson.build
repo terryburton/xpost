@@ -1,4 +1,3 @@
-
 xpost_data_src = files([
   'clip.ps',
   'err.ps',
@@ -16,7 +15,6 @@ xpost_data_src = files([
   'svgwrite.ps',
   'dscwrite.ps',
   'gstate.ps',
-  'matrix.ps',
   'path.ps',
   'paint.ps',
   'resource.ps',
@@ -34,14 +32,8 @@ xpost_data_src = files([
   'readstring.ps',
   'test.ps',
   'testdraw.ps',
-  'tea1.ps',
-  'mat.ps',
-  'teapot',
   'sin1x.ps',
-  'dancingmen.ps',
-  'teamath.ps',
-  'bitfont.ps',
-  'class.ps'
+  'dancingmen.ps'
 ])
 
 install_data(xpost_data_src,
