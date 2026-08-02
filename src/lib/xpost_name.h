@@ -54,6 +54,12 @@ void xpost_name_dump_names(Xpost_Context *ctx);
 int xpost_name_init(Xpost_Context *ctx);
 Xpost_Object xpost_name_cons(Xpost_Context *ctx, const char *s);
 
+/*
+   construct a name object from a counted string, which may contain
+   any bytes, embedded nuls included
+ */
+Xpost_Object xpost_name_cons_n(Xpost_Context *ctx, const char *s, unsigned int n);
+
 /**
  * @brief Construct a name object in global VM regardless of the
  * current allocation mode. Operator names must live in the global
