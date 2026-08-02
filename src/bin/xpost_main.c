@@ -90,7 +90,10 @@ static const char *_xpost_main_devices[] =
 {
     "pgm",
     "ppm",
+    "pbm",
+    "tiff",
     "null",
+    "bbox",
 #ifdef _WIN32
     "gdi",
     "gl",
@@ -103,6 +106,7 @@ static const char *_xpost_main_devices[] =
     "pdfwrite",
 #ifdef HAVE_LIBPNG
     "png",
+    "pngalpha",
 #endif
 #ifdef HAVE_LIBJPEG
     "jpeg",

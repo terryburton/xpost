@@ -265,8 +265,9 @@ Level 2 operators
  [X] currentcolorspace
  [X] setcolor
  [X] currentcolor
- [ ] setpagedevice
- [ ] currentpagedevice
+ [X] setpagedevice (OutputDevice, PageSize, HWResolution, OutputFile,
+     PageOffset; other keys reach the device as features)
+ [X] currentpagedevice
  [X] xshow
  [X] yshow
  [X] xyshow
@@ -351,13 +352,15 @@ Extensions
 ----------
 
  [ ] pdfmark
- [ ] page-size operators of the printer products
+ [X] page-size operators of the printer products (letter, legal, a4,
+     and the rest of the common set)
 
 Display Postscript
 ------------------
 
  [X] multiple contexts
- [ ] multiple devices
+ [/] multiple devices (setpagedevice switches the device mid-job; one
+     device per context at a time)
 
 NeWS
 ----
@@ -375,13 +378,13 @@ Typical output devices
 
  [X] pgm
  [X] ppm
- [ ] pbm
- [ ] tiff
+ [X] pbm
+ [X] tiff (24-bit rgb, one uncompressed strip)
  [X] jpeg
- [ ] png
+ [X] png (also a png with alpha)
  [ ] pdf
  [ ] svg
- [ ] bounding-box
+ [X] bounding-box
  [ ] dsc-compliant distilled ps
  [X] xcb
  [X] ms-windows
