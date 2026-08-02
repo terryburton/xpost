@@ -177,6 +177,11 @@ typedef struct Xpost_Memory_File
                                            monotonic, so a level trigger
                                            would re-request on every
                                            allocation) */
+    unsigned int file_births[256]; /**< live file entities by birth stamp
+                                         (save depth + 1): restore's close
+                                         sweep runs only when a file was born
+                                         above the restored depth */
+    unsigned int file_birth_max; /**< highest stamp with a nonzero count */
     int garbage_collect_pending; /**< a collection is due; performed at the
                                       interpreter's safe point rather than
                                       inside the triggering allocation, so

@@ -60,7 +60,8 @@
 #include "xpost_log.h"
 #include "xpost_compat.h"
 #include "xpost_memory.h"  /* files store FILE*s in (local) mfile */
-#include "xpost_object.h"  /* files are objects */
+#include "xpost_object.h"
+#include "xpost_stack.h"  /* files are objects */
 #include "xpost_context.h"
 
 #include "xpost_error.h"  /* file functions may throw errors */
@@ -1259,6 +1260,32 @@ xpost_filterfile_open_a85(Xpost_File *source)
     FILE *fp = xpost_diskfile_fopen(path, mode, 0, &err);
     Xpost_Object f = readonly(xpost_file_cons(fp)).
  */
+
+/* Record the save depth at which a file entity is born (as depth+1,
+   zero meaning unstamped) in the entity's low-level mark field: restore
+   closes a file created since the corresponding save (PLRM 3.8.2), and
+   the sweep needs the birth depth to tell such a file from an older
+   one. The field is otherwise unused for files, which take no part in
+   copy-on-write snapshots. */
+static void
+_file_birth_stamp(Xpost_Memory_File *mem, unsigned int ent)
+{
+    unsigned int vs, depth = 0, mk;
+
+    if (xpost_memory_table_get_addr(mem,
+            XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs))
+        depth = (unsigned int)xpost_stack_count(mem, vs);
+    if (depth > 254)
+        depth = 254;
+    mk = mem->table.tab[ent].mark;
+    mk &= ~(unsigned int)XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK;
+    mk |= (depth + 1) << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
+    mem->table.tab[ent].mark = mk;
+    mem->file_births[depth + 1]++;
+    if (depth + 1 > mem->file_birth_max)
+        mem->file_birth_max = depth + 1;
+}
+
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
                              /*@NULL@*/ const FILE *fp)
 {
@@ -1278,6 +1305,7 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof df, &df);
     if (!ret)
@@ -1304,6 +1332,7 @@ Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf);
     if (!ret)
@@ -1347,6 +1376,7 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         free(mf);
         return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
     {
@@ -1372,6 +1402,7 @@ Xpost_Object xpost_file_cons_writebuffer(Xpost_Memory_File *mem)
         XPOST_LOG_ERR("cannot allocate file record");
 	return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf);
     if (!ret)
@@ -4248,6 +4279,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff)
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof ff, &ff);
     if (!ret)
@@ -4447,6 +4479,7 @@ Xpost_Object xpost_file_cons_filter_a85(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
+    _file_birth_stamp(mem, ent);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof ff, &ff);
     if (!ret)

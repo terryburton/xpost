@@ -890,6 +890,20 @@ b4 currentpagedevice /PageSize get 0 get 728 eq
 dup <00> cvn get 42 eq (a nul name keys its own dictionary slot) assert
 () cvn get 7 eq (the empty name keys a distinct slot) assert
 
+% --- restore closes a file created since the save (PLRM 3.8.2: the
+% close flushes, observable as bytes on disk; a file from before the
+% save is untouched) ---
+save /rc_f (semantics_restore_scratch) (w) file def
+rc_f (hello) writestring restore
+(semantics_restore_scratch) (r) file
+dup bytesavailable 5 eq (restore flushes and closes a post-save file) assert
+closefile
+/rc_g (semantics_restore_scratch2) (w) file def
+save restore
+{ rc_g (x) writestring true } stopped { pop false } if
+(a file from before the save stays open across restore) assert
+rc_g closefile
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit
