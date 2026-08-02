@@ -33,7 +33,13 @@ newdefaultdevice % defined in xpost_interpreter.c:setlocalconfig()
 %DEVICE {pop =} forall
 
 DEVICE begin
-    /defaultmatrix [ 1 0 0 -1 0 height ] def
+    % a window device that adopted a smaller, scaled window records the
+    % ratio in /windowscale; the page's device matrix carries it
+    /defaultmatrix [
+        currentdict /windowscale 2 copy known { get }{ pop pop 1 } ifelse
+        0 0
+        currentdict /windowscale 2 copy known { get }{ pop pop 1 } ifelse neg
+        0 height ] def
 
     % override the class's scanline FillPoly with the compiled
     % rasterizer, except where the device declares it draws nothing:

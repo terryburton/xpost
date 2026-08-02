@@ -1220,7 +1220,10 @@ currentglobal true setglobal
         % The flip translate must match the height the device adopted,
         % or marks sit offset within a fractional page.
         newdev /defaultmatrix
-            [ sx 0 0 sy neg 0 newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
+            [ newdev /windowscale 2 copy known { get }{ pop pop 1 } ifelse
+              dup sx mul 0 0
+              4 -1 roll sy mul neg 0
+              newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
         newdev /NoOutput known not {
             newdev /FillPoly //.internaldict /.fillpoly get put
             newdev /nativecolorspace get /DeviceGray eq {
