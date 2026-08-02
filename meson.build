@@ -514,6 +514,12 @@ test('op-proc-filter',
   args: [ xpost_exe, files('tests/op_proc_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# setcachedevice/setcharwidth are valid only within a glyph description (PLRM 8.2).
+test('op-glyphcontext',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_glyphcontext_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],
@@ -575,6 +581,25 @@ test('devices',
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
+
+# Embedded Type 1 with a no-access Private: definefont must reach the loader and
+# read Subrs out of Private in C, not raise invalidaccess at a PostScript-level
+# read. Guards the regression where access enforcement broke every embedded
+# Type 1 font (the whole casselman corpus).
+test('font-type1-noaccess',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_type1_noaccess_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Embedded Type 1 with an over-allocated /Subrs array -- more slots declared than
+# filled, leaving null entries. definefont must still load the font. Guards the
+# regression where .loadfont1 rejected the whole font on the first null Subr,
+# which is why xpost rendered 0/13 of the (dvips Computer Modern) casselman corpus
+# while Ghostscript rendered all of it -- CMR10 declares 38 Subrs and fills 15.
+test('font-type1-sparse-subrs',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the

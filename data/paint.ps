@@ -129,6 +129,8 @@
 /eofill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
+        % this implementation's own fill, immune to a program's
+        % redefinition of the name (which may itself invoke eofill)
         //fill exec
     }{
         closepath
@@ -1099,13 +1101,14 @@
     gsave
         newpath
         10 dict begin
-        {datasrc mat polarity height width}{exch def}forall
+        {interp datasrc mat polarity height width}{exch def}forall
         /rowbytes width 7 add 8 idiv def
         /buf rowbytes height mul string def
         /bp 0 def
         { % collect the sample data
             bp buf length ge {exit} if
-            datasrc
+            % the source runs on the caller's stacks (see .fill)
+            currentdict currentdict /datasrc get end exec exch begin
             dup length 0 eq {pop exit} if
             dup length bp add buf length gt {
                 0 buf length bp sub getinterval
@@ -1123,6 +1126,20 @@
         % colour the runs assemble into a single path so the tiling
         % runs once over the whole stencil
         /paintpat //.xpostsys /.patternactive get exec def
+        % a glyph-context stencil blends its edges when the device
+        % blends text, the transform is axis-aligned, and nothing
+        % clips: the coverage painter writes pixels directly
+        /aadone false def
+        paintpat not
+        graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 0 gt
+        interp or and
+        .cliptrivial and {
+            << /buf buf /width width /height height
+               /ink ink /interp interp
+               /mat matrix currentmatrix >> .stencilaa
+            { /aadone true def } if
+        } if
+        aadone not {
         width height mul 16384 le {
             % a small stencil's runs resolve once per distinct mask,
             % consecutive equal-extent rows merged into taller
@@ -1169,6 +1186,7 @@
         } for
         paintpat { //.xpostsys /.patternfill get exec } if
         } ifelse
+        } if
         end
     grestore
 } put
@@ -1188,9 +1206,11 @@
         % fetch through the dictionary: a procedure source fetched by
         % name would execute instead of arriving as the operand
         currentdict /DataSource get //.xpostsys /.imgsource get exec
+        currentdict /Interpolate 2 copy known { get }{ pop pop false } ifelse
+        dup type /booleantype ne { pop false } if
         end
     }{
-        //.xpostsys /.imgsource get exec
+        //.xpostsys /.imgsource get exec false
     } ifelse
     //.xpostsys /.stencilmask get exec
 } def

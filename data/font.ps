@@ -14,6 +14,23 @@
 % carry a TrueType program in /sfnts, reassembled and opened as a
 % memory face by .loadfont42 so the C text operators use it exactly
 % like a findfont face.
+% run a glyph-description procedure with the glyph flag raised: the
+% stencil painter blends mask edges only for glyphs, the way the
+% device's TextAlphaBits asks
+currentglobal true setglobal
+.xpostsys /.runbuild { % ... proc  .runbuild  ...
+    % .inglyph counts glyph-build nesting: a build procedure may itself show
+    % text, so a bare flag would clear on the inner build and read false while
+    % the outer build is still running. setcachedevice/setcharwidth are valid
+    % while it is nonzero.
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 1 add
+    graphicsdict exch /.inglyph exch put
+    exec
+    graphicsdict /.inglyph get 1 sub
+    graphicsdict exch /.inglyph exch put
+} put
+setglobal
+
 /definefont { % /fontname -dict-
     dup type /dicttype ne
     2 index type /nulltype eq or {
@@ -38,16 +55,22 @@
         } stopped {
             /definefont cvx /invalidfont signalerror
         } if
+        % a re-encoded copy of a findfont dictionary already holds a
+        % working face in /Private and shares it; a program-borne
+        % dictionary assembles one from its sfnts
+        dup /Private known not {
         dup .loadfont42
+        } if
     }{
     dup 1 eq 2 index /CharStrings known and
     2 index /Private 2 copy known { get type /dicttype eq }{ pop pop false } ifelse and {
         pop
         % an embedded Type 1 program: its interpreted dictionaries are
-        % written back out as a font program and opened as a face; the
-        % charstrings and subroutines flatten here, where forall lives
+        % written back out as a font program and opened as a face. The
+        % charstrings flatten here, where forall lives; the subroutines are
+        % read from the (no-access) Private dictionary inside .loadfont1, in C,
+        % where the access attribute does not forbid the read.
         dup dup /CharStrings get [ exch { } forall ]
-        2 index /Private get /Subrs 2 copy known { get }{ pop pop 0 array } ifelse
         .loadfont1
     }{
         3 eq {
@@ -67,7 +90,7 @@
             dup /BuildChar known not {
                 dup /BuildChar {
                     1 index /Encoding get exch get
-                    1 index /BuildGlyph get exec
+                    1 index /BuildGlyph get //.xpostsys /.runbuild get exec
                 } put
             } if
         }{
@@ -83,6 +106,17 @@
     } ifelse
     dup /FontName known not {
         dup /FontName 3 index put
+    } if
+    % a serial keys the glyph cache: derived dictionaries keep their
+    % parent's, the transform distinguishing their entries. The
+    % counter lives in graphicsdict, addressed outright: definefont
+    % may run under any dictionary a driver prolog has begun
+    dup /.fontid known not {
+        graphicsdict /.fontserial known not {
+            graphicsdict /.fontserial 1 put
+        } if
+        dup /.fontid graphicsdict /.fontserial get put
+        graphicsdict /.fontserial graphicsdict /.fontserial get 1 add put
     } if
     FontDirectory exch 2 index exch put
     findfont
@@ -112,15 +146,172 @@
 } def
 
 /setcharwidth {
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
+    0 eq { /setcharwidth cvx /undefined signalerror } if
     graphicsdict /currgstate get /currfont get
     dup /xadvance 5 4 roll put
     /yadvance 3 2 roll put
 } def
 
+% wx wy llx lly urx ury  .t3capture  -
+% declare the glyph's metrics and turn the build's marks into a
+% coverage mask: painting swaps to a raster sized from the glyph box
+% under the transform in force, shifted onto it in device space
+currentglobal true setglobal
+.xpostsys /.t3capture {
+    16 dict begin
+    {ury urx lly llx wy wx}{exch def}forall
+    wx wy setcharwidth
+    llx lly transform /y0 exch def /x0 exch def
+    urx lly transform /y1 exch def /x1 exch def
+    llx ury transform /y2 exch def /x2 exch def
+    urx ury transform /y3 exch def /x3 exch def
+    /bx0 x0 x1 2 copy gt { exch } if pop
+         x2 2 copy gt { exch } if pop
+         x3 2 copy gt { exch } if pop floor cvi def
+    /bx1 x0 x1 2 copy lt { exch } if pop
+         x2 2 copy lt { exch } if pop
+         x3 2 copy lt { exch } if pop ceiling cvi def
+    /by0 y0 y1 2 copy gt { exch } if pop
+         y2 2 copy gt { exch } if pop
+         y3 2 copy gt { exch } if pop floor cvi def
+    /by1 y0 y1 2 copy lt { exch } if pop
+         y2 2 copy lt { exch } if pop
+         y3 2 copy lt { exch } if pop ceiling cvi def
+    /W bx1 bx0 sub def
+    /H by1 by0 sub def
+    W 1 ge H 1 ge and W 2048 le and H 2048 le and {
+        0 0 transform /oy exch def /ox exch def
+        /mdev W H .privatedict /newPGMIMAGEdevice get exec def
+        % the compiled rasterizers, as device selection wires them
+        mdev /FillPoly //.internaldict /.fillpoly get put
+        mdev /FillRect //.internaldict /.fillrectgray get put
+        % the advances belong to the glyph, not to whatever font the
+        % build procedure leaves current: a glyph that shows text of
+        % its own retunes currfont and it never comes back before the
+        % capture is filed
+        graphicsdict /.t3cap <<
+            /mdev mdev /w W /h H /bx0 bx0 /by0 by0 /ox ox /oy oy
+            /advx wx /advy wy
+        >> put
+        graphicsdict /currgstate get /device mdev put
+        matrix currentmatrix
+        dup 4 2 copy get bx0 sub put
+        dup 5 2 copy get by0 sub put
+        setmatrix
+        initclip
+        newpath
+        1 setgray
+    } if
+    end
+} put
+setglobal
+
 /setcachedevice {
-    pop pop pop pop
-    setcharwidth
+    graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
+    0 eq { /setcachedevice cvx /undefined signalerror } if
+    graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse
+    graphicsdict /.t3cap 2 copy known { get }{ pop pop null } ifelse
+    null eq and {
+        //.xpostsys /.t3capture get exec
+    }{
+        pop pop pop pop
+        setcharwidth
+    } ifelse
 } def
+
+% font code  .t3build  -
+% render a Type 3 glyph through the glyph cache: a hit replays the
+% stored mask and its advances; a miss runs the build procedure,
+% capturing its marks when it declares setcachedevice, and paints
+% the fresh entry the same way a hit does
+currentglobal true setglobal
+.xpostsys /.t3build {
+    10 dict begin
+    /code exch def /font exch def
+    /devmat matrix currentmatrix def
+    0 0 transform /devy exch def /devx exch def
+    % the cache serves only within a rectangular clip that holds the
+    % whole raster: a glyph crossing the clip edge builds direct,
+    % which clips its marks exactly
+    /clipok .cliprect {
+        4 array astore /cliparr exch def true
+    }{ false } ifelse def
+    clipok
+    { devx devy devmat font code cliparr .t3cachehit }
+    { false } ifelse
+    {
+        /ya exch def /xa exch def
+        graphicsdict /currgstate get /currfont get
+        dup /xadvance xa put
+        /yadvance ya put
+    }{
+    clipok not {
+        % an unhelpful clip: build direct, marks clipped by the
+        % ordinary paint pipeline
+        gsave
+        font code font /BuildChar get
+        currentdict end 4 1 roll
+        //.xpostsys /.runbuild get exec
+        begin
+        grestore
+    }{
+        /oldwant graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse def
+        /oldcap graphicsdict /.t3cap 2 copy known { get }{ pop pop null } ifelse def
+        gsave
+        graphicsdict /.t3want true put
+        graphicsdict /.t3cap null put
+        % the build runs outside this scope, so its defs reach the
+        % caller's dictionaries; the locals ride the operand stack
+        font code font /BuildChar get
+        currentdict end 4 1 roll
+        //.xpostsys /.runbuild get exec
+        begin
+        /cap graphicsdict /.t3cap get def
+        cap null ne {
+            /buf cap /w get cap /h get mul string def
+            0 1 cap /h get 1 sub { /r exch def
+                buf r cap /w get mul
+                cap /mdev get /ImgData get r get
+                0 cap /w get getinterval
+                putinterval
+            } for
+            <<
+                /buf buf /w cap /w get /h cap /h get
+                /bx0 cap /bx0 get /by0 cap /by0 get
+                /ox cap /ox get /oy cap /oy get
+                /advx cap /advx get
+                /advy cap /advy get
+                /mat devmat /font font /code code
+            >> .t3cacheput
+        } if
+        graphicsdict /.t3want oldwant put
+        graphicsdict /.t3cap oldcap put
+        grestore
+        cap null ne {
+            clipok
+            { devx devy devmat font code cliparr .t3cachehit }
+            { false } ifelse
+            {
+                /ya exch def /xa exch def
+                graphicsdict /currgstate get /currfont get
+                dup /xadvance xa put
+                /yadvance ya put
+            }{
+                % past the cache ceiling: build again, painting direct
+                gsave
+                font code font /BuildChar get
+                currentdict end 4 1 roll
+                //.xpostsys /.runbuild get exec
+                begin
+                grestore
+            } ifelse
+        } if
+    } ifelse
+    } ifelse
+    end
+} put
+setglobal
 
 /show {
     graphicsdict /currgstate get /currfont get
@@ -144,7 +335,21 @@
             grestore
             stringwidth rmoveto
         }{
-            pop //show
+            pop
+            //.xpostsys /.patternactive get exec {
+                % a pattern colour tiles through the glyph outlines:
+                % the string's outline fills through the ordinary
+                % pattern paint
+                gsave
+                dup
+                currentpoint newpath moveto
+                true charpath
+                //fill exec
+                grestore
+                stringwidth rmoveto
+            }{
+                //show
+            } ifelse
         } ifelse
     }{
     gsave
@@ -154,9 +359,7 @@
         exch
         %pstack()=
         {
-            gsave
-                1 index /BuildChar get exec
-            grestore
+            //.xpostsys /.t3build get exec
             graphicsdict /currgstate get /currfont get
             dup /xadvance get 1 index /yadvance get
             translate
@@ -173,6 +376,15 @@
 
 /widthshow {
     graphicsdict /currgstate get /currfont get
+    dup /FontType get 0 eq {
+        % a composite font: add the delta after the character whose full
+        % (multi-byte) code matches, as the ordinary composite show walks it
+        7 dict begin
+        /fnt exch def /str exch def /mchar exch def /cdy exch def /cdx exch def
+        /.showhook { mchar eq { cdx cdy rmoveto } if } def
+        fnt str //.xpostsys /.showtype0 get exec
+        end
+    }{
     dup /FontType get 3 ne {
         pop
         4 2 roll dtransform
@@ -187,14 +399,12 @@
         newpath
         dup /FontMatrix get
         dup concat
-        cx cy 3 2 roll dtransform /cy exch def /cx exch def
+        cx cy 3 2 roll idtransform /cy exch def /cx exch def
         exch
         %pstack()=
         {
             dup /curcode exch def
-            gsave
-                1 index /BuildChar get exec
-            grestore
+            //.xpostsys /.t3build get exec
             graphicsdict /currgstate get /currfont get
             dup /xadvance get 1 index /yadvance get
             translate
@@ -210,10 +420,20 @@
     itransform moveto
 
     } ifelse
+    } ifelse
 } def
 
 /ashow {
     graphicsdict /currgstate get /currfont get
+    dup /FontType get 0 eq {
+        % a composite font decodes to descendant glyphs; walk it with the
+        % ordinary composite show and add the delta after each character
+        6 dict begin
+        /fnt exch def /str exch def /ady exch def /adx exch def
+        /.showhook { pop adx ady rmoveto } def
+        fnt str //.xpostsys /.showtype0 get exec
+        end
+    }{
     dup /FontType get 3 ne {
         pop
         3 1 roll dtransform
@@ -228,13 +448,11 @@
         newpath
         dup /FontMatrix get
         dup concat
-        dx dy 3 2 roll dtransform /dy exch def /dx exch def
+        dx dy 3 2 roll idtransform /dy exch def /dx exch def
         exch
         %pstack()=
         {
-            gsave
-                1 index /BuildChar get exec
-            grestore
+            //.xpostsys /.t3build get exec
             graphicsdict /currgstate get /currfont get
             dup /xadvance get 1 index /yadvance get
             translate
@@ -248,10 +466,21 @@
     itransform moveto
 
     } ifelse
+    } ifelse
 } def
 
 /awidthshow {
     graphicsdict /currgstate get /currfont get
+    dup /FontType get 0 eq {
+        % a composite font: the ashow delta after every character, plus the
+        % widthshow delta after the character whose full code matches
+        9 dict begin
+        /fnt exch def /str exch def /ady exch def /adx exch def
+        /mchar exch def /cdy exch def /cdx exch def
+        /.showhook { adx ady rmoveto mchar eq { cdx cdy rmoveto } if } def
+        fnt str //.xpostsys /.showtype0 get exec
+        end
+    }{
     dup /FontType get 3 ne {
         pop
         5 1 roll dtransform
@@ -259,7 +488,9 @@
         5 2 roll
         //awidthshow
     }{
-    7 2 roll
+    % bring the operands (cx cy char ax ay string font) into the order the
+    % binding expects: string font ax ay cx cy char, top-down char cy cx ay ax
+    7 2 roll 5 2 roll
     5 dict begin
     {charcode cy cx dy dx}{exch def}forall
     gsave
@@ -267,15 +498,13 @@
         newpath
         dup /FontMatrix get
         dup concat
-        dup dx dy 3 2 roll dtransform /dy exch def /dx exch def
-        cx cy 3 2 roll dtransform /cy exch def /cx exch def
+        dup dx dy 3 2 roll idtransform /dy exch def /dx exch def
+        cx cy 3 2 roll idtransform /cy exch def /cx exch def
         exch
         %pstack()=
         {
             dup /curcode exch def
-            gsave
-                1 index /BuildChar get exec
-            grestore
+            //.xpostsys /.t3build get exec
             graphicsdict /currgstate get /currfont get
             dup /xadvance get 1 index /yadvance get
             translate
@@ -292,28 +521,52 @@
     itransform moveto
 
     } ifelse
+    } ifelse
 } def
 
+% kshow's compiled program paints through the implementation's own
+% show, captured here while the name still holds this file's
+% procedure -- an array, which a compiled program pushes as data
+currentglobal true setglobal
+.xpostsys /.kshowshow /show load put
+setglobal
+
 /kshow {
-    5 dict begin
-        {str proc}{exch def}forall
-        /font graphicsdict /currgstate get /currfont get def
-        str length 0 gt { str length 1 eq {
-            str show
-        }{
-            str 0 1 getinterval % str<0..+1>
-            dup 0 get exch      % str[0] str<0..+1>
-            show
-            1 1 str length 1 sub { % str[N-1] N
-                str exch 1 getinterval
-                dup 0 get exch % str[N-1] str[N] str<N..+1>
-                3 1 roll       % str<N..+1>  str[N-1] str[N]
-                proc
-                dup 0 get exch  % str[N]  str<N..+1>
-                show  % str[N]
+    % kshow steps the string one byte at a time, which a composite font
+    % cannot decode; the reference rejects it with invalidfont rather than
+    % the rangecheck the byte-wise decode would otherwise raise
+    graphicsdict /currgstate get /currfont get /FontType get 0 eq {
+        /kshow cvx /invalidfont signalerror
+    } if
+    % The walk compiles into a program here and the program runs after
+    % this dict ends, so the kerning procedure executes on the caller's
+    % stacks with no machinery state live anywhere: there are no names
+    % for a program's defs to collide with, its defs reach the caller's
+    % dictionaries, and whatever it leaves on the operand stack stays --
+    % every compiled operand is pushed just before its consumer, so the
+    % procedure's leavings never shift one.
+    8 dict begin
+        /str exch def /proc exch def
+        /exe /exec load def
+        /n str length def
+        [
+        n 0 gt {
+            str 0 1 getinterval
+            //.xpostsys /.kshowshow get
+            currentdict /exe get
+            1 1 n 1 sub { /i exch def
+                str i 1 sub get
+                str i get
+                currentdict /proc get
+                currentdict /exe get
+                str i 1 getinterval
+                //.xpostsys /.kshowshow get
+                currentdict /exe get
             } for
-        } ifelse } if
+        } if
+        ] cvx
     end
+    exec
 } def
 
 %   name  glyphshow  -
@@ -341,7 +594,7 @@
             fnt /yadvance 0 put
             gsave
                 fnt /BuildGlyph 2 copy known {
-                    get fnt gname 3 -1 roll exec
+                    get fnt gname 3 -1 roll //.xpostsys /.runbuild get exec
                 }{
                     pop pop
                     /code null def
@@ -350,7 +603,7 @@
                         { /code exch def exit }{ pop } ifelse
                     } for
                     code null ne {
-                        fnt code fnt /BuildChar get exec
+                        fnt code //.xpostsys /.t3build get exec
                     } if
                 } ifelse
             grestore
@@ -380,7 +633,11 @@ currentglobal true setglobal
 .xpostsys /.glyphbytes { % str p -> w
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
-        /CMap get //.xpostsys /.cmapnext get exec exch pop
+        dup /FMapType get 9 eq {
+            /CMap get //.xpostsys /.cmapnext get exec exch pop
+        }{
+            0 //.xpostsys /.fmapnext get exec 3 1 roll pop pop
+        } ifelse
     }{
         pop pop pop 1
     } ifelse
@@ -447,14 +704,14 @@ setglobal
     graphicsdict /currgstate get /currfont get
     dup /FontType get dup 3 eq exch 0 eq or not { pop //stringwidth }{
     pop
+    % the measurement needs no currentpoint of its own: the string
+    % shows from the origin on the null device and the point it
+    % reaches is the advance
     gsave
         nulldevice
-        currentpoint 3 2 roll
+        0 0 moveto
         show
-        currentpoint % x0 y0 x1 y1
-        3 2 roll sub % x0 x1 y1-y0
-        3 1 roll exch sub % y1-y0 x1-x0
-        exch
+        currentpoint
     grestore
     } ifelse
 } def
@@ -532,7 +789,7 @@ setglobal
      /Lslash /Oslash /OE /ordmasculine /.notdef /.notdef /.notdef /.notdef
      /.notdef /ae /.notdef /.notdef /.notdef /dotlessi /.notdef /.notdef
      /lslash /oslash /oe /germandbls /.notdef /.notdef /.notdef /.notdef
-] def
+] readonly def
 
 /ISOLatin1Encoding [
     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
@@ -561,7 +818,7 @@ setglobal
     /edieresis /igrave /iacute /icircumflex /idieresis /eth /ntilde /ograve /oacute
     /ocircumflex /otilde /odieresis /divide /oslash /ugrave /uacute /ucircumflex
     /udieresis /yacute /thorn /ydieresis
-] def
+] readonly def
 
 % key  undefinefont  -
 /undefinefont {
@@ -584,6 +841,66 @@ setglobal
     exec
     end
 } def
+
+% key  findencoding  encoding
+/findencoding { /Encoding findresource } def
+
+% the show machinery rebinds the current font while it works through
+% a composite; rootfont answers with the font the program set. The
+% original setfont is kept in the private namespace and reached frozen.
+currentglobal true setglobal
+.xpostsys /.rootsetfont /setfont load put
+setglobal
+/setfont {
+    dup graphicsdict /currgstate get /rootfont 3 -1 roll put
+    //.xpostsys /.rootsetfont get exec
+} def
+/rootfont {
+    graphicsdict /currgstate get /rootfont 2 copy known
+        { get }{ pop pop currentfont } ifelse
+} def
+
+% the wider glyph metrics reduce to the horizontal ones
+/setcachedevice2 {
+    pop pop pop pop setcachedevice
+} def
+
+% the glyph cache: rendered rasters replay across shows, and the
+% operators read and set the store itself
+/cachestatus { .cachestatus } def
+/setcachelimit {
+    dup type /integertype ne { cvi } if .setcachelimit
+} def
+% mark [size [lower]] upper  setcacheparams  -
+% the interpreter takes the operands it knows from the top and
+% ignores any deeper ones
+/setcacheparams {
+    counttomark 3 ge {
+        3 dict begin
+        /up exch cvi def /lo exch cvi def /sz exch cvi def
+        sz lo up .setcacheparams
+        end
+    }{ counttomark 2 eq {
+        3 dict begin
+        /up exch cvi def /lo exch cvi def
+        0 lo up .setcacheparams
+        end
+    }{ counttomark 1 eq {
+        cvi 0 exch 0 exch .setcacheparams
+    } if } ifelse } ifelse
+    cleartomark
+} def
+/currentcacheparams {
+    % of the seven status figures, report bmax, a nominal lower
+    % threshold, and the per-glyph ceiling
+    2 dict begin
+    mark cachestatus
+    /bl exch def pop pop pop pop
+    exch pop 4 bl
+    end
+} def
+/setucacheparams { cleartomark } def
+/ucachestatus { mark 0 32768 0 4096 32768 } def
 
 % the required instances of the Encoding resource category, copied
 % into global VM where the instance tables live

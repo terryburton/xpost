@@ -143,8 +143,7 @@ countink dup
 maxrun 3 le (no dot row smears across the raster) assert
 
 % --- the any-part-of-pixel fill rule (PLRM 7.5): a pixel is painted
-%     iff the filled region meets its interior. Probes verified
-%     pixel-for-pixel against a reference interpreter, including the
+%     iff the filled region meets its interior, including the
 %     boundary cases: integer-aligned geometry is exact (closed at the
 %     low device boundary, open at the high one), sub-pixel geometry
 %     paints every pixel it enters, zero-width geometry on a pixel
@@ -267,25 +266,179 @@ grestore
     dup type /dicttype eq { /basefont exch def } { pop } ifelse
 } if
 
+% A Type 3 glyph whose build shows text of its own leaves another
+% font current; the glyph's advances still come from its
+% setcachedevice, and the cache serves the repeat
+erasepage
+/T3Nested << /FontType 3 /FontMatrix [0.001 0 0 0.001 0 0]
+  /FontBBox [0 0 800 800]
+  /Encoding 256 array 0 1 255 { 1 index exch /.notdef put } for
+    dup 66 /nb put
+  /BuildChar { pop pop
+    700 0 0 0 700 700 setcachedevice
+    basefont null ne {
+        gsave basefont 400 scalefont setfont 0 0 moveto (l) show grestore
+    } if
+    100 100 500 500 rectfill
+  }
+>> definefont pop
+/T3Nested findfont 20 scalefont setfont
+2 24 moveto (BB) show
+currentpoint pop 2 sub 28 sub abs 1 lt
+(a glyph that shows text keeps its own advance) assert
+countink 20 ge (the nested-text glyph paints) assert
+initgraphics
+
+% a base font dictionary states the type of the program behind it,
+% and its conventions follow: a Type 42 font carries its program in
+% sfnts over a unit character space, a Type 1 dictionary a
+% thousandth
 basefont null ne {
-    % sharp text by default: ink but no intermediate values
+    basefont /FontType get 42 eq {
+        basefont /sfnts known
+        (a Type 42 base font carries its program in sfnts) assert
+        basefont /FontMatrix get 0 get 1.0 sub abs 0.0001 lt
+        (Type 42 character space is the em) assert
+    }{
+        basefont /FontType get dup 1 eq exch 2 eq or
+        (a base font states its backing program's type) assert
+        basefont /FontMatrix get 0 get 0.001 sub abs 0.0001 lt
+        (Type 1 and 2 character space is a thousandth of the em) assert
+        basefont /FontType get 2 eq basefont /CharStrings known and {
+            basefont /CharStrings get {
+                exch pop type /stringtype eq
+                (a Type 2 base font holds its charstrings) assert
+                exit
+            } forall
+        } if
+    } ifelse
+} if
+
+% A Type 3 glyph that declares setcachedevice builds once: repeats
+% replay its mask from the glyph cache, and the raster still lands
+erasepage
+/T3Count 0 def
+/T3CacheFont << /FontType 3 /FontMatrix [0.001 0 0 0.001 0 0]
+  /FontBBox [0 0 800 800]
+  /Encoding 256 array 0 1 255 { 1 index exch /.notdef put } for
+    dup 65 /sq put
+  /BuildChar {
+    pop pop
+    /T3Count T3Count 1 add def
+    800 0 0 0 700 700 setcachedevice
+    100 100 500 500 rectfill
+  }
+>> definefont pop
+/T3CacheFont findfont 16 scalefont setfont
+2 24 moveto (AAAA) show
+T3Count 1 eq (a setcachedevice glyph builds once for four shows) assert
+countink 100 ge (the cached glyph still lands on the raster) assert
+2 44 moveto (AA) show
+T3Count 1 eq (later shows replay from the cache) assert
+
+basefont null ne {
+    % the glyph cache fills on first rendering and replays after:
+    % a repeat show adds no entries, and the raster is unchanged
+    /gc.pre cachestatus 7 array astore def
     erasepage
     basefont 20 scalefont setfont
     2 24 moveto (Ag) show
-    countink 20 ge (text marks pixels) assert
-    countmid 0 eq (text is sharp without TextAlphaBits) assert
-
-    % anti-aliased text: TextAlphaBits + BlendPix blend glyph edges
-    DEV /TextAlphaBits 4 put
-    DEV /BlendPix 1183615869 internaldict /.blendpixgray get put
+    /gc.mid cachestatus 7 array astore def
+    gc.mid 4 get gc.pre 4 get gt (a show fills the glyph cache) assert
+    gc.mid 0 get gc.pre 0 get gt (cached glyphs account their bytes) assert
     erasepage
     2 24 moveto (Ag) show
-    countmid 0 gt (TextAlphaBits blends glyph edges) assert
-    countink 10 ge (anti-aliased text keeps solid cores) assert
+    cachestatus 7 array astore 4 get gc.mid 4 get eq
+    (a repeat show replays from the cache) assert
+
+    % anti-aliased by default: glyph edges blend, cores stay solid
+    erasepage
+    2 24 moveto (Ag) show
+    countink 10 ge (text marks pixels) assert
+    countmid 0 gt (text blends its glyph edges by default) assert
+
+    % a pattern colour tiles through the glyph outlines instead of
+    % painting the underlying colour solid
+    erasepage
+    basefont 40 scalefont setfont
+    2 34 moveto (H) show
+    /pt.solid countink def
+    erasepage
+    << /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 4 4]
+       /XStep 4 /YStep 4 /PaintProc { pop 0 0 4 2 rectfill } >>
+    matrix makepattern
+    [/Pattern /DeviceGray] setcolorspace
+    0 exch setpattern
+    2 34 moveto (H) show
+    /pt.pat countink def
+    0 setgray
+    pt.pat 0 gt (pattern text marks the raster) assert
+    pt.pat pt.solid lt (pattern text tiles rather than floods) assert
+    pt.pat 5 mul pt.solid gt (pattern text keeps the stripes' share) assert
+    basefont 20 scalefont setfont
+
     DEV /TextAlphaBits 1 put
     erasepage
     2 24 moveto (Ag) show
     countmid 0 eq (TextAlphaBits 1 disables blending) assert
+    countink 20 ge (bilevel text keeps its ink) assert
+    DEV /TextAlphaBits 4 put
+
+    % a bitmap-described glyph blends its edges like any other text,
+    % and a bare stencil outside a glyph keeps the bilevel threshold
+    /T3Mask << /FontType 3 /FontMatrix [0.001 0 0 0.001 0 0]
+      /FontBBox [0 0 1000 1000]
+      /Encoding 256 array 0 1 255 { 1 index exch /.notdef put } for
+        dup 65 /sq put
+      /BuildChar {
+        exch begin
+        600 0 0 0 550 550 setcachedevice
+        Encoding exch get /sq eq {
+          8 8 true [ 8 550 div 0 0 8 550 div neg 0 8 ]
+          {<3C7EFFFFFFFF7E3C>} imagemask
+        } if
+        end
+      }
+    >> definefont pop
+    /T3Mask findfont 30 scalefont setfont
+    erasepage
+    6 20 moveto (A) show
+    countmid 0 gt (a stencil glyph blends its edges) assert
+    countink 40 ge (its core stays solid) assert
+    erasepage
+    gsave 4 4 translate 30 30 scale
+    8 8 true [8 0 0 -8 0 8] {<3C7EFFFFFFFF7E3C>} imagemask
+    grestore
+    countink 100 ge (a stencil outside a glyph paints) assert
+    countmid 0 eq (and stays bilevel) assert
+    % asking for interpolation smooths the same mask
+    erasepage
+    gsave 4 4 translate 30 30 scale
+    << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 1
+       /Decode [1 0] /ImageMatrix [8 0 0 -8 0 8]
+       /DataSource <3C7EFFFFFFFF7E3C> /Interpolate true >> imagemask
+    grestore
+    countink 100 ge (an interpolated stencil paints) assert
+    countmid 0 gt (and ramps its edges) assert
+
+    % a sampled image magnified: stepped, the boundary between blocks
+    % jumps; interpolated, the same point blends the neighbours
+    erasepage
+    gsave 4 4 translate 40 40 scale
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8 /Decode [0 1]
+       /ImageMatrix [2 0 0 -2 0 2] /DataSource <00FF FF00> >> image
+    grestore
+    24 24 DEV dup /GetPix get exec
+    dup 60 lt exch 195 gt or (a stepped image jumps at its block boundary) assert
+    erasepage
+    gsave 4 4 translate 40 40 scale
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8 /Decode [0 1]
+       /ImageMatrix [2 0 0 -2 0 2] /DataSource <00FF FF00>
+       /Interpolate true >> image
+    grestore
+    24 24 DEV dup /GetPix get exec
+    dup 60 ge exch 195 le and (an interpolated image blends there) assert
+    basefont 20 scalefont setfont
 
     % /Encoding: a re-encoded copy renders the named glyph
     erasepage
@@ -303,6 +456,18 @@ basefont null ne {
     erasepage
     2 24 moveto (A) show
     wantsnap snapshot snapeq not (the base font still renders its own glyph) assert
+
+    % a font's /Metrics dictionary overrides a glyph's advance by name,
+    % mapped from character space through the font matrix (the encoding
+    % must name the glyph for the width to be found)
+    basefont dup length dict copy
+    dup /Encoding StandardEncoding put
+    dup /Metrics << /A 900 >> put
+    /MetricsTest exch definefont 100 scalefont setfont
+    (A) stringwidth pop 90 sub abs 1 lt (a Metrics entry overrides the glyph advance) assert
+    basefont 100 scalefont setfont
+    (A) stringwidth pop 90 sub abs 1 ge (the base font keeps its own advance) assert
+    basefont 20 scalefont setfont
 
     % a base font publishes its glyph complement in /CharStrings, as
     % re-encoding programs expect: they size tables from its length,
@@ -861,6 +1026,114 @@ grestore
 32 32 inkat not (ring clip excludes the hole) assert
 32 4 inkat not (ring clip excludes outside the outer circle) assert
 } if
+
+% Byte-mapped composite fonts: each mapping hands the declared
+% descendant the right code, shown by the descendants' distinct
+% advances and by the codes cshow reports
+/FmA << /FontType 3 /FontMatrix matrix /FontBBox [0 0 0 0]
+  /Encoding 256 array 0 1 255 { 1 index exch /.notdef put } for
+  /BuildChar { pop pop 7 0 setcharwidth } bind
+>> definefont pop
+/FmB << /FontType 3 /FontMatrix matrix /FontBBox [0 0 0 0]
+  /Encoding 256 array 0 1 255 { 1 index exch /.notdef put } for
+  /BuildChar { pop pop 11 0 setcharwidth } bind
+>> definefont pop
+/fm.desc [ /FmA findfont /FmB findfont ] def
+/fm.w { % string composite . wx
+    findfont setfont stringwidth pop
+} def
+/Fm2 << /FontType 0 /FMapType 2 /FontMatrix matrix
+        /Encoding [0 1] /FDepVector fm.desc >> definefont pop
+<0041 0141> /Fm2 fm.w 18 (an 8/8 code selects by its first byte) assertnear
+/Fm4 << /FontType 0 /FMapType 4 /FontMatrix matrix
+        /Encoding [0 1] /FDepVector fm.desc >> definefont pop
+<41 C1> /Fm4 fm.w 18 (a 1/7 code selects by its top bit) assertnear
+/Fm5 << /FontType 0 /FMapType 5 /FontMatrix matrix
+        /Encoding [0 1] /FDepVector fm.desc >> definefont pop
+<0041 00C1> /Fm5 fm.w 18 (a 9/7 code selects by its top nine bits) assertnear
+/Fm6 << /FontType 0 /FMapType 6 /FontMatrix matrix /SubsVector <003497>
+        /Encoding [0 1 0] /FDepVector fm.desc >> definefont pop
+<33 41> /Fm6 fm.w 18 (SubsVector codes select by their range) assertnear
+<CB> /Fm6 fm.w 7 (a code past every range lands one font beyond) assertnear
+% cshow reports the decoded codes with the descendant's widths
+/Fm2 findfont setfont
+mark { pop exch } <0041 0142> cshow ]
+dup length 4 eq
+1 index 1 get 65 eq and
+1 index 3 get 66 eq and
+1 index 0 get 7 sub abs 0.01 lt and
+exch 2 get 11 sub abs 0.01 lt and
+(cshow reports byte-mapped codes and widths) assert
+% the modal mappings: an escape or shift selects for what follows,
+% and the selection resets at each show operation
+/Fm3 << /FontType 0 /FMapType 3 /FontMatrix matrix /EscChar 255
+        /Encoding [0 1] /FDepVector fm.desc >> definefont pop
+<41 FF01 42 43> /Fm3 fm.w 29 (an escape selects for the rest) assertnear
+<41 42> /Fm3 fm.w 14 (the selection resets between shows) assertnear
+<FF01 41 FF00 42> /Fm3 fm.w 18 (escapes switch back and forth) assertnear
+/fm.e300 300 array 0 1 299 { 1 index exch 0 put } for
+    dup 257 1 put def
+/Fm7 << /FontType 0 /FMapType 7 /FontMatrix matrix /EscChar 255
+        /Encoding fm.e300 /FDepVector fm.desc >> definefont pop
+<FFFF01 41 42> /Fm7 fm.w 22 (a doubled escape reaches past 255) assertnear
+/Fm8 << /FontType 0 /FMapType 8 /FontMatrix matrix
+        /Encoding [0 1] /FDepVector fm.desc >> definefont pop
+<41 0E 42 43 0F 44> /Fm8 fm.w 36 (shift bytes toggle the two fonts) assertnear
+% stringwidth needs no currentpoint of its own
+newpath
+<41> /Fm4 fm.w 7 (stringwidth measures without a currentpoint) assertnear
+
+% a font dictionary's entries carry the attributes a program reads:
+% the matrix is data, the bounding box answers executable as the
+% reference interpreters do, and the encoding is data
+basefont null ne {
+    basefont /FontMatrix get xcheck not
+    (a font matrix is literal) assert
+    basefont /FontBBox get xcheck
+    (a font bounding box is executable) assert
+    basefont /Encoding get xcheck not
+    (a font encoding is literal) assert
+} if
+
+% --- machinery runs a program's procedures on the program's stacks ---
+% a callback's defs reach the program's dictionaries, and names the
+% machinery uses privately (str, proc, i, pend...) are out of reach:
+% defining them in a callback must not corrupt the machinery
+/Courier findfont 10 scalefont setfont
+gsave
+100 100 moveto
+{ pop pop /str (mine) def /proc 7 def /iso.k true def } (ab) kshow
+grestore
+iso.k (a kshow procedure runs on the caller's stacks) assert
+str (mine) eq (a kshow procedure's defs reach the caller) assert
+userdict /str undef userdict /proc undef userdict /iso.k undef
+count /iso.kd exch def
+gsave 100 100 moveto { pop pop (k) } (abc) kshow grestore
+count iso.kd sub 2 eq (a kshow procedure's stack results survive) assert
+pop pop
+/iso.c 0 def
+gsave 100 100 moveto
+{ pop pop pop /iso.c iso.c 1 add def } (ab) cshow
+grestore
+iso.c 2 eq (a cshow procedure runs per character on the caller's stacks) assert
+userdict /iso.c undef
+gsave
+{ 10 10 8 [10 0 0 -10 0 10]
+  { /pend (x) def /rawrow 5 def /got 99 def <00112233445566778899> }
+  image } stopped not
+(an image source defining the row pump's names completes) assert
+grestore
+userdict /pend undef userdict /rawrow undef userdict /got undef
+gsave
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 10 10] /XStep 10 /YStep 10
+   /PaintProc { pop /i 999 def /pat (mine) def /iso.p true def
+                newpath 0 0 moveto 5 0 lineto 5 5 lineto closepath fill }
+>> matrix makepattern setpattern
+newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath fill
+grestore
+iso.p (a pattern paint procedure runs on the caller's stacks) assert
+userdict /i undef userdict /pat undef userdict /iso.p undef
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

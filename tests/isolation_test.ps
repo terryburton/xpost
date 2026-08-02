@@ -2,7 +2,7 @@
 % run-ps-test.sh; prints SUCCESS iff every assertion holds. The interpreter's
 % internal helper procedures live in the private .xpostsys namespace, so:
 %   (1) their names do not pollute the dictionaries a program sees -- a
-%       program's `/ravec where` is false, as it is on Ghostscript, and
+%       program's `/ravec where` is false, and
 %   (2) a program may redefine any of those names for its own use without
 %       disturbing the graphics machinery.
 % The machinery is also required to survive a program shadowing the operator
@@ -201,6 +201,22 @@ HTNAMES { { (PROGRAM-OWNED) } def } forall
     << /HalftoneType 3 /Width 4 /Height 4
        /Thresholds <10305070 20406080 15355575 25456585> >> sethalftone
 } stopped not (screen and halftone setup survive redefined helper names) assert
+
+% font/CID family (font.ps + cid.ps) now in .xpostsys
+/FONTNAMES [ /.cmapnext /.cidface /.fmapnext /.fmapdesc /.showfmap /.showtype0
+    /.cshmeasure /.cshsetfont /.bytecmap /.runbuild /.t3capture /.t3build
+    /.glyphbytes /.kshowshow /.rootsetfont ] def
+FONTNAMES {
+    dup where { pop (FONT-VISIBLE: ) print == false }{ pop true } ifelse
+    (font helper name is hidden) assert
+} forall
+FONTNAMES { { (PROGRAM-OWNED) } def } forall
+{
+    /Helvetica findfont 12 scalefont setfont
+    50 50 moveto (font test) show
+    50 30 moveto { pop pop } (kshow) kshow
+    /Times-Roman findfont 20 scalefont setfont 50 10 moveto (X) true charpath stroke
+} stopped not (font show, kshow and charpath survive redefined names) assert
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

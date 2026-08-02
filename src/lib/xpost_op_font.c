@@ -37,6 +37,7 @@
 #include <stddef.h>
 
 #include <assert.h>
+#include <ctype.h> /* isdigit, isxdigit, isspace */
 #include <math.h> /* sqrt */
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +48,7 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_font.h"
+#include "xpost_file.h"
 #include "xpost_save.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
@@ -76,9 +78,602 @@ typedef struct textstate
 {
     Xpost_Object encoding;  /* the font's /Encoding array, or invalid */
     Xpost_Object charstrings; /* the font's /CharStrings dict, or invalid */
+    Xpost_Object metrics;   /* the font's /Metrics dict, or invalid */
+    real cdmat[4];          /* character space -> device space (FontMatrix o CTM) */
+    int cdmat_ok;           /* the matrix above is usable */
     Xpost_Object blendpix;  /* the device's BlendPix method, or invalid */
     int blend;              /* anti-alias: TextAlphaBits > 1 and BlendPix present */
 } textstate;
+
+/* the linear part of character space -> device space: the font
+   dictionary's FontMatrix composed with the CTM (row convention:
+   x' = e0 x + e2 y, y' = e1 x + e3 y). Returns 0 when either matrix
+   is unusable. */
+static
+int _char_device_matrix(Xpost_Context *ctx,
+                        Xpost_Object gs,
+                        Xpost_Object fontdict,
+                        real e[4])
+{
+    Xpost_Object psmat;
+    real fm[4] = { 1.0, 0.0, 0.0, 1.0 };
+    real cm[4];
+    int i;
+
+    psmat = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"));
+    if (xpost_object_get_type(psmat) == arraytype && psmat.comp_.sz == 6)
+    {
+        for (i = 0; i < 4; i++)
+        {
+            Xpost_Object el = xpost_array_get(ctx, psmat, i);
+            if (xpost_object_get_type(el) == realtype)
+                fm[i] = el.real_.val;
+            else if (xpost_object_get_type(el) == integertype)
+                fm[i] = (real)el.int_.val;
+        }
+    }
+    psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
+    if (xpost_object_get_type(psmat) != arraytype || psmat.comp_.sz != 6)
+        return 0;
+    for (i = 0; i < 4; i++)
+    {
+        Xpost_Object el = xpost_array_get(ctx, psmat, i);
+        cm[i] = xpost_object_get_type(el) == realtype ? el.real_.val
+             : (real)el.int_.val;
+    }
+    e[0] = fm[0] * cm[0] + fm[1] * cm[2];
+    e[1] = fm[0] * cm[1] + fm[1] * cm[3];
+    e[2] = fm[2] * cm[0] + fm[3] * cm[2];
+    e[3] = fm[2] * cm[1] + fm[3] * cm[3];
+    return 1;
+}
+
+/* the glyph name the font's /Encoding assigns a character code, or the
+   invalid object (codes past the array, or entries that are not names) */
+static
+Xpost_Object _encoded_name(Xpost_Context *ctx,
+                           Xpost_Object encoding,
+                           unsigned int ch)
+{
+    if (xpost_object_get_type(encoding) == arraytype
+     && ch < (unsigned int)encoding.comp_.sz)
+    {
+        Xpost_Object en = xpost_array_get(ctx, encoding, ch);
+        if (xpost_object_get_type(en) == nametype)
+            return en;
+    }
+    return invalid;
+}
+
+/* A /Metrics entry for this glyph name overrides its width (PLRM 5.9.2):
+   a number is a new x width, a two-element array carries the width in its
+   second element, a four-element array carries the width vector in its
+   last two. The values are in character space; deliver the device-space
+   advance in 16.16, y-up, the convention the face's advances arrive in.
+   (The sidebearing the array forms also carry is not applied.) */
+static
+int _metrics_advance(Xpost_Context *ctx,
+                     const textstate *ts,
+                     Xpost_Object glyphname,
+                     long *ax,
+                     long *ay)
+{
+    Xpost_Object v;
+    real wx, wy = 0.0;
+
+    if (!ts->cdmat_ok
+     || xpost_object_get_type(ts->metrics) != dicttype
+     || xpost_object_get_type(glyphname) != nametype)
+        return 0;
+    v = xpost_dict_get(ctx, ts->metrics, glyphname);
+    if (xpost_object_get_type(v) == integertype)
+        wx = (real)v.int_.val;
+    else if (xpost_object_get_type(v) == realtype)
+        wx = v.real_.val;
+    else if (xpost_object_get_type(v) == arraytype
+          && (v.comp_.sz == 2 || v.comp_.sz == 4))
+    {
+        Xpost_Object el = xpost_array_get(ctx, v, v.comp_.sz == 2 ? 1 : 2);
+        if (xpost_object_get_type(el) == realtype)
+            wx = el.real_.val;
+        else if (xpost_object_get_type(el) == integertype)
+            wx = (real)el.int_.val;
+        else
+            return 0;
+        if (v.comp_.sz == 4)
+        {
+            el = xpost_array_get(ctx, v, 3);
+            if (xpost_object_get_type(el) == realtype)
+                wy = el.real_.val;
+            else if (xpost_object_get_type(el) == integertype)
+                wy = (real)el.int_.val;
+            else
+                return 0;
+        }
+    }
+    else
+        return 0;
+    *ax = (long)((ts->cdmat[0] * wx + ts->cdmat[2] * wy) * 65536.0);
+    *ay = (long)(-(ts->cdmat[1] * wx + ts->cdmat[3] * wy) * 65536.0);
+    return 1;
+}
+
+/* Extract the CharStrings of a Type 1 font program on disk: the
+   values a font dictionary built by running the program would hold,
+   the charstring bytes as the RD procedure reads them, still under
+   their own charstring encryption. PFB segment headers unwrap, the
+   eexec layer decrypts from its hexadecimal or raw form, and the
+   entries parse as /name length RD <bytes> ND, whatever pair of
+   names the program chose for RD and ND. Returns a read-only
+   dictionary in global VM, or the invalid object. */
+static Xpost_Object
+_t1_charstrings_from_file(Xpost_Context *ctx, const char *path)
+{
+    Xpost_Object result = null;
+    unsigned char *raw = NULL, *flat = NULL, *plain = NULL;
+    size_t rawlen = 0, flatlen = 0, plainlen = 0;
+    size_t i, ee;
+    int ferrcode = 0;
+    FILE *fp;
+
+    fp = xpost_diskfile_fopen(path, "rb", 1, &ferrcode);
+    if (!fp)
+        return null;
+    fseek(fp, 0, SEEK_END);
+    {
+        long l = ftell(fp);
+
+        if (l <= 0 || l > (16L << 20))
+        {
+            fclose(fp);
+            return null;
+        }
+        rawlen = (size_t)l;
+    }
+    fseek(fp, 0, SEEK_SET);
+    raw = malloc(rawlen);
+    if (!raw || fread(raw, 1, rawlen, fp) != rawlen)
+    {
+        free(raw);
+        fclose(fp);
+        return null;
+    }
+    fclose(fp);
+
+    if (raw[0] == 0x80)
+    {
+        /* PFB: 0x80, type, little-endian length, payload; type 3 ends */
+        size_t off = 0;
+
+        flat = malloc(rawlen);
+        if (!flat)
+            goto out;
+        while (off + 6 <= rawlen && raw[off] == 0x80 && raw[off + 1] != 3)
+        {
+            size_t seg = (size_t)raw[off + 2]
+                       | ((size_t)raw[off + 3] << 8)
+                       | ((size_t)raw[off + 4] << 16)
+                       | ((size_t)raw[off + 5] << 24);
+
+            off += 6;
+            if (off + seg > rawlen)
+                goto out;
+            memcpy(flat + flatlen, raw + off, seg);
+            flatlen += seg;
+            off += seg;
+        }
+    }
+    else
+    {
+        flat = raw;
+        flatlen = rawlen;
+        raw = NULL;
+    }
+
+    /* the encrypted portion follows the eexec token's white space */
+    for (ee = 0; ee + 5 < flatlen; ee++)
+        if (memcmp(flat + ee, "eexec", 5) == 0)
+            break;
+    if (ee + 5 >= flatlen)
+        goto out;
+    ee += 5;
+    while (ee < flatlen && (flat[ee] == '\r' || flat[ee] == '\n'
+                         || flat[ee] == ' ' || flat[ee] == '\t'))
+        ee++;
+    {
+        int ishex = 1;
+        unsigned short r = 55665;
+        size_t n = 0;
+
+        for (i = 0; i < 4 && ee + i < flatlen; i++)
+            if (!isxdigit(flat[ee + i]))
+                ishex = 0;
+        plain = malloc(flatlen);
+        if (!plain)
+            goto out;
+        if (ishex)
+        {
+            int hi = -1;
+
+            for (i = ee; i < flatlen; i++)
+            {
+                int c = flat[i], v;
+
+                if (isdigit(c)) v = c - '0';
+                else if (c >= 'a' && c <= 'f') v = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') v = c - 'A' + 10;
+                else continue;
+                if (hi < 0)
+                    hi = v;
+                else
+                {
+                    plain[n++] = (unsigned char)((hi << 4) | v);
+                    hi = -1;
+                }
+            }
+        }
+        else
+        {
+            memcpy(plain, flat + ee, flatlen - ee);
+            n = flatlen - ee;
+        }
+        for (i = 0; i < n; i++)
+        {
+            unsigned char c = plain[i];
+
+            plain[i] = (unsigned char)(c ^ (r >> 8));
+            r = (unsigned short)((unsigned int)(c + r) * 52845u + 22719u);
+        }
+        if (n <= 4)
+            goto out;
+        memmove(plain, plain + 4, n - 4);
+        plainlen = n - 4;
+    }
+
+    /* /CharStrings, then entries until the closing end */
+    for (i = 0; i + 12 < plainlen; i++)
+        if (memcmp(plain + i, "/CharStrings", 12) == 0)
+            break;
+    if (i + 12 >= plainlen)
+        goto out;
+    i += 12;
+    {
+        unsigned int oldmode = ctx->vmmode;
+        Xpost_Object csdict;
+        int entries = 0;
+
+        ctx->vmmode = GLOBAL;
+        csdict = xpost_dict_cons(ctx, 256);
+        while (i < plainlen && entries < 20000)
+        {
+            char namebuf[128];
+            size_t nb = 0;
+            long len = 0;
+
+            while (i < plainlen && plain[i] != '/')
+            {
+                if (i + 3 < plainlen && memcmp(plain + i, "end", 3) == 0
+                 && (i == 0 || isspace(plain[i - 1]))
+                 && (i + 3 == plainlen || isspace(plain[i + 3])))
+                    goto done;
+                i++;
+            }
+            if (i >= plainlen)
+                break;
+            i++;
+            while (i < plainlen && !isspace(plain[i]) && plain[i] != '('
+                && plain[i] != '/' && plain[i] != '{'
+                && nb + 1 < sizeof namebuf)
+                namebuf[nb++] = (char)plain[i++];
+            namebuf[nb] = 0;
+            while (i < plainlen && isspace(plain[i]))
+                i++;
+            while (i < plainlen && isdigit(plain[i]))
+                len = len * 10 + (plain[i++] - '0');
+            while (i < plainlen && isspace(plain[i]))
+                i++;
+            while (i < plainlen && !isspace(plain[i]))
+                i++;                       /* the RD name of the day */
+            i++;                           /* the single separator */
+            if (len <= 0 || len > 65535 || i + (size_t)len > plainlen
+             || nb == 0)
+                break;
+            {
+                Xpost_Object str = xpost_string_cons(ctx, (unsigned int)len,
+                                                     (char *)plain + i);
+
+                str = xpost_object_set_access(ctx, str,
+                          XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
+                xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, namebuf),
+                               str);
+            }
+            i += (size_t)len;
+            entries++;
+        }
+done:
+        if (entries > 0)
+        {
+            csdict = xpost_object_set_access(ctx, csdict,
+                          XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+            result = csdict;
+        }
+        ctx->vmmode = oldmode;
+    }
+out:
+    free(raw);
+    free(flat);
+    free(plain);
+    return result;
+}
+
+/* CFF INDEX and DICT walking, enough to reach the CharStrings INDEX
+   of a bare CFF or an OpenType CFF table: the glyph names come from
+   the face, so neither the charset nor the string index is read. */
+static unsigned long
+_cff_u(const unsigned char *p, int n)
+{
+    unsigned long v = 0;
+    int i;
+
+    for (i = 0; i < n; i++)
+        v = (v << 8) | p[i];
+    return v;
+}
+
+/* an INDEX at off: sets *count and *first (offset of the offset
+   array's data area); returns the offset just past the INDEX, or 0 */
+static size_t
+_cff_index(const unsigned char *d, size_t len, size_t off,
+           unsigned long *count, size_t *dataoff, int *offsz)
+{
+    unsigned long c;
+    int osz;
+    unsigned long last;
+
+    if (off + 2 > len)
+        return 0;
+    c = _cff_u(d + off, 2);
+    if (c == 0)
+    {
+        *count = 0;
+        return off + 2;
+    }
+    if (off + 3 > len)
+        return 0;
+    osz = d[off + 2];
+    if (osz < 1 || osz > 4)
+        return 0;
+    if (off + 3 + (c + 1) * osz > len)
+        return 0;
+    last = _cff_u(d + off + 3 + c * osz, osz);
+    *count = c;
+    *offsz = osz;
+    *dataoff = off + 3 + (c + 1) * osz - 1;
+    if (*dataoff + last > len)
+        return 0;
+    return *dataoff + last;
+}
+
+/* the CharStrings offset out of the first Top DICT (operator 17) */
+static unsigned long
+_cff_charstrings_offset(const unsigned char *d, size_t len)
+{
+    unsigned long count;
+    size_t dataoff = 0, off;
+    int osz = 0;
+    size_t dstart, dend;
+    double operands[48];
+    int nops = 0;
+
+    if (len < 4)
+        return 0;
+    off = d[2];                          /* header size */
+    off = _cff_index(d, len, off, &count, &dataoff, &osz);   /* Name */
+    if (!off)
+        return 0;
+    if (_cff_index(d, len, off, &count, &dataoff, &osz) == 0 || count == 0)
+        return 0;                                            /* Top DICT */
+    dstart = dataoff + _cff_u(d + off + 3, osz);
+    dend = dataoff + _cff_u(d + off + 3 + osz, osz);
+    while (dstart < dend && dstart < len)
+    {
+        int b = d[dstart];
+
+        if (b <= 21)
+        {
+            int op = b;
+
+            dstart++;
+            if (b == 12)
+            {
+                if (dstart >= len)
+                    return 0;
+                op = 1200 + d[dstart];
+                dstart++;
+            }
+            if (op == 17 && nops >= 1)
+                return (unsigned long)operands[nops - 1];
+            nops = 0;
+        }
+        else if (b >= 32 && b <= 246)
+        {
+            if (nops < 48) operands[nops++] = b - 139;
+            dstart++;
+        }
+        else if (b >= 247 && b <= 250)
+        {
+            if (dstart + 1 >= len)   /* the operand's trailing byte */
+                return 0;
+            if (nops < 48) operands[nops++] =
+                (b - 247) * 256 + d[dstart + 1] + 108;
+            dstart += 2;
+        }
+        else if (b >= 251 && b <= 254)
+        {
+            if (dstart + 1 >= len)
+                return 0;
+            if (nops < 48) operands[nops++] =
+                -((int)(b - 251) * 256) - (int)d[dstart + 1] - 108;
+            dstart += 2;
+        }
+        else if (b == 28)
+        {
+            if (dstart + 2 >= len)   /* two trailing operand bytes */
+                return 0;
+            if (nops < 48) operands[nops++] =
+                (short)_cff_u(d + dstart + 1, 2);
+            dstart += 3;
+        }
+        else if (b == 29)
+        {
+            if (dstart + 4 >= len)   /* four trailing operand bytes */
+                return 0;
+            if (nops < 48) operands[nops++] =
+                (long)_cff_u(d + dstart + 1, 4);
+            dstart += 5;
+        }
+        else if (b == 30)
+        {
+            /* a real number: nibbles to the stop code */
+            dstart++;
+            while (dstart < len)
+            {
+                int lo = d[dstart] & 15, hi = d[dstart] >> 4;
+
+                dstart++;
+                if (hi == 15 || lo == 15)
+                    break;
+            }
+            if (nops < 48) operands[nops++] = 0;
+        }
+        else
+            return 0;
+    }
+    return 0;
+}
+
+/* Publish the CharStrings of a CFF-backed face: the Type 2
+   charstring of every glyph, keyed by the face's glyph names. A bare
+   CFF file reads whole; an OpenType wrapper locates its CFF table.
+   Returns a read-only dictionary in global VM, or null. */
+static Xpost_Object
+_cff_charstrings_from_file(Xpost_Context *ctx, const char *path, void *face)
+{
+    Xpost_Object result = null;
+    unsigned char *raw = NULL;
+    const unsigned char *cff;
+    size_t rawlen = 0, cfflen;
+    unsigned long csoff, count;
+    size_t dataoff = 0;
+    int osz = 0;
+    int ferrcode = 0;
+    FILE *fp;
+
+    fp = xpost_diskfile_fopen(path, "rb", 1, &ferrcode);
+    if (!fp)
+        return null;
+    fseek(fp, 0, SEEK_END);
+    {
+        long l = ftell(fp);
+
+        if (l <= 0 || l > (32L << 20))
+        {
+            fclose(fp);
+            return null;
+        }
+        rawlen = (size_t)l;
+    }
+    fseek(fp, 0, SEEK_SET);
+    raw = malloc(rawlen);
+    if (!raw || fread(raw, 1, rawlen, fp) != rawlen)
+    {
+        free(raw);
+        fclose(fp);
+        return null;
+    }
+    fclose(fp);
+
+    cff = raw;
+    cfflen = rawlen;
+    if (rawlen > 12 && memcmp(raw, "OTTO", 4) == 0)
+    {
+        unsigned long ntab = _cff_u(raw + 4, 2), t;
+
+        cff = NULL;
+        for (t = 0; t < ntab && 12 + t * 16 + 16 <= rawlen; t++)
+        {
+            const unsigned char *e = raw + 12 + t * 16;
+
+            if (memcmp(e, "CFF ", 4) == 0)
+            {
+                unsigned long toff = _cff_u(e + 8, 4);
+                unsigned long tlen = _cff_u(e + 12, 4);
+
+                /* keep the table within the file, without a 32-bit
+                   toff+tlen wrap */
+                if (toff <= rawlen && tlen <= rawlen - toff)
+                {
+                    cff = raw + toff;
+                    cfflen = tlen;
+                }
+                break;
+            }
+        }
+        if (!cff)
+            goto out;
+    }
+    else if (raw[0] != 1)     /* not a bare CFF either */
+        goto out;
+
+    csoff = _cff_charstrings_offset(cff, cfflen);
+    if (!csoff || _cff_index(cff, cfflen, csoff, &count, &dataoff, &osz) == 0
+     || count == 0)
+        goto out;
+
+    {
+        unsigned int oldmode = ctx->vmmode;
+        Xpost_Object csdict;
+        unsigned long gid;
+        int entries = 0;
+
+        ctx->vmmode = GLOBAL;
+        csdict = xpost_dict_cons(ctx, count < 4096 ? (unsigned int)count : 4096);
+        for (gid = 0; gid < count && gid < 65535; gid++)
+        {
+            char nbuf[128];
+            unsigned long a = _cff_u(cff + csoff + 3 + gid * osz, osz);
+            unsigned long b = _cff_u(cff + csoff + 3 + (gid + 1) * osz, osz);
+
+            /* keep the glyph's data span within the font buffer: interior
+               INDEX offsets are otherwise unchecked, so an oversized or
+               non-monotonic offset must not address memory outside it */
+            if (b <= a || b - a > 65535 || b > cfflen - dataoff)
+                continue;
+            if (!xpost_font_face_glyph_name_get(face, (unsigned int)gid,
+                                                nbuf, sizeof nbuf))
+                continue;
+            {
+                Xpost_Object str = xpost_string_cons(ctx,
+                    (unsigned int)(b - a), (char *)cff + dataoff + a);
+
+                str = xpost_object_set_access(ctx, str,
+                          XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
+                xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, nbuf), str);
+                entries++;
+            }
+        }
+        if (entries > 0)
+        {
+            csdict = xpost_object_set_access(ctx, csdict,
+                          XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+            result = csdict;
+        }
+        ctx->vmmode = oldmode;
+    }
+out:
+    free(raw);
+    return result;
+}
 
 static
 int _findfont(Xpost_Context *ctx,
@@ -92,6 +687,9 @@ int _findfont(Xpost_Context *ctx,
     char *fname;
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
+    Xpost_Object sfnts_obj = null;
+    int istt = 0;
+    int cffreal = 0;
 
     if (xpost_object_get_type(fontname) == nametype)
         fontstr = xpost_name_get_string(ctx, fontname);
@@ -111,7 +709,9 @@ int _findfont(Xpost_Context *ctx,
        font dictionaries exactly as a FontDirectory-cached dictionary
        already shares it. */
     {
-        static struct { char *name; void *face; Xpost_Object charstrings; } face_cache[32];
+        static struct { char *name; void *face; Xpost_Object charstrings;
+                        Xpost_Object sfnts; char *file; int csreal; }
+            face_cache[32];
         static int face_cache_n = 0;
         int fi, slot = -1;
         data.face = NULL;
@@ -130,6 +730,10 @@ int _findfont(Xpost_Context *ctx,
             data.face = xpost_font_face_new_from_name(fname);
             if (data.face != NULL && face_cache_n < 32)
             {
+                const char *ff = xpost_font_face_last_file();
+
+                face_cache[face_cache_n].file = ff ? strdup(ff) : NULL;
+                face_cache[face_cache_n].sfnts = null;
                 face_cache[face_cache_n].name = strdup(fname);
                 face_cache[face_cache_n].face = data.face;
                 slot = face_cache_n++;
@@ -149,15 +753,121 @@ int _findfont(Xpost_Context *ctx,
            cache. The values are glyph indices, which the text
            machinery accepts directly; a face without glyph names
            publishes nothing. */
+        istt = xpost_font_face_is_truetype(data.face);
+        /* a TrueType-backed dictionary is a Type 42 font outright:
+           publish the program as sfnts, chunked under the string
+           limit, read once per face and shared between every
+           dictionary the name produces. Only a plain sfnt file
+           qualifies: a compressed wrapper or a collection is not
+           the program a Type 42 dictionary carries, and such a
+           face keeps the Type 1 presentation */
+        if (istt && slot >= 0)
+        {
+            if (xpost_object_get_type(face_cache[slot].sfnts) != arraytype
+             && face_cache[slot].file)
+            {
+                int ferrcode = 0;
+                FILE *fp = xpost_diskfile_fopen(face_cache[slot].file,
+                                                "rb", 1, &ferrcode);
+
+                if (fp)
+                {
+                    long len;
+                    unsigned char magic[4] = { 0, 0, 0, 0 };
+                    int plain;
+
+                    plain = fread(magic, 1, 4, fp) == 4
+                         && ((magic[0] == 0 && magic[1] == 1
+                           && magic[2] == 0 && magic[3] == 0)
+                          || memcmp(magic, "true", 4) == 0);
+                    fseek(fp, 0, SEEK_END);
+                    len = ftell(fp);
+                    fseek(fp, 0, SEEK_SET);
+                    if (plain && len > 0)
+                    {
+                        int nchunks = (int)((len + 65531) / 65532);
+                        unsigned int oldmode = ctx->vmmode;
+                        Xpost_Object arr;
+                        int ci;
+                        unsigned char *cbuf = malloc(65532);
+
+                        ctx->vmmode = GLOBAL;
+                        arr = xpost_array_cons(ctx, nchunks);
+                        for (ci = 0; ci < nchunks && cbuf; ci++)
+                        {
+                            long rem = len - (long)ci * 65532;
+                            size_t want = rem > 65532 ? 65532 : (size_t)rem;
+                            Xpost_Object str;
+
+                            if (fread(cbuf, 1, want, fp) != want)
+                                break;
+                            str = xpost_string_cons(ctx, (unsigned int)want,
+                                                    (char *)cbuf);
+                            xpost_array_put(ctx, arr, ci, str);
+                        }
+                        free(cbuf);
+                        if (cbuf && ci == nchunks)
+                            face_cache[slot].sfnts = arr;
+                        ctx->vmmode = oldmode;
+                    }
+                    fclose(fp);
+                }
+            }
+            if (xpost_object_get_type(face_cache[slot].sfnts) != arraytype)
+                istt = 0;
+            sfnts_obj = face_cache[slot].sfnts;
+        }
+
         if (slot >= 0
          && xpost_object_get_type(face_cache[slot].charstrings) == dicttype)
         {
+            if (face_cache[slot].csreal && xpost_font_face_is_cff(data.face))
+                cffreal = 1;
             xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
                            face_cache[slot].charstrings);
         }
         else
         {
-            unsigned int nglyphs = xpost_font_face_glyph_name_count(data.face);
+            unsigned int nglyphs;
+
+            /* a Type 1 program on disk yields the genuine article:
+               the charstring bytes its RD procedure reads, so the
+               dictionary holds what running the program would build;
+               a CFF face likewise publishes its Type 2 charstrings,
+               and the dictionary then states FontType 2 */
+            if (slot >= 0 && face_cache[slot].file
+             && xpost_font_face_is_type1(data.face))
+            {
+                Xpost_Object cs =
+                    _t1_charstrings_from_file(ctx, face_cache[slot].file);
+
+                if (xpost_object_get_type(cs) == dicttype)
+                {
+                    face_cache[slot].charstrings = cs;
+                    face_cache[slot].csreal = 1;
+                    xpost_dict_put(ctx, fontdict,
+                                   xpost_name_cons(ctx, "CharStrings"), cs);
+                    goto have_charstrings;
+                }
+            }
+            if (slot >= 0 && face_cache[slot].file
+             && xpost_font_face_is_cff(data.face))
+            {
+                Xpost_Object cs =
+                    _cff_charstrings_from_file(ctx, face_cache[slot].file,
+                                               data.face);
+
+                if (xpost_object_get_type(cs) == dicttype)
+                {
+                    face_cache[slot].charstrings = cs;
+                    face_cache[slot].csreal = 1;
+                    cffreal = 1;
+                    xpost_dict_put(ctx, fontdict,
+                                   xpost_name_cons(ctx, "CharStrings"), cs);
+                    goto have_charstrings;
+                }
+            }
+            nglyphs = xpost_font_face_glyph_name_count(data.face);
             if (nglyphs)
             {
                 Xpost_Object csdict;
@@ -179,31 +889,41 @@ int _findfont(Xpost_Context *ctx,
                 xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
                                csdict);
             }
+have_charstrings: ;
         }
     }
 
-    fontbbox = xpost_array_cons(ctx, 4);
-    xpost_font_face_get_bbox(data.face, fontbboxarray, 1000.0);
+    /* executable, as the reference interpreters answer it */
+    fontbbox = xpost_object_cvx(xpost_array_cons(ctx, 4));
+    xpost_font_face_get_bbox(data.face, fontbboxarray, istt ? 1.0 : 1000.0);
     xpost_memory_put(xpost_context_select_memory(ctx, fontbbox),
 		     xpost_object_get_ent(fontbbox),
 		     0, 4 * sizeof(Xpost_Object), fontbboxarray);
     xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
 
-    /* the base font follows the Type 1 convention: character space
-       holds 1000 units per em and FontMatrix maps it to one text-space
-       unit, so FontBBox above is in the same 1000-unit space (programs
-       read the pair together, e.g. FontBBox dtransformed through
-       FontMatrix). scalefont and makefont concatenate onto this in
-       dictionary copies, and the text operators derive the face's
-       pixel scale from it */
+    /* the dictionary states what backs it: a TrueType program makes
+       a Type 42 font, its character space one unit to the em and its
+       CharStrings naming glyph indices, as the type defines; any
+       other face keeps the Type 1 dictionary conventions, character
+       space a thousand units to the em. FontBBox shares the
+       character space, and scalefont and makefont concatenate onto
+       FontMatrix in dictionary copies */
+    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontType"),
+                   xpost_int_cons(istt ? 42 : cffreal ? 2 : 1));
     {
-        Xpost_Object fontmatrix = xpost_array_cons(ctx, 6);
+        /* the constructors answer executable objects; a font's matrix
+           is data, so it says so at its construction, as
+           doc/NEWINTERNALS asks of every composite made here */
+        Xpost_Object fontmatrix = xpost_object_cvlit(xpost_array_cons(ctx, 6));
+        real diag = istt ? 1.0f : 0.001f;
         int mi;
         for (mi = 0; mi < 6; mi++)
             xpost_array_put(ctx, fontmatrix, mi,
-                            xpost_real_cons(mi == 0 || mi == 3 ? 0.001f : 0.0f));
+                            xpost_real_cons(mi == 0 || mi == 3 ? diag : 0.0f));
         xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"), fontmatrix);
     }
+    if (istt && xpost_object_get_type(sfnts_obj) == arraytype)
+        xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "sfnts"), sfnts_obj);
 
     xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
             xpost_object_get_ent(privatestr), 0, sizeof data, &data);
@@ -268,7 +988,8 @@ int _loadfont42(Xpost_Context *ctx,
         return invalidfont;
     }
 
-    fontbbox = xpost_array_cons(ctx, 4);
+    /* executable, as the reference interpreters answer it */
+    fontbbox = xpost_object_cvx(xpost_array_cons(ctx, 4));
     /* a Type 42 dictionary maps one em to one character-space unit */
     xpost_font_face_get_bbox(data.face, fontbboxarray, 1.0);
     xpost_memory_put(xpost_context_select_memory(ctx, fontbbox),
@@ -317,6 +1038,7 @@ int _setfont(Xpost_Context *ctx,
 
 static
 textstate _text_state_get(Xpost_Context *ctx,
+                          Xpost_Object gs,
                           Xpost_Object fontdict,
                           Xpost_Object devdic)
 {
@@ -325,9 +1047,14 @@ textstate _text_state_get(Xpost_Context *ctx,
 
     ts.encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     ts.charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
+    ts.metrics = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Metrics"));
+    ts.cdmat_ok = xpost_object_get_type(ts.metrics) == dicttype
+               && _char_device_matrix(ctx, gs, fontdict, ts.cdmat);
     ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
     tab = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
-    ts.blend = xpost_object_get_type(ts.blendpix) == operatortype
+    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
+             || (xpost_object_get_type(ts.blendpix) == arraytype
+              && xpost_object_is_exe(ts.blendpix)))
             && xpost_object_get_type(tab) == integertype
             && tab.int_.val > 1;
     return ts;
@@ -441,44 +1168,14 @@ void _face_setup(Xpost_Context *ctx,
                  Xpost_Object fontdict,
                  void *face)
 {
-    Xpost_Object psmat;
-    real fm[4] = { 1.0, 0.0, 0.0, 1.0 };
-    real cm[4];
     real e[4];
     real q;
     real r;
     float mat[6] = { 0 };
-    int i;
 
-    psmat = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"));
-    if (xpost_object_get_type(psmat) == arraytype && psmat.comp_.sz == 6)
-    {
-        for (i = 0; i < 4; i++)
-        {
-            Xpost_Object el = xpost_array_get(ctx, psmat, i);
-            if (xpost_object_get_type(el) == realtype)
-                fm[i] = el.real_.val;
-            else if (xpost_object_get_type(el) == integertype)
-                fm[i] = (real)el.int_.val;
-        }
-    }
-
-    psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
-    if (xpost_object_get_type(psmat) != arraytype || psmat.comp_.sz != 6)
+    /* text space -> device space: FontMatrix then CTM */
+    if (!_char_device_matrix(ctx, gs, fontdict, e))
         return;
-    for (i = 0; i < 4; i++)
-    {
-        Xpost_Object el = xpost_array_get(ctx, psmat, i);
-        cm[i] = xpost_object_get_type(el) == realtype ? el.real_.val
-             : (real)el.int_.val;
-    }
-
-    /* text space -> device space: FontMatrix then CTM
-       (row convention: x' = a x + c y, y' = b x + d y) */
-    e[0] = fm[0] * cm[0] + fm[1] * cm[2];
-    e[1] = fm[0] * cm[1] + fm[1] * cm[3];
-    e[2] = fm[2] * cm[0] + fm[3] * cm[2];
-    e[3] = fm[2] * cm[1] + fm[3] * cm[3];
 
     q = (real)sqrt(e[0] * e[0] + e[1] * e[1]);
     if (q == 0)
@@ -497,7 +1194,8 @@ void _face_setup(Xpost_Context *ctx,
         Xpost_Object cft = xpost_dict_get(ctx, fontdict,
                                           xpost_name_cons(ctx, "CIDFontType"));
         real qem = q;
-        if ((xpost_object_get_type(ft) == integertype && ft.int_.val == 1)
+        if ((xpost_object_get_type(ft) == integertype
+             && (ft.int_.val == 1 || ft.int_.val == 2))
          || (xpost_object_get_type(cft) == integertype && cft.int_.val == 0))
         {
             /* a Type 1 character-space unit is usually a thousandth
@@ -554,8 +1252,12 @@ void _draw_bitmap(Xpost_Context *ctx,
     int i, j;
     const unsigned char *tmp;
     unsigned int pix;
+    Xpost_Object exec_name;
 
     tmp = buffer;
+    /* interned once: re-interning it for every set pixel dominates the
+       glyph loop when putpix is a procedure rather than an operator */
+    exec_name = xpost_name_cons(ctx, "exec");
     XPOST_LOG_INFO("bitmap rows = %d, bitmap width = %d", rows, width);
     XPOST_LOG_INFO("bitmap pitch = %d", pitch);
     XPOST_LOG_INFO("bitmap pixel_mode = %d", pixel_mode);
@@ -608,8 +1310,7 @@ void _draw_bitmap(Xpost_Context *ctx,
                 else
                 {
                     xpost_stack_push(ctx->lo, ctx->os, putpix);
-                    xpost_stack_push(ctx->lo, ctx->es,
-                                     xpost_name_cons(ctx, "exec"));
+                    xpost_stack_push(ctx->lo, ctx->es, exec_name);
                 }
             }
         }
@@ -628,6 +1329,7 @@ int _show_glyph(Xpost_Context *ctx,
                 real *xpos,
                 real *ypos,
                 unsigned int glyph_index,
+                Xpost_Object glyphname,
                 int ncomp,
                 Xpost_Object comp1,
                 Xpost_Object comp2,
@@ -659,6 +1361,8 @@ int _show_glyph(Xpost_Context *ctx,
                  (int)floor(*xpos + left + 0.5),
                  (int)floor(*ypos - top + 0.5),
                  ncomp, comp1, comp2, comp3);
+    /* a /Metrics entry for this glyph overrides the face's advance */
+    _metrics_advance(ctx, ts, glyphname, &advance_x, &advance_y);
     /* the face transform leaves the advance in y-up glyph space; the
        pen advances in y-down device space, keeping the fractional part
        (truncating each glyph's advance drifts the line's length) */
@@ -673,6 +1377,7 @@ int _show_glyph(Xpost_Context *ctx,
     (void)xpos;
     (void)ypos;
     (void)glyph_index;
+    (void)glyphname;
     (void)ncomp;
     (void)comp1;
     (void)comp2;
@@ -696,13 +1401,14 @@ int _show_char(Xpost_Context *ctx,
                Xpost_Object comp3)
 {
     /* show does not kern: pair adjustment in PostScript is the
-       program's business (kshow, ashow), and the reference
-       interpreter advances by the glyph widths alone */
+       program's business (kshow, ashow); the advance is the glyph
+       widths alone */
     unsigned int glyph_index = _glyph_index_for_char(ctx, ts->encoding,
                                                      ts->charstrings,
                                                      data.face, ch);
     return _show_glyph(ctx, devdic, putpix, data, ts, xpos, ypos,
-                       glyph_index, ncomp, comp1, comp2, comp3);
+                       glyph_index, _encoded_name(ctx, ts->encoding, ch),
+                       ncomp, comp1, comp2, comp3);
 }
 
 static
@@ -788,7 +1494,7 @@ int _show(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -896,7 +1602,7 @@ int _glyphshow_common(Xpost_Context *ctx,
 
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
     if (xpost_object_get_type(privatestr) == invalidtype)
@@ -947,7 +1653,8 @@ int _glyphshow_common(Xpost_Context *ctx,
         ? _glyph_index_for_name(ctx, ts.charstrings, data.face, gname)
         : gid;
     _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
-                glyph_index, ncomp, comp[0], comp[1], comp[2]);
+                glyph_index, byname ? gname : invalid,
+                ncomp, comp[0], comp[1], comp[2]);
 
     xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
     xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
@@ -1233,7 +1940,8 @@ int _loadcidfont0(Xpost_Context *ctx,
         return invalidfont;
     }
 
-    fontbbox = xpost_array_cons(ctx, 4);
+    /* executable, as the reference interpreters answer it */
+    fontbbox = xpost_object_cvx(xpost_array_cons(ctx, 4));
     xpost_font_face_get_bbox(data.face, fontbboxarray, 1000.0);
     xpost_memory_put(xpost_context_select_memory(ctx, fontbbox),
                      xpost_object_get_ent(fontbbox),
@@ -1279,7 +1987,7 @@ _t1_encrypt(unsigned char *data, size_t n)
         unsigned char c = p ^ (r >> 8);
 
         data[i] = c;
-        r = (unsigned short)((c + r) * 52845 + 22719);
+        r = (unsigned short)((unsigned int)(c + r) * 52845u + 22719u);
     }
 }
 
@@ -1306,11 +2014,10 @@ _t1_emit_bin(Xpost_Context *ctx, char **buf, size_t *len, size_t *cap,
 static
 int _loadfont1(Xpost_Context *ctx,
                Xpost_Object fontdict,
-               Xpost_Object csflat,
-               Xpost_Object subrs)
+               Xpost_Object csflat)
 {
 #ifdef HAVE_FREETYPE2
-    Xpost_Object priv, privatestr, fontbbox;
+    Xpost_Object priv, privatestr, fontbbox, subrs;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
     char *hdr, *sec;
@@ -1319,12 +2026,16 @@ int _loadfont1(Xpost_Context *ctx,
     int i;
     unsigned int k;
 
-    if (xpost_object_get_type(csflat) != arraytype
-     || xpost_object_get_type(subrs) != arraytype)
+    if (xpost_object_get_type(csflat) != arraytype)
         return invalidfont;
     priv = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
     if (xpost_object_get_type(priv) != dicttype)
         return invalidfont;
+    /* The subroutine array lives in the Private dictionary, which a Type 1
+       font seals no-access. Read it here in C, where the access attribute does
+       not apply, rather than from the PostScript loader, where it would forbid
+       the read. An absent or non-array Subrs means no subroutines. */
+    subrs = xpost_dict_get(ctx, priv, xpost_name_cons(ctx, "Subrs"));
 
     hdr = malloc(hcap);
     if (!hdr)
@@ -1356,7 +2067,7 @@ int _loadfont1(Xpost_Context *ctx,
     for (k = 0; k < sizeof _cid_private_keys / sizeof *_cid_private_keys; k++)
         if (_cid_emit_entry(ctx, &sec, &slen, &scap, priv,
                             _cid_private_keys[k])) goto fails;
-    if (subrs.comp_.sz > 0)
+    if (xpost_object_get_type(subrs) == arraytype && subrs.comp_.sz > 0)
     {
         if (_cid_emit(&sec, &slen, &scap, "/Subrs %d array\n", subrs.comp_.sz))
             goto fails;
@@ -1364,8 +2075,37 @@ int _loadfont1(Xpost_Context *ctx,
         {
             Xpost_Object s = xpost_array_get(ctx, subrs, i);
 
+            /* A Type 1 font may over-allocate its Subrs array and leave slots
+               unfilled (null): CMR10 declares 38 and fills only 15. Emit a
+               minimal charstring-encrypted "return" for such a slot, so a
+               callsubr on it is a harmless no-op the way the reference
+               interpreters treat an empty subroutine, rather than rejecting the
+               whole font (or leaving a hole freetype faults on). */
             if (xpost_object_get_type(s) != stringtype)
-                goto fails;
+            {
+                unsigned char cs[5];
+                unsigned short rr = 4330;
+                int j;
+
+                cs[0] = cs[1] = cs[2] = cs[3] = 0; /* lenIV skip bytes */
+                cs[4] = 11;                        /* charstring: return */
+                for (j = 0; j < 5; j++)
+                {
+                    unsigned char c = (unsigned char)(cs[j] ^ (rr >> 8));
+                    cs[j] = c;
+                    rr = (unsigned short)(((unsigned int)(c + rr)) * 52845u + 22719u);
+                }
+                if (_cid_emit(&sec, &slen, &scap, "dup %d 5 RD ", i)) goto fails;
+                while (slen + 5 + 1 >= scap)
+                {
+                    char *nb = realloc(sec, scap * 2);
+                    if (!nb) goto fails;
+                    sec = nb; scap *= 2;
+                }
+                memcpy(sec + slen, cs, 5); slen += 5;
+                if (_cid_emit(&sec, &slen, &scap, " NP\n")) goto fails;
+                continue;
+            }
             if (_cid_emit(&sec, &slen, &scap, "dup %d %u RD ", i,
                           (unsigned int)s.comp_.sz)) goto fails;
             if (_t1_emit_bin(ctx, &sec, &slen, &scap, s)) goto fails;
@@ -1415,7 +2155,7 @@ int _loadfont1(Xpost_Context *ctx,
             unsigned char cc = (unsigned char)(sec[j] ^ (r >> 8));
 
             t[j] = cc;
-            r = (unsigned short)((cc + r) * 52845 + 22719);
+            r = (unsigned short)((unsigned int)(cc + r) * 52845u + 22719u);
         }
         for (j = 0; j < 4; j++)
             if (!( (t[j] >= '0' && t[j] <= '9')
@@ -1445,7 +2185,8 @@ int _loadfont1(Xpost_Context *ctx,
         return invalidfont;
     }
 
-    fontbbox = xpost_array_cons(ctx, 4);
+    /* executable, as the reference interpreters answer it */
+    fontbbox = xpost_object_cvx(xpost_array_cons(ctx, 4));
     xpost_font_face_get_bbox(data.face, fontbboxarray, 1000.0);
     xpost_memory_put(xpost_context_select_memory(ctx, fontbbox),
                      xpost_object_get_ent(fontbbox),
@@ -1465,9 +2206,408 @@ failh:
     free(hdr);
     return invalidfont;
 #else
-    (void)ctx; (void)fontdict; (void)csflat; (void)subrs;
+    (void)ctx; (void)fontdict; (void)csflat;
     return invalidfont;
 #endif
+}
+
+
+/* maskdict  .stencilaa  bool
+   paint a small stencil mask with coverage-blended edges, the way
+   glyph bitmaps paint: an axis-aligned transform lets each device
+   pixel take the box-filtered coverage of the mask cells it spans,
+   fully covered pixels going through the device's solid path and
+   partial ones through its blend. Anything else -- a rotated or
+   skewed matrix, an oversized result, a device without the blending
+   machinery -- answers false and the caller keeps the bilevel path. */
+static
+int _stencilaa(Xpost_Context *ctx,
+               Xpost_Object dict)
+{
+    Xpost_Object userdict, gd, gs, devdic, putpix;
+    Xpost_Object buf, mat, o;
+    textstate ts;
+    int w, h, ink, ncomp, interp = 0;
+    Xpost_Object comp[4];
+    double m[6];
+    double fx0, fx1, fy0, fy1, xa, xb, ya, yb, full;
+    int ix0, iy0, devw, devh, px, py, i;
+    int rowbytes;
+    unsigned char *bits, *cov;
+
+    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+    if (xpost_object_get_type(userdict) != dicttype)
+        goto refuse;
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
+    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
+    devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
+    if (xpost_object_get_type(devdic) != dicttype)
+        goto refuse;
+
+    memset(&ts, 0, sizeof ts);
+    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
+    o = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
+    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
+             || (xpost_object_get_type(ts.blendpix) == arraytype
+              && xpost_object_is_exe(ts.blendpix)))
+            && xpost_object_get_type(o) == integertype
+            && o.int_.val > 1;
+    if (!ts.blend)
+        goto refuse;
+    putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
+
+    buf = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "buf"));
+    if (xpost_object_get_type(buf) != stringtype)
+        goto refuse;
+    o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "width"));
+    if (xpost_object_get_type(o) != integertype) goto refuse;
+    w = o.int_.val;
+    o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "height"));
+    if (xpost_object_get_type(o) != integertype) goto refuse;
+    h = o.int_.val;
+    o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "ink"));
+    if (xpost_object_get_type(o) != integertype) goto refuse;
+    ink = o.int_.val;
+    mat = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "mat"));
+    if (xpost_object_get_type(mat) != arraytype || mat.comp_.sz != 6)
+        goto refuse;
+    o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "interp"));
+    interp = xpost_object_get_type(o) == booleantype && o.int_.val;
+    for (i = 0; i < 6; i++)
+    {
+        o = xpost_array_get(ctx, mat, i);
+        m[i] = xpost_object_get_type(o) == realtype ? o.real_.val
+             : xpost_object_get_type(o) == integertype ? (double)o.int_.val
+             : 0.0;
+    }
+    if (w <= 0 || h <= 0 || (w + 7) / 8 * h > buf.comp_.sz)
+        goto refuse;
+    /* coverage integrates separably only over an axis-aligned map */
+    if (fabs(m[1]) > 1e-4 || fabs(m[2]) > 1e-4
+     || fabs(m[0]) < 1e-6 || fabs(m[3]) < 1e-6)
+        goto refuse;
+
+    xa = m[4]; xb = m[0] * w + m[4];
+    fx0 = xa < xb ? xa : xb; fx1 = xa < xb ? xb : xa;
+    ya = m[5]; yb = m[3] * h + m[5];
+    fy0 = ya < yb ? ya : yb; fy1 = ya < yb ? yb : ya;
+    ix0 = (int)floor(fx0); iy0 = (int)floor(fy0);
+    devw = (int)ceil(fx1) - ix0;
+    devh = (int)ceil(fy1) - iy0;
+    if (devw <= 0 || devh <= 0 || devw > 4096 || devh > 4096
+     || devw * devh > (1 << 20))
+        goto refuse;
+
+    cov = malloc((size_t)devw * devh);
+    if (!cov)
+        goto refuse;
+    bits = (unsigned char *)xpost_string_get_pointer(ctx, buf);
+    rowbytes = (w + 7) / 8;
+    full = (1.0 / fabs(m[0])) * (1.0 / fabs(m[3]));
+
+    for (py = 0; py < devh; py++)
+    {
+        double dy0 = iy0 + py, dy1 = dy0 + 1;
+        double my0 = (dy0 - m[5]) / m[3], my1 = (dy1 - m[5]) / m[3];
+        double t;
+        int yi, yi0, yi1;
+
+        if (my0 > my1) { t = my0; my0 = my1; my1 = t; }
+        if (my0 < 0) my0 = 0;
+        if (my1 > h) my1 = h;
+        yi0 = (int)floor(my0); yi1 = (int)ceil(my1);
+        for (px = 0; px < devw; px++)
+        {
+            double dx0 = ix0 + px, dx1 = dx0 + 1;
+            double mx0 = (dx0 - m[4]) / m[0], mx1 = (dx1 - m[4]) / m[0];
+            double acc = 0.0;
+            int xi, xi0, xi1;
+
+            if (mx0 > mx1) { t = mx0; mx0 = mx1; mx1 = t; }
+            if (mx0 < 0) mx0 = 0;
+            if (mx1 > w) mx1 = w;
+            /* an interpolated mask magnified past its cells ramps
+               between them: sample the field bilinearly at the pixel
+               centre instead of box-filtering within one cell */
+            if (interp && mx1 - mx0 < 1.0 && my1 - my0 < 1.0
+             && mx1 > mx0 && my1 > my0)
+            {
+                double cx = (mx0 + mx1) * 0.5 - 0.5;
+                double cy = (my0 + my1) * 0.5 - 0.5;
+                int bx = (int)floor(cx), by = (int)floor(cy);
+                double fx = cx - bx, fy = cy - by;
+                double v = 0.0;
+                int dx, dy;
+
+                for (dy = 0; dy < 2; dy++)
+                    for (dx = 0; dx < 2; dx++)
+                    {
+                        int sx = bx + dx, sy = by + dy;
+                        double wt = (dx ? fx : 1.0 - fx)
+                                  * (dy ? fy : 1.0 - fy);
+                        int bit;
+
+                        if (sx < 0 || sx >= w || sy < 0 || sy >= h)
+                            continue;
+                        bit = (bits[sy * rowbytes + sx / 8]
+                               >> (7 - (sx % 8))) & 1;
+                        if (bit == ink)
+                            v += wt;
+                    }
+                acc = v * 255.0 + 0.5;
+                cov[py * devw + px] = acc >= 255.0 ? 255
+                                    : acc <= 0.0 ? 0 : (unsigned char)acc;
+                continue;
+            }
+            xi0 = (int)floor(mx0); xi1 = (int)ceil(mx1);
+            for (yi = yi0; yi < yi1; yi++)
+            {
+                double wy = (yi + 1 < my1 ? yi + 1 : my1)
+                          - (yi > my0 ? yi : my0);
+
+                if (wy <= 0)
+                    continue;
+                for (xi = xi0; xi < xi1; xi++)
+                {
+                    double wx = (xi + 1 < mx1 ? xi + 1 : mx1)
+                              - (xi > mx0 ? xi : mx0);
+                    int bit;
+
+                    if (wx <= 0)
+                        continue;
+                    bit = (bits[yi * rowbytes + xi / 8] >> (7 - (xi % 8))) & 1;
+                    if (bit == ink)
+                        acc += wx * wy;
+                }
+            }
+            acc = acc / full * 255.0 + 0.5;
+            cov[py * devw + px] = acc >= 255.0 ? 255
+                                : acc <= 0.0 ? 0 : (unsigned char)acc;
+        }
+    }
+
+    {
+        Xpost_Object colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
+        if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+        {
+            ncomp = 1;
+            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
+        }
+        else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
+        {
+            ncomp = 3;
+            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
+            comp[1] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
+            comp[2] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
+        }
+        else
+        {
+            free(cov);
+            goto refuse;
+        }
+    }
+    /* the answer goes under the queue: the painter stacks one entry
+       per pixel above it, and each entry consumes its own operands
+       before the caller sees the boolean */
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    _draw_bitmap(ctx, devdic, putpix, &ts, cov, devh, devw, devw,
+                 XPOST_FONT_PIXEL_MODE_GRAY, ix0, iy0,
+                 ncomp, comp[0], comp[1], comp[2]);
+    free(cov);
+    return 0;
+refuse:
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+    return 0;
+}
+
+/* Type 3 glyphs cached through setcachedevice: the key is the font's
+   serial and the character code under the exact text-to-device
+   transform, quantized as the face transforms are. The store is the
+   glyph cache; the raster is a coverage mask captured from the build
+   procedure's marks. */
+
+static int
+_t3_key(Xpost_Context *ctx, Xpost_Object fontdict, Xpost_Object code,
+        Xpost_Object mat, unsigned long *k2, long m[4])
+{
+    Xpost_Object o;
+    int i;
+
+    o = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, ".fontid"));
+    if (xpost_object_get_type(o) != integertype)
+        return 0;
+    *k2 = ((unsigned long)o.int_.val << 8) | ((unsigned long)code.int_.val & 255);
+    if (xpost_object_get_type(mat) != arraytype || mat.comp_.sz != 6)
+        return 0;
+    for (i = 0; i < 4; i++)
+    {
+        Xpost_Object el = xpost_array_get(ctx, mat, i);
+        double v = xpost_object_get_type(el) == realtype ? el.real_.val
+                 : xpost_object_get_type(el) == integertype ? (double)el.int_.val
+                 : 0.0;
+
+        m[i] = (long)(v * 0x10000L);
+    }
+    return 1;
+}
+
+/* x y mat font code cliparr  .t3cachehit  advx advy true
+                                            false
+   paint the cached glyph at the device origin (x y) in the current
+   colour and report its character-space advances; a glyph whose
+   raster leaves the clip rectangle [x0 y0 x1 y1] answers false, and
+   the direct build renders it clipped */
+static
+int _t3cachehit(Xpost_Context *ctx,
+                Xpost_Object x,
+                Xpost_Object y,
+                Xpost_Object mat,
+                Xpost_Object fontdict,
+                Xpost_Object code,
+                Xpost_Object cliparr)
+{
+    Xpost_Object userdict, gd, gs, devdic, putpix, o;
+    textstate ts;
+    unsigned long k2;
+    long m[4];
+    unsigned char *bits;
+    int rows, width, pitch, left, top;
+    long ax, ay;
+    int ncomp;
+    Xpost_Object comp[4];
+    double dx, dy;
+
+    if (!_t3_key(ctx, fontdict, code, mat, &k2, m))
+        goto refuse;
+    if (!xpost_font_cache_lookup_bits(NULL, k2, m, 0,
+                                      &bits, &rows, &width, &pitch,
+                                      &left, &top, &ax, &ay))
+        goto refuse;
+
+    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+    if (xpost_object_get_type(userdict) != dicttype)
+        goto refuse;
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
+    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
+    devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
+    if (xpost_object_get_type(devdic) != dicttype)
+        goto refuse;
+
+    memset(&ts, 0, sizeof ts);
+    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
+    o = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
+    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
+             || (xpost_object_get_type(ts.blendpix) == arraytype
+              && xpost_object_is_exe(ts.blendpix)))
+            && xpost_object_get_type(o) == integertype
+            && o.int_.val > 1;
+    putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
+
+    {
+        Xpost_Object colorspace = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "nativecolorspace"));
+        if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceGray")) == 0)
+        {
+            ncomp = 1;
+            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
+        }
+        else if (xpost_dict_compare_objects(ctx, colorspace, xpost_name_cons(ctx, "DeviceRGB")) == 0)
+        {
+            ncomp = 3;
+            comp[0] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp1"));
+            comp[1] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp2"));
+            comp[2] = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "colorcomp3"));
+        }
+        else
+            goto refuse;
+    }
+
+    dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
+    dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
+
+    {
+        double c[4];
+        int i;
+        int gx = (int)floor(dx + 0.5) + left;
+        int gy = (int)floor(dy + 0.5) - top;
+
+        if (xpost_object_get_type(cliparr) != arraytype
+         || cliparr.comp_.sz != 4)
+            goto refuse;
+        for (i = 0; i < 4; i++)
+        {
+            Xpost_Object el = xpost_array_get(ctx, cliparr, i);
+
+            c[i] = xpost_object_get_type(el) == realtype ? el.real_.val
+                 : xpost_object_get_type(el) == integertype
+                 ? (double)el.int_.val : 0.0;
+        }
+        if (gx < c[0] || gy < c[1]
+         || gx + width > c[2] || gy + rows > c[3])
+            goto refuse;
+    }
+
+    /* the answers go under the queue: the painter stacks one entry
+       per pixel above them, and each entry consumes its own operands
+       before the caller sees the boolean */
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(ax / 65536.0)));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(ay / 65536.0)));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    _draw_bitmap(ctx, devdic, putpix, &ts,
+                 bits, rows, width, pitch,
+                 XPOST_FONT_PIXEL_MODE_GRAY,
+                 (int)floor(dx + 0.5) + left,
+                 (int)floor(dy + 0.5) - top,
+                 ncomp, comp[0], comp[1], comp[2]);
+    return 0;
+refuse:
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+    return 0;
+}
+
+/* capdict  .t3cacheput  -
+   insert a captured glyph mask: buf holds width x height coverage
+   bytes whose raster origin sits at device (bx0 by0), the glyph
+   origin was at device (ox oy), advances are character-space, and
+   mat, font and code key the entry as .t3cachehit reads it */
+static
+int _t3cacheput(Xpost_Context *ctx,
+                Xpost_Object dict)
+{
+    Xpost_Object o, buf, mat, fontdict, code;
+    unsigned long k2;
+    long m[4];
+    int w, h, bx0, by0, left, top;
+    double ox, oy, advx, advy;
+    unsigned char *bytes;
+
+#define DGET(name, var, want) do {     o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, name));     if (xpost_object_get_type(o) != want) return typecheck;     var = o; } while (0)
+#define DNUM(name, var) do {     o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, name));     if (xpost_object_get_type(o) == realtype) var = o.real_.val;     else if (xpost_object_get_type(o) == integertype) var = (double)o.int_.val;     else return typecheck; } while (0)
+    DGET("buf", buf, stringtype);
+    DGET("mat", mat, arraytype);
+    DGET("font", fontdict, dicttype);
+    DGET("code", code, integertype);
+    { double t; DNUM("w", t); w = (int)t; }
+    { double t; DNUM("h", t); h = (int)t; }
+    { double t; DNUM("bx0", t); bx0 = (int)t; }
+    { double t; DNUM("by0", t); by0 = (int)t; }
+    DNUM("ox", ox);
+    DNUM("oy", oy);
+    DNUM("advx", advx);
+    DNUM("advy", advy);
+#undef DGET
+#undef DNUM
+    if (w <= 0 || h <= 0 || (unsigned int)(w * h) > buf.comp_.sz)
+        return rangecheck;
+    if (!_t3_key(ctx, fontdict, code, mat, &k2, m))
+        return 0;
+    bytes = (unsigned char *)xpost_string_get_pointer(ctx, buf);
+    left = bx0 - (int)floor(ox + 0.5);
+    top = (int)floor(oy + 0.5) - by0;
+    (void)xpost_font_cache_insert_bits(NULL, k2, m, 0,
+                                       bytes, h, w, w, left, top,
+                                       (long)(advx * 65536.0),
+                                       (long)(advy * 65536.0));
+    return 0;
 }
 
 /* ciddict glypharray  .loadcidfont2  -
@@ -1712,7 +2852,8 @@ int _loadcidfont2(Xpost_Context *ctx,
         return invalidfont;
     }
 
-    fontbbox = xpost_array_cons(ctx, 4);
+    /* executable, as the reference interpreters answer it */
+    fontbbox = xpost_object_cvx(xpost_array_cons(ctx, 4));
     xpost_font_face_get_bbox(data.face, fontbboxarray, 1.0);
     xpost_memory_put(xpost_context_select_memory(ctx, fontbbox),
                      xpost_object_get_ent(fontbbox),
@@ -1772,7 +2913,7 @@ int _ashow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -1886,7 +3027,7 @@ int _widthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -2005,7 +3146,7 @@ int _awidthshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -2098,6 +3239,7 @@ int _stringwidth(Xpost_Context *ctx,
     char *ch;
     Xpost_Object encoding;
     Xpost_Object charstrings;
+    textstate mts;
 
 
     /* load the graphicsdict, current graphics state, and current font */
@@ -2125,6 +3267,13 @@ int _stringwidth(Xpost_Context *ctx,
     _face_setup(ctx, gs, fontdict, data.face);
     encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
+    /* only the /Metrics fields matter here: stringwidth accumulates the
+       same per-glyph advances show would take */
+    memset(&mts, 0, sizeof mts);
+    mts.encoding = encoding;
+    mts.metrics = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Metrics"));
+    mts.cdmat_ok = xpost_object_get_type(mts.metrics) == dicttype
+                && _char_device_matrix(ctx, gs, fontdict, mts.cdmat);
     XPOST_LOG_INFO("loaded font data from dict");
 
     /* get a c-style nul-terminated string */
@@ -2161,6 +3310,10 @@ int _stringwidth(Xpost_Context *ctx,
                 *xpos + left, *ypos - top,
                 ncomp, comp1, comp2, comp3);
                 */
+        /* a /Metrics entry for this glyph overrides the face's advance */
+        _metrics_advance(ctx, &mts,
+                         _encoded_name(ctx, encoding, (unsigned char)*ch),
+                         &advance_x, &advance_y);
         xpos += (real)(advance_x / 65536.0);
         ypos += (real)(advance_y / 65536.0);
 #endif
@@ -2419,7 +3572,7 @@ int _kshow(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, fontdict, devdic);
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
     privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
@@ -2490,6 +3643,54 @@ int _kshow(Xpost_Context *ctx,
     return 0;
 }
 
+/* -  .cachestatus  bsize bmax msize mmax csize cmax blimit
+   the glyph cache's actual figures */
+static
+int _cachestatus(Xpost_Context *ctx)
+{
+    long v[7];
+
+    xpost_font_cache_status(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]);
+    {
+        int i;
+
+        for (i = 0; i < 7; i++)
+            if (!xpost_stack_push(ctx->lo, ctx->os,
+                                  xpost_int_cons((integer)v[i])))
+                return stackoverflow;
+    }
+    return 0;
+}
+
+/* num  .setcachelimit  -
+   the byte ceiling above which a glyph renders uncached */
+static
+int _setcachelimit(Xpost_Context *ctx, Xpost_Object n)
+{
+    (void)ctx;
+    if (n.int_.val < 0)
+        return rangecheck;
+    xpost_font_cache_setlimit((long)n.int_.val);
+    return 0;
+}
+
+/* size lower upper  .setcacheparams  -
+   the cache's byte capacity and per-glyph ceiling; the middle
+   operand, a compression threshold, is accepted and recorded nowhere
+   since rasters stay flat */
+static
+int _setcacheparams(Xpost_Context *ctx,
+                     Xpost_Object size,
+                     Xpost_Object lower,
+                     Xpost_Object upper)
+{
+    (void)ctx;
+    xpost_font_cache_setparams((long)size.int_.val,
+                               (long)lower.int_.val,
+                               (long)upper.int_.val);
+    return 0;
+}
+
 int xpost_oper_init_font_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
 {
@@ -2518,8 +3719,10 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, ".loadcidfont0", (Xpost_Op_Func)_loadcidfont0, 0, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 0, 3,
-            dicttype, arraytype, arraytype);
+    op = xpost_operator_cons(ctx, ".stencilaa", (Xpost_Op_Func)_stencilaa, 1, 1, dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 0, 2,
+            dicttype, arraytype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".loadcidfont2", (Xpost_Op_Func)_loadcidfont2, 0, 2,
             dicttype, arraytype);
@@ -2539,6 +3742,18 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, "kshow", (Xpost_Op_Func)_kshow, 0, 2, proctype, stringtype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".t3cachehit", (Xpost_Op_Func)_t3cachehit, 0, 6,
+        floattype, floattype, arraytype, dicttype, integertype, arraytype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".t3cacheput", (Xpost_Op_Func)_t3cacheput, 0, 1, dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".setcachelimit", (Xpost_Op_Func)_setcachelimit, 0, 1, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".setcacheparams", (Xpost_Op_Func)_setcacheparams, 0, 3,
+        integertype, integertype, integertype);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);

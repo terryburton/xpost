@@ -129,6 +129,10 @@ void xpost_font_face_get_bbox(void *face, Xpost_Object *bboxarray, real em);
  * @see xpost_font_face_new_from_name()
  */
 int xpost_font_face_units(void *face);
+int xpost_font_face_is_truetype(void *face);
+const char *xpost_font_face_last_file(void);
+int xpost_font_face_is_type1(void *face);
+int xpost_font_face_is_cff(void *face);
 void xpost_font_face_free(void *face);
 
 /**
@@ -241,6 +245,25 @@ int xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xp
  * @see xpost_font_face_glyph_index_get()
  */
 int xpost_font_face_glyph_render(void *face, unsigned int glyph_index);
+
+/* the glyph cache behind the rendering pair: status and limits for
+   the cache operators, and keyed raster entry points for glyphs
+   painted by procedure rather than by face */
+void xpost_font_cache_status(long *bsize, long *bmax, long *msize,
+                             long *mmax, long *csize, long *cmax,
+                             long *blimit);
+void xpost_font_cache_setlimit(long blimit);
+void xpost_font_cache_setparams(long bmax, long lower, long upper);
+int xpost_font_cache_lookup_bits(const void *k1, unsigned long k2,
+                                 const long m[4], long size,
+                                 unsigned char **bits, int *rows, int *width,
+                                 int *pitch, int *left, int *top,
+                                 long *advance_x, long *advance_y);
+int xpost_font_cache_insert_bits(const void *k1, unsigned long k2,
+                                 const long m[4], long size,
+                                 const unsigned char *bits, int rows,
+                                 int width, int pitch, int left, int top,
+                                 long advance_x, long advance_y);
 
 void xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y);
 

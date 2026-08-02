@@ -1,7 +1,8 @@
 % Array packing mode (setpacking / currentpacking, PLRM 8.2), run through
-% `xpost -d null` by run-ps-test.sh. Standard PostScript; prints SUCCESS on
-% Ghostscript too. A packed array is read-only, so packing is observed through
-% wcheck rather than through the type, which differs between implementations.
+% `xpost -d null` by run-ps-test.sh. A packed array is read-only, so packing is
+% observed through wcheck: xpost represents a packed array as an ordinary
+% read-only array, so its type is arraytype, whereas Ghostscript and Adobe
+% Distiller report a distinct packedarraytype.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
