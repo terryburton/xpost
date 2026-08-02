@@ -68,47 +68,28 @@
         newpath
     }{
     flattenpath
-    %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
-    [
-        [ % mark
-        {
-            2 array astore % ... mark ... [x0 y0]
-            counttomark 1 ne {
-                counttomark 1 add 1 roll % ... [x0 y0] mark ...
-                ] exch % ... [ ... ] [x0 y0]
-                [ exch % ... [ ... ] [ [x0 y0]
-            } if % ... +++ mark [x0 y0]
-        }
-        { 2 array astore } % ... mark [x0 y0] ... [xN yN]
-        {}
-        { counttomark dup 0 ne { 1 sub index } if } % ... mark [x0 y0] ... [x0 y0]
-        //.xpostsys /.devpathforall get exec
-        ]
-        dup length 0 eq {pop} if
-    ]
+    % subpaths merged into one point list, separated by null, so that
+    % FillPoly scans them together and interior subpaths produce holes.
+    % A rectangular clip region is a single convex window: clip the fill
+    % polygon against it geometrically, so it stays whole rectangles
+    % rather than dissolving into per-scanline bands -- which a vector
+    % device would otherwise emit as one subpath per row. A disjoint or
+    % concave clip region has no single convex half-plane set, so it
+    % intersects span-by-span in the fill's own scan-conversion, exact
+    % for any region the nonzero rule can describe.
+    .cliptrivial not {
+        .cliprect { pop pop pop pop true }{ false } ifelse {
+            //.xpostsys /doclip get exec .fillpolyargs
+        }{
+            .fillpolyargs //.xpostsys /.clippolyargs get exec .clipfillpoly
+        } ifelse
+    }{
+        .fillpolyargs
+    } ifelse
     /DEBUGFILL where { pop
         (fill)=
         pstack()=
         hook
-    } if
-    % merge the subpaths, separated by null, so that FillPoly scans
-    % them together and interior subpaths produce holes
-    [ exch
-    {
-        dup length 2 gt {
-            aload pop null
-        }{
-            pop
-        } ifelse
-    } forall
-    ]
-
-    % A non-trivial clip region intersects span-by-span in the same
-    % scan-conversion the fill itself uses: exact for any region the
-    % nonzero rule can describe (disjoint windows, concave boundaries,
-    % counters), where the half-plane clipper serves only convex ones
-    .cliptrivial not {
-        //.xpostsys /.clippolyargs get exec .clipfillpoly
     } if
 
     dup length 2 gt {
@@ -935,7 +916,7 @@
             /iy 0 def
         end
         w h 8 dd /ImageMatrix get
-        [ st //.xpostsys /.it1row get /exec cvx ] cvx
+        [ st //.xpostsys /.it1row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{ il 2 eq {
@@ -953,7 +934,7 @@
             /iy 0 def
         end
         w h bpc dd /ImageMatrix get
-        [ st //.xpostsys /.it2row get /exec cvx ] cvx
+        [ st //.xpostsys /.it2row get /exec load ] cvx
         dd /Decode get n
         mbits null
     }{
@@ -1083,9 +1064,10 @@
 % where such jobs spend their time. Keyed by a content hash, verified
 % against the stored copy of the mask; runs of consecutive rows
 % sharing one extent merge into taller rectangles, whose union is the
-% very region the row runs cover. The cache lives in the local private
-% dictionary: its runs and mask copies are local render objects, which
-% the global helper namespace could not hold.
+% very region the row runs cover
+currentglobal false setglobal
+.gscratch /.stencilcache 64 dict put
+setglobal
 
 % buf width height ink  .stencilruns  rects
 .xpostsys /.stencilruns {
@@ -1096,10 +1078,7 @@
         kbuf exch get hh 33 mul add 16#FFFFFF and /hh exch def
     } for
     /found null def
-    .privatedict /.stencilcache known not {
-        .privatedict /.stencilcache 64 dict put
-    } if
-    .privatedict /.stencilcache get hh 2 copy known {
+    .gscratch /.stencilcache get hh 2 copy known {
         get {
             dup 0 get kw eq 1 index 1 get kh eq and
             1 index 2 get kink eq and {
@@ -1161,16 +1140,14 @@
             rects i 4 mul 2 add rwa i get put
             rects i 4 mul 3 add rha i get put
         } for
-        .privatedict /.stencilcache get length 200 ge {
-            .privatedict /.stencilcache 64 dict put
-        } if
+        .gscratch /.stencilcache get length 200 ge { .gscratch /.stencilcache 64 dict put } if
         /tuple [ kw kh kink kbuf dup length string copy rects ] def
-        .privatedict /.stencilcache get hh 2 copy known {
+        .gscratch /.stencilcache get hh 2 copy known {
             get [ exch aload pop tuple ]
         }{
             pop pop [ tuple ]
         } ifelse
-        .privatedict /.stencilcache get hh 3 -1 roll put
+        .gscratch /.stencilcache get hh 3 -1 roll put
         rects
     } ifelse
     end

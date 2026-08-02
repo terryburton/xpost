@@ -1,0 +1,38 @@
+% Rectangle-operator forms (PLRM 8.2), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% rectfill, rectstroke and rectclip take four numbers (x y width height), a
+% numarray of 4n numbers describing n rectangles, or an encoded numstring;
+% rectstroke also takes an optional trailing matrix. Geometry is checked through
+% rectclip + clippath, whose bounding box is deterministic.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/near { sub abs 1e-3 lt } def
+/bbox4 { /ury exch def /urx exch def /lly exch def /llx exch def } def
+/clipbox4 { initgraphics newpath exec clippath pathbbox bbox4 } def
+
+% --- single rectangle: the four-number form and the one-rectangle numarray agree ---
+{ 10 10 20 20 rectclip } clipbox4
+llx 10 near lly 10 near and urx 30 near and ury 30 near and (four-number rectclip bbox) assert
+{ [10 10 20 20] rectclip } clipbox4
+llx 10 near lly 10 near and urx 30 near and ury 30 near and (one-rectangle numarray bbox) assert
+
+% --- numarray with two rectangles: clip bbox spans both ---
+{ [10 10 20 20 50 50 30 30] rectclip } clipbox4
+llx 10 near lly 10 near and urx 80 near and ury 80 near and (two-rectangle numarray bbox) assert
+
+% --- numstring form: encoded number string 149,R0,n=4, 10 20 30 40 ---
+{ <950000040000000A000000140000001E00000028> rectclip } clipbox4
+llx 10 near lly 20 near and urx 40 near and ury 60 near and (numstring rectclip bbox) assert
+
+% --- rectfill / rectstroke accept every form without error ---
+{ initgraphics 10 10 30 30 rectfill } stopped not (rectfill four numbers) assert
+{ initgraphics [10 10 20 20 50 50 30 30] rectfill } stopped not (rectfill numarray) assert
+{ initgraphics 10 10 30 30 rectstroke } stopped not (rectstroke four numbers) assert
+{ initgraphics [10 10 20 20 50 50 30 30] rectstroke } stopped not (rectstroke numarray) assert
+% rectstroke with an optional trailing matrix, in both the number and array forms
+{ initgraphics 10 10 30 30 [1 0 0 1 0 0] rectstroke } stopped not (rectstroke four numbers + matrix) assert
+{ initgraphics [10 10 20 20 50 50 30 30] [1 0 0 1 0 0] rectstroke } stopped not (rectstroke numarray + matrix) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

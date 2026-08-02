@@ -151,18 +151,29 @@ int xpost_name_init(Xpost_Context *ctx)
     return 1;
 }
 
+/* A name is a counted byte sequence: each tree level keys one byte
+   (0..255), and a level keyed by the out-of-band terminator 256 ends
+   the name and holds the payload, so a nul byte is an ordinary name
+   character (PLRM: cvn yields a name lexically the same as the
+   string). */
+#define TST_END 256u
+
 /* perform a search using the ternary search tree */
 static
 unsigned int tstsearch(Xpost_Memory_File *mem,
                        unsigned int tadr,
-                       const char *s)
+                       const char *s,
+                       unsigned int n)
 {
     while (tadr) {
         tst *p = (void *)(mem->base + tadr);
-        if ((unsigned int)*s < p->val) {
+        unsigned int key = n ? (unsigned char)*s : TST_END;
+
+        if (key < p->val) {
             tadr = p->lo;
-        } else if ((unsigned int)*s == p->val) {
-            if (*s++ == 0) return p->eq; /* payload when val == '\0' */
+        } else if (key == p->val) {
+            if (key == TST_END) return p->eq; /* payload at the terminator */
+            s++, n--;
             tadr = p->eq;
         } else {
             tadr = p->hi;
@@ -171,17 +182,19 @@ unsigned int tstsearch(Xpost_Memory_File *mem,
     return 0;
 }
 
-/* add a string to the ternary search tree */
+/* add a counted string to the ternary search tree */
 static
 int tstinsert(Xpost_Memory_File *mem,
               unsigned int tadr,
               const char *s,
+              unsigned int n,
               unsigned int *retval)
 {
     tst *p;
     unsigned int t; //temporary
     unsigned int nstk;
     int ret;
+    unsigned int key = n ? (unsigned char)*s : TST_END;
 
     if (!tadr) {
         if (!xpost_memory_file_alloc(mem, sizeof(tst), &tadr))
@@ -190,19 +203,19 @@ int tstinsert(Xpost_Memory_File *mem,
             return VMerror;
         }
         p = (void *)(mem->base + tadr);
-        p->val = *s;
+        p->val = key;
         p->lo = p->eq = p->hi = 0;
     }
     p = (void *)(mem->base + tadr);
-    if ((unsigned int)*s < p->val) {
-        ret = tstinsert(mem, p->lo, s, &t);
+    if (key < p->val) {
+        ret = tstinsert(mem, p->lo, s, n, &t);
         if (ret)
             return ret;
         p = (void *)(mem->base + tadr); //recalc pointer
         p->lo = t;
-    } else if ((unsigned int)*s == p->val) {
-        if (*s) {
-            ret = tstinsert(mem, p->eq, ++s, &t);
+    } else if (key == p->val) {
+        if (key != TST_END) {
+            ret = tstinsert(mem, p->eq, s + 1, n - 1, &t);
             if (ret)
                 return ret;
             p = (void *)(mem->base + tadr); //recalc pointer
@@ -210,10 +223,10 @@ int tstinsert(Xpost_Memory_File *mem,
         }else {
             xpost_memory_table_get_addr(mem,
                     XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &nstk);
-            p->eq = xpost_stack_count(mem, nstk); /* payload when val == '\0' */
+            p->eq = xpost_stack_count(mem, nstk); /* payload at the terminator */
         }
     } else {
-        ret = tstinsert(mem, p->hi, s, &t);
+        ret = tstinsert(mem, p->hi, s, n, &t);
         if (ret)
             return ret;
         p = (void *)(mem->base + tadr); //recalc pointer
@@ -227,7 +240,8 @@ int tstinsert(Xpost_Memory_File *mem,
 /* add the name to the name stack, return index */
 static
 unsigned int addname(Xpost_Context *ctx,
-                     const char *s)
+                     const char *s,
+                     unsigned int n)
 {
     Xpost_Memory_File *mem = ctx->vmmode==GLOBAL?ctx->gl:ctx->lo;
     unsigned int names;
@@ -242,7 +256,7 @@ unsigned int addname(Xpost_Context *ctx,
     //dumpmtab(ctx->gl, 0);
     //unsigned int vmmode = ctx->vmmode;
     //ctx->vmmode = GLOBAL;
-    str = xpost_string_cons(ctx, strlen(s), s);
+    str = xpost_string_cons(ctx, n, s);
     if (xpost_object_get_type(str) == nulltype)
     {
         XPOST_LOG_ERR("cannot allocate name string");
@@ -262,8 +276,9 @@ unsigned int addname(Xpost_Context *ctx,
        mark_.pad0 set to zero
        mark_.padw contains XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK stack index
  */
-Xpost_Object xpost_name_cons(Xpost_Context *ctx,
-                             const char *s)
+Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
+                               const char *s,
+                               unsigned int n)
 {
     unsigned int u;
     unsigned int t;
@@ -273,15 +288,15 @@ Xpost_Object xpost_name_cons(Xpost_Context *ctx,
 
     xpost_memory_table_get_addr(ctx->lo,
             XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
-    u = tstsearch(ctx->lo, tstk, s);
+    u = tstsearch(ctx->lo, tstk, s, n);
     if (!u) {
         xpost_memory_table_get_addr(ctx->gl,
                 XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
-        u = tstsearch(ctx->gl, tstk, s);
+        u = tstsearch(ctx->gl, tstk, s, n);
         if (!u) {
             Xpost_Memory_File *mem = ctx->vmmode==GLOBAL?ctx->gl:ctx->lo;
             Xpost_Memory_Table *tab = &mem->table;
-            ret = tstinsert(mem, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, &t);
+            ret = tstinsert(mem, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, n, &t);
             if (ret)
             {
                 //this can only be a VMerror
@@ -289,7 +304,7 @@ Xpost_Object xpost_name_cons(Xpost_Context *ctx,
             }
             tab = &mem->table; //recalc pointer
             tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = t;
-            u = addname(ctx, s); // obeys vmmode
+            u = addname(ctx, s, n); // obeys vmmode
             o.mark_.tag = nametype | (ctx->vmmode==GLOBAL?XPOST_OBJECT_TAG_DATA_FLAG_BANK:0);
             o.mark_.pad0 = 0;
             o.mark_.padw = u;
@@ -304,6 +319,12 @@ Xpost_Object xpost_name_cons(Xpost_Context *ctx,
         o.mark_.padw = u;
         }
     return o;
+}
+
+Xpost_Object xpost_name_cons(Xpost_Context *ctx,
+                             const char *s)
+{
+    return xpost_name_cons_n(ctx, s, (unsigned int)strlen(s));
 }
 
 /* construct a name object in global VM regardless of the current
@@ -322,13 +343,13 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
 
     xpost_memory_table_get_addr(ctx->gl,
             XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
-    u = tstsearch(ctx->gl, tstk, s);
+    u = tstsearch(ctx->gl, tstk, s, (unsigned int)strlen(s));
     if (!u) {
         unsigned int vmmode = ctx->vmmode;
         Xpost_Memory_Table *tab = &ctx->gl->table;
 
         ctx->vmmode = GLOBAL;
-        ret = tstinsert(ctx->gl, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, &t);
+        ret = tstinsert(ctx->gl, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, (unsigned int)strlen(s), &t);
         if (ret)
         {
             ctx->vmmode = vmmode;
@@ -336,7 +357,7 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
         }
         tab = &ctx->gl->table; //recalc pointer
         tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = t;
-        u = addname(ctx, s);
+        u = addname(ctx, s, (unsigned int)strlen(s));
         ctx->vmmode = vmmode;
     }
     o.mark_.tag = nametype | XPOST_OBJECT_TAG_DATA_FLAG_BANK;

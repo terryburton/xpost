@@ -307,6 +307,23 @@ test('graphics-regression',
   args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Render classes: Type 3 and composite fonts, the shading types, tiling and
+# shading patterns, and screen/halftone setup. Standard PostScript that prints
+# SUCCESS on the reference interpreters too, so it stands as a conformance test.
+test('render-classes',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/render_classes_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Form cache on a raster device: caching an execform builds an image device and
+# clears it with the rect-fill C operators, run through the ppm device. Guards
+# the regression where those operators, relocated into .internaldict, could no
+# longer be fetched by name.
+test('execform-cache',
+  find_program('tests/run-ppm-test.sh'),
+  args: [ xpost_exe, files('tests/execform_cache_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Bounding-box device: render a known fill through -d bbox and check the box.
 test('bbox-device',
   find_program('tests/run-bbox-test.sh'),
@@ -410,6 +427,20 @@ test('op-path',
   args: [ xpost_exe, files('tests/op_path_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Rectangle operators (PLRM 8.2): rectfill/rectstroke/rectclip accept the
+# numarray and numstring forms and rectstroke an optional trailing matrix.
+test('op-rect',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_rect_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Resource and user-object operators (PLRM 8.2): resourcestatus on a category
+# that does not exist raises undefined (was false); the UserObjects rules.
+test('op-resource',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_resource_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # status operator (PLRM 8.2): the (filename) form returns pages/bytes/referred/
 # created/true or false, alongside the existing file-object boolean form.
 test('op-status',
@@ -443,6 +474,13 @@ test('op-packing',
   args: [ xpost_exe, files('tests/op_packing_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# bind (PLRM 8.2): bind rewrites packed arrays and descends into nested ones,
+# but leaves ordinary read-only arrays untouched -- and freezes the operators.
+test('bind-packed',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/bind_packed_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # vmreclaim (PLRM 8.2): 2 (local and global) reclaims local VM like 1 (local).
 test('op-vmreclaim',
   find_program('tests/run-ps-test.sh'),
@@ -455,11 +493,18 @@ test('op-intoverflow',
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# roll operator: correctness (checked against Ghostscript) plus a large-roll
-# performance guard -- an O(n^2) roll on a deep stack times the test out.
-test('roll',
+# SIGINT raises the PostScript interrupt error between evaluation steps;
+# errordict's handler stops the job and the interpreter exits. POSIX-only.
+test('interrupt',
+  find_program('tests/run-interrupt-test.sh'),
+  args: [ xpost_exe, files('tests/interrupt_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Unterminated string literals: end of input inside (...), <...> or <~...~>
+# is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
+test('scanner-eof',
   find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/roll_test.ps') ],
+  args: [ xpost_exe, files('tests/scanner_eof_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Radix number range (PLRM 3.2): unsigned twos-complement in the integer width,
@@ -607,6 +652,17 @@ test('access',
 # page through each built device and require non-empty output.
 test('devices',
   find_program('tests/run-devices-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
+# Multi-page output: a save...showpage...restore job (the separation-plate
+# idiom, which rewinds local virtual memory between pages) must land each page
+# in its own file when the output name carries a %d, and keep only the last
+# page when it does not. Guards the page counter living in a global dictionary
+# rather than the local device dict, where restore would rewind it.
+test('multipage',
+  find_program('tests/run-multipage-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)

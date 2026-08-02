@@ -64,10 +64,18 @@ static
 int Atype(Xpost_Context *ctx,
           Xpost_Object o)
 {
+    const char *name;
+
     if (xpost_object_get_type(o) >= XPOST_OBJECT_NTYPES)
         //return unregistered;
         o = invalid; /* normalize to the all-zero invalid object */
-    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvx(xpost_name_cons(ctx, xpost_object_type_names[xpost_object_get_type(o)])));
+    /* a packed array is stored as a read-only array but reports the
+       distinct packedarraytype the reference implementations report */
+    if (xpost_object_get_type(o) == arraytype && xpost_object_is_packed(o))
+        name = "packedarraytype";
+    else
+        name = xpost_object_type_names[xpost_object_get_type(o)];
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvx(xpost_name_cons(ctx, name)));
     return 0;
 }
 
@@ -285,21 +293,19 @@ static
 int Scvn(Xpost_Context *ctx,
          Xpost_Object s)
 {
-    char *t;
     Xpost_Object name;
 
-    t = xpost_string_allocate_cstring(ctx, s);
-    name = xpost_name_cons(ctx, t);
-    if (xpost_object_get_type(name) == invalidtype){
-        free(t);
+    /* the name is lexically the string, every byte of it: a nul is a
+       name character, not a terminator */
+    name = xpost_name_cons_n(ctx, xpost_string_get_pointer(ctx, s),
+                             s.comp_.sz);
+    if (xpost_object_get_type(name) == invalidtype)
         return VMerror;
-    }
     if (xpost_object_is_exe(s))
         name = xpost_object_cvx(name);
     else
         name = xpost_object_cvlit(name);
     xpost_stack_push(ctx->lo, ctx->os, name);
-    free(t);
     return 0;
 }
 

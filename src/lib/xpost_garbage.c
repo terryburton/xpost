@@ -235,6 +235,15 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
 
     if (!mem) return 0;
 
+    if (xpost_object_get_type(o) == filetype)
+    {
+        unsigned int fent = (unsigned int)o.mark_.padw;
+        Xpost_Memory_File *fm = xpost_context_select_memory(ctx, o);
+        if (fm && fent >= fm->start && fent < fm->table.nextent)
+            (void) _xpost_garbage_mark_ent(fm, fent);
+        return 1;
+    }
+
     if (!xpost_object_is_composite(o))
         return 1;
 
@@ -660,8 +669,6 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
         {
             unsigned int bz;
             unsigned int b;
-            if (mem->table.tab[i].tag == filetype)
-                continue;
             mem->table.tab[i].tag = 0;
             b = _sweep_bucket(mem->table.tab[i].sz);
             bstat[b]++;

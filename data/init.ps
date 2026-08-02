@@ -487,6 +487,7 @@ setglobal
     {
         cvx exec        % the file object has stayed on the stack
     } stopped {
+        //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
     quit
@@ -554,7 +555,7 @@ setglobal
 % mirror the interpreter's fixed capacities (XPOST_{OPER,DICT,EXEC}_STACK_LIMIT
 % in xpost_interpreter.c) and cannot be changed.
 currentglobal true setglobal
-/.uparams << /VMReclaim 0 /VMThreshold 0 >> def
+.xpostsys /.uparams << /VMReclaim 0 /VMThreshold 0 >> put
 setglobal
 
 /setdevparams { pop pop } def
@@ -562,18 +563,18 @@ setglobal
 
 /currentuserparams {
     << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
-       /VMReclaim .uparams /VMReclaim get
-       /VMThreshold .uparams /VMThreshold get >>
+       /VMReclaim //.xpostsys /.uparams get /VMReclaim get
+       /VMThreshold //.xpostsys /.uparams get /VMThreshold get >>
 } def
 /setuserparams {
     dup /VMReclaim known {
         dup /VMReclaim get
-        dup .uparams /VMReclaim 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMReclaim 3 -1 roll put
         vmreclaim
     } if
     dup /VMThreshold known {
         dup /VMThreshold get
-        dup .uparams /VMThreshold 3 -1 roll put
+        dup //.xpostsys /.uparams get /VMThreshold 3 -1 roll put
         setvmthreshold
     } if
     pop
@@ -752,7 +753,11 @@ end % userdict
         {   % try the operator, which states FontType, FontMatrix
             % and FontBBox for the face behind the name
             //findfont
-            dup /Encoding 256 array put
+            % a text font's built-in encoding is the standard one; a
+            % fresh copy, so a program re-encoding in place cannot
+            % touch the shared array. A face without standard glyph
+            % names still resolves through its character map.
+            dup /Encoding StandardEncoding dup length array copy put
             dup /BuildChar {} put
         } stopped { % operator failed: 
             //.xpostsys /.fontsubstitutions get exch 2 copy known { % try substitution
@@ -1058,8 +1063,10 @@ setglobal
 } def
 
 % x y w h
-currentglobal true setglobal   % a global .xpostsys helper
-.xpostsys /rect { %ccw in device space
+currentglobal true setglobal   % global .xpostsys helpers
+% .n2a decodes an encoded-number-string into a plain array, for the numstring forms
+.xpostsys /.n2a /.numstring2array load put
+.xpostsys /.rect1 { %ccw in device space -- x y w h  appends one rectangle subpath
     dtransform 4 2 roll transform 4 2 roll
     dup 0 gt { neg 3 2 roll 1 index sub 3 1 roll } if
     1 index 0 lt { exch neg 4 3 roll 1 index sub 4 1 roll exch } if
@@ -1071,13 +1078,37 @@ currentglobal true setglobal   % a global .xpostsys helper
     neg 0 rlineto
     lineto
 } put
+% the operand is either four numbers (x y w h) for a single rectangle, or a
+% numarray / numstring holding 4n numbers for n rectangles (PLRM 8.2)
+.xpostsys /rect {
+    dup type /stringtype eq { //.xpostsys /.n2a get exec } if
+    dup type /arraytype eq {
+        1 dict begin /.a exch def
+        0 4 .a length 1 sub {
+            .a exch 4 getinterval aload pop //.xpostsys /.rect1 get exec
+        } for
+        end
+    }{
+        //.xpostsys /.rect1 get exec
+    } ifelse
+} put
 setglobal
 
-% the painting pair works on its own path and leaves the caller's
-% untouched; rectclip clips by the rectangles alone and clears the
-% path, as the language specifies
+% the painting pair works on its own path and leaves the caller's untouched;
+% rectclip clips by the rectangles alone and clears the path, as the language
+% specifies. rectstroke also accepts a trailing matrix, which is concatenated
+% to the CTM after the path is built but before stroking (PLRM 8.2).
 /rectfill { gsave newpath //.xpostsys /rect get exec fill grestore } def
-/rectstroke { gsave newpath //.xpostsys /rect get exec stroke grestore } def
+/rectstroke {
+    gsave newpath
+    % a trailing matrix is a six-element array; a numarray always holds 4n
+    % numbers, so length six is unambiguously the optional stroke matrix
+    dup type /arraytype eq { dup length 6 eq }{ false } ifelse
+        { 1 dict begin /.m exch def //.xpostsys /rect get exec .m concat end }
+        { //.xpostsys /rect get exec }
+    ifelse
+    stroke grestore
+} def
 /rectclip { newpath //.xpostsys /rect get exec clip newpath } def
 
 % load graphics support. Global: the device-maker procedures baked into this
@@ -1189,7 +1220,10 @@ currentglobal true setglobal
         % The flip translate must match the height the device adopted,
         % or marks sit offset within a fractional page.
         newdev /defaultmatrix
-            [ sx 0 0 sy neg 0 newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
+            [ newdev /windowscale 2 copy known { get }{ pop pop 1 } ifelse
+              dup sx mul 0 0
+              4 -1 roll sy mul neg 0
+              newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
         newdev /NoOutput known not {
             newdev /FillPoly //.internaldict /.fillpoly get put
             newdev /nativecolorspace get /DeviceGray eq {
@@ -1256,16 +1290,23 @@ currentglobal true setglobal
     graphicsdict /.wrappedprocs 128 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
+        /ufill /ueofill /ustroke /ustrokepath /uappend /upath
+        /infill /ineofill /instroke /inufill /inueofill /inustroke
         /clip /eoclip /initclip /rectclip /clippath
         /flattenpath /pathbbox /reversepath
-        /show /ashow /widthshow /awidthshow /kshow /stringwidth /charpath
-        /definefont /scalefont /makefont /setfont /findfont
-        /setcachedevice /setcharwidth
-        /setscreen /currentscreen /settransfer /currenttransfer
+        /show /ashow /widthshow /awidthshow /kshow /cshow
+        /xshow /yshow /xyshow /glyphshow /stringwidth /charpath
+        /definefont /undefinefont /scalefont /makefont /setfont
+        /selectfont /findfont /composefont
+        /setcachedevice /setcachedevice2 /setcharwidth
+        /setscreen /currentscreen /setcolorscreen /currentcolorscreen
+        /sethalftone /currenthalftone
+        /settransfer /currenttransfer /setcolortransfer /currentcolortransfer
         /setgray /setrgbcolor /sethsbcolor /setcmykcolor /setcolor /setcolorspace
         /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
         /currentcolor /currentcolorspace
-        /image /imagemask
+        /image /imagemask /colorimage
+        /shfill /makepattern /setpattern
         /showpage /copypage /erasepage /setpagedevice /currentpagedevice
         /nulldevice /gsave /grestore /grestoreall /initgraphics
     ] {

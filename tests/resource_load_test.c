@@ -16,6 +16,13 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+/* the Windows CRT mkdir takes no mode argument */
+#ifdef _WIN32
+# define test_mkdir(p) mkdir(p)
+#else
+# define test_mkdir(p) mkdir((p), 0700)
+#endif
+
 #include "xpost.h"
 
 static int failures = 0;
@@ -46,7 +53,7 @@ int main(void)
 {
     Xpost_Context *ctx;
     Xpost_Run_Status st;
-    char root[] = "/tmp/xpost_res_XXXXXX";
+    char root[] = "xpost_res_XXXXXX";  /* relative: a native binary need not share /tmp */
     char dir[512];
     char file[600];
     FILE *w;
@@ -57,7 +64,7 @@ int main(void)
         return 1;
     }
     snprintf(dir, sizeof dir, "%s/TestCategory", root);
-    if (mkdir(dir, 0700) != 0)
+    if (test_mkdir(dir) != 0)
     {
         printf("FAIL: mkdir\n");
         return 1;
@@ -76,7 +83,7 @@ int main(void)
        disk, exercising category-on-demand loading (the layout used by a
        resource-tree distribution: Category/<name> and <name>/<instance>) */
     snprintf(dir, sizeof dir, "%s/Category", root);
-    mkdir(dir, 0700);
+    test_mkdir(dir);
     snprintf(file, sizeof file, "%s/Category/DiskCat", root);
     w = fopen(file, "wb");
     if (w)
@@ -85,7 +92,7 @@ int main(void)
         fclose(w);
     }
     snprintf(dir, sizeof dir, "%s/DiskCat", root);
-    mkdir(dir, 0700);
+    test_mkdir(dir);
     snprintf(file, sizeof file, "%s/DiskCat/diskinst", root);
     w = fopen(file, "wb");
     if (w)
@@ -133,7 +140,17 @@ int main(void)
         "/testinstance /TestCategory findresource pop", 0);
     check(st == XPOST_RUN_COMPLETE, "second lookup is served from VM");
 
-    /* an unknown category is itself loaded on demand, then its instance */
+    /* systemdict is read-only after loading, so a program cannot undef an
+       operator from it. Lockdown removes .resourcefileopen through the
+       privileged C path (_undef_sandbox_ops), not through this operator. */
+    st = xpost_run(ctx, XPOST_INPUT_STRING,
+        "systemdict /.resourcefileopen undef", 0);
+    check(st == XPOST_RUN_ERRORED, "undef of sealed systemdict is rejected");
+    check(strcmp(xpost_error_name_get(ctx), "invalidaccess") == 0,
+          "the rejection is invalidaccess");
+
+    /* an unknown category is itself loaded on demand, then its instance --
+       from disk */
     out_len = 0;
     st = xpost_run(ctx, XPOST_INPUT_STRING,
         "/diskinst /DiskCat findresource print flush", 0);

@@ -384,6 +384,65 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
         return 0;
     }
+    if (cname && strcmp(cname, "ReusableStreamDecode") == 0)
+    {
+        /* the dictionary may name a decode chain to run the source
+           through before buffering: layer each in order */
+        Xpost_Object flt = xpost_dict_get(ctx, dict,
+            xpost_name_cons(ctx, "Filter"));
+        Xpost_Object cur = F;
+        Xpost_Object first = xpost_object_cvlit(null);
+        int ret;
+
+        free(cname);
+        if (xpost_object_get_type(flt) == nametype)
+        {
+            ret = xpost_op_file_filter(ctx, cur, flt);
+            if (ret)
+                return ret;
+            cur = xpost_stack_pop(ctx->lo, ctx->os);
+            first = cur;
+        }
+        else if (xpost_object_get_type(flt) == arraytype)
+        {
+            unsigned int i;
+
+            for (i = 0; i < flt.comp_.sz; i++)
+            {
+                Xpost_Object fn = xpost_array_get(ctx, flt, i);
+
+                if (xpost_object_get_type(fn) != nametype)
+                    return typecheck;
+                ret = xpost_op_file_filter(ctx, cur, fn);
+                if (ret)
+                    return ret;
+                cur = xpost_stack_pop(ctx->lo, ctx->os);
+                if (i == 0)
+                    first = cur;
+            }
+        }
+        ret = xpost_op_file_filter(ctx, cur,
+            xpost_name_cons(ctx, "ReusableStreamDecode"));
+        if (ret)
+            return ret;
+        /* the reusable stream buffered everything its chain yields,
+           but an inner stage can reach its own end before the stage
+           against the file has consumed its end-of-data marker:
+           drain that stage so the file resumes past the encoding */
+        if (xpost_object_get_type(first) == filetype)
+        {
+            /* re-derive the pointer each read: a filter's read can
+               grow the memory file and move it */
+            for (;;)
+            {
+                Xpost_File *dr = xpost_file_get_file_pointer(ctx->lo, first);
+
+                if (!dr || xpost_file_getc(dr) == EOF)
+                    break;
+            }
+        }
+        return 0;
+    }
     free(cname);
     return xpost_op_file_filter(ctx, F, name);
 }
@@ -763,8 +822,11 @@ int xpost_op_file_flushfile (Xpost_Context *ctx,
     return 0;
 }
 
-#ifndef _WIN32
-
+/* file  resetfile  -
+   discard the file's buffered characters (PLRM). A reusable, filter or
+   in-memory stream rewinds to the start of its held data; a disk file
+   flushes its standard-I/O buffer, which is a no-op where the platform
+   offers no way to purge one. */
 static
 int xpost_op_file_resetfile (Xpost_Context *ctx,
                              Xpost_Object F)
@@ -775,8 +837,6 @@ int xpost_op_file_resetfile (Xpost_Context *ctx,
     xpost_file_purge(f);
     return 0;
 }
-
-#endif
 
 /* file  status  bool
    return bool indicating whether file object is active or closed */
@@ -981,7 +1041,11 @@ int xpost_op_setfileposition (Xpost_Context *ctx,
                               Xpost_Object F,
                               Xpost_Object pos)
 {
-    int ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
+    int ret;
+
+    if (!xpost_file_get_status(ctx->lo, F))
+        return ioerror;
+    ret = xpost_file_seek(xpost_file_get_file_pointer(ctx->lo, F), pos.int_.val);
     if (ret != 0)
         return ioerror;
     return 0;
@@ -1605,10 +1669,8 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "flushfile", (Xpost_Op_Func)xpost_op_file_flushfile, 0, 1, filetype);
     INSTALL;
-#ifndef _WIN32
     op = xpost_operator_cons(ctx, "resetfile", (Xpost_Op_Func)xpost_op_file_resetfile, 0, 1, filetype);
     INSTALL;
-#endif
     op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_file_status, 1, 1, filetype);
     INSTALL;
     op = xpost_operator_cons(ctx, "status", (Xpost_Op_Func)xpost_op_string_status, 5, 1, stringtype);

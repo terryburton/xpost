@@ -34,6 +34,7 @@
 #endif
 
 #include <assert.h>
+#include <signal.h> /* sig_atomic_t */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,15 @@ static Xpost_Object nameerrordict;
 
 int _xpost_interpreter_is_tracing = 0;             /* output trace log */
 Xpost_Interpreter *itpdata;  /* the global interpreter instance, containing all contexts and memory files */
+
+/* an external interrupt request: raised from a signal handler,
+   consumed between evaluation steps */
+static volatile sig_atomic_t _interrupt_pending = 0;
+
+void xpost_interrupt(void)
+{
+    _interrupt_pending = 1;
+}
 static int _initializing = 1;  /* garbage collect does not run while _initializing is true.
                                   a getter function is exported in the memory file struct
                                   for the gc to access this global without #include'ing interpreter.h
@@ -307,12 +317,15 @@ int evalfunc(Xpost_Context *ctx, Xpost_Object t);
 /* The stacks grow by VM segments without any structural bound, so a
    runaway loop or recursion would grind through memory rather than
    fail. Execution past these depths raises the stack's overflow
-   error, checked in the interpreter loop where depth accumulates. A
-   latch per stack raises once per crossing, so the error machinery
-   runs (and the program recovers) above the ceiling without
-   retriggering it, and rearms when the depth recedes. The ceilings
-   sit far beyond any legitimate job's depth while keeping the error
-   path's walk over the stacks cheap. */
+   error, checked at the two places depth accumulates: evalarray's
+   internal procedure call and the interpreter loop. A latch per
+   stack raises once per crossing, so the error machinery runs (and
+   the program recovers) above the ceiling without retriggering it,
+   and rearms when the depth recedes. The ceilings sit far beyond any
+   legitimate job's depth while keeping the error path's walk over
+   the stacks cheap. The exec ceiling leaves room for the
+   deferred-paint queues the devices stage there: a vector device
+   decomposes a large fill into very many queued spans. */
 #define XPOST_EXEC_STACK_LIMIT 1000000
 #define XPOST_OPER_STACK_LIMIT 1000000
 #define XPOST_DICT_STACK_LIMIT 5000
@@ -592,10 +605,19 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 --es_top->top; \
                 if (es_top->top == 0 && \
                     (unsigned char *)es_top != ctx->lo->base + ctx->es) \
+                { \
+                    /* the drop can retreat the top segment: the cached \
+                       pointer must follow, or a later slot write lands \
+                       above the live top and is silently lost */ \
                     es_root->prevseg = es_top->prevseg; \
+                    es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg); \
+                } \
             } \
             else \
+            { \
                 (void)xpost_stack_pop(ctx->lo, ctx->es); \
+                es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg); \
+            } \
             have_tail = 0; \
         } \
     } while (0)
@@ -1018,7 +1040,18 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     else if (xpost_object_get_type(x) == arraytype)
                     {
                         /* a procedure call: continue stepping it here,
-                           leaving the current interval behind on es */
+                           leaving the current interval behind on es.
+                           Recursion deepens the stacks through this
+                           site without ever surfacing to the
+                           interpreter loop, so the ceilings are kept
+                           here */
+                        int over = _stack_ceilings(ctx);
+                        if (over)
+                        {
+                            ctx->currentobject = b;
+                            EVALARRAY_SYNC_SLOT();
+                            return over;
+                        }
                         EVALARRAY_SYNC_SLOT();
                         have_tail = 0;
                         a = x;
@@ -1304,9 +1337,6 @@ int eval(Xpost_Context *ctx)
     Xpost_Stack *es_top;
     Xpost_Object_Type type;
 
-    if (!validate_context(ctx))
-        return unregistered;
-
     /* pop the next object, directly off the top segment when possible */
     es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
     es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg);
@@ -1417,6 +1447,7 @@ void _onerror(Xpost_Context *ctx,
     {
         fprintf(stderr, "runaway error cascade (%s)\nabort\n",
                 errorname[err]);
+        ctx->run_uncaught = 1;
         ++ctx->quit;
         return;
     }
@@ -1683,6 +1714,13 @@ ctxswitch:
             ctx->lo->garbage_collect_pending = 0;
             if (ctx->lo->garbage_collect_is_installed)
                 (void)ctx->lo->garbage_collect(ctx->lo, 1, 1);
+        }
+        if (_interrupt_pending)
+        {
+            /* an external interrupt request lands between operations */
+            _interrupt_pending = 0;
+            _onerror(ctx, interrupt);
+            continue;
         }
         if ((++evalcount & 1023) == 0)
         {
@@ -1978,6 +2016,11 @@ void loadinitps(Xpost_Context *ctx)
     return;
 
   load_init_ps:
+    /* init.ps loads now and graphics.ps loads lazily from this same directory;
+       permit reading it so a later sandbox does not deny the interpreter its
+       own start-up files */
+    xpost_path_permit_read(path_init);
+
     /* backslashes are not supported in path because they are inserted in
     * PostScript files, and PostScript */
 #ifdef _WIN32

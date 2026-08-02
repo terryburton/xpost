@@ -48,6 +48,7 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_font.h"
+#include "xpost_strbuf.h"
 #include "xpost_file.h"
 #include "xpost_save.h"
 #include "xpost_context.h"
@@ -2131,30 +2132,26 @@ static void _sfnt_put32(unsigned char *p, unsigned int v)
 static int
 _cid_emit(char **buf, size_t *len, size_t *cap, const char *fmt, ...)
 {
+    Xpost_String_Buffer b;
     va_list ap;
-    int n;
+    int n, ret;
 
-    for (;;)
+    b.s = *buf; b.len = *len; b.cap = *cap;
+    va_start(ap, fmt);
+    n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        return -1;
+    ret = xpost_strbuf_reserve(&b, (size_t)n + 1);
+    if (ret == 0)
     {
         va_start(ap, fmt);
-        n = vsnprintf(*buf + *len, *cap - *len, fmt, ap);
+        vsnprintf(b.s + b.len, b.cap - b.len, fmt, ap);
         va_end(ap);
-        if (n < 0)
-            return -1;
-        if (*len + (size_t)n < *cap)
-        {
-            *len += (size_t)n;
-            return 0;
-        }
-        {
-            char *nb = realloc(*buf, *cap * 2);
-
-            if (!nb)
-                return -1;
-            *buf = nb;
-            *cap *= 2;
-        }
+        b.len += (size_t)n;
     }
+    *buf = b.s; *len = b.len; *cap = b.cap;
+    return ret;
 }
 
 static int
@@ -2412,19 +2409,13 @@ _t1_emit_bin(Xpost_Context *ctx, char **buf, size_t *len, size_t *cap,
              Xpost_Object s)
 {
     char *p = xpost_string_get_pointer(ctx, s);
+    Xpost_String_Buffer b;
+    int ret;
 
-    while (*len + s.comp_.sz + 1 >= *cap)
-    {
-        char *nb = realloc(*buf, *cap * 2);
-
-        if (!nb)
-            return -1;
-        *buf = nb;
-        *cap *= 2;
-    }
-    memcpy(*buf + *len, p, s.comp_.sz);
-    *len += s.comp_.sz;
-    return 0;
+    b.s = *buf; b.len = *len; b.cap = *cap;
+    ret = xpost_strbuf_append(&b, p, s.comp_.sz);
+    *buf = b.s; *len = b.len; *cap = b.cap;
+    return ret;
 }
 
 static
@@ -3873,102 +3864,6 @@ int _stringoutline(Xpost_Context *ctx,
     return 0;
 }
 
-static
-int _kshow(Xpost_Context *ctx,
-           Xpost_Object proc,
-           Xpost_Object str)
-{
-    Xpost_Object userdict;
-    Xpost_Object gd;
-    Xpost_Object gs;
-    Xpost_Object fontdict;
-    Xpost_Object privatestr;
-    struct fontdata data;
-    char *cstr;
-    real xpos, ypos;
-    char *ch;
-    Xpost_Object devdic;
-    Xpost_Object putpix;
-    textstate ts;
-    int ncomp;
-    Xpost_Object comp[4];
-    Xpost_Object finalize;
-    int ret;
-
-
-    (void) &proc;
-    /* load the graphicsdict, current graphics state, and current font */
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    if (xpost_object_get_type(userdict) != dicttype)
-        return dictstackunderflow;
-    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
-    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
-    fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
-    if (xpost_object_get_type(fontdict) == invalidtype)
-        return invalidfont;
-    XPOST_LOG_INFO("loaded graphicsdict, graphics state, and current font");
-
-    /* load the device and PutPix member function */
-    devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
-    putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
-    XPOST_LOG_INFO("loaded DEVICE and PutPix");
-    ts = _text_state_get(ctx, gs, fontdict, devdic);
-
-    /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-            xpost_object_get_ent(privatestr), 0, sizeof data, &data);
-    if (data.face == NULL)
-    {
-        XPOST_LOG_ERR("face is NULL");
-        return invalidfont;
-    }
-    _face_setup(ctx, gs, fontdict, data.face);
-    XPOST_LOG_INFO("loaded font data from dict");
-
-    /* get a c-style nul-terminated string */
-    cstr = xpost_string_allocate_cstring(ctx, str);
-    XPOST_LOG_INFO("append nul to string");
-
-    ret = _get_current_point(ctx, gs, &xpos, &ypos);
-    if (ret){
-        free(cstr);
-        return ret;
-    }
-
-    if (_device_color(ctx, gs, devdic, &ncomp, comp))
-    {
-        free(cstr);
-        return unregistered;
-    }
-    XPOST_LOG_INFO("ncomp = %d", ncomp);
-
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    /* fill-in final pos before return */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
-    xpost_stack_push(ctx->lo, ctx->es, finalize);
-
-    /* render text in char *cstr  with font data  at pen position xpos ypos */
-    for (ch = cstr; *ch; ch++)
-    {
-        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp[0], comp[1], comp[2], comp[3]);
-    }
-
-    /* update current position in the graphics state */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-
-    free(cstr);
-    return 0;
-}
-
 /* -  .cachestatus  bsize bmax msize mmax csize cmax blimit
    the glyph cache's actual figures */
 static
@@ -4066,8 +3961,6 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "stringwidth", (Xpost_Op_Func)_stringwidth, 2, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, 1, stringtype);
-    INSTALL;
-    op = xpost_operator_cons(ctx, "kshow", (Xpost_Op_Func)_kshow, 0, 2, proctype, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
     INSTALL;

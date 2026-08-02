@@ -1047,9 +1047,9 @@ int _blendpixrgb(Xpost_Context *ctx,
         return 0;
     pix = xpost_array_get(ctx, row, ix);
     packed = xpost_object_get_type(pix) == integertype ? pix.int_.val : 0;
-    sr = (int)((xpost_object_get_type(r) == realtype ? r.real_.val : (double)r.int_.val) * 255.0);
-    sg = (int)((xpost_object_get_type(g) == realtype ? g.real_.val : (double)g.int_.val) * 255.0);
-    sb = (int)((xpost_object_get_type(b) == realtype ? b.real_.val : (double)b.int_.val) * 255.0);
+    sr = (int)_channel(r, 255.0);
+    sg = (int)_channel(g, 255.0);
+    sb = (int)_channel(b, 255.0);
     dr = (packed >> 16) & 0xff;
     dg = (packed >> 8) & 0xff;
     db = packed & 0xff;
@@ -1568,7 +1568,7 @@ _blit_decode_row(const unsigned char *src, unsigned char *const *planes,
         }
         else
         {
-            int v[4];
+            int v[4] = { 0, 0, 0, 0 };
 
             for (c = 0; c < ncomp; c++)
                 v[c] = dlut[c][DECSAMP(x, c)];

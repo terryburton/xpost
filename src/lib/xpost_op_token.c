@@ -115,9 +115,11 @@ int isdel(int c)
 static
 int isreg(int c)
 {
-    /* bytes in the binary-token range delimit the token they follow,
-       exactly as whitespace or a delimiter would (PLRM 3.14.2) */
-    return (c != EOF) && (c < 128) && (!isspace(c)) && (!isdel(c));
+    /* bytes in the binary-token range 128..159 delimit the token they
+       follow, exactly as whitespace or a delimiter would (PLRM 3.14.2);
+       bytes 160..255 are regular characters and may appear in names */
+    return (c != EOF) && !(c >= 128 && c <= 159) &&
+           (c >= 128 || (!isspace(c) && !isdel(c)));
 }
 
 //int isxdigit (int c) { return strchr("0123456789ABCDEFabcdef", c) != NULL; }
@@ -392,6 +394,13 @@ int grok(Xpost_Context *ctx,
                     }
                     else *sp++ = c;
                 }
+                if (defer)
+                {
+                    /* the closing parenthesis never arrived: an
+                       unterminated string literal is not a token */
+                    XPOST_LOG_ERR("end of input inside a string literal");
+                    return syntaxerror;
+                }
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
                     return VMerror;
@@ -491,6 +500,12 @@ int grok(Xpost_Context *ctx,
                         for (k = 0; k < nbytes; k++)
                             *sp++ = (tuple >> (24 - 8 * k)) & 0xff;
                     }
+                    if (c == EOF)
+                    {
+                        /* the ~> terminator never arrived */
+                        XPOST_LOG_ERR("end of input inside a base-85 string literal");
+                        return syntaxerror;
+                    }
                     obj = xpost_string_cons(ctx, sp - s, s);
                     if (xpost_object_get_type(obj) == nulltype)
                         return VMerror;
@@ -530,6 +545,12 @@ int grok(Xpost_Context *ctx,
                         return limitcheck;
                     }
                     *sp++ = d;
+                }
+                if (c == EOF)
+                {
+                    /* the > terminator never arrived */
+                    XPOST_LOG_ERR("end of input inside a hex string literal");
+                    return syntaxerror;
                 }
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
@@ -603,10 +624,13 @@ int grok(Xpost_Context *ctx,
                     {
                         Xpost_Object proc = xpost_stack_pop(ctx->lo, ctx->os);
                         /* in packing mode a procedure is built read-only, which
-                           is how xpost represents a packed array */
+                           is how xpost represents a packed array; the packed
+                           flag tells it apart from a plain read-only array so
+                           bind and type treat it as the packed array it is */
                         if (ctx->packing)
-                            proc = xpost_object_set_access(ctx, proc,
-                                    XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+                            proc = xpost_object_set_packed(
+                                    xpost_object_set_access(ctx, proc,
+                                        XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
                         *retval = xpost_object_cvx(proc);
                     }
                 }
@@ -1326,7 +1350,7 @@ int toke(Xpost_Context *ctx,
         *retval = null;
         return 0;
     }
-    if ((unsigned char)buf[0] >= 128)
+    if ((unsigned char)buf[0] >= 128 && (unsigned char)buf[0] <= 159)
         return binary_token(ctx, (unsigned char)buf[0], src, next, retval);
     if (!isdel(*buf))
         sta += puff(ctx, buf + 1, NBUF - 1, src, next, back);

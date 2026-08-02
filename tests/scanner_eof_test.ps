@@ -1,0 +1,55 @@
+% Unterminated string literals (issue: scanner returned the partial
+% string), run through `xpost -d null` by run-ps-test.sh.
+%
+% The PLRM's token entry addresses only end-of-input before a token
+% begins (return false); it is silent on end-of-input inside a string
+% literal. Adobe Distiller and Ghostscript both report syntaxerror for
+% all three literal forms, on the string and file scan paths alike, and
+% the scanner follows them: a literal whose terminator never arrives is
+% not a token.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+
+/expect_syntax { % (bytes) label -- ; scanning the bytes must syntaxerror
+    exch mark exch
+    { token } stopped
+    { $error /errorname get /syntaxerror eq }
+    { false } ifelse
+    /verdict exch def
+    cleartomark
+    verdict exch assert
+} def
+
+% --- string scan path ---
+(\(abc)        (unterminated \(...\) string is syntaxerror)      expect_syntax
+(\(a\(b\)c)    (unterminated nested string is syntaxerror)       expect_syntax
+(\(ab\\)       (EOF in a string escape is syntaxerror)           expect_syntax
+(<6162)        (unterminated hex string is syntaxerror)          expect_syntax
+(<6162 63)     (unterminated hex string with space is syntaxerror) expect_syntax
+(<~9jqo)       (unterminated base-85 string is syntaxerror)      expect_syntax
+
+% --- file scan path ---
+/SCRATCH (scanner_eof_scratch) def
+/expect_syntax_file { % (bytes) label -- ; scanning a file of the bytes must syntaxerror
+    exch mark exch
+    SCRATCH (w) file dup 3 -1 roll writestring closefile
+    { SCRATCH (r) file token } stopped
+    { $error /errorname get /syntaxerror eq }
+    { false } ifelse
+    /verdict exch def
+    cleartomark
+    verdict exch assert
+} def
+
+(\(abc)   (unterminated string at file EOF is syntaxerror)        expect_syntax_file
+(<6162)   (unterminated hex string at file EOF is syntaxerror)    expect_syntax_file
+(<~9jqo)  (unterminated base-85 string at file EOF is syntaxerror) expect_syntax_file
+
+% --- terminated forms still scan ---
+(\(abc\))  token pop (abc) eq (terminated string still scans) assert pop
+(<616263>) token pop <616263> eq (terminated hex string still scans) assert pop
+(<~9jqo~>) token pop length 3 eq (terminated base-85 string still scans) assert pop
+(\(\))     token pop length 0 eq (empty string still scans) assert pop
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
