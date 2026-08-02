@@ -1,13 +1,25 @@
 % Graphics regression checks, run through `xpost -d null` by
 % run-ps-test.sh: prints SUCCESS iff every assertion holds.
 %
+% Covers defects that once escaped the interpreter suite:
+%   - itransform/idtransform and currentpoint under a rotated CTM
+%     (the inverse transforms had transposed cross terms)
+%   - graphics operators running with a user dictionary on the dict
+%     stack whose keys shadow operator names (the machinery is
+%     PostScript and must be bound against capture)
+%   - filling many sub-pixel open subpaths in one path (scan-converter
+%     parity and dropout control)
+%   - clipping with an opposite-wound inner subpath (a hole)
+%   - stroking with the line width transformed to device space
+%
 % Pixel assertions render into a locally constructed PGM device and
 % probe it through its GetPix method.
 
-% The operator-wrapping checks below drive the interpreter's private
-% operators, which live in internaldict rather than systemdict; fetch
-% them deliberately through the password.
+% The device-construction, raster and operator-wrapping checks below drive the
+% interpreter's private operators, which live in internaldict rather than
+% systemdict; fetch them deliberately through the password.
 /.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
 /.wrapop       1183615869 internaldict /.wrapop get def
 
 % failures accumulate in a dedicated dict, so an assert that runs with
@@ -23,6 +35,638 @@ faildict /n 0 put
 /assertnear { % val expected (name) . -
     3 1 roll sub abs 0.01 lt exch assert
 } bind def
+
+% --- construct a raster device to probe ---
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/inkat { % ux uy . bool
+    transform
+    floor cvi exch floor cvi exch  % x y (device)
+    DEV dup /GetPix get exec
+    128 lt
+} def
+/inknear { % ux uy . bool  (ink within a 1px neighbourhood)
+    /py exch def /px exch def
+    false
+    -1 1 1 {
+        /dy exch def
+        -1 1 1 {
+            /dx exch def
+            px dx add py dy add inkat or
+        } for
+    } for
+} def
+/countink { % - . n
+    0
+    0 1 63 {
+        DEV /ImgData get exch get
+        { 128 lt { 1 add } if } forall
+    } for
+} def
+/maxrun { % - . n  (longest horizontal ink run)
+    6 dict begin
+    /best 0 def
+    0 1 63 {
+        /run 0 def
+        DEV /ImgData get exch get {
+            128 lt {
+                /run run 1 add def
+                run best gt { /best run def } if
+            }{
+                /run 0 def
+            } ifelse
+        } forall
+    } for
+    best
+    end
+} def
+
+% --- inverse point and distance transforms under rotation ---
+gsave
+30 40 translate
+45 rotate
+2 3 scale
+100 50 moveto
+currentpoint
+50 (currentpoint y survives a rotated CTM) assertnear
+100 (currentpoint x survives a rotated CTM) assertnear
+10 20 transform itransform
+20 (itransform inverts transform: y) assertnear
+10 (itransform inverts transform: x) assertnear
+3 4 dtransform idtransform
+4 (idtransform inverts dtransform: dy) assertnear
+3 (idtransform inverts dtransform: dx) assertnear
+grestore
+
+% --- operator names shadowed by a user dictionary ---
+<< /type 29 /length 1 /index 2 /copy 3 /width 4 /height 5
+   /flat 6 /off 7 /str 8 /ang 9 /cp 10 /poly 11
+   /pop 12 /concat 13 /roll 14 /repeat 15 /exec 16 /cvx 17 >> begin
+{
+    gsave
+    newpath 5 5 moveto 40 20 lineto 3 setlinewidth stroke
+    grestore
+    gsave
+    30 rotate
+    newpath 5 5 moveto 30 5 lineto 30 25 lineto 5 25 lineto closepath fill
+    grestore
+} stopped not (graphics survive shadowed operator names) assert
+count 0 eq (shadowed graphics leave the stack balanced) assert
+clear end
+
+% --- sub-pixel dots: one path of small open ring subpaths ---
+erasepage
+gsave
+0.5 0.5 scale
+newpath
+8 8 48 {
+    /yy exch def
+    8 8 48 {
+        /xx exch def
+        xx yy moveto
+        xx yy 0.9 0 360 arc
+    } for
+} for
+fill
+grestore
+countink dup
+36 ge (each sub-pixel dot marks at least one pixel) assert
+144 le (sub-pixel dots stay dots) assert
+maxrun 3 le (no dot row smears across the raster) assert
+
+% --- the any-part-of-pixel fill rule (PLRM 7.5): a pixel is painted
+%     iff the filled region meets its interior. Probes verified
+%     pixel-for-pixel against a reference interpreter, including the
+%     boundary cases: integer-aligned geometry is exact (closed at the
+%     low device boundary, open at the high one), sub-pixel geometry
+%     paints every pixel it enters, zero-width geometry on a pixel
+%     boundary paints nothing, and zero-height geometry paints the row
+%     its device coordinate floors to ---
+/rfill { % x0 y0 x1 y1 . -  (fill the rectangle)
+    8 dict begin
+    /ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
+    newpath
+    rx0 ry0 moveto rx1 ry0 lineto rx1 ry1 lineto rx0 ry1 lineto closepath
+    fill
+    end
+} bind def
+
+erasepage
+2 2 5 5 rfill
+2.5 2.5 inkat (integer rect fills its own columns) assert
+4.5 4.5 inkat (integer rect fills to its high corner) assert
+1.5 2.5 inkat not (integer rect stays right of its low x edge) assert
+5.5 2.5 inkat not (integer rect stays left of its high x edge) assert
+2.5 1.5 inkat not (integer rect stays above its low y edge) assert
+2.5 5.5 inkat not (integer rect stays below its high y edge) assert
+
+erasepage
+1.2 2 1.4 5 rfill
+1.5 3.5 inkat (sub-pixel-wide bar paints its column) assert
+0.5 3.5 inkat not (sub-pixel bar does not spill left) assert
+2.5 3.5 inkat not (sub-pixel bar does not spill right) assert
+
+erasepage
+0.8 2 1.2 5 rfill
+0.5 3.5 inkat (straddling bar paints the left pixel) assert
+1.5 3.5 inkat (straddling bar paints the right pixel) assert
+
+erasepage
+1 2 1.2 5 rfill
+1.5 3.5 inkat (bar closed on its low integer edge) assert
+0.5 3.5 inkat not (bar open toward the pixel below the low edge) assert
+
+erasepage
+0.8 2 1 5 rfill
+0.5 3.5 inkat (bar open on its high integer edge) assert
+1.5 3.5 inkat not (bar does not enter the pixel past the high edge) assert
+
+% zero-width and zero-height degenerate subpaths
+erasepage
+newpath 3 1 moveto 3 6 lineto closepath fill
+2.5 3.5 inkat not (zero-width line on a pixel boundary paints nothing: left) assert
+3.5 3.5 inkat not (zero-width line on a pixel boundary paints nothing: right) assert
+erasepage
+newpath 3.5 1 moveto 3.5 6 lineto closepath fill
+3.5 3.5 inkat (zero-width line inside a pixel paints its column) assert
+erasepage
+newpath 1 3 moveto 6 3 lineto closepath fill
+3.5 2.5 inkat (zero-height line on a boundary paints the floor row) assert
+3.5 3.5 inkat not (zero-height line on a boundary paints one row only) assert
+erasepage
+newpath 3.5 3.5 moveto 3.5 3.5 lineto closepath fill
+3.5 3.5 inkat (a degenerate point paints its pixel) assert
+countink 1 eq (a degenerate point paints exactly one pixel) assert
+
+% a thin diagonal bar must be continuous (no dropouts) and thin
+erasepage
+newpath 3 2 moveto 12 11 lineto 12.28 10.72 lineto 3.28 1.72 lineto closepath fill
+5 4 inknear (thin diagonal marks its lower run) assert
+8 7 inknear (thin diagonal marks its middle run) assert
+11 10 inknear (thin diagonal marks its upper run) assert
+countink dup
+10 ge (thin diagonal is continuous) assert
+30 le (thin diagonal stays thin) assert
+
+% --- clip with an opposite-wound hole subpath ---
+erasepage
+gsave
+newpath
+ 5  5 moveto 45  5 lineto 45 45 lineto  5 45 lineto closepath  % window, CCW
+20 20 moveto 20 30 lineto 30 30 lineto 30 20 lineto closepath  % hole, CW
+clip
+newpath 0 0 moveto 50 0 lineto 50 50 lineto 0 50 lineto closepath fill
+grestore
+10 10 inkat (window region is painted) assert
+40 40 inkat (window region beyond the hole is painted) assert
+25 25 inkat not (hole region is clear) assert
+2 2 inkat not (outside the window is clear) assert
+
+% --- stroke width follows the CTM ---
+erasepage
+gsave
+2 2 scale
+0.75 setlinewidth
+newpath 5 5 moveto 20 12.5 lineto stroke
+grestore
+25 17.5 inknear (a scaled diagonal stroke marks pixels) assert
+
+% --- text rendering: sharp threshold by default, coverage blending
+%     under TextAlphaBits, /Encoding vectors honored, Type 42 font
+%     programs accepted by definefont. All skipped when no host font
+%     resolves (headless build without fonts). ---
+/countmid { % - . n  (pixels neither background nor ink: blended edges)
+    0
+    0 1 63 {
+        DEV /ImgData get exch get
+        { dup 10 gt exch 245 lt and { 1 add } if } forall
+    } for
+} bind def
+/snapshot { % - . array of row copies
+    [ 0 1 63 { DEV /ImgData get exch get dup length string copy } for ]
+} bind def
+/snapeq { % snapA snapB . bool
+    4 dict begin
+    /sb exch def /sa exch def
+    /same true def
+    0 1 63 { /i exch def sa i get sb i get eq not { /same false def } if } for
+    same
+    end
+} bind def
+
+/basefont null def
+{ /Helvetica findfont } stopped not count 0 gt and {
+    dup type /dicttype eq { /basefont exch def } { pop } ifelse
+} if
+
+basefont null ne {
+    % sharp text by default: ink but no intermediate values
+    erasepage
+    basefont 20 scalefont setfont
+    2 24 moveto (Ag) show
+    countink 20 ge (text marks pixels) assert
+    countmid 0 eq (text is sharp without TextAlphaBits) assert
+
+    % anti-aliased text: TextAlphaBits + BlendPix blend glyph edges
+    DEV /TextAlphaBits 4 put
+    DEV /BlendPix 1183615869 internaldict /.blendpixgray get put
+    erasepage
+    2 24 moveto (Ag) show
+    countmid 0 gt (TextAlphaBits blends glyph edges) assert
+    countink 10 ge (anti-aliased text keeps solid cores) assert
+    DEV /TextAlphaBits 1 put
+    erasepage
+    2 24 moveto (Ag) show
+    countmid 0 eq (TextAlphaBits 1 disables blending) assert
+
+    % /Encoding: a re-encoded copy renders the named glyph
+    erasepage
+    2 24 moveto (0) show
+    /wantsnap snapshot def
+    basefont dup length dict copy
+    dup /Encoding 256 array put
+    dup /Encoding get 65 /zero put
+    /ReencTest exch definefont 20 scalefont setfont
+    erasepage
+    2 24 moveto (A) show
+    /gotsnap snapshot def
+    wantsnap gotsnap snapeq (re-encoded code renders the named glyph) assert
+    basefont 20 scalefont setfont
+    erasepage
+    2 24 moveto (A) show
+    wantsnap snapshot snapeq not (the base font still renders its own glyph) assert
+
+    % a base font publishes its glyph complement in /CharStrings, as
+    % re-encoding programs expect: they size tables from its length,
+    % test membership with known, and enumerate its keys
+    basefont /CharStrings known (a base font carries CharStrings) assert
+    basefont /CharStrings known {
+        basefont /CharStrings get
+        dup type /dicttype eq (CharStrings is a dictionary) assert
+        dup length 100 ge (CharStrings covers the face's glyphs) assert
+        dup /A known (CharStrings knows the alphabet) assert
+        dup /.notdef known (CharStrings knows notdef) assert
+        wcheck not (CharStrings is read-only) assert
+        /Helvetica findfont /CharStrings get
+        basefont /CharStrings get eq
+        (one CharStrings dictionary serves every copy of a face) assert
+    } if
+
+    % glyphshow paints by name, bypassing the encoding, and advances
+    % the current point exactly as show would
+    erasepage
+    2 24 moveto (0) show
+    /wantsnap snapshot def
+    /wantcp currentpoint pop def
+    erasepage
+    2 24 moveto /zero glyphshow
+    wantsnap snapshot snapeq (glyphshow paints the named glyph) assert
+    currentpoint pop wantcp sub abs 0.01 le (glyphshow advances by the glyph width) assert
+} if
+
+% Type 42: a TrueType program supplied through /sfnts renders
+/t42file (/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf) def
+{ t42file (r) file } stopped {
+    pop pop  % font file absent on this host: discard the leftover path and mode strings
+} {
+    /f exch def
+    /sfntsarr [ { f 65000 string readstring not { exit } if } loop
+                dup length 0 gt { } { pop } ifelse ] def
+    f closefile
+    12 dict begin
+        /FontType 42 def
+        /FontMatrix [1 0 0 1 0 0] def
+        /Encoding ISOLatin1Encoding def
+        /sfnts sfntsarr def
+    currentdict end
+    { /Type42Test exch definefont } stopped
+    dup (definefont accepts a Type 42 program) exch not exch assert
+    not {
+        20 scalefont setfont
+        erasepage
+        2 24 moveto (Ag1) show
+        countink 20 ge (a Type 42 face renders glyphs) assert
+    } if
+} ifelse
+
+% A subset Type 42 program, as document producers embed them, strips
+% the sfnt's glyph names (post format 3.0) and its character map; the
+% font dictionary's /CharStrings dictionary, mapping glyph names to
+% glyph indices, is then the only route from an /Encoding name to a
+% glyph. The embedded 660-byte program holds .notdef, a filled
+% square (glyph 1, on-curve corners only) and a filled triangle
+% (glyph 2), both 600 units wide on an advance of 800.
+12 dict begin
+    /FontType 42 def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontBBox [0 -200 800 800] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /sq put
+    Encoding 66 /tri put
+    /CharStrings << /.notdef 0 /sq 1 /tri 2 >> def
+    /sfnts [
+<
+00010000000A0080000300204F532F3240F642000000012800000060636D6170000C0046
+000001940000002C676C79665D14F5C4000001C800000034686561642F39E06E000000AC
+0000003668686561064202BF000000E400000024686D747805780064000001880000000A
+6C6F6361000D001A000001C0000000086D6178700005000600000108000000206E616D65
+FBB25C27000001FC00000078706F73740003000000000274000000200001000000010000
+FBF3ACAF5F0F3CF5000303E800000000E681CE9B00000000E681CE9B0064000002BC0258
+000000030002000000000000000100000320FF38000003200064006402BC000100000000
+000000000000000000000002000100000003000400010000000000020000000000000000
+0000000000000000000302BC019000050004000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000003F3F3F3F0000
+000000000000000000000000000000000000000000000000000000000020000001F40000
+032000640064000000000002000000030000001400030001000000140004001800000002
+000200000000FFFF0000FFFF0001000000000000000D001A00010064000002BC02580003
+0000331121116402580258FDA80000010064000002BC02580002000033010164012C012C
+0258FDA80000000400360001000000000001000F000000010000000000020007000F0003
+000104090001001E00160003000104090002000E003458706F7374543432466978747572
+65526567756C617200580070006F00730074005400340032004600690078007400750072
+00650052006500670075006C006100720003000000000000000000000000000000000000
+000000000000000000000000
+>
+    ] def
+currentdict end
+{ /SubsetT42Test exch definefont } stopped
+dup (definefont accepts a subset Type 42 program) exch not exch assert
+not {
+    20 scalefont setfont
+    erasepage
+    10 16 moveto (A) show
+    countink 100 ge (a subset glyph resolves through CharStrings) assert
+    /sqink countink def
+    erasepage
+    10 16 moveto (B) show
+    countink 40 ge (a second subset name resolves through CharStrings) assert
+    countink sqink 30 sub le (the two names select distinct glyphs) assert
+    (A) stringwidth pop 16 sub abs 0.5 le (subset metrics come from the program) assert
+    erasepage
+    newpath 10 16 moveto (B) false charpath flattenpath pathbbox
+    pop exch pop exch sub 12 sub abs 1.5 le (charpath resolves subset glyphs) assert
+    erasepage
+    10 16 moveto /tri glyphshow
+    countink 40 ge (glyphshow reaches a subset glyph through CharStrings) assert
+    currentpoint pop 26 sub abs 0.5 le (glyphshow advances by the program width) assert
+
+    % xshow, yshow and xyshow replace each glyph's advance with the
+    % array's user-space displacements; a displacement equal to the
+    % natural advance renders identically to show
+    erasepage
+    10 16 moveto (AB) show
+    /wantsnap snapshot def
+    erasepage
+    10 16 moveto (AB) [16 0 16 0] xyshow
+    wantsnap snapshot snapeq (natural xyshow displacements match show) assert
+    currentpoint pop 42 sub abs 0.01 le (xyshow leaves the summed advance) assert
+    erasepage
+    10 16 moveto (AB) [24 0 16 0] xyshow
+    wantsnap snapshot snapeq not (a widened displacement moves the next glyph) assert
+    10 40 moveto (AB) [9 7] xshow
+    currentpoint exch 26 sub abs 0.01 le exch 40 sub abs 0.01 le and
+    (xshow advances x by the displacements alone) assert
+    10 40 moveto (A) [11] yshow
+    currentpoint exch 10 sub abs 0.01 le exch 51 sub abs 0.01 le and
+    (yshow advances y by the displacement alone) assert
+
+    % displacements may arrive as an encoded number string: 16- or
+    % 32-bit fixed point with a binary scale, or 32-bit reals, in
+    % either byte order
+    10 40 moveto (AB) <9520000200090007> xshow
+    currentpoint exch 26 sub abs 0.01 le exch 40 sub abs 0.01 le and
+    (a fixed-point number string displaces x) assert
+    10 40 moveto (A) <952100010016> yshow
+    currentpoint exch 10 sub abs 0.01 le exch 51 sub abs 0.01 le and
+    (a scaled number string halves its stored values) assert
+    10 40 moveto (AB) <95B00400000080410000000000008041 00000000> xyshow
+    currentpoint exch 42 sub abs 0.01 le exch 40 sub abs 0.01 le and
+    (a low-order-first real number string displaces pairs) assert
+    { (A) (no displacements) xshow } stopped
+    (a string that is not an encoded number string is refused) assert
+    $error /newerror false put clear newpath
+    erasepage
+} if
+
+% A CID-keyed composite font: the CMap decodes two-byte codes to
+% CIDs, the descendant CIDFontType 2 maps them to glyph indices
+% through its CIDMap, and the glyphs paint by index. The descendant
+% reuses the subset program above; the second variant delivers its
+% outlines incrementally through GlyphDirectory, so the face is
+% assembled around them.
+FontDirectory /SubsetT42Test known {
+    /CIDInit /ProcSet findresource begin
+    10 dict begin
+    /CIDFontType 2 def
+    /CIDFontName /TestCID def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontType 42 def
+    /CIDCount 3 def
+    /GDBytes 1 def
+    /CIDMap <000102> def
+    /GlyphDirectory 0 dict def
+    /sfnts FontDirectory /SubsetT42Test get /sfnts get def
+    CIDFontName currentdict end /CIDFont defineresource pop
+    10 dict begin
+    begincmap
+    /CMapName /TestCMap def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    1 begincodespacerange
+    <0000> <FFFF>
+    endcodespacerange
+    1 begincidrange
+    <0000> <FFFF> 0
+    endcidrange
+    endcmap
+    CMapName currentdict end /CMap defineresource pop
+    end
+    /TestT0 /TestCMap [/TestCID] composefont pop
+    /TestT0 findfont 20 scalefont setfont
+    erasepage
+    10 16 moveto <00010002> show
+    countink 100 ge (a composite font paints its glyphs) assert
+    currentpoint pop 42 sub abs 0.5 le (composite codes advance by glyph widths) assert
+    erasepage
+    % incremental delivery: an empty template gains its outlines
+    % through GlyphDirectory and the face assembles around them
+    /CIDInit /ProcSet findresource begin
+    10 dict begin
+    /CIDFontType 2 def
+    /CIDFontName /TestCIDInc def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontType 42 def
+    /CIDCount 3 def
+    /GDBytes 1 def
+    /CIDMap <000102> def
+    /GlyphDirectory 3 dict dup begin
+        1 <00010064000002BC025800030000331121116402580258FDA800> def
+        2 <00010064000002BC02580002000033010164012C012C0258FDA8> def
+    end def
+    /sfnts FontDirectory /SubsetT42Test get /sfnts get def
+    CIDFontName currentdict end /CIDFont defineresource pop
+    end
+    /TestT0i /TestCMap [/TestCIDInc] composefont pop
+    /TestT0i findfont 20 scalefont setfont
+    erasepage
+    10 16 moveto <00010002> show
+    countink 100 ge (an incremental descendant paints its delivered glyphs) assert
+    % the show variants advance one number per glyph, not per byte
+    /TestT0 findfont 20 scalefont setfont
+    erasepage
+    10 16 moveto <00010002> [30 40] xshow
+    currentpoint pop 80 sub abs 0.5 le
+    (xshow through a composite font advances per glyph) assert
+
+    erasepage
+} if
+
+% A CIDFontType 0 descendant: its charstrings arrive in the StartData
+% block -- read from the file itself, so this stands at the top level
+% -- and the face assembles from the written-back resource file,
+% serving glyphs directly by CID
+/CIDInit /ProcSet findresource begin
+20 dict begin
+/CIDFontName /TestCID0 def
+/CIDFontType 0 def
+/CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+/FontMatrix [0.001 0 0 0.001 0 0] def
+/FontBBox [0 0 1000 1000] def
+/CIDCount 2 def
+/FDBytes 1 def
+/GDBytes 2 def
+/CIDMapOffset 0 def
+/FDArray 1 array
+dup 0 4 dict begin
+/FontType 1 def
+/FontMatrix [1 0 0 1 0 0] def
+/Private 1 dict def
+currentdict end put
+def
+(Hex) 43 StartData
+00000900001200002B10BF317079C84B925B10BF317079C84B92BA9844E67E3430AF9B4AC1F3C7BC50D639>
+/CIDInit /ProcSet findresource begin
+10 dict begin
+begincmap
+/CMapName /TestCMap0 def
+/CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 begincidrange
+<0000> <FFFF> 0
+endcidrange
+endcmap
+CMapName currentdict end /CMap defineresource pop
+end
+/TestT00 /TestCMap0 [/TestCID0] composefont pop
+/TestT00 findfont 20 scalefont setfont
+erasepage
+10 16 moveto <0001> show
+countink 40 ge (a CID-keyed charstring descendant paints) assert
+currentpoint pop 22 sub abs 0.5 le
+(its codes advance by the charstring width) assert
+erasepage
+
+% An embedded Type 1 program: the encrypted portion runs through
+% eexec, the charstrings arrive through RD from the decrypted
+% stream, and the program closes its own file; the face assembles
+% from the written-back program. Top level, since eexec reads the
+% file itself.
+%!PS-AdobeFont-1.0: TestT1 001.001
+11 dict begin
+/FontName /TestT1 def
+/FontType 1 def
+/PaintType 0 def
+/FontMatrix [0.001 0 0 0.001 0 0] def
+/FontBBox {0 0 1000 1000} def
+/Encoding 256 array 0 1 255 {1 index exch /.notdef put} for
+dup 65 /sq put readonly def
+currentdict end
+currentfile eexec
+81B0E31231A309E292676B3DFF2E6BA20FF38AE5A2B04E0F2C2D470BB995CD523C821771
+8DA3AF13AD5C6903059F2FD1FFFCC441E6775BEBD9DF5EB3599E8CB489FE7B7285B41D12
+417929EF4C545E986161C0A1C508CF373CC84A31114F0BDC5238187B20E0BFD2E810E260
+6736EF718DF78CEB859063856448C6DBCD7291D37EE7118E4492C59D67AD011A56678E9F
+1ADF952A1A76B8246565BF7D904BAF85B7C231CCCAC1727D3805E87E1B5BF0E2D9A82C7F
+A919FE03254A80DF333E682F8825A7D93F7176278AB8F0F8A0E037C7805397C5C8E9A72E
+73C1B754C514524D25A0628BBE408F575C922A41F26DE9632C9A906E35EE714726B24625
+E3C42AC4E9E2A5161395EF9CAC30822D4A765B0D4D4D59B1CF7BBCD3C571115D601CAC8F
+4EB2F16F07C74B857ABC2D6B0BFD588DA3006FE898B1A3419826453B35756041B9E39E4C
+A214FA19F8210C59B8FA80C9D00D9014FB85AD06AE33B44A6A897B9B2E5A7B2A12F45F9D
+515E980F8921D9647AE1AB955AAD974BF4C589347270EF51FA783023CD8221BCB41C8EA3
+62CA907605DA717E3ADCEA
+0000000000000000000000000000000000000000000000000000000000000000
+cleartomark
+/TestT1 findfont 20 scalefont setfont
+erasepage
+10 16 moveto (A) show
+countink 80 ge (an embedded charstring font paints through eexec) assert
+currentpoint pop 22 sub abs 0.5 le
+(its codes advance by the charstring width) assert
+erasepage
+
+
+% Type 3 fonts serve glyphshow through their BuildGlyph procedure, as
+% plotting tools emit them (a name-keyed CharStrings of drawing
+% procedures); a font defining only BuildGlyph also answers show
+% through the derived BuildChar, and one defining only BuildChar
+% serves glyphshow through the code its Encoding assigns the name.
+9 dict begin
+    /FontType 3 def
+    /FontMatrix [0.01 0 0 0.01 0 0] def
+    /FontBBox [0 0 100 100] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /CharStrings << /box { 0 0 60 60 rectfill } /.notdef {} >> def
+    /BuildGlyph {
+        exch begin
+        80 0 setcharwidth
+        CharStrings exch 2 copy known not { pop /.notdef } if get exec
+        end
+    } def
+currentdict end
+/T3GlyphTest exch definefont pop
+/T3GlyphTest findfont 20 scalefont setfont
+erasepage
+10 16 moveto /box glyphshow
+countink 100 ge (BuildGlyph serves glyphshow) assert
+currentpoint pop 26 sub abs 0.5 le (the BuildGlyph width advances the pen) assert
+erasepage
+10 16 moveto (A) show
+countink 100 ge (a BuildGlyph-only font answers show) assert
+currentpoint pop 26 sub abs 0.5 le (show advances through the derived BuildChar) assert
+9 dict begin
+    /FontType 3 def
+    /FontMatrix [0.01 0 0 0.01 0 0] def
+    /FontBBox [0 0 100 100] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 66 /tribar put
+    /BuildChar {
+        exch begin
+        80 0 setcharwidth
+        Encoding exch get /tribar eq { 0 0 60 30 rectfill } if
+        end
+    } def
+currentdict end
+/T3CharTest exch definefont pop
+/T3CharTest findfont 20 scalefont setfont
+erasepage
+10 16 moveto /tribar glyphshow
+countink 50 ge (BuildChar serves glyphshow through the Encoding) assert
+currentpoint pop 26 sub abs 0.5 le (the BuildChar width advances the pen) assert
+erasepage
 
 % --- procedure-implemented standard operators stand as operators ---
 % load answers operatortype for them, so bind substitutes them and the
@@ -70,6 +714,153 @@ countdictstack /ep.dd exch def
 { ep.d } stopped pop
 countdictstack ep.dd eq (the dict depth at the call comes back) assert
 
+% --- charpath appends glyph outlines: the path carries curves, fills
+%     with its counters intact, and clips like any other path ---
+basefont null ne {
+    /cpd 4 dict def
+    cpd /nc 0 put cpd /nm 0 put
+    erasepage
+    basefont 40 scalefont setfont
+    newpath 8 20 moveto (O) false charpath
+    { pop pop cpd /nm 2 copy get 1 add put }
+    { pop pop }
+    { 6 { pop } repeat cpd /nc 2 copy get 1 add put }
+    { }
+    pathforall
+    cpd /nm get 2 ge (charpath makes a contour per boundary) assert
+    cpd /nc get 8 ge (charpath carries curve segments) assert
+    fill
+    countink 20 ge (charpath fills) assert
+    % the counter must stay clear: probe the middle of the O
+    23 34 inkat not (charpath fill keeps the counter open) assert
+    10 34 inkat (charpath fill marks the ring) assert
+
+    erasepage
+    gsave
+    newpath 8 20 moveto (O) false charpath clip
+    newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+    grestore
+    23 34 inkat not (charpath clip keeps the counter open) assert
+    10 34 inknear (charpath clip admits the ring) assert
+} if
+
+% --- text metrics: stringwidth reports the scaled glyph advances ---
+% a bold digit spans roughly half its em -- far from the rounded-to-a-
+% whole-pixel failure mode of one em per glyph -- and the reported
+% width scales linearly with the font size, including sub-unit sizes
+basefont null ne {
+/Helvetica-Bold findfont 13 scalefont setfont
+(23) stringwidth pop /w13 exch def
+w13 13 div dup 0.8 gt exch 1.6 lt and ((23) width is a plausible em fraction) assert
+/Helvetica-Bold findfont 1 scalefont setfont
+(23) stringwidth pop 13 mul
+w13 (stringwidth scales linearly with the font size) assertnear
+/Helvetica-Bold findfont 0.62 scalefont setfont
+(23) stringwidth pop 13 mul 0.62 div
+w13 (a sub-unit font size scales the advances) assertnear
+
+% the pen moves by exactly the width stringwidth reports
+erasepage
+/Helvetica-Bold findfont 13 scalefont setfont
+(23) stringwidth pop /w13 exch def
+newpath 4 20 moveto (23) show
+currentpoint pop 4 sub
+w13 (show advances the pen by stringwidth) assertnear
+} if
+
+% --- font identity: scalefont and makefont build dictionaries ---
+% scaling a font returns a new dictionary carrying the size in its
+% FontMatrix and leaves the operand font untouched. The base follows
+% the Type 1 convention (0.001: 1000 character-space units per em),
+% so the scaled copy carries size/1000
+basefont null ne {
+/Helvetica-Bold findfont dup 13 scalefont
+2 copy eq not (scalefont returns a new dictionary) assert
+exch /FontMatrix get 0 get
+0.001 (scalefont leaves the operand font unscaled) assertnear
+/FontMatrix get 0 get
+0.013 (scalefont carries the size in the copy's FontMatrix) assertnear
+
+% two sizes of one face coexist: measuring through one dictionary must
+% not disturb the other
+/Helvetica-Bold findfont 13 scalefont /F13x exch def
+/Helvetica-Bold findfont 7 scalefont /F7x exch def
+F13x setfont (23) stringwidth pop /wa13 exch def
+F7x setfont (23) stringwidth pop /wa7 exch def
+F13x setfont (23) stringwidth pop
+wa13 (a font is unaffected by uses of its siblings) assertnear
+wa13 7 mul
+wa7 13 mul (two sizes of one face are in proportion) assertnear
+
+% rendered ink likewise: drawing small, then using the large font,
+% then drawing small again yields the same marks
+erasepage
+F7x setfont newpath 4 20 moveto (23) show
+countink /smallink exch def
+erasepage
+F13x setfont (23) stringwidth pop pop
+F7x setfont newpath 4 20 moveto (23) show
+countink smallink eq (a font's marks are unaffected by uses of its siblings) assert
+
+% the CTM applies when glyphs are marked, not when the font is scaled:
+% a font scaled under a magnified CTM is the same font...
+gsave 7 7 scale /Helvetica-Bold findfont 13 scalefont grestore
+setfont (23) stringwidth pop
+wa13 (scalefont does not bake the CTM of its moment) assertnear
+
+% ...stringwidth reports user space whatever the CTM...
+F13x setfont
+gsave 7 7 scale (23) stringwidth pop grestore
+wa13 (stringwidth is CTM-independent) assertnear
+
+% ...and the CTM in force at show time scales the marks
+erasepage
+F7x setfont
+gsave 2 2 scale newpath 4 12 moveto (23) show grestore
+countink smallink gt (the CTM at show time scales the marks) assert
+
+% makefont concatenates its matrix onto the FontMatrix: an anisotropic
+% matrix stretches the advances by its x component
+/Helvetica-Bold findfont [26 0 0 52 0 0] makefont setfont
+(23) stringwidth pop
+wa13 2 mul (makefont scales the advances by its x component) assertnear
+
+% a sub-pixel em is served exactly: FreeType cannot size a face below
+% a pixel, so the interpreter carries the residual scale itself; the
+% advances stay linear all the way down
+/Helvetica-Bold findfont 0.25 scalefont setfont
+(23) stringwidth pop 13 mul 0.25 div
+wa13 (a sub-pixel em scales the advances) assertnear
+
+% and a sub-pixel em under a magnifying CTM marks like the equivalent
+% point size: 0.3 em drawn at 40x covers the ink of 12 pt within a
+% rasterization tolerance
+erasepage
+/Helvetica-Bold findfont 12 scalefont setfont
+newpath 4 20 moveto (6) show
+countink /ink12 exch def
+erasepage
+/Helvetica-Bold findfont 0.3 scalefont setfont
+gsave 40 40 scale newpath 0.1 0.5 moveto (6) show grestore
+countink ink12 sub abs
+ink12 0.15 mul lt (a sub-pixel em under a magnifying CTM marks at full size) assert
+
+% an annulus clip built the standard way: the closepath's point bridges
+% into the inner subpath by a straight line, so the region arrives as
+% one keyhole path; the clipper must split it at the close, peel the
+% doubled bridge edge, and subtract the opposite-wound inner ring
+erasepage
+gsave
+newpath 32 32 24 0 360 arc closepath
+        32 32 12 360 0 arcn closepath
+clip
+newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+grestore
+32 14 inkat (ring clip admits the band) assert
+14 32 inkat (ring clip admits the band on the other axis) assert
+32 32 inkat not (ring clip excludes the hole) assert
+32 4 inkat not (ring clip excludes outside the outer circle) assert
+} if
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

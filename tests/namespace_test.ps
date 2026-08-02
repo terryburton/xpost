@@ -23,7 +23,8 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (<<) true  (=) true  (==) true  (==only) true
   (=only) true  (=print) true  (=string) true  (>>) true
   (DEVICE) true  (FontDirectory) true  (GlobalFontDirectory) true  (ISOLatin1Encoding) true
-  (Run) true  (SharedFontDirectory) true  (ShowpageSemantics) true  ([) true
+  (Run) true  (SharedFontDirectory) true  (ShowpageSemantics) true  (StandardEncoding) true
+  ([) true
   (]) true  (abs) true  (add) true  (aload) true
   (anchorsearch) true  (and) true  (arc) true  (arcn) true
   (arct) true  (arcto) true  (array) true  (ashow) true
@@ -31,9 +32,11 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (bind) true  (bitshift) true  (bytesavailable) true  (ceiling) true
   (charpath) true  (clear) true  (cleardictstack) true  (cleartomark) true
   (clip) true  (clippath) true  (cliprestore) true  (clipsave) true
-  (closefile) true  (closepath) true  (colorimage) true  (concat) true
+  (closefile) true  (closepath) true  (colorimage) true  (composefont) true
+  (concat) true
   (concatmatrix) true  (copy) true  (copypage) true  (cos) true
   (count) true  (countdictstack) true  (countexecstack) true  (counttomark) true
+  (cshow) true
   (currentblackgeneration) true  (currentcmykcolor) true  (currentcolor) true  (currentcolorrendering) true
   (currentcolorscreen) true  (currentcolorspace) true  (currentcolortransfer) true  (currentcontext) true
   (currentdash) true  (currentdevparams) true  (currentdict) true  (currentfile) true
@@ -48,7 +51,7 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (cvs) true  (cvx) true  (def) true  (defaultmatrix) true
   (definefont) true  (defineresource) true  (deletefile) true  (detach) true
   (dict) true  (dictstack) true  (div) true  (dtransform) true
-  (dup) true  (echo) true  (end) true  (eoclip) true
+  (dup) true  (echo) true  (eexec) true  (end) true  (eoclip) true
   (eofill) true  (eq) true  (erasepage) true  (errordict) true
   (exch) true  (exec) true  (execdict) true  (execstack) true
   (executeonly) true  (executive) true  (exit) true  (exp) true
@@ -57,7 +60,8 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (flattenpath) true  (floor) true  (flush) true  (flushfile) true
   (flushpage) true  (for) true  (forall) true  (fork) true
   (gcheck) true  (ge) true  (get) true  (getenv) true
-  (getinterval) true  (globaldict) true  (globalvmstatus) true  (graphicsdict) true
+  (getinterval) true  (globaldict) true  (globalvmstatus) true  (glyphshow) true
+  (graphicsdict) true
   (grestore) true  (grestoreall) true  (gsave) true  (gstate) true
   (gt) true  (handleerror) true  (identmatrix) true  (idiv) true
   (idtransform) true  (if) true  (ifelse) true  (image) true
@@ -104,7 +108,7 @@ globaldict length 0 ne { globaldict length (globaldict not empty) bad } if
   (version) true  (vmreclaim) true  (vmstatus) true  (wcheck) true
   (where) true  (widthshow) true  (write) true  (writehexstring) true
   (writeobject) true  (writestring) true  (xcheck) true  (xor) true
-  (yield) true
+  (xshow) true  (xyshow) true  (yield) true  (yshow) true
 >> def
 
 % names present only when an optional library or the platform provides them

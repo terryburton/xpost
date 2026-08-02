@@ -10,19 +10,77 @@
 
 //.internaldict /QUIET known { }{ (loading font.ps...)print } ifelse
 
+% Type 3 fonts render through their BuildChar procedure; Type 42 fonts
+% carry a TrueType program in /sfnts, reassembled and opened as a
+% memory face by .loadfont42 so the C text operators use it exactly
+% like a findfont face.
 /definefont { % /fontname -dict-
     dup type /dicttype ne
     2 index type /nulltype eq or {
         /definefont cvx /typecheck signalerror
     } if
-    {
-        dup /FontType known not {stop} if
-        dup /FontMatrix known not {stop} if
-        dup /Encoding known not {stop} if
-        dup /BuildChar known not {stop} if
-    } stopped {
-        /definefont cvx /invalidfont signalerror
-    } if
+    dup /FontType 2 copy known { get }{ pop pop -1 } ifelse
+    dup 0 eq {
+        pop
+        {
+            dup /FMapType known not {stop} if
+            dup /FDepVector known not {stop} if
+        } stopped {
+            /definefont cvx /invalidfont signalerror
+        } if
+    }{
+    dup 42 eq {
+        pop
+        {
+            dup /FontMatrix known not {stop} if
+            dup /Encoding known not {stop} if
+            dup /sfnts known not {stop} if
+        } stopped {
+            /definefont cvx /invalidfont signalerror
+        } if
+        dup .loadfont42
+    }{
+    dup 1 eq 2 index /CharStrings known and
+    2 index /Private 2 copy known { get type /dicttype eq }{ pop pop false } ifelse and {
+        pop
+        % an embedded Type 1 program: its interpreted dictionaries are
+        % written back out as a font program and opened as a face; the
+        % charstrings and subroutines flatten here, where forall lives
+        dup dup /CharStrings get [ exch { } forall ]
+        2 index /Private get /Subrs 2 copy known { get }{ pop pop 0 array } ifelse
+        .loadfont1
+    }{
+        3 eq {
+            {
+                dup /FontMatrix known not {stop} if
+                dup /Encoding known not {stop} if
+                % either build procedure suffices: BuildGlyph fonts
+                % answer show through the derivation below
+                dup /BuildChar known 1 index /BuildGlyph known or
+                not {stop} if
+            } stopped {
+                /definefont cvx /invalidfont signalerror
+            } if
+            % a font defining only BuildGlyph serves the string
+            % operators through the standard derivation: the code's
+            % Encoding entry names the glyph to build
+            dup /BuildChar known not {
+                dup /BuildChar {
+                    1 index /Encoding get exch get
+                    1 index /BuildGlyph get exec
+                } put
+            } if
+        }{
+            % other FontTypes carry no program to load here: accept when
+            % the dictionary already holds a working face (a re-encoded
+            % copy of a findfont dictionary shares its /Private face)
+            dup /Private known not {
+                /definefont cvx /invalidfont signalerror
+            } if
+        } ifelse
+    } ifelse
+    } ifelse
+    } ifelse
     dup /FontName known not {
         dup /FontName 3 index put
     } if
@@ -30,31 +88,27 @@
     findfont
 } def
 
-/scalefont {
-    1 index /FontType get 3 ne {
-        0 dtransform
-        dup mul exch dup mul add sqrt
-        //scalefont
-    }{
-        dup matrix scale makefont
-    } ifelse
+% scalefont and makefont build dictionaries and nothing else: each
+% returns a fresh copy of the font with the requested transform
+% concatenated onto its FontMatrix, leaving the operand font untouched.
+% The face itself is not resized here -- it is shared between every
+% dictionary made from the same findfont name, so its pixel scale is
+% derived from FontMatrix and the CTM by each text operator at use
+% time. This keeps fonts value-like (two sizes of one face coexist)
+% and makes the CTM matter where PostScript says it does: when the
+% glyphs are marked, not when the font is scaled.
+
+/scalefont { % font size  scalefont  font'
+    dup matrix scale makefont
 } def
 
-/makefont {
-    1 index /FontType get 3 ne { % font mat
-        dup aload pop % font mat a b c d e f
-        6 dict begin {/e/f/d/c/b/a}{exch def}forall % font mat
-            a a mul b b mul add sqrt % font mat scale
-            3 copy exch pop scalefont pop
-            1 exch div % font mat 1/scale
-            dup matrix scale % font mat invscalemat
-            matrix concatmatrix % font mat-scale
-        end % font mat
-        //makefont
-    }{
-        1 index /FontMatrix get dup concatmatrix pop
-        %pstack()=
-    } ifelse
+/makefont { % font mat  makefont  font'
+    exch dup length 2 add dict copy         % mat font'
+    dup /FontMatrix 2 copy known { get }{ pop pop matrix } ifelse
+                                            % mat font' oldfm
+    3 -1 roll exch                          % font' mat oldfm
+    matrix concatmatrix                     % font' newfm
+    1 index /FontMatrix 3 -1 roll put       % font'
 } def
 
 /setcharwidth {
@@ -70,7 +124,29 @@
 
 /show {
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 3 ne { pop //show }{
+    dup /FontType get 0 eq {
+        exch //.xpostsys /.showtype0 get exec
+    }{
+    dup /FontType get 3 ne {
+        % PaintType 2 marks an outline font: its glyphs are the
+        % character outlines stroked with StrokeWidth, a character
+        % space distance carried to user space through FontMatrix
+        dup /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse {
+            gsave
+            dup /StrokeWidth 2 copy known { get }{ pop pop 0 } ifelse
+            0 2 index /FontMatrix get dtransform
+            dup mul exch dup mul add sqrt setlinewidth
+            pop
+            dup
+            currentpoint newpath moveto
+            true charpath
+            stroke
+            grestore
+            stringwidth rmoveto
+        }{
+            pop //show
+        } ifelse
+    }{
     gsave
         currentpoint translate
         newpath
@@ -91,6 +167,7 @@
     grestore
     itransform moveto
 
+    } ifelse
     } ifelse
 } def
 
@@ -239,9 +316,136 @@
     end
 } def
 
+%   name  glyphshow  -
+% Paint the glyph the name selects, independent of the character
+% encoding, and advance the current point by the glyph's width. A
+% Type 3 font renders through its BuildGlyph procedure; one defining
+% only BuildChar is served through the first code its Encoding
+% assigns the name. Other font types resolve the name against the
+% font program.
+/glyphshow {
+    graphicsdict /currgstate get /currfont get
+    dup /FontType get 3 ne {
+        pop .glyphshow
+    }{
+        3 dict begin
+        /fnt exch def
+        /gname exch def
+        gsave
+            currentpoint translate
+            newpath
+            fnt /FontMatrix get concat
+            % a build procedure that never reports a width (or a name
+            % the font cannot serve) must not advance the pen
+            fnt /xadvance 0 put
+            fnt /yadvance 0 put
+            gsave
+                fnt /BuildGlyph 2 copy known {
+                    get fnt gname 3 -1 roll exec
+                }{
+                    pop pop
+                    /code null def
+                    0 1 fnt /Encoding get length 1 sub {
+                        dup fnt /Encoding get exch get gname eq
+                        { /code exch def exit }{ pop } ifelse
+                    } for
+                    code null ne {
+                        fnt code fnt /BuildChar get exec
+                    } if
+                } ifelse
+            grestore
+            graphicsdict /currgstate get /currfont get
+            dup /xadvance get exch /yadvance get translate
+            0 0 transform  % device-space coordinates survive grestore
+        grestore
+        itransform moveto
+        end
+    } ifelse
+} def
+
+%   str numarray  xshow  -
+% Show each character, replacing the glyph's advance with the
+% corresponding displacement: after painting glyph i the current
+% point moves to the previous point offset by the array's user-space
+% x displacement (xshow), y displacement (yshow), or (x,y) pair
+% (xyshow). The displacements arrive as an array or an encoded
+% number string (decoded up front); too few displacements is a
+% rangecheck at the glyph that wants one.
+% the show variants position per glyph: through a composite font one
+% glyph spans however many bytes its CMap says, and the number array
+% advances by glyphs, not bytes
+% str  .glyphbytes  w -- the byte width of the glyph at the position,
+% hidden in the private namespace and reached by a frozen reference
+currentglobal true setglobal
+.xpostsys /.glyphbytes { % str p -> w
+    graphicsdict /currgstate get /currfont get
+    dup /FontType get 0 eq {
+        /CMap get //.xpostsys /.cmapnext get exec exch pop
+    }{
+        pop pop pop 1
+    } ifelse
+} put
+setglobal
+
+/xshow {
+    dup type /stringtype eq { .numstring2array } if
+    dup type /arraytype ne { /xshow cvx /typecheck signalerror } if
+    5 dict begin
+    /nums exch def /str exch def
+    /p 0 def /i 0 def
+    {
+        p str length ge { exit } if
+        /w str p //.xpostsys /.glyphbytes get exec def
+        currentpoint
+        str p w getinterval show
+        exch nums i get add exch moveto
+        /p p w add def
+        /i i 1 add def
+    } loop
+    end
+} def
+
+/yshow {
+    dup type /stringtype eq { .numstring2array } if
+    dup type /arraytype ne { /yshow cvx /typecheck signalerror } if
+    5 dict begin
+    /nums exch def /str exch def
+    /p 0 def /i 0 def
+    {
+        p str length ge { exit } if
+        /w str p //.xpostsys /.glyphbytes get exec def
+        currentpoint
+        str p w getinterval show
+        nums i get add moveto
+        /p p w add def
+        /i i 1 add def
+    } loop
+    end
+} def
+
+/xyshow {
+    dup type /stringtype eq { .numstring2array } if
+    dup type /arraytype ne { /xyshow cvx /typecheck signalerror } if
+    5 dict begin
+    /nums exch def /str exch def
+    /p 0 def /i 0 def
+    {
+        p str length ge { exit } if
+        /w str p //.xpostsys /.glyphbytes get exec def
+        currentpoint
+        str p w getinterval show
+        exch nums i 2 mul get add
+        exch nums i 2 mul 1 add get add
+        moveto
+        /p p w add def
+        /i i 1 add def
+    } loop
+    end
+} def
+
 /stringwidth {
     graphicsdict /currgstate get /currfont get
-    dup /FontType get 3 ne { pop //stringwidth }{
+    dup /FontType get dup 3 eq exch 0 eq or not { pop //stringwidth }{
     pop
     gsave
         nulldevice
@@ -255,15 +459,80 @@
     } ifelse
 } def
 
+%   str bool  charpath  -
+% Append the text's glyph outlines to the current path. The segments
+% arrive from .stringoutline in the face's y-up glyph space relative
+% to the pen (device-magnitude pixels, oriented by the face
+% transform), so each point is flipped to a device offset and mapped
+% to user space about the current point. Type 3 fonts only advance
+% the pen by the text's width.
 /charpath {
-    %currentfont /FontName get ==
     pop
-    stringwidth
-    currentpoint
-    currentpoint currentfont /FontMatrix get 0 get .5 mul 1 index add exch
-    0 360 arc
-    moveto rmoveto
+    graphicsdict /currgstate get /currfont get
+    dup /FontType known { /FontType get dup 3 eq exch 0 eq or }{ pop false } ifelse {
+        stringwidth rmoveto
+    }{
+        12 dict begin
+        /cpstr exch def
+        currentpoint /cy exch def /cx exch def
+        % a glyph-space point on the stack becomes a user-space point
+        /cpt { % x y . X Y
+            neg idtransform exch cx add exch cy add
+        } def
+        cpstr .stringoutline {
+            dup type /nametype eq {
+                dup /h eq { pop closepath }{
+                /cpcmd exch def
+                cpcmd /c eq {
+                    {cpy3 cpx3 cpy2 cpx2 cpy1 cpx1}{exch def}forall
+                    cpx1 cpy1 cpt cpx2 cpy2 cpt cpx3 cpy3 cpt curveto
+                }{
+                    cpt
+                    cpcmd /m eq { moveto }{ lineto } ifelse
+                } ifelse } ifelse
+            } if
+        } forall
+        cx cy moveto
+        cpstr stringwidth rmoveto
+        end
+    } ifelse
 } def
+
+% the standard text encoding, as the PLRM's Appendix E defines it
+/StandardEncoding [
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /space /exclam /quotedbl /numbersign /dollar /percent /ampersand /quoteright
+     /parenleft /parenright /asterisk /plus /comma /hyphen /period /slash
+     /zero /one /two /three /four /five /six /seven
+     /eight /nine /colon /semicolon /less /equal /greater /question
+     /at /A /B /C /D /E /F /G
+     /H /I /J /K /L /M /N /O
+     /P /Q /R /S /T /U /V /W
+     /X /Y /Z /bracketleft /backslash /bracketright /asciicircum /underscore
+     /quoteleft /a /b /c /d /e /f /g
+     /h /i /j /k /l /m /n /o
+     /p /q /r /s /t /u /v /w
+     /x /y /z /braceleft /bar /braceright /asciitilde /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /exclamdown /cent /sterling /fraction /yen /florin /section
+     /currency /quotesingle /quotedblleft /guillemotleft /guilsinglleft /guilsinglright /fi /fl
+     /.notdef /endash /dagger /daggerdbl /periodcentered /.notdef /paragraph /bullet
+     /quotesinglbase /quotedblbase /quotedblright /guillemotright /ellipsis /perthousand /.notdef /questiondown
+     /.notdef /grave /acute /circumflex /tilde /macron /breve /dotaccent
+     /dieresis /.notdef /ring /cedilla /.notdef /hungarumlaut /ogonek /caron
+     /emdash /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
+     /.notdef /AE /.notdef /ordfeminine /.notdef /.notdef /.notdef /.notdef
+     /Lslash /Oslash /OE /ordmasculine /.notdef /.notdef /.notdef /.notdef
+     /.notdef /ae /.notdef /.notdef /.notdef /dotlessi /.notdef /.notdef
+     /lslash /oslash /oe /germandbls /.notdef /.notdef /.notdef /.notdef
+] def
 
 /ISOLatin1Encoding [
     /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef /.notdef
@@ -302,6 +571,26 @@
 % GlobalFontDirectory and SharedFontDirectory, aliases for FontDirectory, are
 % named in systemdict by copyudtosd (in C), alongside FontDirectory itself,
 % rather than defined here in userdict.
+
+% file  eexec  -
+% run the encrypted portion of a Type 1 font program: the decrypted
+% stream executes with systemdict as the current dictionary, and the
+% dictionary is popped when the stream is exhausted -- the program
+% inside closes its own file with currentfile closefile
+/eexec {
+    dup type /filetype ne { /eexec cvx /typecheck signalerror } if
+    .eexecdecode cvx
+    systemdict begin
+    exec
+    end
+} def
+
+% the required instances of the Encoding resource category, copied
+% into global VM where the instance tables live
+currentglobal true setglobal
+/StandardEncoding StandardEncoding dup length array copy /Encoding defineresource pop
+/ISOLatin1Encoding ISOLatin1Encoding dup length array copy /Encoding defineresource pop
+setglobal
 
 //.internaldict /QUIET known { }{ (eof font.ps\n)print } ifelse
 

@@ -44,6 +44,7 @@
 #ifdef HAVE_FREETYPE2
 # include <ft2build.h>
 # include FT_FREETYPE_H
+# include FT_OUTLINE_H
 #endif
 
 #include "xpost.h"
@@ -300,17 +301,62 @@ xpost_font_face_new_from_name(const char *name)
     return NULL;
 }
 
+void *
+xpost_font_face_new_from_memory(const unsigned char *data, size_t len)
+{
+#ifdef HAVE_FREETYPE2
+    FT_Face face;
+    FT_Error err;
+
+    err = FT_New_Memory_Face(_xpost_font_ft_library, data, (FT_Long)len, 0, &face);
+    if (err)
+    {
+        XPOST_LOG_ERR("Font program can not be opened or read or is broken (error : %d)", err);
+        return NULL;
+    }
+
+    return face;
+#else
+    (void)data;
+    (void)len;
+#endif
+
+    return NULL;
+}
+
 void
-xpost_font_face_get_bbox(void *face, Xpost_Object *bboxarray){
+xpost_font_face_get_bbox(void *face, Xpost_Object *bboxarray, real em){
 #ifdef HAVE_FREETYPE2
     FT_Face f = face;
-    bboxarray[0] = xpost_real_cons(f->bbox.xMin);
-    bboxarray[1] = xpost_real_cons(f->bbox.yMin);
-    bboxarray[2] = xpost_real_cons(f->bbox.xMax);
-    bboxarray[3] = xpost_real_cons(f->bbox.yMax);
+    real s = 1.0;
+
+    /* FontBBox belongs to character space, whose scale is a convention
+       of the font type (1000 units per em for Type 1, one unit for
+       Type 42): normalize the face's design units to the em size the
+       caller's dictionary declares through its FontMatrix */
+    if (f->units_per_EM > 0)
+        s = em / f->units_per_EM;
+    bboxarray[0] = xpost_real_cons(f->bbox.xMin * s);
+    bboxarray[1] = xpost_real_cons(f->bbox.yMin * s);
+    bboxarray[2] = xpost_real_cons(f->bbox.xMax * s);
+    bboxarray[3] = xpost_real_cons(f->bbox.yMax * s);
 #else
     (void)face;
     (void)bboxarray;
+    (void)em;
+#endif
+}
+
+int
+xpost_font_face_units(void *face)
+{
+#ifdef HAVE_FREETYPE2
+    FT_Face f = face;
+
+    return f->units_per_EM > 0 ? f->units_per_EM : 0;
+#else
+    (void)face;
+    return 0;
 #endif
 }
 
@@ -327,7 +373,7 @@ xpost_font_face_free(void *face)
 #endif
 }
 
-void
+real
 xpost_font_face_scale(void *face, real scale)
 {
 #ifdef HAVE_FREETYPE2
@@ -337,24 +383,42 @@ xpost_font_face_scale(void *face, real scale)
        than a nominal character size: a nominal request quantizes the
        em to 1/64 pixel, which at the sub-pixel em sizes produced by a
        small user-space size under a modest CTM is a metrics error of
-       whole percents. Fixed-size faces reject a scale request; they
-       keep the nominal path. */
+       whole percents.
+
+       FreeType's size machinery is only dependable within a moderate
+       band of pixel sizes: a sub-pixel or enormous em makes the
+       request fail or degrade silently. Since every glyph is loaded
+       unhinted, geometry is linear in the scale, so an extreme
+       request is served at a clamped, well-conditioned size instead
+       and the caller folds the residual ratio into the face
+       transform. Returns the scale actually installed; fixed-size
+       faces keep the nominal path. */
     if (f->units_per_EM > 0)
     {
         FT_Size_RequestRec req;
+        real base = scale;
+
+        if (base < 8.0)
+            base = 8.0;
+        else if (base > 2048.0)
+            base = 2048.0;
 
         req.type = FT_SIZE_REQUEST_TYPE_SCALES;
         req.width = req.height =
-            (FT_Long)(scale * 64.0 * 65536.0 / f->units_per_EM + 0.5);
+            (FT_Long)(base * 64.0 * 65536.0 / f->units_per_EM + 0.5);
         req.horiResolution = 0;
         req.vertResolution = 0;
         if (FT_Request_Size(f, &req) == 0)
-            return;
+            return base;
+        if (FT_Set_Char_Size(f, 0, (FT_F26Dot6)(base * 64 + 0.5), 72, 72) == 0)
+            return base;
     }
     FT_Set_Char_Size(f, 0, (FT_F26Dot6)(scale * 64 + 0.5), 72, 72);
+    return scale;
 #else
     (void)face;
     (void)scale;
+    return scale;
 #endif
 }
 
@@ -391,13 +455,459 @@ xpost_font_face_glyph_index_get(void *face, char c)
 #endif
 }
 
+#ifdef HAVE_FREETYPE2
+/* Adobe glyph name -> Unicode for the standard-encoding names, derived from
+   ISOLatin1Encoding: over U+0020..U+007E and U+00A0..U+00FF the encoding
+   position is the code point (and equals the Adobe glyph list value). Lets a
+   named /Encoding select a glyph on a face whose post table stores no names,
+   by resolving the name to Unicode and consulting the character map. */
+static const struct { const char *name; unsigned short cp; } _xpost_glyph_unicode[] = {
+    { "space", 0x0020 },
+    { "exclam", 0x0021 },
+    { "quotedbl", 0x0022 },
+    { "numbersign", 0x0023 },
+    { "dollar", 0x0024 },
+    { "percent", 0x0025 },
+    { "ampersand", 0x0026 },
+    { "quoteright", 0x0027 },
+    { "parenleft", 0x0028 },
+    { "parenright", 0x0029 },
+    { "asterisk", 0x002A },
+    { "plus", 0x002B },
+    { "comma", 0x002C },
+    { "minus", 0x002D },
+    { "period", 0x002E },
+    { "slash", 0x002F },
+    { "zero", 0x0030 },
+    { "one", 0x0031 },
+    { "two", 0x0032 },
+    { "three", 0x0033 },
+    { "four", 0x0034 },
+    { "five", 0x0035 },
+    { "six", 0x0036 },
+    { "seven", 0x0037 },
+    { "eight", 0x0038 },
+    { "nine", 0x0039 },
+    { "colon", 0x003A },
+    { "semicolon", 0x003B },
+    { "less", 0x003C },
+    { "equal", 0x003D },
+    { "greater", 0x003E },
+    { "question", 0x003F },
+    { "at", 0x0040 },
+    { "A", 0x0041 },
+    { "B", 0x0042 },
+    { "C", 0x0043 },
+    { "D", 0x0044 },
+    { "E", 0x0045 },
+    { "F", 0x0046 },
+    { "G", 0x0047 },
+    { "H", 0x0048 },
+    { "I", 0x0049 },
+    { "J", 0x004A },
+    { "K", 0x004B },
+    { "L", 0x004C },
+    { "M", 0x004D },
+    { "N", 0x004E },
+    { "O", 0x004F },
+    { "P", 0x0050 },
+    { "Q", 0x0051 },
+    { "R", 0x0052 },
+    { "S", 0x0053 },
+    { "T", 0x0054 },
+    { "U", 0x0055 },
+    { "V", 0x0056 },
+    { "W", 0x0057 },
+    { "X", 0x0058 },
+    { "Y", 0x0059 },
+    { "Z", 0x005A },
+    { "bracketleft", 0x005B },
+    { "backslash", 0x005C },
+    { "bracketright", 0x005D },
+    { "asciicircum", 0x005E },
+    { "underscore", 0x005F },
+    { "quoteleft", 0x0060 },
+    { "a", 0x0061 },
+    { "b", 0x0062 },
+    { "c", 0x0063 },
+    { "d", 0x0064 },
+    { "e", 0x0065 },
+    { "f", 0x0066 },
+    { "g", 0x0067 },
+    { "h", 0x0068 },
+    { "i", 0x0069 },
+    { "j", 0x006A },
+    { "k", 0x006B },
+    { "l", 0x006C },
+    { "m", 0x006D },
+    { "n", 0x006E },
+    { "o", 0x006F },
+    { "p", 0x0070 },
+    { "q", 0x0071 },
+    { "r", 0x0072 },
+    { "s", 0x0073 },
+    { "t", 0x0074 },
+    { "u", 0x0075 },
+    { "v", 0x0076 },
+    { "w", 0x0077 },
+    { "x", 0x0078 },
+    { "y", 0x0079 },
+    { "z", 0x007A },
+    { "braceleft", 0x007B },
+    { "bar", 0x007C },
+    { "braceright", 0x007D },
+    { "asciitilde", 0x007E },
+    { "exclamdown", 0x00A1 },
+    { "cent", 0x00A2 },
+    { "sterling", 0x00A3 },
+    { "currency", 0x00A4 },
+    { "yen", 0x00A5 },
+    { "brokenbar", 0x00A6 },
+    { "section", 0x00A7 },
+    { "dieresis", 0x00A8 },
+    { "copyright", 0x00A9 },
+    { "ordfeminine", 0x00AA },
+    { "guillemotleft", 0x00AB },
+    { "logicalnot", 0x00AC },
+    { "hyphen", 0x00AD },
+    { "registered", 0x00AE },
+    { "macron", 0x00AF },
+    { "degree", 0x00B0 },
+    { "plusminus", 0x00B1 },
+    { "twosuperior", 0x00B2 },
+    { "threesuperior", 0x00B3 },
+    { "acute", 0x00B4 },
+    { "mu", 0x00B5 },
+    { "paragraph", 0x00B6 },
+    { "periodcentered", 0x00B7 },
+    { "cedilla", 0x00B8 },
+    { "onesuperior", 0x00B9 },
+    { "ordmasculine", 0x00BA },
+    { "guillemotright", 0x00BB },
+    { "onequarter", 0x00BC },
+    { "onehalf", 0x00BD },
+    { "threequarters", 0x00BE },
+    { "questiondown", 0x00BF },
+    { "Agrave", 0x00C0 },
+    { "Aacute", 0x00C1 },
+    { "Acircumflex", 0x00C2 },
+    { "Atilde", 0x00C3 },
+    { "Adieresis", 0x00C4 },
+    { "Aring", 0x00C5 },
+    { "AE", 0x00C6 },
+    { "Ccedilla", 0x00C7 },
+    { "Egrave", 0x00C8 },
+    { "Eacute", 0x00C9 },
+    { "Ecircumflex", 0x00CA },
+    { "Edieresis", 0x00CB },
+    { "Igrave", 0x00CC },
+    { "Iacute", 0x00CD },
+    { "Icircumflex", 0x00CE },
+    { "Idieresis", 0x00CF },
+    { "Eth", 0x00D0 },
+    { "Ntilde", 0x00D1 },
+    { "Ograve", 0x00D2 },
+    { "Oacute", 0x00D3 },
+    { "Ocircumflex", 0x00D4 },
+    { "Otilde", 0x00D5 },
+    { "Odieresis", 0x00D6 },
+    { "multiply", 0x00D7 },
+    { "Oslash", 0x00D8 },
+    { "Ugrave", 0x00D9 },
+    { "Uacute", 0x00DA },
+    { "Ucircumflex", 0x00DB },
+    { "Udieresis", 0x00DC },
+    { "Yacute", 0x00DD },
+    { "Thorn", 0x00DE },
+    { "germandbls", 0x00DF },
+    { "agrave", 0x00E0 },
+    { "aacute", 0x00E1 },
+    { "acircumflex", 0x00E2 },
+    { "atilde", 0x00E3 },
+    { "adieresis", 0x00E4 },
+    { "aring", 0x00E5 },
+    { "ae", 0x00E6 },
+    { "ccedilla", 0x00E7 },
+    { "egrave", 0x00E8 },
+    { "eacute", 0x00E9 },
+    { "ecircumflex", 0x00EA },
+    { "edieresis", 0x00EB },
+    { "igrave", 0x00EC },
+    { "iacute", 0x00ED },
+    { "icircumflex", 0x00EE },
+    { "idieresis", 0x00EF },
+    { "eth", 0x00F0 },
+    { "ntilde", 0x00F1 },
+    { "ograve", 0x00F2 },
+    { "oacute", 0x00F3 },
+    { "ocircumflex", 0x00F4 },
+    { "otilde", 0x00F5 },
+    { "odieresis", 0x00F6 },
+    { "divide", 0x00F7 },
+    { "oslash", 0x00F8 },
+    { "ugrave", 0x00F9 },
+    { "uacute", 0x00FA },
+    { "ucircumflex", 0x00FB },
+    { "udieresis", 0x00FC },
+    { "yacute", 0x00FD },
+    { "thorn", 0x00FE },
+    { "ydieresis", 0x00FF },
+};
+
+static long
+_xpost_glyph_name_to_unicode(const char *name)
+{
+    size_t i, n;
+    char *end;
+    long v;
+
+    /* uniXXXX: exactly four hexadecimal digits */
+    if (strncmp(name, "uni", 3) == 0 && strlen(name + 3) == 4)
+    {
+        v = strtol(name + 3, &end, 16);
+        if (*end == '\0' && v >= 0)
+            return v;
+    }
+    /* uXXXX .. uXXXXXX: four to six hexadecimal digits */
+    if (name[0] == 'u' && name[1] != 'n')
+    {
+        n = strlen(name + 1);
+        if (n >= 4 && n <= 6 && isxdigit((unsigned char)name[1]))
+        {
+            v = strtol(name + 1, &end, 16);
+            if (*end == '\0' && v >= 0 && v <= 0x10FFFF)
+                return v;
+        }
+    }
+    for (i = 0; i < sizeof _xpost_glyph_unicode / sizeof _xpost_glyph_unicode[0]; i++)
+        if (strcmp(name, _xpost_glyph_unicode[i].name) == 0)
+            return _xpost_glyph_unicode[i].cp;
+    return -1;
+}
+#endif /* HAVE_FREETYPE2 */
+
+unsigned int
+xpost_font_face_glyph_name_count(void *face)
+{
+#ifdef HAVE_FREETYPE2
+    if (!FT_HAS_GLYPH_NAMES((FT_Face)face))
+        return 0;
+    return (unsigned int)((FT_Face)face)->num_glyphs;
+#else
+    (void)face;
+    return 0;
+#endif
+}
+
+int
+xpost_font_face_glyph_name_get(void *face, unsigned int gid, char *buf, int len)
+{
+#ifdef HAVE_FREETYPE2
+    if (!FT_HAS_GLYPH_NAMES((FT_Face)face))
+        return 0;
+    if (FT_Get_Glyph_Name((FT_Face)face, gid, buf, (FT_UInt)len) != 0)
+        return 0;
+    return buf[0] != '\0';
+#else
+    (void)face;
+    (void)gid;
+    (void)buf;
+    (void)len;
+    return 0;
+#endif
+}
+
+unsigned int
+xpost_font_face_glyph_name_index_get(void *face, const char *name)
+{
+#ifdef HAVE_FREETYPE2
+    unsigned int gi;
+    long uni;
+
+    if (FT_HAS_GLYPH_NAMES((FT_Face)face))
+    {
+        gi = FT_Get_Name_Index((FT_Face)face, (FT_String *)name);
+        if (gi)
+            return gi;
+    }
+    /* no post name for this glyph: resolve the Adobe name to Unicode and
+       take it through the character map */
+    uni = _xpost_glyph_name_to_unicode(name);
+    if (uni >= 0)
+        return FT_Get_Char_Index((FT_Face)face, (FT_ULong)uni);
+    return 0;
+#else
+    (void)face;
+    (void)name;
+    return 0;
+#endif
+}
+
+#ifdef HAVE_FREETYPE2
+/* FT_Outline_Decompose adapter: track the current point, divide the
+   26.6 fixed-point coordinates out to pixels, and raise quadratic
+   segments to the equivalent cubics so the sink sees one curve form.
+   The decomposition starts each contour with a moveto and leaves it
+   implicitly closed, so a closepath is synthesized before the next
+   contour and after the last. */
+struct _outline_walk
+{
+    const Xpost_Font_Outline_Sink *sink;
+    double x, y;
+    int open;
+};
+
+static int
+_outline_moveto(const FT_Vector *to, void *user)
+{
+    struct _outline_walk *w = user;
+
+    if (w->open)
+    {
+        int ret = w->sink->closepath(w->sink->user);
+        if (ret)
+            return ret;
+    }
+    w->open = 1;
+    w->x = to->x / 64.0;
+    w->y = to->y / 64.0;
+    return w->sink->moveto(w->sink->user, w->x, w->y);
+}
+
+static int
+_outline_lineto(const FT_Vector *to, void *user)
+{
+    struct _outline_walk *w = user;
+
+    w->x = to->x / 64.0;
+    w->y = to->y / 64.0;
+    return w->sink->lineto(w->sink->user, w->x, w->y);
+}
+
+static int
+_outline_conicto(const FT_Vector *control, const FT_Vector *to, void *user)
+{
+    struct _outline_walk *w = user;
+    double cx = control->x / 64.0;
+    double cy = control->y / 64.0;
+    double ex = to->x / 64.0;
+    double ey = to->y / 64.0;
+    /* a quadratic's control point pulls each cubic control 2/3 of the
+       way from the respective endpoint */
+    double c1x = w->x + (cx - w->x) * (2.0 / 3.0);
+    double c1y = w->y + (cy - w->y) * (2.0 / 3.0);
+    double c2x = ex + (cx - ex) * (2.0 / 3.0);
+    double c2y = ey + (cy - ey) * (2.0 / 3.0);
+
+    w->x = ex;
+    w->y = ey;
+    return w->sink->curveto(w->sink->user, c1x, c1y, c2x, c2y, ex, ey);
+}
+
+static int
+_outline_cubicto(const FT_Vector *control1, const FT_Vector *control2, const FT_Vector *to, void *user)
+{
+    struct _outline_walk *w = user;
+
+    w->x = to->x / 64.0;
+    w->y = to->y / 64.0;
+    return w->sink->curveto(w->sink->user,
+                            control1->x / 64.0, control1->y / 64.0,
+                            control2->x / 64.0, control2->y / 64.0,
+                            w->x, w->y);
+}
+#endif
+
+
+#ifdef HAVE_FREETYPE2
+/* The hinter rounds slot->advance to whole pixels and the rounding
+   accumulates as horizontal drift across a string. Derive the pen
+   advance from the unhinted linear width instead, applied through the
+   face's current transform (identity when none is set), and report it
+   in 16.16 pixels: squeezing through the slot's 26.6 resolution costs
+   up to 1/64 pixel per glyph, a whole percent of a sub-pixel em.
+   Bitmap-only glyphs carry no linear width; those widen the slot
+   advance. */
+static void
+_glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
+{
+    FT_GlyphSlot slot = face->glyph;
+    FT_Fixed lin = slot->linearHoriAdvance;   /* 16.16 pixels */
+    FT_Matrix m;
+
+    if (lin == 0)
+    {
+        *advance_x = slot->advance.x << 10;   /* 26.6 -> 16.16 */
+        *advance_y = slot->advance.y << 10;
+        return;
+    }
+    FT_Get_Transform(face, &m, NULL);
+    *advance_x = FT_MulFix(m.xx, lin);
+    *advance_y = FT_MulFix(m.yx, lin);
+}
+#endif
+
+int
+xpost_font_face_glyph_outline(void *face, unsigned int glyph_index, const Xpost_Font_Outline_Sink *sink, long *advance_x, long *advance_y)
+{
+#ifdef HAVE_FREETYPE2
+    FT_GlyphSlot slot;
+    FT_Outline *outline;
+    FT_Error err;
+    struct _outline_walk w;
+
+    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_BITMAP | FT_LOAD_NO_HINTING);
+    if (err)
+    {
+        XPOST_LOG_ERR("Can not load glyph (error : %d)", err);
+        return 0;
+    }
+    slot = ((FT_Face)face)->glyph;
+    _glyph_linear_advance((FT_Face)face, advance_x, advance_y);
+    if (slot->format != FT_GLYPH_FORMAT_OUTLINE)
+    {
+        XPOST_LOG_ERR("glyph has no outline");
+        return 0;
+    }
+    outline = &slot->outline;
+
+    w.sink = sink;
+    w.x = 0;
+    w.y = 0;
+    w.open = 0;
+    {
+        FT_Outline_Funcs funcs;
+
+        funcs.move_to = _outline_moveto;
+        funcs.line_to = _outline_lineto;
+        funcs.conic_to = _outline_conicto;
+        funcs.cubic_to = _outline_cubicto;
+        funcs.shift = 0;
+        funcs.delta = 0;
+        err = FT_Outline_Decompose(outline, &funcs, &w);
+        if (err)
+            return 0;
+    }
+    if (w.open && sink->closepath(sink->user))
+        return 0;
+    return 1;
+#else
+    (void)face;
+    (void)glyph_index;
+    (void)sink;
+    (void)advance_x;
+    (void)advance_y;
+    return 0;
+#endif
+}
+
 int
 xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 {
 #ifdef HAVE_FREETYPE2
     FT_Error err;
 
-    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
+    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_FORCE_AUTOHINT);
     if (!err)
     {
         if (((FT_Face)face)->glyph->format != FT_GLYPH_FORMAT_BITMAP)
@@ -427,34 +937,6 @@ xpost_font_face_glyph_render(void *face, unsigned int glyph_index)
 
     return 0;
 }
-
-#ifdef HAVE_FREETYPE2
-/* The hinter rounds slot->advance to whole pixels and the rounding
-   accumulates as horizontal drift across a string. Derive the pen
-   advance from the unhinted linear width instead, applied through the
-   face's current transform (identity when none is set), and report it
-   in 16.16 pixels: squeezing through the slot's 26.6 resolution costs
-   up to 1/64 pixel per glyph, a whole percent of a sub-pixel em.
-   Bitmap-only glyphs carry no linear width; those widen the slot
-   advance. */
-static void
-_glyph_linear_advance(FT_Face face, long *advance_x, long *advance_y)
-{
-    FT_GlyphSlot slot = face->glyph;
-    FT_Fixed lin = slot->linearHoriAdvance;   /* 16.16 pixels */
-    FT_Matrix m;
-
-    if (lin == 0)
-    {
-        *advance_x = slot->advance.x << 10;   /* 26.6 -> 16.16 */
-        *advance_y = slot->advance.y << 10;
-        return;
-    }
-    FT_Get_Transform(face, &m, NULL);
-    *advance_x = FT_MulFix(m.xx, lin);
-    *advance_y = FT_MulFix(m.yx, lin);
-}
-#endif
 
 void
 xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y)

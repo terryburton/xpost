@@ -33,7 +33,7 @@ Level 1 operators
  [X] currentcolorscreen
  [X] sethalftone
  [X] currenthalftone
- [ ] makefont
+ [X] makefont
  [X] ashow
  [X] widthshow
  [X] awidthshow
@@ -41,8 +41,9 @@ Level 1 operators
  [X] stringwidth
  [/] Type-3 Fonts
  [ ] font data caching
- [ ] definefont for modified font properties (matrix, encoding, etc.)
- [ ] base font CharStrings
+ [X] definefont for modified font properties (matrix, encoding, etc.)
+ [X] base font CharStrings (a face whose program cannot be read
+     publishes glyph indices)
 
  [X] pop
  [X] exch
@@ -211,7 +212,7 @@ Level 1 operators
  [X] rcurveto
  [X] closepath
  [X] flattenpath
- [ ] charpath
+ [X] charpath
  [X] clippath
  [X] pathbbox
  [X] initclip
@@ -244,7 +245,7 @@ Level 1 operators
  [X] nulldevice
  [X] pathforall
  [X] version
- [ ] eexec
+ [X] eexec
  [ ] internaldict
  [ ] cachestatus
  [ ] setcachelimit
@@ -266,10 +267,10 @@ Level 2 operators
  [X] currentcolor
  [ ] setpagedevice
  [ ] currentpagedevice
- [ ] xshow
- [ ] yshow
- [ ] xyshow
- [ ] glyphshow
+ [X] xshow
+ [X] yshow
+ [X] xyshow
+ [X] glyphshow
  [X] colorimage
  [X] image with dict argument (ImageTypes 1, 3 and 4; Interpolate
      smooths the samples of any shape on the direct raster path,
@@ -335,7 +336,12 @@ Level 3 operators
  [X] shfill (sampled functions at byte depths; FunctionTypes 0, 2 and
      3 -- the type 4 calculator functions rangecheck, and functions of
      more than one input are served by type 0 only)
- [ ] composite fonts
+ [X] composite fonts (FMapTypes 2 through 8 over any descendants,
+     and FMapType 9 through composefont with CIDFont descendants of
+     CIDFontType 2, incremental GlyphDirectory delivery, and
+     CIDFontType 0, charstrings through StartData; escapes select
+     within one modal level; cshow rebinds a CMap composite to
+     one-byte codes)
  [X] clipsave
  [X] cliprestore
  [X] setsmoothness, currentsmoothness (recorded only)
