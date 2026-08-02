@@ -210,6 +210,35 @@ int _create_cont(Xpost_Context *ctx,
     depth = geom->depth;
     free(geom);
 
+    /* a page larger than the screen opens in a smaller window with the
+       page scaled to fit: the adopted dimensions land back in the
+       device dictionary, and the ratio rides /windowscale for the
+       default matrix to fold in */
+    {
+        int sw = private.scr->width_in_pixels;
+        int sh = private.scr->height_in_pixels;
+        double s = 1.0;
+
+        if (sw > 0 && width > sw)
+            s = (double)sw / (double)width;
+        if (sh > 0 && (double)height * s > (double)sh)
+            s = (double)sh / (double)height;
+        if (s < 1.0)
+        {
+            width = (integer)((double)width * s + 0.5);
+            height = (integer)((double)height * s + 0.5);
+            if (width < 1) width = 1;
+            if (height < 1) height = 1;
+            private.width = width;
+            private.height = height;
+            xpost_dict_put(ctx, devdic, namewidth, xpost_int_cons(width));
+            xpost_dict_put(ctx, devdic, nameheight, xpost_int_cons(height));
+            xpost_dict_put(ctx, devdic,
+                           xpost_name_cons(ctx, "windowscale"),
+                           xpost_real_cons((real)s));
+        }
+    }
+
     private.win = xcb_generate_id(private.c);
     {
         unsigned int mask = XCB_CW_BACK_PIXMAP |
