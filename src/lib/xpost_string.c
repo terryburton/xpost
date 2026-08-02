@@ -125,6 +125,13 @@ char *xpost_string_get_pointer(Xpost_Context *ctx,
     unsigned int ent = xpost_object_get_ent(S);
     mem = xpost_context_select_memory(ctx, S) /*S.tag&FBANK?ctx->gl:ctx->lo*/;
     tab = &mem->table;
+    if (ent >= tab->nextent)
+    {
+        /* a corrupt or sentinel ent (get_ent's -1 wraps to UINT_MAX) must
+           not index past the table into a wild pointer */
+        XPOST_LOG_ERR("%d entity number %u not found", VMerror, ent);
+        return NULL;
+    }
     return (void *)(mem->base + tab->tab[ent].adr + S.comp_.off);
 }
 

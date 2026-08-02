@@ -294,6 +294,18 @@ test('run-status',
   run_status_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Object-layer bounds discipline: a string object with a corrupt or
+# sentinel ent yields NULL from the pointer adapter, never a wild pointer.
+string_bounds_exe = executable('string_bounds_test',
+  'tests/string_bounds_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('string-bounds',
+  string_bounds_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),
