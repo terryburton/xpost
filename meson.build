@@ -672,6 +672,16 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Device teardown discipline: Destroy is called at setpagedevice, at job end,
+# and possibly by the program itself, so every device's Destroy must be
+# idempotent -- clear the stored resource handle, never free it twice -- and
+# a device-owned framebuffer must be released unless handed to the client.
+test('device-destroy',
+  find_program('tests/run-device-destroy-test.sh'),
+  args: [ xpost_exe, files('tests/device_destroy_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Multi-page output: a save...showpage...restore job (the separation-plate
 # idiom, which rewinds local virtual memory between pages) must land each page
 # in its own file when the output name carries a %d, and keep only the last

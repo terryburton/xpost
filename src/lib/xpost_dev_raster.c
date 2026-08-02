@@ -92,6 +92,8 @@ typedef struct
      */
 #ifdef FAST_C_BUFFER
     Xpost_Raster_Buffer *buf;
+    int bufowned; /* the device malloc'd buf and has not handed it to the
+                     client through OutputBufferOut, so Destroy frees it */
 #endif
 } PrivateData;
 
@@ -203,6 +205,7 @@ int _create_cont(Xpost_Context *ctx,
 
         memcpy(&inbuf, xpost_string_get_pointer(ctx, inbufstr), sizeof(inbuf));
         private.buf = (Xpost_Raster_Buffer *)inbuf;
+        private.bufowned = 0; /* the client's memory, never ours to free */
     }
     else
     {
@@ -230,6 +233,7 @@ int _create_cont(Xpost_Context *ctx,
         }
         private.buf->height = height;
         private.buf->width = width;
+        private.bufowned = 1;
     }
 #else
     { /*
@@ -589,9 +593,46 @@ int _emit(Xpost_Context *ctx,
 
             memcpy(&outbuf, xpost_string_get_pointer(ctx, outbufstr), sizeof(outbuf));
             *outbuf = data;
+#ifdef FAST_C_BUFFER
+            /* the buffer now belongs to the client (the API documents the
+               handed-out buffer as the caller's to free): Destroy must
+               leave it alone from here on */
+            private.bufowned = 0;
+            xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                             xpost_object_get_ent(privatestr), 0,
+                             sizeof(private), &private);
+#endif
             return 0;
         }
     }
+
+    return 0;
+}
+
+static
+int _destroy(Xpost_Context *ctx,
+             Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
+    if (xpost_object_get_type(privatestr) == invalidtype)
+        return undefined;
+    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                     xpost_object_get_ent(privatestr), 0,
+                     sizeof(private), &private);
+
+#ifdef FAST_C_BUFFER
+    if (private.buf && private.bufowned)
+        free(private.buf);
+    private.buf = NULL;
+    private.bufowned = 0;
+    /* store the cleared pointer back so a repeated destroy is a no-op */
+    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                     xpost_object_get_ent(privatestr), 0,
+                     sizeof(private), &private);
+#endif
 
     return 0;
 }
@@ -696,6 +737,11 @@ int loadrasterdevicecont(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "rasterFlush", (Xpost_Op_Func)_flush, 0, 1, dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Flush"), op);
+    if (ret)
+        return ret;
+
+    op = xpost_operator_cons(ctx, "rasterDestroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
     if (ret)
         return ret;
 

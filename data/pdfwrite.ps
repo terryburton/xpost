@@ -138,6 +138,10 @@
         % .endfile `begin`s the device, so it needs its own copy (get consumes
         % one, begin the other) while leaving the device for .pdffree
         //.xpostsys /.vecout get /single get { dup dup /.endfile get exec } if
+        % stand the shared record down: the interpreter retires a device at
+        % setpagedevice and again at job end, so a repeated Destroy must not
+        % finalise the closed file a second time
+        //.xpostsys /.vecout get dup /single false put /ready false put
         dup //.internaldict /.pdffree get exec pop
     } bind
 

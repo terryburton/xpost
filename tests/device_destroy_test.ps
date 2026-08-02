@@ -1,0 +1,27 @@
+% Device teardown discipline, run against a live device (-d <dev>) by
+% run-device-destroy-test.sh: prints SUCCESS iff every step survives.
+%
+% The device contract requires Destroy to be idempotent: the interpreter
+% retires an outgoing device at setpagedevice and again at job end, and a
+% program may have called Destroy itself. A device holding raw resources
+% (a framebuffer, a window connection, a libpng writer) must clear the
+% stored handle so a repeated Destroy is a no-op, not a double free.
+%
+% Draw and emit a page first so devices that finalise output in Destroy
+% (png) exercise their real teardown path, then Destroy twice explicitly;
+% normal job-end teardown makes a third call on the way out.
+
+newpath 10 10 moveto 90 90 lineto stroke showpage
+
+/.destroydevice {
+    .privatedict /.graphicsdict get /currgstate get /device get
+    dup /Destroy 2 copy known
+    { get exec }
+    { pop pop pop }
+    ifelse
+} def
+
+.destroydevice
+.destroydevice
+
+count 0 eq { (SUCCESS) = } { (FAILURES: operand stack unbalanced) = } ifelse
