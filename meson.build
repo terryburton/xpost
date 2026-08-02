@@ -710,6 +710,17 @@ test('golden-render',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Device method contract, safety tier: every built device must accept the
+# boundary inputs its methods can legally receive (degenerate, inverted,
+# fractional, out-of-range rectangles, pixels and lines) without error and
+# still emit a page. The exact extent semantics stay unasserted until the
+# device layer consolidates on one definition.
+test('device-contract',
+  find_program('tests/run-device-contract-test.sh'),
+  args: [ xpost_exe, files('tests/device_contract_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
 # and possibly by the program itself, so every device's Destroy must be
 # idempotent -- clear the stored resource handle, never free it twice -- and

@@ -1,0 +1,70 @@
+% Device method contract, safety tier: every device must accept the
+% boundary inputs its methods can legally receive -- degenerate,
+% inverted and out-of-range rectangles, edge and out-of-bounds pixels,
+% real-valued coordinates -- without error, and still emit a page.
+% Run against a live device (-d <dev>) by run-device-contract-test.sh.
+%
+% (The exact extent semantics of FillRect -- which pixels an inverted or
+% fractional rectangle paints -- are deliberately not asserted yet: the
+% devices disagree today, and unifying them is part of the device-layer
+% consolidation. This tier pins down only that no boundary input can
+% error or crash, so that consolidation can then tighten the assertions
+% rather than first re-establish safety.)
+
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+
+/try { % proc (name)  .  -
+    exch stopped {
+        (FAIL: ) print print ( errored\n) print
+        /contractfail true def
+    }{ pop } ifelse
+} def
+/contractfail false def
+
+% the colour a method takes is the device's native colourspace, one
+% number per component; /val pushes black in that space
+/ncomp dev /nativecolorspace 2 copy known
+    { get /DeviceRGB eq { 3 }{ 1 } ifelse }{ pop pop 1 } ifelse def
+/val { ncomp { 0 } repeat } def
+
+% a painted baseline so Emit has marks to write
+newpath 10 10 moveto 90 90 lineto stroke
+
+% --- FillRect boundary inputs (val x y w h DEVICE FillRect) ---
+% the raster classes take val as the device's native colour; probe the
+% method only when the device carries it
+dev /FillRect 2 copy known {
+    get /fr exch def
+    { val 5 5 0 0 dev fr exec }          (zero-size FillRect) try
+    { val 5 5 1 1 dev fr exec }          (unit FillRect) try
+    { val -20 -20 10 10 dev fr exec }    (negative-origin FillRect) try
+    { val 5000 5000 50 50 dev fr exec }  (out-of-range FillRect) try
+    { val 50.5 60.25 10.75 3.5 dev fr exec } (fractional FillRect) try
+    { val 80 80 -30 -30 dev fr exec }    (negative-extent FillRect) try
+}{ pop pop } ifelse
+
+% --- PutPix boundary inputs (val x y DEVICE PutPix) ---
+dev /PutPix 2 copy known {
+    get /pp exch def
+    { val 0 0 dev pp exec }        (origin PutPix) try
+    { val -1 -1 dev pp exec }      (negative PutPix) try
+    { val 9999 9999 dev pp exec }  (out-of-range PutPix) try
+    { val 3.7 4.2 dev pp exec }    (fractional PutPix) try
+}{ pop pop } ifelse
+
+% --- DrawLine boundary inputs (val x1 y1 x2 y2 DEVICE DrawLine) ---
+dev /DrawLine 2 copy known {
+    get /dl exch def
+    { val 5 5 5 5 dev dl exec }            (degenerate DrawLine) try
+    { val -50 -50 5000 5000 dev dl exec }  (clipped DrawLine) try
+}{ pop pop } ifelse
+
+% the standard operators must equally survive boundary geometry
+{ newpath -100 -100 moveto 10000 10000 lineto stroke } (off-page stroke) try
+{ -50 -50 20 20 rectfill }                             (off-page rectfill) try
+{ 0 0 0 0 rectfill }                                   (zero rectfill) try
+{ newpath 306 396 0 0 360 arc fill }                   (zero-radius arc fill) try
+
+showpage
+
+contractfail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse
