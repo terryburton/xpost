@@ -43,6 +43,8 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_save.h"
+#include "xpost_free.h"
+#include "xpost_file.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
 #include "xpost_name.h"
@@ -106,6 +108,60 @@ int Vrestore(Xpost_Context *ctx,
     /* the packing mode is save/restore-subject: revert it to this level */
     if (V.save_.lev < sizeof ctx->packing_hist)
         ctx->packing = ctx->packing_hist[V.save_.lev];
+
+    /* restore closes a file created since the corresponding save (PLRM
+       3.8.2): sweep the local table for file entities born above the
+       restored depth and release them -- closing and freeing exactly as
+       the collector would, since nothing surviving the restore can
+       reach them. A file still referenced from a stack stays open: the
+       spec answers that situation with invalidrestore, which is not yet
+       implemented, and closing under a live reference would be worse. */
+    if (ctx->lo->file_birth_max > (unsigned int)V.save_.lev + 1)
+    {
+        unsigned int ent, i, stamp;
+        unsigned int stacks[4];
+        int k, n;
+
+        stacks[0] = ctx->os; stacks[1] = ctx->es;
+        stacks[2] = ctx->ds; stacks[3] = ctx->hold;
+        for (ent = ctx->lo->start; ent < ctx->lo->table.nextent; ent++)
+        {
+            if (ctx->lo->table.tab[ent].tag != filetype)
+                continue;
+            stamp = (ctx->lo->table.tab[ent].mark
+                     & XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK)
+                    >> XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
+            if (stamp == 0 || stamp <= (unsigned int)V.save_.lev + 1)
+                continue;
+            for (k = 0; k < 4; k++)
+            {
+                n = xpost_stack_count(ctx->lo, stacks[k]);
+                for (i = 0; i < (unsigned int)n; i++)
+                {
+                    Xpost_Object o =
+                        xpost_stack_bottomup_fetch(ctx->lo, stacks[k], i);
+                    if (xpost_object_get_type(o) == filetype
+                     && (unsigned int)o.mark_.padw == ent)
+                        goto keep;
+                }
+            }
+            {
+                /* the vtable close releases the stream and clears the
+                   entity's stored pointer; a reusable stream survives
+                   its close rewound, keeps its pointer, and then keeps
+                   its entity too */
+                Xpost_Object o;
+
+                o.mark_.tag = filetype;
+                o.mark_.pad0 = 0;
+                o.mark_.padw = ent;
+                xpost_file_object_close(ctx->lo, o);
+                if (xpost_file_get_file_pointer(ctx->lo, o) == NULL)
+                    xpost_free_memory_ent(ctx->lo, ent);
+            }
+        keep:;
+        }
+    }
     return 0;
 }
 

@@ -159,6 +159,21 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     if (tab->tab[rent].tag == filetype)
     {
         FILE *fp;
+
+        /* retire this file from its birth-stamp bucket */
+        {
+            unsigned int b = (tab->tab[rent].mark
+                              & XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK)
+                             >> XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
+
+            if (b < 256 && mem->file_births[b] > 0)
+            {
+                mem->file_births[b]--;
+                while (mem->file_birth_max > 0
+                    && mem->file_births[mem->file_birth_max] == 0)
+                    mem->file_birth_max--;
+            }
+        }
         ret = xpost_memory_get(mem, ent, 0, sizeof(FILE *), &fp);
         if (!ret)
         {
