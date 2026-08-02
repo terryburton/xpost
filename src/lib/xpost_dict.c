@@ -423,15 +423,21 @@ int dicgrow(Xpost_Context *ctx,
         dent = xpost_object_get_ent(d);
         nent = xpost_object_get_ent(n);
 
-        /* exchange adrs */
+        /* exchange the whole storage identity, as restore's swap does: an
+           ent's (adr, sz, used) travel together, and a swap that leaves
+           `used` behind gives each ent a byte count belonging to the
+           other's allocation */
         hold = tab->tab[dent].adr;
                tab->tab[dent].adr = tab->tab[nent].adr;
                                     tab->tab[nent].adr = hold;
 
-        /* exchange sizes */
         hold = tab->tab[dent].sz;
                tab->tab[dent].sz = tab->tab[nent].sz;
                                    tab->tab[nent].sz = hold;
+
+        hold = tab->tab[dent].used;
+               tab->tab[dent].used = tab->tab[nent].used;
+                                     tab->tab[nent].used = hold;
 
 #if 0
         if (xpost_free_memory_ent(mem, nent) < 0)

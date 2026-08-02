@@ -306,6 +306,19 @@ test('string-bounds',
   string_bounds_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Memory-table bookkeeping under dictionary growth: dicgrow's entity swap
+# must move (adr, sz, used) together; the invariant used <= sz holds for
+# every ent after repeated regrowth.
+dict_grow_exe = executable('dict_grow_test',
+  'tests/dict_grow_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dict-grow',
+  dict_grow_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),
