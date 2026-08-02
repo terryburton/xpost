@@ -31,6 +31,7 @@
 #ifndef XPOST_MEMORY_H
 #define XPOST_MEMORY_H
 
+#include <stddef.h> /* size_t, NULL */
 
 #include "xpost_private.h" /* XPCHECKAPI */
 
@@ -102,7 +103,8 @@ typedef enum
 
 /**
  * @struct Xpost_Memory_Table
- * @brief The segmented Memory Table structure.
+ * @brief The Memory Table: one flat array of allocation records,
+ * grown by realloc as entities are allocated.
  */
 typedef struct Xpost_Memory_Table
 {
@@ -181,6 +183,50 @@ typedef struct Xpost_Memory_File
     int (*interpreter_get_initializing)(void);
     void (*interpreter_set_initializing)(int);
 } Xpost_Memory_File;
+
+/*
+ * The ent -> pointer middle layer.
+ *
+ * An entity's data is reached by looking its address up in the memory
+ * table and offsetting the file's base pointer. These helpers are that
+ * translation, in one place, in both the disciplines the code uses:
+ * checked for ents that may be corrupt or sentinel, unchecked for ents
+ * the caller has already validated (hot paths).
+ *
+ * The usual caveat governs every returned pointer: it is invalidated by
+ * any allocation in the same memory file (the file may realloc and
+ * move). Do not hold one across an allocating call.
+ */
+
+/**
+ * @brief true iff @p ent indexes an allocated slot of @p mem's table.
+ */
+static inline int
+xpost_ent_valid(Xpost_Memory_File *mem, unsigned int ent)
+{
+    return ent < mem->table.nextent;
+}
+
+/**
+ * @brief pointer to entity @p ent's data; @p ent must be valid.
+ */
+static inline void *
+xpost_ent_ptr(Xpost_Memory_File *mem, unsigned int ent)
+{
+    return mem->base + mem->table.tab[ent].adr;
+}
+
+/**
+ * @brief pointer to entity @p ent's data, or NULL if @p ent is out of
+ * range (a corrupt object, or the constructors' -1 sentinel).
+ */
+static inline void *
+xpost_ent_ptr_checked(Xpost_Memory_File *mem, unsigned int ent)
+{
+    if (!xpost_ent_valid(mem, ent))
+        return NULL;
+    return xpost_ent_ptr(mem, ent);
+}
 
 /*
  *

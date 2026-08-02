@@ -80,9 +80,9 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
     {
         /* the PLRM specifies zero-initialized strings; storage reused
            from the free list still holds the previous tenant's bytes */
-        unsigned int adr;
-        if (xpost_memory_table_get_addr(mem, ent, &adr))
-            memset(mem->base + adr, 0, sz);
+        void *data = xpost_ent_ptr_checked(mem, ent);
+        if (data)
+            memset(data, 0, sz);
     }
     o.tag = stringtype | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     o.comp_.sz = sz;
@@ -121,18 +121,18 @@ char *xpost_string_get_pointer(Xpost_Context *ctx,
                                Xpost_Object S)
 {
     Xpost_Memory_File *mem;
-    Xpost_Memory_Table *tab;
     unsigned int ent = xpost_object_get_ent(S);
+    char *data;
     mem = xpost_context_select_memory(ctx, S) /*S.tag&FBANK?ctx->gl:ctx->lo*/;
-    tab = &mem->table;
-    if (ent >= tab->nextent)
+    data = xpost_ent_ptr_checked(mem, ent);
+    if (!data)
     {
         /* a corrupt or sentinel ent (get_ent's -1 wraps to UINT_MAX) must
            not index past the table into a wild pointer */
         XPOST_LOG_ERR("%d entity number %u not found", VMerror, ent);
         return NULL;
     }
-    return (void *)(mem->base + tab->tab[ent].adr + S.comp_.off);
+    return data + S.comp_.off;
 }
 
 

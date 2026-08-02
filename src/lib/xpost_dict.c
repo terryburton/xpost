@@ -84,11 +84,9 @@ typedef union
 Xpost_Object_Tag_Access xpost_dict_get_access(Xpost_Context *ctx, Xpost_Object d)
 {
     Xpost_Memory_File *mem;
-    unsigned int ad;
     dichead *dp;
     mem = xpost_context_select_memory(ctx, d);
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-    dp = (void *)(mem->base + ad);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     return (Xpost_Object_Tag_Access)((dp->tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK) >>
                                      XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
 }
@@ -96,11 +94,9 @@ Xpost_Object_Tag_Access xpost_dict_get_access(Xpost_Context *ctx, Xpost_Object d
 Xpost_Object xpost_dict_set_access(Xpost_Context *ctx, Xpost_Object d, Xpost_Object_Tag_Access access)
 {
     Xpost_Memory_File *mem;
-    unsigned int ad;
     dichead *dp;
     mem = xpost_context_select_memory(ctx, d);
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-    dp = (dichead *)(mem->base + ad);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     dp->tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
     dp->tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
     d.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
@@ -253,7 +249,6 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     Xpost_Object d;
     unsigned int rent;
     unsigned int cnt;
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     unsigned int i;
@@ -287,14 +282,13 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
             | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
             | (cnt << XPOST_MEMORY_TABLE_MARK_DATA_TOPLEVEL_OFFSET) );
 
-    xpost_memory_table_get_addr(mem, ent, &ad);
-    dp = (void *)(mem->base + ad); /* clear header */
+    dp = xpost_ent_ptr(mem, ent); /* clear header */
     dp->tag = d.tag;
     dp->sz = sz;
     dp->nused = 0;
     dp->pad = reqsz; /* remember the requested capacity for maxlength */
 
-    tp = (void *)(mem->base + ad + sizeof(dichead)); /* clear table */
+    tp = (dicrec *)((char *)dp + sizeof(dichead)); /* clear table */
     hashnull = hash(null);
     for (i=0; i < DICTABN(sz); i++){
         tp[i].hash = hashnull;
@@ -330,10 +324,8 @@ Xpost_Object xpost_dict_cons (Xpost_Context *ctx,
 unsigned int xpost_dict_length_memory (Xpost_Memory_File *mem,
                    Xpost_Object d)
 {
-    unsigned int da;
     dichead *dp;
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &da);
-    dp = (void *)(mem->base + da);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     return dp->nused;
 }
 
@@ -342,10 +334,8 @@ unsigned int xpost_dict_length_memory (Xpost_Memory_File *mem,
 unsigned int xpost_dict_max_length_memory (Xpost_Memory_File *mem,
                       Xpost_Object d)
 {
-    unsigned int da;
     dichead *dp;
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &da);
-    dp = (void *)(mem->base + da);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     return dp->sz;
 }
 
@@ -355,10 +345,8 @@ unsigned int xpost_dict_max_length_memory (Xpost_Memory_File *mem,
 unsigned int xpost_dict_requested_length_memory (Xpost_Memory_File *mem,
                       Xpost_Object d)
 {
-    unsigned int da;
     dichead *dp;
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &da);
-    dp = (void *)(mem->base + da);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     return dp->pad;
 }
 
@@ -375,7 +363,6 @@ int dicgrow(Xpost_Context *ctx,
     Xpost_Memory_File *mem;
     unsigned int sz;
     unsigned int newsz;
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     Xpost_Object n;
@@ -395,8 +382,7 @@ int dicgrow(Xpost_Context *ctx,
     if (mem == ctx->gl)
         n.tag |= XPOST_OBJECT_TAG_DATA_FLAG_BANK;
 
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-    dp = (void *)(mem->base + ad);
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
     sz = DICTABN(dp->sz);
     for (i = 0; i < sz; i++)
     {
@@ -404,7 +390,7 @@ int dicgrow(Xpost_Context *ctx,
            memory file, which leaves a table pointer cached across the call
            dangling. Re-derive it from the current base each iteration; ad,
            the source dict's own offset, does not move. */
-        tp = (void *)(mem->base + ad + sizeof(dichead));
+        tp = (dicrec *)((char *)dp + sizeof(dichead));
         if (xpost_object_get_type(tp[i].key) != nulltype)
         {
             xpost_dict_put_memory(ctx, mem, n, tp[i].key, tp[i].value);
@@ -461,15 +447,13 @@ int xpost_dict_is_full_memory (Xpost_Memory_File *mem,
 void xpost_dict_dump_memory (Xpost_Memory_File *mem,
              Xpost_Object d)
 {
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     unsigned int sz;
     unsigned int i;
 
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-    dp = (void *)(mem->base + ad);
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
+    tp = (dicrec *)((char *)dp + sizeof(dichead));
     sz = DICTABN(dp->sz);
 
     printf("\n");
@@ -591,7 +575,6 @@ dicrec *diclookup(Xpost_Context *ctx,
         Xpost_Object d,
         Xpost_Object k)
 {
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     unsigned int sz;
@@ -603,10 +586,10 @@ dicrec *diclookup(Xpost_Context *ctx,
     if (xpost_object_get_type(k) == invalidtype)
         return invalidrec;
 
-    if (!xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad))
+    dp = xpost_ent_ptr_checked(mem, xpost_object_get_ent(d));
+    if (!dp)
         return invalidrec;
-    dp = (void *)(mem->base + ad);
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    tp = (dicrec *)((char *)dp + sizeof(dichead));
     sz = DICTABN(dp->sz);
 
     hashval = hash(k);
@@ -701,7 +684,6 @@ Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
 {
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, d);
     unsigned int ent = xpost_object_get_ent(d);
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     unsigned int sz;
@@ -709,11 +691,10 @@ Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
     unsigned int h;
     unsigned int i;
 
-    if (ent >= mem->table.nextent)
+    dp = xpost_ent_ptr_checked(mem, ent);
+    if (!dp)
         return invalid;
-    ad = mem->table.tab[ent].adr;
-    dp = (void *)(mem->base + ad);
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    tp = (dicrec *)((char *)dp + sizeof(dichead));
     sz = DICTABN(dp->sz);
 
     hashval = hash(k);
@@ -762,7 +743,6 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
 {
     dicrec *r;
     dichead *dp;
-    unsigned int ad;
     int ret;
 
     if (!ctx->gl->interpreter_get_initializing())
@@ -817,8 +797,7 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
                 return VMerror;
         }
 
-        xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-        dp = (void *)(mem->base + ad);
+        dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
         ++ dp->nused;
         r->key = k; /* canonicalised above */
         r->hash = hash(k);
@@ -881,7 +860,6 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
         Xpost_Object k)
 {
     dicrec *e;
-    unsigned int ad;
     dichead *dp;
     dicrec *tp;
     unsigned int sz;
@@ -899,9 +877,8 @@ int xpost_dict_undef_memory(Xpost_Context *ctx,
     if (xpost_object_get_type(k) == invalidtype)
         return VMerror;
 
-    xpost_memory_table_get_addr(mem, xpost_object_get_ent(d), &ad);
-    dp = (void *)(mem->base + ad);
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
+    tp = (dicrec *)((char *)dp + sizeof(dichead));
 
     e = diclookup(ctx, mem, d, k); /*find slot for key */
     if (e == NULL || e == invalidrec || xpost_object_get_type(e->key) == nulltype)
