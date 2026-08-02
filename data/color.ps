@@ -272,6 +272,7 @@ setglobal
     graphicsdict /currgstate get /colorcomp2 0.0 put
     graphicsdict /currgstate get /colorcomp3 0.0 put
     graphicsdict /currgstate get /colorcomp4 0.0 put
+    graphicsdict /currgstate get /sepindex null put
     graphicsdict /currgstate get /tintcomps null put
     %exec pop
 } bind def
@@ -448,6 +449,10 @@ setglobal
     /DeviceGray /currentgray cvx
     /DeviceRGB /currentrgbcolor cvx
     /DeviceCMYK /currentcmykcolor cvx
+    % a device with the /Process native space takes each paint in the
+    % space it was set in: deliver the current colour unconverted (one
+    % grey component, three RGB or four CMYK)
+    /Process /currentcolor cvx
 >> put
 /currentcolor {
     % a Separation or DeviceN colour reads back as the tints it was set
@@ -560,6 +565,7 @@ setglobal
     graphicsdict /currgstate get /setspace /DeviceGray put
     graphicsdict /currgstate get /colorspace /DeviceGray put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentgray {
@@ -574,6 +580,7 @@ setglobal
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentrgbcolor {
@@ -634,6 +641,7 @@ setglobal
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
+    graphicsdict /currgstate get /sepindex null put
 } bind def
 
 /currentcmykcolor {
@@ -659,6 +667,15 @@ setglobal
 .xpostsys /currentcolordict get
     dup /DeviceGray  /currentgray      load put
     dup /DeviceRGB   /currentrgbcolor   load put
-        /DeviceCMYK  /currentcmykcolor  load put
+    dup /DeviceCMYK  /currentcmykcolor  load put
+    % a /Process-native device takes each paint in the space its components
+    % were recorded in. That is the marking pipeline's fetch, not the public
+    % currentcolor: a Separation or DeviceN paint must deliver the RECORDED
+    % tint-transformed components here, where currentcolor reads back the
+    % tints the colour was set with
+    /Process {
+        //.xpostsys /currentcolordict get
+        graphicsdict /currgstate get /colorspace get get exec
+    } bind put
 
 //.internaldict /QUIET known { }{ (eof color\n)print } ifelse

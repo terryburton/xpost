@@ -104,6 +104,8 @@ static const char *_xpost_main_devices[] =
     "bgr",
     "raster",
     "pdfwrite",
+    "dscwrite",
+    "svgwrite",
 #ifdef HAVE_LIBPNG
     "png",
     "pngalpha",

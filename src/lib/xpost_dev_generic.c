@@ -40,6 +40,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef HAVE_ZLIB
+# include <zlib.h>
+#endif
+
 #include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_memory.h" /* access memory */
@@ -80,6 +84,7 @@ static Xpost_Object namecvx;
 static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
+static Xpost_Object namepdfPrivate;
 
 char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
 {
@@ -1118,6 +1123,215 @@ int _fillrectrgb(Xpost_Context *ctx,
     return 0;
 }
 
+/* Encode a string's bytes as base64, RFC 4648 alphabet with padding;
+   the output string allocates in local VM. The caller chunks input
+   at a multiple of three bytes below the string limit. */
+static
+int _base64(Xpost_Context *ctx, Xpost_Object S)
+{
+    static const char abc[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const unsigned char *in;
+    unsigned int n = S.comp_.sz, on, i, o;
+    Xpost_Object out;
+    char *op;
+
+    on = (n + 2) / 3 * 4;
+    if (on > 65535)
+        return rangecheck;
+    out = xpost_string_cons(ctx, on, NULL);
+    if (xpost_object_get_type(out) == nulltype)
+        return VMerror;
+    in = (unsigned char *)xpost_string_get_pointer(ctx, S);
+    op = xpost_string_get_pointer(ctx, out);
+    for (i = 0, o = 0; i + 2 < n; i += 3, o += 4)
+    {
+        unsigned int v = (in[i] << 16) | (in[i + 1] << 8) | in[i + 2];
+
+        op[o] = abc[v >> 18];
+        op[o + 1] = abc[(v >> 12) & 63];
+        op[o + 2] = abc[(v >> 6) & 63];
+        op[o + 3] = abc[v & 63];
+    }
+    if (i < n)
+    {
+        unsigned int v = in[i] << 16;
+        int two = i + 1 < n;
+
+        if (two)
+            v |= in[i + 1] << 8;
+        op[o] = abc[v >> 18];
+        op[o + 1] = abc[(v >> 12) & 63];
+        op[o + 2] = two ? abc[(v >> 6) & 63] : '=';
+        op[o + 3] = '=';
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(out));
+    return 0;
+}
+
+
+/* Compare two captures of the same painting, one over a black ground
+   and one over white: pixels that agree were painted (opaquely, the
+   only kind of painting there is) and set their bit in the coverage
+   mask, one row string per raster row, most significant bit first.
+   Rows are grey strings or packed-integer arrays alike. */
+static
+int _formmask(Xpost_Context *ctx,
+              Xpost_Object rowsa,
+              Xpost_Object rowsb)
+{
+    Xpost_Object maskarr, rowa, rowb, mrow;
+    unsigned int h, y, w, x;
+
+    h = rowsa.comp_.sz;
+    if (rowsb.comp_.sz != h)
+        return rangecheck;
+    maskarr = xpost_array_cons(ctx, h);
+    if (xpost_object_get_type(maskarr) == nulltype)
+        return VMerror;
+    for (y = 0; y < h; y++)
+    {
+        unsigned char *mp;
+
+        rowa = xpost_array_get(ctx, rowsa, y);
+        rowb = xpost_array_get(ctx, rowsb, y);
+        if (xpost_object_get_type(rowa) != xpost_object_get_type(rowb)
+         || rowa.comp_.sz != rowb.comp_.sz)
+            return typecheck;
+        w = rowa.comp_.sz;
+        mrow = xpost_string_cons(ctx, (w + 7) / 8, NULL);
+        if (xpost_object_get_type(mrow) == nulltype)
+            return VMerror;
+        mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
+        memset(mp, 0, (w + 7) / 8);
+        if (xpost_object_get_type(rowa) == stringtype)
+        {
+            unsigned char *pa = (unsigned char *)xpost_string_get_pointer(ctx, rowa);
+            unsigned char *pb = (unsigned char *)xpost_string_get_pointer(ctx, rowb);
+
+            for (x = 0; x < w; x++)
+                if (pa[x] == pb[x])
+                    mp[x / 8] |= 0x80 >> (x % 8);
+        }
+        else if (xpost_object_get_type(rowa) == arraytype)
+        {
+            for (x = 0; x < w; x++)
+            {
+                Xpost_Object a = xpost_array_get(ctx, rowa, x);
+                Xpost_Object b = xpost_array_get(ctx, rowb, x);
+
+                if (xpost_object_get_type(a) == integertype
+                 && xpost_object_get_type(b) == integertype
+                 && a.int_.val == b.int_.val)
+                    mp[x / 8] |= 0x80 >> (x % 8);
+            }
+        }
+        else
+            return typecheck;
+        xpost_array_put(ctx, maskarr, y, mrow);
+    }
+    xpost_stack_push(ctx->lo, ctx->os, maskarr);
+    return 0;
+}
+
+/* Put a device row through its save-copy once, before any pointer
+   into memory is taken for the pixel loop. Writing an array element
+   saves the array at the current level first, which allocates, and
+   the coding rule for device operators is that no pointer survives an
+   allocation. Touching element zero with its own value hoists that
+   copy out of the loop, so the row's storage stays put while the
+   loop writes it. */
+static void
+_row_presave(Xpost_Context *ctx, Xpost_Object row)
+{
+    if (xpost_object_get_type(row) == arraytype && row.comp_.sz > 0)
+        xpost_array_put(ctx, row, 0, xpost_array_get(ctx, row, 0));
+}
+
+/* Replay a captured raster: covered pixels copy onto the device page
+   at the integer offset, clipped to the device bounds; the caller
+   gates on the clip region holding the whole raster. Grey rows copy
+   into grey rows, packed integers into packed integers. */
+static
+int _blitform(Xpost_Context *ctx,
+              Xpost_Object rows,
+              Xpost_Object mask,
+              Xpost_Object oxo,
+              Xpost_Object oyo,
+              Xpost_Object devdic)
+{
+    Xpost_Object imgdata, srow, mrow, drow;
+    int ox, oy, devh, y, x, w, h;
+
+    imgdata = xpost_dict_get(ctx, devdic, nameImgData);
+    if (xpost_object_get_type(imgdata) != arraytype)
+        return undefined;
+    devh = imgdata.comp_.sz;
+    ox = xpost_object_get_type(oxo) == realtype ? (int)floor(oxo.real_.val + 0.5) : oxo.int_.val;
+    oy = xpost_object_get_type(oyo) == realtype ? (int)floor(oyo.real_.val + 0.5) : oyo.int_.val;
+    h = rows.comp_.sz;
+    if (mask.comp_.sz < (unsigned int)h)
+        return rangecheck;
+    for (y = 0; y < h; y++)
+    {
+        int dy = oy + y;
+        unsigned char *mp;
+
+        if (dy < 0 || dy >= devh)
+            continue;
+        srow = xpost_array_get(ctx, rows, y);
+        mrow = xpost_array_get(ctx, mask, y);
+        drow = xpost_array_get(ctx, imgdata, dy);
+        if (xpost_object_get_type(mrow) != stringtype)
+            return typecheck;
+        w = srow.comp_.sz;
+        if (mrow.comp_.sz < (unsigned int)((w + 7) / 8))
+            return rangecheck;
+        mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
+        if (xpost_object_get_type(srow) == stringtype
+         && xpost_object_get_type(drow) == stringtype)
+        {
+            unsigned char *sp = (unsigned char *)xpost_string_get_pointer(ctx, srow);
+            unsigned char *dp = (unsigned char *)xpost_string_get_pointer(ctx, drow);
+            int dw = drow.comp_.sz;
+
+            for (x = 0; x < w; x++)
+            {
+                int dx = ox + x;
+
+                if (dx < 0 || dx >= dw)
+                    continue;
+                if (mp[x / 8] >> (7 - (x % 8)) & 1)
+                    dp[dx] = sp[x];
+            }
+        }
+        else if (xpost_object_get_type(srow) == arraytype
+              && xpost_object_get_type(drow) == arraytype)
+        {
+            int dw = drow.comp_.sz;
+
+            for (x = 0; x < w; x++)
+            {
+                int dx = ox + x;
+
+                if (dx < 0 || dx >= dw)
+                    continue;
+                /* the mask byte is read before the write: putting into
+                   an array saves it at the current level first, which
+                   allocates, and no pointer into memory survives an
+                   allocation */
+                mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
+                if (mp[x / 8] >> (7 - (x % 8)) & 1)
+                    xpost_array_put(ctx, drow, dx,
+                                    xpost_array_get(ctx, srow, x));
+            }
+        }
+        else
+            return typecheck;
+    }
+    return 0;
+}
+
 /* Set every pixel of a packed-integer raster (an array of row arrays)
    to integer zero. Devices call this once from Create; initialising
    each element from PostScript costs an interpreter loop per pixel. */
@@ -1722,6 +1936,7 @@ int _blitrow(Xpost_Context *ctx,
                             if (xpost_object_get_type(row) != arraytype
                              || row.comp_.sz < (unsigned int)devw)
                                 { free(cols); return rangecheck; }
+                            _row_presave(ctx, row);
                         }
                         else
                         {
@@ -1849,6 +2064,7 @@ int _blitrow(Xpost_Context *ctx,
             if (xpost_object_get_type(row) != arraytype
              || row.comp_.sz < (unsigned int)devw)
                 return rangecheck;
+            _row_presave(ctx, row);
         }
         else
         {
@@ -1964,6 +2180,592 @@ int _blitrow(Xpost_Context *ctx,
 }
 #undef SAMPLE
 
+/* Deflate the concatenation of an array of strings, returning the result as an
+   array of <=65535-byte strings (the PostScript string limit) plus a boolean
+   that is true when compression happened. Used by the pdfwrite device to write
+   a FlateDecode content stream. Without zlib the input is returned unchanged
+   with false, so the caller falls back to uncompressed output. */
+static
+int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
+{
+#ifdef HAVE_ZLIB
+    z_stream strm;
+    unsigned char *out = NULL;
+    size_t outlen = 0, outcap = 0;
+    unsigned char buf[16384];
+    Xpost_Object result;
+    int i, n, ret;
+
+    memset(&strm, 0, sizeof strm);
+    if (deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK)
+        return unregistered;
+
+    n = arr.comp_.sz;
+    for (i = 0; i <= n; i++)   /* the final pass (i == n) flushes */
+    {
+        int flush = (i == n) ? Z_FINISH : Z_NO_FLUSH;
+        if (i < n)
+        {
+            Xpost_Object s = xpost_array_get(ctx, arr, i);
+            strm.next_in = (unsigned char *)xpost_string_get_pointer(ctx, s);
+            strm.avail_in = s.comp_.sz;
+        }
+        else
+        {
+            strm.next_in = NULL;
+            strm.avail_in = 0;
+        }
+        do
+        {
+            size_t have;
+            strm.next_out = buf;
+            strm.avail_out = sizeof buf;
+            ret = deflate(&strm, flush);
+            if (ret == Z_STREAM_ERROR)
+            {
+                free(out);
+                deflateEnd(&strm);
+                return unregistered;
+            }
+            have = sizeof buf - strm.avail_out;
+            if (outlen + have > outcap)
+            {
+                unsigned char *tmp;
+                outcap = (outlen + have) * 2 + 64;
+                tmp = realloc(out, outcap);
+                if (!tmp)
+                {
+                    free(out);
+                    deflateEnd(&strm);
+                    return VMerror;
+                }
+                out = tmp;
+            }
+            if (have)
+                memcpy(out + outlen, buf, have);
+            outlen += have;
+        } while (strm.avail_out == 0);
+    }
+    deflateEnd(&strm);
+
+    {
+        size_t pos = 0;
+        int nchunks = (int)((outlen + 65534) / 65535);
+        if (nchunks == 0)
+            nchunks = 1;
+        result = xpost_object_cvlit(xpost_array_cons(ctx, nchunks));
+        for (i = 0; i < nchunks; i++)
+        {
+            size_t chunk = outlen - pos;
+            if (chunk > 65535)
+                chunk = 65535;
+            /* cvlit: strings and arrays are executable by default, and this
+               binary content must be written, not executed */
+            xpost_array_put(ctx, result, i,
+                            xpost_object_cvlit(
+                                xpost_string_cons(ctx, chunk, (char *)(out + pos))));
+            pos += chunk;
+        }
+    }
+    free(out);
+    xpost_stack_push(ctx->lo, ctx->os, result);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+#else
+    xpost_stack_push(ctx->lo, ctx->os, arr);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+    return 0;
+#endif
+}
+
+/* write a decimal integer, returning its length */
+static int _pdf_fmt_long(char *o, long v)
+{
+    char t[24];
+    int n = 0, neg = 0, len = 0;
+    if (v < 0) { neg = 1; v = -v; }
+    if (v == 0) t[n++] = '0';
+    while (v) { t[n++] = (char)('0' + (v % 10)); v /= 10; }
+    if (neg) o[len++] = '-';
+    while (n) o[len++] = t[--n];
+    return len;
+}
+
+/* write a PDF number: an integer when integral, else up to four decimals
+   with trailing zeros trimmed (never exponential). round(v*10000) avoids
+   binary-float print noise; 0.0001pt is finer than any raster grid the
+   consumer will draw on. */
+static int _pdf_fmt_num(char *o, double v)
+{
+    if (v == trunc(v))
+        return _pdf_fmt_long(o, (long)v);
+    else
+    {
+        long m = (long)round(v * 10000.0);
+        long ip, fp;
+        int len = 0, digits = 4;
+        if (m < 0) { o[len++] = '-'; m = -m; }
+        ip = m / 10000;
+        fp = m % 10000;
+        len += _pdf_fmt_long(o + len, ip);
+        if (fp)
+        {
+            while (fp % 10 == 0) { fp /= 10; digits--; }
+            o[len++] = '.';
+            len += digits;
+            { int i = len; while (fp) { o[--i] = (char)('0' + fp % 10); fp /= 10; }
+              while (i > len - digits) o[--i] = '0'; }
+        }
+        return len;
+    }
+}
+
+/* pdfwrite content accumulator. Held in the device's /Private string and grown
+   with malloc/realloc, so the accumulated content lives outside the
+   save/restore-managed memory file (like the raster device's pixel buffer) and
+   survives a `restore` executed by the job before showpage/Emit. The current
+   page's marks are not part of virtual memory, so `restore` must not discard
+   them; storing them in the device dict would let it. */
+/* one registered separation colour space: the dedup key (the separation
+   name as given), the colour-space array body for the page's /ColorSpace
+   resource (missing only the function reference, which depends on object
+   numbering known at Emit), and the complete function object body
+   (dictionary plus stream) defining the tint transform */
+typedef struct
+{
+    char *name;
+    size_t namelen;
+    char *csdef;
+    size_t csdeflen;
+    char *func;
+    size_t funclen;
+} Pdf_Sep;
+
+typedef struct
+{
+    char *data;
+    size_t len;
+    size_t cap;
+    Pdf_Sep *seps;
+    int nseps;
+    int sepcap;
+} Pdf_Acc;
+
+static int _pdf_acc_append(Pdf_Acc *a, const char *s, size_t n)
+{
+    if (a->len + n > a->cap)
+    {
+        size_t nc = a->cap ? a->cap : 4096;
+        char *nd;
+        while (nc < a->len + n)
+            nc *= 2;
+        nd = (char *)realloc(a->data, nc);
+        if (!nd)
+            return 0;
+        a->data = nd;
+        a->cap = nc;
+    }
+    memcpy(a->data + a->len, s, n);
+    a->len += n;
+    return 1;
+}
+
+/* Load/store the accumulator struct via the device's /Private string. The raw
+   memory accessors record no save/restore backup, so neither the struct nor the
+   malloc'd buffer it points at is reverted by `restore`; the pointer is set once
+   at device creation and never re-homed into virtual memory. */
+static int _pdf_acc_get(Xpost_Context *ctx, Xpost_Object devdic,
+                        Xpost_Object *priv, Pdf_Acc *a)
+{
+    *priv = xpost_dict_get(ctx, devdic, namepdfPrivate);
+    if (xpost_object_get_type(*priv) != stringtype)
+        return 0;
+    xpost_memory_get(xpost_context_select_memory(ctx, *priv),
+                     xpost_object_get_ent(*priv), 0, sizeof(*a), a);
+    return 1;
+}
+
+static void _pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
+{
+    xpost_memory_put(xpost_context_select_memory(ctx, priv),
+                     xpost_object_get_ent(priv), 0, sizeof(*a), a);
+}
+
+/* Create the content accumulator and stash it in the device's /Private. Called
+   from the device Create method, before any user save/restore. */
+static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    a.data = (char *)malloc(4096);
+    a.len = 0;
+    a.cap = a.data ? 4096 : 0;
+    a.seps = NULL;
+    a.nseps = 0;
+    a.sepcap = 0;
+    priv = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(a), NULL));
+    _pdf_acc_put(ctx, priv, &a);
+    xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
+    return 0;
+}
+
+/* append a string's bytes to the accumulator (the marking methods' .put) */
+static int _pdfput(Xpost_Context *ctx, Xpost_Object str, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    if (!_pdf_acc_append(&a, (char *)xpost_string_get_pointer(ctx, str), str.comp_.sz))
+        return VMerror;
+    _pdf_acc_put(ctx, priv, &a);
+    return 0;
+}
+
+/* Exported accumulator access for the text operators: they build a
+   complete content-stream fragment per glyph outline and append it in
+   one call. Returns 1 on success. */
+int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdic,
+                         const char *s, size_t n)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return 0;
+    if (!_pdf_acc_append(&a, s, n))
+        return 0;
+    _pdf_acc_put(ctx, priv, &a);
+    return 1;
+}
+
+/* Exported PDF number formatter (see _pdf_fmt_num) */
+int xpost_dev_pdf_fmt_num(char *o, double v)
+{
+    return _pdf_fmt_num(o, v);
+}
+
+/* Emit the content-stream operators for a filled path into the accumulator:
+   the flattened subpaths ("x y m" / "x y l", closed with "h") and a
+   nonzero-winding fill ("f") -- the rule the fill operator has: overlapping
+   subpaths union, and hole subpaths are counter-wound by their producers.
+   This is the per-coordinate hot loop of the pdfwrite FillPoly,
+   in C; the fill colour is the device's business, emitted beforehand. */
+static int _pdffillpoly(Xpost_Context *ctx,
+                        Xpost_Object poly, Xpost_Object devdic)
+{
+#define PDFNUMVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
+                                                           : (double)(o).int_.val)
+    Pdf_Acc a;
+    Xpost_Object priv;
+    char tmp[128];
+    int i, n, len, needmove = 1;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+
+    n = poly.comp_.sz;
+    for (i = 0; i < n; i++)
+    {
+        Xpost_Object e = xpost_array_get(ctx, poly, i);
+        if (xpost_object_get_type(e) == arraytype && e.comp_.sz == 2)
+        {
+            double x = PDFNUMVAL(xpost_array_get(ctx, e, 0));
+            double y = PDFNUMVAL(xpost_array_get(ctx, e, 1));
+            len = 0;
+            len += _pdf_fmt_num(tmp + len, x); tmp[len++] = ' ';
+            len += _pdf_fmt_num(tmp + len, y); tmp[len++] = ' ';
+            tmp[len++] = needmove ? 'm' : 'l';
+            tmp[len++] = '\n';
+            needmove = 0;
+            _pdf_acc_append(&a, tmp, len);
+        }
+        else if (!needmove)   /* null subpath separator: close the subpath */
+        {
+            _pdf_acc_append(&a, "h\n", 2);
+            needmove = 1;
+        }
+    }
+    if (!needmove)
+        _pdf_acc_append(&a, "h\n", 2);
+    _pdf_acc_append(&a, "f\n", 2);
+
+    _pdf_acc_put(ctx, priv, &a);
+    return 0;
+}
+
+#undef PDFNUMVAL
+
+/* The svgwrite FillPoly hot loop: emit one SVG path element for a filled
+   path into the accumulator -- the fill colour as percentages, a
+   nonzero-winding fill rule (the fill operator's), and the flattened subpaths
+   as M/L commands, each closed with Z. Device coordinates are y-down, as
+   SVG's are, so they pass through unchanged. */
+static int _svgfillpoly(Xpost_Context *ctx,
+                        Xpost_Object r, Xpost_Object g, Xpost_Object b,
+                        Xpost_Object poly, Xpost_Object devdic)
+{
+#define PDFNUMVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
+                                                           : (double)(o).int_.val)
+    Pdf_Acc a;
+    Xpost_Object priv;
+    char tmp[128];
+    int i, n, len, needmove = 1;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+
+    len = 0;
+    memcpy(tmp + len, "<path fill=\"rgb(", 16); len += 16;
+    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(r) * 100); tmp[len++] = '%'; tmp[len++] = ',';
+    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(g) * 100); tmp[len++] = '%'; tmp[len++] = ',';
+    len += _pdf_fmt_num(tmp + len, PDFNUMVAL(b) * 100); tmp[len++] = '%';
+    memcpy(tmp + len, ")\" fill-rule=\"nonzero\" d=\"", 26); len += 26;
+    _pdf_acc_append(&a, tmp, len);
+
+    n = poly.comp_.sz;
+    for (i = 0; i < n; i++)
+    {
+        Xpost_Object e = xpost_array_get(ctx, poly, i);
+        if (xpost_object_get_type(e) == arraytype && e.comp_.sz == 2)
+        {
+            double x = PDFNUMVAL(xpost_array_get(ctx, e, 0));
+            double y = PDFNUMVAL(xpost_array_get(ctx, e, 1));
+            len = 0;
+            tmp[len++] = needmove ? 'M' : 'L';
+            len += _pdf_fmt_num(tmp + len, x); tmp[len++] = ' ';
+            len += _pdf_fmt_num(tmp + len, y);
+            needmove = 0;
+            _pdf_acc_append(&a, tmp, len);
+        }
+        else if (!needmove)   /* null subpath separator: close the subpath */
+        {
+            _pdf_acc_append(&a, "Z", 1);
+            needmove = 1;
+        }
+    }
+    if (!needmove)
+        _pdf_acc_append(&a, "Z", 1);
+    _pdf_acc_append(&a, "\"/>\n", 4);
+
+    _pdf_acc_put(ctx, priv, &a);
+    return 0;
+#undef PDFNUMVAL
+}
+
+/* Return the accumulated content as an array of <=65535-byte strings (the
+   PostScript string limit) for the Emit method to compress and write. The
+   malloc'd source buffer is stable across the string allocations. */
+static int _pdfchunks(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv, result;
+    size_t pos = 0;
+    int nchunks, i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    nchunks = (int)((a.len + 65534) / 65535);
+    if (nchunks == 0)
+        nchunks = 1;
+    result = xpost_object_cvlit(xpost_array_cons(ctx, nchunks));
+    for (i = 0; i < nchunks; i++)
+    {
+        size_t chunk = a.len - pos;
+        if (chunk > 65535)
+            chunk = 65535;
+        xpost_array_put(ctx, result, i,
+                        xpost_object_cvlit(
+                            xpost_string_cons(ctx, chunk, a.data + pos)));
+        pos += chunk;
+    }
+    xpost_stack_push(ctx->lo, ctx->os, result);
+    return 0;
+}
+
+/* format a number in PDF syntax into a fresh string: the marking
+   methods format through the accumulator, but separation registration
+   builds function source in strings, and both must agree */
+static int _pdfnumstr(Xpost_Context *ctx, Xpost_Object num)
+{
+    char t[32];
+    int n;
+
+    n = _pdf_fmt_num(t, xpost_object_get_type(num) == realtype
+                        ? num.real_.val : (double)num.int_.val);
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, n, t)));
+    return 0;
+}
+
+/* Separation registry: the device's .registersep method files each
+   separation colour space used by the page under a small integer, which
+   the content stream references as /CS<i>. Entries live beside the
+   content in the accumulator -- outside virtual memory -- so a `restore`
+   cannot roll the registry away from content that already references it. */
+
+static int _pdf_sep_find(Pdf_Acc *a, const char *name, size_t namelen)
+{
+    int i;
+
+    for (i = 0; i < a->nseps; i++)
+        if (a->seps[i].namelen == namelen &&
+            memcmp(a->seps[i].name, name, namelen) == 0)
+            return i;
+    return -1;
+}
+
+/* look a separation up by name: index true, or false when unregistered */
+static int _pdffindsep(Xpost_Context *ctx, Xpost_Object name, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    int i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    i = _pdf_sep_find(&a, (char *)xpost_string_get_pointer(ctx, name),
+                      name.comp_.sz);
+    if (i >= 0)
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(i >= 0));
+    return 0;
+}
+
+static char *_pdf_sep_strdup(Xpost_Context *ctx, Xpost_Object str)
+{
+    char *p = (char *)malloc(str.comp_.sz ? str.comp_.sz : 1);
+
+    if (p)
+        memcpy(p, xpost_string_get_pointer(ctx, str), str.comp_.sz);
+    return p;
+}
+
+/* register a separation (name, colour-space body, function object body),
+   returning its index; an already-registered name just returns its index */
+static int _pdfregsep(Xpost_Context *ctx,
+                      Xpost_Object name, Xpost_Object csdef, Xpost_Object func,
+                      Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    Pdf_Sep *s;
+    int i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    i = _pdf_sep_find(&a, (char *)xpost_string_get_pointer(ctx, name),
+                      name.comp_.sz);
+    if (i >= 0)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+        return 0;
+    }
+    if (a.nseps == a.sepcap)
+    {
+        int nc = a.sepcap ? a.sepcap * 2 : 4;
+        Pdf_Sep *ns = (Pdf_Sep *)realloc(a.seps, nc * sizeof(Pdf_Sep));
+        if (!ns)
+            return VMerror;
+        a.seps = ns;
+        a.sepcap = nc;
+        /* the grown array must reach /Private even if a copy below
+           fails: the old block is gone */
+        _pdf_acc_put(ctx, priv, &a);
+    }
+    s = &a.seps[a.nseps];
+    s->name = _pdf_sep_strdup(ctx, name);
+    s->namelen = name.comp_.sz;
+    s->csdef = _pdf_sep_strdup(ctx, csdef);
+    s->csdeflen = csdef.comp_.sz;
+    s->func = _pdf_sep_strdup(ctx, func);
+    s->funclen = func.comp_.sz;
+    if (!s->name || !s->csdef || !s->func)
+    {
+        free(s->name);
+        free(s->csdef);
+        free(s->func);
+        return VMerror;
+    }
+    i = a.nseps++;
+    _pdf_acc_put(ctx, priv, &a);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
+    return 0;
+}
+
+static int _pdfsepcount(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(a.nseps));
+    return 0;
+}
+
+/* fetch a registered separation's colour-space body and function object
+   body as strings, for Emit to build the resources and objects around */
+static int _pdfsepget(Xpost_Context *ctx, Xpost_Object idx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    Pdf_Sep *s;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return undefined;
+    if (idx.int_.val < 0 || idx.int_.val >= a.nseps)
+        return rangecheck;
+    s = &a.seps[idx.int_.val];
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, s->csdeflen, s->csdef)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_string_cons(ctx, s->funclen, s->func)));
+    return 0;
+}
+
+/* free the accumulator's malloc'd buffer (device Destroy) */
+/* truncate the accumulator for the next page, keeping the buffer */
+static int _pdfreset(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return 0;
+    a.len = 0;
+    _pdf_acc_put(ctx, priv, &a);
+    return 0;
+}
+
+static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    Pdf_Acc a;
+    Xpost_Object priv;
+    int i;
+
+    if (!_pdf_acc_get(ctx, devdic, &priv, &a))
+        return 0;
+    free(a.data);
+    a.data = NULL;
+    a.len = 0;
+    a.cap = 0;
+    for (i = 0; i < a.nseps; i++)
+    {
+        free(a.seps[i].name);
+        free(a.seps[i].csdef);
+        free(a.seps[i].func);
+    }
+    free(a.seps);
+    a.seps = NULL;
+    a.nseps = 0;
+    a.sepcap = 0;
+    _pdf_acc_put(ctx, priv, &a);
+    return 0;
+}
+
 int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                                        Xpost_Object sd)
 {
@@ -1991,15 +2793,41 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".zerorows", (Xpost_Op_Func)_zerorows, 0, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".base64", (Xpost_Op_Func)_base64, 1, 1, stringtype); INSTALL;
+    op = xpost_operator_cons(ctx, ".formmask", (Xpost_Op_Func)_formmask, 1, 2,
+                             arraytype, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".blitform", (Xpost_Op_Func)_blitform, 0, 5,
+                             arraytype, arraytype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 0, 2,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writepbmrows", (Xpost_Op_Func)_writepbmrows, 0, 2,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 0, 2,
                              arraytype, filetype); INSTALL;
+    op = xpost_operator_cons(ctx, ".flatecompress", (Xpost_Op_Func)_flatecompress, 2, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 0, 2,
+            arraytype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".svgfillpoly", (Xpost_Op_Func)_svgfillpoly, 0, 5,
+            numbertype, numbertype, numbertype, arraytype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfinit", (Xpost_Op_Func)_pdfinit, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfput", (Xpost_Op_Func)_pdfput, 0, 2, stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfchunks", (Xpost_Op_Func)_pdfchunks, 1, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffree", (Xpost_Op_Func)_pdffree, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfreset", (Xpost_Op_Func)_pdfreset, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfnumstr", (Xpost_Op_Func)_pdfnumstr, 1, 1,
+            numbertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffindsep", (Xpost_Op_Func)_pdffindsep, 2, 2,
+            stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfregsep", (Xpost_Op_Func)_pdfregsep, 1, 4,
+            stringtype, stringtype, stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfsepcount", (Xpost_Op_Func)_pdfsepcount, 1, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfsepget", (Xpost_Op_Func)_pdfsepget, 2, 2,
+            integertype, dicttype); INSTALL;
     if (xpost_object_get_type((nameImgData = xpost_name_cons(ctx, "ImgData"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namepdfPrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

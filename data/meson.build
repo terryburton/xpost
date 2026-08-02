@@ -13,6 +13,8 @@ xpost_data_src = files([
   'nulldev.ps',
   'bboxdev.ps',
   'pdfwrite.ps',
+  'svgwrite.ps',
+  'dscwrite.ps',
   'gstate.ps',
   'matrix.ps',
   'path.ps',

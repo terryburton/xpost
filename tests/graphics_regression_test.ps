@@ -781,6 +781,18 @@ currentpoint pop 22 sub abs 0.5 le
 (its codes advance by the charstring width) assert
 erasepage
 
+% user paths and forms paint like their ordinary counterparts
+erasepage
+{ 10 10 40 40 setbbox 10 10 moveto 40 10 lineto 40 40 lineto closepath } ufill
+countink 300 ge (ufill paints the described region) assert
+erasepage
+/TestForm << /FormType 1 /Matrix [1 0 0 1 0 0] /BBox [0 0 20 20]
+    /PaintProc { pop 0 0 100 100 rectfill } >> def
+TestForm execform
+countink 350 ge countink 450 le and
+(execform clips its paint to the bounding box) assert
+erasepage
+
 
 % Type 3 fonts serve glyphshow through their BuildGlyph procedure, as
 % plotting tools emit them (a name-keyed CharStrings of drawing
@@ -1028,6 +1040,54 @@ grestore
 32 4 inkat not (ring clip excludes outside the outer circle) assert
 } if
 
+% Insideness testing: the probe pixel or aperture region intersects
+% the spans the painting operator would mark. Point results at edges
+% are half-open in device space; the clip does not participate
+initgraphics
+newpath 10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 infill (infill inside) assert
+25 15 infill not (infill outside) assert
+10.01 15 infill (infill just inside the edge) assert
+9.99 15 infill not (infill just outside the edge) assert
+10 15 infill (infill on the near edge) assert
+20 15 infill not (infill on the far edge) assert
+15 15 infill pop
+currentpoint pop 10 eq (infill leaves the current path) assert
+gsave
+newpath 0 0 moveto 5 0 lineto 5 5 lineto 0 5 lineto closepath clip
+newpath 10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 infill (infill disregards the clip) assert
+grestore
+newpath
+15 15 infill not (infill of an empty path) assert
+newpath 0 0 moveto 30 0 lineto 30 30 lineto 0 30 lineto closepath
+        10 10 moveto 20 10 lineto 20 20 lineto 10 20 lineto closepath
+15 15 ineofill not (ineofill sees the even-odd hole) assert
+5 15 ineofill (ineofill inside the ring) assert
+15 15 infill (infill fills the nonzero hole) assert
+{ 14 14 16 16 setbbox 14 14 moveto 16 14 lineto 16 16 lineto closepath }
+ineofill not (an aperture inside the hole misses) assert
+{ 18 18 40 40 setbbox 18 18 moveto 25 18 lineto 25 25 lineto closepath }
+infill (an overlapping aperture hits) assert
+{ 40 40 50 50 setbbox 40 40 moveto 50 40 lineto 50 50 lineto closepath }
+infill not (a disjoint aperture misses) assert
+newpath 10 10 moveto 20 10 lineto
+5 setlinewidth
+15 11 instroke (instroke within the stroke width) assert
+15 14 instroke not (instroke beyond the stroke width) assert
+1 setlinewidth
+5 2 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
+inufill (inufill inside the triangle) assert
+2 7 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
+inufill not (inufill outside the triangle) assert
+15 11.4 { 10 10 20 12 setbbox 10 10 moveto 20 10 lineto }
+inustroke not (inustroke without the matrix keeps the pen) assert
+% inustroke's optional matrix concatenates before strokepath; a matrix
+% that shapes the pen anisotropically is not exercised here, as this
+% interpreter approximates the pen from the transform's leading column
+% and so keeps it isotropic
+newpath
+
 % Byte-mapped composite fonts: each mapping hands the declared
 % descendant the right code, shown by the descendants' distinct
 % advances and by the codes cshow reports
@@ -1167,6 +1227,96 @@ tf.rt 2 8 mul 2 add 3 mul get 255 eq
 tf.rt 2 8 mul 2 add 3 mul 1 add get 255 eq and
 tf.rt 2 8 mul 2 add 3 mul 2 add get 0 eq and
 (the strip carries the painted pixel) assert
+
+% The distilled-ps device wraps the recorded marks in document
+% structure and a prolog naming the accumulated operators
+/DEVP 100 100 .privatedict /newDSCWRITEdevice get exec def
+DEVP /OutputFileName (graphics.scratch) put
+0.5 10 10 30 20 DEVP dup /FillRect get exec
+DEVP dup /Emit get exec
+/pw.s (graphics.scratch) (r) file 4096 string readstring pop def
+pw.s (%!PS-Adobe-3.0) anchorsearch { pop pop true }{ pop false } ifelse
+(the distilled page opens with its DSC header) assert
+pw.s (re\nf\n) search { pop pop pop true }{ pop false } ifelse
+(the recorded rectangle reaches the page) assert
+pw.s (%%EOF) search { pop pop pop true }{ pop false } ifelse
+(the distilled page closes with its trailer) assert
+DEVP dup /Destroy get exec
+
+% The vector writers take whole sampled images: the pdf device files
+% an image object the page references, and the svg device embeds the
+% bitmap as a data URI; both leave the masked forms to the painters
+/DEVV 100 100 .privatedict /newPDFWRITEdevice get exec def
+DEVV /OutputFileName (graphics.scratch) put
+graphicsdict /currgstate get /device DEVV put
+matrix setmatrix
+gsave 10 10 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1]
+   /DataSource <11 55 aa ee> >> image
+grestore
+DEVV dup /Emit get exec
+/vw.s (graphics.scratch) (r) file 4096 string readstring pop def
+vw.s (%PDF-1.4) anchorsearch { pop pop true }{ pop false } ifelse
+(the pdf page opens with its header) assert
+vw.s (/Subtype /Image) search { pop pop pop true }{ pop false } ifelse
+(the sampled image files as an image object) assert
+vw.s (/XObject) search { pop pop pop true }{ pop false } ifelse
+(the page resources reference the image) assert
+DEVV dup /Destroy get exec
+/DEVW 100 100 .privatedict /newSVGWRITEdevice get exec def
+DEVW /OutputFileName (graphics.scratch) put
+graphicsdict /currgstate get /device DEVW put
+matrix setmatrix
+gsave 10 10 translate 40 40 scale
+<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+   /ImageMatrix [2 0 0 -2 0 2] /Decode [0 1]
+   /DataSource <11 55 aa ee> >> image
+grestore
+DEVW dup /Emit get exec
+/vw.s (graphics.scratch) (r) file 4096 string readstring pop def
+vw.s (data:image/bmp;base64,) search { pop pop pop true }{ pop false } ifelse
+(the svg page embeds the bitmap as a data URI) assert
+DEVW dup /Destroy get exec
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+% The form cache: a form's paint runs only for the two capture
+% grounds; later executions replay the raster, uncovered pixels keep
+% the page beneath, a new transformation captures afresh, and an
+% unwritable dictionary paints directly every time
+erasepage
+userdict /fm.n 0 put
+/FmCached << /FormType 1 /Matrix [1 0 0 1 0 0] /BBox [0 0 16 16]
+    /PaintProc { pop
+        userdict /fm.n 2 copy get 1 add put
+        0 setgray 2 2 12 12 rectfill } >> def
+gsave 4 4 translate FmCached execform grestore
+userdict /fm.n get 2 eq (the capture runs the paint twice, once per ground) assert
+countink /fm.one exch def
+gsave 36 4 translate FmCached execform grestore
+userdict /fm.n get 2 eq (a second execution replays without painting) assert
+countink fm.one 2 mul eq (the replay lands the same marks) assert
+% uncovered pixels keep what the page held
+erasepage
+0 setgray 0 24 64 8 rectfill
+/fm.bg countink def
+gsave 8 20 translate FmCached execform grestore
+9 25 inkat (the stripe shows through the form's uncovered margin) assert
+% a rotated transformation is a different key
+gsave 32 32 translate 30 rotate FmCached execform grestore
+userdict /fm.n get 4 eq (a new transformation captures afresh) assert
+% readonly forms paint afresh every time
+userdict /fm.m 0 put
+/FmPlain << /FormType 1 /Matrix [1 0 0 1 0 0] /BBox [0 0 8 8]
+    /PaintProc { pop
+        userdict /fm.m 2 copy get 1 add put
+        0 setgray 0 0 8 8 rectfill } >> readonly def
+erasepage
+FmPlain execform
+FmPlain execform
+userdict /fm.m get 2 eq (an unwritable form paints directly each time) assert
+initgraphics
 
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse

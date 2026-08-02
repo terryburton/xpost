@@ -52,9 +52,21 @@
 
 % -  fill  -
 % fill current path with current color
+% A device with a FillPath method consumes the whole path itself
+% (vector devices fill with curves preserved). The path must lie
+% inside a rectangular clip: a non-trivial clip region is cut by the
+% polygon machinery below, at the cost of flattening.
 /fill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
+    DEVICE /FillPath known .cliptrivial and {
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+        //.xpostsys /.applytransfer get exec
+        DEVICE dup /FillPath get exec
+        pop
+        flushpage
+        newpath
+    }{
     flattenpath
     %[ { 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall ]
     [
@@ -113,6 +125,7 @@
     flushpage
     newpath
     } ifelse
+    } ifelse
 } bind def
 
 % -  eofill  -
@@ -121,14 +134,15 @@
 % same scan-conversion as the nonzero fill, and the rectangles --
 % winding-uniform -- then travel the ordinary pipeline: clip span
 % intersection and the device FillPoly. A vector device consuming
-% whole paths through FillPath still receives the nonzero
-% approximation, as before.
+% whole paths through FillPath carries the rule to its consumer.
 /eofill {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     DEVICE /FillPath known .cliptrivial and {
+        graphicsdict /currgstate get /.eorule true put
         % this implementation's own fill, immune to a program's
         % redefinition of the name (which may itself invoke eofill)
         //fill exec
+        graphicsdict /currgstate get /.eorule false put
     }{
         closepath
         flattenpath
@@ -154,35 +168,46 @@
 } bind def
 
 % x y proc  .intest  bool
+% upath proc  .intest  bool
 % The insideness core: proc resolves the subject region -- the spans
 % the corresponding painting operator would mark -- and the probe is
-% the device pixel holding the point, inset by the fill grid's quantum
-% so mere boundary contact stays outside, and insideness is any span
-% surviving the intersection. The clip does not participate: the test
-% asks about the painting operator's own marks. The user-path aperture
-% probe waits on the user-path operators.
+% either the device pixel holding the point or the region an aperture
+% user path encloses. The point's pixel is inset by the fill grid's
+% quantum so mere boundary contact stays outside, and insideness is
+% any span surviving the intersection. The clip does not participate:
+% the test asks about the painting operator's own marks
 .xpostsys /.intest {
     4 dict begin
     /.insp exch def
-    transform
-    floor 0.00390625 add /.iny exch def
-    floor 0.00390625 add /.inx exch def
-    [ [.inx .iny]
-      [.inx 0.9921875 add .iny]
-      [.inx 0.9921875 add .iny 0.9921875 add]
-      [.inx .iny 0.9921875 add] ]
+    dup type dup /integertype eq exch /realtype eq or {
+        transform
+        floor 0.00390625 add /.iny exch def
+        floor 0.00390625 add /.inx exch def
+        [ [.inx .iny]
+          [.inx 0.9921875 add .iny]
+          [.inx 0.9921875 add .iny 0.9921875 add]
+          [.inx .iny 0.9921875 add] ]
+    }{
+        gsave newpath uappend flattenpath .fillpolyargs grestore
+    } ifelse
     gsave .insp exec exch .clipfillpoly length 2 gt grestore
     end
 } put
 
 % x y  infill  bool          x y  ineofill  bool
-% would fill (eofill) of the current path mark the point's pixel
+% upath  infill  bool        upath  ineofill  bool
+% would fill (eofill) of the current path mark the point's pixel, or
+% any of the aperture's region
 /infill { { flattenpath .fillpolyargs } //.xpostsys /.intest get exec } bind def
 /ineofill { { closepath flattenpath .fillpolyargs .eospanpoly } //.xpostsys /.intest get exec } bind def
 
-% the stroke form wraps infill: the stroke outline becomes the current
-% path inside a gsave and fills by the nonzero rule, the probe beneath
+% the stroke and user-path forms wrap the two above: the subject
+% becomes the current path inside a gsave -- the stroke outline fills
+% by the nonzero rule -- and the probe operands pass through beneath
 /instroke { gsave strokepath infill grestore } bind def
+/inufill { gsave newpath uappend infill grestore } bind def
+/inueofill { gsave newpath uappend ineofill grestore } bind def
+/inustroke { gsave ustrokepath infill grestore } bind def
 
 % x1 y1 x2 y2 rect  .hairsegclip  x1' y1' x2' y2' true
 %                                 false
@@ -247,9 +272,29 @@
 
 % -  stroke  -
 % draw line along current path
+% A device with a StrokePath method consumes the whole path itself
+% (vector devices stroke with true joins, caps and width); raster
+% devices take the hairline DrawLine walk when the device-space width
+% is within a pixel, else the stroked outline is filled.
 /stroke {
     //.xpostsys /.patternactive get exec {
         strokepath //.xpostsys /.patternfill get exec
+    }{
+    DEVICE /StrokePath known {
+        % dashing and non-rectangular clipping consume line segments;
+        % with neither active the path passes through unflattened, so
+        % curves reach the device
+        currentdash pop length 0 eq .cliptrivial and not {
+            flattenpath
+            //.xpostsys /dashpath get exec
+            //.xpostsys /doclip get exec
+        } if
+        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+        //.xpostsys /.applytransfer get exec
+        DEVICE dup /StrokePath get exec
+        pop
+        flushpage
+        newpath
     }{
     % the hairline walk clips each segment against the rectangular
     % clip region before plotting it: a complex clip takes the outline
@@ -308,6 +353,7 @@
     } ifelse
 
     newpath
+    } ifelse
     } ifelse
 } bind def
 
@@ -509,6 +555,41 @@
             /pend () def
         } ifelse
         /mrow width 7 add 8 idiv def
+
+        % a device that consumes whole images -- the vector writers --
+        % takes the sample rows and the image-to-device matrix and
+        % paints nothing here; the masked forms keep the painting path
+        DEVICE /PaintImage known
+        mbits null eq and mranges null eq and {
+            /m mat matrix invertmatrix matrix currentmatrix
+               matrix concatmatrix def
+            /allrows height array def
+            0 1 height 1 sub { /y exch def
+                multi {
+                    0 1 ncomp 1 sub { /c exch def
+                        /datasrc srcs c get def
+                        /pend pends c get def
+                        /rawrow rawrows c get def
+                        /buf bufs c get def
+                        //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+                        pends c pend put
+                    } for
+                    /irow width ncomp mul string def
+                    0 1 width 1 sub { /x exch def
+                        0 1 ncomp 1 sub { /c exch def
+                            irow x ncomp mul c add
+                            bufs c get x get put
+                        } for
+                    } for
+                    allrows y irow put
+                }{
+                    //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
+                    allrows y buf dup length string copy put
+                } ifelse
+            } for
+            width height ncomp m allrows decode interp
+            DEVICE dup /PaintImage get exec
+        }{
 
         % per-component decode as base + sample x scale over 0..255
         /dbase ncomp array def
@@ -731,6 +812,7 @@
                 } if
             } for
         } for
+        } ifelse
         } ifelse
 
         end

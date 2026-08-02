@@ -57,6 +57,7 @@
 #include "xpost_operator.h"
 #include "xpost_op_dict.h"
 #include "xpost_op_path.h"
+#include "xpost_dev_generic.h"  /* the vector devices' content accumulator */
 
 #undef y0
 #undef y1
@@ -1016,6 +1017,125 @@ int _cliprect(Xpost_Context *ctx)
     return 0;
 }
 
+/* Emit the current path into a vector device's content accumulator with
+   curves preserved -- the FillPath hot loop, walking the path string
+   directly so arbitrarily many subpaths cost no operand stack. The
+   syntax is the device's: PDF path operators or SVG path commands. */
+static
+int _fillpath_emit(Xpost_Context *ctx,
+                   const double *comp,
+                   Xpost_Object devdic, int svg)
+{
+    Xpost_Object gstate, path;
+    char *p;
+    unsigned int used, o;
+    char tmp[192];
+    int n, i;
+
+    Xpost_Object eo;
+    int evenodd;
+
+    gstate = _gstate(ctx);
+    if (xpost_object_get_type(gstate) == invalidtype)
+        return undefined;
+    /* eofill raises the flag around its call: the consumer applies
+       the even-odd rule instead of nonzero winding */
+    eo = xpost_dict_get(ctx, gstate, xpost_name_cons(ctx, ".eorule"));
+    evenodd = xpost_object_get_type(eo) == booleantype && eo.int_.val;
+    path = xpost_dict_get(ctx, gstate, namecurrpath);
+    if (xpost_object_get_type(path) != stringtype)
+        return unregistered;
+    p = xpost_string_get_pointer(ctx, path);
+    used = _path_get_u32(p, 0);
+    if (used <= PATH_HDR)
+        return 0;
+
+    /* the PDF device emits its fill colour itself, before the walk */
+    if (svg)
+    {
+        n = 0;
+        memcpy(tmp + n, "<path fill=\"rgb(", 16); n += 16;
+        n += xpost_dev_pdf_fmt_num(tmp + n, comp[0] * 100); tmp[n++] = '%'; tmp[n++] = ',';
+        n += xpost_dev_pdf_fmt_num(tmp + n, comp[1] * 100); tmp[n++] = '%'; tmp[n++] = ',';
+        n += xpost_dev_pdf_fmt_num(tmp + n, comp[2] * 100); tmp[n++] = '%';
+        if (evenodd)
+            { memcpy(tmp + n, ")\" fill-rule=\"evenodd\" d=\"", 26); n += 26; }
+        else
+            { memcpy(tmp + n, ")\" fill-rule=\"nonzero\" d=\"", 26); n += 26; }
+        if (!xpost_dev_pdf_append(ctx, devdic, tmp, n))
+            return undefined;
+    }
+
+    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    {
+        int cmd = p[o];
+        int nco = cmd == PATH_CMD_CURVE ? 6 : 2;
+        real co[6];
+
+        if (cmd < PATH_CMD_MOVE || cmd > PATH_CMD_CLOSE)
+            return unregistered;
+        _path_get_coords(p, o, co, nco);
+        n = 0;
+        if (cmd == PATH_CMD_CLOSE)
+        {
+            /* the stored coordinates repeat the subpath start */
+            if (svg)
+                tmp[n++] = 'Z';
+            else
+                { tmp[n++] = 'h'; tmp[n++] = '\n'; }
+        }
+        else if (svg)
+        {
+            tmp[n++] = cmd == PATH_CMD_MOVE ? 'M'
+                     : cmd == PATH_CMD_LINE ? 'L' : 'C';
+            for (i = 0; i < nco; i++)
+            {
+                if (i) tmp[n++] = ' ';
+                n += xpost_dev_pdf_fmt_num(tmp + n, co[i]);
+            }
+        }
+        else
+        {
+            for (i = 0; i < nco; i++)
+            {
+                n += xpost_dev_pdf_fmt_num(tmp + n, co[i]);
+                tmp[n++] = ' ';
+            }
+            tmp[n++] = cmd == PATH_CMD_MOVE ? 'm'
+                     : cmd == PATH_CMD_LINE ? 'l' : 'c';
+            tmp[n++] = '\n';
+        }
+        if (n && !xpost_dev_pdf_append(ctx, devdic, tmp, n))
+            return undefined;
+    }
+
+    if (!xpost_dev_pdf_append(ctx, devdic,
+                              svg ? "\"/>\n" : evenodd ? "f*\n" : "f\n",
+                              svg ? 4 : evenodd ? 3 : 2))
+        return undefined;
+    return 0;
+}
+
+#define FPNUMVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
+                                                          : (double)(o).int_.val)
+static
+int _pdffillpath(Xpost_Context *ctx,
+                 Xpost_Object devdic)
+{
+    return _fillpath_emit(ctx, NULL, devdic, 0);
+}
+
+static
+int _svgfillpath(Xpost_Context *ctx,
+                 Xpost_Object r, Xpost_Object g, Xpost_Object b,
+                 Xpost_Object devdic)
+{
+    double comp[3];
+    comp[0] = FPNUMVAL(r); comp[1] = FPNUMVAL(g); comp[2] = FPNUMVAL(b);
+    return _fillpath_emit(ctx, comp, devdic, 1);
+}
+#undef FPNUMVAL
+
 static
 int _closepath(Xpost_Context *ctx)
 {
@@ -1844,6 +1964,13 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     _arcto_cont_opcode = op.mark_.padw;
 
     op = xpost_operator_cons(ctx, "flattenpath", (Xpost_Op_Func)_flattenpath, 0, 0);
+    INSTALL;
+
+    op = xpost_operator_cons(ctx, ".pdffillpath", (Xpost_Op_Func)_pdffillpath, 0, 1,
+            dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".svgfillpath", (Xpost_Op_Func)_svgfillpath, 0, 4,
+            numbertype, numbertype, numbertype, dicttype);
     INSTALL;
 
     _arc_start_proc = xpost_array_cons(ctx, 4);

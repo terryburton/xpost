@@ -319,10 +319,16 @@ Level 2 operators
  [X] startjob (job boundaries accepted; no VM encapsulation)
  [X] setcachedevice2 (reduces to setcachedevice)
  [X] setcacheparams, currentcacheparams
- [ ] user paths
- [ ] insideness testing
- [ ] user objects
- [ ] execform
+ [X] user paths (upath, uappend, ufill, ueofill, ustroke,
+     ustrokepath, setbbox; ucache is accepted, nothing is cached)
+ [X] insideness testing (infill, ineofill, instroke, inufill,
+     inueofill, inustroke; a user path without a leading setbbox is
+     accepted rather than rejected)
+ [X] user objects (defineuserobject, execuserobject,
+     undefineuserobject)
+ [X] execform (output cached on raster pages, keyed by the form and
+     the transformation; a vector or screening page, or an
+     unwritable dictionary, paints afresh)
  [X] setstrokeadjust, currentstrokeadjust (recorded only)
  [X] shared VM (setshared, currentshared, scheck, shareddict,
      SharedFontDirectory, GlobalFontDirectory: the global-VM view
@@ -351,7 +357,8 @@ Level 3 operators
 Extensions
 ----------
 
- [ ] pdfmark
+ [X] pdfmark (DOCINFO reaches the pdfwrite device; other mark types
+     are consumed without effect)
  [X] page-size operators of the printer products (letter, legal, a4,
      and the rest of the common set)
 
@@ -382,10 +389,11 @@ Typical output devices
  [X] tiff (24-bit rgb, one uncompressed strip)
  [X] jpeg
  [X] png (also a png with alpha)
- [ ] pdf
- [ ] svg
+ [X] pdf (pdfwrite)
+ [X] svg (svgwrite)
  [X] bounding-box
- [ ] dsc-compliant distilled ps
+ [X] dsc-compliant distilled ps (pswrite; separations arrive as
+     their process colours)
  [X] xcb
  [X] ms-windows
 
