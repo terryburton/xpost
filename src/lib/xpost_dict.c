@@ -356,6 +356,7 @@ int dicgrow(Xpost_Context *ctx,
     dicrec *tp;
     Xpost_Object n;
     unsigned int i;
+    unsigned int dent;
 
     xpost_stack_push(ctx->lo, ctx->hold, d);
     mem = xpost_context_select_memory(ctx, d);
@@ -371,14 +372,18 @@ int dicgrow(Xpost_Context *ctx,
     if (mem == ctx->gl)
         n.tag |= XPOST_OBJECT_TAG_DATA_FLAG_BANK;
 
-    dp = xpost_ent_ptr(mem, xpost_object_get_ent(d));
+    dent = xpost_object_get_ent(d);
+    dp = xpost_ent_ptr(mem, dent);
     sz = DICTABN(dp->sz);
     for (i = 0; i < sz; i++)
     {
         /* xpost_dict_put_memory below can grow -- and so relocate -- the
-           memory file, which leaves a table pointer cached across the call
-           dangling. Re-derive it from the current base each iteration; ad,
-           the source dict's own offset, does not move. */
+           memory file, which leaves any pointer derived before the call
+           dangling. Re-derive from the entity itself each iteration:
+           xpost_ent_ptr reads the file's base as it stands now. Deriving
+           the record table from a header pointer captured outside the
+           loop would carry the stale base along with it. */
+        dp = xpost_ent_ptr(mem, dent);
         tp = (dicrec *)((char *)dp + sizeof(dichead));
         if (xpost_object_get_type(tp[i].key) != nulltype)
         {
@@ -391,9 +396,8 @@ int dicgrow(Xpost_Context *ctx,
 #endif
 
     {   /* exchange entities */
-        unsigned int dent, nent;
+        unsigned int nent;
 
-        dent = xpost_object_get_ent(d);
         nent = xpost_object_get_ent(n);
 
         xpost_ent_swap(mem, dent, nent);

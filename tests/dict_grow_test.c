@@ -95,6 +95,35 @@ int main(void)
     sweep(ctx->lo, "after growth (local)");
     sweep(ctx->gl, "after growth (global)");
 
+    /* Growth past the point where the memory file must relocate: dicgrow
+       rehashes by putting every entry into a larger dictionary, and each
+       put can grow -- and so move -- the file beneath it. A pointer into
+       the source dictionary derived once and reused across those calls
+       dangles, and the rehash then reads freed memory. Push well past a
+       single relocation and require the contents to survive intact. */
+    {
+        Xpost_Object big = xpost_dict_cons(ctx, 1);
+        int j;
+        const int N = 70000;
+
+        check(xpost_object_get_type(big) == dicttype, "a growable dict constructs");
+        for (j = 0; j < N; j++)
+            xpost_dict_put(ctx, big, xpost_int_cons(j), xpost_int_cons(j + 1));
+
+        for (j = 0; j < N; j++)
+        {
+            Xpost_Object v = xpost_dict_get(ctx, big, xpost_int_cons(j));
+            if (xpost_object_get_type(v) != integertype || v.int_.val != j + 1)
+            {
+                printf("FAIL: relocating growth lost key %d\n", j);
+                failures++;
+                break;
+            }
+        }
+        sweep(ctx->lo, "after relocating growth (local)");
+        sweep(ctx->gl, "after relocating growth (global)");
+    }
+
     xpost_destroy(ctx);
     xpost_quit();
 
