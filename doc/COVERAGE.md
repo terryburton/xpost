@@ -8,7 +8,7 @@ Coverage is a floor, not a score: a covered line is one that ran, not one
 whose behaviour anything asserted. Read the second table as the list of
 places where there is nothing to argue about.
 
-**79.1% of 17215 lines**, across 49 files.
+**79.7% of 17221 lines**, across 49 files.
 
 ## By file, most uncovered lines first
 
@@ -17,19 +17,19 @@ small file at 50% hides less than a large one at 85%.
 
 | File | Covered | Lines | Uncovered |
 |---|---:|---:|---:|
-| `src/lib/xpost_file.c` | 74.89% | 2198 | 552 |
+| `src/lib/xpost_file.c` | 77.72% | 2204 | 491 |
 | `src/lib/xpost_op_font.c` | 79.88% | 2008 | 404 |
 | `src/lib/xpost_dev_generic.c` | 86.67% | 1403 | 187 |
 | `src/lib/xpost_interpreter.c` | 82.21% | 1040 | 185 |
 | `src/lib/xpost_dsc_parse.c` | 70.70% | 587 | 172 |
-| `src/lib/xpost_font.c` | 71.05% | 570 | 165 |
+| `src/lib/xpost_font.c` | 71.23% | 570 | 164 |
 | `src/lib/xpost_op_file.c` | 84.82% | 896 | 136 |
 | `src/lib/xpost_op_token.c` | 82.64% | 674 | 117 |
 | `src/lib/xpost_garbage.c` | 67.87% | 333 | 107 |
-| `src/lib/xpost_op_path.c` | 89.69% | 980 | 101 |
-| `src/lib/xpost_memory.c` | 59.67% | 243 | 98 |
+| `src/lib/xpost_op_path.c` | 89.80% | 980 | 100 |
 | `src/lib/xpost_op_control.c` | 74.23% | 357 | 92 |
-| `src/lib/xpost_operator.c` | 77.75% | 400 | 89 |
+| `src/lib/xpost_operator.c` | 78.50% | 400 | 86 |
+| `src/lib/xpost_memory.c` | 65.02% | 243 | 85 |
 | `src/lib/xpost_compat_posix.c` | 58.33% | 204 | 85 |
 | `src/lib/xpost_dev_raster.c` | 63.56% | 225 | 82 |
 | `src/lib/xpost_dev_xcb.c` | 73.54% | 291 | 77 |
@@ -39,18 +39,18 @@ small file at 50% hides less than a large one at 85%.
 | `src/lib/xpost_context.c` | 65.91% | 176 | 60 |
 | `src/lib/xpost_op_array.c` | 77.24% | 246 | 56 |
 | `src/lib/xpost_free.c` | 63.40% | 153 | 56 |
-| `src/lib/xpost_op_dict.c` | 81.61% | 299 | 55 |
-| `src/lib/xpost_object.c` | 57.48% | 127 | 54 |
+| `src/lib/xpost_op_dict.c` | 81.94% | 299 | 54 |
 | `src/lib/xpost_op_string.c` | 75.23% | 214 | 53 |
 | `src/lib/xpost_dict.c` | 84.59% | 344 | 53 |
-| `src/lib/xpost_op_misc.c` | 71.98% | 182 | 51 |
+| `src/lib/xpost_object.c` | 59.84% | 127 | 51 |
 | `src/lib/xpost_dev_jpeg.c` | 73.98% | 196 | 51 |
 | `src/lib/xpost_save.c` | 75.76% | 132 | 32 |
+| `src/lib/xpost_op_misc.c` | 84.07% | 182 | 29 |
 | `src/lib/xpost_dev_bgr.c` | 79.26% | 135 | 28 |
-| `src/lib/xpost_stack.c` | 81.88% | 149 | 27 |
 | `src/lib/xpost_op_type.c` | 90.49% | 284 | 27 |
 | `src/lib/xpost_name.c` | 83.44% | 157 | 26 |
 | `src/lib/xpost_garbage_diag.c` | 84.43% | 122 | 19 |
+| `src/lib/xpost_stack.c` | 89.26% | 149 | 16 |
 | `src/lib/xpost_op_context.c` | 82.89% | 76 | 13 |
 | `src/lib/xpost_op_stack.c` | 89.29% | 112 | 12 |
 | `src/lib/xpost_op_param.c` | 78.18% | 55 | 12 |
@@ -69,9 +69,9 @@ small file at 50% hides less than a large one at 85%.
 
 ## Functions the suite never enters
 
-The blind spots: 36 functions nothing in the suite reaches.
+The blind spots: 31 functions nothing in the suite reaches.
 
-(A further 30 are defined in headers, so every object that includes
+(A further 27 are defined in headers, so every object that includes
 one carries its own copy and the copies that are not called read as
 zero. They are listed at the end rather than here.)
 
@@ -94,7 +94,6 @@ zero. They are listed at the end rather than here.)
 - `dctenc_empty_output_buffer`
 - `dctenc_error_exit`
 - `dctenc_output_message`
-- `dct_error_exit`
 - `dct_output_message`
 - `dct_skip_input_data`
 - `enc_readch`
@@ -131,13 +130,6 @@ zero. They are listed at the end rather than here.)
 
 - `_stack_number_number`
 
-**`src/lib/xpost_op_misc.c`**
-
-- `debugloadoff`
-- `debugloadon`
-- `dumpvm`
-- `Odumpnames`
-
 ## Header-defined functions with an uncalled copy
 
 Not blind spots: each is compiled into every object that includes its
@@ -159,8 +151,6 @@ header, and only the copies nothing calls are counted here.
 - `xpost_interpreter_exit` (in `src/lib/xpost_interpreter.c`)
 - `xpost_log_print_cb_set` (in `src/lib/xpost_log.c`)
 - `xpost_log_print_cb_stdout` (in `src/lib/xpost_log.c`)
-- `xpost_memory_file_dump` (in `src/lib/xpost_memory.c`)
-- `xpost_memory_table_dump` (in `src/lib/xpost_memory.c`)
 - `xpost_memory_table_dump_ent` (in `src/lib/xpost_memory.c`)
 - `xpost_memory_table_get_mark` (in `src/lib/xpost_memory.c`)
 - `xpost_memory_table_set_addr` (in `src/lib/xpost_memory.c`)
@@ -172,4 +162,3 @@ header, and only the copies nothing calls are counted here.
 - `xpost_operator_dump` (in `src/lib/xpost_operator.c`)
 - `xpost_object_is_exe` (in `src/lib/xpost_op_font.c`)
 - `xpost_op_breakhere` (in `src/lib/xpost_oplib.c`)
-- `xpost_stack_dump` (in `src/lib/xpost_stack.c`)
