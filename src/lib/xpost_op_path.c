@@ -1112,8 +1112,6 @@ int _fillpath_emit(Xpost_Context *ctx,
     return 0;
 }
 
-#define FPNUMVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
-                                                          : (double)(o).int_.val)
 static
 int _pdffillpath(Xpost_Context *ctx,
                  Xpost_Object devdic)
@@ -1127,10 +1125,9 @@ int _svgfillpath(Xpost_Context *ctx,
                  Xpost_Object devdic)
 {
     double comp[3];
-    comp[0] = FPNUMVAL(r); comp[1] = FPNUMVAL(g); comp[2] = FPNUMVAL(b);
+    comp[0] = xpost_object_number(r); comp[1] = xpost_object_number(g); comp[2] = xpost_object_number(b);
     return _fillpath_emit(ctx, comp, devdic, 1);
 }
-#undef FPNUMVAL
 
 static
 int _closepath(Xpost_Context *ctx)

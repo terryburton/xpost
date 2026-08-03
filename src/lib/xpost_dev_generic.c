@@ -867,8 +867,7 @@ int _eospanpoly(Xpost_Context *ctx,
 static double
 _channel(Xpost_Object v, double max)
 {
-    double d = xpost_object_get_type(v) == realtype
-             ? v.real_.val : (double)v.int_.val;
+    double d = xpost_object_number(v);
     if (d < 0.0) d = 0.0;
     if (d > 1.0) d = 1.0;
     return d * max;
@@ -934,10 +933,10 @@ int _fillrectgray(Xpost_Context *ctx,
        solid */
     bht = (int)(_channel(val, 256.0) + 0.5);
 
-    dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
-    dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
-    dw = xpost_object_get_type(w) == realtype ? w.real_.val : (double)w.int_.val;
-    dh = xpost_object_get_type(h) == realtype ? h.real_.val : (double)h.int_.val;
+    dx = xpost_object_number(x);
+    dy = xpost_object_number(y);
+    dw = xpost_object_number(w);
+    dh = xpost_object_number(h);
 
     /* normalise negative extents, then form inclusive end coords */
     if (dw < 0) { dw = -dw; dx -= dw; }
@@ -1006,8 +1005,7 @@ int _blendpixgray(Xpost_Context *ctx,
     row = xpost_array_get(ctx, imgdata, iy);
     if (ix < 0 || ix >= row.comp_.sz)
         return 0;
-    src = (int)((xpost_object_get_type(val) == realtype
-                 ? val.real_.val : (double)val.int_.val) * 255.0);
+    src = (int)((xpost_object_number(val)) * 255.0);
     p = (unsigned char *)xpost_string_get_pointer(ctx, row) + ix;
     dst = *p;
     *p = (unsigned char)(dst + ((src - dst) * c + 127) / 255);
@@ -1090,10 +1088,10 @@ int _fillrectrgb(Xpost_Context *ctx,
            | ((int)_channel(g, 255.0) << 8)
            |  (int)_channel(b, 255.0);
 
-    dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
-    dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
-    dw = xpost_object_get_type(w) == realtype ? w.real_.val : (double)w.int_.val;
-    dh = xpost_object_get_type(h) == realtype ? h.real_.val : (double)h.int_.val;
+    dx = xpost_object_number(x);
+    dy = xpost_object_number(y);
+    dw = xpost_object_number(w);
+    dh = xpost_object_number(h);
 
     /* normalise negative extents, then form inclusive end coords */
     if (dw < 0) { dw = -dw; dx -= dw; }
@@ -2593,8 +2591,7 @@ static int _pdfnumstr(Xpost_Context *ctx, Xpost_Object num)
     char t[32];
     int n;
 
-    n = _pdf_fmt_num(t, xpost_object_get_type(num) == realtype
-                        ? num.real_.val : (double)num.int_.val);
+    n = _pdf_fmt_num(t, xpost_object_number(num));
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_object_cvlit(xpost_string_cons(ctx, n, t)));
     return 0;

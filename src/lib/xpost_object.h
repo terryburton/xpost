@@ -493,6 +493,17 @@ static inline Xpost_Object_Type xpost_object_get_type(Xpost_Object obj)
  * This function returns 1 if the object @p obj is one of the composite
  * types (arraytype, stringtype, or dicttype), 0 otherwise.
  */
+/**
+ * @brief the numeric value of an integer- or real-type object, as a
+ * double. The int-to-real promotion every consumer of a numbertype
+ * operand performs; the caller has already type-checked the object.
+ */
+static inline double xpost_object_number(Xpost_Object obj)
+{
+    return xpost_object_get_type(obj) == realtype
+        ? (double)obj.real_.val : (double)obj.int_.val;
+}
+
 static inline int xpost_object_is_composite(Xpost_Object obj)
 {
     switch (xpost_object_get_type(obj))

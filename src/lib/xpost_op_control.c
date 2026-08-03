@@ -119,8 +119,7 @@ int xpost_op_bool_proc_proc_ifelse (Xpost_Context *ctx,
    counter */
 static double _for_limit(Xpost_Object lim)
 {
-    return xpost_object_get_type(lim) == realtype
-        ? (double)lim.real_.val : (double)lim.int_.val;
+    return xpost_object_number(lim);
 }
 
 /* initial increment limit proc  for  -

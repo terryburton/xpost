@@ -125,8 +125,7 @@ int _char_device_matrix(Xpost_Context *ctx,
     for (i = 0; i < 4; i++)
     {
         Xpost_Object el = xpost_array_get(ctx, psmat, i);
-        cm[i] = xpost_object_get_type(el) == realtype ? el.real_.val
-             : (real)el.int_.val;
+        cm[i] = xpost_object_number(el);
     }
     e[0] = fm[0] * cm[0] + fm[1] * cm[2];
     e[1] = fm[0] * cm[1] + fm[1] * cm[3];
@@ -1592,9 +1591,6 @@ static int _frag_closepath(void *user)
     return _frag_put(f, "h\n", 2);
 }
 
-#define COMPVAL(o) (xpost_object_get_type(o) == realtype ? (o).real_.val \
-                                                         : (double)(o).int_.val)
-
 static
 int _show_char_outline(Xpost_Context *ctx,
                        Xpost_Object devdic,
@@ -1633,9 +1629,9 @@ int _show_char_outline(Xpost_Context *ctx,
         }
     }
 
-    r = COMPVAL(comp1);
-    g = ncomp >= 3 ? COMPVAL(comp2) : r;
-    b = ncomp >= 3 ? COMPVAL(comp3) : r;
+    r = xpost_object_number(comp1);
+    g = ncomp >= 3 ? xpost_object_number(comp2) : r;
+    b = ncomp >= 3 ? xpost_object_number(comp3) : r;
     if (ts->sepindex >= 0 && !f.svg)
     {
         /* the fill colour is a separation registered with the device:
@@ -1662,7 +1658,7 @@ int _show_char_outline(Xpost_Context *ctx,
         t[n++] = ' ';
         n += xpost_dev_pdf_fmt_num(t + n, b);
         t[n++] = ' ';
-        n += xpost_dev_pdf_fmt_num(t + n, COMPVAL(comp4));
+        n += xpost_dev_pdf_fmt_num(t + n, xpost_object_number(comp4));
         memcpy(t + n, " k\n", 3);
         n += 3;
     }
@@ -2287,9 +2283,9 @@ int _loadcidfont0(Xpost_Context *ctx,
             for (j = 0; j < 6; j++)
             {
                 Xpost_Object v = xpost_array_get(ctx, fdfm, j);
-                a[j] = xpost_object_get_type(v) == realtype ? v.real_.val : v.int_.val;
+                a[j] = xpost_object_number(v);
                 v = xpost_array_get(ctx, topfm, j);
-                b[j] = xpost_object_get_type(v) == realtype ? v.real_.val : v.int_.val;
+                b[j] = xpost_object_number(v);
             }
             m[0] = a[0]*b[0] + a[1]*b[2];
             m[1] = a[0]*b[1] + a[1]*b[3];
@@ -2898,8 +2894,8 @@ int _t3cachehit(Xpost_Context *ctx,
     if (_device_color(ctx, gs, devdic, &ncomp, comp))
         goto refuse;
 
-    dx = xpost_object_get_type(x) == realtype ? x.real_.val : (double)x.int_.val;
-    dy = xpost_object_get_type(y) == realtype ? y.real_.val : (double)y.int_.val;
+    dx = xpost_object_number(x);
+    dy = xpost_object_number(y);
 
     {
         double c[4];
@@ -3666,8 +3662,7 @@ int _stringwidth(Xpost_Context *ctx,
             for (i = 0; i < 4; i++)
             {
                 Xpost_Object el = xpost_array_get(ctx, psmat, i);
-                m[i] = xpost_object_get_type(el) == realtype ? el.real_.val
-                     : (real)el.int_.val;
+                m[i] = xpost_object_number(el);
             }
             det = m[0] * m[3] - m[1] * m[2];
             if (det != 0)
