@@ -82,4 +82,23 @@ clear
 { 1 (str) add } stopped (a restored handler still reports the error) assert
 clear
 
+% interrupt and timeout arrive from outside the program rather than from
+% an operator it executed. PLRM 3.11.1 has the interpreter execute them
+% from errordict between two objects without pushing the object being
+% executed or disturbing the operand stack in any other way, and PLRM 8.2
+% says the same of each: their handlers stop, and leave the stack as they
+% found it.
+clear 1 2 3
+count /depth exch def
+{ errordict /interrupt get exec } stopped
+(the interrupt handler stops) assert
+count depth eq (an interrupt leaves the operand stack alone) assert
+
+clear 1 2 3
+count /depth exch def
+{ errordict /timeout get exec } stopped
+(the timeout handler stops) assert
+count depth eq (a timeout leaves the operand stack alone) assert
+clear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
