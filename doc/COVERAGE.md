@@ -13,7 +13,7 @@ the Windows halves of the compatibility layer, and the portable path
 confinement used where the kernel has no openat2 -- cannot run here and
 reads as uncovered whatever the other CI lanes do with it.
 
-**80.9% of 17308 lines**, across 49 files.
+**81.0% of 17337 lines**, across 49 files.
 
 ## By file, most uncovered lines first
 
@@ -23,7 +23,7 @@ small file at 50% hides less than a large one at 85%.
 | File | Covered | Lines | Uncovered |
 |---|---:|---:|---:|
 | `src/lib/xpost_file.c` | 78.40% | 2204 | 476 |
-| `src/lib/xpost_op_font.c` | 80.63% | 2008 | 389 |
+| `src/lib/xpost_op_font.c` | 81.27% | 2008 | 376 |
 | `src/lib/xpost_dev_generic.c` | 86.67% | 1403 | 187 |
 | `src/lib/xpost_interpreter.c` | 82.50% | 1040 | 182 |
 | `src/lib/xpost_dsc_parse.c` | 70.70% | 587 | 172 |
@@ -35,14 +35,14 @@ small file at 50% hides less than a large one at 85%.
 | `src/lib/xpost_operator.c` | 78.50% | 400 | 86 |
 | `src/lib/xpost_memory.c` | 65.02% | 243 | 85 |
 | `src/lib/xpost_compat_posix.c` | 58.33% | 204 | 85 |
-| `src/lib/xpost_dev_xcb.c` | 73.54% | 291 | 77 |
+| `src/lib/xpost_dev_xcb.c` | 73.47% | 294 | 78 |
 | `src/bin/xpost_main.c` | 71.81% | 259 | 73 |
 | `src/lib/xpost_dev_png.c` | 77.60% | 308 | 69 |
 | `src/lib/xpost_op_control.c` | 82.91% | 357 | 61 |
 | `src/lib/xpost_log.c` | 46.02% | 113 | 61 |
 | `src/lib/xpost_context.c` | 65.91% | 176 | 60 |
 | `src/lib/xpost_free.c` | 63.40% | 153 | 56 |
-| `src/lib/xpost_dev_jpeg.c` | 73.98% | 196 | 51 |
+| `src/lib/xpost_dev_jpeg.c` | 74.77% | 222 | 56 |
 | `src/lib/xpost_op_dict.c` | 83.28% | 299 | 50 |
 | `src/lib/xpost_object.c` | 62.20% | 127 | 48 |
 | `src/lib/xpost_dict.c` | 87.50% | 344 | 43 |
