@@ -46,6 +46,33 @@ static int parse(const char *text, Xpost_Dsc *dsc)
     return st == XPOST_DSC_STATUS_SUCCESS;
 }
 
+/* parse a document from a real file on disk, which the library maps
+   rather than reading; 1 if the parse reported success. The clients --
+   xpost_dsc and the viewer -- reach the parser only this way. */
+static int parse_file(const char *text, Xpost_Dsc *dsc, const char *name)
+{
+    Xpost_Dsc_File *file;
+    Xpost_Dsc_Status st;
+    FILE *f;
+
+    f = fopen(name, "wb");
+    if (!f)
+        return 0;
+    fwrite(text, 1, strlen(text), f);
+    fclose(f);
+
+    file = xpost_dsc_file_new_from_file(name);
+    if (!file)
+    {
+        remove(name);
+        return 0;
+    }
+    st = xpost_dsc_parse(file, dsc);
+    xpost_dsc_file_del(file);
+    remove(name);
+    return st == XPOST_DSC_STATUS_SUCCESS;
+}
+
 /* parse from an allocation holding exactly the document's bytes, the
    way a mapped file whose size is an exact page multiple presents
    them: nothing readable follows the last byte */
@@ -445,6 +472,38 @@ int main(void)
     check(dsc.header.document_fonts.nbr == 1,
           "the rest of the header parses after a tab-separated version");
     xpost_dsc_free(&dsc);
+
+    /* --- the mapped-file path the clients use --- */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse_file("%!PS-Adobe-3.0\n"
+                     "%%Title: (A mapped document)\n"
+                     "%%DocumentFonts: Courier Helvetica\n"
+                     "%%Pages: 2\n"
+                     "%%EndComments\n"
+                     "%%BeginSetup\n"
+                     "%%EndSetup\n"
+                     "%%Page: one 1\n"
+                     "showpage\n"
+                     "%%Page: two 2\n"
+                     "showpage\n"
+                     "%%Trailer\n"
+                     "%%EOF\n", &dsc, "dsc_from_file.scratch"),
+          "a document read from a file parses");
+    check(dsc.header.document_fonts.nbr == 2,
+          "the fonts of a mapped document are recorded");
+    check(dsc.header.pages == 2, "the page count of a mapped document is recorded");
+    check(dsc.pages && dsc.pages[0].label && strcmp(dsc.pages[0].label, "one") == 0,
+          "the first page's label survives the mapping");
+    xpost_dsc_free(&dsc);
+
+    /* a file that is not there is refused rather than mapped */
+    memset(&dsc, 0, sizeof(dsc));
+    check(xpost_dsc_file_new_from_file("dsc_absent_file.scratch") == NULL,
+          "a file that does not exist yields no file object");
+
+    /* a directory is not a document */
+    check(xpost_dsc_file_new_from_file(".") == NULL,
+          "a directory yields no file object");
 
     xpost_quit();
 
