@@ -818,6 +818,13 @@ test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
 
+# Device-driver skeleton: the compiled-buffer device fleet reaches its
+# private struct, operand folding and FillRect extent arithmetic through
+# xpost_dev_driver.h -- the contract stays written in one place.
+test('check-device-skeleton',
+  find_program('tests/check-device-skeleton.sh'),
+  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+
 # Machinery stays born in its final home: every registered private-namespace
 # member keeps its dictionary and every graphics-state template slot survives,
 # per the register in tests/dict_homes.golden.
@@ -873,6 +880,19 @@ resource_load_exe = executable('resource_load_test',
 test('resource-load',
   resource_load_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The driver contract's rectangle definition: xpost_dev_rect_normalize()
+# is the one statement of which pixels FillRect paints (inclusive far
+# corner, negative extents reflected, clipped to the device), and the
+# folding helpers truncate. Every device routed through the driver
+# header inherits exactly these semantics.
+dev_rect_exe = executable('dev_rect_test',
+  'tests/dev_rect_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dev-rect', dev_rect_exe)
 #if get_option('nls') == true
 #  subdir('po')
 #endif

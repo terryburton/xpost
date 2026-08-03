@@ -56,6 +56,7 @@
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call load operator for convenience */
 #include "xpost_dev_generic.h" /* get filename */
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_png.h" /* check prototypes */
 
 typedef struct
@@ -270,9 +271,7 @@ int _create_cont(Xpost_Context *ctx,
         png_set_filler(private.png_ptr, 0, PNG_FILLER_AFTER);
 
     /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -300,53 +299,34 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b, ix, iy;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 255.0);
-    else
-        red.int_.val *= 255;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 255.0);
-    else
-        green.int_.val *= 255;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 255.0);
-    else
-        blue.int_.val *= 255;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons(x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons(y.real_.val);
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     /* check bounds */
-    if ((x.int_.val < 0) ||
-        (x.int_.val >= private.width) ||
-        (y.int_.val < 0) ||
-        (y.int_.val >= private.height))
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
         return 0;
 
     {
         Xpost_Png_Pixel pixel;
-        pixel.blue = blue.int_.val;
-        pixel.green = green.int_.val;
-        pixel.red = red.int_.val;
+        pixel.blue = b;
+        pixel.green = g;
+        pixel.red = r;
         pixel.alpha = 255;
-        private.buf->data[y.int_.val * private.width + x.int_.val] = pixel;
+        private.buf->data[iy * private.width + ix] = pixel;
     }
 
-    /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     return 0;
 }
@@ -368,19 +348,16 @@ int _blendpix(Xpost_Context *ctx,
     PrivateData private;
     int r, g, b, c, ix, iy;
 
-    r = (int)((xpost_object_get_type(red)   == realtype ? red.real_.val   * 255.0 : red.int_.val   * 255));
-    g = (int)((xpost_object_get_type(green) == realtype ? green.real_.val * 255.0 : green.int_.val * 255));
-    b = (int)((xpost_object_get_type(blue)  == realtype ? blue.real_.val  * 255.0 : blue.int_.val  * 255));
-    c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
-    ix = xpost_object_get_type(x) == realtype ? (int)x.real_.val : x.int_.val;
-    iy = xpost_object_get_type(y) == realtype ? (int)y.real_.val : y.int_.val;
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    c = xpost_dev_num_to_int(cov);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
 
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     if ((ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
@@ -423,34 +400,24 @@ int _fillrect(Xpost_Context *ctx,
     Xpost_Png_Pixel pixel;
     int ix, iy, x0, y0, x1, y1;
 
-    /* fold numbers as PutPix does: colours scaled to 0..255, coords truncated */
-    pixel.red   = (unsigned char)((xpost_object_get_type(red)   == realtype ? red.real_.val   * 255.0 : red.int_.val   * 255));
-    pixel.green = (unsigned char)((xpost_object_get_type(green) == realtype ? green.real_.val * 255.0 : green.int_.val * 255));
-    pixel.blue  = (unsigned char)((xpost_object_get_type(blue)  == realtype ? blue.real_.val  * 255.0 : blue.int_.val  * 255));
+    /* fold numbers per the driver contract */
+    pixel.red   = (unsigned char)xpost_dev_num_to_byte(red);
+    pixel.green = (unsigned char)xpost_dev_num_to_byte(green);
+    pixel.blue  = (unsigned char)xpost_dev_num_to_byte(blue);
     pixel.alpha = 255;
-    x0 = xpost_object_get_type(x) == realtype ? (int)x.real_.val : x.int_.val;
-    y0 = xpost_object_get_type(y) == realtype ? (int)y.real_.val : y.int_.val;
-    x1 = xpost_object_get_type(w) == realtype ? (int)w.real_.val : w.int_.val;
-    y1 = xpost_object_get_type(h) == realtype ? (int)h.real_.val : h.int_.val;
 
-    /* normalise negative extents, then form inclusive end coords (as PS FillRect) */
-    if (x1 < 0) { x1 = -x1; x0 -= x1; }
-    if (y1 < 0) { y1 = -y1; y0 -= y1; }
-    x1 += x0;
-    y1 += y0;
-
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
-    /* clip to device bounds */
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > private.width  - 1) x1 = private.width  - 1;
-    if (y1 > private.height - 1) y1 = private.height - 1;
+    /* the contract's rectangle: inclusive span, clipped to the device */
+    if (!xpost_dev_rect_normalize(xpost_dev_num_to_int(x),
+                                  xpost_dev_num_to_int(y),
+                                  xpost_dev_num_to_int(w),
+                                  xpost_dev_num_to_int(h),
+                                  private.width, private.height,
+                                  &x0, &y0, &x1, &y1))
+        return 0;
 
     for (iy = y0; iy <= y1; iy++)
     {
@@ -474,12 +441,9 @@ int _emit(Xpost_Context *ctx,
     int pass;
     int y;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-            xpost_object_get_ent(privatestr), 0, sizeof private, &private);
 
     /* libpng reports errors by longjmp: aim it at this call, not at
        the long-gone frame that created the device */
@@ -502,22 +466,10 @@ int _emit(Xpost_Context *ctx,
     }
 
     private.emitted = 1;
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     /* pass data back to client application */
-    {
-        Xpost_Object sd, outbufstr;
-        sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-        outbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"));
-        if (xpost_object_get_type(outbufstr) == stringtype)
-        {
-            unsigned char **outbuf;
-            memcpy(&outbuf, xpost_string_get_pointer(ctx, outbufstr), sizeof(outbuf));
-            *outbuf = (unsigned char *)private.buf->data;
-        }
-    }
+    xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data);
 
     return 0;
 }
@@ -533,12 +485,9 @@ int _erase(Xpost_Context *ctx,
     int i;
     Xpost_Png_Pixel init;
 
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     init.red = init.green = init.blue = 255;
     init.alpha = 0;
@@ -555,13 +504,9 @@ int _destroy(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     free(private.buf);
     private.buf = NULL;
@@ -581,9 +526,7 @@ int _destroy(Xpost_Context *ctx,
         fclose(private.f);
     private.f = NULL;
     /* store the cleared pointers back so a repeated destroy is a no-op */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
     return 0;
 }
 

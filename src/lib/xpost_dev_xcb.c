@@ -57,6 +57,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_xcb.h" /* check prototypes */
 
 #define XCB_ALL_PLANES ~0
@@ -92,14 +93,9 @@ int _event_handler(Xpost_Context *ctx,
     PrivateData private;
     xcb_generic_event_t *event;
 
-
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     event = xcb_poll_for_event(private.c);
     if (event)
@@ -310,9 +306,7 @@ int _create_cont(Xpost_Context *ctx,
 
 
     /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -330,51 +324,34 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b, ix, iy;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 65535.0);
-    else
-        red.int_.val *= 65535;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 65535.0);
-    else
-        green.int_.val *= 65535;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 65535.0);
-    else
-        blue.int_.val *= 65535;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons(x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons(y.real_.val);
+    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
+    r = xpost_dev_num_to_scaled(red, 65535.0);
+    g = xpost_dev_num_to_scaled(green, 65535.0);
+    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0, sizeof private, &private);
 
     /* check bounds */
-    if ((x.int_.val < 0) ||
-        (x.int_.val >= private.width) ||
-        (y.int_.val < 0) ||
-        (y.int_.val >= private.height))
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
         return 0;
 
     {
         xcb_alloc_color_reply_t *rep;
         unsigned int value;
         xcb_point_t p;
-        p.x = x.int_.val;
-        p.y = y.int_.val;
+        p.x = ix;
+        p.y = iy;
 
         rep = xcb_alloc_color_reply(private.c,
                                     xcb_alloc_color(private.c, private.cmap,
-                                                    red.int_.val,
-                                                    green.int_.val,
-                                                    blue.int_.val),
+                                                    r, g, b),
                                     0);
         if (!rep)
             return unregistered;
@@ -388,9 +365,7 @@ int _putpix(Xpost_Context *ctx,
     }
 
     /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     return 0;
 }
@@ -407,13 +382,9 @@ int _getpix(Xpost_Context *ctx,
     (void)x;
     (void)y;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     /* ?? I don't know ...
        make a 1-pixel image and use copy_area?  ... */
@@ -433,39 +404,23 @@ int _drawline(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b, ix1, iy1, ix2, iy2;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 65535.0);
-    else
-        red.int_.val *= 65535;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 65535.0);
-    else
-        green.int_.val *= 65535;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 65535.0);
-    else
-        blue.int_.val *= 65535;
-    if (xpost_object_get_type(x1) == realtype)
-        x1 = xpost_int_cons(x1.real_.val);
-    if (xpost_object_get_type(y1) == realtype)
-        y1 = xpost_int_cons(y1.real_.val);
-    if (xpost_object_get_type(x2) == realtype)
-        x2 = xpost_int_cons(x2.real_.val);
-    if (xpost_object_get_type(y2) == realtype)
-        y2 = xpost_int_cons(y2.real_.val);
+    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
+    r = xpost_dev_num_to_scaled(red, 65535.0);
+    g = xpost_dev_num_to_scaled(green, 65535.0);
+    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    ix1 = xpost_dev_num_to_int(x1);
+    iy1 = xpost_dev_num_to_int(y1);
+    ix2 = xpost_dev_num_to_int(x2);
+    iy2 = xpost_dev_num_to_int(y2);
 
     XPOST_LOG_INFO("_drawline(%d, %d, %d, %d)",
-                   x1.int_.val, y1.int_.val, x2.int_.val, y2.int_.val);
+                   ix1, iy1, ix2, iy2);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     {
         xcb_alloc_color_reply_t *rep;
@@ -473,9 +428,7 @@ int _drawline(Xpost_Context *ctx,
 
         rep = xcb_alloc_color_reply(private.c,
                                     xcb_alloc_color(private.c, private.cmap,
-                                                    red.int_.val,
-                                                    green.int_.val,
-                                                    blue.int_.val),
+                                                    r, g, b),
                                     0);
         if (!rep)
             return unregistered;
@@ -486,11 +439,12 @@ int _drawline(Xpost_Context *ctx,
     }
 
     {
-        xcb_point_t points[] =
-            {
-                { x1.int_.val, y1.int_.val },
-                { x2.int_.val, y2.int_.val }
-            };
+        xcb_point_t points[2];
+
+        points[0].x = ix1;
+        points[0].y = iy1;
+        points[1].x = ix2;
+        points[1].y = iy2;
         xcb_poly_line(private.c, XCB_COORD_MODE_ORIGIN,
                       private.img, private.gc, 2, points);
     }
@@ -512,57 +466,26 @@ int _fillrect(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     int i,j;
+    int r, g, b;
+    int x0, y0, x1, y1;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 65535.0);
-    else
-        red.int_.val *= 65535;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 65535.0);
-    else
-        green.int_.val *= 65535;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 65535.0);
-    else
-        blue.int_.val *= 65535;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons(x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons(y.real_.val);
-    if (xpost_object_get_type(width) == realtype)
-        width = xpost_int_cons(width.real_.val);
-    if (xpost_object_get_type(height) == realtype)
-        height = xpost_int_cons(height.real_.val);
+    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
+    r = xpost_dev_num_to_scaled(red, 65535.0);
+    g = xpost_dev_num_to_scaled(green, 65535.0);
+    b = xpost_dev_num_to_scaled(blue, 65535.0);
 
-    /* adjust ranges */
-    if (width.int_.val < 0)
-    {
-        width.int_.val = abs((int)(width.int_.val));
-        x.int_.val -= width.int_.val;
-    }
-    if (height.int_.val < 0)
-    {
-        height.int_.val = abs((int)(height.int_.val));
-        y.int_.val -= height.int_.val;
-    }
-    if (x.int_.val < 0) x.int_.val = 0;
-    if (y.int_.val < 0) y.int_.val = 0;
-
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
-    if (x.int_.val >= private.width || y.int_.val >= private.height)
+    /* the contract's rectangle: inclusive span, clipped to the device */
+    if (!xpost_dev_rect_normalize(xpost_dev_num_to_int(x),
+                                  xpost_dev_num_to_int(y),
+                                  xpost_dev_num_to_int(width),
+                                  xpost_dev_num_to_int(height),
+                                  private.width, private.height,
+                                  &x0, &y0, &x1, &y1))
         return 0;
-    if (x.int_.val + width.int_.val > private.width)
-        width.int_.val = private.width - x.int_.val;
-    if (y.int_.val + height.int_.val > private.height)
-        height.int_.val = private.height - y.int_.val;
 
     {
         xcb_alloc_color_reply_t *rep;
@@ -570,9 +493,7 @@ int _fillrect(Xpost_Context *ctx,
 
         rep = xcb_alloc_color_reply(private.c,
                                     xcb_alloc_color(private.c, private.cmap,
-                                                    red.int_.val,
-                                                    green.int_.val,
-                                                    blue.int_.val),
+                                                    r, g, b),
                                     0);
         if (!rep)
             return unregistered;
@@ -581,13 +502,13 @@ int _fillrect(Xpost_Context *ctx,
         free(rep);
         xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
 
-        for (i = 0; i < height.int_.val; i++)
+        for (i = y0; i <= y1; i++)
         {
-            for (j = 0; j < width.int_.val; j++)
+            for (j = x0; j <= x1; j++)
             {
                 xcb_point_t p;
-                p.x = x.int_.val + j;
-                p.y = y.int_.val + i;
+                p.x = j;
+                p.y = i;
 
                 xcb_poly_point(private.c, XCB_COORD_MODE_ORIGIN,
                                private.img, private.gc, 1, &p);
@@ -607,26 +528,16 @@ int _fillpoly(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 65535.0);
-    else
-        red.int_.val *= 65535;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 65535.0);
-    else
-        green.int_.val *= 65535;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 65535.0);
-    else
-        blue.int_.val *= 65535;
+    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
+    r = xpost_dev_num_to_scaled(red, 65535.0);
+    g = xpost_dev_num_to_scaled(green, 65535.0);
+    b = xpost_dev_num_to_scaled(blue, 65535.0);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
 
     {
         xcb_point_t *points;
@@ -636,9 +547,7 @@ int _fillpoly(Xpost_Context *ctx,
 
         rep = xcb_alloc_color_reply(private.c,
                                     xcb_alloc_color(private.c, private.cmap,
-                                                    red.int_.val,
-                                                    green.int_.val,
-                                                    blue.int_.val),
+                                                    r, g, b),
                                     0);
         if (!rep)
             return unregistered;
@@ -651,17 +560,10 @@ int _fillpoly(Xpost_Context *ctx,
                     ) * sizeof *points);
         for (i = 0; i < poly.comp_.sz; i++)
         {
-            Xpost_Object pair, x, y;
+            Xpost_Object pair;
             pair = xpost_array_get(ctx, poly, i);
-            x = xpost_array_get(ctx, pair, 0);
-            y = xpost_array_get(ctx, pair, 1);
-            if (xpost_object_get_type(x) == realtype)
-                x = xpost_int_cons(x.real_.val);
-            if (xpost_object_get_type(y) == realtype)
-                y = xpost_int_cons(y.real_.val);
-
-            points[i].x = x.int_.val;
-            points[i].y = y.int_.val;
+            points[i].x = xpost_dev_num_to_int(xpost_array_get(ctx, pair, 0));
+            points[i].y = xpost_dev_num_to_int(xpost_array_get(ctx, pair, 1));
         }
         //points[i].x = points[0].x;
         //points[i].y = points[0].y;
@@ -685,13 +587,9 @@ int _flush(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     xcb_copy_area(private.c, private.img, private.win, private.gc,
                   0, 0, 0, 0, private.width, private.height);
@@ -714,12 +612,9 @@ int _destroy(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
 
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     if (private.c)
     {
@@ -729,9 +624,7 @@ int _destroy(Xpost_Context *ctx,
         private.c = NULL;
         /* store the cleared connection back so a repeated destroy is a
            no-op instead of disconnecting freed state */
-        xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                         xpost_object_get_ent(privatestr), 0,
-                         sizeof(private), &private);
+        xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
     }
 
     return 0;

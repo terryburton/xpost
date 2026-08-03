@@ -59,6 +59,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_generic.h" /* check prototypes */
 
 struct point
@@ -2375,18 +2376,13 @@ static int _pdf_acc_append(Pdf_Acc *a, const char *s, size_t n)
 static int _pdf_acc_get(Xpost_Context *ctx, Xpost_Object devdic,
                         Xpost_Object *priv, Pdf_Acc *a)
 {
-    *priv = xpost_dict_get(ctx, devdic, namepdfPrivate);
-    if (xpost_object_get_type(*priv) != stringtype)
-        return 0;
-    xpost_memory_get(xpost_context_select_memory(ctx, *priv),
-                     xpost_object_get_ent(*priv), 0, sizeof(*a), a);
-    return 1;
+    return xpost_dev_private_get(ctx, devdic, namepdfPrivate,
+                                 priv, a, sizeof(*a));
 }
 
 static void _pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
 {
-    xpost_memory_put(xpost_context_select_memory(ctx, priv),
-                     xpost_object_get_ent(priv), 0, sizeof(*a), a);
+    xpost_dev_private_put(ctx, priv, a, sizeof(*a));
 }
 
 /* Create the content accumulator and stash it in the device's /Private. Called

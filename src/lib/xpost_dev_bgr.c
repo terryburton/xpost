@@ -51,9 +51,8 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call load operator for convenience */
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_bgr.h" /* check prototypes */
-
-#define FAST_C_BUFFER
 
 typedef struct
 {
@@ -72,11 +71,9 @@ typedef struct
     /*
      * add additional members to private struct
      */
-#ifdef FAST_C_BUFFER
     Xpost_Bgr_Buffer *buf;
     int bufowned; /* the device malloc'd buf and has not handed it to the
                      client through OutputBufferOut, so Destroy frees it */
-#endif
 } PrivateData;
 
 
@@ -152,61 +149,19 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-#ifdef FAST_C_BUFFER
     {
         /* allocate buffer header and array */
         private.buf = malloc(sizeof(Xpost_Bgr_Buffer) + sizeof(Xpost_Bgr_Pixel)*width*height);
         private.bufowned = 1;
     }
-#else
-    { /*
-         initialize the PS-level raster buffer,
-         an array of arrays of ints, each holding a 24-bit rgb value.
-         This allows us to re-use most of the PPM base-class functions,
-         and just grab the buffer in _emit() which overrides the device's
-         /Emit member-function which is called as the action of `showpage`.
-       */
-        int i, j;
-        Xpost_Object imgdata;
-        Xpost_Object row;
-        Xpost_Object *rowdata;
-
-        //printf("creating row of %d integers\n", width);
-        rowdata = malloc(width * sizeof(Xpost_Object));
-        for (j = 0; j < width; j++)
-        {
-            rowdata[j] = xpost_int_cons(0);
-        }
-
-        //printf("creating array of %d rows\n", height);
-        imgdata = xpost_object_cvlit(xpost_array_cons(ctx, height));
-        for (i = 0; i < height; i++)
-        {
-            row = xpost_object_cvlit(xpost_array_cons(ctx, width));
-            xpost_array_put(ctx, imgdata, i, row);
-            xpost_memory_put(xpost_context_select_memory(ctx, row),
-                             xpost_object_get_ent(row),
-                             0,
-                             width * sizeof(Xpost_Object),
-                             rowdata);
-        }
-        xpost_dict_put(ctx, devdic, xpost_name_cons(ctx, "ImgData"), imgdata);
-
-        free(rowdata);
-    }
-#endif
 
     /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
     return 0;
 }
-
-#ifdef FAST_C_BUFFER
 
 static
 int _putpix(Xpost_Context *ctx,
@@ -219,57 +174,36 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b, ix, iy;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons(red.real_.val * 255.0);
-    else
-        red.int_.val *= 255;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons(green.real_.val * 255.0);
-    else
-        green.int_.val *= 255;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons(blue.real_.val * 255.0);
-    else
-        blue.int_.val *= 255;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons(x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons(y.real_.val);
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     /* check bounds */
-    if ((x.int_.val < 0) ||
-        (x.int_.val >= private.width) ||
-        (y.int_.val < 0) ||
-        (y.int_.val >= private.height))
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
         return 0;
 
     {
         Xpost_Bgr_Pixel pixel;
-        pixel.blue = blue.int_.val;
-        pixel.green = green.int_.val;
-        pixel.red = red.int_.val;
-        private.buf->data[y.int_.val * private.width + x.int_.val] = pixel;
+        pixel.blue = b;
+        pixel.green = g;
+        pixel.red = r;
+        private.buf->data[iy * private.width + ix] = pixel;
     }
 
-    /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     return 0;
 }
-
-#endif
 
 static
 int _flush(Xpost_Context *ctx,
@@ -278,13 +212,9 @@ int _flush(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
     return 0;
 }
@@ -296,83 +226,18 @@ int _emit(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    unsigned char *data;
-#ifndef FAST_C_BUFFER
-    Xpost_Object imgdata;
-    int stride;
-    int height;
-#endif
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
-
-#ifdef FAST_C_BUFFER
-    data = (unsigned char *)private.buf->data;
-#else
-
-    stride = private.width;
-    height = private.height;
-
-    data = malloc(stride * height * 3);
-    imgdata = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "ImgData"));
-    if (xpost_object_get_type(imgdata) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* pass data back to client application; the buffer then belongs to
+       the client (the API documents the handed-out buffer as the
+       caller's to free): Destroy must leave it alone from here on */
+    if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
     {
-        int i,j;
-        Xpost_Object row;
-        Xpost_Object *rowdata;
-        unsigned int rowaddr;
-        Xpost_Memory_File *mem;
-        unsigned char *iter = data;
-
-        mem = xpost_context_select_memory(ctx, imgdata);
-
-        for (i = 0; i < height; i++)
-        {
-            row = xpost_array_get_memory(mem, imgdata, i);
-            //row = xpost_array_get(ctx, imgdata, i);
-            xpost_memory_table_get_addr(mem, xpost_object_get_ent(row), &rowaddr);
-            rowdata = (Xpost_Object *)(mem->base + rowaddr);
-            //printf("%d\n", i);
-
-            for (j = 0; j < stride; j++)
-            {
-                unsigned int val;
-                val = rowdata[j].int_.val; /* r|g|b 0x00RRGGGBB */
-                *iter++ = (val) & 0xFF;     /* b */
-                *iter++ = (val>>8) & 0xFF;  /* g */
-                *iter++ = (val>>16) & 0xFF; /* r */
-            }
-        }
-    }
-#endif
-
-    /*pass data back to client application */
-    {
-        Xpost_Object sd, outbufstr;
-        sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-        outbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"));
-        if (xpost_object_get_type(outbufstr) == stringtype)
-        {
-            unsigned char **outbuf;
-            memcpy(&outbuf, xpost_string_get_pointer(ctx, outbufstr), sizeof(outbuf));
-            *outbuf = data;
-#ifdef FAST_C_BUFFER
-            /* the buffer now belongs to the client (the API documents the
-               handed-out buffer as the caller's to free): Destroy must
-               leave it alone from here on */
-            private.bufowned = 0;
-            xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                             xpost_object_get_ent(privatestr), 0,
-                             sizeof(private), &private);
-#endif
-        }
+        private.bufowned = 0;
+        xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
     }
 
     return 0;
@@ -385,23 +250,16 @@ int _destroy(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
 
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
 
-#ifdef FAST_C_BUFFER
     if (private.buf && private.bufowned)
         free(private.buf);
     private.buf = NULL;
     private.bufowned = 0;
     /* store the cleared pointer back so a repeated destroy is a no-op */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
-#endif
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
 
     return 0;
 }
@@ -481,7 +339,6 @@ int loadbgrdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-#ifdef FAST_C_BUFFER
     op = xpost_operator_cons(ctx, "bgrPutPix", (Xpost_Op_Func)_putpix, 0, 6,
                              numbertype, numbertype, numbertype,
                              numbertype, numbertype,
@@ -489,7 +346,6 @@ int loadbgrdevicecont(Xpost_Context *ctx,
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
     if (ret)
         return ret;
-#endif
 
     op = xpost_operator_cons(ctx, "bgrEmit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
