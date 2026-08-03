@@ -617,6 +617,7 @@ static Xpost_Dsc_Status
 _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 {
     const unsigned char *next;
+    const unsigned char *next_start;
     const unsigned char *end;
     ptrdiff_t sz;
     int font_idx = 0;
@@ -652,6 +653,9 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
             break;
 
         next = _xpost_dsc_line_get(ctx, &end, &sz);
+        /* a section opened by the file's last line starts where the
+           file ends */
+        next_start = next ? next : ctx->base + ctx->length;
 
         if ((dsc->ps_vmaj > 1) && (sz > 255))
             XPOST_LOG_WARN("Line too long");
@@ -665,7 +669,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     XPOST_LOG_INFO("End of header (EndComments).");
                     in_header = 0;
                     in_prolog = 1;
-                    dsc->prolog.start = next - ctx->base;
+                    dsc->prolog.start = next_start - ctx->base;
                     ctx->cur_loc = next;
                     continue;
                 }
@@ -1100,7 +1104,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                         break;
                     }
 
-                    dsc->fonts[font_idx].section.start = next - ctx->base;
+                    dsc->fonts[font_idx].section.start = next_start - ctx->base;
                     dsc->fonts[font_idx].fontname = fontname;
                     dsc->fonts[font_idx].printername = printername;
                 }
@@ -1196,7 +1200,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                 if (dsc->pages && (page_idx < dsc->header.pages))
                 {
-                    dsc->pages[page_idx].section.start = next - ctx->base;
+                    dsc->pages[page_idx].section.start = next_start - ctx->base;
                     if (page_idx > 0)
                         dsc->pages[page_idx - 1].section.end = ctx->cur_loc - ctx->base;
                     dsc->pages[page_idx].label = label;

@@ -153,6 +153,38 @@ int main(void)
           "the title on an unterminated final line is captured");
     xpost_dsc_free(&dsc);
 
+    /* A section opened by the file's last line starts where the file
+       ends: the recorded offset stays inside the file. */
+    {
+        static const char endcomments_last[] =
+            "%!PS-Adobe-3.0\n"
+            "%%EndComments\n";
+
+        memset(&dsc, 0, sizeof(dsc));
+        check(parse(endcomments_last, &dsc),
+              "a document ending at EndComments parses");
+        check(dsc.prolog.start == (ptrdiff_t)strlen(endcomments_last),
+              "a prolog opened by the final line starts at the file's end");
+        xpost_dsc_free(&dsc);
+    }
+
+    {
+        static const char page_last[] =
+            "%!PS-Adobe-3.0\n"
+            "%%Pages: 1\n"
+            "%%EndComments\n"
+            "%%EndProlog\n"
+            "%%Page: one 1\n";
+
+        memset(&dsc, 0, sizeof(dsc));
+        check(parse(page_last, &dsc),
+              "a document ending at a Page comment parses");
+        check(dsc.pages && dsc.header.pages == 1 &&
+              dsc.pages[0].section.start == (ptrdiff_t)strlen(page_last),
+              "a page opened by the final line starts at the file's end");
+        xpost_dsc_free(&dsc);
+    }
+
     xpost_quit();
 
     if (failures)
