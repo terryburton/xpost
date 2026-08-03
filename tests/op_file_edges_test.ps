@@ -245,6 +245,21 @@ fe.ng closefile
 (fedge_null.scratch) deletefile
 (fedge_enc.scratch) deletefile
 
+% --- flushfile on an output file writes what is buffered (PLRM 8.2) ---
+% Until it is flushed, what a program has written may still be held in
+% the buffer; after it, a reader opening the same file sees it. The file
+% stays open either way.
+/fe.wf (fedge_flush.scratch) (w) file def
+fe.wf (buffered) writestring
+fe.wf flushfile
+fe.wf status (flushfile leaves the file open) assert
+/fe.rf (fedge_flush.scratch) (r) file def
+fe.rf 20 string readstring pop (buffered) eq
+    (flushfile writes the buffered characters through) assert
+fe.rf closefile
+fe.wf closefile
+(fedge_flush.scratch) deletefile
+
 % --- echo governs whether the editors echo what they read (PLRM 8.2) ---
 % Its effect is on the interactive editors, which a test cannot observe;
 % what is pinned here is that it takes a boolean and nothing else, and
