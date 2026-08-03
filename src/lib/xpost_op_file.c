@@ -672,6 +672,12 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
     int n;
     Xpost_File *f;
     char *s;
+    if (!xpost_object_is_readable(ctx,F))
+        return invalidaccess;
+    /* a zero-length string could hold nothing, so asking to fill one is an
+       error rather than a transfer of no bytes (PLRM 8.2) */
+    if (S.comp_.sz == 0)
+        return rangecheck;
     if (!xpost_file_get_status(ctx->lo, F))
     {
         /* a closed file reads as end-of-data rather than erroring */
@@ -680,8 +686,6 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
         return 0;
     }
-    if (!xpost_object_is_readable(ctx,F))
-        return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);
     n = xpost_file_read(s, 1, S.comp_.sz, f);

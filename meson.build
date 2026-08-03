@@ -668,6 +668,13 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# readstring (PLRM 8.2): verbatim transfer, the boolean result at end of
+# file, and the rangecheck a zero-length string operand raises.
+test('op-readstring',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_readstring_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
 # data, closed files, files that do not exist, and the operators whose
 # answer on a filter differs from a positionable disk file.
