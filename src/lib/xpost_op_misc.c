@@ -261,10 +261,16 @@ int _array_swap(Xpost_Context *ctx,
                 Xpost_Object j)
 {
     Xpost_Object a_i, a_j;
+    int ret;
+
     a_i = xpost_array_get(ctx, a, i.int_.val);
     a_j = xpost_array_get(ctx, a, j.int_.val);
-    xpost_array_put(ctx, a, i.int_.val, a_j);
-    xpost_array_put(ctx, a, j.int_.val, a_i);
+    ret = xpost_array_put(ctx, a, i.int_.val, a_j);
+    if (ret)
+        return ret;
+    ret = xpost_array_put(ctx, a, j.int_.val, a_i);
+    if (ret)
+        return ret;
     return 0;
 }
 
