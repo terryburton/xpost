@@ -233,8 +233,19 @@
 (false { 1 } { 2 } ifelse)     same
 (1 { 2 } if)                   same
 (true 1 if)                    same
+(true (xy) cvx if)             same
+(true { } if)                  same
+(true { } { 2 } ifelse)        same
 (if)                           same
 (ifelse)                       same
+% a procedure the operator may not read is refused whether or not the
+% condition selects it, and ifelse reads both before either runs
+(true { 1 } readonly if)       same
+(true { 1 } noaccess if)       same
+(false { 1 } noaccess if)      same
+(true { 1 } noaccess { 2 } ifelse) same
+(false { 1 } noaccess { 2 } ifelse) same
+(true { 1 } { 2 } noaccess ifelse) same
 
 % --- the results are also correct, not merely equal on both paths ---
 wa 0 get 42 eq (a put through the fixture stored its value) assert

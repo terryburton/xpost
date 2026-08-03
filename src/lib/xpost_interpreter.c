@@ -971,7 +971,11 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object b_ = os_top->data[ot - 2];
                     if (xpost_object_get_type(b_) == booleantype &&
                         xpost_object_get_type(p_) == arraytype &&
-                        xpost_object_is_exe(p_))
+                        xpost_object_is_exe(p_) &&
+                        /* the operator refuses a procedure it may not
+                           read, whether or not the condition selects it
+                           (see xpost_op_control.h) */
+                        xpost_op_exec_access_ok(ctx, p_))
                     {
                         os_top->top -= 2;
                         if (!b_.int_.val)
@@ -996,7 +1000,12 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         xpost_object_get_type(p1_) == arraytype &&
                         xpost_object_is_exe(p1_) &&
                         xpost_object_get_type(p2_) == arraytype &&
-                        xpost_object_is_exe(p2_))
+                        xpost_object_is_exe(p2_) &&
+                        /* the operator refuses either procedure it may
+                           not read, whichever the condition selects
+                           (see xpost_op_control.h) */
+                        xpost_op_exec_access_ok(ctx, p1_) &&
+                        xpost_op_exec_access_ok(ctx, p2_))
                     {
                         os_top->top -= 3;
                         EVALARRAY_SYNC_SLOT();
