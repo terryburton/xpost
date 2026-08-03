@@ -39,6 +39,12 @@
 { id /debugloadon get exec } stopped not (the load tracing switches on) assert
 /probe.after.on 7 def
 probe.after.on 7 eq (a name resolves while the tracing is on) assert
+% the tracing is the load operator's own, so exercise that operator and
+% not merely a name the interpreter resolves on its way past
+/add load type /operatortype eq
+    (load answers the operator while the tracing is on) assert
+/probe.after.on load 7 eq
+    (load answers a value the program defined, traced) assert
 { id /debugloadoff get exec } stopped not (the load tracing switches off) assert
 /probe.after.off 8 def
 probe.after.off 8 eq (a name resolves once the tracing is off) assert

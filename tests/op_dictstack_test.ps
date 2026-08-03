@@ -82,6 +82,22 @@ cleardictstack
 { end } /dictstackunderflow
     (end with only the permanent entries is dictstackunderflow) erris
 
+% --- the stack has a ceiling, and begin reports reaching it ---
+% Recovering from it is the error handler's business; what is asserted
+% here is that the ceiling is reported rather than silently ignored, and
+% that the stack is usable again afterwards.
+cleardictstack
+/deep 3 dict def
+{ 0 1 20000 { pop deep begin } for } stopped
+    (begin past the ceiling is refused) assert
+$error /errorname get /dictstackoverflow eq
+    (reaching the ceiling is a dictstackoverflow) assert
+clear
+cleardictstack
+countdictstack base eq (the stack returns to its permanent entries) assert
+/afterceiling 5 def
+afterceiling 5 eq (a definition still works after the ceiling) assert
+
 % --- begin takes a dictionary and nothing else ---
 { 42 begin } /typecheck (begin refuses a number) erris
 { (str) begin } /typecheck (begin refuses a string) erris
