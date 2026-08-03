@@ -43,6 +43,14 @@
 # define XPCHECKAPI
 #endif
 
+/* Marks a function whose return value carries a refusal the caller must
+   act on. Discarding it turns the refusal into a silent no-op. */
+#if defined(__GNUC__) || defined(__clang__)
+# define XPOST_MUST_CHECK __attribute__((warn_unused_result))
+#else
+# define XPOST_MUST_CHECK
+#endif
+
 /**
  * @brief Initialize the log module.
  *

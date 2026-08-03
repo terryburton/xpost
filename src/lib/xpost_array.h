@@ -31,6 +31,8 @@
 #ifndef XPOST_AR_H
 #define XPOST_AR_H
 
+#include "xpost_private.h" /* XPOST_MUST_CHECK */
+
 /**
  * @file xpost_array.h
  * @brief array functions
@@ -69,8 +71,11 @@ int xpost_array_put_memory(Xpost_Memory_File *mem, Xpost_Object a, integer i, Xp
 
 /**
  * @brief store value in a banked array
+ *
+ * Checks the array's write access and returns invalidaccess when it is
+ * withheld; the result must be checked.
 */
-int xpost_array_put(Xpost_Context *ctx, Xpost_Object a, integer i, Xpost_Object o);
+XPOST_MUST_CHECK int xpost_array_put(Xpost_Context *ctx, Xpost_Object a, integer i, Xpost_Object o);
 
 /**
  * @brief extract value from an array
