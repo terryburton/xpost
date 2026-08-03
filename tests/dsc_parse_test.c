@@ -263,6 +263,20 @@ int main(void)
           "the first title is the one recorded");
     xpost_dsc_free(&dsc);
 
+    /* A declared page count beyond the integer range is not a count; it
+       must not wrap into a small one. 4294967297 is 2^32 + 1. */
+    memset(&dsc, 0, sizeof(dsc));
+    parse("%!PS-Adobe-3.0\n"
+          "%%Pages: 4294967297\n"
+          "%%EndComments\n"
+          "%%EndProlog\n"
+          "%%Page: one 1\n"
+          "showpage\n"
+          "%%Trailer\n", &dsc);
+    check(dsc.header.pages == 0 && !dsc.pages,
+          "a page count beyond integer range is not recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

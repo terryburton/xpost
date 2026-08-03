@@ -290,7 +290,7 @@ _xpost_dsc_integer_get_from_string(const unsigned char *str, int *val)
     char *endptr;
     long v;
 
-    *val = v = strtol((const char *)str, &endptr, 10);
+    v = strtol((const char *)str, &endptr, 10);
     if (((errno == ERANGE) &&
          ((v == LONG_MAX) || (v == LONG_MIN))) ||
         ((errno != 0) && (v == 0)))
@@ -304,6 +304,15 @@ _xpost_dsc_integer_get_from_string(const unsigned char *str, int *val)
         XPOST_LOG_ERR("No digits were found");
         return 0;
     }
+
+    /* the converted value must fit the int it is returned through */
+    if ((v > INT_MAX) || (v < INT_MIN))
+    {
+        XPOST_LOG_ERR("Number out of range");
+        return 0;
+    }
+
+    *val = (int)v;
 
    return 1;
 }
