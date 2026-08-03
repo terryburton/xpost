@@ -134,10 +134,8 @@
                 % the device resolution and flip. The defaultmatrix fixup
                 % applied after construction carries the scale; a raw
                 % device is 1:1
-                /sx 1 def /sy 1 def
-                currentdict /defaultmatrix 2 copy known {
-                    get dup 0 get /sx exch def 3 get neg /sy exch def
-                }{ pop pop } ifelse
+                currentdict //.xpostsys /.devres-to-points get exec
+                /sy exch def /sx exch def
                 /uxmin minx sx div def
                 /uxmax maxx sx div def
                 /uymin height maxy sub sy div def

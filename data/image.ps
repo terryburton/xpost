@@ -1,5 +1,425 @@
 //.internaldict /QUIET known { }{ (loading image.ps...\n)print } ifelse
 
+% The raster device base classes. A raster class is one method suite --
+% Create through Emit, the scanline plot machinery and the pixel
+% accessors -- over a handful of parameters: the colour space, the
+% number of colour components a paint delivers (.ncomp), how a scanline
+% row is allocated and initialised, how components pack into a stored
+% pixel and unpack out of it, the coverage blender, and the page writer.
+% .rasterproto holds the suite once; .makerasterclass builds a class
+% from a parameter dictionary. The grayscale and rgb classes below are
+% parameter files over this generator, and the bilevel and TIFF classes
+% are dict-copies of those with the emission overridden.
+%
+% In the method comments, IMAGE is an instance returned by Create and
+% c1..cN are the .ncomp colour components, each in [0,1].
+
+(/qsort.ps) //.xpostsys /.loadmodule get exec
+
+currentglobal true setglobal
+
+.xpostsys /.rasterproto <<
+    /dimensions [0 0]
+
+    % glyph edges blend by coverage against what the page holds; the
+    % interior takes the solid PutPix path
+    /TextAlphaBits 4
+
+    /.copydict { % dict1  .  dict2
+        dup length dict copy
+        dup /width known {
+            dup begin
+                /dimensions [width height] def
+            end
+        } if
+        /OutputFileName where {
+            /OutputFileName exch 1 index get
+            3 copy put pop pop
+        } if
+    } bind
+
+    /Create { % width height IMAGE  .  IMAGE'
+    begin {/height /width}{exch def}forall
+    currentdict end
+    dup /.copydict get exec
+    begin
+        % raster memory is not part of VM (PLRM 3.7.3): allocate the
+        % page buffer in global VM, which save/restore snapshots exempt,
+        % so marks placed inside a save survive its restore
+        currentglobal true setglobal
+        /ImgData height array def
+        0 1 height 1 sub {
+            ImgData exch .rowalloc put
+        } for
+        .rowsinit
+        setglobal
+    currentdict
+    end } bind
+
+    /Destroy { % IMAGE  .  -
+        pop
+    } bind
+
+    /.to-int { floor cvi } bind
+
+    /PutPix { % c1..cN x y IMAGE  .  -
+    begin
+        {
+            .to-int exch .to-int exch
+            dup 0 lt { stop } if
+            dup height ge { stop } if
+            1 index 0 lt { stop } if
+            1 index width ge { stop } if
+            ImgData exch get exch       % c1..cN row x
+            .ncomp 2 add 2 roll         % row x c1..cN
+            .packpix                    % row x pixel
+            put
+        } stopped {
+            .ncomp 2 add { pop } repeat
+        } if
+    end } bind
+
+    /GetPix { % x y IMAGE  .  c1..cN
+    begin
+        .to-int exch .to-int exch
+        ImgData exch get exch get
+        .unpackpix
+    end } bind
+
+    /DrawLine { % c1..cN x1 y1 x2 y2 IMAGE  .  -
+    begin {y2 x2 y1 x1}{exch def}forall .takecolor
+        % quantize to the fill pipeline's 1/256 device grid: an
+        % endpoint meant to lie on a pixel boundary arrives with
+        % accumulated float noise, and the plot floors it
+        /x1 x1 256 mul 0.5 add floor 256 div def
+        /y1 y1 256 mul 0.5 add floor 256 div def
+        /x2 x2 256 mul 0.5 add floor 256 div def
+        /y2 y2 256 mul 0.5 add floor 256 div def
+        x1 0 lt{ x1 y1 x2 y2 0 0 0 height .intersect
+			{ {y1 x1}{exch def}forall } if } if
+        x2 0 lt{ x1 y1 x2 y2 0 0 0 height .intersect
+			{ {y2 x2}{exch def}forall } if } if
+        y1 0 lt{ x1 y1 x2 y2 0 0 width 0 .intersect
+			{ {y1 x1}{exch def}forall } if } if
+        y2 0 lt{ x1 y1 x2 y2 0 0 width 0 .intersect
+			{ {y2 x2}{exch def}forall } if } if
+        x1 width ge { x1 y1 x2 y2 width 0 width height .intersect
+			{ {y1 x1}{exch def}forall } if } if
+        x2 width ge { x1 y1 x2 y2 width 0 width height .intersect
+			{ {y2 x2}{exch def}forall } if } if
+        y1 height ge { x1 y1 x2 y2 0 height width height .intersect
+			{ {y1 x1}{exch def}forall } if } if
+        y2 height ge { x1 y1 x2 y2 0 height width height .intersect
+			{ {y2 x2}{exch def}forall } if } if
+        % walk the major axis by pixel centres: each pixel whose
+        % centre the segment spans paints at the line's height there,
+        % so collinear segments continue each other exactly across
+        % their shared endpoint, wherever it falls within a pixel
+        /ddx x2 x1 sub def
+        /ddy y2 y1 sub def
+        ddx 0 eq ddy 0 eq and {
+            .pushcolor x1 y1 currentdict PutPix
+        }{
+        /painted false def
+        ddx abs ddy abs ge {
+            x1 floor cvi ddx 0 lt { -1 }{ 1 } ifelse x2 floor cvi {
+                /cc exch def
+                /t cc 0.5 add x1 sub ddx div def
+                t 0 ge t 1 le and {
+                    .pushcolor cc y1 ddy t mul add currentdict PutPix
+                    /painted true def
+                } if
+            } for
+        }{
+            y1 floor cvi ddy 0 lt { -1 }{ 1 } ifelse y2 floor cvi {
+                /rr exch def
+                /t rr 0.5 add y1 sub ddy div def
+                t 0 ge t 1 le and {
+                    .pushcolor x1 ddx t mul add rr currentdict PutPix
+                    /painted true def
+                } if
+            } for
+        } ifelse
+        % a segment too short to span any centre still marks a pixel
+        painted not {
+            .pushcolor x1 x2 add 2 div y1 y2 add 2 div currentdict PutPix
+        } if
+        } ifelse
+    end } bind
+
+    %  -----|
+    %  |    |
+    %  |    |
+    %  |-----
+    /DrawRect { % c1..cN x y w h IMAGE  .  -
+    begin {h w y x}{exch def}forall .takecolor
+        0 1 h 1 sub {
+            x 2 copy % h x h x
+            exch y add .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
+            w add
+            exch y add 1 add .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
+        } for
+        1 1 w {
+            x add y 2 copy % x+w y x+w y
+            .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
+            h add exch 1 sub exch
+            .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
+        } for
+    end } bind
+
+    /FillRect { % c1..cN x y w h IMAGE  .  -
+    begin {h w y x}{exch def}forall .takecolor
+        w 0 lt { /w w abs def /x x w sub def } if
+        h 0 lt { /h h abs def /y y h sub def } if
+
+        /h h y add def
+        /w w x add def
+
+        {
+            //.internaldict /USEDRAWLINE known {
+                //.internaldict /USEDRAWLINE get {
+                    y 1 h {
+                        .pushcolor .ncomp 1 add .ncomp roll
+                        x exch w 1 index
+                        currentdict DrawLine
+                    } for
+                    exit
+                } if
+            } if
+
+            .pushcolor
+            y 1 h { % c1..cN y
+                x 1 w { % c1..cN y x
+                    .ncomp 2 add copy exch % c1..cN y x c1..cN x y
+                    currentdict PutPix % c1..cN y x
+                    pop
+                } for
+                pop
+            } for
+            .ncomp { pop } repeat
+
+        exit } loop
+
+    end } bind
+
+    % expand a running device-space box to include a point; FillPoly
+    % seeds minx/miny/maxx/maxy in the instance before the sweep
+    /.maxmin { % x y
+        2 copy
+        dup maxy gt { /maxy exch def }{ pop } ifelse
+        dup maxx gt { /maxx exch def }{ pop } ifelse
+        dup miny lt { /miny exch def }{ pop } ifelse
+        dup minx lt { /minx exch def }{ pop } ifelse
+    } bind
+
+    % x1 y1 x2 y2 x3 y3 x4 y4  .  x5 y5 true
+    %                             false
+    % segment intersection by translating A to the origin and rotating
+    % AB onto the x axis; the scratch dictionary is preallocated once
+    % for the whole suite, so the scanline sweep allocates nothing
+    /.intersect {
+		DICT
+		begin
+        {Dy Dx Cy Cx By Bx Ay Ax}{exch def}forall
+
+        { %stopped
+            % reject degenerate line
+            Ax Bx eq Ay By eq and
+            Cx Dx eq Cy Dy eq and or {stop} if
+
+            % reject coinciding endpoints
+            Ax Cx eq Ay Cy eq and
+            Bx Cx eq By Cy eq and or
+            Ax Dx eq Ay Dy eq and or
+            Bx Dx eq By Dy eq and or {stop} if
+
+            % translate by -Ax,-Ay
+            /Bx Bx Ax sub def /By By Ay sub def
+            /Cx Cx Ax sub def /Cy Cy Ay sub def
+            /Dx Dx Ax sub def /Dy Dy Ay sub def
+
+            % length of AB
+            /distAB Bx Bx mul By By mul add sqrt def
+
+            % rotate AB to x-axis
+            /theCos Bx distAB div def
+            /theSin By distAB div def
+            /newX Cx theCos mul Cy theSin mul add def
+            /Cy   Cy theCos mul Cx theSin mul sub def /Cx newX def
+            /newX Dx theCos mul Dy theSin mul add def
+            /Dy   Dy theCos mul Dx theSin mul sub def /Dx newX def
+
+            % no intersection
+            Cy 0 lt Dy 0 lt and Cy 0 ge Dy 0 ge and or {stop} if
+
+            /ABpos Dx Cx Dx sub Dy mul Dy Cy sub div add def
+            ABpos 0 lt
+            ABpos distAB gt or {stop} if % intersection not on segment
+
+            Ax ABpos theCos mul add
+            Ay ABpos theSin mul add
+        } stopped not
+
+    end }
+	dup 0 16 dict put
+	bind
+
+    %nb. this implementation is overridden by device.ps
+    %after calling `newdefaultdevice`
+    %see xpost_dev_generic.c:_fillpoly(ctx,poly,dev) for the
+    %implementation in current use (10/8/2014)
+
+    /FillPoly { % c1..cN polygon IMAGE  .  -
+    begin {poly}{exch def}forall .takecolor
+
+        /DEBUGFILL where { pop
+            (\nFillPoly)=
+            .pushcolor .ncomp 1 sub -1 0 { index =only( )=only } for
+            .ncomp { pop } repeat
+            poly ==
+        } if
+
+        /minx 16#7ffffff def
+        /miny minx def
+        /maxx minx neg def
+        /maxy maxx def
+        poly {
+            dup type /arraytype eq {
+                dup length 2 eq {
+                    aload pop .maxmin
+                }{
+                    pop
+                } ifelse
+            }{
+                pop
+            } ifelse
+        } forall
+
+        /x_max width .5 add def
+
+        /DEBUGFILL where { pop
+            (FillPoly:<intersect polygon edges with scanlines>)=
+        } if
+        /P poly poly length 1 sub get def
+        [
+        poly {
+            /Q exch def
+            /DEBUGFILL where { pop
+                (P=)=only P ==
+                (Q=)=only Q ==
+            } if
+            x_max miny floor cvi .5 add % [ x_max miny+.5
+            1                           % [ x_max miny+.5 1
+            maxy ceiling cvi .5 sub     % [ x_max miny+.5 1 maxy-.5
+            {                           % [ ... x_max y
+                1 index exch            % [ ... x_max x_max y
+                -.5 1 index               % [ ... x_max x_max y -.5 y
+                4 2 roll
+                P aload pop Q aload pop % [ ... x_max  x_max y  -.5 y  Px Py  Qx Qy
+                .intersect {
+                    2 array astore exch % [ ... [x y] x_max
+                } if
+            } for
+            pop
+            /P Q def
+        } forall
+        ]        % [list-of-x/y-intersections
+        /DEBUGFILL where { pop
+            dup ==()=
+        } if
+
+        /DEBUGFILL where { pop
+            (FillPoly:<sort scanline intersection list>)=
+        } if
+        {
+        dup { % comparitor  % [x1 y1] [x2 y2] . bool
+            1 index 1 get
+            1 index 1 get
+            eq {            % y1 == y2
+                exch 0 get
+                exch 0 get
+                lt             % (x1 < x2)
+            }{              % y1 != y2
+                exch 1 get
+                exch 1 get
+                lt             % (y1 < y2)
+            } ifelse
+        } //.xpostsys /qsort get exec   % [sorted-list-of-intersections]
+        } pop
+        dup .yxsort
+        /DEBUGFILL where { pop
+            dup ==()=
+        } if
+
+        /DEBUGFILL where { pop
+            (FillPoly:<set pixels on each scanline>)=
+        } if
+        aload length 2 idiv { % repeat
+            exch aload pop
+            3 2 roll aload pop
+
+            {
+                //.internaldict /USEDRAWLINE known {
+                    //.internaldict /USEDRAWLINE get {
+                        .pushcolor .ncomp 4 add .ncomp roll
+                        currentdict DrawLine
+                        exit
+                    } if
+                } if
+
+                pop                        % xa ya xb
+                3 2 roll                   % ya xb xa
+                exch 1 exch                % ya xa 1 xb
+                dup width ge { pop width 1 sub } if
+                { % for                    % ya x
+                    .pushcolor .ncomp 1 add .ncomp roll % ya c1..cN x
+                    .ncomp 1 add index     % ya c1..cN x ya
+                    currentdict PutPix
+                } for
+                pop
+            exit } loop
+
+        } repeat
+
+    end } bind %FillPoly
+
+    % write the page: substitute the page number for a %d in the output
+    % name, then hand the rows to the class's .writepage
+    /Emit { % IMAGE  .  -
+    begin
+        /OutputFileName where { pop
+            ImgData
+            OutputFileName //.xpostsys /.pagefilename get exec (w) file
+            .writepage
+        }{
+            ImgData
+            (%stdout) (w) file
+            .writepage
+        } ifelse
+    end } bind
+>> put
+
+% spec  .makerasterclass  class
+% build a raster device class: the shared suite copied from
+% .rasterproto, overlaid with the parameter dictionary, then completed
+% with the colour take/push helpers the component count dictates.
+% Load-time only.
+.xpostsys /.makerasterclass { % spec  .  class
+    //.xpostsys /.rasterproto get
+    dup length 2 index length add 8 add dict
+    copy
+    exch { 2 index 3 1 roll put } forall
+    dup /.ncomp get 1 eq {
+        dup /.takecolor { /c1 exch def } put
+        dup /.pushcolor { c1 } put
+    }{
+        dup /.takecolor { /c3 exch def /c2 exch def /c1 exch def } put
+        dup /.pushcolor { c1 c2 c3 } put
+    } ifelse
+} bind put
+
+setglobal
+
 (/pgmimage.ps) //.xpostsys /.loadmodule get exec
 (/pbmimage.ps) //.xpostsys /.loadmodule get exec
 (/ppmimage.ps) //.xpostsys /.loadmodule get exec

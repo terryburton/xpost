@@ -107,6 +107,10 @@
 .xpostsys /.fneval2
 .xpostsys /.gtri
 .xpostsys /.zeros
+.xpostsys /.num2str
+.xpostsys /.devres-to-points
+.xpostsys /.rasterproto
+.xpostsys /.makerasterclass
 .xpostsys /.upathops
 .xpostsys /.upathargs
 .xpostsys /.isupmat

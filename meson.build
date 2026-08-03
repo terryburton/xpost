@@ -340,6 +340,16 @@ test('render-classes',
   args: [ xpost_exe, files('tests/render_classes_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Raster device classes as a program-made instance: the grayscale and rgb
+# classes mark the same pixels for the same geometry, bounds violations are
+# swallowed, and the marking methods stay silent (a stray diagnostic would
+# interleave with a page stream written to standard output). The strict
+# wrapper requires the output to be exactly SUCCESS.
+test('raster-class',
+  find_program('tests/run-strict-ps-test.sh'),
+  args: [ xpost_exe, files('tests/raster_class_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Form cache on a raster device: caching an execform builds an image device and
 # clears it with the rect-fill C operators, run through the ppm device. Guards
 # the regression where those operators, relocated into .internaldict, could no
@@ -830,6 +840,21 @@ test('check-device-skeleton',
 # per the register in tests/dict_homes.golden.
 test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
+  args: [ meson.current_source_dir() ])
+
+# The raster classes stay a single generated suite: pgm/ppm are parameter
+# files over .makerasterclass, pbm/tiff dict-copies overriding emission,
+# and every shared method is defined exactly once, in the prototype.
+test('raster-classes-derivation',
+  find_program('tests/check-raster-classes.sh'),
+  args: [ meson.current_source_dir() ])
+
+# The vector writers share one base: exactly one two-decimal formatter
+# (.num2str) and one page-to-points unscale (.devres-to-points) exist,
+# each writer reaches them by reference, and the DSC device stays a
+# dict-copy derivation of the PDF device.
+test('vecbase',
+  find_program('tests/check-vecbase.sh'),
   args: [ meson.current_source_dir() ])
 
 # Path-component validation and beneath-root confinement: traversal and

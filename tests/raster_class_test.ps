@@ -1,0 +1,88 @@
+% The raster device classes, exercised as instances a program's page setup
+% would create: the grayscale and rgb classes must mark the same pixels for
+% the same geometry, a bounds violation must be swallowed without error,
+% and no method may print -- a device whose page stream goes to standard
+% output cannot afford a stray diagnostic. Run by run-strict-ps-test.sh,
+% which requires the entire output to be exactly SUCCESS.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name)  .  -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% an instance of each raster class, made as the makers make them
+/gdev 8 8 .privatedict /.xpost_PGMIMAGE get dup /Create get exec def
+/pdev 8 8 .privatedict /.xpost_PPMIMAGE get dup /Create get exec def
+
+% --- the pixel stores: scale to bytes, pack, unpack ---
+0.5 3 4 gdev dup /PutPix get exec
+3 4 gdev dup /GetPix get exec
+127 eq (gray PutPix stores the scaled byte) assert
+
+0.2 0.4 0.6 3 4 pdev dup /PutPix get exec
+3 4 pdev dup /GetPix get exec
+153 eq exch 102 eq and exch 51 eq and
+(rgb PutPix packs and GetPix unpacks the component bytes) assert
+
+% --- bounds violations are swallowed, stack left balanced ---
+count /precount exch def
+1 -3 -3 gdev dup /PutPix get exec
+count precount eq (an out-of-range gray PutPix is swallowed) assert
+count /precount exch def
+1 0 0 99 99 pdev dup /PutPix get exec
+count precount eq (an out-of-range rgb PutPix is swallowed) assert
+
+% --- the classes agree pixel-for-pixel on the same geometry ---
+% grays painted as v into one and (v v v) into the other must land as the
+% same bytes everywhere
+/geq { % -  .  bool
+    true
+    0 1 7 { /yy exch def
+        0 1 7 { /xx exch def
+            xx yy gdev dup /GetPix get exec /gv exch def
+            xx yy pdev dup /GetPix get exec
+            /bv exch def /vv exch def /rv exch def
+            gv rv eq gv vv eq and gv bv eq and and
+        } for
+    } for
+} bind def
+
+% fresh instances: the roundtrip probes above scribbled different values
+/gdev 8 8 .privatedict /.xpost_PGMIMAGE get dup /Create get exec def
+/pdev 8 8 .privatedict /.xpost_PPMIMAGE get dup /Create get exec def
+
+0.5 1 2 5 2 gdev dup /DrawLine get exec
+0.5 0.5 0.5 1 2 5 2 pdev dup /DrawLine get exec
+geq (DrawLine marks the same pixels in both classes) assert
+
+0.75 1 4 4 2 gdev dup /FillRect get exec
+0.75 0.75 0.75 1 4 4 2 pdev dup /FillRect get exec
+geq (FillRect fills the same pixels in both classes) assert
+
+0.25 0 0 6 5 gdev dup /DrawRect get exec
+0.25 0.25 0.25 0 0 6 5 pdev dup /DrawRect get exec
+geq (DrawRect outlines the same pixels in both classes) assert
+
+1 [ [1 1] [6 1] [4 6] ] gdev dup /FillPoly get exec
+1 1 1 [ [1 1] [6 1] [4 6] ] pdev dup /FillPoly get exec
+geq (FillPoly rasterizes the same pixels in both classes) assert
+
+% --- Create carries the output-name binding onto the instance, where the
+%     emit path and the C driver read it from the device dictionary ---
+/OutputFileName (raster-class-test.out) def
+/odev 4 4 .privatedict /.xpost_PGMIMAGE get dup /Create get exec def
+odev /OutputFileName 2 copy known { get (raster-class-test.out) eq }{ pop pop false } ifelse
+(gray Create carries OutputFileName onto the instance) assert
+/odev 4 4 .privatedict /.xpost_PPMIMAGE get dup /Create get exec def
+odev /OutputFileName 2 copy known { get (raster-class-test.out) eq }{ pop pop false } ifelse
+(rgb Create carries OutputFileName onto the instance) assert
+currentdict /OutputFileName undef
+
+count 0 eq (operand stack is balanced) assert
+faildict /n get 0 eq { (SUCCESS\n) print } { (FAILURES\n) print } ifelse
+flush
+quit

@@ -61,19 +61,9 @@
     } bind
 
     % append a number in SVG syntax (integer, or two decimals; never
-    % exponential). round(n*100) avoids binary-float print noise.
+    % exponential), through the vector writers' shared formatter
     /.svgnum { % num  .  -
-        dup truncate 1 index eq {
-            cvi 20 string cvs .put
-        }{
-            100 mul round cvi
-            dup 0 lt { (-) .put neg } if
-            dup 100 idiv 20 string cvs .put
-            (.) .put
-            100 mod
-            dup 10 lt { (0) .put } if
-            20 string cvs .put
-        } ifelse
+        //.xpostsys /.num2str get exec .put
     } bind
 
     % append a colour as an rgb() percentage triple, quoted
@@ -279,15 +269,12 @@
 
         % page size in points: unscale the device resolution carried in
         % the defaultmatrix fixup; a raw 1:1 device is unaffected
-        /sx 1 def /sy 1 def
-        currentdict /defaultmatrix 2 copy known {
-            get dup 0 get /sx exch def 3 get neg /sy exch def
-        }{ pop pop } ifelse
+        currentdict //.xpostsys /.devres-to-points get exec
+        /sy exch def /sx exch def
 
         (<?xml version="1.0" encoding="UTF-8"?>\n) .w
         (<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width=") .w
-        /.wnum { 100 mul round cvi dup 100 idiv 20 string cvs F exch writestring
-                 100 mod dup 0 ne { (.) .w dup 10 lt { (0) .w } if 20 string cvs .w }{ pop } ifelse } def
+        /.wnum { //.xpostsys /.num2str get exec .w } def
         width sx div .wnum (pt" height=") .w
         height sy div .wnum (pt" viewBox="0 0 ) .w
         width .wnum ( ) .w height .wnum (">\n) .w

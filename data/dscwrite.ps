@@ -43,19 +43,12 @@ begin
     /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
     /.w { F exch writestring } def
     /.wnum { % num  .  -   (two decimals at most, never exponential)
-        dup 0 lt { (-) .w neg } if
-        100 mul round cvi
-        dup 100 idiv 20 string cvs .w
-        100 mod dup 0 ne {
-            (.) .w dup 10 lt { (0) .w } if 20 string cvs .w
-        }{ pop } ifelse
+        //.xpostsys /.num2str get exec .w
     } def
 
     % page size in points from the resolution fixup
-    /sx 1 def /sy 1 def
-    currentdict /defaultmatrix 2 copy known {
-        get dup 0 get /sx exch def 3 get neg /sy exch def
-    }{ pop pop } ifelse
+    currentdict //.xpostsys /.devres-to-points get exec
+    /sy exch def /sx exch def
 
     (%!PS-Adobe-3.0\n) .w
     (%%Creator: Xpost\n) .w
@@ -109,12 +102,7 @@ end } put
 
 % write a number to the accumulating file in two decimals at most
 .xpost_DSCWRITE /.vwnum { % num  .  -
-    dup 0 lt { (-) .vw neg } if
-    100 mul round cvi
-    dup 100 idiv 20 string cvs .vw
-    100 mod dup 0 ne {
-        (.) .vw dup 10 lt { (0) .vw } if 20 string cvs .vw
-    }{ pop } ifelse
+    //.xpostsys /.num2str get exec .vw
 } put
 
 % Append one page to the accumulating DSC program: the prolog of short
@@ -124,10 +112,8 @@ end } put
 .xpost_DSCWRITE /.emitpage { % IMAGE  .  -
 begin
     % page size in points from the resolution fixup
-    /sx 1 def /sy 1 def
-    currentdict /defaultmatrix 2 copy known {
-        get dup 0 get /sx exch def 3 get neg /sy exch def
-    }{ pop pop } ifelse
+    currentdict //.xpostsys /.devres-to-points get exec
+    /sy exch def /sx exch def
 
     % header and prolog once, at the first page (the resolution fixup is ready)
     //.xpostsys /.vecout get /headered get not {
