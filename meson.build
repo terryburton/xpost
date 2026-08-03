@@ -843,6 +843,14 @@ test('resource-matrix',
   args: [ xpost_exe, files('tests/resource_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every way of presenting an image against every way of painting one:
+# sample depth, data source, operator and transform are each decoded by
+# a branch of their own.
+test('image-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/image_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.

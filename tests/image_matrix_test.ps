@@ -1,0 +1,167 @@
+% Every way of presenting an image against every way of painting one,
+% run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% An image is described along several axes at once, and each is decoded
+% by a branch of its own: where the samples come from (a string, a
+% procedure called for more, a file, or one string per colour channel),
+% how many bits each sample takes, how the samples map to colour values,
+% and which of the three painting operators was called. A combination
+% that no one has tried is a combination that has never run, so an image
+% that paints perfectly from a string may fail from a procedure, or at
+% one sample depth and not another.
+%
+% So the axes are crossed rather than sampled, and each combination
+% reports for itself.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (which)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+% The tag is put away before the procedure runs: a procedure that fails
+% may leave anything at all on the stack.
+/works { % {proc} (what) (which)
+    /i.b exch def /i.a exch def
+    stopped { i.a i.b note } if
+    clear
+} def
+/refuses { % {proc} (what) (which)
+    /i.b exch def /i.a exch def
+    stopped not { i.a i.b note } if
+    clear
+} def
+
+/place { gsave 40 0 0 40 0 0 6 array astore concat } bind def
+
+% ---------------------------------------------- sample depth by operator
+% Every depth the language defines, through the operand form of image,
+% and the same depths through imagemask where only one is meaningful.
+
+[ 1 2 4 8 ] {
+    /bpc exch def
+    /nm bpc 4 string cvs def
+    { place 4 4 bpc [4 0 0 -4 0 4]
+      <0123456789abcdef0123456789abcdef> image grestore }
+        (paints at this sample depth) nm works
+    % the same data described by a dictionary rather than by operands
+    { place
+      << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent bpc
+         /Decode [0 1] /ImageMatrix [4 0 0 -4 0 4]
+         /DataSource <0123456789abcdef0123456789abcdef> >> image
+      grestore } (paints from a dictionary at this depth) nm works
+    % and reversed, which exercises the decode arithmetic rather than
+    % just carrying the samples through
+    { place
+      << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent bpc
+         /Decode [1 0] /ImageMatrix [4 0 0 -4 0 4]
+         /DataSource <0123456789abcdef0123456789abcdef> >> image
+      grestore } (paints inverted at this depth) nm works
+} forall
+
+% ------------------------------------------------------ the data sources
+% The same picture presented four ways. A source that is read rather
+% than indexed has to be asked for exactly as many bytes as the image
+% needs, which is where a wrong count shows up.
+
+/bytes <00408000C0FF40208060A0E01030507090B0D0F0> def
+
+{ place 4 4 8 [4 0 0 -4 0 4] bytes image grestore }
+    (a string) (source) works
+
+{ place 4 4 8 [4 0 0 -4 0 4] { bytes } image grestore }
+    (a procedure) (source) works
+
+{ /f (imatrix.scratch) (w) file def f bytes writestring f closefile
+  place 4 4 8 [4 0 0 -4 0 4]
+  << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+     /Decode [0 1] /ImageMatrix [4 0 0 -4 0 4]
+     /DataSource (imatrix.scratch) (r) file >> image grestore
+  pop pop pop pop } (a file) (source) works
+
+% a procedure that hands over the data a piece at a time, which is the
+% case a reader that assumes one call gets wrong
+{ /part 0 def
+  place 4 4 8 [4 0 0 -4 0 4]
+  { part 4 ge { () }
+    { bytes part 5 mul 5 getinterval /part part 1 add store } ifelse }
+  image grestore } (a procedure called repeatedly) (source) works
+
+% ------------------------------------------------------- the operators
+% imagemask, which paints through a stencil rather than in colour, and
+% takes its polarity as a boolean rather than a sample depth.
+
+{ place 4 4 true [4 0 0 -4 0 4] <A050A050> imagemask grestore }
+    (with true polarity) (imagemask) works
+{ place 4 4 false [4 0 0 -4 0 4] <A050A050> imagemask grestore }
+    (with false polarity) (imagemask) works
+{ place
+  << /ImageType 1 /Width 4 /Height 4 /ImageMask true
+     /Decode [0 1] /ImageMatrix [4 0 0 -4 0 4]
+     /DataSource <A050A050> >> imagemask grestore }
+    (from a dictionary) (imagemask) works
+{ place 4 4 1 [4 0 0 -4 0 4] <A050A050> imagemask grestore }
+    (given a depth instead of a polarity) (imagemask) refuses
+
+% colorimage, whose channels may arrive interleaved in one string or
+% separately in one string each -- two quite different readers.
+{ place 2 2 8 [2 0 0 -2 0 2]
+  <FF000000FF000000FFFFFFFF00> false 3 colorimage grestore }
+    (interleaved) (colorimage) works
+{ place 2 2 8 [2 0 0 -2 0 2]
+  <FF00FF00> <00FF0000> <0000FFFF> true 3 colorimage grestore }
+    (one string per channel) (colorimage) works
+{ place 2 2 8 [2 0 0 -2 0 2] <30607090> false 1 colorimage grestore }
+    (a single channel) (colorimage) works
+{ place 2 2 8 [2 0 0 -2 0 2]
+  <FF00000000FF000000FFFF000000FFFF00> false 4 colorimage grestore }
+    (four channels) (colorimage) works
+
+% ------------------------------------------------ under the graphics state
+% An image is painted through the current transform and clip like
+% anything else, and has to survive both.
+
+{ place 0.5 0.5 scale 45 rotate
+  4 4 8 [4 0 0 -4 0 4] bytes image grestore }
+    (under a rotation and a scale) (transform) works
+{ place newpath 0 0 2 2 rectclip
+  4 4 8 [4 0 0 -4 0 4] bytes image grestore }
+    (under a clip) (transform) works
+% A transform that collapses the image to nothing, and a width of no
+% samples, are neither required to paint nor required to be refused: the
+% specification constrains neither. Reported rather than asserted, so
+% that this interpreter's answer is recorded without being written down
+% here as the only correct one.
+{ gsave 0 0 0 0 0 0 6 array astore concat
+  4 4 8 [4 0 0 -4 0 4] bytes image grestore } stopped
+  { (note: a degenerate image transform is refused\n) print }
+  { (note: a degenerate image transform paints nothing\n) print } ifelse
+clear
+
+% ------------------------------------------------------- what is refused
+% A description that does not add up is refused rather than read past
+% the end of its data.
+
+{ place 4 4 8 [4 0 0 -4 0 4] <0011> image grestore }
+    (too little data) (a bad description) refuses
+{ place 0 4 8 [4 0 0 -4 0 4] bytes image grestore } stopped
+  { (note: an image of zero width is refused\n) print }
+  { (note: an image of zero width paints nothing\n) print } ifelse
+clear
+{ place 4 4 3 [4 0 0 -4 0 4] bytes image grestore }
+    (a sample depth the language does not define) (a bad description) refuses
+{ place
+  << /ImageType 99 /Width 4 /Height 4 /BitsPerComponent 8
+     /Decode [0 1] /ImageMatrix [4 0 0 -4 0 4]
+     /DataSource bytes >> image grestore }
+    (an unknown image type) (a bad description) refuses
+
+(imatrix.scratch) status { pop pop pop pop
+    (imatrix.scratch) deletefile } if
+
+bad 0 eq (every image description paints through every operator) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
