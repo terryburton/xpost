@@ -111,6 +111,14 @@
                         //.xpostsys /.vecout get /single false put
                     }{
                         exch pop
+                        % the record is global so a page's restore cannot
+                        % rewind it, but a file object lives in local memory
+                        % whatever dictionary holds it, and a global
+                        % dictionary is not a root for local memory
+                        % (PLRM 3.7.2). Hold the file in the local dictionary
+                        % the collector roots as well, so a collection
+                        % between two pieces of output still reaches it.
+                        dup .privatedict exch /.vecoutfile exch put
                         //.xpostsys /.vecout get dup /F 4 -1 roll put
                         dup /single true put
                         dup /nextobj 3 put
@@ -891,8 +899,9 @@
         haveinfo { ( /Info ) .vw infoobj 20 string cvs .vw ( 0 R) .vw } if
         ( >>\nstartxref\n) .vw xoff 20 string cvs .vw (\n%%EOF\n) .vw
 
-        % close the file unless it is stdout
+        % close the file unless it is stdout, and give up the local hold
         //.xpostsys /.vecout get /F get dup (%stdout) (w) file ne { closefile }{ pop } ifelse
+        .privatedict /.vecoutfile undef
     end } bind
 >> def
 

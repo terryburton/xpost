@@ -104,10 +104,12 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
         unsigned int adr = m->table.tab[it.ent].adr;
         unsigned int off;
 
-        /* local unmarked reachable = the gap (global is never swept) */
+        /* local unmarked reachable = the gap (global is never swept).
+           A file entity counts: the collector marks and sweeps them like
+           any other, so one still reachable must be marked too. */
         if (!it.bank && it.ent >= ctx->lo->start &&
             (ctx->lo->table.tab[it.ent].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
-            && ctx->lo->table.tab[it.ent].sz != 0 && tag != filetype)
+            && ctx->lo->table.tab[it.ent].sz != 0)
         {
             fprintf(stderr, "VERIFY GAP: lo ent %u (tag %u used %u) reachable "
                     "via parent ent %u (bank %d)\n",

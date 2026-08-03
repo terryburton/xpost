@@ -762,6 +762,14 @@ test('gc-diagnostics',
   args: [ xpost_exe, files('tests/gc_diagnostics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A collection between two pieces of vector output must leave the device's
+# open output file alone: the file lives in local memory whatever dictionary
+# holds it, and the record holding it is global.
+test('vecout-gc',
+  find_program('tests/run-vecout-gc-test.sh'),
+  args: [ xpost_exe, files('tests/vecout_gc_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
 # r/w/a with and without +, the access attribute each confers, and the
 # refusal of an access string outside the table.

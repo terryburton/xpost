@@ -1,0 +1,30 @@
+% A collection must not reclaim the file a vector device is writing.
+% Run through the pdfwrite device by run-vecout-gc-test.sh.
+%
+% The paginated single-file writer keeps its across-page bookkeeping --
+% including the open output file -- in a dictionary in global memory, so
+% that the save and restore a job wraps around each page cannot rewind
+% it. A file object lives in local memory whatever dictionary holds it,
+% and a global dictionary is not a root for local memory (PLRM 3.7.2),
+% so a collection between two pieces of output must still find that file
+% reachable. If it does not, the entity is reclaimed, its slot is reused
+% by whatever is allocated next, and the device writes through whatever
+% now sits there.
+
+newpath 10 10 moveto 100 10 lineto 100 100 lineto closepath fill
+
+1 vmreclaim
+
+% enough short-lived allocation to reuse the slots the collection freed
+/junk [ 0 1 4000 { pop 40 string } for ] def
+/junk null def
+
+1 vmreclaim
+
+newpath 20 20 moveto 120 20 lineto 120 120 lineto closepath fill
+showpage
+
+% a second page, so the file is written across a page boundary as well
+newpath 30 30 moveto 130 30 lineto 130 130 lineto closepath fill
+1 vmreclaim
+showpage
