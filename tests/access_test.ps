@@ -171,6 +171,25 @@ swaptgt (.swap of a readonly array) intact
 dstgt (dictstack into a readonly array) intact
 { 3 array dictstack pop }                /ok            (dictstack into a writeable array) chk
 
+% the device operators reach the raster their argument names, and a raster
+% is a composite the program can hand them
+/zrtgt [ [1 2 3] readonly ] def
+{ zrtgt idict /.zerorows get exec }      /invalidaccess (.zerorows over a readonly row) chk
+zrtgt 0 get (.zerorows over a readonly row) intact
+{ [ [1 2 3] ] idict /.zerorows get exec } /ok           (.zerorows over a writeable row) chk
+
+/rgbdev 4 dict def
+rgbdev /ImgData [ [1 2 3] readonly ] put
+{ 0 0 0 0 0 2 0 rgbdev idict /.fillrectrgb get exec }
+                                         /invalidaccess (.fillrectrgb over a readonly row) chk
+rgbdev /ImgData get 0 get (.fillrectrgb over a readonly row) intact
+{ 0 0 0 255 0 0 rgbdev idict /.blendpixrgb get exec }
+                                         /invalidaccess (.blendpixrgb over a readonly row) chk
+rgbdev /ImgData get 0 get (.blendpixrgb over a readonly row) intact
+{ [ [4 5 6] ] [ (\377) ] 0 0 rgbdev idict /.blitform get exec }
+                                         /invalidaccess (.blitform over a readonly row) chk
+rgbdev /ImgData get 0 get (.blitform over a readonly row) intact
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
