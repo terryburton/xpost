@@ -456,6 +456,12 @@ int xpost_op_exit (Xpost_Context *ctx)
         {
             Xpost_Object t = xpost_stack_topdown_fetch(ctx->lo, ctx->es, i);
 
+            /* a stopped context bounds the search: the false that
+               stopped pushed marks it, and exit does not pass one
+               (PLRM 8.2). A loop outside it keeps running. */
+            if (xpost_object_get_type(t) == booleantype && !t.int_.val)
+                break;
+
             if ((xpost_dict_compare_objects(ctx, t, opfor)    == 0) ||
                 (xpost_dict_compare_objects(ctx, t, oprepeat) == 0) ||
                 (xpost_dict_compare_objects(ctx, t, oploop)   == 0) ||

@@ -71,6 +71,22 @@ count 0 eq (operand stack is balanced after the loop-exit tests) assert
 (t_loopexit_a.tmp) deletefile
 (t_loopexit_b.tmp) deletefile
 
+% --- a stopped context bounds the search (PLRM 8.2: exit does not
+%     escape a stopped context; with no loop inside it, invalidexit) ---
+/n 0 def
+3 { /n n 1 add def { exit } stopped pop } repeat
+n 3 eq (an exit inside stopped leaves the enclosing loop running) assert
+
+/caught false def
+{ exit } stopped { /caught true def } if
+caught (an exit with no loop inside stopped is caught there) assert
+
+% a loop inside the stopped context is still exited normally
+/m 0 def
+{ 5 { /m m 1 add def exit } repeat } stopped not
+    (a loop inside a stopped context still exits normally) assert
+m 1 eq (and runs exactly once) assert
+
 % --- exit with no enclosing loop is invalidexit (PLRM 8.2) ---
 % It must be an error, and an ordinary one: the enclosing stopped context
 % catches it, the interpreter carries on, and $error names it.
