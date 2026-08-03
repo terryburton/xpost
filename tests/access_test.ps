@@ -142,6 +142,33 @@ faildict /n 0 put
                                          /invalidaccess (cvrs into a readonly string) chk
 { 255 16 8 string cvrs pop }             /ok            (cvrs into a writeable string) chk
 
+% --- every operator that fills a caller's matrix needs write access to it
+%     (PLRM 3.3.2: a write to a read-only object is invalidaccess). They
+%     all store through one writer, which is where the check belongs. ---
+/romat { [1 2 3 4 5 6] readonly } def
+{ romat identmatrix pop }                /invalidaccess (identmatrix into a readonly matrix) chk
+{ [2 0 0 2 10 20] romat invertmatrix pop }
+                                         /invalidaccess (invertmatrix into a readonly matrix) chk
+{ [1 0 0 1 0 0] [1 0 0 1 0 0] romat concatmatrix pop }
+                                         /invalidaccess (concatmatrix into a readonly matrix) chk
+{ 10 20 romat translate pop }            /invalidaccess (translate into a readonly matrix) chk
+{ 2 3 romat scale pop }                  /invalidaccess (scale into a readonly matrix) chk
+{ 45 romat rotate pop }                  /invalidaccess (rotate into a readonly matrix) chk
+
+% the same operators still fill a writeable matrix
+{ [1 2 3 4 5 6] identmatrix pop }        /ok            (identmatrix into a writeable matrix) chk
+{ [2 0 0 2 10 20] matrix invertmatrix pop }
+                                         /ok            (invertmatrix into a writeable matrix) chk
+{ [1 0 0 1 0 0] [1 0 0 1 0 0] matrix concatmatrix pop }
+                                         /ok            (concatmatrix into a writeable matrix) chk
+{ 10 20 matrix translate pop }           /ok            (translate into a writeable matrix) chk
+
+% a refused fill leaves the matrix as it was
+/rm2 [1 2 3 4 5 6] readonly def
+{ [2 0 0 2 10 20] rm2 invertmatrix pop } outcome pop
+{ rm2 0 get 1 eq { }{ (FAIL: a refused invertmatrix modified the matrix\n) print
+    faildict /n 2 copy get 1 add put } ifelse } exec
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
