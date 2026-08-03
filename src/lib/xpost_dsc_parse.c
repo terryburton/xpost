@@ -207,7 +207,7 @@
 /* level 2 */
 #define XPOST_DSC_HEADER_DOCUMENT_PAPER_SIZES "%%DocumentPaperSizes:"
 #define XPOST_DSC_HEADER_DOCUMENT_NEEDED_FONTS "%%DocumentNeededFonts:"
-#define XPOST_DSC_HEADER_DOCUMENT_SUPPLIED_FONTS "%%DocumentNeededFonts:"
+#define XPOST_DSC_HEADER_DOCUMENT_SUPPLIED_FONTS "%%DocumentSuppliedFonts:"
 
 /* level 3 */
 #define XPOST_DSC_HEADER_PAGE_ORDER "%%PageOrder:"

@@ -119,6 +119,21 @@ int main(void)
           "the 2.1 version numbers are recorded");
     xpost_dsc_free(&dsc);
 
+    /* The needed and supplied font lists are distinct comments and each
+       must land in its own record. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-2.0\n"
+                "%%DocumentNeededFonts: Courier\n"
+                "%%DocumentSuppliedFonts: Zapf Dingbats\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a document listing needed and supplied fonts parses");
+    check(dsc.header.document_needed_fonts.nbr == 1,
+          "the needed font is recorded");
+    check(dsc.header.document_supplied_fonts.nbr == 2,
+          "the supplied fonts are recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)
