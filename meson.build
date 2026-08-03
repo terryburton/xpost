@@ -866,6 +866,19 @@ resource_load_exe = executable('resource_load_test',
 test('resource-load',
   resource_load_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The driver contract's rectangle definition: xpost_dev_rect_normalize()
+# is the one statement of which pixels FillRect paints (inclusive far
+# corner, negative extents reflected, clipped to the device), and the
+# folding helpers truncate. Every device routed through the driver
+# header inherits exactly these semantics.
+dev_rect_exe = executable('dev_rect_test',
+  'tests/dev_rect_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dev-rect', dev_rect_exe)
 #if get_option('nls') == true
 #  subdir('po')
 #endif
