@@ -495,7 +495,7 @@ int xpost_op_exit (Xpost_Context *ctx)
    describe the failure. $error is a name in systemdict (its dictionary is
    local), read from the base of the dict stack so a program's own
    dictionaries above it do not shadow it. */
-void _record_run_error(Xpost_Context *ctx)
+void xpost_op_record_run_error(Xpost_Context *ctx)
 {
     {
         Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
@@ -578,7 +578,7 @@ int xpost_op_stop(Xpost_Context *ctx)
        recursing without bound. */
     XPOST_LOG_ERR("no stopped context in 'stop'");
     if (getenv("XPOST_TRAP_NOSTOP")) abort();
-    _record_run_error(ctx);
+    xpost_op_record_run_error(ctx);
     ctx->quit = 1;
     return 0;
 }
@@ -624,7 +624,7 @@ int xpost_op_wrapop(Xpost_Context *ctx,
 static
 int xpost_op_rundied(Xpost_Context *ctx)
 {
-    _record_run_error(ctx);
+    xpost_op_record_run_error(ctx);
     return 0;
 }
 

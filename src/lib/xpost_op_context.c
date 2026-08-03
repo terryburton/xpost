@@ -134,6 +134,7 @@ enum { _JOIN_WAIT_MAX = 64 };
 static unsigned int _join_wait_cid;
 static unsigned int _join_wait_spins;
 
+static
 int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 {
     //(void)context;

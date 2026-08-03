@@ -735,6 +735,13 @@ test('reloc-stress',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# The library's exported symbol set is a register, not a side effect. A
+# declaration interposed between `static` and a function silently gives it
+# external linkage; the compiler reports only a useless-storage-class note.
+test('check-exported-symbols',
+  find_program('tests/check-exported-symbols.sh'),
+  args: [ libxpost_lib.full_path(), files('tests/exported_symbols.golden') ])
+
 # A test must be able to fail. Each rule here encodes a defect this suite
 # actually carried: a failure counter incremented with def inside a scratch
 # dictionary (the increment is discarded, so the suite prints FAIL lines and
