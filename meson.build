@@ -828,6 +828,14 @@ test('internal-debug-ops',
   args: [ xpost_exe, files('tests/internal_debug_ops_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# %statementedit gathers standard input until the statement is complete, over
+# as many lines as that takes. Nothing else in the suite supplies input, so
+# none of the nesting it tracks had ever run.
+test('statementedit',
+  find_program('tests/run-statementedit-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
