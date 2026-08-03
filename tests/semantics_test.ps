@@ -904,6 +904,11 @@ save restore
 (a file from before the save stays open across restore) assert
 rc_g closefile
 
+% the scratch files are the test's own; leaving them behind pollutes the
+% tree the suite runs in
+(semantics_restore_scratch) deletefile
+(semantics_restore_scratch2) deletefile
+
 failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
 flush
 quit

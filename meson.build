@@ -725,6 +725,16 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Relocation stress: every memory grow forced to relocate, so a pointer
+# derived before an allocating call and used after it reads freed memory.
+# Covers string-to-name conversion, encoded number strings, path filling and
+# image blitting; dictionary rehash is covered by the dict-grow C test.
+test('reloc-stress',
+  find_program('tests/run-reloc-stress-test.sh'),
+  args: [ xpost_exe, files('tests/reloc_stress_test.ps'), 'pgm' ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # A test must be able to fail. Each rule here encodes a defect this suite
 # actually carried: a failure counter incremented with def inside a scratch
 # dictionary (the increment is discarded, so the suite prints FAIL lines and

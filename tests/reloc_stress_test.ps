@@ -1,0 +1,71 @@
+% Relocation stress: every operation here derives a pointer into the
+% memory file and then allocates, which can move the file.
+%
+% Run under XPOST_GROW_MOVES=1 by run-reloc-stress-test.sh, where every
+% grow relocates instead of extending in place, so a pointer held across
+% an allocating call reads freed memory. Without that variable the same
+% program exercises the ordinary paths.
+%
+% Sites covered: dictionary rehash (dicgrow), string-to-name conversion
+% (cvn), encoded number strings (.numstring2array through uappend), path
+% construction and filling (.fillpolyargs), and image blitting
+% (.blitrow) on a raster device.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% --- dictionary growth across relocations ---
+/d 1 dict def
+0 1 20000 { dup d exch dup put pop } for
+d length 20001 eq (a dictionary grown across relocations keeps its entries) assert
+d 0 get 0 eq (its first entry survived) assert
+d 20000 get 20000 eq (its last entry survived) assert
+
+% --- string to name, repeatedly, each allocating a name and a string ---
+/nameok true def
+0 1 3000 {
+    20 string dup 0 (relocname) putinterval
+    cvn type /nametype ne { /nameok false store } if
+} for
+nameok (string to name survives relocation) assert
+
+% --- encoded number strings decoded into fresh arrays ---
+% the decoder is a private operator, reached through internaldict as the
+% graphics regression checks reach theirs
+/.n2a 1183615869 internaldict /.numstring2array get def
+/numok true def
+0 1 500 {
+    pop
+    <9500000200000001 00000002> .n2a
+    dup length 2 ne { /numok false store } if
+    dup 0 get 1 ne { /numok false store } if
+    1 get 2 ne { /numok false store } if
+} for
+numok (encoded number strings decode across relocations) assert
+
+% --- path construction and filling, each fill building fresh arrays ---
+/patherr false def
+{ 0 1 200 {
+    pop
+    newpath
+    0 1 40 { dup 3 mul 10 add exch 2 mul 10 add moveto 5 5 rlineto } for
+    closepath
+    fill
+} for } stopped { /patherr true store } if
+patherr not (repeated path fills survive relocation) assert
+
+% --- images, whose row blitting caches pointers per row ---
+/imgerr false def
+{ 0 1 20 {
+    pop
+    gsave 10 10 translate 40 40 scale
+    8 8 8 [ 8 0 0 -8 0 8 ]
+    { <0011223344556677 8899aabbccddeeff 0011223344556677 8899aabbccddeeff
+       0011223344556677 8899aabbccddeeff 0011223344556677 8899aabbccddeeff> }
+    image
+    grestore
+} for } stopped { /imgerr true store } if
+imgerr not (repeated images survive relocation) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
