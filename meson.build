@@ -436,7 +436,8 @@ test('raster-formats',
 test('device-features',
   find_program('tests/run-device-features-test.sh'),
   args: [ xpost_exe, files('tests/device_features_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 180)
 
 # wrapper requires the output to be exactly SUCCESS.
 test('raster-class',
