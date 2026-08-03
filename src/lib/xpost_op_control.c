@@ -429,6 +429,35 @@ int xpost_op_exit (Xpost_Context *ctx)
     printf("\n");
 #endif
 
+    /* Look for the sentinel before disturbing anything: exit with no
+       enclosing looping context is invalidexit (PLRM 8.2), and the
+       program's execution stack -- including any stopped context that
+       will catch the error -- has to survive to receive it. Unwinding
+       first and discovering the absence afterwards destroys exactly the
+       frames the error needs. */
+    {
+        int depth = xpost_stack_count(ctx->lo, ctx->es);
+        int i;
+        int found = 0;
+
+        for (i = 0; i < depth; i++)
+        {
+            Xpost_Object t = xpost_stack_topdown_fetch(ctx->lo, ctx->es, i);
+
+            if ((xpost_dict_compare_objects(ctx, t, opfor)    == 0) ||
+                (xpost_dict_compare_objects(ctx, t, oprepeat) == 0) ||
+                (xpost_dict_compare_objects(ctx, t, oploop)   == 0) ||
+                (xpost_dict_compare_objects(ctx, t, opforall) == 0) ||
+                (xpost_dict_compare_objects(ctx, t, opfilenameforall) == 0))
+            {
+                found = 1;
+                break;
+            }
+        }
+        if (!found)
+            return invalidexit;
+    }
+
     while (1) {
         x = xpost_stack_pop(ctx->lo, ctx->es);
         if (xpost_object_get_type(x) == invalidtype)
