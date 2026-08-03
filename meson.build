@@ -707,6 +707,13 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# The distribution lists must cover every built file: a header present in the
+# meson build but missing from the autotools lists yields a `make dist` tarball
+# that does not compile, which no in-tree build would ever reveal.
+test('check-dist-lists',
+  find_program('tests/check-dist-lists.sh'),
+  args: [ meson.current_source_dir() ])
+
 # A quiet run must be silent: the interpreter's own self-checks report only
 # when something is actually wrong, so stderr stays meaningful.
 test('clean-startup',
