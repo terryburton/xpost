@@ -937,6 +937,14 @@ test('vecbase',
   find_program('tests/check-vecbase.sh'),
   args: [ meson.current_source_dir() ])
 
+# One growable byte buffer for the whole tree: the builders that assemble
+# a byte stream of unknown final size grow it through xpost_strbuf.h, none
+# of them carries a grow loop or a pointer/length/capacity triple of its
+# own, and none reads the answer as a success flag.
+test('one-bytebuf',
+  find_program('tests/check-one-bytebuf.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.

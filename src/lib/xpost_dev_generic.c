@@ -2232,12 +2232,12 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
 {
 #ifdef HAVE_ZLIB
     z_stream strm;
-    unsigned char *out = NULL;
-    size_t outlen = 0, outcap = 0;
+    Xpost_String_Buffer out;
     unsigned char buf[16384];
     Xpost_Object result;
     int i, n, ret;
 
+    memset(&out, 0, sizeof out);
     memset(&strm, 0, sizeof strm);
     if (deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK)
         return unregistered;
@@ -2265,56 +2265,46 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
             ret = deflate(&strm, flush);
             if (ret == Z_STREAM_ERROR)
             {
-                free(out);
+                xpost_strbuf_free(&out);
                 deflateEnd(&strm);
                 return unregistered;
             }
             have = sizeof buf - strm.avail_out;
-            if (outlen + have > outcap)
+            if (have && xpost_strbuf_append(&out, buf, have))
             {
-                unsigned char *tmp;
-                outcap = (outlen + have) * 2 + 64;
-                tmp = realloc(out, outcap);
-                if (!tmp)
-                {
-                    free(out);
-                    deflateEnd(&strm);
-                    return VMerror;
-                }
-                out = tmp;
+                xpost_strbuf_free(&out);
+                deflateEnd(&strm);
+                return VMerror;
             }
-            if (have)
-                memcpy(out + outlen, buf, have);
-            outlen += have;
         } while (strm.avail_out == 0);
     }
     deflateEnd(&strm);
 
     {
         size_t pos = 0;
-        int nchunks = (int)((outlen + 65534) / 65535);
+        int nchunks = (int)((out.len + 65534) / 65535);
         if (nchunks == 0)
             nchunks = 1;
         result = xpost_object_cvlit(xpost_array_cons(ctx, nchunks));
         for (i = 0; i < nchunks; i++)
         {
-            size_t chunk = outlen - pos;
+            size_t chunk = out.len - pos;
             if (chunk > 65535)
                 chunk = 65535;
             /* cvlit: strings and arrays are executable by default, and this
                binary content must be written, not executed */
             ret = xpost_array_put(ctx, result, i,
                                   xpost_object_cvlit(
-                                      xpost_string_cons(ctx, chunk, (char *)(out + pos))));
+                                      xpost_string_cons(ctx, chunk, out.s + pos)));
             if (ret)
             {
-                free(out);
+                xpost_strbuf_free(&out);
                 return ret;
             }
             pos += chunk;
         }
     }
-    free(out);
+    xpost_strbuf_free(&out);
     xpost_stack_push(ctx->lo, ctx->os, result);
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
     return 0;

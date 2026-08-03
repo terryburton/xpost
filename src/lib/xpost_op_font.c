@@ -1516,34 +1516,22 @@ void _draw_bitmap(Xpost_Context *ctx,
    the rendered glyph. */
 typedef struct glyphfrag
 {
-    char *d;
-    size_t len, cap;
+    Xpost_String_Buffer d;
     double px, py;
     int has;   /* any contour emitted */
     int oom;
     int svg;   /* emit SVG path commands instead of PDF operators */
 } glyphfrag;
 
+/* the outline walker aborts on a non-zero return, and oom records that the
+   fragment is incomplete for the caller that emits it */
 static int _frag_put(glyphfrag *f, const char *s, size_t n)
 {
-    if (f->len + n > f->cap)
-    {
-        size_t nc = f->cap ? f->cap * 2 : 256;
-        char *nd;
-        while (nc < f->len + n)
-            nc *= 2;
-        nd = realloc(f->d, nc);
-        if (!nd)
-        {
-            f->oom = 1;
-            return 1;
-        }
-        f->d = nd;
-        f->cap = nc;
-    }
-    memcpy(f->d + f->len, s, n);
-    f->len += n;
-    return 0;
+    int ret = xpost_strbuf_append(&f->d, s, n);
+
+    if (ret)
+        f->oom = 1;
+    return ret;
 }
 
 static int _frag_xy(glyphfrag *f, double x, double y)
@@ -1621,6 +1609,8 @@ int _show_char_outline(Xpost_Context *ctx,
     int n;
 
     memset(&f, 0, sizeof f);
+    if (xpost_strbuf_init(&f.d, 256))
+        f.oom = 1;
     f.px = xpos;
     f.py = ypos;
 
@@ -1696,7 +1686,7 @@ int _show_char_outline(Xpost_Context *ctx,
     sink.user = &f;
     if (!xpost_font_face_glyph_outline(face, glyph_index, &sink, advance_x, advance_y))
     {
-        free(f.d);
+        xpost_strbuf_free(&f.d);
         return 0;
     }
     /* a blank glyph (e.g. space) decomposes to nothing: advance only */
@@ -1707,9 +1697,9 @@ int _show_char_outline(Xpost_Context *ctx,
         else
             _frag_put(&f, "f\n", 2);
         if (!f.oom)
-            xpost_dev_pdf_append(ctx, devdic, f.d, f.len);
+            xpost_dev_pdf_append(ctx, devdic, f.d.s, f.d.len);
     }
-    free(f.d);
+    xpost_strbuf_free(&f.d);
     return 1;
 }
 
