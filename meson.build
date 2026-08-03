@@ -805,6 +805,14 @@ test('op-env',
   args: [ xpost_exe, files('tests/op_env_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# String and number literals as the scanner reads them (PLRM 3.2): the escapes,
+# the end-of-line markers inside a string, the hexadecimal form and its missing
+# final digit, and the number that will not fit an integer.
+test('op-literal',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_literal_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The command line: the geometry option sets the page size and a geometry that
 # does not parse is refused, and the three reporting options report.
 test('cli-options',

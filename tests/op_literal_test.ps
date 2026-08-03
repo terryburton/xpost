@@ -1,0 +1,93 @@
+% String and number literals as the scanner reads them (PLRM 3.2), run
+% through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The escapes a string literal may carry, the end-of-line markers it may
+% contain, the hexadecimal form and its missing final digit, and the
+% number that will not fit an integer. Most of this had never been
+% scanned: about a quarter of the tokenizer went unreached, and what was
+% unreached was the escape handling rather than the error paths.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% --- the named escapes (PLRM 3.2.2) ---
+(a\nb) 1 get 10 eq (\\n is a newline) assert
+(a\rb) 1 get 13 eq (\\r is a carriage return) assert
+(a\tb) 1 get 9 eq (\\t is a tab) assert
+(a\bb) 1 get 8 eq (\\b is a backspace) assert
+(a\fb) 1 get 12 eq (\\f is a form feed) assert
+(a\\b) 1 get 92 eq (a doubled backslash is one backslash) assert
+(a\(b) 1 get 40 eq (an escaped parenthesis is a parenthesis) assert
+(a\)b) 1 get 41 eq (an escaped closing parenthesis is one too) assert
+
+% an escape the language does not define drops the backslash and keeps
+% the character
+(a\qb) length 3 eq (an undefined escape keeps its character) assert
+(a\qb) 1 get 113 eq (an undefined escape drops only the backslash) assert
+
+% --- octal escapes ---
+(a\101b) 1 get 65 eq (a three-digit octal escape is that byte) assert
+(\0) 0 get 0 eq (an octal escape may be a single digit) assert
+(\12) 0 get 10 eq (a two-digit octal escape is that byte) assert
+(\377) 0 get 255 eq (the largest octal escape is the largest byte) assert
+
+% --- a backslash at the end of a line joins the lines ---
+(ab\
+cd) length 4 eq (a backslash before a newline joins the lines) assert
+(ab\
+cd) (abcd) eq (the join leaves nothing of either) assert
+
+% --- parentheses balance inside a string without escaping ---
+(a(b)c) length 5 eq (balanced parentheses need no escape) assert
+
+% --- a newline written into the source is a newline in the string ---
+(a
+b) 1 get 10 eq (a line break inside a string is a newline) assert
+
+% --- hexadecimal strings ---
+<414243> (ABC) eq (a hexadecimal string is its bytes) assert
+<41 42
+43> (ABC) eq (whitespace inside a hexadecimal string is ignored) assert
+<4> length 1 eq (a lone digit is one byte) assert
+<4> 0 get 16#40 eq (a missing final digit is taken as zero) assert
+<414> 1 get 16#40 eq (the missing digit of an odd count is the last) assert
+<> length 0 eq (an empty hexadecimal string is empty) assert
+
+% --- a number too large for an integer becomes a real ---
+99999999999999999999 type /realtype eq
+    (a number beyond the integers is a real) assert
+2147483647 type /integertype eq
+    (the largest integer is still an integer) assert
+
+% --- the end-of-line markers, written as bytes into a file and read
+%     back: a carriage return, and a carriage return with a newline,
+%     each count as one newline inside a string (PLRM 3.2) ---
+/crlf.write { % (bytes)  .  -   write a program defining /s
+    /crlf.f (literal_cr.scratch) (w) file def
+    crlf.f (/s \() writestring
+    crlf.f (a) writestring
+    crlf.f exch writestring
+    crlf.f (b) writestring
+    crlf.f (\) def\n) writestring
+    crlf.f closefile
+} def
+
+<0D> crlf.write
+(literal_cr.scratch) run
+s length 3 eq (a carriage return in a string is one character) assert
+s 1 get 10 eq (a carriage return in a string reads as a newline) assert
+
+<0D0A> crlf.write
+(literal_cr.scratch) run
+s length 3 eq (a carriage return and newline together are one character) assert
+s 1 get 10 eq (the pair reads as a single newline) assert
+
+<0A> crlf.write
+(literal_cr.scratch) run
+s length 3 eq (a newline alone is one character) assert
+s 1 get 10 eq (a newline alone reads as a newline) assert
+
+(literal_cr.scratch) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
