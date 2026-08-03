@@ -1,0 +1,66 @@
+% writehexstring / readhexstring round-trip over the whole byte range,
+% run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% writehexstring encodes each byte as two hexadecimal digits (PLRM 8.2).
+% Every byte value 0..255 must encode, so the digit lookup must index by
+% the byte's unsigned value: a signed character reads bytes above 0x7F as
+% negative and indexes before the digit table, producing wrong output for
+% half the range and reading out of bounds to do it.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% the file's bytes, as a string
+/slurp { % (name) . (contents)
+    2 dict begin
+    /nm exch def
+    /f nm (r) file def
+    /s 4096 string def
+    f s readstring pop
+    f closefile
+    end
+} def
+
+% --- the high half of the byte range must encode correctly ---
+/hx (hexstring.scratch) def
+/f hx (w) file def
+f <80FF41> writehexstring
+f closefile
+hx slurp (80FF41) eq (a byte above 0x7F encodes as its own two digits) assert
+
+/f hx (w) file def
+f <00010F107F8081FEFF> writehexstring
+f closefile
+hx slurp (00010F107F8081FEFF) eq (the boundary bytes encode correctly) assert
+
+% --- every byte value 0..255, in one string ---
+/all 256 string def
+0 1 255 { dup all 3 1 roll put } for
+/f hx (w) file def
+f all writehexstring
+f closefile
+/enc hx slurp def
+enc length 512 eq (every byte produced exactly two digits) assert
+
+% no encoded digit may be anything but 0-9A-F: a mis-indexed lookup
+% yields NUL bytes and stray characters
+/baddigits 0 def
+0 1 enc length 1 sub {
+    enc exch get
+    dup 48 ge 1 index 57 le and
+    exch dup 65 ge exch 70 le and
+    or not { /baddigits baddigits 1 add store } if
+} for
+baddigits 0 eq (every encoded character is a hexadecimal digit) assert
+
+% --- and the encoding round-trips through readhexstring ---
+/g hx (r) file def
+/back 256 string def
+g back readhexstring pop /back exch def
+g closefile
+back all eq (writehexstring output reads back as the original bytes) assert
+
+hx deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

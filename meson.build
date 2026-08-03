@@ -432,6 +432,14 @@ test('op-math',
   args: [ xpost_exe, files('tests/op_math_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# writehexstring over the whole byte range: every byte must encode as two
+# hexadecimal digits and read back identically, including above 0x7F where a
+# signed character index would run off the front of the digit table.
+test('op-hexstring',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_hexstring_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Control operators (PLRM 8.2): repeat of a negative count is rangecheck (PLRM: the
 # count is a nonnegative integer), plus if/ifelse/for/loop/exit/stopped behaviour.
 test('op-control',

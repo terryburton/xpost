@@ -646,8 +646,11 @@ int xpost_op_file_writehexstring (Xpost_Context *ctx,
     {
         char h[2];
         int d;
-        h[0] = hex[s[n] / 16];
-        h[1] = hex[s[n] % 16];
+        /* index by the byte's value: a plain char is signed on most
+           platforms, so a byte above 0x7F would index before the table */
+        unsigned char b = (unsigned char)s[n];
+        h[0] = hex[b / 16];
+        h[1] = hex[b % 16];
         d = _divert_output(ctx, f, h, 2);
         if (d < 0) return ioerror;
         if (d) continue;
