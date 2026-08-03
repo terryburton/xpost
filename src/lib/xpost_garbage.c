@@ -872,6 +872,12 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->currentobject, markall))
                 return -1;
 
+            /* the file the run wrapped around its program: once the
+               program has been read the run holds the only reference,
+               and the run closes it when it ends */
+            if (!_xpost_garbage_mark_object(ctx, mem, ctx->run_input_file, markall))
+                return -1;
+
             /* the sanctioned global->local references: the local
                dictionaries systemdict holds (userdict, $error, errordict,
                statusdict, serverdict, FontDirectory) -- see PLRM 3.7.2 */

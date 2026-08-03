@@ -319,6 +319,14 @@ test('context-reuse',
   context_reuse_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The same embedding runs with the collector set to collect constantly. What
+# the interpreter holds outside the collector's root set survives by luck at
+# the ordinary threshold and not at all at this one.
+test('gc-pressure',
+  find_program('tests/run-gc-pressure-test.sh'),
+  args: [ run_status_exe, context_reuse_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: a run closes the file it wrapped around the program
 # however the run ended, so a context serving many failing jobs does not
 # exhaust the descriptors the process is allowed.
