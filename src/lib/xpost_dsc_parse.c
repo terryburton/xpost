@@ -1159,6 +1159,17 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     label[iter_next - iter]= '\0';
                 }
 
+                /* the ordinal belongs to this line; stepping over the
+                   line end here would carry the scan into the page's
+                   contents */
+                if (XPOST_DSC_EOL(iter_next))
+                {
+                    XPOST_LOG_ERR("no ordinal in %%Page comment");
+                    status = XPOST_DSC_STATUS_ERROR;
+                    free(label);
+                    break;
+                }
+
                 iter = ++iter_next;
                 while (!XPOST_DSC_EOL(iter_next))
                 {

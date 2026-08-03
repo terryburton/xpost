@@ -185,6 +185,24 @@ int main(void)
         xpost_dsc_free(&dsc);
     }
 
+    /* A %%Page comment carries a label and an ordinal on its own line.
+       When the ordinal is absent the comment is malformed and must be
+       reported; the argument scan must not wander onto the following
+       line and pick a number out of the page's contents. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(!parse("%!PS-Adobe-3.0\n"
+                 "%%Pages: 2\n"
+                 "%%EndComments\n"
+                 "%%EndProlog\n"
+                 "%%Page: one\n"
+                 "7\n"
+                 "%%Page: two 2\n"
+                 "%%Trailer\n", &dsc),
+          "a Page comment without an ordinal is reported");
+    check(!(dsc.pages && dsc.header.pages >= 1 && dsc.pages[0].ordinal == 7),
+          "no ordinal is taken from the page's contents");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)
