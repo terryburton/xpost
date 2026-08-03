@@ -58,4 +58,26 @@ sum 6 eq (a real limit iterates the integers 0 through 3) assert
 0 0.5 1.0 { type /realtype eq { /realcount realcount 1 add def } if } for
 realcount 3 eq (a real increment yields real control values) assert
 
+% the real-for control sequence is exact: each value is the previous
+% plus the increment, first value is initial, and the walk stops at the
+% first value past the limit -- ascending and descending
+mark 0.0 0.25 1.0 { } for counttomark 5 eq (real for visits each step to the limit) assert
+cleartomark
+mark 1.0 -0.5 -0.25 { } for counttomark 3 eq (descending real for stops below the limit) assert
+counttomark 1 sub index 1.0 eq (descending real for starts at initial) assert
+cleartomark
+mark 2.5 1.5 2.4 { } for counttomark 0 eq (an already-passed real limit runs nothing) assert
+cleartomark
+/rsum 0.0 def
+0.0 0.25 1.0 { rsum add /rsum exch def } for
+rsum 2.5 sub abs 1e-6 lt (real for accumulates the exact control values) assert
+
+% a real for nested in an integer for keeps both counters independent
+/pairs 0 def
+1 1 2 {
+    pop
+    0.5 0.5 1.0 { pop /pairs pairs 1 add def } for
+} for
+pairs 4 eq (real for nests inside integer for) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

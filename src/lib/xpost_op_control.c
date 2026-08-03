@@ -164,8 +164,26 @@ int xpost_op_int_int_int_proc_for (Xpost_Context *ctx,
     return 0;
 }
 
-/* continue a for loop: es holds (from the top) the next value, the
-   limit, the increment, the literal proc, and the sentinel */
+/* the control value after this iteration: integer counters advance in
+   exact integer arithmetic, real counters in real (the control value's
+   type was fixed by the for operator from initial and increment) */
+static Xpost_Object _for_next(Xpost_Object i, Xpost_Object incr)
+{
+    if (xpost_object_get_type(i) == realtype)
+        return xpost_real_cons(i.real_.val + incr.real_.val);
+    return xpost_int_cons(i.int_.val + incr.int_.val);
+}
+
+static int _for_done(Xpost_Object i, Xpost_Object incr, Xpost_Object lim)
+{
+    return xpost_object_number(incr) > 0
+        ? xpost_object_number(i) > _for_limit(lim)
+        : xpost_object_number(i) < _for_limit(lim);
+}
+
+/* continue a for loop, integer or real: es holds (from the top) the
+   next value, the limit, the increment, the literal proc, and the
+   sentinel */
 static
 int xpost_op_for_iterate (Xpost_Context *ctx)
 {
@@ -179,8 +197,7 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
         lim  = top->data[top->top - 2];
         incr = top->data[top->top - 3];
         P    = top->data[top->top - 4];
-        if (incr.int_.val > 0 ? i.int_.val > _for_limit(lim)
-                              : i.int_.val < _for_limit(lim))
+        if (_for_done(i, incr, lim))
         {
             top->top -= 5; /* drop the frame */
             return 0;
@@ -191,7 +208,7 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
            re-derive the frame pointers before writing through them */
         root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
         top = (Xpost_Stack *)(ctx->lo->base + root->prevseg);
-        top->data[top->top - 1] = xpost_int_cons(i.int_.val + incr.int_.val);
+        top->data[top->top - 1] = _for_next(i, incr);
         top->data[top->top]     = xpost_operator_cons_opcode(ctx->opcode_shortcuts.forcont);
         top->data[top->top + 1] = xpost_object_cvx(P);
         top->top += 2;
@@ -204,8 +221,7 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
     P    = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 3);
     if (xpost_object_get_type(i) == invalidtype)
         return execstackunderflow;
-    if (incr.int_.val > 0 ? i.int_.val > _for_limit(lim)
-                          : i.int_.val < _for_limit(lim))
+    if (_for_done(i, incr, lim))
     {
         int k;
         for (k = 0; k < 5; k++)
@@ -215,7 +231,7 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
     if (!xpost_stack_push(ctx->lo, ctx->os, i))
         return stackoverflow;
     if (!xpost_stack_topdown_replace(ctx->lo, ctx->es, 0,
-                                     xpost_int_cons(i.int_.val + incr.int_.val)))
+                                     _for_next(i, incr)))
         return execstackunderflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_operator_cons_opcode(ctx->opcode_shortcuts.forcont)))
@@ -225,7 +241,8 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
     return 0;
 }
 
-/* same as IIIPfor but for reals */
+/* same as IIIPfor but for reals: the same loop frame, with real state,
+   driven by the same polymorphic iterate operator */
 static
 int xpost_op_real_real_real_proc_for (Xpost_Context *ctx,
                                       Xpost_Object init,
@@ -238,20 +255,22 @@ int xpost_op_real_real_real_proc_for (Xpost_Context *ctx,
     real n = lim.real_.val;
     int up = j > 0;
     if (up? i > n : i < n) return 0;
-    //xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "for", NULL,0,0));
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.opfor)))
-        return execstackoverflow;
-    //xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "cvx", NULL,0,0));
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.cvx)))
+
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.opfor)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
         return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es, lim))
-        return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, incr))
+        return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es, lim))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_real_cons(i + j)))
         return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.forcont)))
+        return execstackoverflow;
+
     if (!xpost_stack_push(ctx->lo, ctx->es, P))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->os, init))
