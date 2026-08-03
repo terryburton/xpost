@@ -1,0 +1,61 @@
+% Work for the collector's own diagnostics to inspect, run by
+% run-gc-diagnostics-test.sh with the verifier and the cross-bank scan
+% enabled.
+%
+% The program churns every composite type through several collections
+% while holding a few objects it must still be able to name afterwards,
+% and it builds both a local and a global dictionary so the cross-bank
+% scan has containers of each bank to walk. Reaching the end with every
+% held object intact is what the interpreter itself asserts; the
+% diagnostics assert the collector's invariants alongside it.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% garbage of every composite kind for a collection to find
+/churn {
+    50 {
+        20 array pop
+        30 string pop
+        5 dict pop
+        { 1 2 add } pop
+    } repeat
+} def
+
+% objects that must survive every collection below
+/keeparray [ 1 2 3 (four) /five ] def
+/keepstring (survivor) def
+/keepdict 8 dict def
+keepdict /array keeparray put
+keepdict /string keepstring put
+keepdict /nested 4 dict put
+
+% a global dictionary holding global objects, for the cross-bank scan to
+% walk: a global container may hold no reference into local memory
+% (PLRM 3.7.2)
+currentglobal true setglobal
+/globaldict.test 8 dict def
+globaldict.test /garray [ 1 2 3 ] put
+globaldict.test /gstring (global) put
+setglobal
+
+5 { churn 1 vmreclaim } repeat
+
+% collections either side of a save level
+save
+churn
+1 vmreclaim
+restore
+churn
+2 vmreclaim
+
+keeparray length 5 eq (an array survives the collections) assert
+keeparray 3 get (four) eq (its string element survives) assert
+keepstring (survivor) eq (a string survives the collections) assert
+keepdict /array get length 5 eq (a dictionary's array value survives) assert
+keepdict /string get (survivor) eq (a dictionary's string value survives) assert
+globaldict.test /garray get length 3 eq (a global array survives) assert
+globaldict.test /gstring get (global) eq (a global string survives) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

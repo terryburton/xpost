@@ -169,49 +169,93 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
    the cross-bank reference a local mark cannot see */
 void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem)
 {
+    Xpost_Memory_File *gl = ctx->gl;
+    unsigned int ge;
+
+    for (ge = gl->start; ge < gl->table.nextent; ge++)
     {
-            unsigned int ge, off;
-            Xpost_Memory_File *gl = ctx->gl;
-            for (ge = gl->start; ge < gl->table.nextent; ge++)
+        unsigned int gtag = gl->table.tab[ge].tag;
+        unsigned int gused = gl->table.tab[ge].used;
+        unsigned int gadr = gl->table.tab[ge].adr;
+        unsigned int slot = 0;
+        unsigned int off;
+        unsigned int step;
+        unsigned int base;
+
+        if (gtag == arraytype)
+        {
+            /* an array entity is its elements, one after another */
+            base = 0;
+            step = sizeof(Xpost_Object);
+        }
+        else if (gtag == dicttype)
+        {
+            /* a dictionary entity is a header followed by its records,
+               each a hash and the key and value it pairs */
+            base = sizeof(dichead);
+            step = sizeof(dicrec);
+        }
+        else
+            continue;
+
+        for (off = base; off + step <= gused; off += step, slot++)
+        {
+            Xpost_Object pair[2];
+            unsigned int n;
+            unsigned int i;
+
+            if (gtag == arraytype)
             {
-                unsigned int gtag = gl->table.tab[ge].tag;
-                unsigned int gused = gl->table.tab[ge].used;
-                unsigned int gadr = gl->table.tab[ge].adr;
-                if (gtag != arraytype && gtag != dicttype) continue;
-                for (off = 0; off + sizeof(Xpost_Object) <= gused; off += sizeof(Xpost_Object))
+                memcpy(&pair[0], gl->base + gadr + off, sizeof pair[0]);
+                n = 1;
+            }
+            else
+            {
+                dicrec rec;
+
+                memcpy(&rec, gl->base + gadr + off, sizeof rec);
+                pair[0] = rec.key;
+                pair[1] = rec.value;
+                n = 2;
+            }
+
+            for (i = 0; i < n; i++)
+            {
+                Xpost_Object o = pair[i];
+                unsigned int te;
+
+                if (!xpost_object_is_composite(o)) continue;
+                if (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) continue; /* global ref: fine */
+                te = xpost_object_get_ent(o);
+                if (te >= mem->table.nextent) continue;
+                if ((mem->table.tab[te].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
+                    && mem->table.tab[te].sz != 0)
                 {
-                    Xpost_Object o;
-                    unsigned int te;
-                    memcpy(&o, gl->base + gadr + off, sizeof o);
-                    if (!xpost_object_is_composite(o)) continue;
-                    if (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) continue; /* global ref: fine */
-                    te = xpost_object_get_ent(o);
-                    if (te >= mem->table.nextent) continue;
-                    if ((mem->table.tab[te].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
-                        && mem->table.tab[te].sz != 0)
+                    fprintf(stderr, "XBANK: gl ent %u (tag %u, %s) slot %u %s -> dying lo ent %u "
+                            "(type %u sz %u)",
+                            ge, gtag,
+                            (gl->table.tab[ge].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK)
+                                ? "MARKED" : "unmarked",
+                            slot,
+                            (gtag == dicttype) ? (i ? "value" : "key") : "element",
+                            te, xpost_object_get_type(o), o.comp_.sz);
+                    if (xpost_object_get_type(o) == stringtype && o.comp_.sz < 200)
                     {
-                        fprintf(stderr, "XBANK: gl ent %u (tag %u, %s) slot %u -> dying lo ent %u "
-                                "(type %u sz %u)",
-                                ge, gtag,
-                                (gl->table.tab[ge].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK)
-                                    ? "MARKED" : "unmarked",
-                                (unsigned int)(off / sizeof(Xpost_Object)),
-                                te, xpost_object_get_type(o), o.comp_.sz);
-                        if (xpost_object_get_type(o) == stringtype && o.comp_.sz < 200)
+                        unsigned int k;
+
+                        fprintf(stderr, " content=\"");
+                        for (k = 0; k < o.comp_.sz; k++)
                         {
-                            unsigned int k;
-                            fprintf(stderr, " content=\"");
-                            for (k = 0; k < o.comp_.sz; k++)
-                            {
-                                unsigned char c = gl->base[0]; /* placeholder */
-                                c = *(mem->base + mem->table.tab[te].adr + o.comp_.off + k);
-                                fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
-                            }
-                            fprintf(stderr, "\"");
+                            unsigned char c =
+                                *(mem->base + mem->table.tab[te].adr + o.comp_.off + k);
+
+                            fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
                         }
-                        fprintf(stderr, "\n");
+                        fprintf(stderr, "\"");
                     }
+                    fprintf(stderr, "\n");
                 }
             }
         }
+    }
 }

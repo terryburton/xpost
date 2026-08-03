@@ -702,6 +702,12 @@ test('op-readstring',
 
 # Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
 # data, closed files, files that do not exist, and the operators whose
+# answer on a filter differs from a positionable disk file.
+test('op-file-edges',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.
@@ -710,10 +716,12 @@ test('op-vm-param',
   args: [ xpost_exe, files('tests/op_vm_param_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# answer on a filter differs from a positionable disk file.
-test('op-file-edges',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
+# The collector's own diagnostics, which no ordinary run reaches: an
+# independent reachability verifier and the cross-bank scan that holds global
+# containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
+test('gc-diagnostics',
+  find_program('tests/run-gc-diagnostics-test.sh'),
+  args: [ xpost_exe, files('tests/gc_diagnostics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
