@@ -250,6 +250,19 @@ int main(void)
           "a Page comment with a non-positive ordinal is reported");
     xpost_dsc_free(&dsc);
 
+    /* Only the first of a repeated header text comment counts; a
+       repeat must not disturb the recorded value. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%Title: first\n"
+                "%%Title: second\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a document repeating its title comment parses");
+    check(dsc.header.title && strcmp(dsc.header.title, "first") == 0,
+          "the first title is the one recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

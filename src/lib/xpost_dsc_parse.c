@@ -732,8 +732,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                                      "Title comment not in header or in font");
                 if (in_header)
                 {
+                    /* only the first occurrence yields a value; a repeat
+                       must not clear the one already recorded */
                     XPOST_DSC_TEXT_GET(dsc->ps_vmaj, txt, HEADER_TITLE);
-                    dsc->header.title = txt;
+                    if (txt)
+                        dsc->header.title = txt;
                 }
             }
             else if (XPOST_DSC_CMT_CHECK(HEADER_CREATOR))
@@ -744,7 +747,8 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (in_header)
                 {
                     XPOST_DSC_TEXT_GET(dsc->ps_vmaj, txt, HEADER_CREATOR);
-                    dsc->header.creator = txt;
+                    if (txt)
+                        dsc->header.creator = txt;
                 }
             }
             else if (XPOST_DSC_CMT_CHECK(HEADER_CREATION_DATE))
@@ -755,14 +759,16 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (in_header)
                 {
                     XPOST_DSC_TEXT_GET(dsc->ps_vmaj, txt, HEADER_CREATION_DATE);
-                    dsc->header.creation_date = txt;
+                    if (txt)
+                        dsc->header.creation_date = txt;
                 }
             }
             else if (XPOST_DSC_CMT_CHECK(HEADER_FOR))
             {
                 XPOST_DSC_HEADER_ERROR_TEST("For");
                 XPOST_DSC_TEXT_GET(dsc->ps_vmaj, txt, HEADER_FOR);
-                dsc->header.for_whom = txt;
+                if (txt)
+                    dsc->header.for_whom = txt;
             }
             else if (XPOST_DSC_CMT_CHECK(HEADER_PAGES))
             {
