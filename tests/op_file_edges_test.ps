@@ -100,7 +100,16 @@ rs 0 setfileposition
 rs 4 string readstring pop (abcd) eq (a reusable stream rereads from a position) assert
 rs resetfile
 rs 1 string readstring pop (a) eq (resetfile rewinds a reusable stream) assert
+
+% Reaching the end of a reusable stream does not close it -- it stays at
+% EOF and can be repositioned (PLRM 3.13) -- but closefile closes it as it
+% closes any other file, and the storage it was holding goes with it.
+rs status (a reusable stream at its end is still open) assert
 rs closefile
+rs status not (closefile closes a reusable stream) assert
+rs 4 string readstring exch pop not
+    (a closed reusable stream serves no more of its data) assert
+clear
 
 % --- the write operators on a closed file are refused ---
 % PLRM 3.8.2 leaves the choice between ioerror and invalidaccess to the

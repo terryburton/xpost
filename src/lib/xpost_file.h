@@ -297,6 +297,7 @@ int xpost_file_get_bytes_available(Xpost_Memory_File *mem, Xpost_Object f, int *
  * @brief Close the file and deallocate the descriptor in VM.
  */
 int xpost_file_object_close(Xpost_Memory_File *mem, Xpost_Object f);
+int xpost_file_object_close_at_eod(Xpost_Memory_File *mem, Xpost_Object f);
 
 int xpost_file_read(char *buf, int size, int count, Xpost_File *fp);
 int xpost_file_write(const char *buf, int size, int count, Xpost_File *fp);

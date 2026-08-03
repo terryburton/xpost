@@ -4193,7 +4193,10 @@ Xpost_Object xpost_file_cons_filter_eexec(Xpost_Memory_File *mem, Xpost_Object s
    paint the same data under different masks). */
 typedef struct Xpost_RsdFile
 {
-    Xpost_File methods;
+    /* the source is consumed whole at construction and kept only so that
+       closing the stream releases a source the machinery owns, as it does
+       for every other filter */
+    Xpost_FilterBase base;
     unsigned char *data;
     size_t len, pos;
 } Xpost_RsdFile;
@@ -4426,11 +4429,14 @@ Xpost_Object xpost_file_cons_filter_rsd(Xpost_Memory_File *mem, Xpost_Object src
         xpost_strbuf_free(&data);
         return invalid;
     }
-    ff->methods.methods = &rsd_methods;
+    ff->base.methods.methods = &rsd_methods;
+    ff->base.source = source;
+    ff->base.pushback = EOF;
+    ff->base.eod = 1;
     ff->data = (unsigned char *)data.s;
     ff->len = data.len;
     ff->pos = 0;
-    return _filter_object_cons(mem, &ff->methods);
+    return _filter_object_cons(mem, &ff->base.methods);
 }
 
 #ifdef HAVE_LIBJPEG
@@ -4797,7 +4803,7 @@ static Xpost_File *_filter_underlying_stream(Xpost_File *f)
 
     if (m != &a85_methods && m != &hex_methods && m != &rle_methods
         && m != &subfile_methods && m != &lzw_methods && m != &fax_methods
-        && m != &eexec_methods
+        && m != &eexec_methods && m != &rsd_methods
         && m != &nullenc_methods && m != &hexenc_methods
         && m != &a85enc_methods && m != &rleenc_methods
         && m != &lzwenc_methods && m != &faxenc_methods
@@ -4841,10 +4847,17 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
 #endif
 
         xpost_file_close(fp);
-        /* a reusable stream survives its close -- the method rewound
-           it -- and the object stays open for the next consumer */
+        /* a reusable stream holds its source's bytes in a buffer of its
+           own, which goes when the stream does */
         if (fp->methods == &rsd_methods)
-            return 0;
+        {
+            Xpost_RsdFile *rf = (Xpost_RsdFile *)fp;
+
+            free(rf->data);
+            rf->data = NULL;
+            rf->len = 0;
+            rf->pos = 0;
+        }
         fp->closed = 1;
         /* give up this filter's claim on the stream beneath it; a source
            synthesised from a string is owned outright, so close it too */
@@ -4880,6 +4893,21 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
         }
     }
     return 0;
+}
+
+/* the interpreter has read a stream it was executing to its end. A
+   reusable stream stays open there and merely rewinds (PLRM 3.13), so a
+   program run off one can be positioned and run again; every other
+   stream closes. */
+int xpost_file_object_close_at_eod(Xpost_Memory_File *mem,
+                                   Xpost_Object f)
+{
+    Xpost_File *fp = xpost_file_get_file_pointer(mem, f);
+
+    if (fp && (fp->methods == &rsd_methods))
+        return xpost_file_close(fp);
+
+    return xpost_file_object_close(mem, f);
 }
 
 // returned value is count of complete size-sized chunks read.
