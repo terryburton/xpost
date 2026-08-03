@@ -759,6 +759,17 @@ test('check-exported-symbols',
   find_program('tests/check-exported-symbols.sh'),
   args: [ libxpost_lib.full_path(), files('tests/exported_symbols.golden') ])
 
+# Document Structuring Convention parsing: a header list continued over %%+
+# lines is accumulated into the header record, and the parallel font array is
+# indexed by that recorded count.
+dsc_parse_exe = executable('dsc_parse_test',
+  'tests/dsc_parse_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, libxpost_dsc_dep ],
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dsc-parse', dsc_parse_exe)
+
 # A test must be able to fail. Each rule here encodes a defect this suite
 # actually carried: a failure counter incremented with def inside a scratch
 # dictionary (the increment is discarded, so the suite prints FAIL lines and

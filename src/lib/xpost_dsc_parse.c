@@ -882,7 +882,13 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     }
 
                     XPOST_CMT_LINE_CONTINUED_GET(header.document_fonts);
-                    dsc->fonts = (Xpost_Dsc_Font *)calloc(nbr, sizeof(Xpost_Dsc_Font));
+                    /* the continuation loop empties nbr as it frees each
+                       appended name; the whole list is in the header
+                       record, and %%BeginFont entries index this array by
+                       that count */
+                    dsc->fonts = (Xpost_Dsc_Font *)calloc(
+                        (size_t)dsc->header.document_fonts.nbr + 1,
+                        sizeof(Xpost_Dsc_Font));
                 }
             }
             /* Level 2 */
