@@ -4696,6 +4696,26 @@ int xpost_file_open(Xpost_Memory_File *mem,
     }
     else
     {
+        unsigned int access;
+
+        /* An access string is r, w or a, optionally followed by + (PLRM
+           3.8.1, Table 3.5): r reads an existing file, w creates or
+           truncates, a creates or appends, and + adds the other direction.
+           The access attribute the file object carries follows from the
+           string, and both are settled before the file is opened, so an
+           access string outside the table neither creates nor truncates
+           anything and is reported as such. */
+        if ((mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a')
+            || (mode[1] && (mode[1] != '+' || mode[2])))
+            return invalidfileaccess;
+        if (mode[1] == '+')
+            access = XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                   | XPOST_OBJECT_TAG_ACCESS_FILE_WRITE;
+        else if (mode[0] == 'r')
+            access = XPOST_OBJECT_TAG_ACCESS_FILE_READ;
+        else
+            access = XPOST_OBJECT_TAG_ACCESS_FILE_WRITE;
+
 #ifdef DEBUG_FILE
         printf("fopen\n");
 #endif
@@ -4703,29 +4723,8 @@ int xpost_file_open(Xpost_Memory_File *mem,
         if (fp == NULL)
             return ret;
         f = xpost_file_cons(mem, fp);
-        if (strcmp(mode, "r") == 0)
-        {
-            f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-            f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
-        }
-        else if (strcmp(mode, "r+") == 0)
-        {
-            f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-            f.tag |= ( (XPOST_OBJECT_TAG_ACCESS_FILE_READ
-                    | XPOST_OBJECT_TAG_ACCESS_FILE_WRITE)
-                    << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
-        }
-        else if (strcmp(mode, "w") == 0)
-        {
-            f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-            f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
-        }
-        else
-        {
-            XPOST_LOG_ERR("bad mode string");
-            return ioerror;
-        }
-
+        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        f.tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
     }
 
     f.tag |= XPOST_OBJECT_TAG_DATA_FLAG_LIT;

@@ -668,6 +668,14 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
+# r/w/a with and without +, the access attribute each confers, and the
+# refusal of an access string outside the table.
+test('op-file-access',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_access_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # readline (PLRM 8.2): terminator handling for CR, LF and CRLF, the boolean
 # result at end of file, and the rangecheck boundary -- a line that exactly
 # fills the string has been read, not overrun.
