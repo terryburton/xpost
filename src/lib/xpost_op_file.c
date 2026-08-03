@@ -1024,7 +1024,14 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     {
         free(tmpbuf);
         free(globbuf);
-        return ioerror;
+        /* the enumeration covers the files whose names match the template
+           (PLRM): a template none matches enumerates nothing, which is not a
+           failure of the file system. Only exhausted memory is reported. */
+#ifdef GLOB_NOSPACE
+        if (ret == GLOB_NOSPACE)
+            return VMerror;
+#endif
+        return 0;
     }
 
     oglob.glob_.tag = globtype;

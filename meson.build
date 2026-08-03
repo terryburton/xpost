@@ -668,6 +668,13 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# filenameforall enumerates the files matching a template (PLRM 8.2), and a
+# template that matches none of them enumerates nothing rather than failing.
+test('op-filenameforall',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_filenameforall_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A filter and the stream beneath it may be closed in either order: the
 # stream a filter reads from (or writes to) outlives the file object that
 # opened it, and a filter over a closed stream reports end of data.
