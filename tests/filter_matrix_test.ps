@@ -1,0 +1,91 @@
+% Every file operator against every filter, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A filter carries a table of methods and inherits the rest of its
+% behaviour from the machinery around it. Which methods it has to carry
+% itself depends on how it holds its data, so a filter can read
+% perfectly while being unable to be reset, or closed, or asked what it
+% holds -- and one operator at a time is exactly what a per-operator
+% test does not catch. The same shape of gap left five devices unable to
+% paint a glyph.
+%
+% So each operator is tried against each filter, and each combination
+% reports for itself.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (filter)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+/works { % {proc} (what) (filter)  -  the operation completes
+    /m.f exch def /m.w exch def
+    stopped { m.w m.f note } if
+    clear
+} def
+/refuses { % {proc} (what) (filter)  -  the operation is refused
+    /m.f exch def /m.w exch def
+    stopped not { m.w m.f note } if
+    clear
+} def
+
+% each decoding filter with a source it can actually decode
+/cases [
+    [ (ASCIIHexDecode)      (414243>)      ]
+    [ (ASCII85Decode)       (@:E_W~>)      ]
+    [ (RunLengthDecode)     (\002abc\200)  ]
+    [ (ReusableStreamDecode) (abcdef)      ]
+] def
+
+cases {
+    aload pop /src exch def /fn exch def
+
+    { src fn cvn filter 8 string readstring pop pop }   (readstring) fn works
+    { src fn cvn filter read pop pop }                  (read) fn works
+    { src fn cvn filter 8 string readhexstring pop pop } (readhexstring) fn works
+    { src fn cvn filter 8 string readline pop pop }     (readline) fn works
+    { src fn cvn filter closefile }                     (closefile) fn works
+    { src fn cvn filter resetfile }                     (resetfile) fn works
+    { src fn cvn filter status pop }                    (status) fn works
+    { src fn cvn filter bytesavailable pop }            (bytesavailable) fn works
+    { src fn cvn filter flushfile }                     (flushfile) fn works
+    { src fn cvn filter /ASCIIHexDecode filter closefile } (filter over it) fn works
+    { src fn cvn filter dup closefile closefile }       (closing twice) fn works
+    { src fn cvn filter token { pop } if }              (token) fn works
+
+    % and the operators each has to refuse
+    { src fn cvn filter 0 string readstring pop pop }
+        (a zero-length read) fn refuses
+    { src fn cvn filter (x) writestring }
+        (writing to an input filter) fn refuses
+} forall
+
+% each encoding filter, through the operators an output file takes
+[ (ASCIIHexEncode) (ASCII85Encode) (NullEncode) (RunLengthEncode) ] {
+    /fn exch def
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e (data) writestring e closefile o closefile }        (write and close) fn works
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e (d) writestring e flushfile e closefile o closefile } (flushfile) fn works
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e (d) writestring e resetfile e closefile o closefile } (resetfile) fn works
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e status pop e closefile o closefile }                 (status) fn works
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e 65 write e closefile o closefile }                   (write a byte) fn works
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e <4142> writehexstring e closefile o closefile }      (writehexstring) fn works
+
+    % and the one it has to refuse
+    { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
+      e read pop pop }                          (reading an output filter) fn refuses
+} forall
+
+bad 0 eq (every operator works on every filter that takes it) assert
+
+(fmatrix.scratch) status { pop pop pop pop (fmatrix.scratch) deletefile } if
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

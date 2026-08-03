@@ -785,6 +785,15 @@ test('op-file-edges',
   args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every file operator against every filter. Which methods a filter carries
+# itself depends on how it holds its data, so it can read perfectly while
+# being unable to be reset or closed -- one operator at a time is what a
+# per-operator test does not catch.
+test('filter-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.
