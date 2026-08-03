@@ -80,4 +80,30 @@ rsum 2.5 sub abs 1e-6 lt (real for accumulates the exact control values) assert
 } for
 pairs 4 eq (real for nests inside integer for) assert
 
+% --- executing a null has no effect (PLRM 3.3.1) ---
+% A literal null is data like any other object and is pushed. An
+% executable one is the placeholder a procedure can carry where an
+% object is not yet known: the interpreter passes over it. Neither is
+% named here, because naming an executable object executes it.
+count /nl.d0 exch def
+[ 1 null 2 ] cvx exec
+count nl.d0 sub 3 eq (a literal null is pushed like any other object) assert
+clear
+
+count /nl.d1 exch def
+[ 1 null cvx 2 ] cvx exec
+count nl.d1 sub 2 eq (an executable null pushes nothing when executed) assert
+clear
+
+% the objects either side of it still arrive, in order
+[ 10 null cvx 20 ] cvx exec
+20 eq exch 10 eq and (the objects around an executed null are unaffected) assert
+clear
+
+% and one on its own leaves the stack as it found it
+count /nl.d2 exch def
+[ null cvx ] cvx exec
+count nl.d2 eq (a procedure holding only a null leaves nothing behind) assert
+clear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
