@@ -1224,6 +1224,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 {
                     XPOST_LOG_ERR("EOL not reached in %%Page comment");
                     status = XPOST_DSC_STATUS_ERROR;
+                    free(label);
                     break;
                 }
 

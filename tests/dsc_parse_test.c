@@ -399,6 +399,20 @@ int main(void)
           "the page on an unterminated final line is captured");
     xpost_dsc_free(&dsc);
 
+    /* A %%Page comment trailing off after its two arguments is
+       reported; the label captured before the error is released, which
+       the leak checker holds. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(!parse("%!PS-Adobe-3.0\n"
+                 "%%Pages: 1\n"
+                 "%%EndComments\n"
+                 "%%EndProlog\n"
+                 "%%Page: one 1 extra\n"
+                 "showpage\n"
+                 "%%Trailer\n", &dsc),
+          "a Page comment with trailing arguments is reported");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)
