@@ -134,6 +134,25 @@ int main(void)
           "the supplied fonts are recorded");
     xpost_dsc_free(&dsc);
 
+    /* A comment on the file's final line spans up to the end of the
+       file; its value must be captured whether or not a newline
+       follows it. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%Title: hello\n", &dsc),
+          "a document ending at its title line parses");
+    check(dsc.header.title && strcmp(dsc.header.title, "hello") == 0,
+          "the title on a newline-terminated final line is captured");
+    xpost_dsc_free(&dsc);
+
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%Title: hello", &dsc),
+          "a document ending inside its title line parses");
+    check(dsc.header.title && strcmp(dsc.header.title, "hello") == 0,
+          "the title on an unterminated final line is captured");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

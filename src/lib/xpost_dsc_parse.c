@@ -231,9 +231,13 @@ _xpost_dsc_line_get(Xpost_Dsc_Ctx *ctx, const unsigned char **end, ptrdiff_t *sz
     e1 = ctx->cur_loc;
     while (!XPOST_DSC_EOF(e1) && !XPOST_DSC_EOL(e1))
         e1++;
+    /* The caller scans the current line even when no line follows it, so
+       its extent is reported on the EOF paths too: the line ends where
+       the file does when no newline intervenes. */
+    *end = e1;
+    *sz = e1 - ctx->cur_loc;
     if (XPOST_DSC_EOF(e1))
     {
-        printf(" ** EOF 1\n");
         ctx->eof = 1;
         return NULL;
     }
@@ -243,13 +247,9 @@ _xpost_dsc_line_get(Xpost_Dsc_Ctx *ctx, const unsigned char **end, ptrdiff_t *sz
         e2++;
     if (XPOST_DSC_EOF(e2))
     {
-        printf(" ** EOF 2\n");
         ctx->eof = 1;
         return NULL;
     }
-
-    *end = e1;
-    *sz = e1 - ctx->cur_loc;
 
     return e2;
 }
