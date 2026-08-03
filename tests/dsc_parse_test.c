@@ -277,6 +277,26 @@ int main(void)
           "a page count beyond integer range is not recorded");
     xpost_dsc_free(&dsc);
 
+    /* More %%Page comments than the header declared: the extras cannot
+       be recorded, and the labels captured for them must be released.
+       The excess page count is the observable; the label release is
+       held by the leak checker. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%Pages: 1\n"
+                "%%EndComments\n"
+                "%%EndProlog\n"
+                "%%Page: one 1\n"
+                "showpage\n"
+                "%%Page: two 2\n"
+                "showpage\n"
+                "%%Trailer\n", &dsc),
+          "a document with more pages than declared parses");
+    check(dsc.pages && dsc.header.pages == 1 && dsc.pages[0].label &&
+          strcmp(dsc.pages[0].label, "one") == 0,
+          "the declared page is recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

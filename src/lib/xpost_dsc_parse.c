@@ -1238,6 +1238,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     dsc->pages[page_idx].label = label;
                     dsc->pages[page_idx].ordinal = ordinal;
                 }
+                else
+                {
+                    /* no slot takes ownership of the label */
+                    free(label);
+                }
                 page_idx++;
             }
         } /* end of management of script */
