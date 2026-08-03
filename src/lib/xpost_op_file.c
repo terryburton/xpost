@@ -443,6 +443,37 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         }
         return 0;
     }
+    /* SubFileDecode takes its two parameters positionally as well, but the
+       dictionary is the general way to give a filter its parameters
+       (PLRM 3.13.3), and this filter reaches its end of data by them. */
+    if (cname && (strcmp(cname, "SubFileDecode") == 0))
+    {
+        Xpost_Object f;
+        Xpost_Object eod;
+        char *ceod = NULL;
+        int eodlen = 0;
+
+        free(cname);
+        if (!xpost_object_is_readable(ctx, F))
+            return invalidaccess;
+        eod = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EODString"));
+        if (xpost_object_get_type(eod) == stringtype)
+        {
+            if (!xpost_object_is_readable(ctx, eod))
+                return invalidaccess;
+            ceod = xpost_string_get_pointer(ctx, eod);
+            eodlen = eod.comp_.sz;
+        }
+        f = xpost_file_cons_filter_subfile(ctx->lo, F,
+                _dict_int(ctx, dict, "EODCount", 0), ceod, eodlen);
+        if (xpost_object_get_type(f) == invalidtype)
+            return ioerror;
+        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                  << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+        return 0;
+    }
     free(cname);
     return xpost_op_file_filter(ctx, F, name);
 }

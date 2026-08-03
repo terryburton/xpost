@@ -245,4 +245,26 @@ fe.ng closefile
 (fedge_null.scratch) deletefile
 (fedge_enc.scratch) deletefile
 
+% --- echo governs whether the editors echo what they read (PLRM 8.2) ---
+% Its effect is on the interactive editors, which a test cannot observe;
+% what is pinned here is that it takes a boolean and nothing else, and
+% that it consumes it.
+count /fe.d0 exch def
+{ false echo } stopped not (echo accepts false) assert
+{ true echo } stopped not (echo accepts true) assert
+count fe.d0 eq (echo consumes its operand) assert
+{ 1 echo } /typecheck (echo refuses a number) erris
+{ (t) echo } /typecheck (echo refuses a string) erris
+false echo
+
+% --- filter takes a parameter dictionary alongside the string source ---
+% The dictionary carries the filter's parameters; a filter that needs
+% none still accepts one, and decodes exactly as it does without it.
+(4142) << >> /ASCIIHexDecode filter 2 string readstring pop (AB) eq
+    (a string source decodes through an empty parameter dictionary) assert
+(abcdef) << /EODCount 3 /EODString () >> /SubFileDecode filter
+    6 string readstring exch (abc) eq
+    (a parameter dictionary carries the subfile's count) assert
+    not (the count in the dictionary ends the data) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

@@ -770,6 +770,13 @@ test('op-file-limit',
   args: [ xpost_exe, files('tests/op_file_limit_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The font cache parameter operators: cachestatus reports what setcachelimit
+# and setcacheparams set, within whatever range the implementation achieves.
+test('op-fontcache',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_fontcache_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
