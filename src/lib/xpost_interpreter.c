@@ -2372,6 +2372,20 @@ static void push_start_proc(Xpost_Context *ctx, const char *name)
                                         xpost_name_cons(ctx, name))));
 }
 
+/* Close the file a run wrapped around the program it was given. A run
+   that reads its program to the end closes it there; one that stops
+   before the end -- at its quit operator, or on an error that unwinds
+   past every stopped context -- would otherwise leave it open, and the
+   file a program arrives in as a string is one this run made itself. */
+static void _close_run_input(Xpost_Context *ctx)
+{
+    if (xpost_object_get_type(ctx->run_input_file) == filetype)
+    {
+        (void) xpost_file_object_close(ctx->lo, ctx->run_input_file);
+        ctx->run_input_file = null;
+    }
+}
+
 XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
     Xpost_Object lsav = null;
@@ -2449,7 +2463,9 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
     }
     else if (ps_file_ptr)
     {
-        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr)));
+        ctx->run_input_file =
+            xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr));
+        xpost_stack_push(ctx->lo, ctx->os, ctx->run_input_file);
         push_start_proc(ctx, ctx->skip_graphics ? "startfilenographics" : "startfile");
     }
     else
@@ -2490,6 +2506,7 @@ run:
         while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
             (void)xpost_stack_pop(ctx->lo, ctx->es);
 
+        _close_run_input(ctx);
         return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
     }
 
@@ -2554,6 +2571,7 @@ run:
         }
     }
 
+    _close_run_input(ctx);
     return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
 }
 

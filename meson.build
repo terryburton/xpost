@@ -319,6 +319,19 @@ test('context-reuse',
   context_reuse_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: a run closes the file it wrapped around the program
+# however the run ended, so a context serving many failing jobs does not
+# exhaust the descriptors the process is allowed.
+run_input_close_exe = executable('run_input_close_test',
+  'tests/run_input_close_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('run-input-close',
+  run_input_close_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object-layer bounds discipline: a string object with a corrupt or
 # sentinel ent yields NULL from the pointer adapter, never a wild pointer.
 string_bounds_exe = executable('string_bounds_test',
