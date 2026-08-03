@@ -1017,26 +1017,6 @@ xpost_memoryfile_open_read(unsigned char *ptr, size_t limit)
     return &mf->methods;
 }
 
-static Xpost_File *
-xpost_memoryfile_open_write(void)
-{
-    Xpost_MemoryFile *mf = malloc(sizeof *mf);
-
-    if (mf)
-    {
-        mf->methods.methods = &memory_methods;
-        mf->methods.refs = 0;
-        mf->methods.closed = 0;
-	mf->contents = NULL;
-	mf->is_read = 0;
-	mf->is_malloc = 1;
-	mf->write_next = 0;
-	mf->write_capacity = 0;
-    }
-
-    return &mf->methods;
-}
-
 /* ASCII85Decode filter: a read file decoding an ASCII base-85 stream
    from an underlying file. Whitespace between coded characters is
    ignored (a stream's layout carries no data), 'z' abbreviates four
@@ -1323,33 +1303,6 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
     return f;
 }
 
-Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem,
-					unsigned char *ptr,
-					size_t limit)
-{
-    Xpost_Object f;
-    unsigned int ent;
-    int ret;
-    Xpost_File *mf;
-
-    f.tag = filetype;
-    mf = xpost_memoryfile_open_read(ptr, limit);
-    if (!xpost_memory_table_alloc(mem, sizeof mf, filetype, &ent))
-    {
-        XPOST_LOG_ERR("cannot allocate file record");
-        return invalid;
-    }
-    _file_birth_stamp(mem, ent);
-    f.mark_.padw = ent;
-    ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        return invalid;
-    }
-    return f;
-}
-
 /* A readable file over a private copy of a byte range, for the string form of
    the filter operator. The copy is owned by the memory file (is_malloc) and is
    released when the file is closed; the wrapping decode filter closes it (see
@@ -1391,31 +1344,6 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         xpost_file_close(mf);
         free(mf);
         return invalid;
-    }
-    return f;
-}
-
-Xpost_Object xpost_file_cons_writebuffer(Xpost_Memory_File *mem)
-{
-    Xpost_Object f;
-    unsigned int ent;
-    int ret;
-    Xpost_File *mf;
-
-    f.tag = filetype;
-    mf = xpost_memoryfile_open_write();
-    if (!xpost_memory_table_alloc(mem, sizeof mf, filetype, &ent))
-    {
-        XPOST_LOG_ERR("cannot allocate file record");
-	return invalid;
-    }
-    _file_birth_stamp(mem, ent);
-    f.mark_.padw = ent;
-    ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-	return invalid;
     }
     return f;
 }

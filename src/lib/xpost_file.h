@@ -170,15 +170,10 @@ int xpost_file_seek(Xpost_File *f, long offset)
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp);
 
 /**
- * @brief Construct a file object wrapping a pointer and size.
+ * @brief Construct a readable file object over a private copy of a
+ * pointer and size.
  */
-Xpost_Object xpost_file_cons_readbuffer(Xpost_Memory_File *mem, unsigned char *str, size_t limit);
 Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem, const unsigned char *ptr, unsigned int len);
-
-/**
- * @brief Construct a file object for accumulating output.
- */
-Xpost_Object xpost_file_cons_writebuffer(Xpost_Memory_File *mem);
 
 /**
  * @brief Construct an ASCII85Decode filter file over a source file object.

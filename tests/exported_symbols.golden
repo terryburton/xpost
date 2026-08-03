@@ -134,9 +134,7 @@ xpost_file_cons_filter_lzw
 xpost_file_cons_filter_rle
 xpost_file_cons_filter_rsd
 xpost_file_cons_filter_subfile
-xpost_file_cons_readbuffer
 xpost_file_cons_readstring
-xpost_file_cons_writebuffer
 xpost_file_get_bytes_available
 xpost_file_get_file_pointer
 xpost_file_get_status
