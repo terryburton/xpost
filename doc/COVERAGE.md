@@ -22,13 +22,13 @@ small file at 50% hides less than a large one at 85%.
 
 | File | Covered | Lines | Uncovered |
 |---|---:|---:|---:|
-| `src/lib/xpost_file.c` | 78.40% | 2204 | 476 |
+| `src/lib/xpost_file.c` | 78.63% | 2204 | 471 |
 | `src/lib/xpost_op_font.c` | 81.27% | 2008 | 376 |
 | `src/lib/xpost_dev_generic.c` | 86.67% | 1403 | 187 |
 | `src/lib/xpost_interpreter.c` | 82.50% | 1040 | 182 |
 | `src/lib/xpost_dsc_parse.c` | 70.70% | 587 | 172 |
-| `src/lib/xpost_font.c` | 71.05% | 570 | 165 |
-| `src/lib/xpost_op_file.c` | 84.93% | 896 | 135 |
+| `src/lib/xpost_font.c` | 71.23% | 570 | 164 |
+| `src/lib/xpost_op_file.c` | 85.27% | 896 | 132 |
 | `src/lib/xpost_garbage.c` | 67.76% | 335 | 108 |
 | `src/lib/xpost_op_token.c` | 84.42% | 674 | 105 |
 | `src/lib/xpost_op_path.c` | 89.80% | 980 | 100 |
@@ -43,7 +43,7 @@ small file at 50% hides less than a large one at 85%.
 | `src/lib/xpost_context.c` | 65.91% | 176 | 60 |
 | `src/lib/xpost_free.c` | 63.40% | 153 | 56 |
 | `src/lib/xpost_dev_jpeg.c` | 74.77% | 222 | 56 |
-| `src/lib/xpost_op_dict.c` | 83.28% | 299 | 50 |
+| `src/lib/xpost_op_dict.c` | 83.61% | 299 | 49 |
 | `src/lib/xpost_object.c` | 62.20% | 127 | 48 |
 | `src/lib/xpost_dict.c` | 87.50% | 344 | 43 |
 | `src/lib/xpost_dev_raster.c` | 85.11% | 282 | 42 |
