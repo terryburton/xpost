@@ -65,6 +65,7 @@
 #include "xpost_op_type.h"  /* the shared type naming */
 #include "xpost_op_array.h"  /* the shared array element access */
 #include "xpost_op_boolean.h"  /* the shared relations */
+#include "xpost_op_stack.h"  /* the shared index and roll rules */
 #include "xpost_oplib.h"
 
 static
@@ -755,8 +756,11 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 if (w == (unsigned int)ctx->opcode_shortcuts.opindex && ot >= 2)
                 {
                     Xpost_Object n_ = os_top->data[ot - 1];
+                    /* the operator's own selection rule, applied to the
+                       operands below n in this segment (see
+                       xpost_op_stack.h) */
                     if (xpost_object_get_type(n_) == integertype &&
-                        n_.int_.val >= 0 && n_.int_.val <= (integer)ot - 2)
+                        xpost_op_index_check(n_.int_.val, (int)ot - 1) == 0)
                     {
                         os_top->data[ot - 1] = os_top->data[ot - 2 - n_.int_.val];
                         goto next_element;
@@ -860,17 +864,19 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         n_.int_.val > 0 && n_.int_.val <= 32 &&
                         (unsigned int)n_.int_.val + 2 <= ot)
                     {
+                        /* the operator's own shift and its own
+                           placement rule, over the operands below n and
+                           j: top_[-i] is position i counting down from
+                           the top of the group (see xpost_op_stack.h) */
                         Xpost_Object tmp_[32];
                         integer n = n_.int_.val;
-                        integer j = j_.int_.val % n;
+                        integer j = xpost_op_roll_shift(n, j_.int_.val);
                         integer k;
-                        Xpost_Object *base_ = os_top->data + ot - 2 - n;
-                        if (j < 0)
-                            j += n;
+                        Xpost_Object *top_ = os_top->data + ot - 3;
                         for (k = 0; k < n; k++)
-                            tmp_[(k + j) % n] = base_[k];
+                            tmp_[k] = top_[-xpost_op_roll_source(k, n, j)];
                         for (k = 0; k < n; k++)
-                            base_[k] = tmp_[k];
+                            top_[-k] = tmp_[k];
                         os_top->top -= 2;
                         goto next_element;
                     }

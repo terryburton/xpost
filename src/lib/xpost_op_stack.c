@@ -132,10 +132,10 @@ static
 int Iindex(Xpost_Context *ctx,
            Xpost_Object n)
 {
-    if (n.int_.val < 0)
-        return rangecheck;
-    if (n.int_.val >= xpost_stack_count(ctx->lo, ctx->os))
-        return stackunderflow;
+    int ret = xpost_op_index_check(n.int_.val,
+                                   xpost_stack_count(ctx->lo, ctx->os));
+    if (ret)
+        return ret;
     //printf("index %d\n", n.int_.val);
     if (!xpost_stack_push(ctx->lo, ctx->os,
                           xpost_stack_topdown_fetch(ctx->lo, ctx->os, n.int_.val)))
@@ -154,15 +154,14 @@ int IIroll(Xpost_Context *ctx,
     unsigned char *base;
     Xpost_Stack *root, *top, *seg;
     int n = N.int_.val;
-    int j = J.int_.val;
+    integer j;
     int got;
     if (n < 0)
         return rangecheck;
     if (n == 0) return 0;
     if (n > xpost_stack_count(ctx->lo, ctx->os))
         return stackunderflow;
-    if (j < 0) j = n - ((- j) % n);
-    j %= n;
+    j = xpost_op_roll_shift(n, J.int_.val);
     if (j == 0) return 0;
 
     /* roll touches each of the top n operands a constant number of times,
@@ -170,9 +169,9 @@ int IIroll(Xpost_Context *ctx,
        topdown_replace each walked O(index) stack segments, making a roll of
        a deep stack O(n^2). Snapshot the top n operands in a single top-down
        pass (src[0] is the topmost), then write them back rotated in one more
-       pass: element at top-down position i receives the operand that was at
-       position (i + j) mod n. Neither pass allocates VM, so the cached
-       base/segment pointers stay valid throughout. */
+       pass, each position taking the operand the shared rule names.
+       Neither pass allocates VM, so the cached base/segment pointers stay
+       valid throughout. */
     src = malloc((size_t)n * sizeof(Xpost_Object));
     if (!src)
         return VMerror;
@@ -190,7 +189,7 @@ int IIroll(Xpost_Context *ctx,
         int put = (n - got < t) ? (n - got) : t;
         int m;
         for (m = 0; m < put; m++)
-            seg->data[t - 1 - m] = src[(got + m + j) % n];
+            seg->data[t - 1 - m] = src[xpost_op_roll_source(got + m, n, j)];
         got += put;
         if (got < n)
             seg = (Xpost_Stack *)(base + seg->prevseg);

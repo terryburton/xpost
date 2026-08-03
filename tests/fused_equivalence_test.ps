@@ -147,6 +147,8 @@
 (1 2 3 9 index)                same
 (1 2 3 -1 index)               same
 (1 2 3 (x) index)              same
+(1 2 3 4 5 6 3 index)          same
+(1 2 3 4 5 6 5 index)          same
 (index)                        same
 (1 2 3 3 1 roll)               same
 (1 2 3 3 -1 roll)              same
@@ -155,6 +157,20 @@
 (1 2 3 -1 1 roll)              same
 (1 2 3 (x) 1 roll)             same
 (roll)                         same
+% the shift is taken modulo the count, and a negative one rolls the
+% other way; a count of zero rolls nothing whatever the shift
+(1 2 3 4 3 2 roll)             same
+(1 2 3 4 3 -2 roll)            same
+(1 2 3 3 4 roll)               same
+(1 2 3 3 -4 roll)              same
+(1 2 3 3 -3 roll)              same
+(1 2 3 0 5 roll)               same
+(1 2 3 1 5 roll)               same
+(1 2 3 -1 roll)                same
+(1 2 3 4 5 5 -1 roll)          same
+% more operands than the fused copy rolls in place
+(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 33 1 roll) same
+(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 33 -1 roll) same
 
 % --- get and put: type, range and ACCESS on every composite ---
 (wa 0 get)                     same
