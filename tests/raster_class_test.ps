@@ -71,6 +71,17 @@ geq (DrawRect outlines the same pixels in both classes) assert
 1 1 1 [ [1 1] [6 1] [4 6] ] pdev dup /FillPoly get exec
 geq (FillPoly rasterizes the same pixels in both classes) assert
 
+% --- Create carries the output-name binding onto the instance, where the
+%     emit path and the C driver read it from the device dictionary ---
+/OutputFileName (raster-class-test.out) def
+/odev 4 4 .privatedict /.xpost_PGMIMAGE get dup /Create get exec def
+odev /OutputFileName 2 copy known { get (raster-class-test.out) eq }{ pop pop false } ifelse
+(gray Create carries OutputFileName onto the instance) assert
+/odev 4 4 .privatedict /.xpost_PPMIMAGE get dup /Create get exec def
+odev /OutputFileName 2 copy known { get (raster-class-test.out) eq }{ pop pop false } ifelse
+(rgb Create carries OutputFileName onto the instance) assert
+currentdict /OutputFileName undef
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { (FAILURES\n) print } ifelse
 flush

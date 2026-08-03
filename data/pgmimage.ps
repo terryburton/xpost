@@ -44,6 +44,10 @@
                 /dimensions [width height] def
             end
         } if
+        /OutputFileName where {
+            /OutputFileName exch 1 index get
+            3 copy put pop pop
+        } if
         %dup /defaultmatrix known {
         %    dup /defaultmatrix 2 copy get matrix copy put
         %} if
