@@ -38,4 +38,36 @@ printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -q '%%BoundingBox: 10 10 50 50' || exit 1
 printf '%s\n' "$out" | grep -q '%%BoundingBox: 10 10 150 150' || exit 1
 test "$(printf '%s\n' "$out" | grep -c '%%BoundingBox: 10 10 50 50')" = 2 || exit 1
+# Text reaches the box by a path of its own: an extent-tracking device
+# needs no glyph rasterization, so each glyph contributes its ink box
+# rather than its pixels. The numbers depend on whichever font resolves,
+# so what is required here holds for any of them: the box is not empty,
+# it starts no further left than the pen, the ascender of the capital
+# rises above the baseline and the descender of the g falls below it.
+txt=${TMPDIR:-/tmp}/bbox-text-$$.ps
+trap 'rm -f "$tmp" "$txt"' 0
+cat > "$txt" <<'PSEOF'
+/Helvetica findfont 24 scalefont setfont
+20 40 moveto (Ag) show
+showpage
+quit
+PSEOF
+out=$("$xpost" -q -d bbox -o /dev/null "$txt" </dev/null 2>&1)
+status=$?
+printf '%s\n' "$out"
+if [ "$status" -ne 0 ]; then
+    echo "FAIL: the interpreter exited with status $status on the text job"
+    exit 1
+fi
+box=$(printf '%s\n' "$out" | grep -m1 '^%%BoundingBox:')
+[ -n "$box" ] || { echo "FAIL: shown text produced no bounding box"; exit 1; }
+set -- $box
+llx=$2; lly=$3; urx=$4; ury=$5
+[ "$urx" -gt "$llx" ] && [ "$ury" -gt "$lly" ] \
+    || { echo "FAIL: the text box is empty: $box"; exit 1; }
+[ "$llx" -ge 19 ] || { echo "FAIL: the text box starts left of the pen: $box"; exit 1; }
+[ "$ury" -gt 40 ] || { echo "FAIL: nothing rises above the baseline: $box"; exit 1; }
+[ "$lly" -lt 40 ] || { echo "FAIL: nothing falls below the baseline: $box"; exit 1; }
+echo "text bounding box OK ($box)"
+
 exit 0
