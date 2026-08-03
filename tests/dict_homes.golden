@@ -108,6 +108,7 @@
 .xpostsys /.gtri
 .xpostsys /.zeros
 .xpostsys /.num2str
+.xpostsys /.devres-to-points
 .xpostsys /.upathops
 .xpostsys /.upathargs
 .xpostsys /.isupmat

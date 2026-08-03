@@ -28,6 +28,20 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% devdict  .devres-to-points  sx sy
+% the device-resolution scale carried in the defaultmatrix fixup applied
+% after construction; a raw 1:1 device answers 1 1. Dividing a device
+% dimension by its scale yields the page size in points, which is how
+% the vector writers and the bounding-box device report their pages
+% independently of HWResolution.
+currentglobal true setglobal
+.xpostsys /.devres-to-points { % devdict  .  sx sy
+    /defaultmatrix 2 copy known {
+        get dup 0 get exch 3 get neg
+    }{ pop pop 1 1 } ifelse
+} bind put
+setglobal
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device

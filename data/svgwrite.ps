@@ -269,10 +269,8 @@
 
         % page size in points: unscale the device resolution carried in
         % the defaultmatrix fixup; a raw 1:1 device is unaffected
-        /sx 1 def /sy 1 def
-        currentdict /defaultmatrix 2 copy known {
-            get dup 0 get /sx exch def 3 get neg /sy exch def
-        }{ pop pop } ifelse
+        currentdict //.xpostsys /.devres-to-points get exec
+        /sy exch def /sx exch def
 
         (<?xml version="1.0" encoding="UTF-8"?>\n) .w
         (<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width=") .w

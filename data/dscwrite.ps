@@ -47,10 +47,8 @@ begin
     } def
 
     % page size in points from the resolution fixup
-    /sx 1 def /sy 1 def
-    currentdict /defaultmatrix 2 copy known {
-        get dup 0 get /sx exch def 3 get neg /sy exch def
-    }{ pop pop } ifelse
+    currentdict //.xpostsys /.devres-to-points get exec
+    /sy exch def /sx exch def
 
     (%!PS-Adobe-3.0\n) .w
     (%%Creator: Xpost\n) .w
@@ -114,10 +112,8 @@ end } put
 .xpost_DSCWRITE /.emitpage { % IMAGE  .  -
 begin
     % page size in points from the resolution fixup
-    /sx 1 def /sy 1 def
-    currentdict /defaultmatrix 2 copy known {
-        get dup 0 get /sx exch def 3 get neg /sy exch def
-    }{ pop pop } ifelse
+    currentdict //.xpostsys /.devres-to-points get exec
+    /sy exch def /sx exch def
 
     % header and prolog once, at the first page (the resolution fixup is ready)
     //.xpostsys /.vecout get /headered get not {
