@@ -835,6 +835,14 @@ test('function-matrix',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# Every resource operator against every category the interpreter admits
+# to, asked for rather than listed, so a category added later is held to
+# the same contract without editing the test.
+test('resource-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/resource_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.

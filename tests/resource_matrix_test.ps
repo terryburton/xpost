@@ -1,0 +1,110 @@
+% Every resource operator against every resource category, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A resource category is a dictionary of its own that says how instances
+% of that category are found, defined, counted and enumerated. The
+% operators go through whichever category they were named, so an
+% operator that works for one category is running different code for the
+% next -- and a category that was only ever asked to find an instance
+% may not answer at all when asked whether one exists, or asked to list
+% what it holds. One category at a time is exactly what a per-category
+% test does not catch.
+%
+% Nothing here defines or removes an instance: the categories are asked
+% only the questions that leave them as they were found, so the suite
+% cannot damage the state it runs in.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (category)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+/works { % {proc} (what) (category)
+    /r.c exch def /r.w exch def
+    stopped { r.w r.c note } if
+    clear
+} def
+/refuses { % {proc} (what) (category)
+    /r.c exch def /r.w exch def
+    stopped not { r.w r.c note } if
+    clear
+} def
+
+% Every category the interpreter admits to, asked for by the category of
+% categories rather than listed here, so a category added later is held
+% to the same contract without this test being edited.
+% Generic is left out: it is the prototype a new category is built from
+% rather than a category holding instances of its own, so the questions
+% below do not apply to it.
+/cats [ (*) { cvn dup /Generic eq { pop }{ } ifelse }
+        100 string /Category resourceforall ] def
+
+cats length 0 gt (there are categories to test) assert
+
+cats {
+    /cat exch def
+    /nm cat 40 string cvs def
+
+    % the category is itself an instance of Category, and yields a
+    % dictionary describing how its instances are handled
+    { cat /Category findresource dup type /dicttype ne
+        { (Category instance is not a dictionary) nm note } if pop }
+      (is found as a Category instance) nm works
+    { cat /Category resourcestatus
+        { pop pop }{ (Category instance has no status) nm note } ifelse }
+      (has a status as a Category instance) nm works
+
+    % it enumerates, whether or not it holds anything
+    { /count 0 def
+      (*) { pop /count count 1 add store } 100 string cat resourceforall }
+      (enumerates) nm works
+
+    % a name it certainly does not hold is reported absent rather than
+    % invented, and asking for it outright is an error
+    { /XpostNoSuchInstanceAtAll cat resourcestatus
+        { pop pop (a missing instance is reported present) nm note }
+        { } ifelse }
+      (reports a missing instance absent) nm works
+    { /XpostNoSuchInstanceAtAll cat findresource }
+      (refuses to find a missing instance) nm refuses
+
+    % and whatever it does hold, it can find and give a status for --
+    % the two operators have to agree with the enumeration. The name
+    % arrives in the scratch string, which is handed out again for the
+    % next instance, so it is copied rather than kept.
+    { /first null def
+      (*) { first null eq
+            { dup length string copy /first exch store }{ pop } ifelse }
+          100 string cat resourceforall
+      first null ne {
+          first cvn cat resourcestatus
+              { pop pop }
+              { (an enumerated instance has no status) nm note }
+          ifelse
+          first cvn cat findresource pop
+      } if }
+      (finds what it enumerates) nm works
+} forall
+
+% the operators refuse a category that does not exist, rather than
+% inventing one
+{ /XpostNoSuchCategory /Category findresource }
+    (an unknown category) (findresource) refuses
+{ /Anything /XpostNoSuchCategory findresource }
+    (an unknown category) (findresource on it) refuses
+{ (*) { pop } 100 string /XpostNoSuchCategory resourceforall }
+    (an unknown category) (resourceforall) refuses
+
+% and resourcestatus refuses it too: the absent answer it returns is
+% about a missing instance, not a missing category
+{ /Anything /XpostNoSuchCategory resourcestatus
+    { pop pop } { } ifelse }
+    (an unknown category) (resourcestatus) refuses
+
+bad 0 eq (every resource operator works for every category) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
