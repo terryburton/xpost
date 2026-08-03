@@ -35,6 +35,13 @@ fail=0
 check() { # description  input  expected
     rm -f "$work/got.txt"
     printf '%b' "$2" | "$xpost" -q --no-sandbox -d null "$work/read.ps" >/dev/null 2>&1
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "FAIL: $1"
+        echo "      the interpreter exited with status $status"
+        fail=1
+        return
+    fi
     printf '%b' "$3" > "$work/want.txt"
     if ! cmp -s "$work/got.txt" "$work/want.txt"; then
         echo "FAIL: $1"
