@@ -107,6 +107,20 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     Xpost_Operator *optab;
     unsigned int optadr;
 
+    /* Mark every opcode shortcut uncaptured before any module registers.
+       Zero cannot serve as the marker: it is a valid opcode -- the first
+       operator registered holds it -- so a field left zero would be
+       indistinguishable from a genuine capture of that operator. An
+       unset field must also never match a real opcode in the fused
+       comparisons, which -1 satisfies. */
+    {
+        int *sc = (int *)&ctx->opcode_shortcuts;
+        size_t n_ = sizeof ctx->opcode_shortcuts / sizeof *sc;
+        size_t i_;
+        for (i_ = 0; i_ < n_; i_++)
+            sc[i_] = -1;
+    }
+
     sd = xpost_dict_cons (ctx, SDSIZE);
     if (xpost_object_get_type(sd) == nulltype)
     {
@@ -191,22 +205,20 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
 #endif
     xpost_oper_init_context_ops(ctx, sd);
 
-    /* Every opcode shortcut must have been captured. A missed capture
-       leaves the field zero, which is a valid opcode -- the first
-       operator registered -- so the interpreter would silently treat
-       that operator as the one it meant to shortcut. Zero is therefore
-       the one value no shortcut may hold, and this is where every
-       module has finished registering. */
+    /* Every opcode shortcut must now have been captured: one still
+       holding the uncaptured marker would make the interpreter treat
+       some unrelated operator as the one it meant to shortcut. This is
+       the point where every module has finished registering. */
     {
         const int *sc = (const int *)&ctx->opcode_shortcuts;
         size_t n = sizeof ctx->opcode_shortcuts / sizeof *sc;
         size_t i;
         for (i = 0; i < n; i++)
         {
-            if (sc[i] == 0)
+            if (sc[i] == -1)
             {
-                XPOST_LOG_ERR("opcode shortcut %u was never captured: it "
-                              "aliases the first registered operator", (unsigned int)i);
+                XPOST_LOG_ERR("opcode shortcut %u was never captured",
+                              (unsigned int)i);
                 return 0;
             }
         }

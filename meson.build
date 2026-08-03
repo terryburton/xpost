@@ -697,6 +697,13 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# A quiet run must be silent: the interpreter's own self-checks report only
+# when something is actually wrong, so stderr stays meaningful.
+test('clean-startup',
+  find_program('tests/run-clean-startup-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Fused-execution equivalence: the interpreter inlines the hottest operators
 # while walking a procedure, and those copies must behave exactly as the
 # operators they stand in for -- same results, same errors, same access
