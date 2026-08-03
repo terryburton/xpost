@@ -106,6 +106,10 @@ printf 'since it builds an instrumented tree and runs the whole suite in it).\n\
 printf 'Coverage is a floor, not a score: a covered line is one that ran, not one\n'
 printf 'whose behaviour anything asserted. Read the second table as the list of\n'
 printf 'places where there is nothing to argue about.\n\n'
+printf 'These numbers are one platform. Code chosen at build time for another --\n'
+printf 'the Windows halves of the compatibility layer, and the portable path\n'
+printf 'confinement used where the kernel has no openat2 -- cannot run here and\n'
+printf 'reads as uncovered whatever the other CI lanes do with it.\n\n'
 
 awk -F'|' '
     { pct[$1] = $2; lines[$1] = $3 }
