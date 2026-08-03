@@ -8,7 +8,7 @@ Coverage is a floor, not a score: a covered line is one that ran, not one
 whose behaviour anything asserted. Read the second table as the list of
 places where there is nothing to argue about.
 
-**77.5% of 17225 lines**, across 49 files.
+**77.9% of 17225 lines**, across 49 files.
 
 ## By file, most uncovered lines first
 
@@ -18,7 +18,7 @@ small file at 50% hides less than a large one at 85%.
 | File | Covered | Lines | Uncovered |
 |---|---:|---:|---:|
 | `src/lib/xpost_file.c` | 73.79% | 2198 | 576 |
-| `src/lib/xpost_op_font.c` | 76.10% | 2008 | 480 |
+| `src/lib/xpost_op_font.c` | 79.78% | 2008 | 406 |
 | `src/lib/xpost_interpreter.c` | 79.90% | 1040 | 209 |
 | `src/lib/xpost_dev_generic.c` | 86.43% | 1408 | 191 |
 | `src/lib/xpost_font.c` | 69.12% | 570 | 176 |
@@ -69,7 +69,7 @@ small file at 50% hides less than a large one at 85%.
 
 ## Functions the suite never enters
 
-The blind spots: 99 functions nothing in the suite reaches.
+The blind spots: 97 functions nothing in the suite reaches.
 
 **`src/bin/xpost_main.c`**
 
@@ -223,10 +223,8 @@ The blind spots: 99 functions nothing in the suite reaches.
 
 **`src/lib/xpost_op_font.c`**
 
-- `_awidthshow`
 - `_setcachelimit`
 - `_setcacheparams`
-- `_widthshow`
 - `xpost_object_is_exe`
 
 **`src/lib/xpost_oplib.c`**
