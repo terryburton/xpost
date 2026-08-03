@@ -378,10 +378,10 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
     }
 
     /* The record stack is now empty and, with its save object popped, wholly
-       unreferenced. It is a raw file allocation the collector cannot reclaim
-       (xpost_stack_free is a broken stub, hence the dead line below), so a
-       save/restore-heavy job would leak one per save level. Park a single
-       one for the next save to reuse. Only single-segment stacks are pooled
+       unreferenced. It is a raw file allocation the collector does not
+       reclaim, so a save/restore-heavy job would leak one per save level.
+       Park a single one for the next save to reuse. Only single-segment
+       stacks are pooled
        -- the overwhelming common case, and it keeps reuse a plain top reset;
        a stack that grew across segments is left as it was. */
     {
@@ -393,7 +393,6 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
             mem->free_substack = sav.save_.stk;
         }
     }
-    //xpost_stack_free(mem, sav.save_.stk);
 }
 
 #ifdef TESTMODULE_V

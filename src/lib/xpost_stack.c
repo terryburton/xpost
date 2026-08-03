@@ -105,22 +105,6 @@ void xpost_stack_dump(Xpost_Memory_File *mem,
 }
 
 /* deallocate stack segment and any chained segments */
-XPCHECKAPI void xpost_stack_free(Xpost_Memory_File *mem,
-                                 unsigned int stackadr)
-{
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
-    Xpost_Memory_Table *tab;
-    unsigned int e;
-
-    if (s->nextseg)
-        xpost_stack_free(mem, s->nextseg);
-    xpost_memory_table_alloc(mem, 0, 0, &e); /* allocate entry with 0 size */
-    tab = &mem->table;
-    tab->tab[e].adr = stackadr; /* insert address */
-    tab->tab[e].sz = sizeof(Xpost_Stack); /* insert size */
-    /* discard */
-}
-
 int xpost_stack_count(Xpost_Memory_File *mem,
                       unsigned int stackadr)
 {

@@ -115,11 +115,6 @@ void xpost_stack_clear(Xpost_Memory_File *mem, unsigned int stackadr);
 void xpost_stack_dump(Xpost_Memory_File *mem, unsigned int stackadr);
 
 /**
- * @brief Free a stack, and all succeeding segments.
- */
-XPCHECKAPI void xpost_stack_free(Xpost_Memory_File *mem, unsigned int stackadr);
-
-/**
  * @brief Count elements in stack.
  */
 int xpost_stack_count(Xpost_Memory_File *mem, unsigned int stackadr);

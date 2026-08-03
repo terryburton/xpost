@@ -51,34 +51,6 @@
 
 #define CNT_STR(s) sizeof(s)-1, s
 
-/* print a dump of the name string stacks, global and local */
-void xpost_name_dump_names(Xpost_Context *ctx)
-{
-    unsigned int stk;
-    unsigned int cnt, i;
-    Xpost_Object str;
-    char *s;
-
-    xpost_memory_table_get_addr(ctx->gl,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &stk);
-    cnt = xpost_stack_count(ctx->gl, stk);
-    printf("global names:\n");
-    for (i=0; i < cnt; i++){
-        str = xpost_stack_bottomup_fetch(ctx->gl, stk, i);
-        s = xpost_string_get_pointer(ctx, str);
-        printf("%u: %*s\n", i, str.comp_.sz, s);
-    }
-    xpost_memory_table_get_addr(ctx->lo,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &stk);
-    cnt = xpost_stack_count(ctx->lo, stk);
-    printf("local names:\n");
-    for (i=0; i < cnt; i++) {
-        str = xpost_stack_bottomup_fetch(ctx->lo, stk, i);
-        s = xpost_string_get_pointer(ctx, str);
-        printf("%u: %*s\n", i, str.comp_.sz, s);
-    }
-}
-
 /* initialize the name special entities XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, NAME_TREE */
 int xpost_name_init(Xpost_Context *ctx)
 {

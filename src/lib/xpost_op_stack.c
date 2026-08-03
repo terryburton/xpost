@@ -204,16 +204,7 @@ int IIroll(Xpost_Context *ctx,
 static
 int Zclear(Xpost_Context *ctx)
 {
-    //Xpost_Stack *s = (void *)(ctx->lo->base + ctx->os);
-    //s->top = 0;
     xpost_stack_clear(ctx->lo, ctx->os);
-#if 0
-    if (s->nextseg) /* trim the stack */
-    {
-        xpost_stack_free(ctx->lo, s->nextseg);
-        s->nextseg = 0;
-    }
-#endif
     return 0;
 }
 
