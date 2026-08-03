@@ -24,6 +24,9 @@ cat > "$tmp/t.ps" <<PSEOF
 0 1 0 setrgbcolor newpath 160 70 15 0 360 arc closepath fill
 0 setgray 1 setlinewidth newpath 130 30 10 0 180 arc stroke
 0 setgray newpath 10.12345 5 moveto 5 0 rlineto 0 2 rlineto -5 0 rlineto closepath fill
+gsave 60 5 translate 20 20 scale
+4 4 8 [ 4 0 0 -4 0 4 ] { <004080c0 4080c000 80c00040 c0004080> } image
+grestore
 showpage
 << /HWResolution [144 144] /OutputFile ($tmp/b.svg) >> setpagedevice
 0 0 1 setrgbcolor newpath 20 20 moveto 60 0 rlineto 0 40 rlineto -60 0 rlineto closepath fill
@@ -43,6 +46,13 @@ grep -q '<path fill="rgb(0%,0%,0%)" d="M[0-9.]* [0-9.]* C' "$a" || fail "glyph o
 grep -q '<path fill="rgb(0%,100%,0%)" fill-rule="nonzero" d="M175 30C' "$a" || fail "curve-preserving circle fill"
 grep -q 'stroke-width="1"[^>]*d="M140 70C' "$a" || fail "curve-preserving stroke"
 grep -q 'd="M10.1235 95L15.1235 95L15.1235 93L10.1235 93Z"' "$a" || fail "four-decimal coordinates"
+grep -q '<image transform="matrix(' "$a" || fail "sampled image element"
+# every attribute value is a single quoted run: a doubled quote would end the
+# value early and make the document malformed (image-rendering once did)
+grep -q '=""' "$a" && fail "empty/doubled attribute quote"
+grep -q 'image-rendering="pixelated"' "$a" || fail "image-rendering attribute"
+# no attribute may carry a stray quote inside its value
+grep -qE '"[a-zA-Z-]+="[^"]*"[^ />]' "$a" && fail "malformed attribute run"
 grep -q '</svg>' "$a" || fail "closing tag"
 grep -q 'width="200pt" height="100pt" viewBox="0 0 400 200"' "$b" || fail "144dpi page in points"
 grep -q 'd="M40 160L160 160L160 80L40 80Z"' "$b" || fail "144dpi coordinates"
