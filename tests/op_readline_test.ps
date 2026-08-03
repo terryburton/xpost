@@ -1,0 +1,113 @@
+% readline (PLRM 8.2), run through `xpost -q --no-sandbox -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% readline fills the string from the file up to a line terminator, returns
+% the substring actually filled without the terminator, and a boolean that
+% is false only when end-of-file arrived before any terminator. A line is
+% terminated by CR, LF or CRLF (PLRM 3.8), all three of which the operator
+% consumes whole. A rangecheck arises only when the string is completely
+% filled *before* a terminator is encountered -- a line that exactly fills
+% the string has been read, not overrun.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+/mk { % (contents) (name) . -   write contents to the named file
+    (w) file dup 3 -1 roll writestring closefile } def
+
+(abcd\nefgh\n) (rdln_lf.scratch) mk
+(abcd\rXY) (rdln_cr.scratch) mk
+(abcd\r\nXY) (rdln_crlf.scratch) mk
+(abcd) (rdln_bare.scratch) mk
+(\nxyz) (rdln_nl1st.scratch) mk
+() (rdln_empty.scratch) mk
+
+% --- an ordinary line, with room to spare ---
+/f (rdln_lf.scratch) (r) file def
+f 20 string readline
+(a terminated line reads true) assert
+(abcd) eq (the line is returned without its terminator) assert
+f 20 string readline pop (efgh) eq (the next line follows) assert
+f closefile
+
+% --- a line that exactly fills the string is read, not a rangecheck ---
+/f (rdln_lf.scratch) (r) file def
+f 4 string readline
+(a line that exactly fills the string reads true) assert
+(abcd) eq (an exactly-filling line is returned whole) assert
+% and its terminator was consumed, so the next line follows cleanly
+f 20 string readline pop (efgh) eq
+    (the terminator of an exactly-filling line is consumed) assert
+f closefile
+
+% --- exactly filling, terminated by CR, then CRLF ---
+/f (rdln_cr.scratch) (r) file def
+f 4 string readline pop (abcd) eq (a CR-terminated exact fit is returned) assert
+f read pop 88 eq (a CR terminator is consumed whole) assert
+f closefile
+/f (rdln_crlf.scratch) (r) file def
+f 4 string readline pop (abcd) eq (a CRLF-terminated exact fit is returned) assert
+f read pop 88 eq (a CRLF terminator is consumed whole) assert
+f closefile
+
+% --- end-of-file with no terminator: the text is returned with false ---
+/f (rdln_bare.scratch) (r) file def
+f 20 string readline
+not (an unterminated final line reads false) assert
+(abcd) eq (an unterminated final line still returns its text) assert
+f closefile
+
+% --- and the same when that final line exactly fills the string ---
+/f (rdln_bare.scratch) (r) file def
+f 4 string readline
+not (an unterminated exactly-filling line reads false) assert
+(abcd) eq (an unterminated exactly-filling line returns its text) assert
+f closefile
+
+% --- an empty line ---
+/f (rdln_nl1st.scratch) (r) file def
+f 20 string readline
+(an empty line reads true) assert
+length 0 eq (an empty line returns an empty substring) assert
+f closefile
+
+% --- a zero-length string can still read an empty line ---
+/f (rdln_nl1st.scratch) (r) file def
+f 0 string readline
+(a zero-length string reads an empty line as true) assert
+length 0 eq (a zero-length string returns an empty substring) assert
+f read pop 120 eq (the empty line's terminator was consumed) assert
+f closefile
+
+% --- but a zero-length string against a non-empty line is a rangecheck ---
+/f (rdln_lf.scratch) (r) file def
+{ f 0 string readline } /rangecheck
+    (a zero-length string cannot hold a non-empty line) erris
+f closefile
+
+% --- a string too short for the line is a rangecheck ---
+/f (rdln_lf.scratch) (r) file def
+{ f 2 string readline } /rangecheck (a line longer than the string is a rangecheck) erris
+f closefile
+
+% --- at end of file: no text and false ---
+/f (rdln_empty.scratch) (r) file def
+f 20 string readline
+not (readline at end of file reads false) assert
+length 0 eq (readline at end of file returns an empty substring) assert
+f closefile
+
+(rdln_lf.scratch) deletefile
+(rdln_cr.scratch) deletefile
+(rdln_crlf.scratch) deletefile
+(rdln_bare.scratch) deletefile
+(rdln_nl1st.scratch) deletefile
+(rdln_empty.scratch) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

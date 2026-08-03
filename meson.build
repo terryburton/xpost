@@ -668,6 +668,14 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# readline (PLRM 8.2): terminator handling for CR, LF and CRLF, the boolean
+# result at end of file, and the rangecheck boundary -- a line that exactly
+# fills the string has been read, not overrun.
+test('op-readline',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_readline_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # filenameforall enumerates the files matching a template (PLRM 8.2), and a
 # template that matches none of them enumerates nothing rather than failing.
 test('op-filenameforall',
