@@ -8,7 +8,7 @@ Coverage is a floor, not a score: a covered line is one that ran, not one
 whose behaviour anything asserted. Read the second table as the list of
 places where there is nothing to argue about.
 
-**78.5% of 17244 lines**, across 49 files.
+**79.0% of 17215 lines**, across 49 files.
 
 ## By file, most uncovered lines first
 
@@ -19,44 +19,44 @@ small file at 50% hides less than a large one at 85%.
 |---|---:|---:|---:|
 | `src/lib/xpost_file.c` | 74.89% | 2198 | 552 |
 | `src/lib/xpost_op_font.c` | 79.88% | 2008 | 404 |
-| `src/lib/xpost_interpreter.c` | 80.10% | 1040 | 207 |
-| `src/lib/xpost_dev_generic.c` | 86.36% | 1408 | 192 |
+| `src/lib/xpost_dev_generic.c` | 86.67% | 1403 | 187 |
+| `src/lib/xpost_interpreter.c` | 82.21% | 1040 | 185 |
 | `src/lib/xpost_dsc_parse.c` | 70.70% | 587 | 172 |
 | `src/lib/xpost_font.c` | 71.23% | 570 | 164 |
 | `src/lib/xpost_op_file.c` | 84.82% | 896 | 136 |
 | `src/lib/xpost_op_token.c` | 82.64% | 674 | 117 |
-| `src/bin/xpost_main.c` | 55.43% | 258 | 115 |
 | `src/lib/xpost_garbage.c` | 67.87% | 333 | 107 |
 | `src/lib/xpost_op_path.c` | 89.80% | 980 | 100 |
 | `src/lib/xpost_memory.c` | 59.67% | 243 | 98 |
 | `src/lib/xpost_op_control.c` | 74.23% | 357 | 92 |
-| `src/lib/xpost_operator.c` | 78.00% | 400 | 88 |
-| `src/lib/xpost_compat_posix.c` | 56.86% | 204 | 88 |
+| `src/lib/xpost_operator.c` | 77.75% | 400 | 89 |
+| `src/lib/xpost_compat_posix.c` | 58.33% | 204 | 85 |
 | `src/lib/xpost_dev_raster.c` | 63.56% | 225 | 82 |
 | `src/lib/xpost_dev_xcb.c` | 73.54% | 291 | 77 |
+| `src/bin/xpost_main.c` | 71.43% | 259 | 74 |
 | `src/lib/xpost_dev_png.c` | 77.60% | 308 | 69 |
+| `src/lib/xpost_op_dict.c` | 79.60% | 299 | 61 |
 | `src/lib/xpost_log.c` | 46.02% | 113 | 61 |
 | `src/lib/xpost_context.c` | 65.91% | 176 | 60 |
-| `src/lib/xpost_op_dict.c` | 80.94% | 299 | 57 |
-| `src/lib/xpost_op_misc.c` | 69.23% | 182 | 56 |
-| `src/lib/xpost_op_array.c` | 77.24% | 246 | 56 |
+| `src/lib/xpost_op_array.c` | 76.02% | 246 | 59 |
 | `src/lib/xpost_free.c` | 63.40% | 153 | 56 |
 | `src/lib/xpost_object.c` | 57.48% | 127 | 54 |
 | `src/lib/xpost_op_string.c` | 75.23% | 214 | 53 |
 | `src/lib/xpost_dict.c` | 84.59% | 344 | 53 |
+| `src/lib/xpost_op_misc.c` | 71.98% | 182 | 51 |
 | `src/lib/xpost_dev_jpeg.c` | 73.98% | 196 | 51 |
-| `src/lib/xpost_name.c` | 75.72% | 173 | 42 |
-| `src/lib/xpost_stack.c` | 77.22% | 158 | 36 |
 | `src/lib/xpost_save.c` | 75.76% | 132 | 32 |
 | `src/lib/xpost_dev_bgr.c` | 79.26% | 135 | 28 |
+| `src/lib/xpost_stack.c` | 81.88% | 149 | 27 |
 | `src/lib/xpost_op_type.c` | 90.49% | 284 | 27 |
+| `src/lib/xpost_name.c` | 83.44% | 157 | 26 |
 | `src/lib/xpost_garbage_diag.c` | 84.43% | 122 | 19 |
 | `src/lib/xpost_op_context.c` | 82.89% | 76 | 13 |
-| `src/lib/xpost_main.c` | 68.29% | 41 | 13 |
 | `src/lib/xpost_op_stack.c` | 89.29% | 112 | 12 |
 | `src/lib/xpost_op_param.c` | 78.18% | 55 | 12 |
 | `src/lib/xpost_dsc_file.c` | 76.60% | 47 | 11 |
 | `src/lib/xpost_string.c` | 85.00% | 60 | 9 |
+| `src/lib/xpost_main.c` | 78.05% | 41 | 9 |
 | `src/lib/xpost_op_matrix.c` | 96.86% | 255 | 8 |
 | `src/lib/xpost_oplib.c` | 87.76% | 49 | 6 |
 | `src/lib/xpost_array.c` | 89.29% | 56 | 6 |
@@ -69,12 +69,7 @@ small file at 50% hides less than a large one at 85%.
 
 ## Functions the suite never enters
 
-The blind spots: 77 functions nothing in the suite reaches.
-
-**`src/bin/xpost_main.c`**
-
-- `_xpost_atoi`
-- `_xpost_main_license`
+The blind spots: 67 functions nothing in the suite reaches.
 
 **`src/lib/xpost_compat.c`**
 
@@ -83,7 +78,6 @@ The blind spots: 77 functions nothing in the suite reaches.
 **`src/lib/xpost_compat_posix.c`**
 
 - `xpost_fd_realpath`
-- `xpost_get_realtime_ms`
 - `xpost_renameat_beneath`
 
 **`src/lib/xpost_context.c`**
@@ -91,10 +85,6 @@ The blind spots: 77 functions nothing in the suite reaches.
 - `xpost_context_dump`
 - `xpost_context_fork1`
 - `xpost_context_fork2`
-
-**`src/lib/xpost_dev_generic.c`**
-
-- `xpost_device_set_filename`
 
 **`src/lib/xpost_dev_jpeg.c`**
 
@@ -155,19 +145,12 @@ The blind spots: 77 functions nothing in the suite reaches.
 **`src/lib/xpost_interpreter.c`**
 
 - `evalquit`
-- `get_token`
-- `xpost_add_definitions`
 - `xpost_interpreter_exit`
 
 **`src/lib/xpost_log.c`**
 
 - `xpost_log_print_cb_set`
 - `xpost_log_print_cb_stdout`
-
-**`src/lib/xpost_main.c`**
-
-- `xpost_data_dir_get`
-- `xpost_lib_dir_get`
 
 **`src/lib/xpost_memory.c`**
 
@@ -180,10 +163,6 @@ The blind spots: 77 functions nothing in the suite reaches.
 - `xpost_memory_table_set_size`
 - `xpost_memory_table_set_tag`
 
-**`src/lib/xpost_name.c`**
-
-- `xpost_name_dump_names`
-
 **`src/lib/xpost_object.c`**
 
 - `xpost_object_install_file_get_access`
@@ -193,6 +172,10 @@ The blind spots: 77 functions nothing in the suite reaches.
 
 - `_i_am_free_`
 - `_i_am_zombie_`
+
+**`src/lib/xpost_op_dict.c`**
+
+- `xpost_op_cleardictstack`
 
 **`src/lib/xpost_operator.c`**
 
@@ -213,9 +196,7 @@ The blind spots: 77 functions nothing in the suite reaches.
 - `debugloadon`
 - `dumpvm`
 - `Odumpnames`
-- `realtime`
 
 **`src/lib/xpost_stack.c`**
 
 - `xpost_stack_dump`
-- `xpost_stack_free`
