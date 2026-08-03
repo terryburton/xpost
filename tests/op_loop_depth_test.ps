@@ -1,0 +1,86 @@
+% The loop operators at every depth of execution, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Each of for, repeat, loop and the forall family resumes through a
+% continuation that keeps its state on the execution stack. That stack is
+% held in segments, and each continuation has a fast path for a frame
+% lying wholly within the top segment and a general one for a frame that
+% straddles two. Ordinary programs run shallow, so only the fast path is
+% ever taken and the fallback -- the one that has to be right when the
+% stack is deep -- goes unexercised.
+%
+% Every loop below is run at each nesting depth across a range wide
+% enough to carry the execution stack over a segment boundary, so both
+% paths run and both have to give the same answers.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { /bad bad 1 add store } def
+
+% one round of every loop kind, each checking its own result
+/loops {
+    % forall over a string visits every character
+    /n 0 def
+    (abcde) { pop /n n 1 add store } forall
+    n 5 eq not { note } if
+
+    % forall over an array visits every element, in order
+    /sum 0 def
+    [ 1 2 3 4 ] { sum add /sum exch store } forall
+    sum 10 eq not { note } if
+
+    % forall over a dictionary visits every pair
+    /pairs 0 def
+    << /a 1 /b 2 /c 3 >> { pop pop /pairs pairs 1 add store } forall
+    pairs 3 eq not { note } if
+
+    % repeat runs its procedure the given number of times
+    /r 0 def
+    7 { /r r 1 add store } repeat
+    r 7 eq not { note } if
+
+    % for counts from its initial value by its increment
+    /f 0 def
+    1 1 6 { f add /f exch store } for
+    f 21 eq not { note } if
+
+    % loop runs until exit
+    /l 0 def
+    { /l l 1 add store l 4 ge { exit } if } loop
+    l 4 eq not { note } if
+
+    % a forall left early by exit stops there
+    /e 0 def
+    [ 1 2 3 4 5 ] { pop /e e 1 add store e 2 ge { exit } if } forall
+    e 2 eq not { note } if
+} def
+
+% Run one round at nesting depth d, by recursing d deep first. The
+% recursive call is not in tail position -- something follows it -- so
+% each level's frame stays on the execution stack rather than being
+% folded away, which is what carries the stack to the depth wanted.
+/atdepth { % d  .  -
+    dup 0 gt { dup 1 sub atdepth pop }{ pop loops } ifelse
+} def
+
+% A shallow sweep, where the frame lies well inside one segment.
+0 1 40 { atdepth } for
+
+% Then a sweep across a segment boundary. The execution stack carries
+% about one slot per level of this recursion and a segment holds a
+% thousand, so these depths put the loop's own frame either side of the
+% boundary and astride it.
+980 1 1020 { atdepth } for
+
+bad 0 eq (every loop gives the same answers at every depth) assert
+
+% and once more at the shallowest depth, so a failure above cannot be
+% blamed on the recursion itself
+/bad 0 def
+loops
+bad 0 eq (every loop gives its answers at the shallowest depth) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

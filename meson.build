@@ -812,6 +812,15 @@ test('op-dictstack',
   args: [ xpost_exe, files('tests/op_dictstack_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The loop operators resume through continuations whose state sits on the
+# execution stack, which is held in segments. Each has a fast path for a frame
+# inside one segment and a fallback for a frame astride two; ordinary programs
+# run shallow, so only the fast one is otherwise taken.
+test('op-loop-depth',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_loop_depth_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A JPEG stream that stops early, or was never a JPEG, must end the decode
 # rather than leave it waiting for input that will never come.
 test('dct-truncated',
