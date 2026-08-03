@@ -1,0 +1,243 @@
+% Fused-execution equivalence, run through `xpost -d null` by run-ps-test.sh.
+%
+% The interpreter executes the hottest operators inline while walking a
+% procedure, instead of dispatching to the operator. Those fused copies
+% re-implement each operator's semantics, so any of them can drift from
+% the operator it stands in for -- silently, since ordinary tests reach
+% whichever path their own shape happens to select. (Two had already
+% drifted: the fused array get and put skipped their access checks, so
+% inside a procedure a noaccess array could be read and a readonly array
+% written.)
+%
+% This test closes that hole for the class rather than the instance. Each
+% case below is run BOTH ways and the outcomes must be identical:
+%   - as a string executed with cvx exec, whose tokens the main eval loop
+%     evaluates one at a time -- the operator path;
+%   - as a procedure, whose elements the fused walker evaluates -- the
+%     fast path.
+% Outcome means everything observable: the error raised (or /ok), and the
+% exact operand results. tests/check-fused-ops.sh requires every operator
+% the interpreter fuses to appear here, so a newly fused operator cannot
+% be added without its equivalence cases.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add def } ifelse } def
+
+% Run an object and capture everything observable about the run: the
+% error it raised (or /ok), its net effect on the stack depth, and the
+% values it left. A pad of sentinels sits beneath, so a case that pops
+% more than it pushed eats the pad instead of the caller's stack; the
+% net delta is recorded as the array's first element, so an asymmetric
+% underflow is itself a mismatch.
+/pobj null def /pd0 0 def /pnm null def /pn 0 def /pres null def
+/probe { % obj . array outcome
+    /pobj exch def
+    null null null null null null null null   % 8-deep sentinel pad
+    /pd0 count def
+    { pobj exec } stopped
+    { /pnm $error /errorname get def }{ /pnm /ok def } ifelse
+    /pn count pd0 sub def
+    pn 0 ge
+        { pn array astore /pres exch def
+          [ pn pres aload pop ] /pres exch def }
+        { [ pn ] /pres exch def }
+    ifelse
+    % restore the caller's depth: drop whatever remains above the pad base
+    count pd0 8 sub sub { pop } repeat
+    pres pnm
+} def
+
+% Element-wise comparison. eq on two composites compares identity, and
+% each run builds its own, so composite elements are compared by type
+% and length -- enough to catch a path leaving a different object, while
+% not demanding that two separately-built procedures be the same object.
+/elemeq { % o1 o2 . bool
+    2 copy type exch type eq
+    {
+        % composites are compared by type alone: eq would compare
+        % identity, and reading length or contents can itself raise
+        % invalidaccess on the access-restricted fixtures below
+        1 index type /arraytype eq
+        1 index type /stringtype eq or
+        1 index type /dicttype eq or
+        { pop pop true }
+        { eq }
+        ifelse
+    }
+    { pop pop false } ifelse
+} def
+/aeq { % a1 a2 . bool
+    2 copy length exch length eq
+    { /i 0 def /r true def
+      1 index length 0 gt {
+        0 1 3 index length 1 sub {
+          /i exch def
+          1 index i get 1 index i get elemeq not { /r false def } if
+        } for
+      } if
+      pop pop r }
+    { pop pop false } ifelse
+} def
+
+% (src) . proc -- the same tokens as a BOUND procedure object. bind is
+% what makes this the fused path: the walker inlines an element only
+% when it is an operator object, so an unbound name dispatches normally
+% and never reaches the fast path. All interpreter machinery is bound,
+% so bound is the case that matters -- and the reason the access defect
+% hid: an unbound test procedure exercises the operator either way.
+/asproc { % (src) . proc
+    2 dict begin
+    /s exch def
+    s length 4 add string
+    dup 0 ({ ) putinterval
+    dup 2 s putinterval
+    dup s length 2 add ( }) putinterval
+    cvx exec
+    bind
+    end
+} def
+
+% (src) . -   execute src the two ways and require identical outcomes
+/same { % (src) . -
+    3 dict begin
+    /src exch def
+    src cvx probe             % operator path: tokens evaluated individually
+    /o1 exch def /r1 exch def
+    src asproc probe          % fused path: the same tokens inside a procedure
+    /o2 exch def /r2 exch def
+    o1 o2 eq
+    { r1 r2 aeq
+      { }
+      { (MISMATCH results: ) print src print ( direct=) print r1 ==only
+        ( fused=) print r2 ==only (\n) print
+        /failcount failcount 1 add def } ifelse }
+    { (MISMATCH outcome: ) print src print ( direct=) print o1 ==only
+      ( fused=) print o2 ==only (\n) print
+      /failcount failcount 1 add def } ifelse
+    end
+} def
+
+% --- fixtures the cases below share ---
+/roa [ 1 2 3 ] readonly def          % readonly array
+/naa [ 1 2 3 ] noaccess def          % noaccess array
+/wa  [ 1 2 3 ] def                   % writeable array
+/rod 3 dict dup /a 1 put readonly def
+/wd  3 dict def
+/ros (abc) readonly def
+/ws  (abc) def
+/mx 2147483647 def
+/mn -2147483648 def
+
+% --- pop, exch, dup, index, roll: stack shuffling, valid and starved ---
+(1 2 pop)                      same
+(pop)                          same
+(1 2 exch)                     same
+(1 exch)                       same
+(exch)                         same
+(1 dup)                        same
+(dup)                          same
+(1 2 3 0 index)                same
+(1 2 3 2 index)                same
+(1 2 3 9 index)                same
+(1 2 3 -1 index)               same
+(1 2 3 (x) index)              same
+(index)                        same
+(1 2 3 3 1 roll)               same
+(1 2 3 3 -1 roll)              same
+(1 2 3 3 0 roll)               same
+(1 2 3 9 1 roll)               same
+(1 2 3 -1 1 roll)              same
+(1 2 3 (x) 1 roll)             same
+(roll)                         same
+
+% --- get and put: type, range and ACCESS on every composite ---
+(wa 0 get)                     same
+(wa 2 get)                     same
+(wa 9 get)                     same
+(wa -1 get)                    same
+(wa (x) get)                   same
+(naa 0 get)                    same
+(roa 0 get)                    same
+(rod /a get)                   same
+(ws 0 get)                     same
+(wa 0 42 put wa 0 get)         same
+(wa 9 42 put)                  same
+(wa -1 42 put)                 same
+(roa 0 99 put)                 same
+(naa 0 99 put)                 same
+(rod /a 99 put)                same
+(ros 0 88 put)                 same
+(ws 0 88 put ws 0 get)         same
+(wd /k 5 put wd /k get)        same
+(get)                          same
+(put)                          same
+(1 2 get)                      same
+(1 2 3 put)                    same
+
+% --- arithmetic: in range, at the boundary, and starved ---
+(2 3 add)                      same
+(mx 1 add)                     same
+(mn 1 sub)                     same
+(mx 2 mul)                     same
+(mx mx add)                    same
+(mn mn add)                    same
+(2.5 1.5 add)                  same
+(2 1.5 add)                    same
+(2 3 sub)                      same
+(2 3 mul)                      same
+((x) 1 add)                    same
+(1 add)                        same
+(add)                          same
+
+% --- comparisons: numeric, mixed, string, type errors ---
+(1 2 eq)                       same
+(2 2 eq)                       same
+(2 2.0 eq)                     same
+(1 2 ne)                       same
+(1 2 lt)                       same
+(2 1 lt)                       same
+(1 2 le)                       same
+(2 2 le)                       same
+(1 2 gt)                       same
+(2 1 gt)                       same
+(1 2 ge)                       same
+(2 2 ge)                       same
+((abc) (abd) lt)               same
+((abc) (abc) eq)               same
+(/a /a eq)                     same
+(1 (x) lt)                     same
+(1 eq)                         same
+(eq)                           same
+
+% --- type ---
+(1 type)                       same
+(1.5 type)                     same
+((x) type)                     same
+(/n type)                      same
+([ 1 ] type)                   same
+(true type)                    same
+(null type)                    same
+(type)                         same
+
+% --- def: value, VM discipline, and immediate visibility ---
+(/dk 5 def dk)                 same
+(/dk 5 def /dk 6 def dk)       same
+(5 def)                        same
+(def)                          same
+
+% --- if / ifelse ---
+(true { 1 } if)                same
+(false { 1 } if)               same
+(true { 1 } { 2 } ifelse)      same
+(false { 1 } { 2 } ifelse)     same
+(1 { 2 } if)                   same
+(true 1 if)                    same
+(if)                           same
+(ifelse)                       same
+
+% --- the results are also correct, not merely equal on both paths ---
+wa 0 get 42 eq (a put through the fixture stored its value) assert
+roa 0 get 1 eq (the readonly array was never modified) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

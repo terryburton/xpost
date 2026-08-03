@@ -697,6 +697,22 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Fused-execution equivalence: the interpreter inlines the hottest operators
+# while walking a procedure, and those copies must behave exactly as the
+# operators they stand in for -- same results, same errors, same access
+# enforcement. Each case runs both ways and the outcomes must match.
+test('fused-equivalence',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/fused_equivalence_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# ... and every fused operator must actually have those cases: adding one
+# to the fast path without equivalence coverage fails here.
+test('check-fused-ops',
+  find_program('tests/check-fused-ops.sh'),
+  args: [ meson.current_source_dir() / 'src' / 'lib',
+          files('tests/fused_equivalence_test.ps') ])
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.
