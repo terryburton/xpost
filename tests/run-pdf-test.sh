@@ -180,6 +180,11 @@ showpage
 quit
 EOF
 out=$("$xpost" -q -d null -o /dev/null "$cspps" </dev/null 2>&1)
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "FAILURES: the interpreter exited with status $status"
+    exit 1
+fi
 rm -f "$cspps"
 printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: colour-space preservation probes"; exit 1; }
 n=$(printf '%s\n' "$out" | grep -c '^ok ')

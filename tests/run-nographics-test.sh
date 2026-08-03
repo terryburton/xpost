@@ -10,5 +10,10 @@ script=$2
 # --no-graphics selects the no-graphics start procedure; lets the
 # script exercise the interpreter's own file operations
 out=$("$xpost" --no-graphics --no-sandbox -q -d null "$script" </dev/null 2>&1)
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "FAILURES: the interpreter exited with status $status"
+    exit 1
+fi
 printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -q '^SUCCESS$'

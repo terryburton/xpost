@@ -15,6 +15,16 @@ out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 
 "$xpost" -q -d null "$prog" </dev/null >"$out" 2>&1 &
+
+status=$?
+
+if [ "$status" -ne 0 ]; then
+
+    echo "FAILURES: the interpreter exited with status $status"
+
+    exit 1
+
+fi
 pid=$!
 
 # wait for the program to announce it is inside the loop

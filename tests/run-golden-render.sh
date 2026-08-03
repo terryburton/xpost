@@ -45,6 +45,11 @@ out_manifest="$work/manifest.sha256"
 for dev in $devices; do
     out="$work/golden.$dev"
     err=$("$xpost" -q $ns -d "$dev" -o "$out" "$page" </dev/null 2>&1)
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "FAILURES: the interpreter exited with status $status"
+        exit 1
+    fi
     if printf '%s' "$err" | grep -q '%%\[ Error'; then
         echo "FAIL $dev: $(printf '%s' "$err" | grep '%%\[ Error' | head -1)"
         fail=1

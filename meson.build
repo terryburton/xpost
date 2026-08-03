@@ -725,6 +725,16 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# A test must be able to fail. Each rule here encodes a defect this suite
+# actually carried: a failure counter incremented with def inside a scratch
+# dictionary (the increment is discarded, so the suite prints FAIL lines and
+# reports SUCCESS); a wrapper that ignores the interpreter's exit status (a
+# crash after SUCCESS passes); a guard that accepts an empty golden file
+# (it then compares nothing).
+test('check-test-quality',
+  find_program('tests/check-test-quality.sh'),
+  args: [ meson.current_source_dir() / 'tests' ])
+
 # The distribution lists must cover every built file: a header present in the
 # meson build but missing from the autotools lists yields a `make dist` tarball
 # that does not compile, which no in-tree build would ever reveal.

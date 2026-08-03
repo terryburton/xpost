@@ -54,6 +54,11 @@ fail=0
 
 render() {   # $1=device $2=output-path ; returns 1 on skip/error
     err=$("$xpost" -q $ns -d "$1" -o "$2" "$prog" </dev/null 2>&1)
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "FAILURES: the interpreter exited with status $status"
+        exit 1
+    fi
     case "$err" in
         *"wrong device"*) return 1 ;;
     esac

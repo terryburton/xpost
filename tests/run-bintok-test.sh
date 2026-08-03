@@ -22,8 +22,13 @@ trap 'rm -f "$scratch" "$job" "$out"' EXIT
 
 # -a: name tokens may carry bytes 160..255, which would otherwise trip
 # grep's binary-file heuristic and truncate the stream
-"$xpost" -q -d null "$job" </dev/null 2>/dev/null \
-    | grep -av '^Xpost\|^Copyright\|WARRANTY\|COPYING\|^PS' > "$out"
+"$xpost" -q -d null "$job" </dev/null 2>/dev/null > "$out.raw"
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "FAILURES: the interpreter exited with status $status"
+    exit 1
+fi
+grep -av '^Xpost\|^Copyright\|WARRANTY\|COPYING\|^PS' < "$out.raw" > "$out"
 
 # --strip-trailing-cr: the golden may be checked out with CRLF on a host that
 # translates line endings, while the interpreter emits LF
