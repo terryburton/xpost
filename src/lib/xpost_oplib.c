@@ -211,9 +211,9 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
        the uncaptured marker names no operator. */
     {
         const int *sc = (const int *)&ctx->opcode_shortcuts;
-        size_t n = sizeof ctx->opcode_shortcuts / sizeof *sc;
+        size_t nshortcuts = sizeof ctx->opcode_shortcuts / sizeof *sc;
         size_t i;
-        for (i = 0; i < n; i++)
+        for (i = 0; i < nshortcuts; i++)
         {
             if (sc[i] == -1)
             {

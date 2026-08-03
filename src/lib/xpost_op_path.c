@@ -1338,7 +1338,15 @@ int _pathnext(Xpost_Context *ctx, Xpost_Object str, Xpost_Object off)
     used = _path_get_u32(p, 0);
     if (used > _path_avail(ctx, str))
         return rangecheck;
-    o = off.int_.val < PATH_HDR ? PATH_HDR : (unsigned int)off.int_.val;
+    /* an offset before the first element names no element, and one
+       below the header names the first */
+    if (off.int_.val < 0)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+    o = (unsigned int)off.int_.val < PATH_HDR
+        ? PATH_HDR : (unsigned int)off.int_.val;
     if (o >= used)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));

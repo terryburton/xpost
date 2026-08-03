@@ -128,7 +128,6 @@ int _i_am_free_ (Xpost_Context *ctx)
    context  join  mark obj1..objN
    await context termination and return its results
 */
-static
 /* bound on reschedules of one join before it is reported unschedulable */
 enum { _JOIN_WAIT_MAX = 64 };
 static unsigned int _join_wait_cid;
