@@ -1026,7 +1026,7 @@ int _fillpath_emit(Xpost_Context *ctx,
     char *p;
     unsigned int used, o;
     char tmp[192];
-    int n, i;
+    int n, i, ret;
 
     Xpost_Object eo;
     int evenodd;
@@ -1058,8 +1058,9 @@ int _fillpath_emit(Xpost_Context *ctx,
             { memcpy(tmp + n, ")\" fill-rule=\"evenodd\" d=\"", 26); n += 26; }
         else
             { memcpy(tmp + n, ")\" fill-rule=\"nonzero\" d=\"", 26); n += 26; }
-        if (!xpost_dev_pdf_append(ctx, devdic, tmp, n))
-            return undefined;
+        ret = xpost_dev_pdf_append(ctx, devdic, tmp, n);
+        if (ret)
+            return ret;
     }
 
     for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
@@ -1101,14 +1102,19 @@ int _fillpath_emit(Xpost_Context *ctx,
                      : cmd == PATH_CMD_LINE ? 'l' : 'c';
             tmp[n++] = '\n';
         }
-        if (n && !xpost_dev_pdf_append(ctx, devdic, tmp, n))
-            return undefined;
+        if (n)
+        {
+            ret = xpost_dev_pdf_append(ctx, devdic, tmp, n);
+            if (ret)
+                return ret;
+        }
     }
 
-    if (!xpost_dev_pdf_append(ctx, devdic,
-                              svg ? "\"/>\n" : evenodd ? "f*\n" : "f\n",
-                              svg ? 4 : evenodd ? 3 : 2))
-        return undefined;
+    ret = xpost_dev_pdf_append(ctx, devdic,
+                               svg ? "\"/>\n" : evenodd ? "f*\n" : "f\n",
+                               svg ? 4 : evenodd ? 3 : 2);
+    if (ret)
+        return ret;
     return 0;
 }
 
