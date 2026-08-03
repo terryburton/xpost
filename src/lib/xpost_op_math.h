@@ -33,4 +33,61 @@
 
 int xpost_oper_init_math_ops(Xpost_Context *ctx, Xpost_Object sd);
 
+/*
+ * Integer arithmetic with PLRM 3.3.2 range semantics, shared verbatim
+ * between the add/sub/mul operators and the interpreter's fused
+ * procedure execution so the two can never disagree: a result outside
+ * the PostScript integer range becomes a real of the true value rather
+ * than wrapping.
+ *
+ * The bounds are those of the `integer` type, so a build with a wider
+ * integer widens them with it.
+ */
+#define XPOST_INTEGER_MAX \
+    ((long long)(((unsigned long long)1 << (sizeof(integer)*8 - 1)) - 1))
+#define XPOST_INTEGER_MIN (-XPOST_INTEGER_MAX - 1)
+
+static inline int xpost_int_add_willover(long x, long y)
+{
+    if (y < 0) return x < XPOST_INTEGER_MIN - y;
+    return x > XPOST_INTEGER_MAX - y;
+}
+
+static inline int xpost_int_sub_willunder(long x, long y)
+{
+    if (y < 0) return x > XPOST_INTEGER_MAX + y;
+    return x < XPOST_INTEGER_MIN + y;
+}
+
+static inline int xpost_int_mul_willover(long x, long y)
+{
+    long long xx = x < 0 ? -(long long)x : (long long)x;
+    long long yy = y < 0 ? -(long long)y : (long long)y;
+    if (xx == 0 || yy == 0) return 0;
+    return xx > XPOST_INTEGER_MAX / yy;
+}
+
+/**
+ * @brief the sum/difference/product of two integer objects, as the
+ * object the PLRM prescribes: an integer, or a real when the exact
+ * result leaves the integer range.
+ */
+static inline Xpost_Object xpost_int_add(integer x, integer y)
+{
+    return xpost_int_add_willover(x, y) ? xpost_real_cons((real)x + y)
+                                        : xpost_int_cons(x + y);
+}
+
+static inline Xpost_Object xpost_int_sub(integer x, integer y)
+{
+    return xpost_int_sub_willunder(x, y) ? xpost_real_cons((real)x - y)
+                                         : xpost_int_cons(x - y);
+}
+
+static inline Xpost_Object xpost_int_mul(integer x, integer y)
+{
+    return xpost_int_mul_willover(x, y) ? xpost_real_cons((real)x * y)
+                                        : xpost_int_cons(x * y);
+}
+
 #endif

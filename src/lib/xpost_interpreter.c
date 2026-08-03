@@ -60,6 +60,7 @@
 #include "xpost_garbage.h"  /*  test gc, install collect() in context's memory files */
 #include "xpost_operator.h"  /* eval functions call operators */
 #include "xpost_op_dict.h"  /* the shared def fast path */
+#include "xpost_op_math.h"  /* the shared range-preserving arithmetic */
 #include "xpost_oplib.h"
 
 static
@@ -782,17 +783,20 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 {
                     Xpost_Object x_ = os_top->data[ot - 2];
                     Xpost_Object y_ = os_top->data[ot - 1];
-                    integer r_;
                     if (xpost_object_get_type(x_) == integertype &&
-                        xpost_object_get_type(y_) == integertype &&
-                        !(w == (unsigned int)ctx->opcode_shortcuts.opadd
-                            ? __builtin_add_overflow(x_.int_.val, y_.int_.val, &r_)
-                            : w == (unsigned int)ctx->opcode_shortcuts.opsub
-                            ? __builtin_sub_overflow(x_.int_.val, y_.int_.val, &r_)
-                            : __builtin_mul_overflow(x_.int_.val, y_.int_.val, &r_)))
+                        xpost_object_get_type(y_) == integertype)
                     {
+                        /* the operators' own range-preserving arithmetic,
+                           so an out-of-range result becomes the same real
+                           here as it does there (see xpost_op_math.h) */
+                        Xpost_Object r_ =
+                            w == (unsigned int)ctx->opcode_shortcuts.opadd
+                                ? xpost_int_add(x_.int_.val, y_.int_.val)
+                            : w == (unsigned int)ctx->opcode_shortcuts.opsub
+                                ? xpost_int_sub(x_.int_.val, y_.int_.val)
+                                : xpost_int_mul(x_.int_.val, y_.int_.val);
                         --os_top->top;
-                        os_top->data[ot - 2] = xpost_int_cons(r_);
+                        os_top->data[ot - 2] = r_;
                         goto next_element;
                     }
                 }

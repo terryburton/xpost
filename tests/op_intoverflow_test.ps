@@ -21,4 +21,42 @@
 100000000000 100000 div 1000000 sub abs 100 lt (1e11 literal has its value) assert
 -9999999999 0 lt (negative over-range literal stays negative) assert
 
+% --- arithmetic overflow behaves identically wherever the operator runs ---
+% The interpreter executes add, sub and mul inline when they appear inside
+% a procedure. That path and the operator must agree exactly: an operation
+% that overflows the integer range yields a real of the true value (PLRM
+% 3.3.2), and one that does not yields an integer.
+/mx 2147483647 def
+/mn -2147483648 def
+
+/pair { % top-level-result {proc} (label) . -  the fused result must equal
+        %                                       the top-level operator result
+    3 dict begin
+    /lbl exch def /pr exch def /want exch def
+    pr exec want eq lbl assert
+    end
+} def
+
+mx 1 add   { mx 1 add }   (add overflow agrees in and out of a procedure) pair
+mn 1 sub   { mn 1 sub }   (sub underflow agrees in and out of a procedure) pair
+mx 2 mul   { mx 2 mul }   (mul overflow agrees in and out of a procedure) pair
+mx mx add  { mx mx add }  (max+max agrees in and out of a procedure) pair
+mn mn add  { mn mn add }  (min+min agrees in and out of a procedure) pair
+mn 1 mul   { mn 1 mul }   (min*1 agrees in and out of a procedure) pair
+2 3 add    { 2 3 add }    (in-range add agrees in and out of a procedure) pair
+
+% and the types are what the PLRM requires, from inside a procedure
+/otype { mx 1 add type } def
+otype /realtype eq (an overflowing add in a procedure yields a real) assert
+/itype { 2 3 add type } def
+itype /integertype eq (an in-range add in a procedure yields an integer) assert
+/stype { mn 1 sub type } def
+stype /realtype eq (an underflowing sub in a procedure yields a real) assert
+/mtype { mx 2 mul type } def
+mtype /realtype eq (an overflowing mul in a procedure yields a real) assert
+
+% the value survives the promotion
+/ovval { mx 1 add 2147483648.0 sub abs 1 lt } def
+ovval (an overflowing add in a procedure keeps its value) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

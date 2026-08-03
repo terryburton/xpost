@@ -59,37 +59,8 @@
 #include "xpost_operator.h"
 #include "xpost_op_math.h"
 
-/* bounds of the postscript integer type, for overflow detection */
-static const long long integer_max =
-    (long long)(((unsigned long long)1 << (sizeof(integer)*8 - 1)) - 1);
-static const long long integer_min =
-    -(long long)(((unsigned long long)1 << (sizeof(integer)*8 - 1)) - 1) - 1;
-
-static
-int addwillover(long x,
-                long y)
-{
-    if (y < 0) return x < integer_min - y;
-    return x > integer_max - y;
-}
-
-static
-int subwillunder(long x,
-                 long y)
-{
-    if (y < 0) return x > integer_max + y;
-    return x < integer_min + y;
-}
-
-static
-int mulwillover(long x,
-                long y)
-{
-    long long xx = x < 0 ? -(long long)x : (long long)x;
-    long long yy = y < 0 ? -(long long)y : (long long)y;
-    if (xx == 0 || yy == 0) return 0;
-    return xx > integer_max / yy;
-}
+/* the integer range predicates and the range-preserving add/sub/mul
+   live in xpost_op_math.h, shared with the interpreter's fused path */
 
 /* num1 num2  add  sum
    num1 plus num2 */
@@ -98,10 +69,7 @@ int Iadd(Xpost_Context *ctx,
          Xpost_Object x,
          Xpost_Object y)
 {
-    if (addwillover(x.int_.val, y.int_.val))
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)x.int_.val + y.int_.val));
-    else
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x.int_.val + y.int_.val));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_add(x.int_.val, y.int_.val));
     return 0;
 }
 
@@ -175,10 +143,7 @@ int Imul(Xpost_Context *ctx,
          Xpost_Object x,
          Xpost_Object y)
 {
-    if (mulwillover(x.int_.val, y.int_.val))
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)x.int_.val * y.int_.val));
-    else
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x.int_.val * y.int_.val));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_mul(x.int_.val, y.int_.val));
     return 0;
 }
 
@@ -198,10 +163,7 @@ int Isub(Xpost_Context *ctx,
          Xpost_Object x,
          Xpost_Object y)
 {
-    if (subwillunder(x.int_.val, y.int_.val))
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)x.int_.val - y.int_.val));
-    else
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x.int_.val - y.int_.val));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_sub(x.int_.val, y.int_.val));
     return 0;
 }
 
