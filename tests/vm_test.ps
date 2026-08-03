@@ -33,6 +33,25 @@ clear false setglobal /Lc 4 dict def
 true setglobal
 { [ Lc ] pop } probe (a local value is rejected from a global array literal) assert
 
+% every operator that fills an array element by element enforces the same
+% rule, not just put: copy into a global destination, and the packed-array
+% and dictstack constructors building in global VM
+clear true setglobal /Gcd 1 array def
+false setglobal /Lcs [ 4 dict ] def
+{ Lcs Gcd copy pop } probe (a local value is rejected from a global array by copy) assert
+{ Gcd 0 get type /nulltype eq } probe not (the refused copy left the destination empty) assert
+
+clear false setglobal /Lpk 4 dict def
+true setglobal
+{ Lpk 1 packedarray pop } probe (a local value is rejected from a global packed array) assert
+false setglobal
+
+% userdict is local, so a dictstack snapshot cannot be taken into a global array
+clear true setglobal
+{ 4 array dictstack pop } probe (a local dict is rejected from a global dictstack array) assert
+false setglobal
+{ 4 array dictstack pop } probe not (a local dictstack array accepts the dict stack) assert
+
 % --- allowed: a global value may enter a local container; same-VM is fine --
 clear false setglobal /Ld2 4 dict def
 true setglobal /Gd2 4 dict def

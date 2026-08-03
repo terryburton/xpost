@@ -723,7 +723,7 @@ int _rspans_to_poly(Xpost_Context *ctx,
                     int nout)
 {
     Xpost_Object result;
-    int i;
+    int i, ret;
 
     if (5 * (long)nout > 65535)
         /* too many spans for a single backing array (the object size
@@ -745,13 +745,21 @@ int _rspans_to_poly(Xpost_Context *ctx,
 
             if (xpost_object_get_type(pair) == invalidtype)
                 return VMerror;
-            xpost_array_put(ctx, pair, 0,
+            ret = xpost_array_put(ctx, pair, 0,
                 xpost_real_cons(xsel[k] ? out[i].hi : out[i].lo));
-            xpost_array_put(ctx, pair, 1,
+            if (ret)
+                return ret;
+            ret = xpost_array_put(ctx, pair, 1,
                 xpost_real_cons((real)(out[i].band + ysel[k])));
-            xpost_array_put(ctx, result, 5 * i + k, pair);
+            if (ret)
+                return ret;
+            ret = xpost_array_put(ctx, result, 5 * i + k, pair);
+            if (ret)
+                return ret;
         }
-        xpost_array_put(ctx, result, 5 * i + 4, null);
+        ret = xpost_array_put(ctx, result, 5 * i + 4, null);
+        if (ret)
+            return ret;
     }
 
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(result));
@@ -1055,8 +1063,7 @@ int _blendpixrgb(Xpost_Context *ctx,
     dr += ((sr - dr) * c + 127) / 255;
     dg += ((sg - dg) * c + 127) / 255;
     db += ((sb - db) * c + 127) / 255;
-    xpost_array_put(ctx, row, ix, xpost_int_cons(dr << 16 | dg << 8 | db));
-    return 0;
+    return xpost_array_put(ctx, row, ix, xpost_int_cons(dr << 16 | dg << 8 | db));
 }
 
 /* Fill a rectangle of a packed-integer rgb device (each row an array
@@ -1079,6 +1086,7 @@ int _fillrectrgb(Xpost_Context *ctx,
     double dx, dy, dw, dh;
     int height, iy, ix, iy0, iy1, ix0, ix1;
     int packed;
+    int ret;
 
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
@@ -1116,7 +1124,11 @@ int _fillrectrgb(Xpost_Context *ctx,
         cx0 = ix0 < 0 ? 0 : ix0;
         cx1 = ix1 > width - 1 ? width - 1 : ix1;
         for (ix = cx0; ix <= cx1; ix++)
-            xpost_array_put(ctx, row, ix, xpost_int_cons(packed));
+        {
+            ret = xpost_array_put(ctx, row, ix, xpost_int_cons(packed));
+            if (ret)
+                return ret;
+        }
     }
 
     return 0;
@@ -1181,6 +1193,7 @@ int _formmask(Xpost_Context *ctx,
 {
     Xpost_Object maskarr, rowa, rowb, mrow;
     unsigned int h, y, w, x;
+    int ret;
 
     h = rowsa.comp_.sz;
     if (rowsb.comp_.sz != h)
@@ -1227,7 +1240,9 @@ int _formmask(Xpost_Context *ctx,
         }
         else
             return typecheck;
-        xpost_array_put(ctx, maskarr, y, mrow);
+        ret = xpost_array_put(ctx, maskarr, y, mrow);
+        if (ret)
+            return ret;
     }
     xpost_stack_push(ctx->lo, ctx->os, maskarr);
     return 0;
@@ -1239,12 +1254,14 @@ int _formmask(Xpost_Context *ctx,
    the coding rule for device operators is that no pointer survives an
    allocation. Touching element zero with its own value hoists that
    copy out of the loop, so the row's storage stays put while the
-   loop writes it. */
-static void
+   loop writes it. The touch is a write like any other, so it reports
+   a row that refuses one. */
+static int
 _row_presave(Xpost_Context *ctx, Xpost_Object row)
 {
     if (xpost_object_get_type(row) == arraytype && row.comp_.sz > 0)
-        xpost_array_put(ctx, row, 0, xpost_array_get(ctx, row, 0));
+        return xpost_array_put(ctx, row, 0, xpost_array_get(ctx, row, 0));
+    return 0;
 }
 
 /* Replay a captured raster: covered pixels copy onto the device page
@@ -1261,6 +1278,7 @@ int _blitform(Xpost_Context *ctx,
 {
     Xpost_Object imgdata, srow, mrow, drow;
     int ox, oy, devh, y, x, w, h;
+    int ret;
 
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
@@ -1321,8 +1339,12 @@ int _blitform(Xpost_Context *ctx,
                    allocation */
                 mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
                 if (mp[x / 8] >> (7 - (x % 8)) & 1)
-                    xpost_array_put(ctx, drow, dx,
-                                    xpost_array_get(ctx, srow, x));
+                {
+                    ret = xpost_array_put(ctx, drow, dx,
+                                          xpost_array_get(ctx, srow, x));
+                    if (ret)
+                        return ret;
+                }
             }
         }
         else
@@ -1337,7 +1359,7 @@ int _blitform(Xpost_Context *ctx,
 static
 int _zerorows(Xpost_Context *ctx, Xpost_Object imgdata)
 {
-    int iy, ix;
+    int iy, ix, ret;
 
     for (iy = 0; iy < imgdata.comp_.sz; iy++)
     {
@@ -1345,7 +1367,11 @@ int _zerorows(Xpost_Context *ctx, Xpost_Object imgdata)
         if (xpost_object_get_type(row) != arraytype)
             return typecheck;
         for (ix = 0; ix < row.comp_.sz; ix++)
-            xpost_array_put(ctx, row, ix, xpost_int_cons(0));
+        {
+            ret = xpost_array_put(ctx, row, ix, xpost_int_cons(0));
+            if (ret)
+                return ret;
+        }
     }
     return 0;
 }
@@ -1932,10 +1958,14 @@ int _blitrow(Xpost_Context *ctx,
                         row = xpost_array_get(ctx, rows, dy);
                         if (packed)
                         {
+                            int pret;
+
                             if (xpost_object_get_type(row) != arraytype
                              || row.comp_.sz < (unsigned int)devw)
                                 { free(cols); return rangecheck; }
-                            _row_presave(ctx, row);
+                            pret = _row_presave(ctx, row);
+                            if (pret)
+                                { free(cols); return pret; }
                         }
                         else
                         {
@@ -2016,8 +2046,12 @@ int _blitrow(Xpost_Context *ctx,
                                 if (px[k] > 255) px[k] = 255;
                             }
                             if (packed)
-                                xpost_array_put(ctx, row, dx,
+                            {
+                                int wret = xpost_array_put(ctx, row, dx,
                                     xpost_int_cons(px[0] << 16 | px[1] << 8 | px[2]));
+                                if (wret)
+                                    { free(cols); return wret; }
+                            }
                             else if (htc)
                                 rowp[dx] = (256 * px[0] + 127) / 255
                                            >= htc[(dy % hth) * htw + dx % htw]
@@ -2060,10 +2094,14 @@ int _blitrow(Xpost_Context *ctx,
         row = xpost_array_get(ctx, rows, dy);
         if (packed)
         {
+            int pret;
+
             if (xpost_object_get_type(row) != arraytype
              || row.comp_.sz < (unsigned int)devw)
                 return rangecheck;
-            _row_presave(ctx, row);
+            pret = _row_presave(ctx, row);
+            if (pret)
+                return pret;
         }
         else
         {
@@ -2162,8 +2200,12 @@ int _blitrow(Xpost_Context *ctx,
                         if (dx < 0)
                             continue;
                         if (packed)
-                            xpost_array_put(ctx, row, dx,
+                        {
+                            int wret = xpost_array_put(ctx, row, dx,
                                             xpost_int_cons(r << 16 | g << 8 | b));
+                            if (wret)
+                                return wret;
+                        }
                         else if (htc)
                             rowp[dx] = (256 * gray + 127) / 255
                                        >= htc[(dy % hth) * htw + dx % htw]
@@ -2260,9 +2302,14 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
                 chunk = 65535;
             /* cvlit: strings and arrays are executable by default, and this
                binary content must be written, not executed */
-            xpost_array_put(ctx, result, i,
-                            xpost_object_cvlit(
-                                xpost_string_cons(ctx, chunk, (char *)(out + pos))));
+            ret = xpost_array_put(ctx, result, i,
+                                  xpost_object_cvlit(
+                                      xpost_string_cons(ctx, chunk, (char *)(out + pos))));
+            if (ret)
+            {
+                free(out);
+                return ret;
+            }
             pos += chunk;
         }
     }
@@ -2557,7 +2604,7 @@ static int _pdfchunks(Xpost_Context *ctx, Xpost_Object devdic)
     Pdf_Acc a;
     Xpost_Object priv, result;
     size_t pos = 0;
-    int nchunks, i;
+    int nchunks, i, ret;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
@@ -2570,9 +2617,11 @@ static int _pdfchunks(Xpost_Context *ctx, Xpost_Object devdic)
         size_t chunk = a.len - pos;
         if (chunk > 65535)
             chunk = 65535;
-        xpost_array_put(ctx, result, i,
-                        xpost_object_cvlit(
-                            xpost_string_cons(ctx, chunk, a.data + pos)));
+        ret = xpost_array_put(ctx, result, i,
+                              xpost_object_cvlit(
+                                  xpost_string_cons(ctx, chunk, a.data + pos)));
+        if (ret)
+            return ret;
         pos += chunk;
     }
     xpost_stack_push(ctx->lo, ctx->os, result);

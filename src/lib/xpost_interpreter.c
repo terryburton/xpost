@@ -2334,8 +2334,16 @@ XPAPI int xpost_add_resource_dir(Xpost_Context *ctx, const char *dir)
         return 0;
     }
     for (i = 0; i < n; i++)
-        xpost_array_put(ctx, newrp, i, xpost_array_get(ctx, rp, i));
-    xpost_array_put(ctx, newrp, n, str);
+        if (xpost_array_put(ctx, newrp, i, xpost_array_get(ctx, rp, i)) != 0)
+        {
+            ctx->vmmode = vmmode;
+            return 0;
+        }
+    if (xpost_array_put(ctx, newrp, n, str) != 0)
+    {
+        ctx->vmmode = vmmode;
+        return 0;
+    }
     ctx->vmmode = vmmode;
 
     xpost_dict_put(ctx, ud, key, newrp);

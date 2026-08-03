@@ -61,6 +61,7 @@ int packedarray(Xpost_Context *ctx,
                 Xpost_Object n)
 {
     int i;
+    int ret;
     Xpost_Object a, v;
 
     if (n.int_.val < 0)
@@ -77,7 +78,9 @@ int packedarray(Xpost_Context *ctx,
         v = xpost_stack_pop(ctx->lo, ctx->os);
         if (xpost_object_get_type(v) == invalidtype)
             return stackunderflow;
-        xpost_array_put(ctx, a, i-1, v);
+        ret = xpost_array_put(ctx, a, i-1, v);
+        if (ret)
+            return ret;
     }
     a = xpost_object_set_packed(
             xpost_object_set_access(ctx, xpost_object_cvlit(a),

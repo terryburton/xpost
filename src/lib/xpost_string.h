@@ -31,6 +31,8 @@
 #ifndef XPOST_STRING_H
 #define XPOST_STRING_H
 
+#include "xpost_private.h" /* XPOST_MUST_CHECK */
+
 /**
  * @file xpost_string.h
  * @brief string functions
@@ -81,11 +83,14 @@ int xpost_string_put_memory(Xpost_Memory_File *mem,
 
 /**
  * @brief put a value into a string
+ *
+ * Checks the string's write access and returns invalidaccess when it is
+ * withheld; the result must be checked.
  */
-int xpost_string_put(Xpost_Context *ctx,
-                     Xpost_Object s,
-                     integer i,
-                     integer c);
+XPOST_MUST_CHECK int xpost_string_put(Xpost_Context *ctx,
+                                      Xpost_Object s,
+                                      integer i,
+                                      integer c);
 
 /**
  * @brief get a value from a string with specified memory

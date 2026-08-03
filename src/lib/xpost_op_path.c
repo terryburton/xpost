@@ -1839,6 +1839,7 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     Xpost_Operator *optab;
     Xpost_Object n,op,pathempty_op;
     unsigned int optadr;
+    int ret;
 
     assert(ctx->gl->base);
 
@@ -1965,18 +1966,27 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     INSTALL;
 
     _arc_start_proc = xpost_array_cons(ctx, 4);
-    xpost_array_put(ctx, _arc_start_proc, 0, pathempty_op);
+    ret = xpost_array_put(ctx, _arc_start_proc, 0, pathempty_op);
+    if (ret)
+        return ret;
     {
         Xpost_Object true_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
-        xpost_array_put(ctx, true_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-        xpost_array_put(ctx, _arc_start_proc, 1, true_clause);
+        ret = xpost_array_put(ctx, true_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
+        if (ret)
+            return ret;
+        ret = xpost_array_put(ctx, _arc_start_proc, 1, true_clause);
+        if (ret)
+            return ret;
     }
     {
         Xpost_Object false_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
-        xpost_array_put(ctx, false_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "lineto")));
-        xpost_array_put(ctx, _arc_start_proc, 2, false_clause);
+        ret = xpost_array_put(ctx, false_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "lineto")));
+        if (ret)
+            return ret;
+        ret = xpost_array_put(ctx, _arc_start_proc, 2, false_clause);
+        if (ret)
+            return ret;
     }
-    xpost_array_put(ctx, _arc_start_proc, 3, xpost_object_cvx(xpost_name_cons(ctx, "ifelse")));
-
-    return 0;
+    return xpost_array_put(ctx, _arc_start_proc, 3,
+                           xpost_object_cvx(xpost_name_cons(ctx, "ifelse")));
 }

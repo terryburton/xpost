@@ -1046,7 +1046,9 @@ int bt_seq_object(Xpost_Context *ctx,
                     ret = bt_seq_object(ctx, buf, buflen, base, base + value + i * 8, le, depth + 1, &el);
                     if (ret)
                         return ret;
-                    xpost_array_put(ctx, obj, i, el);
+                    ret = xpost_array_put(ctx, obj, i, el);
+                    if (ret)
+                        return ret;
                 }
             }
             break;
@@ -1135,7 +1137,12 @@ int bt_sequence(Xpost_Context *ctx,
             free(buf);
             return ret;
         }
-        xpost_array_put(ctx, arr, i, el);
+        ret = xpost_array_put(ctx, arr, i, el);
+        if (ret)
+        {
+            free(buf);
+            return ret;
+        }
     }
     free(buf);
     /* the sequence executes; only brace procedures defer */
@@ -1216,7 +1223,12 @@ int binary_token(Xpost_Context *ctx,
                         free(buf);
                         return ret;
                     }
-                    xpost_array_put(ctx, arr, i, el);
+                    ret = xpost_array_put(ctx, arr, i, el);
+                    if (ret)
+                    {
+                        free(buf);
+                        return ret;
+                    }
                 }
                 free(buf);
                 *retval = xpost_object_cvlit(arr);

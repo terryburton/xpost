@@ -809,7 +809,8 @@ int _findfont(Xpost_Context *ctx,
                                 break;
                             str = xpost_string_cons(ctx, (unsigned int)want,
                                                     (char *)cbuf);
-                            xpost_array_put(ctx, arr, ci, str);
+                            if (xpost_array_put(ctx, arr, ci, str) != 0)
+                                break;
                         }
                         free(cbuf);
                         if (cbuf && ci == nchunks)
@@ -924,8 +925,15 @@ have_charstrings: ;
         real diag = istt ? 1.0f : 0.001f;
         int mi;
         for (mi = 0; mi < 6; mi++)
-            xpost_array_put(ctx, fontmatrix, mi,
+        {
+            int mret = xpost_array_put(ctx, fontmatrix, mi,
                             xpost_real_cons(mi == 0 || mi == 3 ? diag : 0.0f));
+            if (mret)
+            {
+                free(fname);
+                return mret;
+            }
+        }
         xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"), fontmatrix);
     }
     if (istt && xpost_object_get_type(sfnts_obj) == arraytype)
@@ -1902,6 +1910,50 @@ int _get_current_point (Xpost_Context *ctx,
     return 0;
 }
 
+/* Build the procedure a show operator leaves on the execution stack to
+   run once its glyphs are painted: it restores the current point in
+   user space and flushes the page. Elements 0 and 1 hold the position,
+   rewritten by _show_finalize_pos with the point the operator ended
+   at. The array is this function's own, so only allocation failure can
+   stop it being filled. */
+static
+int _show_finalize_cons(Xpost_Context *ctx,
+                        real xpos,
+                        real ypos,
+                        Xpost_Object *out)
+{
+    Xpost_Object f = xpost_object_cvx(xpost_array_cons(ctx, 5));
+    int ret;
+
+    if (xpost_object_get_type(f) == nulltype)
+        return VMerror;
+    if ((ret = xpost_array_put(ctx, f, 0, xpost_real_cons(xpos))) != 0
+     || (ret = xpost_array_put(ctx, f, 1, xpost_real_cons(ypos))) != 0
+     || (ret = xpost_array_put(ctx, f, 2,
+             xpost_object_cvx(xpost_name_cons(ctx, "itransform")))) != 0
+     || (ret = xpost_array_put(ctx, f, 3,
+             xpost_object_cvx(xpost_name_cons(ctx, "moveto")))) != 0
+     || (ret = xpost_array_put(ctx, f, 4,
+             xpost_object_cvx(xpost_name_cons(ctx, "flushpage")))) != 0)
+        return ret;
+    *out = f;
+    return 0;
+}
+
+/* Record the point the show ended at in the finalize procedure. */
+static
+int _show_finalize_pos(Xpost_Context *ctx,
+                       Xpost_Object f,
+                       real xpos,
+                       real ypos)
+{
+    int ret = xpost_array_put(ctx, f, 0, xpost_real_cons(xpos));
+
+    if (ret)
+        return ret;
+    return xpost_array_put(ctx, f, 1, xpost_real_cons(ypos));
+}
+
 static
 int _show(Xpost_Context *ctx,
           Xpost_Object str)
@@ -1972,13 +2024,12 @@ int _show(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
 
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    /* fill-in final pos before return */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
+    ret = _show_finalize_cons(ctx, xpos, ypos, &finalize);
+    if (ret)
+    {
+        free(cstr);
+        return ret;
+    }
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
@@ -1988,11 +2039,10 @@ int _show(Xpost_Context *ctx,
     }
 
     /* update current position in the graphics state */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
+    ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
 
     free(cstr);
-    return 0;
+    return ret;
 }
 
 /* glyphname  .glyphshow  -
@@ -2054,12 +2104,9 @@ int _glyphshow_common(Xpost_Context *ctx,
     if (_device_color(ctx, gs, devdic, &ncomp, comp))
         return unregistered;
 
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
+    ret = _show_finalize_cons(ctx, xpos, ypos, &finalize);
+    if (ret)
+        return ret;
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     glyph_index = byname
@@ -2069,10 +2116,7 @@ int _glyphshow_common(Xpost_Context *ctx,
                 glyph_index, byname ? gname : invalid,
                 ncomp, comp[0], comp[1], comp[2], comp[3]);
 
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-
-    return 0;
+    return _show_finalize_pos(ctx, finalize, xpos, ypos);
 }
 
 static
@@ -3318,13 +3362,12 @@ int _ashow(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
 
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    /* fill-in final pos before return */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
+    ret = _show_finalize_cons(ctx, xpos, ypos, &finalize);
+    if (ret)
+    {
+        free(cstr);
+        return ret;
+    }
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
@@ -3337,11 +3380,10 @@ int _ashow(Xpost_Context *ctx,
     }
 
     /* update current position in the graphics state */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
+    ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
 
     free(cstr);
-    return 0;
+    return ret;
 }
 
 static
@@ -3417,13 +3459,12 @@ int _widthshow(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
 
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    /* fill-in final pos before return */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
+    ret = _show_finalize_cons(ctx, xpos, ypos, &finalize);
+    if (ret)
+    {
+        free(cstr);
+        return ret;
+    }
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
@@ -3439,11 +3480,10 @@ int _widthshow(Xpost_Context *ctx,
     }
 
     /* update current position in the graphics state */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
+    ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
 
     free(cstr);
-    return 0;
+    return ret;
 }
 
 static
@@ -3521,13 +3561,12 @@ int _awidthshow(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("ncomp = %d", ncomp);
 
-    finalize = xpost_object_cvx(xpost_array_cons(ctx, 5));
-    /* fill-in final pos before return */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
-    xpost_array_put(ctx, finalize, 2, xpost_object_cvx(xpost_name_cons(ctx, "itransform")));
-    xpost_array_put(ctx, finalize, 3, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
-    xpost_array_put(ctx, finalize, 4, xpost_object_cvx(xpost_name_cons(ctx, "flushpage")));
+    ret = _show_finalize_cons(ctx, xpos, ypos, &finalize);
+    if (ret)
+    {
+        free(cstr);
+        return ret;
+    }
     xpost_stack_push(ctx->lo, ctx->es, finalize);
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
@@ -3545,11 +3584,10 @@ int _awidthshow(Xpost_Context *ctx,
     }
 
     /* update current position in the graphics state */
-    xpost_array_put(ctx, finalize, 0, xpost_real_cons(xpos));
-    xpost_array_put(ctx, finalize, 1, xpost_real_cons(ypos));
+    ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
 
     free(cstr);
-    return 0;
+    return ret;
 }
 
 static
@@ -3853,7 +3891,15 @@ int _stringoutline(Xpost_Context *ctx,
         return VMerror;
     }
     for (i = 0; i < oc.len; i++)
-        xpost_array_put(ctx, arr, (integer)i, oc.objs[i]);
+    {
+        int aret = xpost_array_put(ctx, arr, (integer)i, oc.objs[i]);
+
+        if (aret)
+        {
+            free(oc.objs);
+            return aret;
+        }
+    }
     free(oc.objs);
     xpost_stack_push(ctx->lo, ctx->os, arr);
     return 0;

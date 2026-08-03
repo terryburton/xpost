@@ -179,6 +179,54 @@ faildict /n 0 put
 { rm2 0 get 1 eq { }{ (FAIL: a refused invertmatrix modified the matrix\n) print
     faildict /n 2 copy get 1 add put } ifelse } exec
 
+% --- a write an operator makes into a composite the program handed it is
+%     subject to that composite's access, and a refused write is an error.
+%     PLRM 3.3.2: a read-only object's value cannot be changed, and an
+%     attempt to change it raises invalidaccess. Each case asserts the
+%     error AND that the target still holds its original elements, since a
+%     silent omission differs from a refusal only in the error. ---
+
+/idict 1183615869 internaldict def
+
+/intact { % array (label) . -   complains unless the array still reads 1 2 3
+    /L exch def
+    dup 0 get 1 eq exch dup 1 get 2 eq exch 2 get 3 eq and and
+    { }{ (FAIL: ) print L print (: a refused write modified the target\n) print
+        faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
+/swaptgt [1 2 3] readonly def
+{ swaptgt 0 1 idict /.swap get exec }    /invalidaccess (.swap of a readonly array) chk
+swaptgt (.swap of a readonly array) intact
+/swapok [1 2 3] def
+{ swapok 0 1 idict /.swap get exec }     /ok            (.swap of a writeable array) chk
+{ swapok 0 get 2 eq { }{ (FAIL: .swap did not exchange the elements\n) print
+    faildict /n 2 copy get 1 add put } ifelse } exec
+
+/dstgt [1 2 3] readonly def
+{ dstgt dictstack pop }                  /invalidaccess (dictstack into a readonly array) chk
+dstgt (dictstack into a readonly array) intact
+{ 3 array dictstack pop }                /ok            (dictstack into a writeable array) chk
+
+% the device operators reach the raster their argument names, and a raster
+% is a composite the program can hand them
+/zrtgt [ [1 2 3] readonly ] def
+{ zrtgt idict /.zerorows get exec }      /invalidaccess (.zerorows over a readonly row) chk
+zrtgt 0 get (.zerorows over a readonly row) intact
+{ [ [1 2 3] ] idict /.zerorows get exec } /ok           (.zerorows over a writeable row) chk
+
+/rgbdev 4 dict def
+rgbdev /ImgData [ [1 2 3] readonly ] put
+{ 0 0 0 0 0 2 0 rgbdev idict /.fillrectrgb get exec }
+                                         /invalidaccess (.fillrectrgb over a readonly row) chk
+rgbdev /ImgData get 0 get (.fillrectrgb over a readonly row) intact
+{ 0 0 0 255 0 0 rgbdev idict /.blendpixrgb get exec }
+                                         /invalidaccess (.blendpixrgb over a readonly row) chk
+rgbdev /ImgData get 0 get (.blendpixrgb over a readonly row) intact
+{ [ [4 5 6] ] [ (\377) ] 0 0 rgbdev idict /.blitform get exec }
+                                         /invalidaccess (.blitform over a readonly row) chk
+rgbdev /ImgData get 0 get (.blitform over a readonly row) intact
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
