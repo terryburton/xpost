@@ -762,6 +762,14 @@ test('op-cvn',
   args: [ xpost_exe, files('tests/op_cvn_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Exceeding the number of files a context may hold open is a limitcheck
+# (PLRM 8.2, file). Run with the process's allowance lowered so the limit is
+# reached at once.
+test('op-file-limit',
+  find_program('tests/run-file-limit-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_limit_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.

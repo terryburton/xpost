@@ -249,8 +249,22 @@ xpost_fopen_errno(int e)
         case ENOTDIR:
 #endif
             return undefinedfilename;
+#ifdef EMFILE
+        case EMFILE:      /* this process may open no more */
+#endif
+#ifdef ENFILE
+        case ENFILE:      /* the system may open no more */
+#endif
+#if defined(EMFILE) || defined(ENFILE)
+            /* "If the number of files opened by the current context
+               exceeds an implementation limit, a limitcheck error
+               occurs" (PLRM 8.2, file) */
+            return limitcheck;
+#endif
         default:
-            return unregistered;
+            /* "If an environment-dependent error is detected, an ioerror
+               occurs" (PLRM 8.2, file) */
+            return ioerror;
     }
 }
 
