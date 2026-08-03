@@ -431,6 +431,21 @@ int main(void)
           "the two fonts around the ragged spacing are captured");
     xpost_dsc_free(&dsc);
 
+    /* From version 2 of the conventions a tab separates a comment's
+       keyword from what follows it, wherever a space does. The version
+       comment is the first such place: what follows the version there
+       declares the document a query, a server exit or an EPS file. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\tEPSF-3.0\n"
+                "%%DocumentFonts: Courier\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a version comment separated by a tab parses");
+    check(dsc.eps_vmaj == 3, "the EPS version after a tab is recorded");
+    check(dsc.header.document_fonts.nbr == 1,
+          "the rest of the header parses after a tab-separated version");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

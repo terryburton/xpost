@@ -111,7 +111,7 @@
 
 
 #define XPOST_CMT_IS_SPACE(vmaj, iter) \
-    (*(iter) == ' ') || (((vmaj) > 1) && (*(iter) == '\t'))
+    ((*(iter) == ' ') || (((vmaj) > 1) && (*(iter) == '\t')))
 
 #define XPOST_CMT_LINE_IS_CONTINUED(iter) \
     ((iter) && \
