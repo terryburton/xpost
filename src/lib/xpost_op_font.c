@@ -1696,8 +1696,12 @@ int _show_char_outline(Xpost_Context *ctx,
             _frag_put(&f, "\"/>\n", 4);   /* glyphs fill nonzero: SVG's default rule */
         else
             _frag_put(&f, "f\n", 2);
-        if (!f.oom)
-            xpost_dev_pdf_append(ctx, devdic, f.d.s, f.d.len);
+        if (!f.oom && xpost_dev_pdf_append(ctx, devdic, f.d.s, f.d.len))
+        {
+            /* the glyph's content did not reach the page */
+            xpost_strbuf_free(&f.d);
+            return 0;
+        }
     }
     xpost_strbuf_free(&f.d);
     return 1;

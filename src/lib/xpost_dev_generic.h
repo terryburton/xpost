@@ -44,6 +44,8 @@
 #ifndef XPOST_DEV_GENERIC_H
 #define XPOST_DEV_GENERIC_H
 
+#include "xpost_private.h" /* XPOST_MUST_CHECK */
+
 /**
  * @brief convenience function to retrieve filename associated with device
  *
@@ -73,7 +75,7 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
  * path fragments. Answers 0 for no error, undefined when the device
  * carries no accumulator and VMerror when memory is exhausted.
  */
-int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdic,
+XPOST_MUST_CHECK int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdic,
                          const char *s, size_t n);
 
 /**
