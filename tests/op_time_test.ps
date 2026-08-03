@@ -1,0 +1,52 @@
+% The clock operators (PLRM 8.2), run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% realtime counts real time independently of the interpreter; usertime
+% counts time the interpreter has spent executing. Both are in
+% milliseconds from an arbitrary origin, so what can be asserted is
+% their type, that they do not run backwards, and that they do move.
+% Each loop below runs until its clock ticks rather than for a fixed
+% number of turns, so a fast machine cannot make it fail.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/spins 4000000 def   % a bound, not an expectation
+
+realtime type /integertype eq (realtime answers an integer) assert
+usertime type /integertype eq (usertime answers an integer) assert
+
+% --- neither runs backwards ---
+/r0 realtime def
+/u0 usertime def
+realtime r0 ge (realtime does not run backwards) assert
+usertime u0 ge (usertime does not run backwards) assert
+
+% --- realtime moves as real time passes ---
+/r1 realtime def
+/n 0 def
+{
+    realtime r1 sub 0 gt { exit } if
+    /n n 1 add store
+    n spins ge { exit } if
+} loop
+realtime r1 sub 0 gt (realtime advances while the program runs) assert
+
+% --- usertime moves as the interpreter executes ---
+/u1 usertime def
+/n 0 def
+{
+    usertime u1 sub 0 gt { exit } if
+    /n n 1 add store
+    n spins ge { exit } if
+} loop
+usertime u1 sub 0 gt (usertime advances while the interpreter executes) assert
+
+% --- the interpreter has been executing for all the real time it has
+%     used, so the time it reports using is no more than the real time
+%     that has passed since the run began ---
+usertime u0 sub realtime r0 sub le
+    (the time used is within the real time that passed) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

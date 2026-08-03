@@ -777,6 +777,14 @@ test('op-fontcache',
   args: [ xpost_exe, files('tests/op_fontcache_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The clock operators: realtime counts real time, usertime the time the
+# interpreter has spent executing, both in milliseconds from an arbitrary
+# origin. Each loop runs until its clock ticks rather than a fixed count.
+test('op-time',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_time_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
