@@ -828,6 +828,21 @@ test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
   args: [ meson.current_source_dir() ])
 
+# The raster classes stay a single generated suite: pgm/ppm are parameter
+# files over .makerasterclass, pbm/tiff dict-copies overriding emission,
+# and every shared method is defined exactly once, in the prototype.
+test('raster-classes-derivation',
+  find_program('tests/check-raster-classes.sh'),
+  args: [ meson.current_source_dir() ])
+
+# The vector writers share one base: exactly one two-decimal formatter
+# (.num2str) and one page-to-points unscale (.devres-to-points) exist,
+# each writer reaches them by reference, and the DSC device stays a
+# dict-copy derivation of the PDF device.
+test('vecbase',
+  find_program('tests/check-vecbase.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.
