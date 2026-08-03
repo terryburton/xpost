@@ -466,7 +466,6 @@ int xpost_op_exit (Xpost_Context *ctx)
    describe the failure. $error is a name in systemdict (its dictionary is
    local), read from the base of the dict stack so a program's own
    dictionaries above it do not shadow it. */
-static
 void _record_run_error(Xpost_Context *ctx)
 {
     {
@@ -511,7 +510,6 @@ void _record_run_error(Xpost_Context *ctx)
 
 /* -  stop  -
    terminate stopped context */
-static
 int xpost_op_stop(Xpost_Context *ctx)
 {
     Xpost_Object f = xpost_bool_cons(0);

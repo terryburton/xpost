@@ -31,6 +31,12 @@
 #ifndef XPOST_OP_CONTROL_H
 #define XPOST_OP_CONTROL_H
 
+/* terminate the innermost stopped context; with none, report and quit */
+int xpost_op_stop(Xpost_Context *ctx);
+
+/* record what ended the run for the embedding caller, from $error */
+void _record_run_error(Xpost_Context *ctx);
+
 int xpost_oper_init_control_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 #endif

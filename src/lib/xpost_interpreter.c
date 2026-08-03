@@ -61,6 +61,7 @@
 #include "xpost_operator.h"  /* eval functions call operators */
 #include "xpost_op_dict.h"  /* the shared def fast path */
 #include "xpost_op_math.h"  /* the shared range-preserving arithmetic */
+#include "xpost_op_control.h"  /* record the run outcome when a job ends */
 #include "xpost_oplib.h"
 
 static
@@ -1408,6 +1409,7 @@ void _onerror(Xpost_Context *ctx,
 {
     Xpost_Object sd;
     Xpost_Object ed;
+    Xpost_Object handler;
     Xpost_Object dollarerror;
 
     if (err > unknownerror) err = unknownerror;
@@ -1609,9 +1611,43 @@ void _onerror(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "signalerror")));
 #endif
     ed = xpost_dict_get(ctx, sd, nameerrordict);
-    xpost_stack_push(ctx->lo, ctx->es,
-            xpost_dict_get(ctx, ed,
-                xpost_name_cons(ctx, errorname[err])));
+    handler = xpost_dict_get(ctx, ed, xpost_name_cons(ctx, errorname[err]));
+    if (xpost_object_get_type(handler) != invalidtype &&
+        xpost_stack_push(ctx->lo, ctx->es, handler))
+    {
+        itpdata->in_onerror = 0;
+        return;
+    }
+
+    /* errordict carries no handler for this error, or it cannot be
+       scheduled. errordict is writable by design (PLRM 3.11.1: a program
+       substitutes its own handlers there), and removing an entry is the
+       program's own doing, but the error must still take effect: resuming
+       as though the operator had succeeded is the one outcome the language
+       does not allow.
+       Raise it the way signalerror does instead -- the errorname beside
+       the command already on the operand stack -- so $error records the
+       error, its name and the stack snapshots exactly as a standard
+       handler would, and the stop those handlers end with surfaces to any
+       enclosing stopped context. */
+    {
+        Xpost_Object sig = xpost_dict_get(ctx, sd,
+                                          xpost_name_cons(ctx, "signalerror"));
+
+        XPOST_LOG_ERR("no errordict handler for /%s; raising it directly",
+                      errorname[err]);
+        if (xpost_object_get_type(sig) != invalidtype &&
+            xpost_stack_push(ctx->lo, ctx->os,
+                             xpost_object_cvlit(xpost_name_cons(ctx, errorname[err]))) &&
+            xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(sig)))
+        {
+            itpdata->in_onerror = 0;
+            return;
+        }
+        /* the error machinery itself is unusable: end the job rather
+           than continue past the error */
+        (void)xpost_op_stop(ctx);
+    }
 
     /* printf("8\n"); */
     itpdata->in_onerror = 0;

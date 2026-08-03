@@ -45,4 +45,28 @@ isint (sqrt: operand restored as integer) assert
 % successful coercing operator is unaffected
 clear 6 4 div 1.5 sub abs 1e-6 lt (div still works) assert
 
+% --- an error whose errordict handler is gone must still be an error ---
+% A program may replace errordict entries; removing one must not make the
+% error itself disappear. The interpreter schedules the handler by pushing
+% it, and a push that cannot happen once left execution resuming past the
+% error as though it had succeeded -- so a program could switch error
+% reporting off wholesale by undefining an entry.
+clear
+errordict /typecheck 2 copy get   % keep the real handler to restore after
+3 1 roll undef
+{ 1 (str) add } stopped
+    (an error with no errordict handler still reaches stopped) assert
+% $error must describe the error exactly as a standard handler leaves it
+% (PLRM 3.11.1: the handler records newerror, errorname and command)
+$error /errorname get /typecheck eq
+    (the error name reaches $error with no handler installed) assert
+$error /newerror get
+    (newerror is set with no handler installed) assert
+errordict 3 1 roll put            % put the handler back
+clear
+
+% and the handler restored above works again
+{ 1 (str) add } stopped (a restored handler still reports the error) assert
+clear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
