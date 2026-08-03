@@ -1378,6 +1378,48 @@ FontDirectory /SubsetT42Test known {
     currentpoint pop 80 sub abs 0.5 le
     (xshow through a composite font advances per glyph) assert
 
+    % A CMap that names another with usecmap reaches that one's code
+    % spaces and CID ranges as if they were written in its own body.
+    % The vertical CMaps of a character collection are built this way:
+    % each carries only the codes it substitutes and inherits the rest
+    % of the mapping from the horizontal CMap it names.
+    /CIDInit /ProcSet findresource begin
+    10 dict begin
+    begincmap
+    /CMapName /TestCMapBase def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    1 begincodespacerange
+    <0000> <FFFF>
+    endcodespacerange
+    1 begincidrange
+    <0001> <0001> 1
+    endcidrange
+    endcmap
+    CMapName currentdict end /CMap defineresource pop
+    10 dict begin
+    begincmap
+    /TestCMapBase usecmap
+    /CMapName /TestCMapUses def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    1 begincidrange
+    <0002> <0002> 2
+    endcidrange
+    endcmap
+    CMapName currentdict end /CMap defineresource pop
+    end
+    /TestT0u /TestCMapUses [/TestCID] composefont pop
+    /TestT0u findfont 20 scalefont setfont
+    erasepage
+    10 16 moveto <0002> show
+    countink 40 ge (a CMap maps the codes of its own ranges) assert
+    currentpoint pop 26 sub abs 0.5 le
+    (an inherited code space measures the code that follows it) assert
+    erasepage
+    10 16 moveto <0001> show
+    countink 40 ge (a CMap maps the codes of the ranges it inherits) assert
+    currentpoint pop 26 sub abs 0.5 le
+    (an inherited range supplies the CID its code names) assert
+
     erasepage
 } if
 

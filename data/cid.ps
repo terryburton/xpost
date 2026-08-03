@@ -97,7 +97,31 @@ currentdict /c undef
     % single-descendant jobs select font 0; the association of later
     % ranges with other descendants is not kept
     /usefont { pop }
-    /usecmap { pop }
+    %   name|cmap  usecmap  -
+    % adopt the mapping of another CMap. Its code spaces, CID ranges
+    % and single-CID assignments join those of the CMap under
+    % construction where the naming appears, so a CMap that carries
+    % only the codes it substitutes reaches the rest of its mapping
+    % through the one it names
+    /usecmap {
+        dup type /nametype eq { /CMap findresource } if
+        dup type /dicttype ne { /usecmap cvx /typecheck signalerror } if
+        currentdict exch
+        3 dict begin
+        /src exch def
+        /dst exch def
+        [ /.codespaces /.cidranges /.cidchars ] {
+            /k exch def
+            src k known {
+                dst k
+                dst k known {
+                    [ dst k get aload pop src k get aload pop ]
+                }{ src k get } ifelse
+                put
+            } if
+        } forall
+        end
+    }
     % base-font character mappings (ToUnicode tables) pass through
     % this procedure set too: accept and discard them
     /beginbfchar { pop mark }
