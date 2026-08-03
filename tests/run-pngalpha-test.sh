@@ -16,6 +16,10 @@ trap 'rm -f "$ps" "$outa" "$outrgb"' EXIT
 cat > "$ps" <<'EOF'
 newpath 20 20 moveto 100 20 lineto 100 60 lineto 20 60 lineto closepath fill
 1 setgray newpath 120 20 moveto 200 20 lineto 200 60 lineto 120 60 lineto closepath fill
+% anti-aliased text: the glyph edges are blended against the page, which
+% is the device's blending method rather than its rectangle fill
+0 setgray /Helvetica findfont 24 scalefont setfont
+20 90 moveto (Ag) show
 showpage
 quit
 EOF
@@ -61,10 +65,19 @@ for y in range(H):
     out += line; prev = line
 def pix(x,y):
     o=(y*W+x)*4; return tuple(out[o:o+4])
+# A glyph rendered with anti-aliasing has edge pixels only partly
+# covered: their alpha lies strictly between transparent and opaque.
+# A device that painted glyphs without blending would give every pixel
+# one or the other.
+alphas = {out[(y*W+x)*4 + 3] for y in range(H) for x in range(W)}
+partial = {a for a in alphas if 0 < a < 255}
+
 checks = [
     (pix(2,2)[3] == 0,               "erased page is transparent"),
     (pix(60,H-40) == (0,0,0,255),    "ink is opaque"),
     (pix(160,H-40) == (255,255,255,255), "an explicit white fill is opaque"),
+    (255 in alphas,                  "the text rendered at all"),
+    (len(partial) > 0,               "anti-aliased glyph edges are partly covered"),
 ]
 bad = [msg for ok,msg in checks if not ok]
 for m in bad: print("FAIL:", m)
