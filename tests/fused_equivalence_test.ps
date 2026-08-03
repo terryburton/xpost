@@ -125,6 +125,7 @@
 /roa [ 1 2 3 ] readonly def          % readonly array
 /naa [ 1 2 3 ] noaccess def          % noaccess array
 /wa  [ 1 2 3 ] def                   % writeable array
+/va  [ 1 2 3 ] def                   % writeable array the cases may leave altered
 /rod 3 dict dup /a 1 put readonly def
 /wd  3 dict def
 /ros (abc) readonly def
@@ -174,6 +175,12 @@
 (ros 0 88 put)                 same
 (ws 0 88 put ws 0 get)         same
 (wd /k 5 put wd /k get)        same
+(pka 1 get)                    same
+(pka 3 get)                    same
+(pka -1 get)                   same
+(pka 0 99 put)                 same
+(va 0 (x) put va 0 get)        same
+(4 array 0 va put)             same
 (get)                          same
 (put)                          same
 (1 2 get)                      same

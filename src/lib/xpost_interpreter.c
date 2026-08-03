@@ -63,6 +63,7 @@
 #include "xpost_op_math.h"  /* the shared range-preserving arithmetic */
 #include "xpost_op_control.h"  /* record the run outcome when a job ends */
 #include "xpost_op_type.h"  /* the shared type naming */
+#include "xpost_op_array.h"  /* the shared array element access */
 #include "xpost_oplib.h"
 
 static
@@ -765,17 +766,20 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object a_ = os_top->data[ot - 2];
                     Xpost_Object i_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
-                        xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0 &&
-                        xpost_object_is_readable(ctx, a_))
+                        xpost_object_get_type(i_) == integertype)
                     {
-                        Xpost_Object t_ = xpost_array_get(ctx, a_, i_.int_.val);
-                        if (xpost_object_get_type(t_) != invalidtype)
+                        /* the operator's own get, access checks and all
+                           (see xpost_op_array.h) */
+                        Xpost_Object t_;
+                        if (xpost_op_array_get_checked(ctx, a_, i_.int_.val,
+                                                       &t_) == 0)
                         {
                             --os_top->top;
                             os_top->data[ot - 2] = t_;
                             goto next_element;
                         }
+                        /* on failure fall through: the generic path
+                           re-executes the get for the exact protocol */
                     }
                 }
                 if (ot >= 2 &&
@@ -942,13 +946,15 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object i_ = os_top->data[ot - 2];
                     Xpost_Object v_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
-                        xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0 &&
-                        xpost_object_is_writeable(ctx, a_))
+                        xpost_object_get_type(i_) == integertype)
                     {
-                        /* operands stay on the stack through the put (a
-                           saved array copies on first write) */
-                        int ret_ = xpost_array_put(ctx, a_, i_.int_.val, v_);
+                        /* the operator's own put, access checks and all
+                           (see xpost_op_array.h). The operands stay on
+                           the stack through it, so a saved array that
+                           copies on first write keeps them visible to
+                           the collector */
+                        int ret_ = xpost_op_array_put_checked(ctx, a_,
+                                                              i_.int_.val, v_);
                         if (ret_ == 0)
                         {
                             if (ctx->lo->base != seen_lo_base ||
