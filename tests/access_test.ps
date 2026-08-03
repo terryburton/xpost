@@ -166,6 +166,11 @@ swaptgt (.swap of a readonly array) intact
 { swapok 0 get 2 eq { }{ (FAIL: .swap did not exchange the elements\n) print
     faildict /n 2 copy get 1 add put } ifelse } exec
 
+/dstgt [1 2 3] readonly def
+{ dstgt dictstack pop }                  /invalidaccess (dictstack into a readonly array) chk
+dstgt (dictstack into a readonly array) intact
+{ 3 array dictstack pop }                /ok            (dictstack into a writeable array) chk
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse

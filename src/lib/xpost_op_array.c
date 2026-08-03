@@ -65,13 +65,16 @@ int _xpost_op_array_copy_aux (Xpost_Context *ctx,
 {
     unsigned i;
     Xpost_Object t;
+    int ret;
 
     for (i = 0; i < S.comp_.sz; i++)
     {
         t = xpost_array_get(ctx, S, i);
         if (xpost_object_get_type(t) == invalidtype)
             return rangecheck;
-        xpost_array_put(ctx, D, i, t);
+        ret = xpost_array_put(ctx, D, i, t);
+        if (ret)
+            return ret;
     }
 
     return 0;
@@ -233,8 +236,7 @@ int xpost_op_array_int_array_putinterval (Xpost_Context *ctx,
     subarr = xpost_object_get_interval(D, I.int_.val, S.comp_.sz);
     if (xpost_object_get_type(subarr) == invalidtype)
         return rangecheck;
-    _xpost_op_array_copy_aux(ctx, S, subarr);
-    return 0;
+    return _xpost_op_array_copy_aux(ctx, S, subarr);
 }
 
 /* array  aload  a0..aN-1 array
@@ -292,13 +294,16 @@ int xpost_op_array_copy (Xpost_Context *ctx,
                          Xpost_Object D)
 {
     Xpost_Object subarr;
+    int ret;
     if (!xpost_object_is_readable(ctx, S))
         return invalidaccess;
     if (!xpost_object_is_writeable(ctx, D))
         return invalidaccess;
     if (D.comp_.sz < S.comp_.sz)
         return rangecheck;
-    _xpost_op_array_copy_aux(ctx, S, D);
+    ret = _xpost_op_array_copy_aux(ctx, S, D);
+    if (ret)
+        return ret;
     subarr = xpost_object_get_interval(D, 0, S.comp_.sz);
     if (xpost_object_get_type(subarr) == invalidtype)
         return rangecheck;
@@ -460,7 +465,9 @@ int _numstring2array (Xpost_Context *ctx,
                                        p + 4 + i * width, &el);
         if (ret)
             return ret;
-        xpost_array_put(ctx, arr, (integer)i, el);
+        ret = xpost_array_put(ctx, arr, (integer)i, el);
+        if (ret)
+            return ret;
     }
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(arr));
     return 0;
