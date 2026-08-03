@@ -37,11 +37,24 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "xpost_error.h"
+
 /* A growable byte buffer: the one allocation discipline behind every
-   builder that assembles a byte stream of unknown final size. Growth
-   doubles the capacity, so a build is linear in its output. All
-   functions return 0 on success and -1 when memory runs out, leaving
-   the buffer valid either way; the caller frees s. */
+   builder that assembles a byte stream of unknown final size -- the
+   vector devices' page content, the font module's font programs, a
+   compressed stream, a rereadable file's captured bytes. Growth doubles
+   the capacity, so a build is linear in its output.
+
+   Every function answers the operator convention the rest of the tree
+   answers: 0 for no error, and otherwise the error code to raise. The
+   only error a byte buffer has is VMerror, so a caller may return the
+   result of a call directly. A call that answers VMerror leaves the
+   buffer exactly as it found it, still holding its bytes and still
+   usable; the caller releases it with xpost_strbuf_free.
+
+   A zero-filled Xpost_String_Buffer is a valid empty buffer, so a holder
+   that arrives by byte copy rather than by construction needs no
+   initialiser. */
 typedef struct
 {
     char *s;
@@ -54,26 +67,37 @@ xpost_strbuf_init(Xpost_String_Buffer *b, size_t initial)
 {
     if (initial < 16)
         initial = 16;
-    b->s = malloc(initial);
+    b->s = (char *)malloc(initial);
     b->len = 0;
     b->cap = b->s ? initial : 0;
-    return b->s ? 0 : -1;
+    return b->s ? 0 : VMerror;
 }
 
+/* make room for extra more bytes past the current length */
 static inline int
 xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 {
-    size_t need = b->len + extra;
-    size_t cap = b->cap ? b->cap : 16;
+    size_t need, cap;
     char *ns;
 
+    if (extra > (size_t)-1 - b->len)
+        return VMerror;
+    need = b->len + extra;
     if (need <= b->cap)
         return 0;
-    while (cap <= need)
+    cap = b->cap ? b->cap : 16;
+    while (cap < need)
+    {
+        if (cap > ((size_t)-1) / 2)
+        {
+            cap = need;   /* the last doubling would wrap */
+            break;
+        }
         cap *= 2;
-    ns = realloc(b->s, cap);
+    }
+    ns = (char *)realloc(b->s, cap);
     if (!ns)
-        return -1;
+        return VMerror;
     b->s = ns;
     b->cap = cap;
     return 0;
@@ -82,34 +106,36 @@ xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 static inline int
 xpost_strbuf_append(Xpost_String_Buffer *b, const void *p, size_t n)
 {
-    if (xpost_strbuf_reserve(b, n + 1))
-        return -1;
+    int ret = xpost_strbuf_reserve(b, n);
+
+    if (ret)
+        return ret;
     memcpy(b->s + b->len, p, n);
     b->len += n;
     return 0;
 }
 
+/* append the formatted text, sized before it is written so the buffer
+   grows once and the format runs at most twice */
 static inline int
 xpost_strbuf_appendf(Xpost_String_Buffer *b, const char *fmt, ...)
 {
     va_list ap;
-    int n;
+    int n, ret;
 
-    for (;;)
-    {
-        va_start(ap, fmt);
-        n = vsnprintf(b->s + b->len, b->cap - b->len, fmt, ap);
-        va_end(ap);
-        if (n < 0)
-            return -1;
-        if (b->len + (size_t)n < b->cap)
-        {
-            b->len += (size_t)n;
-            return 0;
-        }
-        if (xpost_strbuf_reserve(b, (size_t)n + 1))
-            return -1;
-    }
+    va_start(ap, fmt);
+    n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        return VMerror;
+    ret = xpost_strbuf_reserve(b, (size_t)n + 1);
+    if (ret)
+        return ret;
+    va_start(ap, fmt);
+    vsnprintf(b->s + b->len, b->cap - b->len, fmt, ap);
+    va_end(ap);
+    b->len += (size_t)n;
+    return 0;
 }
 
 static inline void

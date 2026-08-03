@@ -306,6 +306,23 @@ test('string-bounds',
   string_bounds_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The one growable byte buffer every byte-stream builder in the tree grows
+# through: its return convention (0 for no error, the error code to raise
+# otherwise), a zero-filled buffer being a valid empty one, content survival
+# across arbitrarily many doublings, and a capacity request no allocator can
+# satisfy answering the error instead of wrapping around.
+strbuf_exe = executable('strbuf_test',
+  'tests/strbuf_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+# the unsatisfiable reserve asks the allocator for a block no allocator can
+# serve; AddressSanitizer aborts on such a request unless told to answer null
+# the way the C library does
+test('strbuf', strbuf_exe,
+  env: { 'ASAN_OPTIONS': 'allocator_may_return_null=1' })
+
 # Memory-table bookkeeping under dictionary growth: dicgrow's entity swap
 # must move (adr, sz, used) together; the invariant used <= sz holds for
 # every ent after repeated regrowth.
