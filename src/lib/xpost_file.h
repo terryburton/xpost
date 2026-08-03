@@ -73,9 +73,17 @@ typedef struct Xpost_File_Methods
     int (*seek)(Xpost_File*, long);
 } Xpost_File_Methods;
 
+/* A filter holds the stream it decodes from (or encodes to) as a plain
+   pointer, so that stream must outlive it however the two are closed.
+   refs counts the filters holding this stream; closed records that its
+   own file object has been closed. A closed stream whose refs have not
+   all been released stays allocated -- its methods then report end of
+   data and refuse writes -- and the last filter to release it frees it. */
 struct Xpost_File
 {
     Xpost_File_Methods *methods;
+    int refs;
+    int closed;
 };
 
 typedef struct Xpost_DiskFile

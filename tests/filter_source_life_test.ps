@@ -1,0 +1,89 @@
+% A filter holds its source (a decode filter) or its target (an encode
+% filter) as a live stream. Closing that underlying file before the filter
+% must leave the filter usable: reading a decode filter whose source is
+% closed reports end-of-data (PLRM 3.8: an operation that cannot obtain
+% data because the file is closed returns the end-of-file result rather
+% than erroring), and writing to an encode filter whose target is closed
+% is refused rather than reaching a dead stream.
+%
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints
+% SUCCESS iff every assertion holds. The interpreter's exit status is part
+% of the verdict, so a crash here fails the test even if SUCCESS printed.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+
+% --- a decode filter over a disk file whose source is closed first ---
+/scr (filtersrc.scratch) def
+/f scr (w) file def
+f (41424344) writestring
+f closefile
+
+/src scr (r) file def
+/flt src /ASCIIHexDecode filter def
+src closefile
+/s 4 string def
+flt s readstring
+exch pop not (a decode filter whose source is closed reads as end-of-data) assert
+
+% the filter object itself is still open and closing it is harmless
+flt status (the filter is still open after its source is closed) assert
+flt closefile
+flt status not (the filter closes normally) assert
+
+% --- the same for a run-length decode filter, whose reader keeps run state ---
+/src2 scr (r) file def
+/flt2 src2 /RunLengthDecode filter def
+src2 closefile
+flt2 4 string readstring exch pop not
+    (a run-length filter whose source is closed reads as end-of-data) assert
+flt2 closefile
+
+% --- a filter chained onto a filter, with the innermost source closed ---
+/src3 scr (r) file def
+/inner src3 /ASCIIHexDecode filter def
+/outer inner /RunLengthDecode filter def
+src3 closefile
+outer 4 string readstring exch pop not
+    (a chained filter whose innermost source is closed reads as end-of-data) assert
+outer closefile
+inner closefile
+
+% --- an encode filter whose target is closed before it ---
+% PLRM 3.8.2: any exception during writing raises ioerror, so a write that
+% cannot reach its destination is refused rather than reaching a dead stream.
+/tgt (filtertgt.scratch) (w) file def
+/enc tgt /ASCIIHexEncode filter def
+tgt closefile
+{ enc (AB) writestring } /ioerror
+    (writing through an encode filter whose target is closed is an ioerror) erris
+enc closefile
+
+% --- closing the source twice around a live filter ---
+/src4 scr (r) file def
+/flt4 src4 /ASCIIHexDecode filter def
+src4 closefile
+src4 closefile
+flt4 4 string readstring exch pop not
+    (a twice-closed source still reads as end-of-data through its filter) assert
+flt4 closefile
+
+% --- the reverse order still works: filter closed first, source after ---
+/src5 scr (r) file def
+/flt5 src5 /ASCIIHexDecode filter def
+flt5 closefile
+src5 status (closing a filter leaves its source open) assert
+src5 read pop 52 eq (the source still reads its own bytes after the filter closes) assert
+src5 closefile
+
+scr deletefile
+(filtertgt.scratch) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

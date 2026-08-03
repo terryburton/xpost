@@ -1,0 +1,62 @@
+% filenameforall (PLRM 8.2), run through `xpost -q --no-sandbox -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% filenameforall "enumerates all files whose names match the specified
+% template". A template that matches nothing enumerates nothing: the
+% procedure runs zero times and no error is raised. ioerror is reserved for
+% a genuine failure of the underlying file system.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+
+% --- two files to find, and a name nothing will match ---
+/mk { (w) file dup (xy) writestring closefile } def
+(fnfa1.scratch) mk
+(fnfa2.scratch) mk
+
+% --- a template matching nothing runs the procedure zero times ---
+/hits 0 def
+{ (fnfa_nothing_matches_*.scratch) { pop /hits hits 1 add store } 128 string
+  filenameforall } stopped
+not (a template matching nothing is not an error) assert
+hits 0 eq (a template matching nothing runs the procedure zero times) assert
+
+% --- a template that does match reaches every matching name ---
+/hits 0 def
+/seen1 false def
+/seen2 false def
+(fnfa?.scratch) {
+    dup (fnfa1.scratch) eq { /seen1 true store } if
+    (fnfa2.scratch) eq { /seen2 true store } if
+    /hits hits 1 add store
+} 128 string filenameforall
+hits 2 eq (both matching files are enumerated) assert
+seen1 seen2 and (each matching name reaches the procedure) assert
+
+% --- the name handed to the procedure is a substring of the scratch string ---
+/scratch 128 string def
+/gotlen -1 def
+(fnfa1.scratch) { length /gotlen exch store } scratch filenameforall
+gotlen (fnfa1.scratch) length eq
+    (the enumerated name is the substring actually used) assert
+
+% --- exit leaves the enumeration early ---
+/hits 0 def
+(fnfa?.scratch) { pop /hits hits 1 add store exit } 128 string filenameforall
+hits 1 eq (exit leaves filenameforall after the current iteration) assert
+
+% --- a scratch string too short for a matching name is a rangecheck ---
+{ (fnfa?.scratch) { pop } 2 string filenameforall } /rangecheck
+    (a scratch string shorter than a matching name is a rangecheck) erris
+
+(fnfa1.scratch) deletefile
+(fnfa2.scratch) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

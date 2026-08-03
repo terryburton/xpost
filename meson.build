@@ -693,6 +693,52 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# readstring (PLRM 8.2): verbatim transfer, the boolean result at end of
+# file, and the rangecheck a zero-length string operand raises.
+test('op-readstring',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_readstring_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
+# data, closed files, files that do not exist, and the operators whose
+# answer on a filter differs from a positionable disk file.
+test('op-file-edges',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
+# r/w/a with and without +, the access attribute each confers, and the
+# refusal of an access string outside the table.
+test('op-file-access',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_access_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# readline (PLRM 8.2): terminator handling for CR, LF and CRLF, the boolean
+# result at end of file, and the rangecheck boundary -- a line that exactly
+# fills the string has been read, not overrun.
+test('op-readline',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_readline_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# filenameforall enumerates the files matching a template (PLRM 8.2), and a
+# template that matches none of them enumerates nothing rather than failing.
+test('op-filenameforall',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_filenameforall_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# A filter and the stream beneath it may be closed in either order: the
+# stream a filter reads from (or writes to) outlives the file object that
+# opened it, and a filter over a closed stream reports end of data.
+test('filter-source-life',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_source_life_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Procedure data sources for filters (PLRM 3.8.4).
 test('op-proc-filter',
   find_program('tests/run-ps-test.sh'),

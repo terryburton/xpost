@@ -672,6 +672,12 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
     int n;
     Xpost_File *f;
     char *s;
+    if (!xpost_object_is_readable(ctx,F))
+        return invalidaccess;
+    /* a zero-length string could hold nothing, so asking to fill one is an
+       error rather than a transfer of no bytes (PLRM 8.2) */
+    if (S.comp_.sz == 0)
+        return rangecheck;
     if (!xpost_file_get_status(ctx->lo, F))
     {
         /* a closed file reads as end-of-data rather than erroring */
@@ -680,8 +686,6 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
         return 0;
     }
-    if (!xpost_object_is_readable(ctx,F))
-        return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);
     n = xpost_file_read(s, 1, S.comp_.sz, f);
@@ -763,8 +767,25 @@ int xpost_op_file_readline (Xpost_Context *ctx,
         }
         s[n] = c;
     }
-    if (n == S.comp_.sz && c != '\n' && c != '\r')
-        return rangecheck;
+    if (n == S.comp_.sz)
+    {
+        /* The string is exactly full. A line that ends here has been read,
+           not overrun, so look at the next character: a terminator (whole,
+           for CRLF) or end of file completes the line, and only a further
+           character of text means the line does not fit (PLRM 8.2). */
+        c = xpost_file_getc(f);
+        if (c == '\r')
+        {
+            int c2 = xpost_file_getc(f);
+            if (c2 != '\n' && c2 != EOF)
+                xpost_file_ungetc(f, c2);
+        }
+        else if (c != '\n' && c != EOF)
+        {
+            xpost_file_ungetc(f, c);
+            return rangecheck;
+        }
+    }
     S.comp_.sz = n;
     xpost_stack_push(ctx->lo, ctx->os, S);
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(c != EOF));
@@ -1024,7 +1045,14 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     {
         free(tmpbuf);
         free(globbuf);
-        return ioerror;
+        /* the enumeration covers the files whose names match the template
+           (PLRM): a template none matches enumerates nothing, which is not a
+           failure of the file system. Only exhausted memory is reported. */
+#ifdef GLOB_NOSPACE
+        if (ret == GLOB_NOSPACE)
+            return VMerror;
+#endif
+        return 0;
     }
 
     oglob.glob_.tag = globtype;

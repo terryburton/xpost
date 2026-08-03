@@ -1,0 +1,196 @@
+% Edge cases of the file operators (PLRM 3.8 and 8.2), run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% The happy paths are covered elsewhere; this pins the boundaries: empty
+% operands, end of data, closed files, files that do not exist, and the
+% operators whose result on a filter differs from a positionable disk file.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+/errors { % { proc } (tag)  -> asserts proc raises some error
+    2 dict begin
+    /tag exch def
+    stopped tag assert clear
+    end } def
+
+/nm (fedge.scratch) def
+/mkfile { /f nm (w) file def f (0123456789) writestring f closefile } def
+mkfile
+
+% --- zero-length transfers ---
+/f nm (r) file def
+f 0 string readhexstring exch pop
+    (readhexstring with an empty string reports no end of data) assert
+f closefile
+/f nm (a) file def
+f () writestring                        % no bytes, no error
+f <> writehexstring                     % no bytes, no error
+f closefile
+nm status { 4 array astore 1 get 10 eq (empty writes wrote nothing) assert }
+         { (empty writes lost the file) assert } ifelse
+
+% --- status: the file form and the named form ---
+/f nm (r) file def
+f status (an open file reports true) assert
+f closefile
+f status not (a closed file reports false) assert
+(fedge_absent.scratch) status not
+    (status of a file that does not exist is false) assert
+/f nm (r) file def
+/flt f /ASCIIHexDecode filter def
+flt status (a filter reports true while open) assert
+flt closefile
+f closefile
+
+% --- bytesavailable: a count for a positionable file, -1 for a filter ---
+/f nm (r) file def
+f bytesavailable 10 eq (a ten-byte file reports ten bytes) assert
+f 10 string readstring pop pop
+f bytesavailable 0 eq (a file read to its end reports no bytes) assert
+f closefile
+(4142) /ASCIIHexDecode filter bytesavailable -1 eq
+    (a filter over a string cannot report a count) assert
+
+% --- flushfile drains an input file to end of data (PLRM 3.8) ---
+/f nm (r) file def
+f flushfile
+f 4 string readstring exch pop not (flushfile leaves an input file at its end) assert
+f closefile
+
+% --- resetfile never raises an error, whatever it is given (PLRM 8.2) ---
+/f nm (r) file def
+f resetfile
+f closefile
+f resetfile                              % ... including a closed file
+(4142) /ASCIIHexDecode filter resetfile   % ... and a filter
+/f nm (a) file def
+f resetfile                              % ... and an output file
+f closefile
+
+% --- position: a disk file is positionable, a decode filter is not ---
+/f nm (r) file def
+f fileposition 0 eq (a fresh file is at position zero) assert
+f 4 string readstring pop pop
+f fileposition 4 eq (reading advances the position) assert
+f 1 setfileposition
+f read pop 49 eq (setfileposition moves the read point) assert
+f 100 setfileposition                    % past the end is the file system's affair
+f 4 string readstring exch pop not (reading past the end yields no data) assert
+f closefile
+{ (4142) /ASCIIHexDecode filter fileposition } /ioerror
+    (a decode filter has no file position) erris
+{ (4142) /ASCIIHexDecode filter 0 setfileposition } /ioerror
+    (a decode filter cannot be positioned) erris
+
+% --- a reusable stream, by contrast, is positionable and rereadable ---
+% ReusableStreamDecode buffers its source rather than decoding it, so the
+% bytes it serves are the bytes it was given.
+/rs (abcd) /ReusableStreamDecode filter def
+rs 2 string readstring pop (ab) eq (a reusable stream reads its data) assert
+rs fileposition 2 eq (a reusable stream reports its position) assert
+rs 0 setfileposition
+rs 4 string readstring pop (abcd) eq (a reusable stream rereads from a position) assert
+rs resetfile
+rs 1 string readstring pop (a) eq (resetfile rewinds a reusable stream) assert
+rs closefile
+
+% --- the write operators on a closed file are refused ---
+% PLRM 3.8.2 leaves the choice between ioerror and invalidaccess to the
+% implementation, so only the refusal itself is asserted.
+/mkclosed { nm (a) file dup closefile } def
+{ mkclosed 65 write } (write on a closed file is refused) errors
+{ mkclosed (A) writestring } (writestring on a closed file is refused) errors
+{ mkclosed (41) writehexstring } (writehexstring on a closed file is refused) errors
+
+% --- end of data arrives immediately ---
+/f nm (r) file def
+f 10 setfileposition
+f read not (read at end of file reports no byte) assert
+f closefile
+() /ASCIIHexDecode filter 4 string readstring exch pop not
+    (a decode filter over no data reports end of data at once) assert
+(>) /ASCIIHexDecode filter 4 string readstring exch pop not
+    (a hexadecimal stream that opens with its terminator yields nothing) assert
+(~>) /ASCII85Decode filter 4 string readstring exch pop not
+    (an ASCII85 stream that opens with its terminator yields nothing) assert
+
+% --- one filter over another: the inner decode yields (3E3E), which the
+% outer decodes in turn to (>>) ---
+(33453345) /ASCIIHexDecode filter /ASCIIHexDecode filter 2 string readstring
+pop (>>) eq (a filter reads through another filter) assert
+
+% --- SubFileDecode with an empty terminator counts bytes ---
+(abcdef) 3 () /SubFileDecode filter 6 string readstring
+exch (abc) eq (an empty terminator makes the count a byte count) assert
+not (the byte count ends the data) assert
+
+% --- token reads one object from a file and leaves the rest ---
+/f (fedge_tok.scratch) (w) file def
+f (42 /x) writestring
+f closefile
+/f (fedge_tok.scratch) (r) file def
+f token (a token is found in the file) assert
+42 eq (the token is the object read) assert
+f token pop /x eq (the file is left after the token just read) assert
+f token not (token at end of file reports false) assert
+f closefile
+(fedge_tok.scratch) deletefile
+
+% --- currentfile is literal, so a name holding it pushes the file (PLRM 8.2) ---
+currentfile xcheck not (currentfile returns a literal file object) assert
+
+% --- files that do not exist ---
+{ (fedge_absent.scratch) (r) file } /undefinedfilename
+    (opening a file that does not exist is undefinedfilename) erris
+{ (fedge_absent.scratch) deletefile } /undefinedfilename
+    (deleting a file that does not exist is undefinedfilename) erris
+{ (fedge_absent.scratch) (fedge_other.scratch) renamefile } /undefinedfilename
+    (renaming a file that does not exist is undefinedfilename) erris
+
+% --- the special files (PLRM 3.8.3) ---
+% %stdin allows only r access, %stdout and %stderr only w. The line and
+% statement editors read from the standard input, which the test harness
+% supplies as an empty stream, so each reports that there is nothing to
+% edit rather than blocking.
+(%stdin) (r) file status (the standard input opens for reading) assert
+(%stdout) (w) file status (the standard output opens for writing) assert
+(%stderr) (w) file status (the standard error opens for writing) assert
+{ (%stdin) (w) file } /invalidfileaccess
+    (the standard input cannot be opened for writing) erris
+{ (%stdout) (r) file } /invalidfileaccess
+    (the standard output cannot be opened for reading) erris
+{ (%stderr) (r) file } /invalidfileaccess
+    (the standard error cannot be opened for reading) erris
+{ (%lineedit) (r) file } /undefinedfilename
+    (the line editor reports nothing to edit at end of input) erris
+{ (%statementedit) (r) file } /undefinedfilename
+    (the statement editor reports nothing to edit at end of input) erris
+{ (%nosuchdevice) (r) file } /undefinedfilename
+    (an unknown special file is undefinedfilename) erris
+% closing a standard file leaves the process's own stream alone: the file
+% object is closed, and the stream can be opened again
+(%stdout) (w) file dup closefile status not
+    (closing the standard output closes the file object) assert
+(%stdout) (w) file status (the standard output reopens after closing) assert
+
+% --- flush takes no operand and always succeeds ---
+flush
+
+% --- renamefile moves a file ---
+mkfile
+nm (fedge_moved.scratch) renamefile
+nm status not (the old name is gone after renamefile) assert
+(fedge_moved.scratch) status { 4 array astore 1 get 10 eq
+    (the new name holds the file after renamefile) assert }
+    { (renamefile lost the file) assert } ifelse
+(fedge_moved.scratch) deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
