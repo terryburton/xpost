@@ -278,7 +278,12 @@ setglobal
 } bind def
 
 /currentcolorspace {
+    % The space is reported as an array even when it was set as a bare
+    % family name and has no parameters (PLRM 8.2), so that indexing the
+    % result to ask which family it is works for every space rather than
+    % for the parameterised ones only.
     graphicsdict /currgstate get /setspace get
+    dup type /arraytype ne { 1 array astore } if
 } bind def
 
 .xpostsys /setcolordict <<
