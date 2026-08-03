@@ -107,6 +107,18 @@ int main(void)
        point without the allocator faulting is the assertion */
     xpost_dsc_free(&dsc);
 
+    /* Version 2.1 of the conventions exists alongside 1.0, 2.0 and 3.0
+       and a document declaring it conforms. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-2.1\n"
+                "%%Pages: 1\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a version 2.1 document is recognized");
+    check(dsc.ps_vmaj == 2 && dsc.ps_vmin == 1,
+          "the 2.1 version numbers are recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

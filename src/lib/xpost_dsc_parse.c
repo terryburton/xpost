@@ -538,8 +538,8 @@ _xpost_dsc_header_version_get(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc, const unsigned
         return XPOST_DSC_STATUS_NO_DSC;
     }
 
-    if (((dsc->ps_vmaj == 2) && (dsc->ps_vmin > 1)) ||
-        (dsc->ps_vmin > 0))
+    /* known versions of the conventions: 1.0, 2.0, 2.1 and 3.0 */
+    if ((dsc->ps_vmaj == 2) ? (dsc->ps_vmin > 1) : (dsc->ps_vmin > 0))
     {
         XPOST_LOG_WARN("First comment erronoeus (invalid vmin).");
         return XPOST_DSC_STATUS_NO_DSC;
