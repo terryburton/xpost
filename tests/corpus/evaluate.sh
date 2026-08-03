@@ -15,6 +15,7 @@ root=$(CDPATH= cd -- "$here/../.." && pwd)
 work="$here/.work"
 XPOST=${XPOST:-"$root/build/src/bin/xpost"}
 GS=${GS:-gs}
+jobs=${CORPUS_JOBS:-$(nproc 2>/dev/null || echo 4)}
 
 for tool in "$XPOST" "$GS"; do
     command -v "$tool" >/dev/null 2>&1 || [ -x "$tool" ] || {
@@ -33,27 +34,16 @@ device_for() {   # corpus base -> "ppm" | "pbm"
     esac
 }
 
-evaluate_corpus() {
+# One program, rendered by both engines in a directory of its own so that
+# any number of these may run at once.
+#   $1 corpus  $2 base name  $3 path to the program  $4 work directory
+evaluate_one() {
     corpus=$1
-    dir="$here/$corpus"
-    set -- "$dir"/*.ps "$dir"/*.eps
-    have=0
-    for p in "$@"; do [ -f "$p" ] && have=1; done
-    if [ "$have" = 0 ]; then
-        echo "$corpus: absent -- skipped (fetch.sh $corpus)"
-        return
-    fi
-    echo "=== $corpus"
+    b=$2
+    p=$3
+    work=$4
     mkdir -p "$work"
-    for p in "$@"; do
-        [ -f "$p" ] || continue
-        b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
-        # a corpus may list basenames (one per line) in a "slow" file: programs
-        # that render correctly but too slowly to fit the per-file timeout, held
-        # out until the underlying performance work lands
-        if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
-            echo "  $b  held out (see $corpus/slow)"; continue
-        fi
+    (
         dev=$(device_for "$corpus" "$b")
         gsdev=${dev}raw
         rm -f "$work"/g_*.* "$work"/x_*.*
@@ -74,15 +64,15 @@ evaluate_corpus() {
         # a signal death or a timeout is a hard regression, distinct from a
         # controlled PostScript error (which just yields no page, below)
         if [ "$xstatus" -ge 128 ]; then
-            echo "  $b  XPOST CRASHED (signal $((xstatus - 128)))"; continue
+            echo "  $b  XPOST CRASHED (signal $((xstatus - 128)))"; exit 0
         fi
         if [ "$xstatus" = 124 ]; then
-            echo "  $b  XPOST TIMED OUT"; continue
+            echo "  $b  XPOST TIMED OUT"; exit 0
         fi
         ng=$(ls "$work"/g_*.$dev 2>/dev/null | wc -l)
         nx=$(ls "$work"/x_*.$dev 2>/dev/null | wc -l)
-        if [ "$ng" = 0 ]; then echo "  $b  reference produced no page"; continue; fi
-        if [ "$nx" = 0 ]; then echo "  $b  XPOST FAILED${xerr:+: $xerr}"; continue; fi
+        if [ "$ng" = 0 ]; then echo "  $b  reference produced no page"; exit 0; fi
+        if [ "$nx" = 0 ]; then echo "  $b  XPOST FAILED${xerr:+: $xerr}"; exit 0; fi
         i=1
         while [ "$i" -le "$ng" ]; do
             gp="$work/g_$i.$dev"; xp="$work/x_$i.$dev"
@@ -99,9 +89,58 @@ evaluate_corpus() {
             fi
             i=$((i+1))
         done
-    done
+    ) > "$work.out"
     rm -rf "$work"
 }
+
+evaluate_corpus() {
+    corpus=$1
+    dir="$here/$corpus"
+    set -- "$dir"/*.ps "$dir"/*.eps
+    have=0
+    for p in "$@"; do [ -f "$p" ] && have=1; done
+    if [ "$have" = 0 ]; then
+        echo "$corpus: absent -- skipped (fetch.sh $corpus)"
+        return
+    fi
+    echo "=== $corpus"
+    mkdir -p "$work"
+
+    # Name the programs to render, in order, and hold out the ones the
+    # corpus lists as too slow for the per-file timeout.
+    n=0
+    : > "$work/list"
+    for p in "$@"; do
+        [ -f "$p" ] || continue
+        b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
+        # a corpus may list basenames (one per line) in a "slow" file: programs
+        # that render correctly but too slowly to fit the per-file timeout, held
+        # out until the underlying performance work lands
+        if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
+            echo "  $b  held out (see $corpus/slow)"; continue
+        fi
+        n=$((n + 1))
+        printf '%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$work/$n" >> "$work/list"
+        printf '%s\n' "$work/$n.out" >> "$work/order"
+    done
+    [ "$n" = 0 ] && return
+
+    # Render them concurrently -- each engine run is a separate process over
+    # its own directory -- then report in the order they were named, so the
+    # output does not depend on which finished first.
+    xargs -P "$jobs" -n4 "$0" --one < "$work/list" >/dev/null 2>&1
+    while read -r f; do
+        [ -f "$f" ] && cat "$f"
+    done < "$work/order"
+    rm -f "$work/list" "$work/order"
+}
+
+# the per-program entry point xargs re-invokes this script through
+if [ "${1:-}" = "--one" ]; then
+    shift
+    evaluate_one "$@"
+    exit 0
+fi
 
 for name in ${*:-ghostscript casselman bwipp adobe}; do
     evaluate_corpus "$name"

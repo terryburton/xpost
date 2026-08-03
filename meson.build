@@ -1046,12 +1046,16 @@ test('font-bigbuf',
 # per-page difference. Skips when no corpus is present or the reference tools
 # are absent, so it is never a build-time dependency; fails only when xpost
 # crashes or hangs on a program.
-test('corpus',
-  find_program('tests/corpus/run-corpus-test.sh'),
-  args: [ xpost_exe ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: 'corpus',
-  timeout: 1800)
+# One test per corpus, so that meson overlaps them instead of running them end
+# to end; each skips on its own when its corpus has not been fetched.
+foreach corpus : [ 'ghostscript', 'casselman', 'bwipp', 'adobe' ]
+  test('corpus-' + corpus,
+    find_program('tests/corpus/run-corpus-test.sh'),
+    args: [ xpost_exe, corpus ],
+    env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+    suite: 'corpus',
+    timeout: 1800)
+endforeach
 
 # Binary tokens (PLRM 3.14): the conformance corpus against a golden
 # record generated from the reference interpreter, which revalidates

@@ -12,9 +12,12 @@
 #   - PASS (exit 0) otherwise, with the per-page differences left in the log for
 #     inspection (meson test corpus -v, or meson-logs/testlog.txt).
 #   $1  path to the built xpost binary (optional; evaluate.sh finds one itself)
+#   $2  one corpus to evaluate (optional; all of them by default). Naming one
+#       per test lets them run concurrently rather than end to end.
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ "${1:-}" ] && XPOST=$1 && export XPOST
+corpus=${2:-}
 
 command -v gs >/dev/null 2>&1 || {
     echo "corpus: Ghostscript not found -- skipping"; exit 77; }
@@ -22,16 +25,16 @@ command -v compare >/dev/null 2>&1 || {
     echo "corpus: ImageMagick 'compare' not found -- skipping"; exit 77; }
 
 have=0
-for d in "$here"/*/; do
+for d in ${corpus:+"$here/$corpus/"} ${corpus:-"$here"/*/}; do
     for p in "$d"*.ps "$d"*.eps; do
         [ -f "$p" ] && { have=1; break 2; }
     done
 done
 [ "$have" = 1 ] || {
-    echo "corpus: no corpus present -- run tests/corpus/fetch.sh, then re-run. Skipping."
+    echo "corpus: ${corpus:-no corpus} not present -- run tests/corpus/fetch.sh, then re-run. Skipping."
     exit 77; }
 
-out=$("$here/evaluate.sh" 2>&1)
+out=$("$here/evaluate.sh" $corpus 2>&1)
 printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -Eq 'XPOST (CRASHED|TIMED OUT)' && {
     echo "corpus: xpost crashed or hung on a program -- see above"; exit 1; }
