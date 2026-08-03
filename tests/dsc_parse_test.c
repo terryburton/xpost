@@ -203,6 +203,27 @@ int main(void)
           "no ordinal is taken from the page's contents");
     xpost_dsc_free(&dsc);
 
+    /* Under level 1 a page whose position is unknown carries ? as its
+       ordinal; it is recorded as -1 and the pages after it keep
+       parsing. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-1.0\n"
+                "%%Pages: 2\n"
+                "%%EndComments\n"
+                "%%EndProlog\n"
+                "%%Page: one ?\n"
+                "showpage\n"
+                "%%Page: two 2\n"
+                "showpage\n"
+                "%%Trailer\n", &dsc),
+          "a level 1 document with a ? page ordinal parses");
+    check(dsc.pages && dsc.header.pages == 2 && dsc.pages[0].ordinal == -1,
+          "the ? ordinal is recorded as -1");
+    check(dsc.pages && dsc.header.pages == 2 && dsc.pages[1].label &&
+          strcmp(dsc.pages[1].label, "two") == 0 && dsc.pages[1].ordinal == 2,
+          "the page after a ? ordinal is still recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

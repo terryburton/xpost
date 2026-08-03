@@ -1195,19 +1195,27 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (((dsc->ps_vmaj == 1)) &&
                     ((iter_next - iter) == 1) &&
                     (*iter == '?'))
-                    ordinal = -1;
-
-                if (!_xpost_dsc_integer_get_from_string(iter, &ordinal))
                 {
-                    free(ordinal_str);
-                    break;
+                    /* a level 1 page in an unknown position: recorded
+                       as -1, not converted as a number */
+                    ordinal = -1;
+                }
+                else
+                {
+                    if (!_xpost_dsc_integer_get_from_string(iter, &ordinal))
+                    {
+                        free(ordinal_str);
+                        break;
+                    }
+
+                    if (ordinal < 1)
+                    {
+                        free(ordinal_str);
+                        break;
+                    }
                 }
 
                 free(ordinal_str);
-                if (ordinal < 1)
-                {
-                    break;
-                }
 
                 if (dsc->pages && (page_idx < dsc->header.pages))
                 {
