@@ -798,6 +798,13 @@ test('op-time',
   args: [ xpost_exe, files('tests/op_time_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The environment operators: a variable set by putenv has to survive the call,
+# and getenv answers its value or reports there is none.
+test('op-env',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_env_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The command line: the geometry option sets the page size and a geometry that
 # does not parse is refused, and the three reporting options report.
 test('cli-options',

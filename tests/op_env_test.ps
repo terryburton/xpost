@@ -1,0 +1,58 @@
+% The environment operators, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% getenv answers the value of a variable and raises undefined when there
+% is none; putenv sets one. They are this interpreter's own operators
+% rather than the language's, so what they answer is pinned here rather
+% than cited. Both are refused outright while the file-access sandbox is
+% engaged, which is why this test runs with it lifted.
+%
+% A variable set by putenv has to survive the call: the value handed to
+% the environment must be the environment's to keep, not memory the
+% operator releases on its way out.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { /er.tag exch def /er.want exch def
+    stopped { $error /errorname get er.want eq }{ false } ifelse
+    er.tag assert clear } def
+
+% --- a variable that is not set ---
+{ (XPOST_TEST_NO_SUCH_VARIABLE) getenv } /undefined
+    (getenv of an unset variable is undefined) erris
+
+% --- setting one, and reading it back ---
+(XPOST_TEST_VAR) (hello) putenv
+{ (XPOST_TEST_VAR) getenv } stopped not
+    (a variable set by putenv is found by getenv) assert
+(XPOST_TEST_VAR) getenv (hello) eq
+    (getenv answers the value putenv set) assert
+(XPOST_TEST_VAR) getenv length 5 eq
+    (the value is as long as the string that set it) assert
+
+% --- the value survives the memory being churned ---
+% If the environment kept the operator's own allocation rather than a
+% copy of it, whatever took that memory next would show up here.
+0 1 2000 { pop 200 string pop } for
+(XPOST_TEST_VAR) getenv (hello) eq
+    (the value is still there once the memory has turned over) assert
+
+% --- setting it again replaces the value ---
+(XPOST_TEST_VAR) (goodbye) putenv
+(XPOST_TEST_VAR) getenv (goodbye) eq
+    (putenv replaces the value of a variable already set) assert
+
+% --- an empty value is a value ---
+(XPOST_TEST_EMPTY) () putenv
+{ (XPOST_TEST_EMPTY) getenv } stopped not
+    (a variable set to an empty value is still set) assert
+(XPOST_TEST_EMPTY) getenv length 0 eq
+    (the empty value reads back empty) assert
+
+% --- the operands are strings ---
+{ 42 getenv } /typecheck (getenv refuses a number) erris
+{ (XPOST_TEST_VAR) 42 putenv } /typecheck (putenv refuses a number value) erris
+{ 42 (v) putenv } /typecheck (putenv refuses a number name) erris
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

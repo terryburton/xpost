@@ -232,25 +232,54 @@ int SSputenv(Xpost_Context *ctx,
              Xpost_Object N,
              Xpost_Object S)
 {
-    char *n, *s, *r;
+    char *n;
+    char *v;
+
     if (xpost_path_control_is_engaged())
         return invalidaccess;
-    n = xpost_string_get_pointer(ctx, N);
-    if (xpost_object_get_type(S) == nulltype)
+    n = xpost_string_allocate_cstring(ctx, N);
+    if (!n)
+        return VMerror;
+    v = xpost_string_allocate_cstring(ctx, S);
+    if (!v)
     {
-        r = xpost_string_allocate_cstring(ctx, N);
+        free(n);
+        return VMerror;
     }
-    else
+
+#ifdef _WIN32
+    /* the runtime copies the string it is given, so the joined one is
+       this function's to release */
     {
-        s = xpost_string_get_pointer(ctx, S);
-	r = malloc(N.comp_.sz + 1 + S.comp_.sz + 1);
-        memcpy(r, n, N.comp_.sz);
-        r[N.comp_.sz] = '=';
-        memcpy(r + N.comp_.sz + 1, s, S.comp_.sz);
-        r[N.comp_.sz + 1 + S.comp_.sz] = '\0';
+        size_t len = strlen(n) + 1 + strlen(v) + 1;
+        char *joined = malloc(len);
+
+        if (!joined)
+        {
+            free(n);
+            free(v);
+            return VMerror;
+        }
+        memcpy(joined, n, strlen(n));
+        joined[strlen(n)] = '=';
+        memcpy(joined + strlen(n) + 1, v, strlen(v) + 1);
+        putenv(joined);
+        free(joined);
     }
-    putenv(r);
-    free(r);
+#else
+    /* putenv would take the pointer rather than a copy of it, and the
+       environment would be left holding memory released on the way out
+       of here; setenv copies what it is given */
+    if (setenv(n, v, 1) != 0)
+    {
+        free(n);
+        free(v);
+        return VMerror;
+    }
+#endif
+
+    free(n);
+    free(v);
     return 0;
 }
 
