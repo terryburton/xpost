@@ -1,0 +1,90 @@
+% The virtual-memory parameter operators (PLRM 8.2), run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% vmstatus reports the save level and the memory consumed and available;
+% vmreclaim controls the collector and answers rangecheck outside the five
+% values it defines. globalvmstatus reports the same three numbers for
+% global memory alone.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/isint { type /integertype eq } def
+
+% --- vmstatus answers three integers ---
+clear
+vmstatus
+count 3 eq (vmstatus answers three values) assert
+/vmmax exch def /vmused exch def /vmlevel exch def
+vmmax isint vmused isint and vmlevel isint and
+    (vmstatus answers integers) assert
+vmused 0 gt (vmstatus reports memory in use) assert
+vmused vmmax le (the memory in use is within the maximum) assert
+
+% --- the level vmstatus reports is the save level ---
+clear
+vmstatus pop pop /level0 exch def
+save
+vmstatus pop pop /level1 exch def
+level1 level0 gt (save raises the level vmstatus reports) assert
+restore
+vmstatus pop pop /level2 exch def
+level2 level0 eq (restore returns the level vmstatus reports) assert
+
+% --- globalvmstatus answers three integers for global memory alone ---
+clear
+globalvmstatus
+count 3 eq (globalvmstatus answers three values) assert
+/gmax exch def /gused exch def /glevel exch def
+gmax isint gused isint and glevel isint and
+    (globalvmstatus answers integers) assert
+gused 0 gt (globalvmstatus reports memory in use) assert
+gused gmax le (the global memory in use is within its maximum) assert
+% global memory is one of the two banks vmstatus totals
+vmstatus pop /totalused exch def pop
+gused totalused le
+    (the global memory in use is part of the total) assert
+
+% --- vmreclaim takes the five values it defines, and no others ---
+clear
+{ -2 vmreclaim } stopped not
+    (vmreclaim disables collection in both banks) assert
+{ -1 vmreclaim } stopped not
+    (vmreclaim disables collection in local memory) assert
+{ 0 vmreclaim } stopped not
+    (vmreclaim enables collection) assert
+{ 1 vmreclaim } stopped not
+    (vmreclaim collects local memory) assert
+{ 2 vmreclaim } stopped not
+    (vmreclaim collects both banks) assert
+clear
+
+% anything outside that range is a rangecheck, and a non-integer a typecheck
+{ 3 vmreclaim } stopped (a value above the range is refused) assert
+$error /errorname get /rangecheck eq
+    (a value above the range is a rangecheck) assert
+clear
+{ -3 vmreclaim } stopped (a value below the range is refused) assert
+$error /errorname get /rangecheck eq
+    (a value below the range is a rangecheck) assert
+clear
+{ (x) vmreclaim } stopped (a non-integer operand is refused) assert
+$error /errorname get /typecheck eq
+    (a non-integer operand is a typecheck) assert
+clear
+
+% --- an immediate collection leaves the program running over it ---
+% the collector reclaims what nothing reaches; everything the program can
+% still name must survive it
+clear
+/keep [ 1 2 3 ] def
+/keepstr (survivor) def
+20 { 100 array pop } repeat        % garbage for the collection to find
+1 vmreclaim
+keep length 3 eq (an array survives a collection) assert
+keep 2 get 3 eq (its contents survive a collection) assert
+keepstr (survivor) eq (a string survives a collection) assert
+0 vmreclaim
+clear
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

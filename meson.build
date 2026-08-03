@@ -702,6 +702,14 @@ test('op-readstring',
 
 # Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
 # data, closed files, files that do not exist, and the operators whose
+# The virtual-memory parameter operators: vmstatus and globalvmstatus report
+# the save level and memory consumption, and vmreclaim takes the five values
+# PLRM 8.2 defines for it and refuses the rest.
+test('op-vm-param',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_vm_param_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # answer on a filter differs from a positionable disk file.
 test('op-file-edges',
   find_program('tests/run-ps-test.sh'),
