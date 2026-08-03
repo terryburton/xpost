@@ -863,6 +863,17 @@ test('font-type1-sparse-subrs',
   args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Type 1 emission across many doublings of the font-program buffer: an
+# embedded font whose eexec section outgrows its buffer several times
+# over, every glyph declaring its own advance width through hsbw and
+# every one of those widths read back with stringwidth. A byte lost,
+# duplicated or reordered at any grow lands in a charstring the check
+# reads.
+test('font-bigbuf',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_bigbuf_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools

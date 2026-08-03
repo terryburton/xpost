@@ -1,0 +1,128 @@
+%!PS
+% Type 1 emission across many buffer doublings. definefont writes the
+% interpreted font dictionary back out as a font program -- a cleartext
+% header and an eexec section carrying the Private dictionary and every
+% charstring -- into a growable byte buffer that starts far smaller than
+% the program it must hold. This font's charstrings force several
+% doublings of that buffer.
+%
+% eexec is a chained stream cipher over the whole section, so a byte
+% dropped, duplicated or reordered at any grow destroys every charstring
+% after it. Each glyph declares its own advance width through hsbw, and
+% those widths are read back with stringwidth from glyphs sampled evenly
+% across the whole emitted section, so the check reaches content on both
+% sides of every doubling.
+
+/NGLYPH 250 def           % charstrings emitted, every one of them checked
+/NPAD 163 def             % padding moves per charstring, to bulk it out
+/WBASE 200 def            % advance width of the first glyph
+
+% plainstring  csencrypt  cipherstring
+% Type 1 charstring encryption, key 4330, as the RD reader undoes it.
+/csencrypt {
+  /plain exch def
+  /out plain length string def
+  /r 4330 def
+  0 1 plain length 1 sub {
+    /ci exch def
+    /c plain ci get r -8 bitshift 255 and xor def
+    out ci c put
+    % (c + r) * 52845 + 22719, kept modulo 65536 the whole way: the
+    % multiplier is split as 206*256 + 109 so no product leaves the
+    % integer range
+    /ct c r add def
+    /r ct 109 mul  ct 206 mul 255 and 256 mul  add  22719 add  65535 and def
+  } for
+  out
+} bind def
+
+% width  charstring  string
+% four lenIV skip bytes, "0 width hsbw", NPAD null moves, then endchar.
+% The width takes the two-byte charstring number encoding, so it must lie
+% in 108..1131. The null moves carry no shape; they are there to make each
+% charstring long enough that a few hundred glyphs overflow the emission
+% buffer several times over.
+/charstring {
+  /w exch def
+  /cs 9 NPAD 3 mul add string def
+  cs 0 0 put cs 1 0 put cs 2 0 put cs 3 0 put   % lenIV = 4
+  cs 4 139 put                                  % sbx = 0
+  cs 5 w 108 sub -8 bitshift 247 add put
+  cs 6 w 108 sub 255 and put
+  cs 7 13 put                                   % hsbw
+  0 1 NPAD 1 sub {
+    /cj exch 3 mul 8 add def
+    cs cj 139 put cs cj 1 add 139 put cs cj 2 add 21 put   % 0 0 rmoveto
+  } for
+  cs 8 NPAD 3 mul add 14 put                    % endchar
+  cs csencrypt
+} bind def
+
+% i  glyphname  /gI
+/glyphname {
+  /gnum exch 20 string cvs def
+  /gstr gnum length 1 add string def
+  gstr 0 103 put                                % 'g'
+  gstr 1 gnum putinterval
+  gstr cvn
+} bind def
+
+% i  glyphwidth  w      the advance width glyph i declares
+/glyphwidth { WBASE add } bind def
+
+/FontDict 10 dict def
+FontDict begin
+  /FontType 1 def
+  /FontMatrix [0.001 0 0 0.001 0 0] def
+  /FontBBox [0 0 1200 1000] def
+  /Encoding 256 array def
+  0 1 255 { Encoding exch /.notdef put } for
+  /CharStrings NGLYPH 2 add dict def
+  CharStrings /.notdef 300 charstring put
+  /Private 4 dict def
+  Private /lenIV 4 put
+end
+
+% every glyph declares its own width and every one is reachable by an
+% encoding code, so a byte lost anywhere in the emitted section lands in a
+% charstring the checks below read back
+0 1 NGLYPH 1 sub {
+  /i exch def
+  FontDict /CharStrings get i glyphname i glyphwidth charstring put
+  FontDict /Encoding get i 1 add i glyphname put
+} for
+
+/TestBigBuf FontDict definefont pop
+/TestBigBuf findfont 1000 scalefont setfont
+
+/probe NGLYPH string def
+0 1 NGLYPH 1 sub { /k exch def probe k k 1 add put } for
+
+/expected 0 def
+0 1 NGLYPH 1 sub { /k exch def /expected expected k glyphwidth add def } for
+
+/pnum { 30 string cvs print } bind def
+
+probe stringwidth pop
+dup expected sub abs 0.5 gt {
+  (FAIL: advance widths total ) print pnum
+  ( , expected ) print expected pnum (\n) print
+} { pop } ifelse
+
+% and each glyph on its own, so a single corrupted charstring cannot hide
+% inside a total
+/one 1 string def
+/nbad 0 def
+0 1 NGLYPH 1 sub {
+  /k exch def
+  one 0 k 1 add put
+  one stringwidth pop k glyphwidth sub abs 0.5 gt
+    { /nbad nbad 1 add store } if
+} for
+nbad 0 gt {
+  (FAIL: ) print nbad pnum
+  ( glyphs report the wrong advance width\n) print
+} if
+
+100 100 moveto probe 0 20 getinterval show
+(SUCCESS) =
