@@ -16,6 +16,11 @@
 set -u
 src=$1
 golden="$src/tests/dict_homes.golden"
+# a missing or empty register would make every check below vacuous
+if [ ! -s "$golden" ]; then
+    echo "FAILURES: no usable register at $golden"
+    exit 1
+fi
 fail=0
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 

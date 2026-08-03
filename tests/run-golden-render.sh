@@ -73,9 +73,23 @@ if [ "$regen" = "--regen" ]; then
     exit 0
 fi
 
-if [ ! -f "$manifest" ]; then
+if [ ! -s "$manifest" ]; then
     rm -rf "$work"
-    echo "FAILURES: no manifest at $manifest (run with --regen to create)"
+    echo "FAILURES: no usable manifest at $manifest (run with --regen to create)"
+    exit 1
+fi
+
+# the manifest must cover every device rendered, or a truncated file would
+# silently reduce the gate to whatever lines survived
+for dev in $devices; do
+    if ! grep -q " $dev\$" "$manifest"; then
+        echo "FAIL: $dev is rendered but absent from the manifest"
+        fail=1
+    fi
+done
+if [ "$fail" -ne 0 ]; then
+    rm -rf "$work"
+    echo "FAILURES: the manifest does not cover the rendered devices"
     exit 1
 fi
 

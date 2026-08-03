@@ -26,6 +26,14 @@ exempt='token wrapdone'
 fused=$(grep -oE 'opcode_shortcuts\.[a-z]+' "$libdir/xpost_interpreter.c" \
         | sed 's/^opcode_shortcuts\.//' | sort -u)
 
+# an empty list would make this check vacuously pass, so a rename of the
+# shortcut structure cannot be allowed to disarm it
+if [ -z "$fused" ]; then
+    echo "FAIL: no fused operators found in xpost_interpreter.c --"
+    echo "      the shortcut structure was renamed and this check disarmed"
+    exit 1
+fi
+
 fail=0
 for op in $fused; do
     case " $exempt " in
