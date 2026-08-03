@@ -307,6 +307,18 @@ test('page-semantics',
   page_semantics_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: a process may create, use and destroy contexts for as
+# long as it lives, so no per-context table or allocation may carry over.
+context_reuse_exe = executable('context_reuse_test',
+  'tests/context_reuse_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('context-reuse',
+  context_reuse_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object-layer bounds discipline: a string object with a corrupt or
 # sentinel ent yields NULL from the pointer adapter, never a wild pointer.
 string_bounds_exe = executable('string_bounds_test',

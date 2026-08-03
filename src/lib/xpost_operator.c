@@ -97,7 +97,8 @@ static void _op_restore_note(Xpost_Context *ctx, int idx, Xpost_Object orig)
    #define MAXOPS 20
 */
 
-/* the number of ops, at any given time. */
+/* the number of ops in the optab of the context being served; reset with
+   the table itself, which each context allocates in its own global VM */
 static
 int _xpost_noops = 0;
 
@@ -331,6 +332,7 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
     tab = &ctx->gl->table;
     assert(ent == XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
     tab->tab[ent].sz = 0; // so gc will ignore it
+    _xpost_noops = 0;
     //printf("ent: %d\nOPTAB: %d\n", ent, (int)XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
 
     return 1;
