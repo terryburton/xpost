@@ -420,6 +420,15 @@ test('render-classes',
 # classes mark the same pixels for the same geometry, bounds violations are
 # swallowed, and the marking methods stay silent (a stray diagnostic would
 # interleave with a page stream written to standard output). The strict
+# The raster device's pixel formats, named after the colon in the device
+# string. Only the fallback was exercised, so neither the selection of the
+# others nor the buffer each sizes had run; a name matching none of them has to
+# be harmless rather than leaving the format unset.
+test('raster-formats',
+  find_program('tests/run-raster-formats-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # wrapper requires the output to be exactly SUCCESS.
 test('raster-class',
   find_program('tests/run-strict-ps-test.sh'),

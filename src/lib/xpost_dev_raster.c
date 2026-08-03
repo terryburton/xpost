@@ -159,21 +159,24 @@ int _create_cont(Xpost_Context *ctx,
         subdevice = xpost_string_cons(ctx, sizeof("rgb") - 1, "rgb");
     }
     XPOST_LOG_INFO("</SUBDEVICE %*s>", subdevice.comp_.sz, xpost_string_get_pointer(ctx, subdevice));
-    if (memcmp(xpost_string_get_pointer(ctx, subdevice), "argb", 4) == 0)
     {
-        private.pixelformat = ARGB;
-    }
-    else if (memcmp(xpost_string_get_pointer(ctx, subdevice), "rgb", 3) == 0)
-    {
+        /* The name is compared against its own length: a shorter one
+           read as though it were four bytes long would take whatever
+           follows it in memory with it. A name that matches none of
+           them leaves the format the one the device takes when no name
+           is given at all, rather than leaving it unset. */
+        const char *sub = xpost_string_get_pointer(ctx, subdevice);
+        unsigned int sublen = subdevice.comp_.sz;
+
         private.pixelformat = RGB;
-    }
-    else if (memcmp(xpost_string_get_pointer(ctx, subdevice), "bgra", 4) == 0)
-    {
-        private.pixelformat = BGRA;
-    }
-    else if (memcmp(xpost_string_get_pointer(ctx, subdevice), "bgr", 3) == 0)
-    {
-        private.pixelformat = BGR;
+        if ((sublen == 4) && (memcmp(sub, "argb", 4) == 0))
+            private.pixelformat = ARGB;
+        else if ((sublen == 3) && (memcmp(sub, "rgb", 3) == 0))
+            private.pixelformat = RGB;
+        else if ((sublen == 4) && (memcmp(sub, "bgra", 4) == 0))
+            private.pixelformat = BGRA;
+        else if ((sublen == 3) && (memcmp(sub, "bgr", 3) == 0))
+            private.pixelformat = BGR;
     }
 
     /* create a string to contain device data structure */
