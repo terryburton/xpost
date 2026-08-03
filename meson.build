@@ -803,6 +803,14 @@ test('save-restore-matrix',
   args: [ xpost_exe, files('tests/save_restore_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every graphics state parameter through gsave and grestore. A parameter
+# left out of the copy leaks across the grestore and changes how
+# everything painted afterwards looks.
+test('gstate-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gstate_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.

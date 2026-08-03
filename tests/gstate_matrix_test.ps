@@ -1,0 +1,147 @@
+% Every graphics state parameter through gsave and grestore, run
+% through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The graphics state is a fixed set of parameters saved and restored one
+% by one. Whether a parameter comes back is a property of that
+% parameter, not of the mechanism, so the line width returning says
+% nothing about the dash pattern, the flatness or the colour rendering
+% -- a parameter left out of the copy leaks across the grestore and
+% silently changes how everything painted afterwards looks. One
+% parameter at a time is exactly what a per-operator test does not
+% catch.
+%
+% So each parameter named in PLRM 4.2 that this interpreter implements
+% is set to a value distinguishable from its default inside a gsave, and
+% checked against its original after the matching grestore.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% Compare two arrays elementwise: the dash and matrix parameters are
+% arrays, and eq on two separate arrays compares identity, not value.
+/samearray { % [a] [b] -> bool
+    /sa.b exch def /sa.a exch def
+    sa.a length sa.b length eq {
+        true 0 1 sa.a length 1 sub {
+            /sa.i exch def
+            sa.a sa.i get sa.b sa.i get eq not { pop false exit } if
+        } for
+    }{ false } ifelse
+} def
+
+% --------------------------------------------------------------- the paint
+
+gsave 3 setlinewidth grestore
+currentlinewidth 1.0 eq (the line width comes back) assert
+
+gsave 2 setlinecap grestore
+currentlinecap 0 eq (the line cap comes back) assert
+
+gsave 1 setlinejoin grestore
+currentlinejoin 0 eq (the line join comes back) assert
+
+gsave 4 setmiterlimit grestore
+currentmiterlimit 10.0 eq (the miter limit comes back) assert
+
+/dash0 currentdash pop def
+gsave [3 2] 1 setdash grestore
+currentdash pop [ ] samearray (the dash pattern comes back) assert
+currentdash exch pop 0 eq (the dash offset comes back) assert
+
+/flat0 currentflat def
+gsave 5 setflat grestore
+currentflat flat0 eq (the flatness comes back) assert
+
+% ------------------------------------------------------------- the colour
+
+gsave 0.5 setgray grestore
+currentgray 0.0 eq (the grey level comes back) assert
+
+gsave 1 0 0 setrgbcolor grestore
+currentrgbcolor pop pop 0.0 eq (the rgb colour comes back) assert
+
+gsave 0 0 0 1 setcmykcolor grestore
+currentcmykcolor pop pop pop 0.0 eq (the cmyk colour comes back) assert
+
+gsave 0.5 0.5 0.5 sethsbcolor grestore
+currentgray 0.0 eq (the hsb colour comes back) assert
+
+% the colour space itself, not merely the components within it
+/space0 currentcolorspace def
+gsave /DeviceCMYK setcolorspace grestore
+currentcolorspace 0 get /DeviceGray eq (the colour space comes back) assert
+
+% ------------------------------------------------------ the transformation
+
+/ctm0 matrix currentmatrix def
+gsave 2 3 scale grestore
+matrix currentmatrix ctm0 samearray (the transform comes back) assert
+
+gsave 30 rotate grestore
+matrix currentmatrix ctm0 samearray (a rotation comes back) assert
+
+gsave 17 23 translate grestore
+matrix currentmatrix ctm0 samearray (a translation comes back) assert
+
+% ------------------------------------------------------------- the path
+
+newpath 10 10 moveto 20 20 lineto
+gsave newpath 90 90 moveto 95 95 lineto grestore
+% the path is restored: its bounding box is the one built before the gsave
+pathbbox 4 array astore
+dup 0 get 10.0 eq exch dup 2 get 20.0 eq exch pop and
+    (the current path comes back) assert
+
+% and the current point with it
+newpath 40 50 moveto
+gsave 90 90 moveto grestore
+currentpoint exch 40.0 eq exch 50.0 eq and (the current point comes back) assert
+
+% ------------------------------------------------------------- the clip
+
+newpath 0 0 200 200 rectclip
+/clip0 { clippath pathbbox 4 array astore } def
+/before clip0 def
+gsave newpath 10 10 20 20 rectclip grestore
+clip0 before samearray (the clipping path comes back) assert
+
+% -------------------------------------------------------------- the font
+
+/Helvetica findfont 10 scalefont setfont
+/font0 currentfont def
+gsave /Courier findfont 24 scalefont setfont grestore
+currentfont font0 eq (the font comes back) assert
+
+% ------------------------------------------------- the rendering parameters
+
+/transfer0 currenttransfer def
+gsave { 1 exch sub } settransfer grestore
+currenttransfer /transfer0 load eq (the transfer function comes back) assert
+
+/halftone0 currentscreen 3 array astore def
+gsave 60 45 { pop } setscreen grestore
+currentscreen 3 array astore 0 get halftone0 0 get eq
+    (the halftone screen comes back) assert
+
+% ------------------------------------------------------------- the nesting
+% Depth is what a leaked parameter shows up in: each level has to hold
+% its own copy rather than sharing one.
+
+2 setlinewidth
+gsave
+  4 setlinewidth
+  gsave
+    8 setlinewidth
+  grestore
+  currentlinewidth 4.0 eq (the inner grestore goes back one level) assert
+grestore
+currentlinewidth 2.0 eq (the outer grestore goes back the rest) assert
+
+% grestoreall unwinds however many are outstanding
+1 setlinewidth
+gsave gsave gsave 9 setlinewidth
+grestoreall
+currentlinewidth 1.0 eq (grestoreall unwinds them all) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
