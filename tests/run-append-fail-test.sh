@@ -22,6 +22,16 @@ if ! ( ulimit -v "$limitkb" ) 2>/dev/null; then
     exit 77
 fi
 
+# The limit above is calibrated against the collector's own settings: it
+# has to leave room for the interpreter and the calibration fills while
+# denying the accumulator its next doubling. Collecting on a different
+# schedule moves what the job allocates and when, so the limit no longer
+# lands where this check needs it.
+if [ -n "${XPOST_GC_THRESHOLD:-}" ]; then
+    echo "SKIP: the address-space limit is calibrated for the default collector"
+    exit 77
+fi
+
 # a build that cannot start at all under the limit (a sanitizer runtime
 # reserves far more address space) cannot host this check
 if ! ( ulimit -v "$limitkb"; "$xpost" -V ) >/dev/null 2>&1; then
