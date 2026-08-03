@@ -31,6 +31,35 @@
 #ifndef XPOST_OP_BOOLEAN_H
 #define XPOST_OP_BOOLEAN_H
 
+/*
+ * The verdict each of eq, ne, lt, le, gt and ge draws from the
+ * three-way comparison of its two operands, shared between those
+ * operators and the interpreter's fused procedure execution so the
+ * relations exist once.
+ */
+typedef enum
+{
+    XPOST_OP_REL_EQ,
+    XPOST_OP_REL_NE,
+    XPOST_OP_REL_LT,
+    XPOST_OP_REL_LE,
+    XPOST_OP_REL_GT,
+    XPOST_OP_REL_GE
+} Xpost_Op_Relation;
+
+static inline int xpost_op_relation(Xpost_Op_Relation rel, int cmp)
+{
+    switch (rel)
+    {
+        case XPOST_OP_REL_EQ: return cmp == 0;
+        case XPOST_OP_REL_NE: return cmp != 0;
+        case XPOST_OP_REL_LT: return cmp < 0;
+        case XPOST_OP_REL_LE: return cmp <= 0;
+        case XPOST_OP_REL_GT: return cmp > 0;
+        default:              return cmp >= 0;
+    }
+}
+
 int xpost_oper_init_bool_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 #endif

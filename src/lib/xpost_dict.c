@@ -113,6 +113,14 @@ int xpost_dict_compare_objects(Xpost_Context *ctx,
            Xpost_Object L,
            Xpost_Object R)
 {
+    int cmp;
+
+    /* a pair of the same simple type orders without reading vm, and
+       does so in the one place the fused relational operators share
+       (see xpost_dict.h) */
+    if (xpost_dict_compare_simple(L, R, &cmp))
+        return cmp;
+
     /* fold nearly-comparable types to comparable */
     if (xpost_object_get_type(L) != xpost_object_get_type(R))
     {
@@ -151,11 +159,8 @@ cont:
         case nulltype: return 0;
         case invalidtype: return 0;
 
-        case booleantype: /*@fallthrough@*/
-        /* three-way compare: a subtraction can overflow the return
-           type and flip the verdict */
-        case integertype: return L.int_.val < R.int_.val ? -1 :
-                                 L.int_.val > R.int_.val ? 1 : 0;
+        /* booleans, integers and names are settled above; the folds
+           reach here as a real or a string */
 
         /* numbers compare exactly: this function also backs
            the relational operators */
@@ -171,10 +176,6 @@ cont:
 
         case operatortype:  return L.mark_.padw < R.mark_.padw ? -1 :
                                    L.mark_.padw > R.mark_.padw ? 1 : 0;
-
-        case nametype: return (L.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK)==(R.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK)?
-                                (signed)(L.mark_.padw - R.mark_.padw):
-                                    (signed)((L.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK) - (R.tag&XPOST_OBJECT_TAG_DATA_FLAG_BANK));
 
         case dicttype: /*@fallthrough@*/ /*return !( xpost_object_get_ent(L) == xpost_object_get_ent(R) ); */
         case arraytype: return !( L.comp_.sz == R.comp_.sz

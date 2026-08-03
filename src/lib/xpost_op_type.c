@@ -64,17 +64,8 @@ static
 int Atype(Xpost_Context *ctx,
           Xpost_Object o)
 {
-    const char *name;
+    const char *name = xpost_op_type_name(xpost_op_type_index(o));
 
-    if (xpost_object_get_type(o) >= XPOST_OBJECT_NTYPES)
-        //return unregistered;
-        o = invalid; /* normalize to the all-zero invalid object */
-    /* a packed array is stored as a read-only array but reports the
-       distinct packedarraytype the reference implementations report */
-    if (xpost_object_get_type(o) == arraytype && xpost_object_is_packed(o))
-        name = "packedarraytype";
-    else
-        name = xpost_object_type_names[xpost_object_get_type(o)];
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvx(xpost_name_cons(ctx, name)));
     return 0;
 }

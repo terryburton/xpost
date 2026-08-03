@@ -35,7 +35,10 @@
     /pobj exch def
     null null null null null null null null   % 8-deep sentinel pad
     /pd0 count def
-    { pobj exec } stopped
+    % load the case rather than naming it: naming it executes it, and
+    % the exec would then run whatever it left -- turning a case whose
+    % result is executable, as type's is, into a second run
+    { /pobj load exec } stopped
     { /pnm $error /errorname get def }{ /pnm /ok def } ifelse
     /pn count pd0 sub def
     pn 0 ge
@@ -122,10 +125,12 @@
 /roa [ 1 2 3 ] readonly def          % readonly array
 /naa [ 1 2 3 ] noaccess def          % noaccess array
 /wa  [ 1 2 3 ] def                   % writeable array
+/va  [ 1 2 3 ] def                   % writeable array the cases may leave altered
 /rod 3 dict dup /a 1 put readonly def
 /wd  3 dict def
 /ros (abc) readonly def
 /ws  (abc) def
+/pka 1 2 3 3 packedarray def         % packed array: read-only, own type
 /mx 2147483647 def
 /mn -2147483648 def
 
@@ -142,6 +147,8 @@
 (1 2 3 9 index)                same
 (1 2 3 -1 index)               same
 (1 2 3 (x) index)              same
+(1 2 3 4 5 6 3 index)          same
+(1 2 3 4 5 6 5 index)          same
 (index)                        same
 (1 2 3 3 1 roll)               same
 (1 2 3 3 -1 roll)              same
@@ -150,6 +157,20 @@
 (1 2 3 -1 1 roll)              same
 (1 2 3 (x) 1 roll)             same
 (roll)                         same
+% the shift is taken modulo the count, and a negative one rolls the
+% other way; a count of zero rolls nothing whatever the shift
+(1 2 3 4 3 2 roll)             same
+(1 2 3 4 3 -2 roll)            same
+(1 2 3 3 4 roll)               same
+(1 2 3 3 -4 roll)              same
+(1 2 3 3 -3 roll)              same
+(1 2 3 0 5 roll)               same
+(1 2 3 1 5 roll)               same
+(1 2 3 -1 roll)                same
+(1 2 3 4 5 5 -1 roll)          same
+% more operands than the fused copy rolls in place
+(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 33 1 roll) same
+(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 33 -1 roll) same
 
 % --- get and put: type, range and ACCESS on every composite ---
 (wa 0 get)                     same
@@ -170,6 +191,12 @@
 (ros 0 88 put)                 same
 (ws 0 88 put ws 0 get)         same
 (wd /k 5 put wd /k get)        same
+(pka 1 get)                    same
+(pka 3 get)                    same
+(pka -1 get)                   same
+(pka 0 99 put)                 same
+(va 0 (x) put va 0 get)        same
+(4 array 0 va put)             same
 (get)                          same
 (put)                          same
 (1 2 get)                      same
@@ -205,10 +232,38 @@
 (2 2 ge)                       same
 ((abc) (abd) lt)               same
 ((abc) (abc) eq)               same
+((abc) (ab) gt)                same
+((ab) (abc) lt)                same
 (/a /a eq)                     same
 (1 (x) lt)                     same
 (1 eq)                         same
 (eq)                           same
+% booleans and names order as well as compare, and every relation is
+% drawn from the same comparison
+(true true eq)                 same
+(true false eq)                same
+(true false ne)                same
+(false true lt)                same
+(true false gt)                same
+(true true le)                 same
+(false false ge)               same
+(/a /b lt)                     same
+(/b /a lt)                     same
+(/a /a le)                     same
+(/a /b gt)                     same
+(/a /b ne)                     same
+(/abc (abc) eq)                same
+(/a (b) lt)                    same
+(2 2.0 lt)                     same
+(2.0 2 ge)                     same
+(2.0 2.0 eq)                   same
+(wa wa eq)                     same
+(wa roa eq)                    same
+(mark mark eq)                 same
+(null null eq)                 same
+(true 1 eq)                    same
+(null 1 eq)                    same
+(mark 1 lt)                    same
 
 % --- type ---
 (1 type)                       same
@@ -218,6 +273,12 @@
 ([ 1 ] type)                   same
 (true type)                    same
 (null type)                    same
+(mark type)                    same
+(currentdict type)             same
+(/x cvx type)                  same
+({ 1 } 0 get type)             same
+% a packed array is stored as a read-only array but is a type of its own
+(pka type)                     same
 (type)                         same
 
 % --- def: value, VM discipline, and immediate visibility ---
@@ -233,8 +294,19 @@
 (false { 1 } { 2 } ifelse)     same
 (1 { 2 } if)                   same
 (true 1 if)                    same
+(true (xy) cvx if)             same
+(true { } if)                  same
+(true { } { 2 } ifelse)        same
 (if)                           same
 (ifelse)                       same
+% a procedure the operator may not read is refused whether or not the
+% condition selects it, and ifelse reads both before either runs
+(true { 1 } readonly if)       same
+(true { 1 } noaccess if)       same
+(false { 1 } noaccess if)      same
+(true { 1 } noaccess { 2 } ifelse) same
+(false { 1 } noaccess { 2 } ifelse) same
+(true { 1 } { 2 } noaccess ifelse) same
 
 % --- the results are also correct, not merely equal on both paths ---
 wa 0 get 42 eq (a put through the fixture stored its value) assert

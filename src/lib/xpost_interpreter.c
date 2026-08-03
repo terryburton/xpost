@@ -62,6 +62,10 @@
 #include "xpost_op_dict.h"  /* the shared def fast path */
 #include "xpost_op_math.h"  /* the shared range-preserving arithmetic */
 #include "xpost_op_control.h"  /* record the run outcome when a job ends */
+#include "xpost_op_type.h"  /* the shared type naming */
+#include "xpost_op_array.h"  /* the shared array element access */
+#include "xpost_op_boolean.h"  /* the shared relations */
+#include "xpost_op_stack.h"  /* the shared index and roll rules */
 #include "xpost_oplib.h"
 
 static
@@ -752,8 +756,11 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 if (w == (unsigned int)ctx->opcode_shortcuts.opindex && ot >= 2)
                 {
                     Xpost_Object n_ = os_top->data[ot - 1];
+                    /* the operator's own selection rule, applied to the
+                       operands below n in this segment (see
+                       xpost_op_stack.h) */
                     if (xpost_object_get_type(n_) == integertype &&
-                        n_.int_.val >= 0 && n_.int_.val <= (integer)ot - 2)
+                        xpost_op_index_check(n_.int_.val, (int)ot - 1) == 0)
                     {
                         os_top->data[ot - 1] = os_top->data[ot - 2 - n_.int_.val];
                         goto next_element;
@@ -764,17 +771,20 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object a_ = os_top->data[ot - 2];
                     Xpost_Object i_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
-                        xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0 &&
-                        xpost_object_is_readable(ctx, a_))
+                        xpost_object_get_type(i_) == integertype)
                     {
-                        Xpost_Object t_ = xpost_array_get(ctx, a_, i_.int_.val);
-                        if (xpost_object_get_type(t_) != invalidtype)
+                        /* the operator's own get, access checks and all
+                           (see xpost_op_array.h) */
+                        Xpost_Object t_;
+                        if (xpost_op_array_get_checked(ctx, a_, i_.int_.val,
+                                                       &t_) == 0)
                         {
                             --os_top->top;
                             os_top->data[ot - 2] = t_;
                             goto next_element;
                         }
+                        /* on failure fall through: the generic path
+                           re-executes the get for the exact protocol */
                     }
                 }
                 if (ot >= 2 &&
@@ -803,14 +813,14 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 }
                 if (w == (unsigned int)ctx->opcode_shortcuts.optype && ot >= 1)
                 {
-                    Xpost_Object o_ = os_top->data[ot - 1];
-                    Xpost_Object_Type k_ = xpost_object_get_type(o_);
-                    if (k_ >= XPOST_OBJECT_NTYPES)
-                        k_ = invalidtype; /* as the operator normalises */
+                    /* the operator's own naming, so a packed array is
+                       reported as its own type here as it is there
+                       (see xpost_op_type.h) */
+                    unsigned int k_ = xpost_op_type_index(os_top->data[ot - 1]);
                     if (xpost_object_get_type(ctx->typenames[k_]) != nametype)
                     {
                         ctx->typenames[k_] = xpost_object_cvx(
-                            xpost_name_cons(ctx, xpost_object_type_names[k_]));
+                            xpost_name_cons(ctx, xpost_op_type_name(k_)));
                         /* interning the name may grow (and so move) the
                            memory file: re-derive the cached pointers */
                         EVALARRAY_RECHECK_BASES();
@@ -819,58 +829,29 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     os_top->data[ot - 1] = ctx->typenames[k_];
                     goto next_element;
                 }
-                if (ot >= 2 &&
-                    (w == (unsigned int)ctx->opcode_shortcuts.opeq ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opne))
+                if (ot >= 2)
                 {
-                    Xpost_Object x_ = os_top->data[ot - 2];
-                    Xpost_Object y_ = os_top->data[ot - 1];
-                    Xpost_Object_Type tx_ = xpost_object_get_type(x_);
-                    if (tx_ == xpost_object_get_type(y_) &&
-                        (tx_ == nametype || tx_ == booleantype))
+                    /* the operators' own comparison and their own
+                       reading of it serve all six relations, so a pair
+                       the comparison settles without reading vm answers
+                       the same here as it does there (see xpost_dict.h
+                       and xpost_op_boolean.h) */
+                    int rel_ =
+                        w == (unsigned int)ctx->opcode_shortcuts.opeq ? XPOST_OP_REL_EQ :
+                        w == (unsigned int)ctx->opcode_shortcuts.opne ? XPOST_OP_REL_NE :
+                        w == (unsigned int)ctx->opcode_shortcuts.oplt ? XPOST_OP_REL_LT :
+                        w == (unsigned int)ctx->opcode_shortcuts.ople ? XPOST_OP_REL_LE :
+                        w == (unsigned int)ctx->opcode_shortcuts.opgt ? XPOST_OP_REL_GT :
+                        w == (unsigned int)ctx->opcode_shortcuts.opge ? XPOST_OP_REL_GE : -1;
+                    int cmp_;
+
+                    if (rel_ >= 0 &&
+                        xpost_dict_compare_simple(os_top->data[ot - 2],
+                                                  os_top->data[ot - 1], &cmp_))
                     {
-                        int r_;
-                        if (tx_ == nametype)
-                            r_ = ((x_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ==
-                                  (y_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)) &&
-                                 x_.mark_.padw == y_.mark_.padw;
-                        else
-                            r_ = x_.int_.val == y_.int_.val;
-                        if (w == (unsigned int)ctx->opcode_shortcuts.opne)
-                            r_ = !r_;
                         --os_top->top;
-                        os_top->data[ot - 2] = xpost_bool_cons(r_);
-                        goto next_element;
-                    }
-                }
-                if (ot >= 2 &&
-                    (w == (unsigned int)ctx->opcode_shortcuts.opeq ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opne ||
-                     w == (unsigned int)ctx->opcode_shortcuts.oplt ||
-                     w == (unsigned int)ctx->opcode_shortcuts.ople ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opgt ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opge))
-                {
-                    Xpost_Object x_ = os_top->data[ot - 2];
-                    Xpost_Object y_ = os_top->data[ot - 1];
-                    if (xpost_object_get_type(x_) == integertype &&
-                        xpost_object_get_type(y_) == integertype)
-                    {
-                        int r_;
-                        if (w == (unsigned int)ctx->opcode_shortcuts.opeq)
-                            r_ = x_.int_.val == y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.opne)
-                            r_ = x_.int_.val != y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.oplt)
-                            r_ = x_.int_.val < y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.ople)
-                            r_ = x_.int_.val <= y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.opgt)
-                            r_ = x_.int_.val > y_.int_.val;
-                        else
-                            r_ = x_.int_.val >= y_.int_.val;
-                        --os_top->top;
-                        os_top->data[ot - 2] = xpost_bool_cons(r_);
+                        os_top->data[ot - 2] = xpost_bool_cons(
+                            xpost_op_relation((Xpost_Op_Relation)rel_, cmp_));
                         goto next_element;
                     }
                 }
@@ -883,17 +864,19 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         n_.int_.val > 0 && n_.int_.val <= 32 &&
                         (unsigned int)n_.int_.val + 2 <= ot)
                     {
+                        /* the operator's own shift and its own
+                           placement rule, over the operands below n and
+                           j: top_[-i] is position i counting down from
+                           the top of the group (see xpost_op_stack.h) */
                         Xpost_Object tmp_[32];
                         integer n = n_.int_.val;
-                        integer j = j_.int_.val % n;
+                        integer j = xpost_op_roll_shift(n, j_.int_.val);
                         integer k;
-                        Xpost_Object *base_ = os_top->data + ot - 2 - n;
-                        if (j < 0)
-                            j += n;
+                        Xpost_Object *top_ = os_top->data + ot - 3;
                         for (k = 0; k < n; k++)
-                            tmp_[(k + j) % n] = base_[k];
+                            tmp_[k] = top_[-xpost_op_roll_source(k, n, j)];
                         for (k = 0; k < n; k++)
-                            base_[k] = tmp_[k];
+                            top_[-k] = tmp_[k];
                         os_top->top -= 2;
                         goto next_element;
                     }
@@ -941,13 +924,15 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object i_ = os_top->data[ot - 2];
                     Xpost_Object v_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
-                        xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0 &&
-                        xpost_object_is_writeable(ctx, a_))
+                        xpost_object_get_type(i_) == integertype)
                     {
-                        /* operands stay on the stack through the put (a
-                           saved array copies on first write) */
-                        int ret_ = xpost_array_put(ctx, a_, i_.int_.val, v_);
+                        /* the operator's own put, access checks and all
+                           (see xpost_op_array.h). The operands stay on
+                           the stack through it, so a saved array that
+                           copies on first write keeps them visible to
+                           the collector */
+                        int ret_ = xpost_op_array_put_checked(ctx, a_,
+                                                              i_.int_.val, v_);
                         if (ret_ == 0)
                         {
                             if (ctx->lo->base != seen_lo_base ||
@@ -971,7 +956,11 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object b_ = os_top->data[ot - 2];
                     if (xpost_object_get_type(b_) == booleantype &&
                         xpost_object_get_type(p_) == arraytype &&
-                        xpost_object_is_exe(p_))
+                        xpost_object_is_exe(p_) &&
+                        /* the operator refuses a procedure it may not
+                           read, whether or not the condition selects it
+                           (see xpost_op_control.h) */
+                        xpost_op_exec_access_ok(ctx, p_))
                     {
                         os_top->top -= 2;
                         if (!b_.int_.val)
@@ -996,7 +985,12 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         xpost_object_get_type(p1_) == arraytype &&
                         xpost_object_is_exe(p1_) &&
                         xpost_object_get_type(p2_) == arraytype &&
-                        xpost_object_is_exe(p2_))
+                        xpost_object_is_exe(p2_) &&
+                        /* the operator refuses either procedure it may
+                           not read, whichever the condition selects
+                           (see xpost_op_control.h) */
+                        xpost_op_exec_access_ok(ctx, p1_) &&
+                        xpost_op_exec_access_ok(ctx, p2_))
                     {
                         os_top->top -= 3;
                         EVALARRAY_SYNC_SLOT();

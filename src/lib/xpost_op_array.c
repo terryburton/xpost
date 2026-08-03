@@ -169,13 +169,10 @@ int xpost_op_array_int_get (Xpost_Context *ctx,
                             Xpost_Object I)
 {
     Xpost_Object t;
-    if (!xpost_object_is_readable(ctx, A))
-        return invalidaccess;
-    if (I.int_.val < 0)
-        return rangecheck;
-    t = xpost_array_get(ctx, A, I.int_.val);
-    if (xpost_object_get_type(t) == invalidtype)
-        return rangecheck;
+    int ret = xpost_op_array_get_checked(ctx, A, I.int_.val, &t);
+
+    if (ret)
+        return ret;
     if (!xpost_stack_push(ctx->lo, ctx->os, t))
         return stackoverflow;
     return 0;
@@ -189,11 +186,7 @@ int xpost_op_array_int_any_put(Xpost_Context *ctx,
                                Xpost_Object I,
                                Xpost_Object O)
 {
-    if (!xpost_object_is_writeable(ctx, A))
-        return invalidaccess;
-    if (I.int_.val < 0)
-        return rangecheck;
-    return xpost_array_put(ctx, A, I.int_.val, O);
+    return xpost_op_array_put_checked(ctx, A, I.int_.val, O);
 }
 
 /* array index count  getinterval  subarray

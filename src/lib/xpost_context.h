@@ -124,8 +124,13 @@ struct _Xpost_Context {
     unsigned int namecache_size;   /**< entries allocated */
     unsigned int namebind_gen;     /**< current binding generation */
 
-    Xpost_Object typenames[XPOST_OBJECT_NTYPES]; /**< executable name per type,
-                                                      populated on first use */
+    Xpost_Object typenames[XPOST_OBJECT_NTYPES + 1]; /**< executable name per
+                                                          type index, populated
+                                                          on first use; the
+                                                          index past the object
+                                                          types names a packed
+                                                          array (see
+                                                          xpost_op_type.h) */
 
     /*@dependent@*/
     Xpost_Memory_File *gl; /**< global VM */

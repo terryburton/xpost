@@ -31,6 +31,23 @@
 #ifndef XPOST_OP_CONTROL_H
 #define XPOST_OP_CONTROL_H
 
+/*
+ * The access rule for scheduling an object for execution, shared
+ * between the operators that schedule one and the interpreter's fused
+ * procedure execution so the rule exists once.
+ *
+ * Executing an array or a string reads its contents, which an object
+ * with no access forbids (PLRM 3.3.2); a dictionary is only pushed onto
+ * the dictionary stack, so it is exempt.
+ */
+static inline int xpost_op_exec_access_ok(Xpost_Context *ctx, Xpost_Object O)
+{
+    Xpost_Object_Type type = xpost_object_get_type(O);
+
+    return !((type == arraytype || type == stringtype)
+             && xpost_object_get_access(ctx, O) == XPOST_OBJECT_TAG_ACCESS_NONE);
+}
+
 /* terminate the innermost stopped context; with none, report and quit */
 int xpost_op_stop(Xpost_Context *ctx);
 

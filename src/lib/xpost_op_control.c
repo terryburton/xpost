@@ -57,25 +57,13 @@
 #include "xpost_operator.h"
 #include "xpost_op_control.h"
 
-/* Executing an array or string reads its contents, which a no-access
-   object forbids; a dict is merely pushed, so is exempt. Every operator
-   that schedules an object for execution applies this. */
-static
-int _exec_access_ok(Xpost_Context *ctx, Xpost_Object O)
-{
-    word type = xpost_object_get_type(O);
-
-    return !((type == arraytype || type == stringtype)
-             && xpost_object_get_access(ctx, O) == XPOST_OBJECT_TAG_ACCESS_NONE);
-}
-
 /* any  exec  -
    execute arbitrary object */
 static
 int xpost_op_any_exec (Xpost_Context *ctx,
                        Xpost_Object O)
 {
-    if (!_exec_access_ok(ctx, O))
+    if (!xpost_op_exec_access_ok(ctx, O))
         return invalidaccess;
     if (!xpost_stack_push(ctx->lo, ctx->es, O))
         return execstackoverflow;
@@ -89,7 +77,7 @@ int xpost_op_bool_proc_if (Xpost_Context *ctx,
                            Xpost_Object B,
                            Xpost_Object P)
 {
-    if (!_exec_access_ok(ctx, P))
+    if (!xpost_op_exec_access_ok(ctx, P))
         return invalidaccess;
     if (B.int_.val)
         if (!xpost_stack_push(ctx->lo, ctx->es, P))
@@ -106,7 +94,7 @@ int xpost_op_bool_proc_proc_ifelse (Xpost_Context *ctx,
                                     Xpost_Object Then,
                                     Xpost_Object Else)
 {
-    if (!_exec_access_ok(ctx, Then) || !_exec_access_ok(ctx, Else))
+    if (!xpost_op_exec_access_ok(ctx, Then) || !xpost_op_exec_access_ok(ctx, Else))
         return invalidaccess;
     if (B.int_.val)
     {
