@@ -811,6 +811,14 @@ test('gstate-matrix',
   args: [ xpost_exe, files('tests/gstate_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every colour space family through every colour operator. Each family
+# decides for itself how many components it takes and how a colour in it
+# is recorded, so one working says little about the next.
+test('colorspace-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/colorspace_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.
