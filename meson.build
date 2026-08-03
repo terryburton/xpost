@@ -812,6 +812,14 @@ test('op-dictstack',
   args: [ xpost_exe, files('tests/op_dictstack_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A JPEG stream that stops early, or was never a JPEG, must end the decode
+# rather than leave it waiting for input that will never come.
+test('dct-truncated',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/dct_truncated_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 60)
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.

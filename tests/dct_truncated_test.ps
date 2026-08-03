@@ -1,0 +1,55 @@
+% A malformed or truncated JPEG stream must end the decode, not hang it.
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The decoder is fed from the filter's source a byte at a time, and a
+% source that runs out has to be closed off with the marker the decoder
+% is waiting for. An end-of-image marker is two bytes; a decoder handed
+% the second one alone goes on asking for input that will never come.
+%
+% A program reads image data it did not write -- an embedded stream in a
+% document -- so a stream that stops early is ordinary input, not an
+% attack, and it has to be reported rather than waited on.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% start of image, then an APP0 marker whose declared length promises
+% bytes that never arrive
+/truncated <FFD8FFE000104A46> def
+
+/reads { % (data)  .  bytecount-or--1
+    /DCTDecode filter 64 string readstring
+    { pop -1 }{ length } ifelse    % true means data followed: unexpected here
+} def
+
+{ truncated reads 0 eq (a truncated JPEG stream yields no scanlines) assert }
+stopped { (FAIL: reading a truncated stream errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+{ (not a jpeg, just some text) reads 0 eq
+    (a stream that is not a JPEG yields no scanlines) assert }
+stopped { (FAIL: reading a non-JPEG errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+{ () reads 0 eq (an empty stream yields no scanlines) assert }
+stopped { (FAIL: reading an empty stream errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+% read to exhaustion rather than once: the loop has to end
+/rounds 0 def
+{ /f truncated /DCTDecode filter def
+  { f 64 string readstring not { exit } if pop
+    /rounds rounds 1 add store
+    rounds 1000 ge { exit } if } loop
+} stopped not (reading a truncated stream to its end terminates) assert
+rounds 1000 lt (the read to exhaustion ends rather than repeating) assert
+clear
+
+% the interpreter is still usable afterwards
+1 2 add 3 eq (the interpreter still works after the malformed streams) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

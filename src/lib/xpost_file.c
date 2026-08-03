@@ -1809,7 +1809,7 @@ typedef struct Xpost_DctFile
     struct jpeg_error_mgr jerr;
     jmp_buf jmp;
     struct jpeg_source_mgr jsrc;
-    JOCTET jbyte;
+    JOCTET jbytes[2];
     int started;
     unsigned char *row;
     unsigned int rown, rowi;
@@ -1847,10 +1847,22 @@ dct_fill_input_buffer(j_decompress_ptr cinfo)
     Xpost_DctFile *ff = (Xpost_DctFile *)cinfo->client_data;
     int c = xpost_file_getc(ff->source);
 
-    /* a truncated stream feeds the decoder end-of-image markers so it
-       terminates with whatever scanlines it has */
-    ff->jbyte = c == EOF ? 0xd9 : (JOCTET)c;
-    ff->jsrc.next_input_byte = &ff->jbyte;
+    if (c == EOF)
+    {
+        /* A stream that stops early is closed off with the end-of-image
+           marker the decoder is waiting for, so it finishes with the
+           scanlines it has. The marker is both its bytes: handed the
+           second one alone the decoder sees no marker and asks for input
+           that will never come, for as long as it is asked to decode. */
+        ff->jbytes[0] = 0xff;
+        ff->jbytes[1] = 0xd9;
+        ff->jsrc.next_input_byte = ff->jbytes;
+        ff->jsrc.bytes_in_buffer = 2;
+        return TRUE;
+    }
+
+    ff->jbytes[0] = (JOCTET)c;
+    ff->jsrc.next_input_byte = ff->jbytes;
     ff->jsrc.bytes_in_buffer = 1;
     return TRUE;
 }
