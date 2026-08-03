@@ -62,6 +62,7 @@
 #include "xpost_op_dict.h"  /* the shared def fast path */
 #include "xpost_op_math.h"  /* the shared range-preserving arithmetic */
 #include "xpost_op_control.h"  /* record the run outcome when a job ends */
+#include "xpost_op_type.h"  /* the shared type naming */
 #include "xpost_oplib.h"
 
 static
@@ -803,14 +804,14 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 }
                 if (w == (unsigned int)ctx->opcode_shortcuts.optype && ot >= 1)
                 {
-                    Xpost_Object o_ = os_top->data[ot - 1];
-                    Xpost_Object_Type k_ = xpost_object_get_type(o_);
-                    if (k_ >= XPOST_OBJECT_NTYPES)
-                        k_ = invalidtype; /* as the operator normalises */
+                    /* the operator's own naming, so a packed array is
+                       reported as its own type here as it is there
+                       (see xpost_op_type.h) */
+                    unsigned int k_ = xpost_op_type_index(os_top->data[ot - 1]);
                     if (xpost_object_get_type(ctx->typenames[k_]) != nametype)
                     {
                         ctx->typenames[k_] = xpost_object_cvx(
-                            xpost_name_cons(ctx, xpost_object_type_names[k_]));
+                            xpost_name_cons(ctx, xpost_op_type_name(k_)));
                         /* interning the name may grow (and so move) the
                            memory file: re-derive the cached pointers */
                         EVALARRAY_RECHECK_BASES();

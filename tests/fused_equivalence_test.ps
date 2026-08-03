@@ -35,7 +35,10 @@
     /pobj exch def
     null null null null null null null null   % 8-deep sentinel pad
     /pd0 count def
-    { pobj exec } stopped
+    % load the case rather than naming it: naming it executes it, and
+    % the exec would then run whatever it left -- turning a case whose
+    % result is executable, as type's is, into a second run
+    { /pobj load exec } stopped
     { /pnm $error /errorname get def }{ /pnm /ok def } ifelse
     /pn count pd0 sub def
     pn 0 ge
@@ -126,6 +129,7 @@
 /wd  3 dict def
 /ros (abc) readonly def
 /ws  (abc) def
+/pka 1 2 3 3 packedarray def         % packed array: read-only, own type
 /mx 2147483647 def
 /mn -2147483648 def
 
@@ -218,6 +222,12 @@
 ([ 1 ] type)                   same
 (true type)                    same
 (null type)                    same
+(mark type)                    same
+(currentdict type)             same
+(/x cvx type)                  same
+({ 1 } 0 get type)             same
+% a packed array is stored as a read-only array but is a type of its own
+(pka type)                     same
 (type)                         same
 
 % --- def: value, VM discipline, and immediate visibility ---
