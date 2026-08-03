@@ -57,6 +57,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_xcb.h" /* check prototypes */
 
 #define XCB_ALL_PLANES ~0
@@ -512,6 +513,7 @@ int _fillrect(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     int i,j;
+    int x0, y0, x1, y1;
 
     /* fold numbers to integertype */
     if (xpost_object_get_type(red) == realtype)
@@ -535,20 +537,6 @@ int _fillrect(Xpost_Context *ctx,
     if (xpost_object_get_type(height) == realtype)
         height = xpost_int_cons(height.real_.val);
 
-    /* adjust ranges */
-    if (width.int_.val < 0)
-    {
-        width.int_.val = abs((int)(width.int_.val));
-        x.int_.val -= width.int_.val;
-    }
-    if (height.int_.val < 0)
-    {
-        height.int_.val = abs((int)(height.int_.val));
-        y.int_.val -= height.int_.val;
-    }
-    if (x.int_.val < 0) x.int_.val = 0;
-    if (y.int_.val < 0) y.int_.val = 0;
-
     /* load private data struct from string */
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
@@ -557,12 +545,12 @@ int _fillrect(Xpost_Context *ctx,
                      xpost_object_get_ent(privatestr), 0,
                      sizeof(private), &private);
 
-    if (x.int_.val >= private.width || y.int_.val >= private.height)
+    /* the contract's rectangle: inclusive span, clipped to the device */
+    if (!xpost_dev_rect_normalize(x.int_.val, y.int_.val,
+                                  width.int_.val, height.int_.val,
+                                  private.width, private.height,
+                                  &x0, &y0, &x1, &y1))
         return 0;
-    if (x.int_.val + width.int_.val > private.width)
-        width.int_.val = private.width - x.int_.val;
-    if (y.int_.val + height.int_.val > private.height)
-        height.int_.val = private.height - y.int_.val;
 
     {
         xcb_alloc_color_reply_t *rep;
@@ -581,13 +569,13 @@ int _fillrect(Xpost_Context *ctx,
         free(rep);
         xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
 
-        for (i = 0; i < height.int_.val; i++)
+        for (i = y0; i <= y1; i++)
         {
-            for (j = 0; j < width.int_.val; j++)
+            for (j = x0; j <= x1; j++)
             {
                 xcb_point_t p;
-                p.x = x.int_.val + j;
-                p.y = y.int_.val + i;
+                p.x = j;
+                p.y = i;
 
                 xcb_poly_point(private.c, XCB_COORD_MODE_ORIGIN,
                                private.img, private.gc, 1, &p);

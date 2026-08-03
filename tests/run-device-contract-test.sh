@@ -3,7 +3,8 @@
 # (device_contract_test.ps) against every headless-capable built device.
 # The test feeds each device method its boundary inputs (degenerate,
 # inverted, fractional, out-of-range) and requires no errors and an
-# emitted page. Window devices (xcb, gdi) need a display and are not run.
+# emitted page. Window devices need a display: xcb runs under a virtual
+# one (xvfb-run) when the host provides it, gdi is not run.
 #
 #   $1  path to the built xpost binary
 #   $2  path to device_contract_test.ps
@@ -34,6 +35,27 @@ for dev in $devices; do
         fail=1
     fi
 done
+
+# the xcb window device, on a private virtual display; its FillRect,
+# PutPix and DrawLine methods see the same boundary inputs as the
+# headless devices above
+if command -v xvfb-run >/dev/null 2>&1; then
+    out=$(xvfb-run -a "$xpost" -q $ns -d xcb "$script" </dev/null 2>&1)
+    case "$out" in
+        *"wrong device"*) echo "SKIP xcb (not built in)" ;;
+        *)
+            if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+                echo "OK   xcb"
+            else
+                echo "FAIL xcb:"
+                printf '%s\n' "$out" | tail -3
+                fail=1
+            fi
+            ;;
+    esac
+else
+    echo "SKIP xcb (no xvfb-run)"
+fi
 
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then
