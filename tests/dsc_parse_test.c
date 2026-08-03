@@ -315,6 +315,32 @@ int main(void)
           "a zero coordinate converts with errno set on entry");
     xpost_dsc_free(&dsc);
 
+    /* A bounding box carries four integers. One without them is not a
+       bounding box: it must not be recorded as zeros, and it must not
+       count as the one bounding box the header may carry. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%BoundingBox: garbage\n"
+                "%%BoundingBox: 1 2 3 4\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a document with a malformed then a correct bounding box parses");
+    check(dsc.header.bounding_box.llx == 1 &&
+          dsc.header.bounding_box.lly == 2 &&
+          dsc.header.bounding_box.urx == 3 &&
+          dsc.header.bounding_box.ury == 4,
+          "a malformed bounding box does not stand in for a correct one");
+    xpost_dsc_free(&dsc);
+
+    memset(&dsc, 0, sizeof(dsc));
+    parse("%!PS-Adobe-3.0\n"
+          "%%BoundingBox: 10 \n"
+          "%%EndComments\n"
+          "showpage\n", &dsc);
+    check(dsc.header.bounding_box.llx == 0,
+          "a bounding box missing three integers is not recorded");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

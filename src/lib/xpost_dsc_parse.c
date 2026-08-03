@@ -356,57 +356,63 @@ _xpost_dsc_header_bounding_box_get(int vmaj,
     int urx;
     int ury;
 
-    llx = 0.0;
-    lly = 0.0;
-    urx = 0.0;
-    ury = 0.0;
+    bb->llx = 0;
+    bb->lly = 0;
+    bb->urx = 0;
+    bb->ury = 0;
 
-    bb->llx = 0.0;
-    bb->lly = 0.0;
-    bb->urx = 0.0;
-    bb->ury = 0.0;
+    /* four integers, each present: a comment missing any of them is
+       not a bounding box */
     iter = _xpost_dsc_integer_get(vmaj, iter, &val);
-    if (iter)
+    if (!iter)
     {
-        llx = val;
-        if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
-        else
-        {
-            XPOST_LOG_ERR("Boundingbox ill-form");
-            return 0;
-        }
-        iter = _xpost_dsc_integer_get(vmaj, iter, &val);
-        if (iter)
-        {
-            lly = val;
-            if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
-            else
-            {
-                XPOST_LOG_ERR("Boundingbox ill-form");
-                return 0;
-            }
-        }
-        iter = _xpost_dsc_integer_get(vmaj, iter, &val);
-        if (iter)
-        {
-            urx = val;
-            if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
-            else
-            {
-                XPOST_LOG_ERR("Boundingbox ill-form");
-                return 0;
-            }
-        }
-        iter = _xpost_dsc_integer_get(vmaj, iter, &val);
-        if (iter)
-        {
-            ury = val;
-            if (!XPOST_DSC_EOL(iter))
-            {
-                XPOST_LOG_ERR("Boundingbox ill-form");
-                return 0;
-            }
-        }
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    llx = val;
+    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    else
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    if (!iter)
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    lly = val;
+    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    else
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    if (!iter)
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    urx = val;
+    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    else
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    if (!iter)
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
+    }
+    ury = val;
+    if (!XPOST_DSC_EOL(iter))
+    {
+        XPOST_LOG_ERR("Boundingbox ill-form");
+        return 0;
     }
 
     bb->llx = llx;
