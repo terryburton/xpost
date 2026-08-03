@@ -122,7 +122,12 @@ Xpost_Object bind(Xpost_Context *ctx,
                     t = xpost_dict_get_name(ctx, d, t);
                     if (xpost_object_get_type(t) != invalidtype) {
                         if (xpost_object_get_type(t) == operatortype) {
-                            xpost_array_put(ctx, p, i, t);
+                            /* bind rewrites the procedure itself, which
+                               is read-only once packed: the raw layer
+                               writes without the program-facing access
+                               check */
+                            xpost_array_put_memory(
+                                xpost_context_select_memory(ctx, p), p, i, t);
                         }
                         break;
                     }
@@ -137,7 +142,8 @@ Xpost_Object bind(Xpost_Context *ctx,
                 if (xpost_object_is_exe(t))
                 {
                     t = bind(ctx, t, seen);
-                    xpost_array_put(ctx, p, i, t);
+                    xpost_array_put_memory(
+                        xpost_context_select_memory(ctx, p), p, i, t);
                 }
         }
     }

@@ -176,6 +176,15 @@ int xpost_array_put(Xpost_Context *ctx,
                     Xpost_Object o)
 {
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, a);
+
+    /* the write needs write access, checked here so every caller
+       inherits it (as xpost_dict_put_memory does for dictionaries).
+       Interpreter start-up builds read-only structures before any
+       program runs. */
+    if (!ctx->gl->interpreter_get_initializing())
+        if (!xpost_object_is_writeable(ctx, a))
+            return invalidaccess;
+
     if (!ctx->ignoreinvalidaccess)
     {
         if ( mem == ctx->gl &&

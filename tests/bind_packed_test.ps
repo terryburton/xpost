@@ -64,4 +64,20 @@ checkaddn 5 eq
   (a bound packed procedure is still read-only) assert
 
 false setpacking
+% -- bind's own writes are machinery writes, not program writes ------------
+% A packed procedure is stored read-only, so bind rewriting it in place
+% writes a read-only array. That write goes through the raw layer, which
+% carries no access check; the packed/read-only distinction is bind's
+% own, made before any write. A program's write to the same procedure is
+% still refused.
+true setpacking
+/pk2 { 2 3 add } def
+false setpacking
+/pk2 /pk2 load bind def
+/pk2 load 2 get type /operatortype eq
+  (bind writes into a packed, read-only procedure) assert
+{ /pk2 load 0 99 put } stopped
+  (a program's write to that same packed procedure is refused) assert
+clear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

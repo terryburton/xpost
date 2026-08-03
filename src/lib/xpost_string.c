@@ -170,6 +170,13 @@ int xpost_string_put(Xpost_Context *ctx,
                      integer i,
                      integer c)
 {
+    /* the write needs write access, checked here so every caller
+       inherits it. Interpreter start-up builds read-only strings
+       before any program runs. */
+    if (!ctx->gl->interpreter_get_initializing())
+        if (!xpost_object_is_writeable(ctx, s))
+            return invalidaccess;
+
     return xpost_string_put_memory(xpost_context_select_memory(ctx, s) /*s.tag&FBANK? ctx->gl: ctx->lo*/, s, i, c);
 }
 
