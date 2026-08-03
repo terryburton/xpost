@@ -115,17 +115,18 @@
 
 #define XPOST_CMT_LINE_IS_CONTINUED(iter) \
     ((iter) && \
-     (*((iter) + 0) && (*((iter) + 0) == '%')) && \
-     (*((iter) + 1) && (*((iter) + 1) == '%')) && \
-     (*((iter) + 2) && (*((iter) + 2) == '+')) && \
-     (*((iter) + 3) && (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, (iter) + 3))))
+     ((ctx->length - (size_t)((iter) - ctx->base)) >= 4) && \
+     (*((iter) + 0) == '%') && \
+     (*((iter) + 1) == '%') && \
+     (*((iter) + 2) == '+') && \
+     (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, (iter) + 3)))
 
 #define XPOST_CMT_LINE_CONTINUED_GET(Array_) \
     do \
     { \
         while (XPOST_CMT_LINE_IS_CONTINUED(next)) \
         { \
-            array = _xpost_dsc_header_string_array_get(dsc->ps_vmaj, next + 4, &nbr); \
+            array = _xpost_dsc_header_string_array_get(ctx, dsc->ps_vmaj, next + 4, &nbr); \
             if (array) \
             { \
                 dsc->Array_.array = _xpost_dsc_string_array_append(dsc->Array_.array, dsc->Array_.nbr, array, nbr); \
@@ -160,18 +161,24 @@
 /* casting to size_t below is harmless, as cur always > ctx->base */
 #define XPOST_DSC_EOF(cur) ((size_t)(cur - ctx->base) >= ctx->length)
 
+/* a line ends where an end-of-line byte sits or where the file does;
+   nothing is readable past the file's last byte */
+#define XPOST_DSC_LINE_END(iter) (XPOST_DSC_EOF(iter) || XPOST_DSC_EOL(iter))
+
 #define XPOST_DSC_CMT(cmt) XPOST_DSC_ ## cmt
 
 #define XPOST_DSC_CMT_LEN(cmt) (sizeof(XPOST_DSC_ ## cmt) - 1)
 
-#define XPOST_DSC_CMT_CHECK(cmt) _xpost_dsc_prefix_cmp(ctx->cur_loc, XPOST_DSC_CMT(cmt))
+#define XPOST_DSC_CMT_CHECK(cmt) _xpost_dsc_prefix_cmp(ctx, ctx->cur_loc, XPOST_DSC_CMT(cmt))
 
-#define XPOST_DSC_CMT_CHECK_EXACT(cmt) _xpost_dsc_prefix_cmp_exact(ctx->cur_loc, XPOST_DSC_CMT(cmt))
+#define XPOST_DSC_CMT_CHECK_EXACT(cmt) _xpost_dsc_prefix_cmp_exact(ctx, ctx->cur_loc, XPOST_DSC_CMT(cmt))
 
 #define XPOST_DSC_CMT_ARG(vmaj, cmt) \
-    ctx->cur_loc + XPOST_DSC_CMT_LEN(cmt) + (XPOST_CMT_IS_SPACE(vmaj, (ctx->cur_loc + XPOST_DSC_CMT_LEN(cmt))) ? 1 : 0)
+    ctx->cur_loc + XPOST_DSC_CMT_LEN(cmt) + \
+    ((!XPOST_DSC_EOF(ctx->cur_loc + XPOST_DSC_CMT_LEN(cmt)) && \
+      (XPOST_CMT_IS_SPACE(vmaj, (ctx->cur_loc + XPOST_DSC_CMT_LEN(cmt))))) ? 1 : 0)
 
-#define XPOST_DSC_CMT_IS_ATEND(vmaj, cmt) _xpost_dsc_prefix_cmp_exact(XPOST_DSC_CMT_ARG(vmaj, cmt), "(atend)")
+#define XPOST_DSC_CMT_IS_ATEND(vmaj, cmt) _xpost_dsc_prefix_cmp_exact(ctx, XPOST_DSC_CMT_ARG(vmaj, cmt), "(atend)")
 
 #define XPOST_DSC_TEXT_GET(vmaj, buf, cmt) \
     do \
@@ -255,11 +262,11 @@ _xpost_dsc_line_get(Xpost_Dsc_Ctx *ctx, const unsigned char **end, ptrdiff_t *sz
 }
 
 static unsigned char
-_xpost_dsc_prefix_cmp(const unsigned char *iter, const char *prefix)
+_xpost_dsc_prefix_cmp(const Xpost_Dsc_Ctx *ctx, const unsigned char *iter, const char *prefix)
 {
     while (*prefix)
     {
-        if (*prefix != *iter)
+        if (XPOST_DSC_EOF(iter) || (*prefix != *iter))
             return 0;
         prefix++;
         iter++;
@@ -269,16 +276,16 @@ _xpost_dsc_prefix_cmp(const unsigned char *iter, const char *prefix)
 }
 
 static unsigned char
-_xpost_dsc_prefix_cmp_exact(const unsigned char *iter, const char *prefix)
+_xpost_dsc_prefix_cmp_exact(const Xpost_Dsc_Ctx *ctx, const unsigned char *iter, const char *prefix)
 {
     while (*prefix)
     {
-        if (*prefix != *iter)
+        if (XPOST_DSC_EOF(iter) || (*prefix != *iter))
             return 0;
         prefix++;
         iter++;
     }
-    if (!XPOST_DSC_EOL(iter))
+    if (!XPOST_DSC_LINE_END(iter))
         return 0;
 
     return 1;
@@ -321,7 +328,7 @@ _xpost_dsc_integer_get_from_string(const unsigned char *str, int *val)
 }
 
 static const unsigned char *
-_xpost_dsc_integer_get(int vmaj, const unsigned char *cur_loc, int *val)
+_xpost_dsc_integer_get(const Xpost_Dsc_Ctx *ctx, int vmaj, const unsigned char *cur_loc, int *val)
 {
     unsigned char buf[20];
     const unsigned char *iter;
@@ -329,9 +336,10 @@ _xpost_dsc_integer_get(int vmaj, const unsigned char *cur_loc, int *val)
     if (!cur_loc)  /* a caller chaining these may pass on a prior NULL result */
         return NULL;
     iter = cur_loc;
-    while ((*iter >= '0') && (*iter <= '9'))
+    while (!XPOST_DSC_EOF(iter) && (*iter >= '0') && (*iter <= '9'))
         iter++;
-    if ((!XPOST_CMT_IS_SPACE(vmaj, iter)) && (!XPOST_DSC_EOL(iter)))
+    if (!XPOST_DSC_EOF(iter) &&
+        (!(XPOST_CMT_IS_SPACE(vmaj, iter))) && (!XPOST_DSC_EOL(iter)))
         return NULL;
 
     if ((size_t)(iter - cur_loc) >= sizeof(buf))  /* too many digits for an int */
@@ -346,7 +354,8 @@ _xpost_dsc_integer_get(int vmaj, const unsigned char *cur_loc, int *val)
 }
 
 static unsigned char
-_xpost_dsc_header_bounding_box_get(int vmaj,
+_xpost_dsc_header_bounding_box_get(const Xpost_Dsc_Ctx *ctx,
+                                   int vmaj,
                                    const unsigned char *iter,
                                    Xpost_Dsc_Bounding_Box *bb)
 {
@@ -363,53 +372,53 @@ _xpost_dsc_header_bounding_box_get(int vmaj,
 
     /* four integers, each present: a comment missing any of them is
        not a bounding box */
-    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    iter = _xpost_dsc_integer_get(ctx, vmaj, iter, &val);
     if (!iter)
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
     llx = val;
-    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    if (!XPOST_DSC_EOF(iter) && (XPOST_CMT_IS_SPACE(vmaj, iter))) iter++;
     else
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
-    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    iter = _xpost_dsc_integer_get(ctx, vmaj, iter, &val);
     if (!iter)
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
     lly = val;
-    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    if (!XPOST_DSC_EOF(iter) && (XPOST_CMT_IS_SPACE(vmaj, iter))) iter++;
     else
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
-    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    iter = _xpost_dsc_integer_get(ctx, vmaj, iter, &val);
     if (!iter)
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
     urx = val;
-    if (XPOST_CMT_IS_SPACE(vmaj, iter)) iter++;
+    if (!XPOST_DSC_EOF(iter) && (XPOST_CMT_IS_SPACE(vmaj, iter))) iter++;
     else
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
-    iter = _xpost_dsc_integer_get(vmaj, iter, &val);
+    iter = _xpost_dsc_integer_get(ctx, vmaj, iter, &val);
     if (!iter)
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
     }
     ury = val;
-    if (!XPOST_DSC_EOL(iter))
+    if (!XPOST_DSC_LINE_END(iter))
     {
         XPOST_LOG_ERR("Boundingbox ill-form");
         return 0;
@@ -442,7 +451,8 @@ _xpost_dsc_string_array_append(char **array1, int count1, char **array2, int cou
 }
 
 static char **
-_xpost_dsc_header_string_array_get(int vmaj,
+_xpost_dsc_header_string_array_get(const Xpost_Dsc_Ctx *ctx,
+                                   int vmaj,
                                    const unsigned char *cur_loc,
                                    int *count)
 {
@@ -452,7 +462,7 @@ _xpost_dsc_header_string_array_get(int vmaj,
 
     nbr = 0;
     iter = cur_loc;
-    while (!XPOST_DSC_EOL(iter))
+    while (!XPOST_DSC_LINE_END(iter))
     {
         if (XPOST_CMT_IS_SPACE(vmaj, iter))
             nbr++;
@@ -471,7 +481,7 @@ _xpost_dsc_header_string_array_get(int vmaj,
 
     nbr = 0;
     iter = cur_loc;
-    while (!XPOST_DSC_EOL(iter))
+    while (!XPOST_DSC_LINE_END(iter))
     {
         if (XPOST_CMT_IS_SPACE(vmaj, iter))
         {
@@ -582,11 +592,11 @@ _xpost_dsc_header_version_get(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc, const unsigned
     iter++;
     if (dsc->ps_vmaj >= 2)
     {
-        if (_xpost_dsc_prefix_cmp_exact(iter, "Query"))
+        if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Query"))
             dsc->job = XPOST_DSC_JOB_QUERY;
-        else if (_xpost_dsc_prefix_cmp_exact(iter, "ExitServer"))
+        else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "ExitServer"))
             dsc->job = XPOST_DSC_JOB_EXIT_SERVER;
-        else if (_xpost_dsc_prefix_cmp(iter, "EPSF-"))
+        else if (_xpost_dsc_prefix_cmp(ctx, iter, "EPSF-"))
         {
             iter += 5;
             if (!_xpost_dsc_version_get(iter, &dsc->eps_vmaj, &dsc->eps_vmin))
@@ -604,20 +614,20 @@ _xpost_dsc_header_version_get(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc, const unsigned
                 return XPOST_DSC_STATUS_NO_DSC;
             }
         }
-        else if ((dsc->ps_vmaj >= 3) && (_xpost_dsc_prefix_cmp(iter, "Resource-")))
+        else if ((dsc->ps_vmaj >= 3) && (_xpost_dsc_prefix_cmp(ctx, iter, "Resource-")))
         {
             iter += 9;
-            if (_xpost_dsc_prefix_cmp_exact(iter, "Encoding"))
+            if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Encoding"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_ENCODING;
-            else if (_xpost_dsc_prefix_cmp_exact(iter, "File"))
+            else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "File"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_FILE;
-            else if (_xpost_dsc_prefix_cmp_exact(iter, "Font"))
+            else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Font"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_FONT;
-            else if (_xpost_dsc_prefix_cmp_exact(iter, "Form"))
+            else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Form"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_FORM;
-            else if (_xpost_dsc_prefix_cmp_exact(iter, "Pattern"))
+            else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Pattern"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_PATTERN;
-            else if (_xpost_dsc_prefix_cmp_exact(iter, "ProcSet"))
+            else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "ProcSet"))
                 dsc->job = XPOST_DSC_JOB_RESOURCE_PROCSET;
             else
                 return XPOST_DSC_STATUS_NO_DSC;
@@ -815,7 +825,8 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                   get_pages:
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_PAGES);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
                     /* Bound the declared page count by the file length -- a
@@ -823,7 +834,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                        so a bogus count cannot request a huge allocation, and
                        only record the count if the allocation succeeded so
                        header.pages and pages stay consistent for cleanup. */
-                    if (_xpost_dsc_integer_get(dsc->ps_vmaj, iter, &val) &&
+                    if (_xpost_dsc_integer_get(ctx, dsc->ps_vmaj, iter, &val) &&
                         val > 0 && (size_t)val <= ctx->length)
                     {
                         dsc->pages = (Xpost_Dsc_Page *)calloc(val, sizeof(Xpost_Dsc_Page));
@@ -860,10 +871,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                   get_bounding_box:
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_BOUNDING_BOX);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
-                    if (_xpost_dsc_header_bounding_box_get(dsc->ps_vmaj, iter, &bb))
+                    if (_xpost_dsc_header_bounding_box_get(ctx, dsc->ps_vmaj, iter, &bb))
                     {
                         dsc->header.bounding_box = bb;
                         ctx->HEADER_BOUNDING_BOX = 1;
@@ -898,10 +910,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                   get_document_fonts:
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_DOCUMENT_FONTS);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
-                    array = _xpost_dsc_header_string_array_get(dsc->ps_vmaj, iter, &nbr);
+                    array = _xpost_dsc_header_string_array_get(ctx, dsc->ps_vmaj, iter, &nbr);
                     if (array)
                     {
                         dsc->header.document_fonts.array = array;
@@ -935,10 +948,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (!ctx->HEADER_DOCUMENT_PAPER_SIZES)
                 {
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_DOCUMENT_PAPER_SIZES);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
-                    array = _xpost_dsc_header_string_array_get(dsc->ps_vmaj, iter, &nbr);
+                    array = _xpost_dsc_header_string_array_get(ctx, dsc->ps_vmaj, iter, &nbr);
                     if (array)
                     {
                         dsc->header.document_paper_sizes.array = array;
@@ -964,10 +978,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (!ctx->HEADER_DOCUMENT_NEEDED_FONTS)
                 {
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_DOCUMENT_NEEDED_FONTS);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
-                    array = _xpost_dsc_header_string_array_get(dsc->ps_vmaj, iter, &nbr);
+                    array = _xpost_dsc_header_string_array_get(ctx, dsc->ps_vmaj, iter, &nbr);
                     if (array)
                     {
                         dsc->header.document_needed_fonts.array = array;
@@ -993,10 +1008,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 if (!ctx->HEADER_DOCUMENT_SUPPLIED_FONTS)
                 {
                     iter = ctx->cur_loc + XPOST_DSC_CMT_LEN(HEADER_DOCUMENT_SUPPLIED_FONTS);
-                    if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                    if (!XPOST_DSC_EOF(iter) &&
+                        (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                         iter++;
 
-                    array = _xpost_dsc_header_string_array_get(dsc->ps_vmaj, iter, &nbr);
+                    array = _xpost_dsc_header_string_array_get(ctx, dsc->ps_vmaj, iter, &nbr);
                     if (array)
                     {
                         dsc->header.document_supplied_fonts.array = array;
@@ -1040,11 +1056,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                   get_page_order:
                     iter = XPOST_DSC_CMT_ARG(dsc->ps_vmaj, HEADER_PAGE_ORDER);
-                    if (_xpost_dsc_prefix_cmp_exact(iter, "Ascend"))
+                    if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Ascend"))
                         dsc->header.page_order = XPOST_DSC_PAGE_ORDER_ASCEND;
-                    else if (_xpost_dsc_prefix_cmp_exact(iter, "Descend"))
+                    else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Descend"))
                         dsc->header.page_order = XPOST_DSC_PAGE_ORDER_DESCEND;
-                    else if (_xpost_dsc_prefix_cmp_exact(iter, "Special"))
+                    else if (_xpost_dsc_prefix_cmp_exact(ctx, iter, "Special"))
                         dsc->header.page_order = XPOST_DSC_PAGE_ORDER_SPECIAL;
                     else
                     {
@@ -1077,7 +1093,8 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     break;
                 }
                 iter = XPOST_DSC_CMT_ARG(dsc->ps_vmaj, BODY_BEGIN_FONT);
-                if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                if (!XPOST_DSC_EOF(iter) &&
+                    (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                     iter++;
 
                 if (dsc->fonts && (font_idx < dsc->header.document_fonts.nbr))
@@ -1087,7 +1104,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                     /* get fontname */
                     iter_next = iter;
-                    while (!XPOST_DSC_EOL(iter_next))
+                    while (!XPOST_DSC_LINE_END(iter_next))
                     {
                         if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter_next))
                             break;
@@ -1102,10 +1119,10 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                     }
 
                     /* check if we have printername */
-                    if (!XPOST_DSC_EOL(iter_next))
+                    if (!XPOST_DSC_LINE_END(iter_next))
                     {
                         iter = ++iter_next;
-                        while (!XPOST_DSC_EOL(iter_next))
+                        while (!XPOST_DSC_LINE_END(iter_next))
                         {
                             if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter_next))
                                 break;
@@ -1119,7 +1136,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                         }
                     }
 
-                    if (!XPOST_DSC_EOL(iter_next))
+                    if (!XPOST_DSC_LINE_END(iter_next))
                     {
                         XPOST_LOG_ERR("EOL not reached in %%BeginFont comment");
                         status = XPOST_DSC_STATUS_ERROR;
@@ -1165,11 +1182,12 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
 
                 XPOST_DSC_ERROR_TEST(!in_script, "Page comment not in script");
                 iter = XPOST_DSC_CMT_ARG(dsc->ps_vmaj, BODY_PAGE);
-                if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter))
+                if (!XPOST_DSC_EOF(iter) &&
+                    (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter)))
                     iter++;
 
                 iter_next = iter;
-                while (!XPOST_DSC_EOL(iter_next))
+                while (!XPOST_DSC_LINE_END(iter_next))
                 {
                     if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter_next))
                         break;
@@ -1186,7 +1204,7 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 /* the ordinal belongs to this line; stepping over the
                    line end here would carry the scan into the page's
                    contents */
-                if (XPOST_DSC_EOL(iter_next))
+                if (XPOST_DSC_LINE_END(iter_next))
                 {
                     XPOST_LOG_ERR("no ordinal in %%Page comment");
                     status = XPOST_DSC_STATUS_ERROR;
@@ -1195,14 +1213,14 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 }
 
                 iter = ++iter_next;
-                while (!XPOST_DSC_EOL(iter_next))
+                while (!XPOST_DSC_LINE_END(iter_next))
                 {
                     if (XPOST_CMT_IS_SPACE(dsc->ps_vmaj, iter_next))
                         break;
                     iter_next++;
                 }
 
-                if (!XPOST_DSC_EOL(iter_next))
+                if (!XPOST_DSC_LINE_END(iter_next))
                 {
                     XPOST_LOG_ERR("EOL not reached in %%Page comment");
                     status = XPOST_DSC_STATUS_ERROR;
@@ -1226,7 +1244,11 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 }
                 else
                 {
-                    if ((!_xpost_dsc_integer_get_from_string(iter, &ordinal)) ||
+                    /* the conversion runs on the extracted copy: the
+                       token in the buffer is not null-terminated when
+                       the file ends with it */
+                    if ((!ordinal_str) ||
+                        (!_xpost_dsc_integer_get_from_string((unsigned char *)ordinal_str, &ordinal)) ||
                         (ordinal < 1))
                     {
                         XPOST_LOG_ERR("ordinal in %%Page comment is not a positive integer");

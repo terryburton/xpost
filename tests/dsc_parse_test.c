@@ -46,6 +46,33 @@ static int parse(const char *text, Xpost_Dsc *dsc)
     return st == XPOST_DSC_STATUS_SUCCESS;
 }
 
+/* parse from an allocation holding exactly the document's bytes, the
+   way a mapped file whose size is an exact page multiple presents
+   them: nothing readable follows the last byte */
+static int parse_exact(const char *text, Xpost_Dsc *dsc)
+{
+    Xpost_Dsc_File *file;
+    Xpost_Dsc_Status st;
+    unsigned char *buf;
+    size_t len;
+
+    len = strlen(text);
+    buf = malloc(len);
+    if (!buf)
+        return 0;
+    memcpy(buf, text, len);
+    file = xpost_dsc_file_new_from_address(buf, len);
+    if (!file)
+    {
+        free(buf);
+        return 0;
+    }
+    st = xpost_dsc_parse(file, dsc);
+    xpost_dsc_file_del(file);
+    free(buf);
+    return st == XPOST_DSC_STATUS_SUCCESS;
+}
+
 int main(void)
 {
     /* A DocumentFonts list continued over %%+, with a %%BeginFont entry
@@ -339,6 +366,37 @@ int main(void)
           "showpage\n", &dsc);
     check(dsc.header.bounding_box.llx == 0,
           "a bounding box missing three integers is not recorded");
+    xpost_dsc_free(&dsc);
+
+    /* Every scan stops at the end of the buffer: a file whose last
+       line is an unterminated list, a bare comment prefix or a page
+       comment offers nothing readable past its final byte. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse_exact("%!PS-Adobe-3.0\n"
+                      "%%DocumentFonts: AAA BBB", &dsc),
+          "a document ending inside its font list parses");
+    check(dsc.header.document_fonts.nbr == 2 &&
+          dsc.header.document_fonts.array &&
+          dsc.header.document_fonts.array[1] &&
+          strcmp(dsc.header.document_fonts.array[1], "BBB") == 0,
+          "the font list on an unterminated final line is captured");
+    xpost_dsc_free(&dsc);
+
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse_exact("%!PS-Adobe-3.0\n"
+                      "%%Pag", &dsc),
+          "a document ending in a bare comment prefix parses");
+    xpost_dsc_free(&dsc);
+
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse_exact("%!PS-Adobe-3.0\n"
+                      "%%Pages: 1\n"
+                      "%%EndComments\n"
+                      "%%EndProlog\n"
+                      "%%Page: one 1", &dsc),
+          "a document ending inside its page comment parses");
+    check(dsc.pages && dsc.header.pages == 1 && dsc.pages[0].ordinal == 1,
+          "the page on an unterminated final line is captured");
     xpost_dsc_free(&dsc);
 
     xpost_quit();
