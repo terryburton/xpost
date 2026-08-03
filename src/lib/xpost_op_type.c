@@ -295,6 +295,10 @@ int Scvn(Xpost_Context *ctx,
 {
     Xpost_Object name;
 
+    /* the string's characters become the name, so it needs read access */
+    if (!xpost_object_is_readable(ctx, s))
+        return invalidaccess;
+
     /* the name is lexically the string, every byte of it: a nul is a
        name character, not a terminator */
     name = xpost_name_cons_n(ctx, xpost_string_get_pointer(ctx, s),
@@ -378,6 +382,9 @@ int NRScvrs(Xpost_Context *ctx,
             Xpost_Object str)
 {
     int r, n;
+    /* the digits are written into the string, so it needs write access */
+    if (!xpost_object_is_writeable(ctx, str))
+        return invalidaccess;
     if (xpost_object_get_type(num) == realtype)
         num = xpost_int_cons((integer)num.real_.val);
     r = rad.int_.val;

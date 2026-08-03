@@ -339,6 +339,9 @@ int xpost_op_dict_any_known(Xpost_Context *ctx,
                             Xpost_Object D,
                             Xpost_Object K)
 {
+    /* the dictionary is searched, so it needs read access */
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
 #if 0
     printf("\nknown: ");
     xpost_object_dump(D);

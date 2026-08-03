@@ -177,6 +177,9 @@ int _ident_matrix(Xpost_Context *ctx,
                   Xpost_Object psmat)
 {
     Xpost_Matrix mat;
+    /* the matrix is written, so it needs write access (PLRM 8.2) */
+    if (!xpost_object_is_writeable(ctx, psmat))
+        return invalidaccess;
     xpost_matrix_identity(&mat);
     if (_xmat2psmat(ctx, &mat, psmat)) return rangecheck;
     xpost_stack_push(ctx->lo, ctx->os, psmat);

@@ -125,6 +125,23 @@ faildict /n 0 put
 { wa 0 get 42 eq { }{ (FAIL: the in-procedure put did not store its value\n) print
     faildict /n 2 copy get 1 add put } ifelse } exec
 
+% --- operators that read or write a composite operand need the matching
+%     access, whichever operator it is. These five took their operand
+%     without asking (PLRM 8.2: each raises invalidaccess). ---
+{ /m1 [1 2 3 4 5 6] readonly def m1 identmatrix pop }
+                                         /invalidaccess (identmatrix into a readonly matrix) chk
+{ [1 2 3 4 5 6] identmatrix pop }        /ok            (identmatrix into a writeable matrix) chk
+{ /s1 (secret\n) noaccess def s1 print } /invalidaccess (print of a noaccess string) chk
+{ (visible\n) print }                    /ok            (print of a readable string) chk
+{ /s2 (secret) noaccess def s2 cvn pop } /invalidaccess (cvn of a noaccess string) chk
+{ (name) cvn pop }                       /ok            (cvn of a readable string) chk
+{ 5 dict dup /a 1 put noaccess /a known pop }
+                                         /invalidaccess (known on a noaccess dict) chk
+{ 5 dict dup /a 1 put /a known pop }     /ok            (known on a readable dict) chk
+{ /s3 8 string readonly def 255 16 s3 cvrs pop }
+                                         /invalidaccess (cvrs into a readonly string) chk
+{ 255 16 8 string cvrs pop }             /ok            (cvrs into a writeable string) chk
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
