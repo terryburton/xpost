@@ -1,0 +1,126 @@
+% Every text-showing operator against every kind of font, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The showing operators are not one operator with options: each walks
+% the string its own way, and each has to arrange the same things --
+% decoding the string, finding the glyph, positioning it, advancing by
+% its width, and applying whatever extra displacement it was given. A
+% font whose glyphs come from a procedure rather than from an outline
+% goes down a different path again. So an operator can show a string
+% perfectly in one kind of font and mispositions or fail outright in the
+% other, and one operator at a time is exactly what a per-operator test
+% does not catch. That is how awidthshow came to take its two
+% displacements in the wrong space.
+%
+% So every showing operator is run against both kinds of font, with the
+% painting and the metrics checked separately, and each combination
+% reports for itself.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (font)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+% The tag is put away before the procedure runs: a procedure that fails
+% may leave anything at all on the stack.
+/works { % {proc} (what) (font)
+    /s.f exch def /s.w exch def
+    stopped { s.w s.f note } if
+    clear
+} def
+
+% A procedure held in a name runs when the name is mentioned, so the
+% selection procedures are fetched with load rather than named.
+%
+% A font whose glyphs are procedures, so the other path through the
+% showing operators is taken as well as the outline one.
+/BuiltFont 10 dict def
+BuiltFont begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    Encoding 66 /tri put
+    Encoding 32 /space put
+    /CharProcs 4 dict def
+    CharProcs /box { 750 0 setcharwidth 0 0 700 700 rectfill } put
+    CharProcs /tri { 750 0 setcharwidth
+        newpath 0 0 moveto 700 0 lineto 350 700 lineto closepath fill } put
+    CharProcs /space { 400 0 setcharwidth } put
+    CharProcs /.notdef { 400 0 setcharwidth } put
+    /BuildGlyph { exch begin CharProcs exch get exec end } def
+end
+
+/fonts [
+    [ { /Helvetica findfont 12 scalefont setfont } (an outline font) (AB) ]
+    [ { BuiltFont /Built exch definefont 12 scalefont setfont }
+                                          (a built font)   (AB) ]
+] def
+
+fonts {
+    aload pop /str exch def /nm exch def /sel exch def
+
+    % the string-walking operators
+    { /sel load exec newpath 10 20 moveto str show } (show) nm works
+    { /sel load exec newpath 10 20 moveto 2 0 str ashow } (ashow) nm works
+    { /sel load exec newpath 10 20 moveto 2 0 8#040 str widthshow } (widthshow) nm works
+    % cx cy char ax ay string: the first pair goes to the named
+    % character only, the second to every character
+    { /sel load exec newpath 10 20 moveto 2 0 8#040 1 0 str awidthshow }
+        (awidthshow) nm works
+    { /sel load exec newpath 10 20 moveto { pop pop } str kshow } (kshow) nm works
+
+    % the operators given an explicit displacement per character
+    { /sel load exec newpath 10 20 moveto str [ 9 9 ] xshow } (xshow) nm works
+    { /sel load exec newpath 10 20 moveto str [ 0 0 ] yshow } (yshow) nm works
+    { /sel load exec newpath 10 20 moveto str [ 9 0 9 0 ] xyshow } (xyshow) nm works
+
+    % the one that walks by show rather than by character
+    { /sel load exec newpath 10 20 moveto { pop } str cshow } (cshow) nm works
+
+    % a glyph named directly, bypassing the encoding
+    { /sel load exec newpath 10 20 moveto
+      nm (an outline font) eq { /A }{ /box } ifelse glyphshow }
+        (glyphshow) nm works
+
+    % the metrics, which have to agree with the painting
+    { /sel load exec str stringwidth pop pop } (stringwidth) nm works
+    { /sel load exec str stringwidth pop
+      dup 0 le { (width is not positive) nm note } if pop }
+        (measures a positive width) nm works
+
+    % the outline, which is the same walk again into a path
+    { /sel load exec newpath 10 20 moveto str true charpath } (charpath) nm works
+    { /sel load exec newpath 10 20 moveto str false charpath } (charpath stroked) nm works
+
+    % every operator has to leave the current point where the next one
+    % would start, which is what a displacement applied in the wrong
+    % space gets wrong without failing
+    { /sel load exec newpath 10 20 moveto str show currentpoint pop
+      10 le { (show did not advance) nm note } if } (advances) nm works
+    { /sel load exec newpath 10 20 moveto 5 0 str ashow currentpoint pop
+      /awide exch def
+      newpath 10 20 moveto str show currentpoint pop
+      awide ge { (ashow did not add its displacement) nm note } if
+    } (ashow adds its displacement) nm works
+    { /sel load exec newpath 10 20 moveto 2 0 8#040 1 0 (A B) awidthshow
+      currentpoint pop /awide exch def
+      newpath 10 20 moveto (A B) show currentpoint pop
+      awide ge { (awidthshow did not add its displacements) nm note } if
+    } (awidthshow adds its displacements) nm works
+
+    % and an empty string is shown without complaint
+    { /sel load exec newpath 10 20 moveto ( ) show } (shows a space) nm works
+    { /sel load exec newpath 10 20 moveto () show } (shows an empty string) nm works
+    { /sel load exec () stringwidth pop pop } (measures an empty string) nm works
+} forall
+
+bad 0 eq (every showing operator works with every kind of font) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
