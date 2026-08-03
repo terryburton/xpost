@@ -1,0 +1,127 @@
+% Every kind of function against every kind of shading it can drive,
+% run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A function dictionary is evaluated by a branch chosen from its type:
+% a sampled function interpolates a table, an exponential one raises a
+% parameter to a power, and a stitching one picks a subfunction and
+% remaps the parameter into its domain -- the three the language
+% defines. A shading, in turn, asks its function for colours in
+% a pattern of its own. So a function that evaluates correctly on its
+% own may still be wrong when a shading asks for the ends of its domain,
+% and a shading that works with one kind of function may never have been
+% given another -- which is exactly what a per-type test does not catch.
+%
+% So every function type is put through every shading type that takes
+% one, and each combination reports for itself.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (which)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+% The tag is put away before the procedure runs: a procedure that fails
+% may leave anything at all on the stack.
+/works { % {proc} (what) (which)
+    /f.w2 exch def /f.w1 exch def
+    stopped { f.w1 f.w2 note } if
+    clear
+} def
+
+% One function of each type, every one of them mapping a single
+% parameter in [0 1] to three components running from red to blue, so
+% that a wrong branch shows up as a wrong colour rather than as an
+% error.
+/funcs [
+    [ << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >>
+      (exponential) ]
+    [ << /FunctionType 0 /Domain [0 1] /Range [0 1 0 1 0 1]
+         /Size [2] /BitsPerSample 8 /DataSource <FF0000 0000FF> >>
+      (sampled) ]
+    [ << /FunctionType 3 /Domain [0 1]
+         /Functions [ << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 1 0] /N 1 >>
+                      << /FunctionType 2 /Domain [0 1] /C0 [0 1 0] /C1 [0 0 1] /N 1 >> ]
+         /Bounds [0.5] /Encode [0 1 0 1] >>
+      (stitching) ]
+] def
+
+funcs {
+    aload pop /fn exch def /fd exch def
+
+    % an axial shading, which asks along a line
+    { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+         /Function fd >> shfill } (drives an axial shading) fn works
+
+    % a radial shading, which asks along a pair of circles
+    { << /ShadingType 3 /ColorSpace /DeviceRGB /Coords [30 30 0 30 30 25]
+         /Function fd >> shfill } (drives a radial shading) fn works
+
+    % the ends of the domain, which is where an off-by-one in a table or
+    % a bound in a stitching function shows up
+    { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+         /Domain [0 0.0001] /Function fd >> shfill }
+        (is asked at the start of its domain) fn works
+    { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+         /Domain [0.9999 1] /Function fd >> shfill }
+        (is asked at the end of its domain) fn works
+
+    % extension past the ends, which asks outside the domain entirely
+    { << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [20 0 40 0]
+         /Extend [true true] /Function fd >> shfill }
+        (is asked outside its domain) fn works
+
+    % a shading used as a pattern rather than painted directly
+    { << /PatternType 2 /Shading
+         << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+            /Function fd >> >>
+      matrix makepattern
+      [/Pattern] setcolorspace setcolor
+      newpath 0 0 60 40 rectfill
+      0 setgray } (backs a shading pattern) fn works
+
+    % and driving a space rather than a shading: the same evaluation, in
+    % the other place a function is asked for colours
+    { [ /Indexed /DeviceRGB 1 <FF00000000FF> ] setcolorspace
+      0 setcolor 0 setgray } (leaves the colour usable) fn works
+} forall
+
+% Each type also has to answer sensibly on its own account, through the
+% one shading whose colours can be read back from the device.
+funcs {
+    aload pop /fn exch def /fd exch def
+    { << /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 60 0]
+         /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>
+      shfill } (drives a single-component shading) fn works
+} forall
+
+% A malformed function is refused rather than painted, for each type
+% that can be malformed in an obvious way.
+/refuses { % {proc} (what)
+    /f.w1 exch def
+    stopped not {
+        (FAIL: ) print f.w1 print ( is not refused\n) print
+        /bad bad 1 add store
+    } if
+    clear
+} def
+% the language defines three function types; a dictionary claiming any
+% other is refused rather than guessed at, including the calculator type
+% that belongs to the document format rather than to this language
+{ << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+     /Function << /FunctionType 9 /Domain [0 1] >> >> shfill }
+    (an unknown function type) refuses
+{ << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+     /Function << /FunctionType 4 /Domain [0 1] /Range [0 1 0 1 0 1]
+                  /Function { dup 1 exch sub exch 0 exch } >> >> shfill }
+    (a function type this language does not define) refuses
+{ << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0]
+     /Function << /FunctionType 3 /Domain [0 1] /Functions [ ]
+                  /Bounds [ ] /Encode [ ] >> >> shfill }
+    (a stitching function with no subfunctions) refuses
+
+bad 0 eq (every function type drives every shading) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
