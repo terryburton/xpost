@@ -668,6 +668,14 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
+# data, closed files, files that do not exist, and the operators whose
+# answer on a filter differs from a positionable disk file.
+test('op-file-edges',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
 # r/w/a with and without +, the access attribute each confers, and the
 # refusal of an access string outside the table.

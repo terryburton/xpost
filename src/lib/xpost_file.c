@@ -1053,7 +1053,6 @@ typedef struct Xpost_FilterFile
     int outn, outi;    /* decoded bytes pending */
     int pushback;      /* one unread byte, or -1 */
     int eod;
-    long count;        /* decoded bytes delivered (tell) */
 } Xpost_FilterFile;
 
 /* Peek past optional whitespace for a trailing "~>" and consume it, leaving the
@@ -1090,10 +1089,7 @@ a85_readch(Xpost_File *f)
         return c;
     }
     if (ff->outi < ff->outn)
-    {
-        ff->count++;
         return ff->out[ff->outi++];
-    }
     if (ff->eod)
         return EOF;
 
@@ -1126,7 +1122,6 @@ a85_readch(Xpost_File *f)
             ff->out[0] = ff->out[1] = ff->out[2] = ff->out[3] = 0;
             ff->outn = 4;
             ff->outi = 1;
-            ff->count++;
             /* a "z" is a complete zero group; consume a trailing "~>" eagerly,
                exactly as the full five-character group below does */
             if (!ff->eod)
@@ -1168,7 +1163,6 @@ a85_readch(Xpost_File *f)
         ff->out[3] = tuple & 0xff;
         ff->outn = nbytes;
         ff->outi = 1;
-        ff->count++;
         return ff->out[0];
     }
 }
@@ -1221,21 +1215,9 @@ a85_unreadch(Xpost_File *f, int c)
     return 0;
 }
 
-static long
-a85_tell(Xpost_File *f)
-{
-    Xpost_FilterFile *ff = (Xpost_FilterFile *)f;
-
-    return ff->count;
-}
-
-static int
-a85_seek(Xpost_File *f, long offset)
-{
-    (void)f;
-    (void)offset;
-    return -1;
-}
+/* the positioning methods shared by every filter (see filter_tell) */
+static long filter_tell(Xpost_File *f);
+static int filter_seek(Xpost_File *f, long offset);
 
 struct Xpost_File_Methods a85_methods =
 {
@@ -1245,8 +1227,8 @@ struct Xpost_File_Methods a85_methods =
     a85_flush,
     a85_purge,
     a85_unreadch,
-    a85_tell,
-    a85_seek
+    filter_tell,
+    filter_seek
 };
 
 static Xpost_File *
@@ -1261,7 +1243,6 @@ xpost_filterfile_open_a85(Xpost_File *source)
         ff->outn = ff->outi = 0;
         ff->pushback = -1;
         ff->eod = 0;
-        ff->count = 0;
     }
 
     return &ff->methods;
@@ -2095,11 +2076,15 @@ filter_unreadch(Xpost_File *f, int c)
     return 0;
 }
 
+/* A filter delivers a stream of decoded (or encoded) bytes with no
+   relation to a position in anything underneath it, and cannot be
+   repositioned; report it as unpositionable, which fileposition and
+   setfileposition raise ioerror for (PLRM 8.2). */
 static long
 filter_tell(Xpost_File *f)
 {
     (void)f;
-    return 0;
+    return -1;
 }
 
 static int
