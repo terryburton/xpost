@@ -413,6 +413,24 @@ int main(void)
           "a Page comment with trailing arguments is reported");
     xpost_dsc_free(&dsc);
 
+    /* Words in a list comment are separated by runs of whitespace; the
+       runs themselves contribute nothing. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%DocumentFonts: AAA  BBB \n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a document with ragged spacing in its font list parses");
+    check(dsc.header.document_fonts.nbr == 2,
+          "a run of separators yields no phantom font");
+    check(dsc.header.document_fonts.nbr == 2 &&
+          dsc.header.document_fonts.array &&
+          dsc.header.document_fonts.array[0] && dsc.header.document_fonts.array[1] &&
+          strcmp(dsc.header.document_fonts.array[0], "AAA") == 0 &&
+          strcmp(dsc.header.document_fonts.array[1], "BBB") == 0,
+          "the two fonts around the ragged spacing are captured");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

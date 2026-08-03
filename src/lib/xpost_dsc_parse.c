@@ -457,51 +457,62 @@ _xpost_dsc_header_string_array_get(const Xpost_Dsc_Ctx *ctx,
                                    int *count)
 {
     const unsigned char *iter;
+    const unsigned char *word;
     char **array;
     int nbr;
 
+    *count = 0;
+
+    /* the words are the maximal runs of non-separator bytes; the
+       separator runs between them contribute nothing */
     nbr = 0;
+    word = NULL;
     iter = cur_loc;
     while (!XPOST_DSC_LINE_END(iter))
     {
         if (XPOST_CMT_IS_SPACE(vmaj, iter))
-            nbr++;
-        iter++;
-    }
-    nbr++;
-
-    array = (char **)calloc(nbr, sizeof(char *));
-    if (!array)
-    {
-        *count = 0;
-        return NULL;
-    }
-
-    *count = nbr;
-
-    nbr = 0;
-    iter = cur_loc;
-    while (!XPOST_DSC_LINE_END(iter))
-    {
-        if (XPOST_CMT_IS_SPACE(vmaj, iter))
+            word = NULL;
+        else if (!word)
         {
-            array[nbr] = (char *)malloc((iter - cur_loc + 1) * sizeof(char));
-            if (array[nbr])
-            {
-                memcpy(array[nbr], cur_loc, iter - cur_loc);
-                array[nbr][iter - cur_loc] = '\0';
-            }
+            word = iter;
             nbr++;
-            cur_loc = iter + 1;
         }
         iter++;
     }
 
-    array[nbr] = (char *)malloc((iter - cur_loc + 1) * sizeof(char));
-    if (array[nbr])
+    if (nbr == 0)
+        return NULL;
+
+    array = (char **)calloc(nbr, sizeof(char *));
+    if (!array)
+        return NULL;
+
+    *count = nbr;
+
+    nbr = 0;
+    word = NULL;
+    iter = cur_loc;
+    while (1)
     {
-        memcpy(array[nbr], cur_loc, iter - cur_loc);
-        array[nbr][iter - cur_loc] = '\0';
+        if (XPOST_DSC_LINE_END(iter) || (XPOST_CMT_IS_SPACE(vmaj, iter)))
+        {
+            if (word)
+            {
+                array[nbr] = (char *)malloc((iter - word + 1) * sizeof(char));
+                if (array[nbr])
+                {
+                    memcpy(array[nbr], word, iter - word);
+                    array[nbr][iter - word] = '\0';
+                }
+                nbr++;
+                word = NULL;
+            }
+            if (XPOST_DSC_LINE_END(iter))
+                break;
+        }
+        else if (!word)
+            word = iter;
+        iter++;
     }
 
     return array;
