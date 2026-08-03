@@ -1041,12 +1041,13 @@
     } ifelse
 } def
 
-% width height bits matrix datasrc false ncomp  colorimage  -
-% paint interleaved samples in the device space matching the
-% component count: one grey, three RGB or four CMYK components per
-% pixel through the shared painter, in its own colour space like the
-% five-operand image. One data source per component (multi true) is
-% unsupported and refused.
+% width height bits matrix datasrc multi ncomp  colorimage  -
+% paint samples in the device space matching the component count: one
+% grey, three RGB or four CMYK components per pixel through the shared
+% painter, in its own colour space like the five-operand image. The
+% samples arrive interleaved in a single source, or with multi true from
+% one source per component, which are gathered into an array the painter
+% reads a plane at a time.
 .xpostsys /.identdecode <<
     1 [ 0 1 ]
     3 [ 0 1 0 1 0 1 ]

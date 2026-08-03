@@ -111,18 +111,11 @@
 { place 2 2 8 [2 0 0 -2 0 2]
   <FF000000FF000000FFFFFFFF00> false 3 colorimage grestore }
     (interleaved) (colorimage) works
-% The per-channel form is accepted but does not paint what the same
-% picture painted from one interleaved string paints, so it is neither
-% asserted to work nor asserted to be refused: doing either would write
-% down one of the two answers as correct while they disagree. Reported
-% instead, and recorded as open work.
+% the same picture described per channel as interleaved above: the two
+% readers have to agree, which is checked by rendering rather than here
 { place 2 2 8 [2 0 0 -2 0 2]
-  <FF0000FF> <00FF00FF> <0000FF00> true 3 colorimage grestore } stopped
-  { (note: colorimage with one string per channel is refused\n) print }
-  { (note: colorimage with one string per channel is accepted, and paints\n)
-    print (      a different picture than the interleaved form\n) print }
-  ifelse
-clear
+  <FF0000FF> <00FF00FF> <0000FF00> true 3 colorimage grestore }
+    (one string per channel) (colorimage) works
 { place 2 2 8 [2 0 0 -2 0 2] <30607090> false 1 colorimage grestore }
     (a single channel) (colorimage) works
 { place 2 2 8 [2 0 0 -2 0 2]
