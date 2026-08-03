@@ -52,6 +52,8 @@
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
 #include "xpost_op_stack.h"
+#include "xpost_bytes.h"
+#include "xpost_op_token.h" /* xpost_scanner_rep_number */
 #include "xpost_op_array.h"
 
 
@@ -439,8 +441,7 @@ int _numstring2array (Xpost_Context *ctx,
         r -= 128;
     if (r > 48)
         return rangecheck;
-    n = le ? (unsigned int)p[2] | (unsigned int)p[3] << 8
-           : (unsigned int)p[2] << 8 | (unsigned int)p[3];
+    n = le ? xpost_bytes_le16(p + 2) : xpost_bytes_be16(p + 2);
     width = (r >= 32 && r <= 47) ? 2 : 4;
     if (sz < 4 + n * width)
         return rangecheck;
@@ -449,47 +450,16 @@ int _numstring2array (Xpost_Context *ctx,
         return VMerror;
     for (i = 0; i < n; i++)
     {
-        const unsigned char *q = p + 4 + i * width;
         Xpost_Object el;
+        int ret;
 
-        if (r == 48)
-        {
-            unsigned int u = le
-                ? (unsigned int)q[0]
-                | (unsigned int)q[1] << 8
-                | (unsigned int)q[2] << 16
-                | (unsigned int)q[3] << 24
-                : (unsigned int)q[0] << 24
-                | (unsigned int)q[1] << 16
-                | (unsigned int)q[2] << 8
-                | (unsigned int)q[3];
-            float f;
-            memcpy(&f, &u, sizeof f);
-            el = xpost_real_cons((real)f);
-        }
-        else if (width == 2)
-        {
-            short v = (short)(le ? (unsigned short)q[0]
-                                 | (unsigned short)q[1] << 8
-                                 : (unsigned short)q[0] << 8
-                                 | (unsigned short)q[1]);
-            int scale = r - 32;
-            el = scale == 0 ? xpost_int_cons(v)
-                 : xpost_real_cons((real)ldexp((double)v, -scale));
-        }
-        else
-        {
-            int v = (int)(le ? (unsigned int)q[0]
-                             | (unsigned int)q[1] << 8
-                             | (unsigned int)q[2] << 16
-                             | (unsigned int)q[3] << 24
-                             : (unsigned int)q[0] << 24
-                             | (unsigned int)q[1] << 16
-                             | (unsigned int)q[2] << 8
-                             | (unsigned int)q[3]);
-            el = r == 0 ? xpost_int_cons(v)
-                 : xpost_real_cons((real)ldexp((double)v, -r));
-        }
+        /* p[1] carries representation and byte order exactly as a
+           binary token's rep byte does: decode through the scanner's
+           shared routine rather than a fourth copy of the byte math */
+        ret = xpost_scanner_rep_number((unsigned int)p[1],
+                                       p + 4 + i * width, &el);
+        if (ret)
+            return ret;
         xpost_array_put(ctx, arr, (integer)i, el);
     }
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(arr));

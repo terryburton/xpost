@@ -33,4 +33,13 @@
 
 int xpost_oper_init_token_ops(Xpost_Context *ctx, Xpost_Object sd);
 
+/**
+ * @brief decode one number of a binary token or encoded number string
+ * (PLRM 3.14.4/3.14.5): @p rep selects representation (0..31 32-bit
+ * fixed point scaled by rep, 32..47 16-bit fixed point scaled by
+ * rep-32, 48 IEEE real, 49 native-order real; +128 = low-order byte
+ * first), @p p the encoded bytes. 0 or the error to raise.
+ */
+int xpost_scanner_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval);
+
 #endif

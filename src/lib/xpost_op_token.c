@@ -58,6 +58,7 @@
 #include "xpost_operator.h"
 #include "xpost_op_array.h"
 #include "xpost_op_dict.h"
+#include "xpost_bytes.h"
 #include "xpost_op_token.h"
 
 /* large enough for the longest legal string literal (a string's
@@ -91,25 +92,29 @@ int isdot(int c)
     return c == '.';
 }
 
-/* FIXME: return (c == 'e') || (c = 'E') faster ? */
 static
 int ise(int c)
 {
-    return strchr("eE", c) != NULL;
+    return c == 'e' || c == 'E';
 }
 
-/* FIXME: see FIXME above */
 static
 int issign(int c)
 {
-    return strchr("+-", c) != NULL;
+    return c == '+' || c == '-';
 }
 
-/* FIXME: see FIXME above */
 static
 int isdel(int c)
 {
-    return strchr("()[]<>{}/%", c) != NULL;
+    switch (c)
+    {
+        case '(': case ')': case '[': case ']':
+        case '<': case '>': case '{': case '}':
+        case '/': case '%':
+            return 1;
+    }
+    return 0;
 }
 
 static
@@ -878,8 +883,10 @@ int bt_rep_size(unsigned int rep)
     return 0;
 }
 
-static
-int bt_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval)
+/* decode one number of a binary token or encoded number string
+   (PLRM 3.14.4/3.14.5): rep selects representation and byte order,
+   p the encoded bytes. Shared with the .numstring2array decoder. */
+int xpost_scanner_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval)
 {
     unsigned int r = rep & 127;
     int le = rep >= 128;
@@ -891,19 +898,15 @@ int bt_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval
 
         if (r == 49)
             memcpy(&v, p, 4);      /* native order */
-        else if (le)
-            v = ((unsigned int)p[3] << 24) | ((unsigned int)p[2] << 16) | ((unsigned int)p[1] << 8) | p[0];
         else
-            v = ((unsigned int)p[0] << 24) | ((unsigned int)p[1] << 16) | ((unsigned int)p[2] << 8) | p[3];
+            v = le ? xpost_bytes_le32(p) : xpost_bytes_be32(p);
         memcpy(&f, &v, 4);
         *retval = xpost_real_cons((real)f);
         return 0;
     }
     if (r <= 31)
     {
-        unsigned int v = le
-            ? ((unsigned int)p[3] << 24) | ((unsigned int)p[2] << 16) | ((unsigned int)p[1] << 8) | p[0]
-            : ((unsigned int)p[0] << 24) | ((unsigned int)p[1] << 16) | ((unsigned int)p[2] << 8) | p[3];
+        unsigned int v = le ? xpost_bytes_le32(p) : xpost_bytes_be32(p);
         int i = (int)v;
 
         if (r == 0)
@@ -914,8 +917,7 @@ int bt_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval
     }
     if (r <= 47)
     {
-        unsigned short v = le ? (unsigned short)((p[1] << 8) | p[0])
-                              : (unsigned short)((p[0] << 8) | p[1]);
+        unsigned short v = le ? xpost_bytes_le16(p) : xpost_bytes_be16(p);
         short i = (short)v;
         unsigned int scale = r - 32;
 
@@ -954,11 +956,9 @@ int bt_seq_object(Xpost_Context *ctx,
     p = buf + recoff;
     xflag = p[0] & 0x80;
     type = p[0] & 0x7f;
-    length = le ? (unsigned int)((p[3] << 8) | p[2])
-                : (unsigned int)((p[2] << 8) | p[3]);
+    length = le ? xpost_bytes_le16(p + 2) : xpost_bytes_be16(p + 2);
     value = le
-        ? ((unsigned int)p[7] << 24) | ((unsigned int)p[6] << 16) | ((unsigned int)p[5] << 8) | p[4]
-        : ((unsigned int)p[4] << 24) | ((unsigned int)p[5] << 16) | ((unsigned int)p[6] << 8) | p[7];
+        ? xpost_bytes_le32(p + 4) : xpost_bytes_be32(p + 4);
 
     /* records that use the value as an offset (string and name text,
        array elements) are only defined for the low-order header
@@ -1090,8 +1090,7 @@ int bt_sequence(Xpost_Context *ctx,
     if (hdr[1] != 0)
     {
         count = hdr[1];
-        length = le ? (unsigned int)((hdr[3] << 8) | hdr[2])
-                    : (unsigned int)((hdr[2] << 8) | hdr[3]);
+        length = le ? xpost_bytes_le16(hdr + 2) : xpost_bytes_be16(hdr + 2);
         hdrlen = 4;
     }
     else
@@ -1172,7 +1171,7 @@ int binary_token(Xpost_Context *ctx,
                     return syntaxerror;
                 if (!bt_read(ctx, src, next, q, sz))
                     return syntaxerror;
-                return bt_rep_number(p[0], q, retval);
+                return xpost_scanner_rep_number(p[0], q, retval);
             }
         case 147: case 148:  /* user name table: nothing populates it */
             if (!bt_read(ctx, src, next, p, 1))
@@ -1211,7 +1210,7 @@ int binary_token(Xpost_Context *ctx,
                 for (i = 0; i < count; i++)
                 {
                     Xpost_Object el;
-                    int ret = bt_rep_number(rep, buf + (size_t)i * sz, &el);
+                    int ret = xpost_scanner_rep_number(rep, buf + (size_t)i * sz, &el);
                     if (ret)
                     {
                         free(buf);
