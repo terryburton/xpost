@@ -189,32 +189,12 @@ int xpost_op_any_any_def(Xpost_Context *ctx,
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, D);
     int ret;
 
-    /* the current dictionary is topmost, so def deterministically sets
-       the visible binding of a name key: refresh that cache entry
-       instead of invalidating every resolution. the arguments are held
-       by the operator machinery, so the general wrapper's re-holding
-       is unnecessary. */
+    /* the arguments are held by the operator machinery, so the general
+       wrapper's re-holding is unnecessary on the fast path (see
+       xpost_dict_def_cached for its contract) */
     if (xpost_object_get_type(K) == nametype &&
-        !(mem == ctx->gl &&
-          ((xpost_object_is_composite(K) &&
-            mem != xpost_context_select_memory(ctx, K)) ||
-           (xpost_object_is_composite(V) &&
-            mem != xpost_context_select_memory(ctx, V)))))
-    {
-        ret = xpost_dict_put_memory(ctx, mem, D, K, V);
-        if (ret)
-            return ret;
-        {
-            unsigned int key = ((unsigned int)K.mark_.padw << 1) |
-                ((K.mark_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ? 1 : 0);
-            if (key < ctx->namecache_size)
-            {
-                ctx->namecache_gen[key] = ctx->namebind_gen;
-                ctx->namecache_val[key] = V;
-            }
-        }
-        return 0;
-    }
+        xpost_dict_def_fast_ok(ctx, mem, V))
+        return xpost_dict_def_cached(ctx, mem, D, K, V);
 
     ret = xpost_dict_put(ctx, D, K, V);
     if (ret)

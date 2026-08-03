@@ -59,6 +59,7 @@
 #include "xpost_interpreter.h" /* uses: context itp MAXCONTEXT MAXMFILE */
 #include "xpost_garbage.h"  /*  test gc, install collect() in context's memory files */
 #include "xpost_operator.h"  /* eval functions call operators */
+#include "xpost_op_dict.h"  /* the shared def fast path */
 #include "xpost_oplib.h"
 
 static
@@ -903,18 +904,16 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         {
                             Xpost_Object d_ = ds_top->data[ds_top->top - 1];
                             Xpost_Memory_File *dmem_ = xpost_context_select_memory(ctx, d_);
-                            if (!(dmem_ == ctx->gl &&
-                                  xpost_object_is_composite(v_) &&
-                                  dmem_ != xpost_context_select_memory(ctx, v_)))
+                            if (xpost_dict_def_fast_ok(ctx, dmem_, v_))
                             {
                                 /* the operands stay on the stack through the
                                    put, keeping them visible to the collector
-                                   if the dictionary grows */
-                                int ret_ = xpost_dict_put_memory(ctx, dmem_, d_, k_, v_);
+                                   if the dictionary grows; the shared def
+                                   core carries the semantics (see
+                                   xpost_op_dict.h) */
+                                int ret_ = xpost_dict_def_cached(ctx, dmem_, d_, k_, v_);
                                 if (ret_ == 0)
                                 {
-                                    unsigned int key_ = ((unsigned int)k_.mark_.padw << 1) |
-                                        ((k_.mark_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ? 1 : 0);
                                     if (ctx->lo->base != seen_lo_base ||
                                         ctx->gl->base != seen_gl_base)
                                     {
@@ -924,11 +923,6 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                                         EVALARRAY_RESOLVE_STACKS();
                                     }
                                     os_top->top -= 2;
-                                    if (key_ < ctx->namecache_size)
-                                    {
-                                        ctx->namecache_gen[key_] = ctx->namebind_gen;
-                                        ctx->namecache_val[key_] = v_;
-                                    }
                                     goto next_element;
                                 }
                             }

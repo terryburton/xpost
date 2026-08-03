@@ -55,6 +55,33 @@ clear false setglobal /Ld6 4 dict def /Ld7 4 dict def
 clear false setglobal /Lc2 4 dict def
 { [ Lc2 ] pop } probe not (a local array literal accepts a local element) assert
 
+% --- def: the same VM discipline and immediate visibility, through the
+%     fused in-procedure path as well as the direct one ---
+% a local value is rejected by def when the current dictionary is global
+clear false setglobal /Lv3 2 dict def
+true setglobal
+globaldict begin
+{ /gk Lv3 def } probe (a local value is rejected by def into a global dict) assert
+end
+false setglobal
+
+% a global value defs fine under global VM
+clear true setglobal
+globaldict begin
+{ /gk2 (shared) def gk2 } probe not (a global value defs into a global dict) assert
+globaldict /gk2 undef
+end
+false setglobal
+clear
+
+% a def is visible to the very next token of the same procedure (the
+% fused fast path must refresh the visible-binding cache), and a redef
+% replaces that binding just as immediately
+/defseq { /dv1 41 def dv1 1 add /dv2 exch def dv2 } def
+defseq 42 eq (a def is visible to the next token in its procedure) assert
+/redefseq { /dv3 1 def /dv3 2 def dv3 } def
+redefseq 2 eq (a redef replaces the visible binding immediately) assert
+
 clear false setglobal
 
 count 0 eq (operand stack is balanced) assert
