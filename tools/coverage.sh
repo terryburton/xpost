@@ -125,10 +125,32 @@ awk -F'|' '{ printf "%d|%s|%s|%s\n", $3 - ($3 * $2 / 100) + 0.5, $1, $2, $3 }' "
     | sort -rn -t'|' -k1 \
     | awk -F'|' '{ printf "| `%s` | %s%% | %s | %s |\n", $2, $3, $4, $1 }'
 
+# A function defined in a header is compiled into every object that
+# includes it, and gcov counts each copy separately: the copy in an object
+# that never calls it reads as zero even when another object's copy runs.
+# Those are not blind spots, so name them apart.
+: > "$work/inline"
+while IFS='|' read -r f fn; do
+    if grep -rlE "(^|[ *])$fn[[:space:]]*\\(" src/lib/*.h >/dev/null 2>&1; then
+        printf '%s|%s\n' "$f" "$fn" >> "$work/inline"
+    fi
+done < "$work/zero.u"
+sort -u "$work/inline" > "$work/inline.u" 2>/dev/null || : > "$work/inline.u"
+comm -23 "$work/zero.u" "$work/inline.u" > "$work/zero.real"
+
 printf '\n## Functions the suite never enters\n\n'
-nzero=$(wc -l < "$work/zero.u" | tr -d ' ')
+nzero=$(wc -l < "$work/zero.real" | tr -d ' ')
+ninline=$(wc -l < "$work/inline.u" | tr -d ' ')
 printf 'The blind spots: %s functions nothing in the suite reaches.\n\n' "$nzero"
+printf '(A further %s are defined in headers, so every object that includes\n' "$ninline"
+printf 'one carries its own copy and the copies that are not called read as\n'
+printf 'zero. They are listed at the end rather than here.)\n\n'
 awk -F'|' '
     { if ($1 != last) { if (last != "") printf "\n"; printf "**`%s`**\n\n", $1; last = $1 }
       printf "- `%s`\n", $2 }
-' "$work/zero.u"
+' "$work/zero.real"
+
+printf '\n## Header-defined functions with an uncalled copy\n\n'
+printf 'Not blind spots: each is compiled into every object that includes its\n'
+printf 'header, and only the copies nothing calls are counted here.\n\n'
+awk -F'|' '{ printf "- `%s` (in `%s`)\n", $2, $1 }' "$work/inline.u"
