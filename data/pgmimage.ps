@@ -203,7 +203,6 @@
         {
             //.internaldict /USEDRAWLINE known {
                 //.internaldict /USEDRAWLINE get {
-                    (using DrawLine)=
                     y 1 h {
                         val exch 
                         x exch w 1 index
@@ -215,7 +214,6 @@
                 } if
             } if
 
-            (using PutPix)=
             val
             y 1 h { % val y
                 x 1 w { % val y x
@@ -319,7 +317,6 @@
 
         /x_max width .5 add def
 
-        (intersect polygon edges with scanlines)=
         /P poly poly length 1 sub get def
         [
         poly {
@@ -342,7 +339,6 @@
         ]        % [list-of-x/y-intersections
         %dup ==()=
 
-        (sort scanline intersection list)=
         {
         dup { % comparitor  % [x1 y1] [x2 y2] . bool
             1 index 1 get
@@ -365,7 +361,6 @@
 
         %(%lineedit)(r)file pop %pause
 
-        (set pixels on each scanline)=
         aload length 2 idiv { % repeat
             exch aload pop
             3 2 roll aload pop
