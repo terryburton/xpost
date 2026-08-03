@@ -221,7 +221,7 @@ xpost_dsc_file_new_from_file(const char *filename)
     }
 
     base = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (!base)
+    if (base == MAP_FAILED)
     {
         XPOST_LOG_ERR("Can not map file %s into memory", filename);
         goto close_fd;
