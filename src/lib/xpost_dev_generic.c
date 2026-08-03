@@ -2530,7 +2530,7 @@ static int _svgfillpoly(Xpost_Context *ctx,
     Pdf_Acc a;
     Xpost_Object priv;
     char tmp[128];
-    int i, n, len, needmove = 1;
+    int i, n, len, needmove = 1, ret;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
@@ -2541,10 +2541,10 @@ static int _svgfillpoly(Xpost_Context *ctx,
     len += _pdf_fmt_num(tmp + len, PDFNUMVAL(g) * 100); tmp[len++] = '%'; tmp[len++] = ',';
     len += _pdf_fmt_num(tmp + len, PDFNUMVAL(b) * 100); tmp[len++] = '%';
     memcpy(tmp + len, ")\" fill-rule=\"nonzero\" d=\"", 26); len += 26;
-    xpost_strbuf_append(&a.content, tmp, len);
+    ret = xpost_strbuf_append(&a.content, tmp, len);
 
     n = poly.comp_.sz;
-    for (i = 0; i < n; i++)
+    for (i = 0; ret == 0 && i < n; i++)
     {
         Xpost_Object e = xpost_array_get(ctx, poly, i);
         if (xpost_object_get_type(e) == arraytype && e.comp_.sz == 2)
@@ -2556,20 +2556,24 @@ static int _svgfillpoly(Xpost_Context *ctx,
             len += _pdf_fmt_num(tmp + len, x); tmp[len++] = ' ';
             len += _pdf_fmt_num(tmp + len, y);
             needmove = 0;
-            xpost_strbuf_append(&a.content, tmp, len);
+            ret = xpost_strbuf_append(&a.content, tmp, len);
         }
         else if (!needmove)   /* null subpath separator: close the subpath */
         {
-            xpost_strbuf_append(&a.content, "Z", 1);
+            ret = xpost_strbuf_append(&a.content, "Z", 1);
             needmove = 1;
         }
     }
-    if (!needmove)
-        xpost_strbuf_append(&a.content, "Z", 1);
-    xpost_strbuf_append(&a.content, "\"/>\n", 4);
+    if (ret == 0 && !needmove)
+        ret = xpost_strbuf_append(&a.content, "Z", 1);
+    if (ret == 0)
+        ret = xpost_strbuf_append(&a.content, "\"/>\n", 4);
 
+    /* the struct is stored back even when an append failed: the appends
+       that did land may have moved the buffer, and the stored copy must
+       follow it */
     _pdf_acc_put(ctx, priv, &a);
-    return 0;
+    return ret;
 #undef PDFNUMVAL
 }
 

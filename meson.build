@@ -424,6 +424,14 @@ test('pdf-append-fail',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# The same append-completeness contract on the svgwrite device, whose
+# FillPoly emits the fill colour through the same unchecked hot loop.
+test('svg-append-fail',
+  find_program('tests/run-append-fail-test.sh'),
+  args: [ xpost_exe, files('tests/svg_append_fail_test.ps'), 'svgwrite' ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.
