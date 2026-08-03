@@ -1,0 +1,90 @@
+% The dictionary stack operators (PLRM 8.2), run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The stack carries three permanent entries in this language level --
+% systemdict, globaldict and userdict, bottom to top -- and begin and end
+% add and remove above them. cleardictstack removes everything above
+% them and nothing else; countdictstack reports the depth; dictstack
+% copies the whole stack into an array, bottommost first.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+% This helper must not begin a dictionary of its own: some of the
+% procedures below move the dictionary stack, which is the point of them.
+/erris { % {proc} /name (tag)  -  asserts proc raises error /name
+    /er.tag exch def /er.want exch def
+    stopped { $error /errorname get er.want eq }{ false } ifelse
+    er.tag assert clear
+} def
+
+/base countdictstack def
+base 3 eq (the stack starts with its three permanent entries) assert
+
+% --- begin and end move the depth by one apiece ---
+/d1 6 dict def
+d1 begin
+countdictstack base 1 add eq (begin adds one to the depth) assert
+currentdict d1 eq (begin makes its dictionary current) assert
+end
+countdictstack base eq (end takes it away again) assert
+
+% --- cleardictstack removes everything above the permanent entries ---
+5 dict begin 5 dict begin 5 dict begin
+countdictstack base 3 add eq (three begins add three) assert
+cleardictstack
+countdictstack base eq (cleardictstack returns to the permanent entries) assert
+currentdict userdict eq (userdict is current after cleardictstack) assert
+
+% the permanent entries are still there: an operator still resolves
+% through systemdict, and globaldict is still on the stack
+/add where { pop true }{ false } ifelse
+    (systemdict survives cleardictstack) assert
+/globaldict where { pop true }{ false } ifelse
+    (globaldict survives cleardictstack) assert
+
+% and doing it again, with nothing above them, changes nothing
+cleardictstack
+countdictstack base eq (cleardictstack on a clean stack is harmless) assert
+
+% it leaves the operand stack alone as well
+count /cds.n exch def
+5 dict begin
+cleardictstack
+count cds.n eq (cleardictstack takes no operands and leaves none) assert
+
+% --- dictstack copies the stack, bottommost first ---
+/holder 10 array def
+holder dictstack /snap exch def
+snap length countdictstack eq (dictstack fills as many elements as the depth) assert
+snap 0 get systemdict eq (the bottommost entry is systemdict) assert
+snap snap length 1 sub get currentdict eq
+    (the topmost entry is the current dictionary) assert
+
+% with a dictionary begun, that one is on top
+/d2 4 dict def
+d2 begin
+holder dictstack /snap2 exch def
+snap2 snap2 length 1 sub get d2 eq
+    (a begun dictionary is the topmost entry) assert
+snap2 length base 1 add eq (the copy is as deep as the stack) assert
+end
+
+% an array too short for the stack is a rangecheck
+{ 1 array dictstack } /rangecheck
+    (dictstack into too short an array is a rangecheck) erris
+{ (str) dictstack } /typecheck (dictstack refuses a non-array) erris
+
+% --- end with only the permanent entries left ---
+% PLRM 8.2 gives end a dictstackunderflow when the stack holds nothing
+% but its permanent entries.
+cleardictstack
+{ end } /dictstackunderflow
+    (end with only the permanent entries is dictstackunderflow) erris
+
+% --- begin takes a dictionary and nothing else ---
+{ 42 begin } /typecheck (begin refuses a number) erris
+{ (str) begin } /typecheck (begin refuses a string) erris
+cleardictstack
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

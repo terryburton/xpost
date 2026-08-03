@@ -805,6 +805,13 @@ test('cli-options',
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The dictionary stack: begin and end above the three permanent entries,
+# cleardictstack back down to them, and dictstack's copy of the whole stack.
+test('op-dictstack',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_dictstack_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
