@@ -646,8 +646,7 @@ int xpost_op_file_writehexstring (Xpost_Context *ctx,
     {
         char h[2];
         int d;
-        /* index by the byte's value: a plain char is signed on most
-           platforms, so a byte above 0x7F would index before the table */
+        /* char is signed on most platforms; hex is indexed by value */
         unsigned char b = (unsigned char)s[n];
         h[0] = hex[b / 16];
         h[1] = hex[b % 16];

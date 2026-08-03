@@ -1,5 +1,5 @@
 /*
-2 * Xpost - a Level-2 Postscript interpreter
+ * Xpost - a Level-2 Postscript interpreter
  * Copyright (C) 2013-2016, Michael Joshua Ryan
  * Copyright (C) 2013, Thorsten Behrens
  * All rights reserved.
@@ -651,8 +651,8 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
 
     int k;
 
-    /* the hold stack is cracked as a single segment below, so an
-       operator's declared arity must fit one segment */
+    /* the hold stack is cracked as a single segment below: an
+       operator's declared arity fits one segment */
     assert(n < XPOST_STACK_SEGMENT_SIZE);
 
     /* when all args sit in the stack's top segment, copy them into the

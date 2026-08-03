@@ -377,12 +377,10 @@ int dicgrow(Xpost_Context *ctx,
     sz = DICTABN(dp->sz);
     for (i = 0; i < sz; i++)
     {
-        /* xpost_dict_put_memory below can grow -- and so relocate -- the
-           memory file, which leaves any pointer derived before the call
-           dangling. Re-derive from the entity itself each iteration:
-           xpost_ent_ptr reads the file's base as it stands now. Deriving
-           the record table from a header pointer captured outside the
-           loop would carry the stale base along with it. */
+        /* xpost_dict_put_memory below allocates, which can relocate the
+           memory file. xpost_ent_ptr reads the file's base as it stands
+           at the call, so the header is re-derived per iteration and the
+           record table with it. */
         dp = xpost_ent_ptr(mem, dent);
         tp = (dicrec *)((char *)dp + sizeof(dichead));
         if (xpost_object_get_type(tp[i].key) != nulltype)

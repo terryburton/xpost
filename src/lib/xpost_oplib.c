@@ -205,10 +205,8 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
 #endif
     xpost_oper_init_context_ops(ctx, sd);
 
-    /* Every opcode shortcut must now have been captured: one still
-       holding the uncaptured marker would make the interpreter treat
-       some unrelated operator as the one it meant to shortcut. This is
-       the point where every module has finished registering. */
+    /* Every module has registered by here. A shortcut still holding
+       the uncaptured marker names no operator. */
     {
         const int *sc = (const int *)&ctx->opcode_shortcuts;
         size_t n = sizeof ctx->opcode_shortcuts / sizeof *sc;

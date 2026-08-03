@@ -885,7 +885,7 @@ int bt_rep_size(unsigned int rep)
 
 /* decode one number of a binary token or encoded number string
    (PLRM 3.14.4/3.14.5): rep selects representation and byte order,
-   p the encoded bytes. Shared with the .numstring2array decoder. */
+   p holds the encoded bytes. Also used by .numstring2array. */
 int xpost_scanner_rep_number(unsigned int rep, const unsigned char *p, Xpost_Object *retval)
 {
     unsigned int r = rep & 127;
