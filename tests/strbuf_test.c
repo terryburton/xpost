@@ -77,6 +77,10 @@ int main(void)
     /* a zero-initialised buffer is a valid empty buffer: the vector devices
        load theirs out of a byte string with no constructor run */
     memset(&z, 0, sizeof z);
+    check(xpost_strbuf_append(&z, "", 0) == 0,
+          "appending nothing to a zeroed buffer answers 0");
+    check(z.s == NULL && z.len == 0 && z.cap == 0,
+          "appending nothing allocates nothing");
     check(xpost_strbuf_append(&z, "x", 1) == 0, "append to a zeroed buffer answers 0");
     check(z.len == 1 && z.s && z.s[0] == 'x', "the zeroed buffer took the byte");
     xpost_strbuf_free(&z);

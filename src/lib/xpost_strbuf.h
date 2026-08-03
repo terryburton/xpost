@@ -106,8 +106,11 @@ xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 static inline int
 xpost_strbuf_append(Xpost_String_Buffer *b, const void *p, size_t n)
 {
-    int ret = xpost_strbuf_reserve(b, n);
+    int ret;
 
+    if (!n)
+        return 0;
+    ret = xpost_strbuf_reserve(b, n);
     if (ret)
         return ret;
     memcpy(b->s + b->len, p, n);
