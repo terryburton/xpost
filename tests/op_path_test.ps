@@ -61,4 +61,54 @@ initgraphics newpath false upath length 0 gt (upath of an empty path yields a us
 % --- setbbox takes four numbers (llx lly urx ury) ---
 { initgraphics newpath 12 24 36 48 setbbox } stopped not (setbbox accepts four numbers) assert
 
+% --- rcurveto: the three points are relative to the current point (PLRM 8.2) ---
+% Each pair displaces from the current point, not from the point before it, so
+% the curve rcurveto appends is the one curveto appends at the summed points.
+initgraphics newpath 100 100 moveto 10 10 20 20 30 0 rcurveto
+currentpoint exch 130 (rcurveto ends at the third displacement) assertnear
+    100 (rcurveto's third displacement is relative to the start) assertnear
+
+% the same curve written absolutely leaves the same path
+initgraphics newpath 100 100 moveto 10 10 20 20 30 0 rcurveto
+flattenpath pathbbox bbox4
+/rllx llx def /rlly lly def /rurx urx def /rury ury def
+initgraphics newpath 100 100 moveto 110 110 120 120 130 100 curveto
+flattenpath pathbbox bbox4
+llx rllx (rcurveto's box matches the absolute curve, llx) assertnear
+lly rlly (rcurveto's box matches the absolute curve, lly) assertnear
+urx rurx (rcurveto's box matches the absolute curve, urx) assertnear
+ury rury (rcurveto's box matches the absolute curve, ury) assertnear
+
+% it needs a current point to be relative to
+{ initgraphics newpath 10 10 20 20 30 0 rcurveto } /nocurrentpoint
+    (rcurveto without a current point is nocurrentpoint) erris
+
+% rcurveto composes with the other relative operators
+initgraphics newpath 0 0 moveto 50 0 rlineto 10 10 20 20 30 0 rcurveto
+currentpoint exch 80 (rcurveto continues from where rlineto left off) assertnear
+    0 (rcurveto keeps the y the displacements sum to) assertnear
+
+% --- reversepath turns a path with a curve around ---
+% The curve's control points exchange roles when the direction reverses, so a
+% reversed path must still cover the ground the original covered.
+initgraphics newpath 100 100 moveto 110 130 120 130 130 100 curveto
+flattenpath pathbbox bbox4
+/fllx llx def /flly lly def /furx urx def /fury ury def
+initgraphics newpath 100 100 moveto 110 130 120 130 130 100 curveto
+reversepath
+currentpoint exch 100 (reversepath ends where the path began, x) assertnear
+    100 (reversepath ends where the path began, y) assertnear
+initgraphics newpath 100 100 moveto 110 130 120 130 130 100 curveto
+reversepath flattenpath pathbbox bbox4
+llx fllx (a reversed curve covers the same ground, llx) assertnear
+lly flly (a reversed curve covers the same ground, lly) assertnear
+urx furx (a reversed curve covers the same ground, urx) assertnear
+ury fury (a reversed curve covers the same ground, ury) assertnear
+
+% reversing twice restores the original direction
+initgraphics newpath 100 100 moveto 110 130 120 130 130 100 curveto
+reversepath reversepath
+currentpoint exch 130 (reversing twice ends where the path ended, x) assertnear
+    100 (reversing twice ends where the path ended, y) assertnear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
