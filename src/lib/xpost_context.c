@@ -35,6 +35,7 @@
 
 #include <assert.h>
 #include <stdio.h> /* FILE* */
+#include <stdlib.h> /* free */
 #include <string.h> /* memset */
 
 #ifdef _WIN32
@@ -318,6 +319,15 @@ FIXME: delete cid from CTXLIST, destroy memory file when empty
  */
 void xpost_context_exit(Xpost_Context *ctx)
 {
+    if (!ctx)
+        return;
+
+    free(ctx->namecache_gen);
+    free(ctx->namecache_val);
+    ctx->namecache_gen = NULL;
+    ctx->namecache_val = NULL;
+    ctx->namecache_size = 0;
+
     xpost_memory_file_exit(ctx->gl);
     xpost_memory_file_exit(ctx->lo);
 }

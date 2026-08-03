@@ -5,14 +5,47 @@
  * An embedder that serves one job per context creates and destroys
  * contexts for as long as the process lives. Each context owns its
  * operator table and its two memory files, so nothing an earlier
- * context installed or allocated may limit a later one.
+ * context installed or allocated may limit a later one, and a context
+ * that has been destroyed must hold nothing: a job server that gained
+ * a context's worth of memory per job would grow without bound.
+ *
+ * The memory claim is measured as the peak resident size, which only
+ * ever rises -- so memory returned and reused registers as no growth,
+ * while memory retained registers on every cycle. Where the platform
+ * does not report it the cycles still run and their results are still
+ * checked; only the growth comparison is left out, which the test says
+ * so on its output.
  */
 
 #include <stdio.h>
 #include <string.h>
 #include "xpost.h"
 
-#define CYCLES 5
+#ifndef _WIN32
+# include <sys/time.h>
+# include <sys/resource.h>
+#endif
+
+#define CYCLES 8
+
+/* the peak resident size of this process in KiB, or 0 where the
+   platform does not report it */
+static long peak_resident_kib(void)
+{
+#ifdef _WIN32
+    return 0;
+#else
+    struct rusage ru;
+
+    if (getrusage(RUSAGE_SELF, &ru) != 0)
+        return 0;
+# ifdef __APPLE__
+    return (long)(ru.ru_maxrss / 1024); /* bytes */
+# else
+    return (long)ru.ru_maxrss;          /* KiB */
+# endif
+#endif
+}
 
 static int failures = 0;
 
@@ -41,6 +74,8 @@ static void check(int cond, const char *what)
 
 int main(void)
 {
+    long settled = 0;
+    long grown = 0;
     int i;
 
     if (!xpost_init())
@@ -76,7 +111,19 @@ int main(void)
 
         xpost_stdout_handler_set(ctx, NULL, NULL);
         xpost_destroy(ctx);
+
+        /* the first two cycles reach the peak that serving one context
+           costs; from there a further cycle must cost nothing */
+        if (i == 1)
+            settled = peak_resident_kib();
+        grown = peak_resident_kib();
     }
+
+    if (settled > 0)
+        check(grown - settled < 512,
+              "a destroyed context leaves the process no larger");
+    else
+        printf("NOTE: peak resident size unavailable; growth not compared\n");
 
     xpost_quit();
 

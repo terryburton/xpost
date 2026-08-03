@@ -2590,22 +2590,22 @@ XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
  */
 XPAPI void xpost_destroy(Xpost_Context *ctx)
 {
+    if (!ctx)
+        return;
 
     if (!ctx->quiet)
     {
         printf("bye!\n");
         fflush(NULL);
     }
-    /*xpost_garbage_collect(itpdata->ctab->gl, 1, 1); */
-    /*xpost_garbage_collect(itpdata->ctab->lo, 1, 1); */
-#if 0
-#ifndef XPOST_NO_GC
-    xpost_garbage_collect(ctx->gl, 1, 1);
-    xpost_garbage_collect(ctx->lo, 1, 0);
-#endif
-#endif
 
-    /* exit if all contexts are destroyed */
-    /*xpost_interpreter_exit(itpdata); */
-    /*free(itpdata); */
+    xpost_context_exit(ctx);
+
+    /* the interpreter holds this one context, so it ends with it */
+    if (itpdata && (ctx == &itpdata->ctab[0]))
+    {
+        free(itpdata);
+        itpdata = NULL;
+        xpost_ctx = NULL;
+    }
 }

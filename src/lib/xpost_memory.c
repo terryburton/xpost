@@ -281,6 +281,12 @@ xpost_memory_file_exit(Xpost_Memory_File *mem)
         mem->fname[0] = '\0';
     }
 
+    /* the table indexing the arena is held outside it */
+    free(mem->table.tab);
+    mem->table.tab = NULL;
+    mem->table.max = 0;
+    mem->table.nextent = 0;
+
     return 1;
 }
 
