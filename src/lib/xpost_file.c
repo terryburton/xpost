@@ -2836,12 +2836,16 @@ enc_flush(Xpost_File *f)
     return xpost_file_flush(ff->target);
 }
 
+/* Discard what the target has buffered and go on encoding: resetfile
+   drops characters that have not been written, and leaves the file open
+   (PLRM 8.2). Whatever part of a coding group the encoder itself is
+   holding stays with it, since the base has no reach into the coding. */
 static void
 enc_purge(Xpost_File *f)
 {
     Xpost_EncBase *ff = (Xpost_EncBase *)f;
 
-    ff->closed = 1;
+    xpost_file_purge(ff->target);
 }
 
 static int

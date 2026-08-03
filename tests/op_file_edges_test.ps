@@ -202,4 +202,47 @@ nm status not (the old name is gone after renamefile) assert
     { (renamefile lost the file) assert } ifelse
 (fedge_moved.scratch) deletefile
 
+% --- an encode filter is an output file, a decode filter an input one ---
+% Each carries the access its direction allows (PLRM 3.8.2), so the
+% operators of the other direction are refused before they reach the
+% filter at all.
+/fe.f (fedge_enc.scratch) (w) file def
+/fe.e fe.f /ASCIIHexEncode filter def
+{ fe.e read } /invalidaccess (reading an encode filter is refused) erris
+{ fe.e 4 string readstring } /invalidaccess
+    (readstring on an encode filter is refused) erris
+{ fe.e 4 string readline } /invalidaccess
+    (readline on an encode filter is refused) erris
+
+% flushing and resetting it are its own operations, not the target's
+fe.e (41) writestring
+{ fe.e flushfile } stopped not (flushfile on an encode filter is accepted) assert
+{ fe.e resetfile } stopped not (resetfile on an encode filter is accepted) assert
+fe.e status (resetfile leaves an encode filter open) assert
+{ fe.e (42) writestring } stopped not
+    (an encode filter still writes after resetfile) assert
+fe.e closefile fe.f closefile
+
+/fe.d (4142) /ASCIIHexDecode filter def
+{ fe.d (x) writestring } /invalidaccess
+    (writing a decode filter is refused) erris
+{ fe.d (x) writehexstring } /invalidaccess
+    (writehexstring on a decode filter is refused) erris
+fe.d closefile
+
+% --- NullEncode passes its bytes to the target unchanged ---
+% The filter exists so that a target can be written through the filter
+% interface without encoding anything; what arrives is what was written.
+/fe.nf (fedge_null.scratch) (w) file def
+/fe.n fe.nf /NullEncode filter def
+fe.n (hello) writestring
+fe.n closefile
+fe.nf closefile
+/fe.ng (fedge_null.scratch) (r) file def
+fe.ng 20 string readstring pop (hello) eq
+    (NullEncode writes its bytes through unchanged) assert
+fe.ng closefile
+(fedge_null.scratch) deletefile
+(fedge_enc.scratch) deletefile
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
