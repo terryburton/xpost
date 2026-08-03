@@ -224,6 +224,32 @@ int main(void)
           "the page after a ? ordinal is still recorded");
     xpost_dsc_free(&dsc);
 
+    /* An ordinal that is not a positive integer is malformed and must
+       be reported, not silently end the parse mid-file. */
+    memset(&dsc, 0, sizeof(dsc));
+    check(!parse("%!PS-Adobe-3.0\n"
+                 "%%Pages: 2\n"
+                 "%%EndComments\n"
+                 "%%EndProlog\n"
+                 "%%Page: one xyz\n"
+                 "showpage\n"
+                 "%%Page: two 2\n"
+                 "%%Trailer\n", &dsc),
+          "a Page comment with a non-numeric ordinal is reported");
+    xpost_dsc_free(&dsc);
+
+    memset(&dsc, 0, sizeof(dsc));
+    check(!parse("%!PS-Adobe-3.0\n"
+                 "%%Pages: 2\n"
+                 "%%EndComments\n"
+                 "%%EndProlog\n"
+                 "%%Page: one 0\n"
+                 "showpage\n"
+                 "%%Page: two 2\n"
+                 "%%Trailer\n", &dsc),
+          "a Page comment with a non-positive ordinal is reported");
+    xpost_dsc_free(&dsc);
+
     xpost_quit();
 
     if (failures)

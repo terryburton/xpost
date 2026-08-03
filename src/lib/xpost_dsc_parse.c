@@ -1202,15 +1202,13 @@ _xpost_dsc_parse(Xpost_Dsc_Ctx *ctx, Xpost_Dsc *dsc)
                 }
                 else
                 {
-                    if (!_xpost_dsc_integer_get_from_string(iter, &ordinal))
+                    if ((!_xpost_dsc_integer_get_from_string(iter, &ordinal)) ||
+                        (ordinal < 1))
                     {
+                        XPOST_LOG_ERR("ordinal in %%Page comment is not a positive integer");
+                        status = XPOST_DSC_STATUS_ERROR;
                         free(ordinal_str);
-                        break;
-                    }
-
-                    if (ordinal < 1)
-                    {
-                        free(ordinal_str);
+                        free(label);
                         break;
                     }
                 }
