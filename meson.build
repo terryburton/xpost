@@ -811,6 +811,13 @@ test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
 
+# Device-driver skeleton: the compiled-buffer device fleet reaches its
+# private struct, operand folding and FillRect extent arithmetic through
+# xpost_dev_driver.h -- the contract stays written in one place.
+test('check-device-skeleton',
+  find_program('tests/check-device-skeleton.sh'),
+  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+
 # Machinery stays born in its final home: every registered private-namespace
 # member keeps its dictionary and every graphics-state template slot survives,
 # per the register in tests/dict_homes.golden.
