@@ -9,6 +9,19 @@ xpost=$1
 script=$2
 # these conformance tests exercise the interpreter's own file operations, so
 # run with the CLI file-access sandbox lifted
+# capture the interpreter's exit status as well as its output: a run that
+# reports SUCCESS and then dies during teardown -- a crash, an assertion,
+# a sanitizer abort -- must not be recorded as a pass
 out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
+status=$?
 printf '%s\n' "$out"
+if [ "$status" -ne 0 ]; then
+    echo "FAILURES: the interpreter exited with status $status"
+    exit 1
+fi
+# a suite that printed any failure line has failed, whatever it concluded
+if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:|MISMATCH)'; then
+    echo "FAILURES: the suite reported failures above"
+    exit 1
+fi
 printf '%s\n' "$out" | grep -q '^SUCCESS$'

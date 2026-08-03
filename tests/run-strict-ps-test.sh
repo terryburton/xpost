@@ -12,6 +12,11 @@ script=$2
 # capture stdout only: the silence requirement is about the page-stream
 # channel; the log channel (stderr) is judged by other tests
 out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "FAILURES: the interpreter exited with status $status"
+    exit 1
+fi
 printf '%s\n' "$out"
 filtered=$(printf '%s\n' "$out" \
     | grep -v '^Xpost ' \

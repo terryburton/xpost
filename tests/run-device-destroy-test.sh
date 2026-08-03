@@ -23,9 +23,15 @@ fail=0
 
 for dev in $devices; do
     out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
     esac
+    if [ "$st" -ne 0 ]; then
+        echo "FAIL $dev: the interpreter exited with status $st"
+        fail=1
+        continue
+    fi
     if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
         echo "OK   $dev"
     else
