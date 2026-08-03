@@ -52,17 +52,30 @@ clear 6 4 div 1.5 sub abs 1e-6 lt (div still works) assert
 % error as though it had succeeded -- so a program could switch error
 % reporting off wholesale by undefining an entry.
 clear
-errordict /typecheck 2 copy get   % keep the real handler to restore after
-3 1 roll undef
+/savedtypecheck errordict /typecheck get def
+
+% removing the entry: the error is still raised, through the same route
+% a standard handler takes, so $error records it (PLRM 3.11.1)
+errordict /typecheck undef
 { 1 (str) add } stopped
     (an error with no errordict handler still reaches stopped) assert
-% $error must describe the error exactly as a standard handler leaves it
-% (PLRM 3.11.1: the handler records newerror, errorname and command)
+clear
 $error /errorname get /typecheck eq
     (the error name reaches $error with no handler installed) assert
 $error /newerror get
     (newerror is set with no handler installed) assert
-errordict 3 1 roll put            % put the handler back
+clear
+
+% an entry that is not executable is pushed, never run
+errordict /typecheck 42 put
+{ 1 (str) add } stopped
+    (an error whose handler is not a procedure still reaches stopped) assert
+clear
+$error /errorname get /typecheck eq
+    (a non-procedure handler still records the error name) assert
+clear
+
+errordict /typecheck /savedtypecheck load put   % load: the handler is executable
 clear
 
 % and the handler restored above works again

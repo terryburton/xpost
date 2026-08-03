@@ -1612,7 +1612,11 @@ void _onerror(Xpost_Context *ctx,
 #endif
     ed = xpost_dict_get(ctx, sd, nameerrordict);
     handler = xpost_dict_get(ctx, ed, xpost_name_cons(ctx, errorname[err]));
+    /* the handler runs when the interpreter schedules it, so it has to
+       be executable: a literal is pushed on the operand stack and the
+       error goes no further */
     if (xpost_object_get_type(handler) != invalidtype &&
+        xpost_object_is_exe(handler) &&
         xpost_stack_push(ctx->lo, ctx->es, handler))
     {
         itpdata->in_onerror = 0;
