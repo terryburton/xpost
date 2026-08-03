@@ -497,14 +497,20 @@ int main(int argc, char *argv[])
     {
         printf("geom 1 : %s\n", geometry);
     }
-    have_geometry = _xpost_geometry_parse(geometry,
-                                          &width, &height,
-                                          &xoffset, &xsign,
-                                          &yoffset, &ysign);
-    if (have_geometry)
+    /* the parse answers whether it understood the geometry, so a
+       geometry that was given and not understood is the error; one that
+       was not given at all leaves the default page size standing */
+    if (geometry)
     {
-        XPOST_LOG_ERR("bad formatted geometry");
-        goto quit_xpost;
+        have_geometry = _xpost_geometry_parse(geometry,
+                                              &width, &height,
+                                              &xoffset, &xsign,
+                                              &yoffset, &ysign);
+        if (!have_geometry)
+        {
+            XPOST_LOG_ERR("bad formatted geometry");
+            goto quit_xpost;
+        }
     }
     if (output_msg != XPOST_OUTPUT_MESSAGE_QUIET)
     {

@@ -785,6 +785,13 @@ test('op-time',
   args: [ xpost_exe, files('tests/op_time_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The command line: the geometry option sets the page size and a geometry that
+# does not parse is refused, and the three reporting options report.
+test('cli-options',
+  find_program('tests/run-cli-options-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.
