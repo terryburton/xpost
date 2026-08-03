@@ -415,6 +415,15 @@ test('pdf-device',
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# PDF content appends under memory pressure: a FillPoly whose content
+# append fails must raise rather than leave a truncated page that
+# reported success. Skips where the shell cannot impose the limit.
+test('pdf-append-fail',
+  find_program('tests/run-append-fail-test.sh'),
+  args: [ xpost_exe, files('tests/pdf_append_fail_test.ps'), 'pdfwrite' ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.

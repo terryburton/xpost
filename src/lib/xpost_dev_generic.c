@@ -2475,13 +2475,13 @@ static int _pdffillpoly(Xpost_Context *ctx,
     Pdf_Acc a;
     Xpost_Object priv;
     char tmp[128];
-    int i, n, len, needmove = 1;
+    int i, n, len, needmove = 1, ret = 0;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
 
     n = poly.comp_.sz;
-    for (i = 0; i < n; i++)
+    for (i = 0; ret == 0 && i < n; i++)
     {
         Xpost_Object e = xpost_array_get(ctx, poly, i);
         if (xpost_object_get_type(e) == arraytype && e.comp_.sz == 2)
@@ -2494,20 +2494,24 @@ static int _pdffillpoly(Xpost_Context *ctx,
             tmp[len++] = needmove ? 'm' : 'l';
             tmp[len++] = '\n';
             needmove = 0;
-            xpost_strbuf_append(&a.content, tmp, len);
+            ret = xpost_strbuf_append(&a.content, tmp, len);
         }
         else if (!needmove)   /* null subpath separator: close the subpath */
         {
-            xpost_strbuf_append(&a.content, "h\n", 2);
+            ret = xpost_strbuf_append(&a.content, "h\n", 2);
             needmove = 1;
         }
     }
-    if (!needmove)
-        xpost_strbuf_append(&a.content, "h\n", 2);
-    xpost_strbuf_append(&a.content, "f\n", 2);
+    if (ret == 0 && !needmove)
+        ret = xpost_strbuf_append(&a.content, "h\n", 2);
+    if (ret == 0)
+        ret = xpost_strbuf_append(&a.content, "f\n", 2);
 
+    /* the struct is stored back even when an append failed: the appends
+       that did land may have moved the buffer, and the stored copy must
+       follow it */
     _pdf_acc_put(ctx, priv, &a);
-    return 0;
+    return ret;
 }
 
 #undef PDFNUMVAL
