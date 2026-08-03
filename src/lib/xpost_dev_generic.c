@@ -904,6 +904,21 @@ _ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
     return (const unsigned char *)xpost_string_get_pointer(ctx, c);
 }
 
+/* A raster row about to be written through a raw pointer must be
+   writable: the row strings are fetched from the device dictionary,
+   which a program can reach and restock, so a row may arrive carrying
+   the read-only (or tighter) attribute. The raw pointer bypasses the
+   checked string mutator, so the access check happens here, before the
+   pointer is taken. The packed-array row path inherits the same check
+   from the array mutator it writes through. */
+static int
+_row_writable(Xpost_Context *ctx, Xpost_Object row)
+{
+    if (!xpost_object_is_writeable(ctx, row))
+        return invalidaccess;
+    return 0;
+}
+
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
    PGMIMAGE. Writes the ImgData row strings directly rather than looping over
    PutPix in PostScript; erasepage clears the whole page through FillRect, so
@@ -969,7 +984,12 @@ int _fillrectgray(Xpost_Context *ctx,
         cx1 = ix1 > width - 1 ? width - 1 : ix1;
         if (cx0 <= cx1)
         {
-            unsigned char *p = (unsigned char *)
+            unsigned char *p;
+            int wret = _row_writable(ctx, row);
+
+            if (wret)
+                return wret;
+            p = (unsigned char *)
                 xpost_string_get_pointer(ctx, row);
 
             if (cell)
@@ -1016,6 +1036,12 @@ int _blendpixgray(Xpost_Context *ctx,
     if (ix < 0 || ix >= row.comp_.sz)
         return 0;
     src = (int)((xpost_object_number(val)) * 255.0);
+    {
+        int wret = _row_writable(ctx, row);
+
+        if (wret)
+            return wret;
+    }
     p = (unsigned char *)xpost_string_get_pointer(ctx, row) + ix;
     dst = *p;
     *p = (unsigned char)(dst + ((src - dst) * c + 127) / 255);
@@ -1309,9 +1335,14 @@ int _blitform(Xpost_Context *ctx,
         if (xpost_object_get_type(srow) == stringtype
          && xpost_object_get_type(drow) == stringtype)
         {
-            unsigned char *sp = (unsigned char *)xpost_string_get_pointer(ctx, srow);
-            unsigned char *dp = (unsigned char *)xpost_string_get_pointer(ctx, drow);
+            unsigned char *sp, *dp;
             int dw = drow.comp_.sz;
+
+            ret = _row_writable(ctx, drow);
+            if (ret)
+                return ret;
+            sp = (unsigned char *)xpost_string_get_pointer(ctx, srow);
+            dp = (unsigned char *)xpost_string_get_pointer(ctx, drow);
 
             for (x = 0; x < w; x++)
             {
@@ -1970,9 +2001,14 @@ int _blitrow(Xpost_Context *ctx,
                         }
                         else
                         {
+                            int wret;
+
                             if (xpost_object_get_type(row) != stringtype
                              || row.comp_.sz < (unsigned int)devw)
                                 { free(cols); return rangecheck; }
+                            wret = _row_writable(ctx, row);
+                            if (wret)
+                                { free(cols); return wret; }
                             rowp = (unsigned char *)xpost_string_get_pointer(ctx, row);
                         }
                         {
@@ -2106,9 +2142,14 @@ int _blitrow(Xpost_Context *ctx,
         }
         else
         {
+            int wret;
+
             if (xpost_object_get_type(row) != stringtype
              || row.comp_.sz < (unsigned int)devw)
                 return rangecheck;
+            wret = _row_writable(ctx, row);
+            if (wret)
+                return wret;
             rowp = (unsigned char *)xpost_string_get_pointer(ctx, row);
         }
 
