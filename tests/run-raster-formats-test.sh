@@ -22,6 +22,11 @@ cat > "$work/paint.ps" <<'PSEOF'
 newpath 10 10 moveto 60 10 lineto 60 40 lineto closepath fill
 0 0 1 setrgbcolor
 newpath 20 20 moveto 30 0 rlineto 0 30 rlineto closepath fill
+% Text as well as fills: a glyph's edge pixels are blended into the
+% device's own buffer, which is a different method from the one that
+% fills reach and one these devices have to carry themselves.
+0 setgray /Helvetica findfont 14 scalefont setfont
+10 60 moveto (Ag) show
 showpage
 quit
 PSEOF
@@ -48,6 +53,12 @@ done
     </dev/null >/dev/null 2>&1
 status=$?
 [ "$status" -eq 0 ] || { echo "FAIL: raster exited with status $status"; fail=1; }
+
+# the other device that keeps its pixels in a buffer of its own
+"$xpost" -q --no-sandbox -d bgr -o /dev/null "$work/paint.ps" \
+    </dev/null >/dev/null 2>&1
+status=$?
+[ "$status" -eq 0 ] || { echo "FAIL: bgr exited with status $status"; fail=1; }
 
 [ "$fail" = 0 ] || { echo "FAILURES: the formats above"; exit 1; }
 echo "SUCCESS"

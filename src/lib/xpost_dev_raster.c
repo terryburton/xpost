@@ -325,6 +325,103 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Blend a coverage-weighted pixel: each channel moves toward the colour
+   by cov/255. The text operators use this for the partly covered pixels
+   at a glyph's edges, and a device without it inherits the base class's,
+   which blends into a raster held as PostScript arrays -- this device
+   keeps its pixels in a buffer of its own instead, so it needs its own.
+*/
+static
+int _blendpix(Xpost_Context *ctx,
+              Xpost_Object red,
+              Xpost_Object green,
+              Xpost_Object blue,
+              Xpost_Object cov,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int r, g, b, c, ix, iy;
+
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    c = xpost_dev_num_to_int(cov);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if (ix < 0 || ix >= xpost_dict_get(ctx, devdic, namewidth).int_.val)
+        return 0;
+    if (iy < 0 || iy >= xpost_dict_get(ctx, devdic, nameheight).int_.val)
+        return 0;
+
+    if (c <= 0)
+        return 0;
+    if (c > 255)
+        c = 255;
+
+#define XPOST_RASTER_BLEND(dst, src) \
+    ((dst) + (((src) - (dst)) * c + 127) / 255)
+
+    switch(private.pixelformat)
+    {
+        case BGRA:
+        {
+            Xpost_Raster_BGRA_Pixel *p = &((Xpost_Raster_BGRA_Pixel *)
+                private.buf->data)[iy * private.buf->width + ix];
+
+            p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
+            p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
+            p->blue = (unsigned char)XPOST_RASTER_BLEND(p->blue, b);
+            p->alpha = 255;
+        }
+        break;
+        case BGR:
+        {
+            Xpost_Raster_BGR_Pixel *p = &((Xpost_Raster_BGR_Pixel *)
+                private.buf->data)[iy * private.buf->width + ix];
+
+            p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
+            p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
+            p->blue = (unsigned char)XPOST_RASTER_BLEND(p->blue, b);
+        }
+        break;
+        case ARGB:
+        {
+            Xpost_Raster_ARGB_Pixel *p = &((Xpost_Raster_ARGB_Pixel *)
+                private.buf->data)[iy * private.buf->width + ix];
+
+            p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
+            p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
+            p->blue = (unsigned char)XPOST_RASTER_BLEND(p->blue, b);
+            p->alpha = 255;
+        }
+        break;
+        case RGB:
+        {
+            Xpost_Raster_RGB_Pixel *p = &((Xpost_Raster_RGB_Pixel *)
+                private.buf->data)[iy * private.buf->width + ix];
+
+            p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
+            p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
+            p->blue = (unsigned char)XPOST_RASTER_BLEND(p->blue, b);
+        }
+        break;
+    }
+
+#undef XPOST_RASTER_BLEND
+
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+
+    return 0;
+}
+
 /* C fast-path for the base-class per-pixel FillRect. erasepage clears the
    whole page through FillRect, so this is on the hot path for every page. */
 static
@@ -536,6 +633,13 @@ int loadrasterdevicecont(Xpost_Context *ctx,
                              numbertype, numbertype,
                              dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
+    if (ret)
+        return 0;
+
+    op = xpost_operator_cons(ctx, "rasterBlendPix", (Xpost_Op_Func)_blendpix, 0, 7,
+                             numbertype, numbertype, numbertype, numbertype,
+                             numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BlendPix"), op);
     if (ret)
         return ret;
 
