@@ -142,6 +142,18 @@ faildict /n 0 put
                                          /invalidaccess (cvrs into a readonly string) chk
 { 255 16 8 string cvrs pop }             /ok            (cvrs into a writeable string) chk
 
+% --- executing a procedure reads it, whichever operator does the
+%     executing. exec refuses a noaccess procedure; if and ifelse
+%     execute the same object through the same rule. ---
+{ { 1 } noaccess true exch if }          /invalidaccess (if executes a noaccess procedure) chk
+{ { 1 } noaccess false exch { 2 } exch ifelse }
+                                         /invalidaccess (ifelse executes a noaccess else-procedure) chk
+{ { 1 } noaccess true exch { 2 } ifelse }
+                                         /invalidaccess (ifelse executes a noaccess then-procedure) chk
+{ { 1 } executeonly true exch if pop }   /ok            (if executes an executeonly procedure) chk
+{ true { 1 } if pop }                    /ok            (if executes an ordinary procedure) chk
+{ false { 1 } { 2 } ifelse pop }         /ok            (ifelse executes an ordinary procedure) chk
+
 % --- every operator that fills a caller's matrix needs write access to it
 %     (PLRM 3.3.2: a write to a read-only object is invalidaccess). They
 %     all store through one writer, which is where the check belongs. ---
