@@ -376,6 +376,9 @@ setglobal
         dup 0 lt { pop 0 } if
         dup cs 2 get gt { pop cs 2 get } if
         /ix exch def
+        % record the index as given, for currentcolor: the gstate holds
+        % the palette entry it resolves to, in the base space
+        graphicsdict /.idxstash [ ix ] put
         cs 1 get setcolorspace
         cs 3 get dup type /stringtype eq {
             /lk exch def
@@ -389,6 +392,7 @@ setglobal
         end
         setcolor
         graphicsdict /currgstate get /setspace graphicsdict /.idxspace get put
+        graphicsdict /currgstate get /tintcomps graphicsdict /.idxstash get put
     }{
     dup type /arraytype eq { dup 0 get dup /Separation eq exch /DeviceN eq or } { false } ifelse
     {
@@ -437,10 +441,18 @@ setglobal
         % currentcolorspace reports, so the space is stashed and
         % restored around the conversion
         dup graphicsdict exch /.ciespace exch put
+        % record the components as given, for currentcolor: the gstate
+        % holds the device colour they convert to, which is a different
+        % count in every family but ABC
+        pop //.xpostsys /.ncomponents get exec
+        array astore
+        dup graphicsdict exch /.ciestash exch put
+        aload pop graphicsdict /.ciespace get
         //.xpostsys /.ciergb get exec
         /DeviceRGB setcolorspace
         setrgbcolor
         graphicsdict /currgstate get /setspace graphicsdict /.ciespace get put
+        graphicsdict /currgstate get /tintcomps graphicsdict /.ciestash get put
     }{
         % a pattern space arrives as an array: dispatch on the family
         dup type /arraytype eq { 0 get } if
@@ -460,12 +472,12 @@ setglobal
     /Process /currentcolor cvx
 >> put
 /currentcolor {
-    % a Separation or DeviceN colour reads back as the tints it was set
-    % with, recorded by setcolor; everything else delivers the recorded
-    % components, keyed by the space they are recorded in
-    graphicsdict /currgstate get /setspace get
-    dup type /arraytype eq { 0 get dup /Separation eq exch /DeviceN eq or }{ pop false } ifelse
-    graphicsdict /currgstate get /tintcomps get type /arraytype eq and {
+    % a colour whose space records its components elsewhere than it
+    % takes them -- Separation, DeviceN, Indexed, any CIE-based family --
+    % reads back as the components it was set with, which setcolor put
+    % aside; everything else delivers the recorded components, keyed by
+    % the space they are recorded in
+    graphicsdict /currgstate get /tintcomps get type /arraytype eq {
         graphicsdict /currgstate get /tintcomps get aload pop
     }{
         //.xpostsys /currentcolordict get graphicsdict /currgstate get /colorspace get get exec
