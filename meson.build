@@ -820,6 +820,14 @@ test('dct-truncated',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 60)
 
+# The interpreter's own debugging printers, which live in the private
+# dictionary and which nothing in ordinary use reaches: they walk the memory
+# table and the name stacks, so they stop working when either changes shape.
+test('internal-debug-ops',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/internal_debug_ops_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.

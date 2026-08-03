@@ -1,0 +1,51 @@
+% The interpreter's own debugging operators, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% dumpvm, dumpnames and the load tracing live in the private
+% .internaldict rather than systemdict, so a program cannot name them and
+% nothing in ordinary use reaches them. That is what makes them worth a
+% test: a printer that walks the memory table or the name stacks stops
+% working the moment either changes shape, and nobody would find out.
+% One of this interpreter's collector diagnostics was found to have been
+% reporting nonsense for exactly that reason.
+%
+% They write what they find to the standard output, so this test is a
+% noisy one. What is asserted is that each runs, that the interpreter is
+% unharmed afterwards, and that the tracing they switch on can be
+% switched off again.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/id 1183615869 internaldict def
+
+% every one of them is where it is expected to be, and nowhere else
+[ /dumpvm /dumpnames /debugloadon /debugloadoff ] {
+    dup id exch known (a debugging operator is in the private dictionary) assert
+    systemdict exch known not
+        (a debugging operator is not in systemdict) assert
+} forall
+
+% each runs and leaves the interpreter working
+{ id /dumpvm get exec } stopped not (dumpvm runs) assert
+1 2 add 3 eq (the interpreter works after dumpvm) assert
+
+{ id /dumpnames get exec } stopped not (dumpnames runs) assert
+1 2 add 3 eq (the interpreter works after dumpnames) assert
+
+% the load tracing switches on and off again, and the interpreter keeps
+% resolving names either side of it
+{ id /debugloadon get exec } stopped not (the load tracing switches on) assert
+/probe.after.on 7 def
+probe.after.on 7 eq (a name resolves while the tracing is on) assert
+{ id /debugloadoff get exec } stopped not (the load tracing switches off) assert
+/probe.after.off 8 def
+probe.after.off 8 eq (a name resolves once the tracing is off) assert
+
+% none of them takes or leaves an operand
+count /dbg.n exch def
+{ id /dumpvm get exec } stopped pop
+count dbg.n eq (dumpvm leaves the operand stack as it found it) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
