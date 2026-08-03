@@ -1,0 +1,70 @@
+%!
+% Content-append completeness on the pdfwrite device under memory pressure.
+%
+% The harness runs this under an address-space limit sized so that the
+% device's content accumulator cannot grow past a doubling. Each FillPoly
+% below appends about half a megabyte of identical path content, so the
+% accumulated content length a successful fill leaves behind is exactly
+% measurable. The invariant: a FillPoly that returns without raising an
+% error has appended every byte of its content. A fill whose append fails
+% must raise the failure; content silently missing from a fill that
+% reported success is a truncated page the job cannot detect.
+%
+% The accumulator is read back through the private .pdfchunks operator.
+% Reading it copies the content into VM, so VM is pre-grown with a
+% reclaimable ballast; after one vmreclaim the copies reuse that space and
+% the read needs no new address space under the limit.
+
+% counters live in userdict at top level; no dict begin/end wraps them
+/.pdfchunks 1183615869 internaldict /.pdfchunks get def
+
+% total accumulated content length, summed over the chunk strings
+/countlen { % -  .  n
+  /tl 0 def
+  DEVICE .pdfchunks { length tl add /tl exch def } forall
+  tl
+} def
+
+/poly [ 0 1 24999 { /i exch def [ i 100 ] [ i 200 ] } for ] def
+/fillonce { 0 poly DEVICE dup /FillPoly get exec } def
+
+% calibrate the exact per-fill content length with two unpressured fills
+fillonce
+/L1 countlen def
+fillonce
+/L2 countlen def
+/perfill L2 L1 sub def
+
+% pre-grow VM, then free the ballast for the later chunk copies
+/ballast 1200 array def
+0 1 1199 { ballast exch 65535 string put } for
+/ballast null def
+1 vmreclaim
+
+/successes 0 def
+/errored false def
+198 {
+  { fillonce } stopped
+  { /errored true def exit } if
+  /successes successes 1 add def
+} repeat
+
+/lensum countlen def
+/expected L2 successes perfill mul add def
+
+(per-fill bytes: ) print perfill 20 string cvs print (\n) print flush
+(successes:      ) print successes 20 string cvs print (\n) print flush
+(content bytes:  ) print lensum 20 string cvs print (\n) print flush
+(expected bytes: ) print expected 20 string cvs print (\n) print flush
+
+lensum expected lt
+{ (FAIL: silent truncation: ) print
+  expected lensum sub 20 string cvs print
+  ( content bytes missing from fills that reported success) print
+  errored { (\n) }{ ( -- and no error was ever raised\n) } ifelse print flush }
+{
+  errored
+  { (PASS: every fill that reported success is complete\n) print flush }
+  { (INCONCLUSIVE: the limit never bit\n) print flush } ifelse
+} ifelse
+quit

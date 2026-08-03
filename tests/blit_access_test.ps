@@ -1,0 +1,128 @@
+%!
+% Access-attribute enforcement in the device blitters (PLRM 3.3.2).
+%
+% A raster device's page buffer rows live in an array the device
+% dictionary exposes, and a program can restock that array with a
+% read-only string. The compiled blitters write rows through a raw
+% pointer rather than the checked string mutator, so each write path
+% must check the row's access itself: painting into a read-only row is
+% an invalidaccess, and the read-only bytes must stay untouched.
+%
+% Covered here: the rectangle-fill path (erasepage clears the page
+% through FillRect) and the sampled-image row blit. Each check plants a
+% read-only row, requires invalidaccess and an unmodified row, then
+% restores the original row and requires the same painting to succeed.
+
+/fails 0 def
+/note { print (\n) print } def
+
+% A device method that raises leaves its own begin on the dictionary
+% stack and an aborted gsave leaves its transformation behind, so each
+% helper records the raised error as operands, unwinds the dictionary
+% stack to its depth on entry and resets the transformation and clip
+% (not initgraphics: its page-device reset repaints) before it touches
+% any name. Definitions made against a leftover device
+% dictionary would vanish when it is popped.
+
+% run a procedure; expect invalidaccess
+/expectinvalid { % proc label  .  -
+  /label exch def
+  /d0 countdictstack def
+  stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  initmatrix initclip
+  exch
+  { dup (invalidaccess) eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% run a procedure; expect clean completion
+/expectok { % proc label  .  -
+  /label exch def
+  /d0 countdictstack def
+  stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  initmatrix initclip
+  exch
+  { /fails fails 1 add def
+    (FAIL: ) print label print ( raised ) print note }
+  { pop (ok   ) print label note } ifelse
+} def
+
+<< /OutputDevice /pgm /OutputFile (/dev/null) >> setpagedevice
+
+/rows DEVICE /ImgData get def
+/H rows length def
+/w rows 0 get length def
+
+% the raster rows live in global VM, so the planted row must too
+currentglobal true setglobal
+/ro w string readonly def
+setglobal
+
+% --- rectangle-fill path ---
+/keep rows 100 get def
+rows 100 ro put
+{ 1 setgray erasepage } (fill into a read-only row is invalidaccess) expectinvalid
+ro 40 get 0 eq
+{ (ok   read-only row unwritten by the fill) note }
+{ /fails fails 1 add def (FAIL: the fill wrote the read-only row) note } ifelse
+rows 100 keep put
+{ 1 setgray erasepage } (fill resumes with a writable row) expectok
+
+% --- sampled-image row blit ---
+% the image below covers user space 36..96 x 280..340; device row
+% H-310 lies inside it
+/target H 310 sub def
+/keep rows target get def
+rows target ro put
+/drawimage {
+  gsave
+  36 280 translate
+  60 60 scale
+  8 8 8 [ 8 0 0 -8 0 8 ]
+  { <00112233445566778899aabbccddeeff
+     00112233445566778899aabbccddeeff
+     00112233445566778899aabbccddeeff
+     00112233445566778899aabbccddeeff> } image
+  grestore
+} def
+{ drawimage } (image into a read-only row is invalidaccess) expectinvalid
+ro 43 get 0 eq
+{ (ok   read-only row unwritten by the image) note }
+{ /fails fails 1 add def (FAIL: the image wrote the read-only row) note } ifelse
+rows target keep put
+{ drawimage } (image resumes with a writable row) expectok
+rows target get 43 get 17 eq
+{ (ok   the image marks the restored row) note }
+{ /fails fails 1 add def (FAIL: the image left no mark on the restored row) note } ifelse
+
+% --- anti-aliased glyph pixel blend ---
+% the text below anti-aliases its edges, and user y 396 carries partial
+% coverage the device blends pixel by pixel
+/gtarget H 396 sub def
+/keep rows gtarget get def
+rows gtarget ro put
+/drawtext {
+  /Courier findfont 40 scalefont setfont
+  100 400 moveto (Hg) show
+} def
+{ drawtext } (glyph blend into a read-only row is invalidaccess) expectinvalid
+/gclean true def
+100 1 200 { ro exch get 0 ne { /gclean false def } if } for
+gclean
+{ (ok   read-only row unwritten by the glyph blend) note }
+{ /fails fails 1 add def (FAIL: the glyph blend wrote the read-only row) note } ifelse
+rows gtarget keep put
+{ drawtext } (glyph blend resumes with a writable row) expectok
+
+<< /OutputDevice /null >> setpagedevice
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
