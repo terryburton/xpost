@@ -763,7 +763,8 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object i_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
                         xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0)
+                        i_.int_.val >= 0 &&
+                        xpost_object_is_readable(ctx, a_))
                     {
                         Xpost_Object t_ = xpost_array_get(ctx, a_, i_.int_.val);
                         if (xpost_object_get_type(t_) != invalidtype)
@@ -936,7 +937,8 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object v_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(a_) == arraytype &&
                         xpost_object_get_type(i_) == integertype &&
-                        i_.int_.val >= 0)
+                        i_.int_.val >= 0 &&
+                        xpost_object_is_writeable(ctx, a_))
                     {
                         /* operands stay on the stack through the put (a
                            saved array copies on first write) */

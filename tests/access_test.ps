@@ -94,6 +94,37 @@ faildict /n 0 put
 { (abc) executeonly pop }                /ok            (executeonly on string) chk
 { 2 dict executeonly }                   /typecheck     (executeonly on dict) chk
 
+% --- access is enforced identically wherever an operator runs ---
+% The interpreter executes the hottest operators inline when they appear
+% inside a procedure, and that path must apply the same access rules as
+% the operator invoked directly: a readonly composite refuses put in
+% both. (put into a readonly array once succeeded inside a procedure.)
+/roa [ 1 2 3 ] readonly def
+{ roa 0 99 put }                         /invalidaccess (put into a readonly array, direct) chk
+/roaproc { roa 0 99 put } bind def
+{ roaproc }                              /invalidaccess (put into a readonly array, in a procedure) chk
+{ roa 0 get 1 eq { }{ (FAIL: a refused put modified the readonly array\n) print
+    faildict /n 2 copy get 1 add put } ifelse } exec
+
+/naa [ 1 2 3 ] noaccess def
+{ naa 0 get }                            /invalidaccess (get from a noaccess array, direct) chk
+/naaproc { naa 0 get } bind def
+{ naaproc }                              /invalidaccess (get from a noaccess array, in a procedure) chk
+
+/rod 3 dict dup /a 1 put readonly def
+/rodproc { rod /a 99 put } bind def
+{ rodproc }                              /invalidaccess (put into a readonly dict, in a procedure) chk
+/ros (abc) readonly def
+/rosproc { ros 0 88 put } bind def
+{ rosproc }                              /invalidaccess (put into a readonly string, in a procedure) chk
+
+% and a writeable array still accepts put on both paths
+/wa [ 1 2 3 ] def
+/waproc { wa 0 42 put } bind def
+{ waproc }                               /ok            (put into a writeable array, in a procedure) chk
+{ wa 0 get 42 eq { }{ (FAIL: the in-procedure put did not store its value\n) print
+    faildict /n 2 copy get 1 add put } ifelse } exec
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse
