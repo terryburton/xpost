@@ -1,0 +1,62 @@
+% Execution-context operators (PLRM 7.1), run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% fork, join, detach, yield and currentcontext are registered operators
+% that no test exercised and that never executed under coverage.
+%
+% _switch_context returns the calling context unchanged, so a forked
+% context is never scheduled. join on a context that has not already
+% finished therefore cannot succeed; it reports rather than waiting
+% forever.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % { proc } /name (tag)  -  asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+/completes { % { proc }  -  bool
+    stopped not
+} def
+
+% currentcontext yields the running context
+currentcontext type /contexttype eq (currentcontext yields a context) assert
+clear
+
+% fork yields a context object
+mark 2 3 { add } fork
+dup type /contexttype eq (fork yields a context) assert
+detach
+clear
+
+% detach accepts a forked context
+{ mark { } fork detach } completes (detach accepts a forked context) assert
+clear
+
+% yield succeeds
+{ yield } completes (yield succeeds) assert
+clear
+
+% join on an unscheduled context terminates rather than waiting forever
+{ mark 2 3 { add } fork join } stopped
+    (join on an unscheduled context reports rather than hanging) assert
+clear
+
+% join and detach type-check their operand
+{ 42 join } /typecheck (join of a non-context is typecheck) erris
+{ (str) detach } /typecheck (detach of a non-context is typecheck) erris
+
+% repeated forks either all succeed or report; none may answer a context
+% it did not create
+/n 0 def
+{ 40 { mark { } fork detach /n n 1 add store } repeat } stopped pop
+n 0 gt (forks were performed) assert
+clear
+
+% the interpreter runs normally afterwards
+1 2 add 3 eq (execution continues after the context operators) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

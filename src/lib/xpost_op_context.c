@@ -37,6 +37,7 @@
 #include <stdlib.h> /* NULL */
 
 #include "xpost.h"
+#include "xpost_log.h"
 #include "xpost_memory.h"
 #include "xpost_object.h"
 #include "xpost_stack.h"
@@ -79,7 +80,14 @@ int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
                               ctx->xpost_interpreter_alloc_local_memory,
                               ctx->xpost_interpreter_alloc_global_memory,
                               ctx->garbage_collect_function);
+    /* 0 is not a context id: it is what a fork with no free table slot
+       answers. Indexing with it yields (0 - 1) % MAXCONTEXT, an
+       unrelated slot. */
+    if (cid == 0)
+        return limitcheck;
     newctx = ctx->gl->interpreter_cid_get_context(cid);
+    if (!newctx)
+        return unregistered;
 
     (void)xpost_op_counttomark(ctx);
     n = xpost_stack_pop(ctx->lo, ctx->os).int_.val;
@@ -121,6 +129,11 @@ int _i_am_free_ (Xpost_Context *ctx)
    await context termination and return its results
 */
 static
+/* bound on reschedules of one join before it is reported unschedulable */
+enum { _JOIN_WAIT_MAX = 64 };
+static unsigned int _join_wait_cid;
+static unsigned int _join_wait_spins;
+
 int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 {
     //(void)context;
@@ -136,6 +149,31 @@ int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
         // Cleanup child
         child->state = C_FREE;
         return 0;
+    }
+
+    /* Waiting requires the interpreter to run the child. _switch_context
+       returns the calling context unchanged, so no other context is ever
+       scheduled and a child that has not already finished never will.
+       Rescheduling this join then repeats forever. Bound the wait and
+       report instead. */
+    if (child->state != C_ZOMB)
+    {
+        if (context.mark_.padw == _join_wait_cid)
+        {
+            if (++_join_wait_spins > _JOIN_WAIT_MAX)
+            {
+                _join_wait_cid = 0;
+                _join_wait_spins = 0;
+                XPOST_LOG_ERR("join: context %u cannot be scheduled",
+                              (unsigned int)context.mark_.padw);
+                return unregistered;
+            }
+        }
+        else
+        {
+            _join_wait_cid = context.mark_.padw;
+            _join_wait_spins = 0;
+        }
     }
 
     /* continue */

@@ -440,6 +440,16 @@ test('op-hexstring',
   args: [ xpost_exe, files('tests/op_hexstring_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Execution-context operators (PLRM 7.1): fork, join, detach, yield and
+# currentcontext. A forked context is never scheduled, so join reports in
+# bounded time instead of waiting forever, and a fork with no free table
+# slot is an error rather than an index into an unrelated slot.
+test('op-context',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_context_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 60)
+
 # Control operators (PLRM 8.2): repeat of a negative count is rangecheck (PLRM: the
 # count is a nonnegative integer), plus if/ifelse/for/loop/exit/stopped behaviour.
 test('op-control',
