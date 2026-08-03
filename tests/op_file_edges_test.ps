@@ -155,6 +155,35 @@ currentfile xcheck not (currentfile returns a literal file object) assert
 { (fedge_absent.scratch) (fedge_other.scratch) renamefile } /undefinedfilename
     (renaming a file that does not exist is undefinedfilename) erris
 
+% --- the special files (PLRM 3.8.3) ---
+% %stdin allows only r access, %stdout and %stderr only w. The line and
+% statement editors read from the standard input, which the test harness
+% supplies as an empty stream, so each reports that there is nothing to
+% edit rather than blocking.
+(%stdin) (r) file status (the standard input opens for reading) assert
+(%stdout) (w) file status (the standard output opens for writing) assert
+(%stderr) (w) file status (the standard error opens for writing) assert
+{ (%stdin) (w) file } /invalidfileaccess
+    (the standard input cannot be opened for writing) erris
+{ (%stdout) (r) file } /invalidfileaccess
+    (the standard output cannot be opened for reading) erris
+{ (%stderr) (r) file } /invalidfileaccess
+    (the standard error cannot be opened for reading) erris
+{ (%lineedit) (r) file } /undefinedfilename
+    (the line editor reports nothing to edit at end of input) erris
+{ (%statementedit) (r) file } /undefinedfilename
+    (the statement editor reports nothing to edit at end of input) erris
+{ (%nosuchdevice) (r) file } /undefinedfilename
+    (an unknown special file is undefinedfilename) erris
+% closing a standard file leaves the process's own stream alone: the file
+% object is closed, and the stream can be opened again
+(%stdout) (w) file dup closefile status not
+    (closing the standard output closes the file object) assert
+(%stdout) (w) file status (the standard output reopens after closing) assert
+
+% --- flush takes no operand and always succeeds ---
+flush
+
 % --- renamefile moves a file ---
 mkfile
 nm (fedge_moved.scratch) renamefile
