@@ -708,6 +708,9 @@ disk_readch(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file) /* the stream is closed: it holds no more data */
+        return EOF;
+
     /*
      * FIXME: check if this work on Windows
      * indeed, on Windows, select() needs a socket, not a fd, and fileno() returns a fd
@@ -762,6 +765,8 @@ disk_writech(Xpost_File *file, int c)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file)
+        return EOF;
     return fputc(c, df->file);
 }
 
@@ -772,6 +777,8 @@ disk_close(Xpost_File *file)
     FILE *fp = df->file;
     int ret;
 
+    if (!fp)
+        return 0;
     if (fp == stdin || fp == stdout || fp == stderr) /* do NOT close standard files */
         return 0;
     ret = fclose(df->file);
@@ -785,6 +792,8 @@ disk_flush(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file)
+        return 0;
     return fflush(df->file);
 }
 
@@ -792,6 +801,9 @@ static void
 disk_purge(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
+
+    if (!df->file)
+        return;
     xpost_fpurge(df->file);
 }
 
@@ -800,6 +812,8 @@ disk_unreadch(Xpost_File *file, int c)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file)
+        return EOF;
     return ungetc(c, df->file);
 }
 
@@ -808,6 +822,8 @@ disk_tell(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file)
+        return -1;
     return ftell(df->file);
 }
 
@@ -816,6 +832,8 @@ disk_seek(Xpost_File *file, long offset)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
+    if (!df->file)
+        return -1;
     return fseek(df->file, offset, SEEK_SET);
 }
 
@@ -841,6 +859,8 @@ xpost_diskfile_open(const FILE *fp)
         struct stat st;
 
         df->methods.methods = &disk_methods;
+        df->methods.refs = 0;
+        df->methods.closed = 0;
         df->file = (FILE*)fp;
         /* reads from a regular file never block, so only poll fds that
            can stall (pipes, terminals, sockets) */
@@ -902,7 +922,8 @@ memory_close(Xpost_File *f)
 
     if (mf->is_malloc)
         free(mf->contents);
-
+    /* the buffer is gone: a write must not grow one back */
+    mf->is_malloc = 0;
     mf->contents = NULL;
     mf->read_next =
       mf->read_limit =
@@ -984,6 +1005,8 @@ xpost_memoryfile_open_read(unsigned char *ptr, size_t limit)
     if (mf)
     {
         mf->methods.methods = &memory_methods;
+        mf->methods.refs = 0;
+        mf->methods.closed = 0;
         mf->contents = ptr;
         mf->is_read = 1;
         mf->is_malloc = 0;
@@ -1002,6 +1025,8 @@ xpost_memoryfile_open_write(void)
     if (mf)
     {
         mf->methods.methods = &memory_methods;
+        mf->methods.refs = 0;
+        mf->methods.closed = 0;
 	mf->contents = NULL;
 	mf->is_read = 0;
 	mf->is_malloc = 1;
@@ -2131,6 +2156,7 @@ struct Xpost_File_Methods dct_methods =
 #endif
 
 static Xpost_Object _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff);
+static Xpost_File *_filter_underlying_stream(Xpost_File *f);
 
 /* LZWDecode filter: the variable-width LZW codes PostScript and PDF
    share -- 9 to 12 bits, packed high bit first, code 256 clearing
@@ -4264,16 +4290,20 @@ struct Xpost_File_Methods rsd_methods =
     rsd_purge, rsd_unreadch, rsd_tell, rsd_seek
 };
 
-/* wrap a malloc'd filter struct in a filetype object */
+/* wrap a malloc'd filter struct in a filetype object, and record the claim
+   it lays on the stream it reads from or writes to */
 static Xpost_Object
 _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff)
 {
     Xpost_Object f;
+    Xpost_File *under;
     unsigned int ent;
     int ret;
 
     if (!ff)
         return invalid;
+    ff->refs = 0;
+    ff->closed = 0;
     f.tag = filetype;
     if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
     {
@@ -4288,6 +4318,9 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff)
         XPOST_LOG_ERR("cannot save file pointer in VM");
         return invalid;
     }
+    under = _filter_underlying_stream(ff);
+    if (under)
+        under->refs++;
     return f;
 }
 
@@ -4457,33 +4490,13 @@ Xpost_Object xpost_file_cons_filter_dct(Xpost_Memory_File *mem, Xpost_Object src
 Xpost_Object xpost_file_cons_filter_a85(Xpost_Memory_File *mem,
                                         Xpost_Object src)
 {
-    Xpost_Object f;
-    unsigned int ent;
-    int ret;
-    Xpost_File *source, *ff;
+    Xpost_File *source = xpost_file_get_file_pointer(mem, src);
+    Xpost_File *ff;
 
-    source = xpost_file_get_file_pointer(mem, src);
     if (!source)
         return invalid;
-
-    f.tag = filetype;
     ff = xpost_filterfile_open_a85(source);
-    if (!ff)
-        return invalid;
-    if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
-    {
-        XPOST_LOG_ERR("cannot allocate file record");
-        return invalid;
-    }
-    _file_birth_stamp(mem, ent);
-    f.mark_.padw = ent;
-    ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof ff, &ff);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        return invalid;
-    }
-    return f;
+    return _filter_object_cons(mem, ff);
 }
 
 /* pinch-off a tmpfile containing one line from file. */
@@ -4789,28 +4802,39 @@ int xpost_file_get_bytes_available(Xpost_Memory_File *mem,
     return 0;
 }
 
-/* If f is a decode filter whose source is an in-memory file this module
-   synthesised from a string (the string form of the filter operator), return
-   that source so the closing filter can release it; otherwise NULL. A decode
-   filter's source sits at a fixed offset after the method table in every filter
-   struct, so it is read through Xpost_FilterBase once f is known to be one. */
-static Xpost_File *_owned_memory_source(Xpost_File *f)
+/* If f is a filter, the stream beneath it: a decode filter's source or an
+   encode filter's target; otherwise NULL. That stream sits at a fixed offset
+   after the method table in every filter struct of either family, so it is
+   read through Xpost_FilterBase once f is known to be one. A reusable stream
+   holds its data outright and keeps no source. */
+static Xpost_File *_filter_underlying_stream(Xpost_File *f)
 {
     Xpost_File_Methods *m = f->methods;
-    Xpost_File *src;
 
     if (m != &a85_methods && m != &hex_methods && m != &rle_methods
         && m != &subfile_methods && m != &lzw_methods && m != &fax_methods
         && m != &eexec_methods
+        && m != &nullenc_methods && m != &hexenc_methods
+        && m != &a85enc_methods && m != &rleenc_methods
+        && m != &lzwenc_methods && m != &faxenc_methods
 #ifdef HAVE_ZLIB
-        && m != &flate_methods
+        && m != &flate_methods && m != &flateenc_methods
 #endif
 #ifdef HAVE_LIBJPEG
-        && m != &dct_methods
+        && m != &dct_methods && m != &dctenc_methods
 #endif
         )
         return NULL;
-    src = ((Xpost_FilterBase *)f)->source;
+    return ((Xpost_FilterBase *)f)->source;
+}
+
+/* If f is a filter whose stream is an in-memory file this module synthesised
+   from a string (the string form of the filter operator), return that stream
+   so the closing filter can release it; otherwise NULL. */
+static Xpost_File *_owned_memory_source(Xpost_File *f)
+{
+    Xpost_File *src = _filter_underlying_stream(f);
+
     if (src && src->methods == &memory_methods
             && ((Xpost_MemoryFile *)src)->is_read)
         return src;
@@ -4837,19 +4861,32 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
            it -- and the object stays open for the next consumer */
         if (fp->methods == &rsd_methods)
             return 0;
-        /* release a source synthesised from a string, which the filter owns */
+        fp->closed = 1;
+        /* give up this filter's claim on the stream beneath it; a source
+           synthesised from a string is owned outright, so close it too */
         {
-            Xpost_File *osrc = _owned_memory_source(fp);
-            if (osrc)
+            Xpost_File *under = _filter_underlying_stream(fp);
+
+            if (under)
             {
-                xpost_file_close(osrc);
-                free(osrc);
+                if (_owned_memory_source(fp))
+                {
+                    xpost_file_close(under);
+                    under->closed = 1;
+                }
+                if (under->refs > 0)
+                    --under->refs;
+                if (under->closed && under->refs == 0)
+                    free(under);
             }
         }
         /* the close method released the stream's own resources; the object's
            only pointer to the backing struct is cleared next, and file
-           entities are never collected, so free the struct here or it leaks */
-        free(fp);
+           entities are never collected, so free the struct here or it leaks.
+           A filter still reading from (or writing to) this stream holds the
+           struct alive instead, and frees it when it closes. */
+        if (fp->refs == 0)
+            free(fp);
         fp = NULL;
         ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof fp, &fp);
         if (!ret)

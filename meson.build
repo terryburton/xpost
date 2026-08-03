@@ -668,6 +668,14 @@ test('op-string-filter',
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A filter and the stream beneath it may be closed in either order: the
+# stream a filter reads from (or writes to) outlives the file object that
+# opened it, and a filter over a closed stream reports end of data.
+test('filter-source-life',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_source_life_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Procedure data sources for filters (PLRM 3.8.4).
 test('op-proc-filter',
   find_program('tests/run-ps-test.sh'),
