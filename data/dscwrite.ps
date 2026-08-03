@@ -43,12 +43,7 @@ begin
     /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
     /.w { F exch writestring } def
     /.wnum { % num  .  -   (two decimals at most, never exponential)
-        dup 0 lt { (-) .w neg } if
-        100 mul round cvi
-        dup 100 idiv 20 string cvs .w
-        100 mod dup 0 ne {
-            (.) .w dup 10 lt { (0) .w } if 20 string cvs .w
-        }{ pop } ifelse
+        //.xpostsys /.num2str get exec .w
     } def
 
     % page size in points from the resolution fixup
@@ -109,12 +104,7 @@ end } put
 
 % write a number to the accumulating file in two decimals at most
 .xpost_DSCWRITE /.vwnum { % num  .  -
-    dup 0 lt { (-) .vw neg } if
-    100 mul round cvi
-    dup 100 idiv 20 string cvs .vw
-    100 mod dup 0 ne {
-        (.) .vw dup 10 lt { (0) .vw } if 20 string cvs .vw
-    }{ pop } ifelse
+    //.xpostsys /.num2str get exec .vw
 } put
 
 % Append one page to the accumulating DSC program: the prolog of short

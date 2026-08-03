@@ -107,6 +107,7 @@
 .xpostsys /.fneval2
 .xpostsys /.gtri
 .xpostsys /.zeros
+.xpostsys /.num2str
 .xpostsys /.upathops
 .xpostsys /.upathargs
 .xpostsys /.isupmat

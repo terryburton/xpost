@@ -188,19 +188,9 @@
     } bind
 
     % append a number in PDF syntax (integer, or two decimals; never
-    % exponential). round(n*100) avoids binary-float print noise.
+    % exponential), through the vector writers' shared formatter
     /.pdfnum { % num  .  -
-        dup truncate 1 index eq {
-            cvi 20 string cvs .put
-        }{
-            100 mul round cvi
-            dup 0 lt { (-) .put neg } if
-            dup 100 idiv 20 string cvs .put
-            (.) .put
-            100 mod
-            dup 10 lt { (0) .put } if
-            20 string cvs .put
-        } ifelse
+        //.xpostsys /.num2str get exec .put
     } bind
 
     % format a number in PDF syntax to a fresh string at the accumulator's

@@ -5,6 +5,29 @@
 
 //.internaldict /QUIET known { }{ (loading device.ps...\n)print } ifelse
 
+% num  .num2str  str
+% the one number formatter for the vector writers (the PDF, SVG and DSC
+% devices format every coordinate and dimension through it): an integral
+% value prints as an integer; anything else prints with exactly two
+% decimals, never exponential -- round(n*100) sidesteps binary-float
+% print noise.
+currentglobal true setglobal
+.xpostsys /.num2str { % num  .  str
+    dup truncate 1 index eq {
+        cvi 20 string cvs
+    }{
+        100 mul round cvi
+        dup 0 lt { (-) exch neg }{ () exch } ifelse
+        dup 100 idiv 20 string cvs
+        3 -1 roll exch //.xpostsys /.strcat get exec
+        exch 100 mod
+        dup 10 lt { (.0) }{ (.) } ifelse exch
+        20 string cvs //.xpostsys /.strcat get exec
+        //.xpostsys /.strcat get exec
+    } ifelse
+} bind put
+setglobal
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device
