@@ -230,6 +230,24 @@ fe.e closefile fe.f closefile
     (writehexstring on a decode filter is refused) erris
 fe.d closefile
 
+% --- resetfile and closefile reach each decoding filter's own methods ---
+% resetfile discards what the filter is holding: an input filter has
+% nothing more to give afterwards, which is how it reports the discard.
+% sixteen bytes encoded, so plenty is still to come after the first read
+/fe.a (@:E_WAS,RgBkhF\"D/O92~>) /ASCII85Decode filter def
+fe.a 4 string readstring pop (abcd) eq
+    (an ASCII85 filter decodes its data) assert
+fe.a resetfile
+fe.a 8 string readstring exch pop not
+    (an ASCII85 filter has nothing left after resetfile) assert
+fe.a closefile
+
+% a fax filter closes like any other, whatever its rows decoded to
+/fe.x <00112233> /CCITTFaxDecode filter def
+fe.x status (a fax filter is open) assert
+fe.x closefile
+fe.x status not (closefile closes a fax filter) assert
+
 % --- NullEncode passes its bytes to the target unchanged ---
 % The filter exists so that a target can be written through the filter
 % interface without encoding anything; what arrives is what was written.
