@@ -1,8 +1,11 @@
-% Execution-context operators (PLRM 7.1), run through
+% Execution-context operators, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
 % fork, join, detach, yield and currentcontext are registered operators
-% that no test exercised and that never executed under coverage.
+% that no test exercised and that never executed under coverage. They
+% are not operators of the PostScript language: the PLRM 3rd edition
+% defines no multiple-execution-context facility, so their behaviour is
+% this interpreter's own and is pinned here rather than cited.
 %
 % _switch_context returns the calling context unchanged, so a forked
 % context is never scheduled. join on a context that has not already

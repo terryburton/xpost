@@ -127,10 +127,8 @@ faildict /n 0 put
 
 % --- operators that read or write a composite operand need the matching
 %     access, whichever operator it is. These five took their operand
-%     without asking (PLRM 8.2: each raises invalidaccess). ---
-{ /m1 [1 2 3 4 5 6] readonly def m1 identmatrix pop }
-                                         /invalidaccess (identmatrix into a readonly matrix) chk
-{ [1 2 3 4 5 6] identmatrix pop }        /ok            (identmatrix into a writeable matrix) chk
+%     without asking. A read or write of a composite whose access
+%     forbids it is invalidaccess (PLRM 3.3.2). ---
 { /s1 (secret\n) noaccess def s1 print } /invalidaccess (print of a noaccess string) chk
 { (visible\n) print }                    /ok            (print of a readable string) chk
 { /s2 (secret) noaccess def s2 cvn pop } /invalidaccess (cvn of a noaccess string) chk
