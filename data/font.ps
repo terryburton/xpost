@@ -483,9 +483,12 @@ setglobal
     }{
     dup /FontType get 3 ne {
         pop
-        5 1 roll dtransform
-        5 3 roll dtransform
-        5 2 roll
+        % the binding takes both deltas in device space: send the string
+        % below them, transform each pair in turn, and restore the order
+        % cx cy char ax ay string
+        6 1 roll dtransform
+        5 -2 roll dtransform
+        6 2 roll 4 -1 roll
         //awidthshow
     }{
     % bring the operands (cx cy char ax ay string font) into the order the
