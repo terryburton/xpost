@@ -332,6 +332,19 @@ test('run-input-close',
   run_input_close_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: the key=value definitions an embedder supplies land in
+# userdict as objects of the type each value spells, and the library reports
+# where it and its data live.
+api_definitions_exe = executable('api_definitions_test',
+  'tests/api_definitions_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('api-definitions',
+  api_definitions_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object-layer bounds discipline: a string object with a corrupt or
 # sentinel ent yields NULL from the pointer adapter, never a wild pointer.
 string_bounds_exe = executable('string_bounds_test',
