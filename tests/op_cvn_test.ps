@@ -1,0 +1,65 @@
+% cvn: a string becomes the name its characters spell (PLRM 8.2).
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The characters cvn is given live in the string's own memory, and
+% interning a name it has not seen before allocates -- a node per
+% character and a string to hold them. An allocation may grow the memory
+% file, which moves it, so a name interned from a string in that file
+% must not be read from where it used to be. The loop at the end
+% interns many names it has never seen while allocating between them,
+% which is where that goes wrong.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% --- what cvn answers ---
+(abc) cvn /abc eq (cvn answers the name its characters spell) assert
+(abc) cvn type /nametype eq (cvn answers a name) assert
+(abc) cvn xcheck not (a literal string yields a literal name) assert
+(abc) cvx cvn xcheck (an executable string yields an executable name) assert
+() cvn type /nametype eq (an empty string is a name) assert
+() cvn 20 string cvs length 0 eq (the empty name has no characters) assert
+
+% a name is the characters, all of them: a zero byte is one of them
+/z 3 string def
+z 0 97 put z 1 0 put z 2 98 put
+z cvn 20 string cvs length 3 eq (a zero byte is a name character) assert
+
+% the same characters name the same name, whatever string they came from
+(dup-test) cvn (dup-test) cvn eq (equal strings name the same name) assert
+
+% cvn reads the string's characters, so it needs read access
+/ro (readonlyname) readonly def
+{ ro cvn } stopped not (cvn reads a read-only string) assert
+clear
+/na (noaccessname) noaccess def
+{ na cvn } stopped (cvn refuses a string it may not read) assert
+clear
+
+% --- interning while the memory file moves underneath ---
+% each turn spells a name that has never been seen and allocates beside
+% it, so the interning that follows may move the string it is reading
+/buf 24 string def
+/spell { % i . (name)
+    buf 0 (nm) putinterval
+    buf 2 3 -1 roll 20 string cvs putinterval
+    buf 0 22 getinterval
+} def
+
+/mismatches 0 def
+0 1 30000 {
+    /i exch def
+    i spell cvn
+    % the name must spell what the string spelled, every time
+    30 string cvs i spell eq not
+        { /mismatches mismatches 1 add store } if
+    100 string pop
+} for
+mismatches 0 eq (every interned name spells its own characters) assert
+
+% and the last of them is still the name it was
+29999 spell cvn 30 string cvs 29999 spell eq
+    (a name interned during the churn keeps its characters) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

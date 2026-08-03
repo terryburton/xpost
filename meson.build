@@ -754,6 +754,14 @@ test('op-vm-param',
   args: [ xpost_exe, files('tests/op_vm_param_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# cvn interns a name from characters that live in the memory file the
+# interning allocates in, so the interning must not read them from where they
+# used to be. Many names never seen before, interned amid allocation.
+test('op-cvn',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_cvn_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
 # containers to PLRM 3.7.2. A collection-heavy job must leave both silent.

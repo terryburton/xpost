@@ -296,15 +296,40 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
         if (!u) {
             Xpost_Memory_File *mem = ctx->vmmode==GLOBAL?ctx->gl:ctx->lo;
             Xpost_Memory_Table *tab = &mem->table;
-            ret = tstinsert(mem, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, n, &t);
+            char inline_copy[256];
+            char *chars = inline_copy;
+
+            /* Interning the name allocates: a node for every character
+               and a string to hold them. An allocation may grow the
+               memory file, which moves it, and the characters offered
+               here may be living in it -- cvn names a string in VM.
+               Both walks below read from a copy outside it instead.
+               The search above allocates nothing, so it reads the
+               caller's characters directly. */
+            if (n > sizeof inline_copy)
+            {
+                chars = malloc(n);
+                if (!chars)
+                {
+                    XPOST_LOG_ERR("cannot copy name characters");
+                    return invalid;
+                }
+            }
+            memcpy(chars, s, n);
+
+            ret = tstinsert(mem, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, chars, n, &t);
             if (ret)
             {
                 //this can only be a VMerror
+                if (chars != inline_copy)
+                    free(chars);
                 return invalid;
             }
             tab = &mem->table; //recalc pointer
             tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = t;
-            u = addname(ctx, s, n); // obeys vmmode
+            u = addname(ctx, chars, n); // obeys vmmode
+            if (chars != inline_copy)
+                free(chars);
             o.mark_.tag = nametype | (ctx->vmmode==GLOBAL?XPOST_OBJECT_TAG_DATA_FLAG_BANK:0);
             o.mark_.pad0 = 0;
             o.mark_.padw = u;
