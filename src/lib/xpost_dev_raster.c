@@ -55,8 +55,6 @@
 
 enum Xpost_PixelFormat { RGB, ARGB, BGR, BGRA };
 
-#define FAST_C_BUFFER
-
 typedef struct
 {
     unsigned char blue, green, red, alpha;
@@ -90,11 +88,9 @@ typedef struct
     /*
      * add additional members to private struct
      */
-#ifdef FAST_C_BUFFER
     Xpost_Raster_Buffer *buf;
     int bufowned; /* the device malloc'd buf and has not handed it to the
                      client through OutputBufferOut, so Destroy frees it */
-#endif
 } PrivateData;
 
 
@@ -197,7 +193,6 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-#ifdef FAST_C_BUFFER
     inbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"));
     if (xpost_object_get_type(inbufstr) == stringtype)
     {
@@ -235,43 +230,6 @@ int _create_cont(Xpost_Context *ctx,
         private.buf->width = width;
         private.bufowned = 1;
     }
-#else
-    { /*
-         initialize the PS-level raster buffer,
-         an array of arrays of ints, each holding a 24-bit rgb value.
-         This allows us to re-use most of the PPM base-class functions,
-         and just grab the buffer in _emit() which overrides the device's
-         /Emit member-function which is called as the action of `showpage`.
-       */
-        int i, j;
-        Xpost_Object imgdata;
-        Xpost_Object row;
-        Xpost_Object *rowdata;
-
-        //printf("creating row of %d integers\n", width);
-        rowdata = malloc(width * sizeof(Xpost_Object));
-        for (j = 0; j < width; j++)
-        {
-            rowdata[j] = xpost_int_cons(0);
-        }
-
-        //printf("creating array of %d rows\n", height);
-        imgdata = xpost_object_cvlit(xpost_array_cons(ctx, height));
-        for (i = 0; i < height; i++)
-        {
-            row = xpost_object_cvlit(xpost_array_cons(ctx, width));
-            xpost_array_put(ctx, imgdata, i, row);
-            xpost_memory_put(xpost_context_select_memory(ctx, row),
-                             xpost_object_get_ent(row),
-                             0,
-                             width * sizeof(Xpost_Object),
-                             rowdata);
-        }
-        xpost_dict_put(ctx, devdic, xpost_name_cons(ctx, "ImgData"), imgdata);
-
-        free(rowdata);
-    }
-#endif
 
     /* save private data struct in string */
     xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
@@ -282,8 +240,6 @@ int _create_cont(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, devdic);
     return 0;
 }
-
-#ifdef FAST_C_BUFFER
 
 static
 int _putpix(Xpost_Context *ctx,
@@ -465,8 +421,6 @@ int _fillrect(Xpost_Context *ctx,
     return 0;
 }
 
-#endif
-
 static
 int _flush(Xpost_Context *ctx,
            Xpost_Object devdic)
@@ -493,11 +447,6 @@ int _emit(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     unsigned char *data;
-#ifndef FAST_C_BUFFER
-    Xpost_Object imgdata;
-    int stride;
-    int height;
-#endif
 
     /* load private data struct from string */
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
@@ -507,80 +456,7 @@ int _emit(Xpost_Context *ctx,
                      xpost_object_get_ent(privatestr), 0,
                      sizeof(private), &private);
 
-#ifdef FAST_C_BUFFER
     data = (unsigned char *)private.buf->data;
-#else
-
-    stride = private.width;
-    height = private.height;
-
-    inbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"));
-    if (xpost_object_get_type(inbufstr) == stringtype)
-    {
-        Xpost_Raster_Buffer *inbuf;
-
-        memcpy(&inbuf, xpost_string_get_pointer(ctx, inbufstr), sizeof(inbuf));
-        data = inbuf->data;
-    }
-    else
-    {
-        data = malloc(stride * height * ((private.pixelformat == ARGB) || (private.pixelformat == BGRA)) ? 4 : 3);
-    }
-    imgdata = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "ImgData"));
-    if (xpost_object_get_type(imgdata) == invalidtype)
-        return undefined;
-
-    {
-        int i,j;
-        Xpost_Object row;
-        Xpost_Object *rowdata;
-        unsigned int rowaddr;
-        Xpost_Memory_File *mem;
-        unsigned char *iter = data;
-
-        mem = xpost_context_select_memory(ctx, imgdata);
-
-        for (i = 0; i < height; i++)
-        {
-            row = xpost_array_get_memory(mem, imgdata, i);
-            //row = xpost_array_get(ctx, imgdata, i);
-            xpost_memory_table_get_addr(mem, xpost_object_get_ent(row), &rowaddr);
-            rowdata = (Xpost_Object *)(mem->base + rowaddr);
-            //printf("%d\n", i);
-
-            for (j = 0; j < stride; j++)
-            {
-                unsigned int val;
-                val = rowdata[j].int_.val; /* r|g|b 0x00RRGGGBB */
-                switch(private.pixelformat)
-                {
-                    case ARGB:
-                        *iter++ = 255;              /* a */
-                        *iter++ = (val>>16) & 0xFF; /* r */
-                        *iter++ = (val>>8) & 0xFF;  /* g */
-                        *iter++ = (val) & 0xFF;     /* b */
-                        break;
-                    case RGB:
-                        *iter++ = (val>>16) & 0xFF; /* r */
-                        *iter++ = (val>>8) & 0xFF;  /* g */
-                        *iter++ = (val) & 0xFF;     /* b */
-                        break;
-                    case BGRA:
-                        *iter++ = (val) & 0xFF;     /* b */
-                        *iter++ = (val>>8) & 0xFF;  /* g */
-                        *iter++ = (val>>16) & 0xFF; /* r */
-                        *iter++ = 255;              /* a */
-                        break;
-                    case BGR:
-                        *iter++ = (val) & 0xFF;     /* b */
-                        *iter++ = (val>>8) & 0xFF;  /* g */
-                        *iter++ = (val>>16) & 0xFF; /* r */
-                        break;
-                }
-            }
-        }
-    }
-#endif
 
     /*pass data back to client application */
     {
@@ -593,7 +469,6 @@ int _emit(Xpost_Context *ctx,
 
             memcpy(&outbuf, xpost_string_get_pointer(ctx, outbufstr), sizeof(outbuf));
             *outbuf = data;
-#ifdef FAST_C_BUFFER
             /* the buffer now belongs to the client (the API documents the
                handed-out buffer as the caller's to free): Destroy must
                leave it alone from here on */
@@ -601,7 +476,6 @@ int _emit(Xpost_Context *ctx,
             xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                              xpost_object_get_ent(privatestr), 0,
                              sizeof(private), &private);
-#endif
             return 0;
         }
     }
@@ -623,7 +497,6 @@ int _destroy(Xpost_Context *ctx,
                      xpost_object_get_ent(privatestr), 0,
                      sizeof(private), &private);
 
-#ifdef FAST_C_BUFFER
     if (private.buf && private.bufowned)
         free(private.buf);
     private.buf = NULL;
@@ -632,7 +505,6 @@ int _destroy(Xpost_Context *ctx,
     xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                      xpost_object_get_ent(privatestr), 0,
                      sizeof(private), &private);
-#endif
 
     return 0;
 }
@@ -712,7 +584,6 @@ int loadrasterdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-#ifdef FAST_C_BUFFER
     op = xpost_operator_cons(ctx, "rasterPutPix", (Xpost_Op_Func)_putpix, 0, 6,
                              numbertype, numbertype, numbertype,
                              numbertype, numbertype,
@@ -728,7 +599,6 @@ int loadrasterdevicecont(Xpost_Context *ctx,
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillRect"), op);
     if (ret)
         return ret;
-#endif
 
     op = xpost_operator_cons(ctx, "rasterEmit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
