@@ -216,10 +216,38 @@
 (2 2 ge)                       same
 ((abc) (abd) lt)               same
 ((abc) (abc) eq)               same
+((abc) (ab) gt)                same
+((ab) (abc) lt)                same
 (/a /a eq)                     same
 (1 (x) lt)                     same
 (1 eq)                         same
 (eq)                           same
+% booleans and names order as well as compare, and every relation is
+% drawn from the same comparison
+(true true eq)                 same
+(true false eq)                same
+(true false ne)                same
+(false true lt)                same
+(true false gt)                same
+(true true le)                 same
+(false false ge)               same
+(/a /b lt)                     same
+(/b /a lt)                     same
+(/a /a le)                     same
+(/a /b gt)                     same
+(/a /b ne)                     same
+(/abc (abc) eq)                same
+(/a (b) lt)                    same
+(2 2.0 lt)                     same
+(2.0 2 ge)                     same
+(2.0 2.0 eq)                   same
+(wa wa eq)                     same
+(wa roa eq)                    same
+(mark mark eq)                 same
+(null null eq)                 same
+(true 1 eq)                    same
+(null 1 eq)                    same
+(mark 1 lt)                    same
 
 % --- type ---
 (1 type)                       same

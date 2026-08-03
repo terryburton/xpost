@@ -105,6 +105,45 @@ Xpost_Object xpost_dict_set_access(Xpost_Context *ctx, Xpost_Object d, Xpost_Obj
 int xpost_dict_compare_objects(Xpost_Context *ctx, Xpost_Object l, Xpost_Object r);
 
 /**
+   compare two objects of the same simple type, without reading vm.
+
+   This is the front of xpost_dict_compare_objects, shared with the
+   interpreter's fused relational operators so the ordering of the types
+   they settle exists once. Returns 1 with the three-way result in cmp
+   for a pair it settles, 0 for every other pair -- those need the full
+   comparison, which folds nearly-comparable types and reads composites.
+*/
+static inline int xpost_dict_compare_simple(Xpost_Object l, Xpost_Object r,
+                                            int *cmp)
+{
+    Xpost_Object_Type type = xpost_object_get_type(l);
+
+    if (type != xpost_object_get_type(r))
+        return 0;
+
+    switch (type)
+    {
+        case booleantype: /*@fallthrough@*/
+        /* three-way compare: a subtraction can overflow the return
+           type and flip the verdict */
+        case integertype:
+            *cmp = l.int_.val < r.int_.val ? -1 : l.int_.val > r.int_.val ? 1 : 0;
+            return 1;
+
+        case nametype:
+            *cmp = (l.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ==
+                   (r.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)
+                ? (signed)(l.mark_.padw - r.mark_.padw)
+                : (signed)((l.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) -
+                           (r.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK));
+            return 1;
+
+        default:
+            return 0;
+    }
+}
+
+/**
    construct dictionary
    in the memory table of specified memory file
 */

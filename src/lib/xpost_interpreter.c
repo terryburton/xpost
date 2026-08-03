@@ -64,6 +64,7 @@
 #include "xpost_op_control.h"  /* record the run outcome when a job ends */
 #include "xpost_op_type.h"  /* the shared type naming */
 #include "xpost_op_array.h"  /* the shared array element access */
+#include "xpost_op_boolean.h"  /* the shared relations */
 #include "xpost_oplib.h"
 
 static
@@ -824,58 +825,29 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     os_top->data[ot - 1] = ctx->typenames[k_];
                     goto next_element;
                 }
-                if (ot >= 2 &&
-                    (w == (unsigned int)ctx->opcode_shortcuts.opeq ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opne))
+                if (ot >= 2)
                 {
-                    Xpost_Object x_ = os_top->data[ot - 2];
-                    Xpost_Object y_ = os_top->data[ot - 1];
-                    Xpost_Object_Type tx_ = xpost_object_get_type(x_);
-                    if (tx_ == xpost_object_get_type(y_) &&
-                        (tx_ == nametype || tx_ == booleantype))
+                    /* the operators' own comparison and their own
+                       reading of it serve all six relations, so a pair
+                       the comparison settles without reading vm answers
+                       the same here as it does there (see xpost_dict.h
+                       and xpost_op_boolean.h) */
+                    int rel_ =
+                        w == (unsigned int)ctx->opcode_shortcuts.opeq ? XPOST_OP_REL_EQ :
+                        w == (unsigned int)ctx->opcode_shortcuts.opne ? XPOST_OP_REL_NE :
+                        w == (unsigned int)ctx->opcode_shortcuts.oplt ? XPOST_OP_REL_LT :
+                        w == (unsigned int)ctx->opcode_shortcuts.ople ? XPOST_OP_REL_LE :
+                        w == (unsigned int)ctx->opcode_shortcuts.opgt ? XPOST_OP_REL_GT :
+                        w == (unsigned int)ctx->opcode_shortcuts.opge ? XPOST_OP_REL_GE : -1;
+                    int cmp_;
+
+                    if (rel_ >= 0 &&
+                        xpost_dict_compare_simple(os_top->data[ot - 2],
+                                                  os_top->data[ot - 1], &cmp_))
                     {
-                        int r_;
-                        if (tx_ == nametype)
-                            r_ = ((x_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) ==
-                                  (y_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)) &&
-                                 x_.mark_.padw == y_.mark_.padw;
-                        else
-                            r_ = x_.int_.val == y_.int_.val;
-                        if (w == (unsigned int)ctx->opcode_shortcuts.opne)
-                            r_ = !r_;
                         --os_top->top;
-                        os_top->data[ot - 2] = xpost_bool_cons(r_);
-                        goto next_element;
-                    }
-                }
-                if (ot >= 2 &&
-                    (w == (unsigned int)ctx->opcode_shortcuts.opeq ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opne ||
-                     w == (unsigned int)ctx->opcode_shortcuts.oplt ||
-                     w == (unsigned int)ctx->opcode_shortcuts.ople ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opgt ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opge))
-                {
-                    Xpost_Object x_ = os_top->data[ot - 2];
-                    Xpost_Object y_ = os_top->data[ot - 1];
-                    if (xpost_object_get_type(x_) == integertype &&
-                        xpost_object_get_type(y_) == integertype)
-                    {
-                        int r_;
-                        if (w == (unsigned int)ctx->opcode_shortcuts.opeq)
-                            r_ = x_.int_.val == y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.opne)
-                            r_ = x_.int_.val != y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.oplt)
-                            r_ = x_.int_.val < y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.ople)
-                            r_ = x_.int_.val <= y_.int_.val;
-                        else if (w == (unsigned int)ctx->opcode_shortcuts.opgt)
-                            r_ = x_.int_.val > y_.int_.val;
-                        else
-                            r_ = x_.int_.val >= y_.int_.val;
-                        --os_top->top;
-                        os_top->data[ot - 2] = xpost_bool_cons(r_);
+                        os_top->data[ot - 2] = xpost_bool_cons(
+                            xpost_op_relation((Xpost_Op_Relation)rel_, cmp_));
                         goto next_element;
                     }
                 }
