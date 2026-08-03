@@ -697,6 +697,19 @@ test('devices',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# The byte-identity render gate: the golden page (fills, strokes, clipping,
+# images, shading, patterns, an inline Type 3 font) rendered through every
+# deterministic output device must reproduce the recorded sha256 exactly.
+# A refactor claiming "no behavioral change" is held to these bytes; an
+# intended rendering change regenerates the manifest in the same commit
+# (tests/run-golden-render.sh ... --regen).
+test('golden-render',
+  find_program('tests/run-golden-render.sh'),
+  args: [ xpost_exe, files('tests/golden_page.ps'),
+          meson.current_source_dir() / 'tests' / 'golden' ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
 # and possibly by the program itself, so every device's Destroy must be
 # idempotent -- clear the stored resource handle, never free it twice -- and
