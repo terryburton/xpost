@@ -191,6 +191,26 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
 #endif
     xpost_oper_init_context_ops(ctx, sd);
 
+    /* Every opcode shortcut must have been captured. A missed capture
+       leaves the field zero, which is a valid opcode -- the first
+       operator registered -- so the interpreter would silently treat
+       that operator as the one it meant to shortcut. Zero is therefore
+       the one value no shortcut may hold, and this is where every
+       module has finished registering. */
+    {
+        const int *sc = (const int *)&ctx->opcode_shortcuts;
+        size_t n = sizeof ctx->opcode_shortcuts / sizeof *sc;
+        size_t i;
+        for (i = 0; i < n; i++)
+        {
+            if (sc[i] == 0)
+            {
+                XPOST_LOG_ERR("opcode shortcut %u was never captured: it "
+                              "aliases the first registered operator", (unsigned int)i);
+                return 0;
+            }
+        }
+    }
 
 #ifdef DEBUGOP
     printf("final sd:\n");
