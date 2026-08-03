@@ -1118,11 +1118,12 @@ static
 int xpost_op_string_print (Xpost_Context *ctx,
                            Xpost_Object S)
 {
+    size_t ret;
+    char *s;
+
     /* the string's characters are read out, so it needs read access */
     if (!xpost_object_is_readable(ctx, S))
         return invalidaccess;
-    size_t ret;
-    char *s;
     s = xpost_string_get_pointer(ctx, S);
     if (ctx->stdout_fn)
     {
