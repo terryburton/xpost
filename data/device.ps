@@ -109,12 +109,19 @@ end
     } if
 } bind def
 
+% (banner)  .pagepause  -
+% the wait the announcing semantics take at a page boundary: name the
+% page on the standard output and read a line from the line editor
+.xpostsys /.pagepause {
+    =print flush
+    [ {(%lineedit)(r)file}stopped cleartomark
+} bind put
+
 .xpostsys /ShowpageSemanticsDict <<
 
     % XPOST_SHOWPAGE_DEFAULT
     0 {
-        (----showpage----) =print flush
-        [ {(%lineedit)(r)file}stopped cleartomark
+        (----showpage----) //.xpostsys /.pagepause get exec
         DEVICE /pagenumber
         2 copy known {
             2 copy get 1 add put
@@ -122,18 +129,27 @@ end
             1 put
         } ifelse
         erasepage
-    } 
+    }
 
     % XPOST_SHOWPAGE_NOPAUSE
     1 {
         % don't do it.
         % do not pause right here.
-    } 
+    }
 
     % XPOST_SHOWPAGE_RETURN
     2 {
         returntocaller
     }
+>> put
+
+% copypage transmits the page without erasing it (PLRM 8.2), so it ends
+% a page for the embedder's purposes but not for the program's: it takes
+% the same three behaviours, less the page number and the erasure
+.xpostsys /CopypageSemanticsDict <<
+    0 { (----copypage----) //.xpostsys /.pagepause get exec }
+    1 { }
+    2 { returntocaller }
 >> put
 
 % name  .pagefilename  name'
@@ -168,11 +184,9 @@ setglobal
 
 /copypage {
     DEVICE dup /Emit get exec
-    flushpage 
+    flushpage
 
-    (----copypage----) =print flush
-    [ {(%lineedit)(r)file}stopped cleartomark
-
+    //.xpostsys /CopypageSemanticsDict get ShowpageSemantics get exec
 } bind def
 
 //.internaldict /QUIET known { }{ (eof device.ps\n)print } ifelse

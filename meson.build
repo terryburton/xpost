@@ -294,6 +294,19 @@ test('run-status',
   run_status_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: showpage and copypage both end a page, so both must
+# take the page semantics the embedder selected rather than announcing the
+# page and reading the line editor regardless.
+page_semantics_exe = executable('page_semantics_test',
+  'tests/page_semantics_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('page-semantics',
+  page_semantics_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Object-layer bounds discipline: a string object with a corrupt or
 # sentinel ent yields NULL from the pointer adapter, never a wild pointer.
 string_bounds_exe = executable('string_bounds_test',
