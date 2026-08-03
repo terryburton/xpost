@@ -791,6 +791,15 @@ test('op-file-limit',
   args: [ xpost_exe, files('tests/op_file_limit_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# File lifetime against a small open-file allowance: eight hundred files ended
+# by restore, by the program in either order, and as reusable streams, with a
+# collection asked for in every round. A descriptor not released shows up as a
+# refusal to open rather than as a leak nobody notices.
+test('file-lifetime',
+  find_program('tests/run-file-lifetime-test.sh'),
+  args: [ xpost_exe, files('tests/file_lifetime_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

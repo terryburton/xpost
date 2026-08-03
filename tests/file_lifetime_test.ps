@@ -1,0 +1,82 @@
+% File lifetime under everything that can end one, run by
+% run-file-lifetime-test.sh with the open-file allowance lowered.
+%
+% A file can be closed by the program, by the restore of a save taken
+% before it was opened (PLRM 3.8), or reclaimed with the rest of a job.
+% Each holds a descriptor until it is, and the allowance the wrapper sets
+% is far smaller than the number of files opened here: anything that
+% fails to close shows up as a refusal to open rather than as a slow
+% leak nobody notices.
+%
+% Collections are asked for throughout, because a file is held by the
+% interpreter outside its stacks and a collection is where that goes
+% wrong.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/nm (flife.scratch) def
+/seed nm (w) file def seed (0123456789abcdef) writestring seed closefile
+
+% --- closed by restore: each file and filter is opened after the save ---
+0 1 200 {
+    pop
+    save
+    /f nm (r) file def
+    f 4 string readstring pop pop
+    /g nm (r) file def
+    /h g /ASCIIHexDecode filter def
+    1 vmreclaim
+    restore
+    1 vmreclaim
+} for
+{ nm (r) file dup closefile } stopped not
+    (a file still opens after two hundred rounds closed by restore) assert
+
+% --- closed by the program, filter first then its source ---
+0 1 200 {
+    pop
+    /f nm (r) file def
+    /h f /ASCII85Decode filter def
+    h closefile
+    f closefile
+    1 vmreclaim
+} for
+{ nm (r) file dup closefile } stopped not
+    (a file still opens after two hundred closed by the program) assert
+
+% --- closed by the program, source first then the filter over it ---
+% The filter holds the stream beneath it, so closing them this way round
+% has to leave the filter usable until it is closed in its turn.
+0 1 200 {
+    pop
+    /f nm (r) file def
+    /h f /ASCIIHexDecode filter def
+    f closefile
+    h 2 string readstring pop pop
+    h closefile
+    1 vmreclaim
+} for
+{ nm (r) file dup closefile } stopped not
+    (a file still opens after two hundred closed source-first) assert
+
+% --- reusable streams, which hold their source's bytes ---
+0 1 200 {
+    pop
+    /r nm (r) file def
+    /s r /ReusableStreamDecode filter def
+    s 4 string readstring pop pop
+    s closefile
+    r closefile
+    1 vmreclaim
+} for
+{ nm (r) file dup closefile } stopped not
+    (a file still opens after two hundred reusable streams) assert
+
+% and the interpreter is still working
+1 2 add 3 eq (the interpreter still works after the rounds) assert
+
+nm deletefile
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
