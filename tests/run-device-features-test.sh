@@ -51,6 +51,25 @@ for dev in $devices; do
     }
 done
 
+# The window device needs a display. Where one can be conjured, it is
+# held to the same set: it keeps its own drawable and so carries the same
+# risk of inheriting a method that reaches for a raster it does not have.
+if command -v xvfb-run >/dev/null 2>&1; then
+    out=$(xvfb-run -a "$xpost" -q --no-sandbox -d xcb "$script" </dev/null 2>&1)
+    status=$?
+    ran=$((ran + 1))
+    if [ "$status" -ne 0 ]; then
+        echo "FAIL: xcb exited with status $status"
+        fail=1
+    elif printf '%s\n' "$out" | grep -qE '^FAIL:'; then
+        echo "FAIL: xcb could not paint:"
+        printf '%s\n' "$out" | grep -E '^FAIL:' | sed 's/^/      /'
+        fail=1
+    fi
+else
+    echo "note: no virtual display, the window device was not tried"
+fi
+
 [ "$ran" -gt 0 ] || { echo "FAILURES: no device was tried"; exit 1; }
 [ "$fail" = 0 ] || { echo "FAILURES: the devices above"; exit 1; }
 echo "SUCCESS ($ran devices)"

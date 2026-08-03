@@ -717,6 +717,18 @@ int loadxcbdevicecont(Xpost_Context *ctx,
                              dicttype); /* devdic */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
     if (ret)
+        return 0;
+
+    /* Paint glyphs without blending their edges. The blend the text
+       operators would otherwise use reads the pixel already there, which
+       for a window means asking the server for it one pixel at a time;
+       the base class's blend reaches for a raster of PostScript arrays
+       this device does not keep at all, and answers undefined. Declaring
+       one bit of text alpha takes the aliased path, which paints through
+       PutPix above. */
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "TextAlphaBits"),
+                         xpost_int_cons(1));
+    if (ret)
         return ret;
 
     op = xpost_operator_cons(ctx, "xcbGetPix", (Xpost_Op_Func)_getpix, 3, 3, numbertype, numbertype, dicttype);
