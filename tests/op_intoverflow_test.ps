@@ -6,7 +6,7 @@
 % integer range itself is implementation-defined.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 % in-range values remain integers on any implementation
 42 type /integertype eq (small literal is an integer) assert

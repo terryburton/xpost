@@ -6,7 +6,7 @@
 % apply the parameters they recognise, ignoring any they do not.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 currentuserparams
 dup type /dicttype eq (currentuserparams returns a dictionary) assert

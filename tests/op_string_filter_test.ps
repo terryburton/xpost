@@ -4,7 +4,7 @@
 % A filter's data source may be a string; the filter reads a private copy of it.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 % ASCIIHexDecode from a string
 (48656C6C6F>) /ASCIIHexDecode filter 12 string readstring pop

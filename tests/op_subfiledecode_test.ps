@@ -8,7 +8,7 @@
 % many bytes.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /mkfile { (subfiledecode.scratch) (w) file dup 3 -1 roll writestring closefile
           (subfiledecode.scratch) (r) file } def
 

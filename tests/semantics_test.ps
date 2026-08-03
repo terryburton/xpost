@@ -12,7 +12,7 @@
 
 /failcount 0 def
 /assert { % bool (name) . -
-    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
 } def
 /assertnear { % val expected (name) . -
     3 1 roll sub abs 0.001 lt exch assert

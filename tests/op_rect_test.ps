@@ -7,7 +7,7 @@
 % rectclip + clippath, whose bounding box is deterministic.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /near { sub abs 1e-3 lt } def
 /bbox4 { /ury exch def /urx exch def /lly exch def /llx exch def } def
 /clipbox4 { initgraphics newpath exec clippath pathbbox bbox4 } def

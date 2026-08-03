@@ -5,7 +5,7 @@
 % growth under 2 is no worse than under 1. This catches 2 being a no-op.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /vmused { vmstatus pop exch pop } def
 /churn { 1 1 120 { pop /d 30 dict def 0 1 40 { d exch dup put } for 100 array pop } for } def
 

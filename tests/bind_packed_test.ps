@@ -7,7 +7,7 @@
 % the same distinction even though a packed array is stored as a read-only array.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 % -- bind rewrites operator names in a packed procedure ----------------------
 true setpacking /pk { 2 3 add } def false setpacking

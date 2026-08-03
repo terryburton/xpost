@@ -18,7 +18,7 @@
 
 /failcount 0 def
 /assert { % bool (name) . -
-    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
 } def
 
 % --- an encoded program stream defines a value; the outer scanner resumes ---

@@ -5,7 +5,7 @@
 % reports a distinct packedarraytype and an ordinary read-only array does not.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 currentpacking not (currentpacking is initially false) assert
 true setpacking currentpacking (setpacking true is reported by currentpacking) assert

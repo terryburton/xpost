@@ -9,7 +9,7 @@
 % not a token.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 /expect_syntax { % (bytes) label -- ; scanning the bytes must syntaxerror
     exch mark exch

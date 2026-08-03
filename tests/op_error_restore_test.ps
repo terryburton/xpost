@@ -4,7 +4,7 @@
 % to. Run through `xpost -d null` by run-ps-test.sh.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /isint { type /integertype eq } def
 /isreal { type /realtype eq } def
 

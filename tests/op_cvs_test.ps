@@ -4,7 +4,7 @@
 % run-ps-test.sh.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /streq { 2 copy length exch length eq { eq } { pop pop false } ifelse } def
 /cvseq { 64 string cvs exch streq } def
 

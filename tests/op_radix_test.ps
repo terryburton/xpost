@@ -7,7 +7,7 @@
 % integers), so it is checked on xpost only, not compared to Ghostscript.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /tok { token pop exch pop } def   % string -> its first token
 
 % the width itself is implementation-defined: a radix numeral fills the

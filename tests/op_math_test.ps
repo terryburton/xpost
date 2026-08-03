@@ -7,7 +7,7 @@
 %   - RAD_PER_DEG is M_PI/180, so atan/sin/cos hit the PLRM examples
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /assertnear { 3 1 roll sub abs 1e-4 lt exch assert } def
 /erris { % { proc } /name (tag)  -> asserts proc raises error /name
     3 dict begin

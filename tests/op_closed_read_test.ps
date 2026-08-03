@@ -2,7 +2,7 @@
 % rather than raising an error. Run through `xpost -d null` by run-ps-test.sh.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /cr.f (closedread.scratch) (w) file def
 cr.f (Hi) writestring cr.f closefile
 /mkclosed { (closedread.scratch) (r) file dup closefile } def

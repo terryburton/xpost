@@ -7,7 +7,7 @@
 % implementation-defined, so only their type and presence are asserted.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 % create a file of known size (10 bytes)
 /f (status.scratch) (w) file def

@@ -5,7 +5,7 @@
 % filter, whose remaining count cannot be determined, it is -1.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 /f (bytesavail.scratch) (w) file def
 f (0123456789) writestring

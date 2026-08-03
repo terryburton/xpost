@@ -20,7 +20,7 @@
 
 /failcount 0 def
 /assert { % bool (name) . -
-    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
 } def
 
 % --- recover .xpostsys from a privatedict-anchored bound procedure ---

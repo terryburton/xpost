@@ -22,7 +22,7 @@
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add def } ifelse } def
+    /failcount failcount 1 add store } ifelse } def
 
 % Run an object and capture everything observable about the run: the
 % error it raised (or /ok), its net effect on the stack depth, and the
@@ -111,10 +111,10 @@
       { }
       { (MISMATCH results: ) print src print ( direct=) print r1 ==only
         ( fused=) print r2 ==only (\n) print
-        /failcount failcount 1 add def } ifelse }
+        /failcount failcount 1 add store } ifelse }
     { (MISMATCH outcome: ) print src print ( direct=) print o1 ==only
       ( fused=) print o2 ==only (\n) print
-      /failcount failcount 1 add def } ifelse
+      /failcount failcount 1 add store } ifelse
     end
 } def
 

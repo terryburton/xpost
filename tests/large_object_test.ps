@@ -8,7 +8,7 @@
 % is held to its own contract.
 
 /failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add def } ifelse } def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 
 /widesz { 70000 array pop true } stopped { pop false } if def
 
