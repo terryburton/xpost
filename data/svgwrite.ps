@@ -231,7 +231,38 @@
     % the rule the flattening fill applies. The per-element formatting
     % walks the path in C (.svgfillpath), appending to the accumulator,
     % so subpath count costs no operand stack.
-    /FillPath { //.internaldict /.svgfillpath get exec } bind
+    /FillPath { % r g b IMAGE  .  -
+        dup 5 1 roll            % keep the device for the clip close below
+        //.internaldict /.svgfillpath get exec
+        % a clip adopted for this fill ends with it
+        begin
+            currentdict /.svgclipopen 2 copy known { get }{ pop pop false } ifelse {
+                (</g>\n) .put
+                /.svgclipopen false def
+            } if
+        end
+    } bind
+
+    % clippath IMAGE . -  ; adopt a clip shape the interpreter could not
+    % reduce to a rectangle, as a clipPath the fill's group references.
+    % Without this the fill would be cut to pixel-band spans before
+    % reaching the device and arrive as one path per scanline; the shape
+    % costs one element and keeps its curves.
+    /ClipPath { % path IMAGE  .  -
+    begin
+        /.svgclipid currentdict /.svgclipid 2 copy known { get 1 add }{ pop pop 1 } ifelse def
+        % the path walker reads the current path, so install the clip
+        % shape for the walk and put the working path back after
+        graphicsdict /currgstate get /currpath get
+        exch
+        graphicsdict /currgstate get exch /currpath exch put
+        (<clipPath id="xc) .put .svgclipid 20 string cvs .put ("><path d=") .put
+        [ { /m } { /l } { /c } { /h } //.xpostsys /.devpathforall get exec ] .putelems
+        ("/></clipPath>\n) .put
+        (<g clip-path="url\(#xc) .put .svgclipid 20 string cvs .put (\)">\n) .put
+        graphicsdict /currgstate get exch /currpath exch put
+        /.svgclipopen true def
+    end } bind
 
     % r g b IMAGE . -  ; stroke the current path as one path element with
     % the device-space line width and the graphics state's cap, join and

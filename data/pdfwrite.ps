@@ -484,7 +484,34 @@
     begin
         .pdffillcolor
         currentdict //.internaldict /.pdffillpath get exec
+        % a clip adopted for this fill ends with it
+        currentdict /.pdfclipopen 2 copy known { get }{ pop pop false } ifelse {
+            (Q\n) .put
+            /.pdfclipopen false def
+        } if
     end }
+
+    % clippath IMAGE . -  ; adopt a clip shape the interpreter could not
+    % reduce to a rectangle, as a content-stream clip. Without this the
+    % fill would be cut to pixel-band spans before reaching the device and
+    % arrive as one subpath per scanline; the shape costs a few operators
+    % and keeps its curves. The clip lands inside the q/Q the fill's own
+    % emission balances, so it governs that fill alone.
+    /ClipPath { % path IMAGE  .  -
+    begin
+        % the path walker reads the current path, so install the clip
+        % shape for the walk and put the working path back after. No
+        % scratch dictionary is opened: the accumulator methods below
+        % append through currentdict, which must stay the device.
+        graphicsdict /currgstate get /currpath get      % path saved
+        exch                                            % saved path
+        graphicsdict /currgstate get exch /currpath exch put
+        (q\n) .put
+        [ { /m } { /l } { /c } { /h } //.xpostsys /.devpathforall get exec ] .putelems
+        (W n\n) .put
+        graphicsdict /currgstate get exch /currpath exch put
+        /.pdfclipopen true def
+    end } bind
 
     % w h ncomp mat rows decode interp IMAGE . -  ; take a whole sampled
     % image: the rows (one interleaved 8-bit string per row) file as

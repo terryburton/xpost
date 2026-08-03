@@ -63,6 +63,11 @@ currentglobal false setglobal
     %/scratchmatrix [ 1 0 0 1 0 0 ] % ??
     /currpath .newpathstr
     /clipregion .newpathstr
+    % the clip's shape as a path, when the region is one: the resolved
+    % clipregion above may have been reduced to pixel-band spans, which
+    % a device that clips for itself does not want. null once a region
+    % is no longer expressible as a single path.
+    /clipsource null
     /flat 1.0
     /linewidth 1.0
     /linecap 0

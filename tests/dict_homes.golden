@@ -38,6 +38,8 @@
 .xpostsys /despike
 .xpostsys /.devicemakers
 .xpostsys /.devpathforall
+.xpostsys /.devsendclip
+.xpostsys /.devtakespath
 .xpostsys /.dir
 .xpostsys /doclip
 .xpostsys /dolinejoin
@@ -132,6 +134,7 @@ gstate /greentransfer
 gstate /bluetransfer
 gstate /currpath
 gstate /clipregion
+gstate /clipsource
 gstate /flat
 gstate /linewidth
 gstate /linecap

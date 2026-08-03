@@ -57,6 +57,18 @@ def
     % the clip machinery consumes line segments, so the region is cut
     % from a flattened working copy; the caller's path is kept aside
     % and put back, undisturbed by flattening or the intersection
+    % remember the clip's shape as a path before flattening: a device
+    % that clips for itself wants the shape, not the pixel-band spans the
+    % region may reduce to below. Only an unclipped page keeps an exact
+    % single-path region; intersecting with an existing region can produce
+    % a shape no single path describes, so that case clears the record.
+    graphicsdict /currgstate get
+    .cliptrivial
+        { dup /currpath get .copypath }
+        { null }
+    ifelse
+    /clipsource exch put
+
     graphicsdict /currgstate get /currpath get .copypath
     flattenpath
     .cliptrivial {

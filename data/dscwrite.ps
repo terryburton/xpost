@@ -67,6 +67,12 @@ begin
     (/re { 4 2 roll moveto 1 index 0 rlineto\n) .w
     (     0 exch rlineto neg 0 rlineto closepath } bind def\n) .w
     (/f { fill } bind def\n) .w
+    (/f* { eofill } bind def\n) .w
+    (/q { gsave } bind def\n) .w
+    (/Q { grestore } bind def\n) .w
+    (/W { clip } bind def\n) .w
+    (/W* { eoclip } bind def\n) .w
+    (/n { newpath } bind def\n) .w
     (/S { stroke } bind def\n) .w
     (/w { setlinewidth } bind def\n) .w
     (/J { setlinecap } bind def\n) .w
@@ -134,6 +140,12 @@ begin
         (/re { 4 2 roll moveto 1 index 0 rlineto\n) .vw
         (     0 exch rlineto neg 0 rlineto closepath } bind def\n) .vw
         (/f { fill } bind def\n) .vw
+    (/f* { eofill } bind def\n) .vw
+    (/q { gsave } bind def\n) .vw
+    (/Q { grestore } bind def\n) .vw
+    (/W { clip } bind def\n) .vw
+    (/W* { eoclip } bind def\n) .vw
+    (/n { newpath } bind def\n) .vw
         (/S { stroke } bind def\n) .vw
         (/w { setlinewidth } bind def\n) .vw
         (/J { setlinecap } bind def\n) .vw
