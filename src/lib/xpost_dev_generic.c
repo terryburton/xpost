@@ -110,17 +110,6 @@ char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
     return filename;
 }
 
-int xpost_device_set_filename(Xpost_Context *ctx, Xpost_Object devdic, char *filename)
-{
-    Xpost_Object filenamestr;
-    int ret;
-
-    filenamestr = xpost_string_cons(ctx, strlen(filename), filename);
-    if ((ret = xpost_dict_put(ctx, devdic, xpost_name_cons(ctx, "OutputFileName"), filenamestr)))
-        return ret;
-    return 0;
-}
-
 static
 int _yxcomp(const void *left, const void *right)
 {
