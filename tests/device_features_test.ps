@@ -1,0 +1,78 @@
+% Every painting operator through whichever device is current, run by
+% run-device-features-test.sh once per device.
+%
+% A device implements a handful of methods and inherits the rest from
+% the base class. Which ones it has to implement itself depends on how
+% it keeps its raster, and a device that keeps its own buffer but
+% inherits a method reaching for the base class's raster fails only for
+% the operators that use that method -- the two buffer devices could
+% fill and stroke and measure text for years while being unable to paint
+% a single glyph.
+%
+% So each operator is exercised here rather than a representative one,
+% and each reports for itself.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+% The tag is put away before the procedure runs: a procedure that fails
+% may leave anything at all on the stack, and a report that reads its
+% own operands from there reports the leavings instead.
+/works { % {proc} (tag)  -  the operation completes
+    /w.tag exch def
+    stopped {
+        (FAIL: ) print w.tag print (\n) print
+        /failcount failcount 1 add store
+    } if
+    clear
+} def
+
+20 20 translate
+
+{ newpath 0 0 moveto 60 0 lineto 60 40 lineto closepath fill }
+    (fill paints) works
+{ newpath 0 0 moveto 60 40 lineto 3 setlinewidth stroke }
+    (stroke paints) works
+{ 0.5 setgray newpath 0 0 60 40 rectfill }
+    (rectfill paints) works
+{ newpath 5 5 20 0 360 arc stroke }
+    (an arc strokes) works
+{ 1 0 0 setrgbcolor newpath 0 0 moveto 30 0 rlineto 0 30 rlineto closepath fill }
+    (a coloured fill paints) works
+
+% text: the glyphs themselves, not merely their metrics
+{ /Helvetica findfont 14 scalefont setfont } (a font is selected) works
+{ (Ag) stringwidth pop pop } (text measures) works
+{ newpath 0 60 moveto (Ag) show } (text paints) works
+{ newpath 0 80 moveto /A glyphshow } (a glyph paints by name) works
+{ newpath 0 100 moveto (Ag) true charpath } (text becomes a path) works
+
+% images of each kind
+{ gsave 40 0 0 40 0 120 6 array astore concat
+  4 4 8 [4 0 0 -4 0 4] <00408000C0FF40208060A0E01030507090B0D0F0> image
+  grestore } (an image paints) works
+{ gsave 40 0 0 40 50 120 6 array astore concat
+  4 4 true [4 0 0 -4 0 4] <A050A050> imagemask
+  grestore } (an image mask paints) works
+{ gsave 40 0 0 40 100 120 6 array astore concat
+  2 2 8 [2 0 0 -2 0 2] <FF000000FF000000FFFFFF00> false 3 colorimage
+  grestore } (a colour image paints) works
+
+% a shading and a tiling pattern
+{ gsave 0 170 translate
+  << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 80 0]
+     /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >>
+  >> shfill grestore } (a shading paints) works
+{ gsave 0 220 translate
+  << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10]
+     /XStep 10 /YStep 10 /PaintProc { pop 0 0 5 5 rectfill } >>
+  matrix makepattern setpattern
+  newpath 0 0 80 40 rectfill grestore } (a pattern paints) works
+
+% and the page is emitted
+{ showpage } (the page is emitted) works
+
+% the page-emission banner ends without a newline, so start on a fresh
+% line rather than running into it
+(\n) print
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

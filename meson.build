@@ -429,6 +429,15 @@ test('raster-formats',
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every painting operator through every device that runs without a display.
+# Which methods a device must implement itself depends on how it keeps its
+# raster, so a device can fill and stroke for years while being unable to
+# paint a glyph -- which is what three of them were doing.
+test('device-features',
+  find_program('tests/run-device-features-test.sh'),
+  args: [ xpost_exe, files('tests/device_features_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # wrapper requires the output to be exactly SUCCESS.
 test('raster-class',
   find_program('tests/run-strict-ps-test.sh'),

@@ -227,6 +227,59 @@ int _create_cont(Xpost_Context *ctx,
     return unregistered;
 }
 
+/* Blend a coverage-weighted pixel: each channel moves toward the colour
+   by cov/255. The text operators use this for the partly covered pixels
+   at a glyph's edges, and a device without it inherits the base class's,
+   which blends into a raster held as PostScript arrays -- this device
+   keeps its pixels in a buffer of its own instead, so it needs its own.
+*/
+static
+int _blendpix(Xpost_Context *ctx,
+              Xpost_Object red,
+              Xpost_Object green,
+              Xpost_Object blue,
+              Xpost_Object cov,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int r, g, b, c, ix, iy;
+
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    c = xpost_dev_num_to_int(cov);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
+        return 0;
+
+    if (c <= 0)
+        return 0;
+    if (c > 255)
+        c = 255;
+
+    {
+        Xpost_Jpeg_Pixel *p = &private.buf->data[iy * private.width + ix];
+
+        p->red = (unsigned char)(p->red + ((r - p->red) * c + 127) / 255);
+        p->green = (unsigned char)(p->green + ((g - p->green) * c + 127) / 255);
+        p->blue = (unsigned char)(p->blue + ((b - p->blue) * c + 127) / 255);
+    }
+
+    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+
+    return 0;
+}
+
 static
 int _putpix(Xpost_Context *ctx,
             Xpost_Object red,
@@ -440,6 +493,13 @@ int loadjpegdevicecont(Xpost_Context *ctx,
             numbertype, numbertype,
             dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
+    if (ret)
+        return 0;
+
+    op = xpost_operator_cons(ctx, "jpegBlendPix", (Xpost_Op_Func)_blendpix, 0, 7,
+                             numbertype, numbertype, numbertype, numbertype,
+                             numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BlendPix"), op);
     if (ret)
         return ret;
 

@@ -1,0 +1,56 @@
+#!/bin/sh
+# Meson test wrapper: every painting operator through every device that
+# can run without a display.
+#
+# A device implements some methods and inherits the rest. Which it must
+# implement itself depends on how it keeps its raster, and a device that
+# keeps a buffer of its own while inheriting a method that reaches for
+# the base class's raster fails only for the operators using that method.
+# That is how both buffer devices came to be unable to paint a glyph
+# while filling, stroking and measuring text perfectly well: nothing
+# asked them to paint one.
+#
+#   $1  path to the built xpost binary
+#   $2  path to the PostScript workload
+set -u
+xpost=$1
+script=$2
+case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
+case $script in /*) ;; *) script=$PWD/$script ;; esac
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# The window devices need a display and the Windows ones another platform;
+# everything else renders headless. The raster device is named once per
+# pixel format, since each keeps its buffer differently.
+devices="null pgm ppm pbm tiff bbox png jpeg pdfwrite svgwrite dscwrite
+         bgr raster raster:rgb raster:argb raster:bgr raster:bgra"
+
+fail=0
+ran=0
+for dev in $devices; do
+    out=$("$xpost" -q --no-sandbox -d "$dev" -o "$work/out.bin" "$script" \
+          </dev/null 2>&1)
+    status=$?
+    ran=$((ran + 1))
+    if [ "$status" -ne 0 ]; then
+        echo "FAIL: $dev exited with status $status"
+        fail=1
+        continue
+    fi
+    if printf '%s\n' "$out" | grep -qE '^FAIL:'; then
+        echo "FAIL: $dev could not paint:"
+        printf '%s\n' "$out" | grep -E '^FAIL:' | sed 's/^/      /'
+        fail=1
+        continue
+    fi
+    printf '%s\n' "$out" | grep -q '^SUCCESS$' || {
+        echo "FAIL: $dev did not report success"
+        fail=1
+    }
+done
+
+[ "$ran" -gt 0 ] || { echo "FAILURES: no device was tried"; exit 1; }
+[ "$fail" = 0 ] || { echo "FAILURES: the devices above"; exit 1; }
+echo "SUCCESS ($ran devices)"
