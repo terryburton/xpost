@@ -12,7 +12,9 @@
 
 /.xpost_TIFFIMAGE .xpost_PPMIMAGE dup length 2 add dict copy def
 
-.xpost_TIFFIMAGE /.writetiff { % img file
+% emission frames the rows as a TIFF; the Emit dispatch itself is
+% inherited
+.xpost_TIFFIMAGE /.writepage { % img file
     12 dict begin
     {/f /a}{exch def}forall
     /w a 0 get length def
@@ -73,20 +75,6 @@
         a f //.internaldict /.writergbrows get exec
         8 w h mul 3 mul add 1 w h mul 3 mul ifdbuild
     } ifelse
-    end
-} put
-
-.xpost_TIFFIMAGE /Emit {
-    begin
-        /OutputFileName where { pop
-            ImgData
-            OutputFileName //.xpostsys /.pagefilename get exec (w) file
-            .writetiff
-        }{
-            ImgData
-            (%stdout) (w) file
-            .writetiff
-        } ifelse
     end
 } put
 

@@ -44,27 +44,15 @@ begin
     } if
 end } put
 
-.xpost_PBMIMAGE /.writepbm { % img file
+% emission thresholds and packs through the compiled row writer; the
+% Emit dispatch itself is inherited
+.xpost_PBMIMAGE /.writepage { % img file
     2 dict begin
     {/f /a}{exch def}forall
     a f //.internaldict /.writepbmrows get exec
     f (%stdout)(w)file ne {
         f closefile
     } if
-    end
-} put
-
-.xpost_PBMIMAGE /Emit {
-    begin
-        /OutputFileName where { pop
-            ImgData
-            OutputFileName //.xpostsys /.pagefilename get exec (w) file
-            .writepbm
-        }{
-            ImgData
-            (%stdout) (w) file
-            .writepbm
-        } ifelse
     end
 } put
 
