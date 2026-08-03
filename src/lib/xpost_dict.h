@@ -80,6 +80,32 @@ typedef struct Xpost_Magic_Pair
 } Xpost_Magic_Pair;
 
 /**
+ * @brief the dictionary header at an entity, and at a raw address.
+ *
+ * A dictionary's storage is a dichead followed by DICTABN(sz) records.
+ * These derive the two pointers; the record table always follows its own
+ * header, so it is taken from the header rather than re-offsetting the
+ * memory file's base. Both are invalidated by any allocation in @p mem.
+ */
+static inline dichead *
+xpost_dict_head(Xpost_Memory_File *mem, unsigned int ent)
+{
+    return (dichead *)xpost_ent_ptr(mem, ent);
+}
+
+static inline dichead *
+xpost_dict_head_at(Xpost_Memory_File *mem, unsigned int adr)
+{
+    return (dichead *)(mem->base + adr);
+}
+
+static inline dicrec *
+xpost_dict_table_of(dichead *dp)
+{
+    return (dicrec *)((char *)dp + sizeof(dichead));
+}
+
+/**
  * @brief yields the number of real entries in the table for a dict of size n
  */
 #define DICTABN(n) (2*(n)+1)

@@ -134,8 +134,8 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
     if (!mem) return 0;
 
     {
-        dichead *dp = (void *)(mem->base + adr);
-        dicrec *tp = (void *)(mem->base + adr + sizeof(dichead));
+        dichead *dp = xpost_dict_head_at(mem, adr);
+        dicrec *tp = xpost_dict_table_of(dp);
         int j;
 #ifdef DEBUG_GC
         Xpost_Object_Type type;
@@ -687,8 +687,8 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     if (ent >= sdmem->table.nextent)
         return 1;
     adr = sdmem->table.tab[ent].adr;
-    dp = (dichead *)(sdmem->base + adr);
-    tp = (dicrec *)(sdmem->base + adr + sizeof(dichead));
+    dp = xpost_dict_head_at(sdmem, adr);
+    tp = xpost_dict_table_of(dp);
     for (j = 0; j < DICTABN(dp->sz); j++)
     {
         Xpost_Object v = tp[j].value;

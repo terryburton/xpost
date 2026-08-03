@@ -126,8 +126,8 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
         }
         else if (tag == dicttype)
         {
-            dichead *dp = (void *)(m->base + adr);
-            dicrec *tp = (void *)(m->base + adr + sizeof(dichead));
+            dichead *dp = xpost_dict_head_at(m, adr);
+            dicrec *tp = xpost_dict_table_of(dp);
             int j;
             for (j = 0; j < DICTABN(dp->sz); j++)
             {

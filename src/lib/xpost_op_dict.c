@@ -403,14 +403,14 @@ int xpost_op_dict_copy(Xpost_Context *ctx,
                 xpost_object_get_ent(S));
         return VMerror;
     }
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    tp = xpost_dict_table_of(xpost_dict_head_at(mem, ad));
     for (i = 0; i < DICTABN(sz); i++)
     {
         if (xpost_object_get_type(tp[i].key) != nulltype)
         {
             if ((ret = xpost_dict_put(ctx, D, tp[i].key, tp[i].value)))
                 return ret;
-            tp = (void *)(mem->base + ad + sizeof(dichead)); /* recalc */
+            tp = xpost_dict_table_of(xpost_dict_head_at(mem, ad)); /* recalc */
         }
     }
     xpost_stack_push(ctx->lo, ctx->os, D);
@@ -443,7 +443,7 @@ int _dict_forall_step (Xpost_Context *ctx,
         *reterr = VMerror;
         return 0;
     }
-    tp = (void *)(mem->base + ad + sizeof(dichead));
+    tp = xpost_dict_table_of(xpost_dict_head_at(mem, ad));
 
     for ( ; D->comp_.off < DICTABN(D->comp_.sz); ++D->comp_.off) // find next pair
     {
