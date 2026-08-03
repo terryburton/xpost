@@ -795,6 +795,14 @@ test('filter-matrix',
   args: [ xpost_exe, files('tests/filter_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every mutating operator against restore. Whether an operator records
+# what it overwrites is a property of the operator, not of the type, so
+# one reverting says nothing about the next.
+test('save-restore-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/save_restore_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.

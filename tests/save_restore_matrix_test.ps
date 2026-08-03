@@ -1,0 +1,172 @@
+% Every mutating operator against save and restore, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Local memory is kept copy-on-write: an operator that changes a
+% composite has to record what was there before, or its change survives
+% the restore that should have undone it. Whether an operator does that
+% is a property of the operator, not of the type it changes, so `put`
+% reverting says nothing about `putinterval` -- and one operator at a
+% time is exactly what a per-operator test does not catch.
+%
+% PLRM 3.7.3 gives restore five separate obligations, and each is
+% checked here rather than the first: it reverts composites other than
+% strings, leaves strings alone, discards what was made since the save,
+% closes files opened since the save, performs a grestoreall, and leaves
+% global memory untouched.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% ---------------------------------------------------------------- arrays
+% "Resets the values of all composite objects in local VM, except
+% strings, to their state at the time of the save."
+
+/a [1 2 3 4] def
+/vm save def a 0 99 put vm restore
+a 0 get 1 eq (put on an array is undone) assert
+
+/a [1 2 3 4] def
+/vm save def a 1 [7 8] putinterval vm restore
+a 1 get 2 eq (putinterval on an array is undone) assert
+
+/a [1 2 3 4] def
+/vm save def 7 8 9 10 a astore pop vm restore
+a 0 get 1 eq (astore is undone) assert
+
+/a [1 2 3 4] def
+/vm save def [9 9 9 9] a copy pop vm restore
+a 0 get 1 eq (copy into an array is undone) assert
+
+/a [1 2 3 4] def
+/vm save def a 0 [5 6] putinterval vm restore
+a 0 get 1 eq (putinterval at the front is undone) assert
+
+% a procedure changed in place by bind
+/p { 1 2 add } def
+/vm save def /p load bind pop vm restore
+/p load 2 get /add cvx eq (bind on a procedure is undone) assert
+
+% an array reached only through another array
+/inner [1 2] def
+/outer [ inner ] def
+/vm save def outer 0 get 0 42 put vm restore
+inner 0 get 1 eq (a nested array is undone) assert
+
+% ---------------------------------------------------------- dictionaries
+
+/d 8 dict def d /k 1 put
+/vm save def d /k 2 put vm restore
+d /k get 1 eq (put on a dictionary is undone) assert
+
+/d 8 dict def d /k 1 put
+/vm save def d /k undef vm restore
+d /k known (undef is undone) assert
+
+/d 8 dict def d /k 1 put
+/vm save def d begin /k 2 def end vm restore
+d /k get 1 eq (def is undone) assert
+
+/d 8 dict def d /k 1 put
+/vm save def d begin /k 2 store end vm restore
+d /k get 1 eq (store is undone) assert
+
+/d 8 dict def d /k 1 put
+/src 8 dict def src /k 3 put
+/vm save def src d copy pop vm restore
+d /k get 1 eq (copy into a dictionary is undone) assert
+
+% a key added rather than changed
+/d 8 dict def
+/vm save def d /fresh 1 put vm restore
+d /fresh known not (a key added after the save is undone) assert
+
+% growing the dictionary past its allotment, which moves it
+/d 2 dict def d /a 1 put
+/vm save def d /b 2 put d /c 3 put d /e 4 put vm restore
+d length 1 eq (a dictionary grown after the save is undone) assert
+
+% ---------------------------------------------------------------- strings
+% "except strings" -- the one composite restore is specified to leave
+% alone. Asserted so that making strings revert would be caught as the
+% deviation it would be.
+
+/s (abcd) def
+/vm save def s 0 88 put vm restore
+s 0 get 88 eq (a string is left alone, as specified) assert
+
+/s (abcd) def
+/vm save def s 0 (XY) putinterval vm restore
+s 0 get 88 eq (putinterval on a string is left alone) assert
+
+% ------------------------------------------------- what the save discards
+
+/vm save def /made [1 2 3] def vm restore
+/made where { pop false }{ true } ifelse
+    (an array made after the save is discarded) assert
+
+% A reference left on a stack to such an object is specified to make
+% the restore itself an error. That check is not implemented, so the
+% restore is taken and the object goes on being readable -- it stays
+% reachable from the stack, which the collector treats as a root, so
+% nothing dangles and the deviation is one of permissiveness. Reported
+% rather than asserted, so that neither behaviour is written down here
+% as the correct one.
+/vm save def
+{ [1 2 3] vm restore } stopped
+    { (note: a restore under a newer object on the stack is refused\n) print }
+    { (note: a restore under a newer object on the stack is permitted\n) print }
+  ifelse
+clear
+
+% -------------------------------------------------------------- the files
+% "Closes files that were opened since the corresponding save" is not
+% checked here: a program cannot hold the file object across the very
+% restore that discards it without breaking the rule above. It is
+% checked in file_lifetime_test.ps instead, by opening and restoring
+% away enough files that a descriptor left open would exhaust the
+% supply.
+
+% ----------------------------------------------------- the graphics state
+% "Performs an implicit grestoreall operation."
+
+/vm save def
+0.25 setgray 3 setlinewidth
+vm restore
+currentgray 0.0 eq (the colour is restored) assert
+currentlinewidth 1.0 eq (the line width is restored) assert
+
+/vm save def
+gsave gsave gsave 0.5 setgray
+vm restore
+currentgray 0.0 eq (nested gsaves are all undone) assert
+
+% ---------------------------------------------------------- global memory
+% "save and restore normally do not affect global VM."
+
+true setglobal
+/gd 8 dict def gd /k 1 put
+false setglobal
+/vm save def
+true setglobal gd /k 2 put false setglobal
+vm restore
+gd /k get 2 eq (a global dictionary is not reverted) assert
+
+% ------------------------------------------------------------- the nesting
+% Restores taken in turn go back one snapshot at a time.
+
+/a [1 2 3] def
+/v1 save def a 0 11 put
+/v2 save def a 0 22 put
+v2 restore
+a 0 get 11 eq (the inner restore goes back one step) assert
+v1 restore
+a 0 get 1 eq (the outer restore goes back the rest) assert
+
+% and the depth is reported while they are outstanding
+/before vmstatus pop pop def
+/v1 save def
+vmstatus pop pop before 1 add eq (the save level is counted) assert
+v1 restore
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
