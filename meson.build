@@ -306,6 +306,23 @@ test('string-bounds',
   string_bounds_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The one growable byte buffer every byte-stream builder in the tree grows
+# through: its return convention (0 for no error, the error code to raise
+# otherwise), a zero-filled buffer being a valid empty one, content survival
+# across arbitrarily many doublings, and a capacity request no allocator can
+# satisfy answering the error instead of wrapping around.
+strbuf_exe = executable('strbuf_test',
+  'tests/strbuf_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+# the unsatisfiable reserve asks the allocator for a block no allocator can
+# serve; AddressSanitizer aborts on such a request unless told to answer null
+# the way the C library does
+test('strbuf', strbuf_exe,
+  env: { 'ASAN_OPTIONS': 'allocator_may_return_null=1' })
+
 # Memory-table bookkeeping under dictionary growth: dicgrow's entity swap
 # must move (adr, sz, used) together; the invariant used <= sz holds for
 # every ent after repeated regrowth.
@@ -846,6 +863,17 @@ test('font-type1-sparse-subrs',
   args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Type 1 emission across many doublings of the font-program buffer: an
+# embedded font whose eexec section outgrows its buffer several times
+# over, every glyph declaring its own advance width through hsbw and
+# every one of those widths read back with stringwidth. A byte lost,
+# duplicated or reordered at any grow lands in a charstring the check
+# reads.
+test('font-bigbuf',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_bigbuf_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools
@@ -907,6 +935,14 @@ test('raster-classes-derivation',
 # dict-copy derivation of the PDF device.
 test('vecbase',
   find_program('tests/check-vecbase.sh'),
+  args: [ meson.current_source_dir() ])
+
+# One growable byte buffer for the whole tree: the builders that assemble
+# a byte stream of unknown final size grow it through xpost_strbuf.h, none
+# of them carries a grow loop or a pointer/length/capacity triple of its
+# own, and none reads the answer as a success flag.
+test('one-bytebuf',
+  find_program('tests/check-one-bytebuf.sh'),
   args: [ meson.current_source_dir() ])
 
 # Path-component validation and beneath-root confinement: traversal and

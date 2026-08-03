@@ -66,6 +66,7 @@
 
 #include "xpost_error.h"  /* file functions may throw errors */
 #include "xpost_file.h"  /* double-check prototypes */
+#include "xpost_strbuf.h"  /* a rereadable file captures its source in one */
 
 /* --- file-access sandbox -------------------------------------------------
    A process-wide, one-way latch. Before engaging, disk access is
@@ -4384,37 +4385,32 @@ Xpost_Object xpost_file_cons_filter_rsd(Xpost_Memory_File *mem, Xpost_Object src
 {
     Xpost_File *source = xpost_file_get_file_pointer(mem, src);
     Xpost_RsdFile *ff;
-    unsigned char *data = NULL;
-    size_t len = 0, cap = 0;
+    Xpost_String_Buffer data;
     int c;
 
     if (!source)
         return invalid;
+    if (xpost_strbuf_init(&data, 4096))
+        return invalid;
     while ((c = xpost_file_getc(source)) != EOF)
     {
-        if (len == cap)
+        char b = (char)c;
+
+        if (xpost_strbuf_append(&data, &b, 1))
         {
-            unsigned char *grown;
-            cap = cap ? cap * 2 : 4096;
-            grown = realloc(data, cap);
-            if (!grown)
-            {
-                free(data);
-                return invalid;
-            }
-            data = grown;
+            xpost_strbuf_free(&data);
+            return invalid;
         }
-        data[len++] = (unsigned char)c;
     }
     ff = malloc(sizeof *ff);
     if (!ff)
     {
-        free(data);
+        xpost_strbuf_free(&data);
         return invalid;
     }
     ff->methods.methods = &rsd_methods;
-    ff->data = data;
-    ff->len = len;
+    ff->data = (unsigned char *)data.s;
+    ff->len = data.len;
     ff->pos = 0;
     return _filter_object_cons(mem, &ff->methods);
 }

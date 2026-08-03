@@ -61,6 +61,7 @@
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_generic.h" /* check prototypes */
+#include "xpost_strbuf.h" /* the growable byte buffer the content accumulates in */
 
 struct point
 {
@@ -2231,12 +2232,12 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
 {
 #ifdef HAVE_ZLIB
     z_stream strm;
-    unsigned char *out = NULL;
-    size_t outlen = 0, outcap = 0;
+    Xpost_String_Buffer out;
     unsigned char buf[16384];
     Xpost_Object result;
     int i, n, ret;
 
+    memset(&out, 0, sizeof out);
     memset(&strm, 0, sizeof strm);
     if (deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK)
         return unregistered;
@@ -2264,56 +2265,46 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
             ret = deflate(&strm, flush);
             if (ret == Z_STREAM_ERROR)
             {
-                free(out);
+                xpost_strbuf_free(&out);
                 deflateEnd(&strm);
                 return unregistered;
             }
             have = sizeof buf - strm.avail_out;
-            if (outlen + have > outcap)
+            if (have && xpost_strbuf_append(&out, buf, have))
             {
-                unsigned char *tmp;
-                outcap = (outlen + have) * 2 + 64;
-                tmp = realloc(out, outcap);
-                if (!tmp)
-                {
-                    free(out);
-                    deflateEnd(&strm);
-                    return VMerror;
-                }
-                out = tmp;
+                xpost_strbuf_free(&out);
+                deflateEnd(&strm);
+                return VMerror;
             }
-            if (have)
-                memcpy(out + outlen, buf, have);
-            outlen += have;
         } while (strm.avail_out == 0);
     }
     deflateEnd(&strm);
 
     {
         size_t pos = 0;
-        int nchunks = (int)((outlen + 65534) / 65535);
+        int nchunks = (int)((out.len + 65534) / 65535);
         if (nchunks == 0)
             nchunks = 1;
         result = xpost_object_cvlit(xpost_array_cons(ctx, nchunks));
         for (i = 0; i < nchunks; i++)
         {
-            size_t chunk = outlen - pos;
+            size_t chunk = out.len - pos;
             if (chunk > 65535)
                 chunk = 65535;
             /* cvlit: strings and arrays are executable by default, and this
                binary content must be written, not executed */
             ret = xpost_array_put(ctx, result, i,
                                   xpost_object_cvlit(
-                                      xpost_string_cons(ctx, chunk, (char *)(out + pos))));
+                                      xpost_string_cons(ctx, chunk, out.s + pos)));
             if (ret)
             {
-                free(out);
+                xpost_strbuf_free(&out);
                 return ret;
             }
             pos += chunk;
         }
     }
-    free(out);
+    xpost_strbuf_free(&out);
     xpost_stack_push(ctx->lo, ctx->os, result);
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
     return 0;
@@ -2389,32 +2380,11 @@ typedef struct
 
 typedef struct
 {
-    char *data;
-    size_t len;
-    size_t cap;
+    Xpost_String_Buffer content;
     Pdf_Sep *seps;
     int nseps;
     int sepcap;
 } Pdf_Acc;
-
-static int _pdf_acc_append(Pdf_Acc *a, const char *s, size_t n)
-{
-    if (a->len + n > a->cap)
-    {
-        size_t nc = a->cap ? a->cap : 4096;
-        char *nd;
-        while (nc < a->len + n)
-            nc *= 2;
-        nd = (char *)realloc(a->data, nc);
-        if (!nd)
-            return 0;
-        a->data = nd;
-        a->cap = nc;
-    }
-    memcpy(a->data + a->len, s, n);
-    a->len += n;
-    return 1;
-}
 
 /* Load/store the accumulator struct via the device's /Private string. The raw
    memory accessors record no save/restore backup, so neither the struct nor the
@@ -2439,9 +2409,7 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     Pdf_Acc a;
     Xpost_Object priv;
 
-    a.data = (char *)malloc(4096);
-    a.len = 0;
-    a.cap = a.data ? 4096 : 0;
+    xpost_strbuf_init(&a.content, 4096);
     a.seps = NULL;
     a.nseps = 0;
     a.sepcap = 0;
@@ -2456,30 +2424,35 @@ static int _pdfput(Xpost_Context *ctx, Xpost_Object str, Xpost_Object devdic)
 {
     Pdf_Acc a;
     Xpost_Object priv;
+    int ret;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
-    if (!_pdf_acc_append(&a, (char *)xpost_string_get_pointer(ctx, str), str.comp_.sz))
-        return VMerror;
+    ret = xpost_strbuf_append(&a.content,
+                              xpost_string_get_pointer(ctx, str), str.comp_.sz);
+    if (ret)
+        return ret;
     _pdf_acc_put(ctx, priv, &a);
     return 0;
 }
 
 /* Exported accumulator access for the text operators: they build a
    complete content-stream fragment per glyph outline and append it in
-   one call. Returns 1 on success. */
+   one call. */
 int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdic,
                          const char *s, size_t n)
 {
     Pdf_Acc a;
     Xpost_Object priv;
+    int ret;
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
-        return 0;
-    if (!_pdf_acc_append(&a, s, n))
-        return 0;
+        return undefined;
+    ret = xpost_strbuf_append(&a.content, s, n);
+    if (ret)
+        return ret;
     _pdf_acc_put(ctx, priv, &a);
-    return 1;
+    return 0;
 }
 
 /* Exported PDF number formatter (see _pdf_fmt_num) */
@@ -2521,17 +2494,17 @@ static int _pdffillpoly(Xpost_Context *ctx,
             tmp[len++] = needmove ? 'm' : 'l';
             tmp[len++] = '\n';
             needmove = 0;
-            _pdf_acc_append(&a, tmp, len);
+            xpost_strbuf_append(&a.content, tmp, len);
         }
         else if (!needmove)   /* null subpath separator: close the subpath */
         {
-            _pdf_acc_append(&a, "h\n", 2);
+            xpost_strbuf_append(&a.content, "h\n", 2);
             needmove = 1;
         }
     }
     if (!needmove)
-        _pdf_acc_append(&a, "h\n", 2);
-    _pdf_acc_append(&a, "f\n", 2);
+        xpost_strbuf_append(&a.content, "h\n", 2);
+    xpost_strbuf_append(&a.content, "f\n", 2);
 
     _pdf_acc_put(ctx, priv, &a);
     return 0;
@@ -2564,7 +2537,7 @@ static int _svgfillpoly(Xpost_Context *ctx,
     len += _pdf_fmt_num(tmp + len, PDFNUMVAL(g) * 100); tmp[len++] = '%'; tmp[len++] = ',';
     len += _pdf_fmt_num(tmp + len, PDFNUMVAL(b) * 100); tmp[len++] = '%';
     memcpy(tmp + len, ")\" fill-rule=\"nonzero\" d=\"", 26); len += 26;
-    _pdf_acc_append(&a, tmp, len);
+    xpost_strbuf_append(&a.content, tmp, len);
 
     n = poly.comp_.sz;
     for (i = 0; i < n; i++)
@@ -2579,17 +2552,17 @@ static int _svgfillpoly(Xpost_Context *ctx,
             len += _pdf_fmt_num(tmp + len, x); tmp[len++] = ' ';
             len += _pdf_fmt_num(tmp + len, y);
             needmove = 0;
-            _pdf_acc_append(&a, tmp, len);
+            xpost_strbuf_append(&a.content, tmp, len);
         }
         else if (!needmove)   /* null subpath separator: close the subpath */
         {
-            _pdf_acc_append(&a, "Z", 1);
+            xpost_strbuf_append(&a.content, "Z", 1);
             needmove = 1;
         }
     }
     if (!needmove)
-        _pdf_acc_append(&a, "Z", 1);
-    _pdf_acc_append(&a, "\"/>\n", 4);
+        xpost_strbuf_append(&a.content, "Z", 1);
+    xpost_strbuf_append(&a.content, "\"/>\n", 4);
 
     _pdf_acc_put(ctx, priv, &a);
     return 0;
@@ -2608,18 +2581,18 @@ static int _pdfchunks(Xpost_Context *ctx, Xpost_Object devdic)
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return undefined;
-    nchunks = (int)((a.len + 65534) / 65535);
+    nchunks = (int)((a.content.len + 65534) / 65535);
     if (nchunks == 0)
         nchunks = 1;
     result = xpost_object_cvlit(xpost_array_cons(ctx, nchunks));
     for (i = 0; i < nchunks; i++)
     {
-        size_t chunk = a.len - pos;
+        size_t chunk = a.content.len - pos;
         if (chunk > 65535)
             chunk = 65535;
         ret = xpost_array_put(ctx, result, i,
                               xpost_object_cvlit(
-                                  xpost_string_cons(ctx, chunk, a.data + pos)));
+                                  xpost_string_cons(ctx, chunk, a.content.s + pos)));
         if (ret)
             return ret;
         pos += chunk;
@@ -2777,7 +2750,7 @@ static int _pdfreset(Xpost_Context *ctx, Xpost_Object devdic)
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return 0;
-    a.len = 0;
+    a.content.len = 0;
     _pdf_acc_put(ctx, priv, &a);
     return 0;
 }
@@ -2790,10 +2763,7 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
 
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return 0;
-    free(a.data);
-    a.data = NULL;
-    a.len = 0;
-    a.cap = 0;
+    xpost_strbuf_free(&a.content);
     for (i = 0; i < a.nseps; i++)
     {
         free(a.seps[i].name);
