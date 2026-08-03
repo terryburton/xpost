@@ -290,6 +290,9 @@ _xpost_dsc_integer_get_from_string(const unsigned char *str, int *val)
     char *endptr;
     long v;
 
+    /* strtol reports overflow only through errno, so clear any value
+       left over from unrelated earlier work */
+    errno = 0;
     v = strtol((const char *)str, &endptr, 10);
     if (((errno == ERANGE) &&
          ((v == LONG_MAX) || (v == LONG_MIN))) ||

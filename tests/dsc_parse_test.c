@@ -13,6 +13,7 @@
 # include "config.h"
 #endif
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -295,6 +296,23 @@ int main(void)
     check(dsc.pages && dsc.header.pages == 1 && dsc.pages[0].label &&
           strcmp(dsc.pages[0].label, "one") == 0,
           "the declared page is recorded");
+    xpost_dsc_free(&dsc);
+
+    /* Number conversion must judge only its own outcome: an errno left
+       over from unrelated earlier work must not make a zero coordinate
+       look like a conversion failure. */
+    memset(&dsc, 0, sizeof(dsc));
+    errno = ERANGE;
+    check(parse("%!PS-Adobe-3.0\n"
+                "%%BoundingBox: 0 0 612 792\n"
+                "%%EndComments\n"
+                "showpage\n", &dsc),
+          "a bounding box parses regardless of entry errno");
+    check(dsc.header.bounding_box.llx == 0 &&
+          dsc.header.bounding_box.lly == 0 &&
+          dsc.header.bounding_box.urx == 612 &&
+          dsc.header.bounding_box.ury == 792,
+          "a zero coordinate converts with errno set on entry");
     xpost_dsc_free(&dsc);
 
     xpost_quit();
