@@ -234,6 +234,7 @@ end
 setglobal
 
 /setcolorspace {
+    dup //.xpostsys /.csvalidate get exec
     %[ currentcolor setcolordict currentcolorspace get counttomark 2 add -1 roll
     % record the space as set (what currentcolorspace reports), then the
     % space the colour components are recorded in: setcolor converts an
@@ -360,6 +361,41 @@ currentglobal true setglobal
         //.xpostsys /.spacecomps get exch get
     } ifelse
 } bind put
+
+% space  .csvalidate  -
+% walk a colour space down to the device space a colour in it is finally
+% recorded in, without touching the graphics state: an Indexed space
+% reduces through its base, a Separation or DeviceN through its
+% alternative, and a CIE-based family to device RGB. A family none of
+% those knows is undefined, answered before the space is installed
+% rather than by the next operator to ask a question of it
+.xpostsys /.csvalidate {
+    1 dict begin
+    /sp exch def
+    sp type /arraytype eq { sp 0 get }{ sp } ifelse /Pattern eq {
+        % a pattern space carries the space its uncoloured cells paint
+        % with as a second element, when it carries one at all
+        sp type /arraytype eq {
+            sp length 1 gt { sp 1 get //.xpostsys /.csvalidate get exec } if
+        } if
+    }{
+        {
+            sp type /arraytype ne { exit } if
+            sp 0 get /Indexed eq { /sp sp 1 get def }{
+            sp 0 get dup /Separation eq exch /DeviceN eq or
+                { /sp sp 2 get def }{
+            //.xpostsys /.ciefams get sp 0 get known
+                { /sp /DeviceRGB def }{ exit } ifelse } ifelse } ifelse
+        } loop
+        % an array still standing here names a family nothing reduced
+        sp type /arraytype eq { /sp sp 0 get def } if
+        sp type /nametype ne
+            { /setcolorspace cvx /typecheck signalerror } if
+        //.xpostsys /.spacecomps get sp known not
+            { /setcolorspace cvx /undefined signalerror } if
+    } ifelse
+    end
+} put
 setglobal
 /setcolor {
     currentcolorspace
