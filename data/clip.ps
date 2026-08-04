@@ -475,7 +475,7 @@ put
 
 % clipsave/cliprestore (LL3): push and pop the clip region alone,
 % independent of the graphics state stack
-/clipsave {
+/clipsave [ ] {
     graphicsdict /clipstack 2 copy known { get }{
         2 copy 32 array put get
     } ifelse
@@ -483,14 +483,14 @@ put
     2 copy graphicsdict /currgstate get /clipregion get .copypath put
     pop
     graphicsdict /clipptr 2 copy get 1 add put
-} def
-/cliprestore {
+} //.xpostsys /.defop get exec
+/cliprestore [ ] {
     graphicsdict /clipptr get 0 gt {
         graphicsdict /clipptr 2 copy get 1 sub put
         graphicsdict /currgstate get /clipregion
         graphicsdict /clipstack get graphicsdict /clipptr get get
         put
     } if
-} def
+} //.xpostsys /.defop get exec
 
 //.internaldict /QUIET known { }{ (eof clip.ps\n)print } ifelse

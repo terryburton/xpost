@@ -103,11 +103,11 @@ userdict /.internaldict 256 dict put
 % int  internaldict  dict
 % the guarded accessor by which a font program reaches the private
 % operators; the password is part of the language folklore
-/internaldict {
+/internaldict [ /integertype ] {
     1183615869 eq { //.internaldict }{
         /internaldict cvx /invalidaccess signalerror
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % Debug aids and the internal context-state markers are C operators, not part of
 % the language, and must not sit in a program's lookup path. The machinery
@@ -184,15 +184,14 @@ setglobal
 % bool password  startjob  bool
 % job boundaries are accepted -- definitions persist either way,
 % as xpost runs jobs unencapsulated
-/startjob { pop pop true } def
+/startjob [ /booleantype /anytype ] { pop pop true } //.xpostsys /.defop get exec
 
 % the interpreter answers for the whole language
 /languagelevel 3 def
 
-/setvmthreshold {
-    /setvmthreshold [ /integertype ] //.xpostsys /.checkargs get exec
+/setvmthreshold [ /integertype ] {
     pop
-} def
+} //.xpostsys /.defop get exec
 
 % the shared-VM view of global VM, one and the same here
 /setshared /setglobal load def
@@ -287,7 +286,7 @@ setglobal
 %/product (Xpost) def % now an operator in xpost_op_misc.c
 %/version (0) def % now an operator in xpost_op_misc.c
 %/revision 0 def % now an operator in xpost_op_misc.c
-/run { (r) file cvx exec } def
+/run [ /stringtype ] { (r) file cvx exec } //.xpostsys /.defop get exec
 /Run { (\() print dup =print (\) run\n) print flush run } def
 
 %(2\n)print
@@ -309,10 +308,10 @@ setglobal
 /=only //=print def
 
 %(3\n)print
-/= {
+/= [ /anytype ] {
     //=print exec
     (\n) print
-} bind def
+} bind //.xpostsys /.defop get exec
 
 %dumpnames dumpvm
 %debugloadon
@@ -329,7 +328,7 @@ setglobal
 (/err.ps) //.xpostsys /.loadmodule get exec
 
 %(5\n)print
-/stack { count dup 1 add copy //= repeat pop } def
+/stack [ ] { count dup 1 add copy //= repeat pop } //.xpostsys /.defop get exec
 
 %(6\n)print
 userdict begin
@@ -446,8 +445,8 @@ userdict begin
     { stop } if    % so an error inside == does not strand it on the
                    % dict stack; re-raise once the dict stack is clean
 } end def % remove ==dict, installing == in userdict
-/== { ==only (\n) print } def
-/pstack { count dup 1 add copy //== repeat pop } def
+/== [ /anytype ] { ==only (\n) print } //.xpostsys /.defop get exec
+/pstack [ ] { count dup 1 add copy //== repeat pop } //.xpostsys /.defop get exec
 end % back to systemdict
 
 
@@ -610,14 +609,14 @@ setglobal
     quit
 } def
 
-/prompt {
+/prompt [ ] {
     (PS) print
     count dup 0 eq { pop } { (<) print //=print exec } ifelse
     //execdict /execdepth get {
         (>) print
     } repeat
     flush
-} def
+} //.xpostsys /.defop get exec
 
 % User, system, and device parameters. The current* operators return a fresh
 % dictionary of the present values; the set* operators apply the parameters they
@@ -628,15 +627,15 @@ currentglobal true setglobal
 .xpostsys /.uparams << /VMReclaim 0 /VMThreshold 0 >> put
 setglobal
 
-/setdevparams { pop pop } def
-/currentdevparams { pop 0 dict } def
+/setdevparams [ /stringtype /dicttype ] { pop pop } //.xpostsys /.defop get exec
+/currentdevparams [ /stringtype ] { pop 0 dict } //.xpostsys /.defop get exec
 
-/currentuserparams {
+/currentuserparams [ ] {
     << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
        /VMReclaim //.xpostsys /.uparams get /VMReclaim get
        /VMThreshold //.xpostsys /.uparams get /VMThreshold get >>
-} def
-/setuserparams {
+} //.xpostsys /.defop get exec
+/setuserparams [ /dicttype ] {
     dup /VMReclaim known {
         dup /VMReclaim get
         dup //.xpostsys /.uparams get /VMReclaim 3 -1 roll put
@@ -648,12 +647,12 @@ setglobal
         setvmthreshold
     } if
     pop
-} def
+} //.xpostsys /.defop get exec
 
-/currentsystemparams {
+/currentsystemparams [ ] {
     << /RealFormat (IEEE) /ByteOrder true /MaxFontCache 1048576 >>
-} def
-/setsystemparams { pop } def
+} //.xpostsys /.defop get exec
+/setsystemparams [ /dicttype ] { pop } //.xpostsys /.defop get exec
 
 % Move the start procedures into privatedict, off the dict stack: the C fetches
 % them there (through ctx->privatedict) to prime a run, so a program never sees
@@ -698,7 +697,7 @@ currentglobal true setglobal
     end
 } put
 setglobal
-/filter {
+/filter [ /nametype ] {
     count 2 ge
     { 1 index dup type /arraytype eq exch xcheck and }
     { false }
@@ -709,7 +708,7 @@ setglobal
     }{
         //.xpostsys /.cfilter get exec
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 end % systemdict
 
@@ -720,7 +719,7 @@ false setglobal
 % not with a frozen reference: $error is a name in systemdict for a dictionary
 % in local VM, and a global procedure may not freeze a local object.
 currentglobal true setglobal
-/executive {
+/executive [ ] {
     //execdict begin
 
     /execdepth execdepth 1 add def
@@ -769,8 +768,7 @@ currentglobal true setglobal
     end
     $error /doclose false put
     stop
-} bind
-def
+} bind //.xpostsys /.defop get exec
 setglobal
 
 
@@ -849,7 +847,7 @@ end % userdict
 
 % index any  defineuserobject  -
 % the user-object table lives in userdict, growing as indices demand
-/defineuserobject {
+/defineuserobject [ /integertype /anytype ] {
     exch
     dup 0 lt { /defineuserobject cvx /rangecheck signalerror } if
     userdict /UserObjects known not {
@@ -861,17 +859,17 @@ end % userdict
         userdict /UserObjects 3 -1 roll put
     } if
     UserObjects exch 3 -1 roll put
-} def
+} //.xpostsys /.defop get exec
 
 % index  execuserobject  -
-/execuserobject {
+/execuserobject [ /integertype ] {
     UserObjects exch get exec
-} def
+} //.xpostsys /.defop get exec
 
 % index  undefineuserobject  -
-/undefineuserobject {
+/undefineuserobject [ /integertype ] {
     UserObjects exch null put
-} def
+} //.xpostsys /.defop get exec
 
 % formdict  .execformdirect  -
 % paint the form afresh: its matrix concatenates, its bounding box
@@ -930,8 +928,7 @@ setglobal
 % unwritable dictionary, an oversized raster -- paints afresh. A
 % form's own execform calls run inside its capture, so nested forms
 % cache independently.
-/execform {
-    /execform [ /dicttype ] //.xpostsys /.checkargs get exec
+/execform [ /dicttype ] {
     dup /FormType 2 copy known { get 1 eq }{ pop pop false } ifelse
     not { /execform cvx /rangecheck signalerror } if
     DEVICE /ImgData known
@@ -1019,15 +1016,15 @@ setglobal
         } ifelse
         end
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % User paths: the self-describing form is an executable array of the
 % path operators below; the encoded form pairs an operand source (a
 % number array or encoded number string) with a string of opcodes,
 % where an opcode of 32 or more repeats the following operator that
 % many fewer than its value times
-/setbbox { pop pop pop pop } def    % the box is advisory here
-/ucache {} def
+/setbbox [ /numbertype /numbertype /numbertype /numbertype ] { pop pop pop pop } //.xpostsys /.defop get exec    % the box is advisory here
+/ucache [ ] {} //.xpostsys /.defop get exec
 
 currentglobal true setglobal
 .xpostsys /.upathops [ /setbbox /moveto /rmoveto /lineto /rlineto /curveto
@@ -1067,13 +1064,18 @@ currentglobal true setglobal
     end
 } put
 
+% dict name proc  .wrapwithsig  -
+% dict name proc  .wrapwithsig  -
 % The operands each wrapped operator takes, in operand order. An
 % operator named here is wrapped with its statement and the dispatcher
 % enforces it; one not named is wrapped as before and checks itself.
+% The operator goes back into the dictionary its name was found in,
+% which is not always userdict: some of the standard operators written
+% in PostScript are defined straight into systemdict.
 .xpostsys /.wrapwithsig {
-    2 dict begin
-    /w.proc exch def /w.name exch def
-    userdict w.name
+    3 dict begin
+    /w.proc exch def /w.name exch def /w.dict exch def
+    w.dict w.name
     w.name /w.proc load
     //.xpostsys /.opsigs get w.name 2 copy known
         { get .wrapopsig }
@@ -1465,7 +1467,7 @@ currentglobal true setglobal
     % executable arrays promote; the procedures stay defed in
     % .wrappedprocs, keeping them inside the collector's view (the
     % operator table is outside it).
-    graphicsdict /.wrappedprocs 128 dict put
+    graphicsdict /.wrappedprocs 256 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
         /ufill /ueofill /ustroke /ustrokepath /uappend /upath
@@ -1475,6 +1477,22 @@ currentglobal true setglobal
         /setlinewidth /currentlinewidth /setlinecap /currentlinecap
         /setlinejoin /currentlinejoin /setmiterlimit /currentmiterlimit
         /setdash /currentdash /setflat /currentflat
+        /gstate /setgstate /currentgstate /currentfont
+        /setoverprint /currentoverprint /setsmoothness /currentsmoothness
+        /setstrokeadjust /currentstrokeadjust
+        /setblackgeneration /currentblackgeneration
+        /setundercolorremoval /currentundercolorremoval
+        /setcolorrendering /currentcolorrendering /findcolorrendering
+        /cachestatus /currentcacheparams /setcacheparams /setcachelimit
+        /setucacheparams /ucachestatus /ucache /rootfont /findencoding /eexec
+        /clipsave /cliprestore /pathforall /setbbox
+        /defineresource /findresource /undefineresource
+        /resourceforall /resourcestatus
+        /defineuserobject /execuserobject /undefineuserobject
+        /setuserparams /currentuserparams /setsystemparams /currentsystemparams
+        /setdevparams /currentdevparams /setvmthreshold
+        /= /== /stack /pstack /prompt /executive /run /startjob
+        /filter /internaldict /execform
         /show /ashow /widthshow /awidthshow /kshow /cshow
         /xshow /yshow /xyshow /glyphshow /stringwidth /charpath
         /definefont /undefinefont /scalefont /makefont /setfont
@@ -1504,7 +1522,7 @@ currentglobal true setglobal
                 % an operator that states its operands is wrapped with
                 % the statement, so the dispatcher enforces it before
                 % the procedure runs, exactly as for one written in C
-                //.xpostsys /.wrapwithsig get exec
+                userdict 3 1 roll //.xpostsys /.wrapwithsig get exec
             }{ pop pop } ifelse
         }{ pop } ifelse
     } forall
@@ -1524,6 +1542,32 @@ currentglobal true setglobal
         % Open a writeable window on systemdict so the standard operators can be
         % relocated into it; the matching relock below closes it.
         .sysdictunlock
+    % A few standard operators are defined straight into systemdict rather
+    % than into userdict, so the wrapping pass over userdict never reached
+    % them and they stayed plain procedures, invisible to bind. Wrap them
+    % now, while systemdict is open and before anything is bound: the sweep
+    % below can only freeze a reference to an operator that is one already.
+    % Their procedures are held in privatedict rather than the graphics
+    % scratch, since these operators exist whether or not graphics loaded.
+    .privatedict /.wrappedsysprocs 2 copy known not
+        { 32 dict put }{ pop pop } ifelse
+    % = and filter are left out: making them operators exposes machinery
+    % procedures that name them without binding them, which .bindscope
+    % does not reach and tamper_dispatch_test.ps rightly reports. The
+    % references predate this and wrapping only makes them visible.
+    [ /run /stack /startjob /internaldict
+      /setvmthreshold /setuserparams /currentuserparams
+      /setsystemparams /currentsystemparams
+      /setdevparams /currentdevparams ] {
+        dup systemdict exch known {
+            dup systemdict exch get
+            dup type /arraytype eq 1 index xcheck and {
+                bind
+                .privatedict /.wrappedsysprocs get 2 index 2 index put
+                systemdict 3 1 roll //.xpostsys /.wrapwithsig get exec
+            }{ pop pop } ifelse
+        }{ pop } ifelse
+    } forall
     % With the standard operators now operator-typed, freeze the
     % machinery's own references to them with the shared recursive
     % sweep: every procedure table it can reach through nested

@@ -174,7 +174,7 @@ setglobal
 currentglobal false setglobal
 .gscratch /.pfdict 10 dict put
 setglobal
-/pathforall {
+/pathforall [ /proctype /proctype /proctype /proctype ] {
 .gscratch /.pfdict get
 begin
     4 array astore /procs exch def
@@ -196,7 +196,7 @@ begin
         end exec .gscratch /.pfdict get begin
     } loop
 end
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % emit the held-back element, drawn to the endpoint on the stack;
 % reversal delays each element by one so that its command pairs with

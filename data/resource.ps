@@ -58,7 +58,7 @@ setglobal
 } bind put
 
 % key instance category  defineresource  instance
-/defineresource {
+/defineresource [ /anytype /anytype /nametype ] {
     dup /Category eq {
         % a new category comes into being with an empty instance table
         2 index //.xpostsys /.resources get exch 2 copy known not
@@ -67,7 +67,7 @@ setglobal
     dup //.xpostsys /.instof get exec pop     % the category must exist either way
     currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse
     2 index 2 index put exch pop
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % key category  .loadresource  bool
 % On a findresource miss, try to load the named instance from the search
@@ -97,7 +97,7 @@ setglobal
 } bind put
 
 % key category  findresource  instance
-/findresource {
+/findresource [ /anytype /nametype ] {
   { % loop, so the local-shadow path can exit early
     2 dict begin
     /category exch def
@@ -129,10 +129,10 @@ setglobal
     end
     exit
   } loop
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % key category  resourcestatus  status size true | false
-/resourcestatus {
+/resourcestatus [ /anytype /nametype ] {
     % querying a category that does not exist is an undefined error (PLRM);
     % only a present-but-absent instance yields false. Ensure the category is
     % defined the same way findresource does before reporting on an instance.
@@ -161,10 +161,10 @@ setglobal
             { pop pop pop false }
             { get exch known { 0 0 true }{ false } ifelse } ifelse
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % key category  undefineresource  -
-/undefineresource {
+/undefineresource [ /anytype /nametype ] {
     2 copy .gscratch /.lresources get exch 2 copy known {
         get 1 index known {
             //.xpostsys /.linstof get exec exch undef pop
@@ -174,7 +174,7 @@ setglobal
     }{
         pop pop pop //.xpostsys /.instof get exec exch undef
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % string template  .wcmatch  bool
 % Match a name against a resourceforall template: ? matches any one
@@ -234,7 +234,7 @@ setglobal
 % The keys are snapshotted first, so the proc may define or undefine
 % resources; whether such changes are enumerated is unspecified, as
 % the language allows.
-/resourceforall {
+/resourceforall [ /stringtype /proctype /stringtype /nametype ] {
     % merge the global table with any local instances over it
     dup //.xpostsys /.instof get exec exch
     .gscratch /.lresources get exch 2 copy known {
@@ -253,7 +253,7 @@ setglobal
         }{ pop } ifelse
     } forall
     end
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % In-RIP trapping (PLRM 6.3). The trapping operators are defined in the
 % Trapping procedure set; a program reaches them with

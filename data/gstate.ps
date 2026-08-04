@@ -195,34 +195,32 @@ end
 
 % -  gstate  gstate
 % create graphics state object
-/gstate {
+/gstate [ ] {
     .privatedict /.gstatetemplate get exec dup length dict copy
-} def
+} //.xpostsys /.defop get exec
 
 % gstate  setgstate  -
 % set graphics state from gstate
-/setgstate {
+/setgstate [ /dicttype ] {
     % the operand is examined before the current state is fetched
-    /setgstate [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /currmatrix known not
         { /setgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get copy pop
-} def
+} //.xpostsys /.defop get exec
 
 % gstate  currentgstate  gstate
 % copy current graphics state into given gstate object
-/currentgstate {
-    /currentgstate [ /dicttype ] //.xpostsys /.checkargs get exec
+/currentgstate [ /dicttype ] {
     dup /currmatrix known not
         { /currentgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentfont  dict
 % return current font from the graphics state
-/currentfont {
+/currentfont [ ] {
     graphicsdict /currgstate get /currfont get
-} def
+} //.xpostsys /.defop get exec
 
 % proc  settransfer  -
 % install the transfer procedure for every component
@@ -244,39 +242,33 @@ end
 % black generation and undercolor removal (recorded only: painting
 % converts by the additive-complement formulae), and the colour
 % rendering dictionary (recorded only)
-/setblackgeneration {
-    /setblackgeneration [ /proctype ] //.xpostsys /.checkargs get exec
+/setblackgeneration [ /proctype ] {
     dup /setblackgeneration exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /blackgen exch put
-} def
-/currentblackgeneration {
+} //.xpostsys /.defop get exec
+/currentblackgeneration [ ] {
     graphicsdict /currgstate get /blackgen get
-} def
-/setundercolorremoval {
-    /setundercolorremoval [ /proctype ] //.xpostsys /.checkargs get exec
+} //.xpostsys /.defop get exec
+/setundercolorremoval [ /proctype ] {
     dup /setundercolorremoval exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /ucr exch put
-} def
-/currentundercolorremoval {
+} //.xpostsys /.defop get exec
+/currentundercolorremoval [ ] {
     graphicsdict /currgstate get /ucr get
-} def
-/setcolorrendering {
-    /setcolorrendering [ /dicttype ] //.xpostsys /.checkargs get exec
+} //.xpostsys /.defop get exec
+/setcolorrendering [ /dicttype ] {
     graphicsdict /currgstate get exch /colorrendering exch put
-} def
-/currentcolorrendering {
+} //.xpostsys /.defop get exec
+/currentcolorrendering [ ] {
     graphicsdict /currgstate get /colorrendering get
-} def
+} //.xpostsys /.defop get exec
 
 % string  findcolorrendering  name bool
 % one rendering serves every condition: the default instance
-/findcolorrendering {
-    dup type /stringtype eq
-        { /findcolorrendering [ /stringtype ] //.xpostsys /.checkargs get exec }
-        { /findcolorrendering [ /nametype ] //.xpostsys /.checkargs get exec }
-      ifelse
+% the rendering intent is named, or given as the string of a name
+/findcolorrendering [ [ /nametype ] [ /stringtype ] ] {
     pop /DefaultColorRendering true
-} def
+} //.xpostsys /.defop get exec
 currentglobal true setglobal
 /DefaultColorRendering 0 dict dup /ColorRenderingType 1 put
 /ColorRendering defineresource pop
@@ -861,24 +853,22 @@ setglobal
 } //.xpostsys /.defop get exec
 
 % flag  setstrokeadjust  -   (recorded only)
-/setstrokeadjust {
-    /setstrokeadjust [ /booleantype ] //.xpostsys /.checkargs get exec
+/setstrokeadjust [ /booleantype ] {
     graphicsdict /currgstate get exch /strokeadjust exch put
-} def
-/currentstrokeadjust {
+} //.xpostsys /.defop get exec
+/currentstrokeadjust [ ] {
     graphicsdict /currgstate get /strokeadjust 2 copy known
         { get }{ pop pop false } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % num  setsmoothness  -   (recorded only)
-/setsmoothness {
-    /setsmoothness [ /numbertype ] //.xpostsys /.checkargs get exec
+/setsmoothness [ /numbertype ] {
     graphicsdict /currgstate get exch /smoothness exch put
-} def
-/currentsmoothness {
+} //.xpostsys /.defop get exec
+/currentsmoothness [ ] {
     graphicsdict /currgstate get /smoothness 2 copy known
         { get }{ pop pop 0.02 } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % num  setlinewidth  -
 % set line width
@@ -952,15 +942,14 @@ setglobal
 } //.xpostsys /.defop get exec
 
 % bool  setoverprint  -
-/setoverprint {
-    /setoverprint [ /booleantype ] //.xpostsys /.checkargs get exec
+/setoverprint [ /booleantype ] {
     graphicsdict /currgstate get exch /overprint exch put
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentoverprint  bool
-/currentoverprint {
+/currentoverprint [ ] {
     graphicsdict /currgstate get /overprint get
-} def
+} //.xpostsys /.defop get exec
 
 
 % Graphics State Operators -- Device Dependent

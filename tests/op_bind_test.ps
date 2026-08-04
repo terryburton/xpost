@@ -32,6 +32,27 @@
        /setlinejoin /currentlinejoin /setmiterlimit /currentmiterlimit
        /setdash /currentdash /setflat /currentflat ] def
 
+% ------------------------------------ where a wrapped procedure has to live
+% The operator table is outside the collector's view, so the procedure a
+% wrapped operator runs is kept reachable by .wrappedprocs alone. That
+% procedure must be in global VM: a local one would be invalidated by a
+% restore past its creation while the operator table still pointed at it,
+% and load and exec would follow the dangling reference.
+%
+% Which VM a definition lands in is decided by the setglobal in force
+% when its file is read, so it is settled a long way from the definition
+% and nothing else checks the result.
+
+/graphicsdict where {
+    pop
+    /wp graphicsdict /.wrappedprocs get def
+    /local 0 def
+    wp { pop gcheck not { /local local 1 add store } if } forall
+    local 0 eq (every wrapped procedure is in global VM) assert
+    wp length 0 gt (there are wrapped procedures to check) assert
+}{ (FAIL: graphicsdict is not reachable, nothing was checked\n) print
+   /failcount failcount 1 add store } ifelse
+
 % {test} (what)  -  run the test on every name, naming any that fail
 /eachop {
     /e.w exch def /e.t exch def /e.bad 0 def
