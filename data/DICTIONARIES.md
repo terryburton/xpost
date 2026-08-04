@@ -146,6 +146,22 @@ readable `systemdict` procedure), which is accepted: it is self-harm under
 per-job isolation, and closing it would need `executeonly` everywhere,
 non-standard and breaking the `1183615869 internaldict` path.
 
+#### What the lockdown still moves, and why each has to stay
+
+Three relocations remain. Each looks like a definition made in the wrong
+place, and each has been tried; the measurements are here so the attempt is
+not repeated.
+
+| Moved | Size | Why it cannot be defined in place |
+|---|---|---|
+| private C operators → `.internaldict` | 76 names | the machinery calls them by bare name all through loading — **161 uses across 47 of them** — so they can only move once the bind pass has frozen those references. Installing them into `.internaldict` at registration compiles and then dies in `init.ps` at the first such use. |
+| device classes → `privatedict` | 9 names | a derived class is written by naming its parent (`/.xpost_PBMIMAGE .xpost_PGMIMAGE dup length 2 add dict copy def`) — **51 sites across 11 files**. The step is also not a move: it takes a **local copy with headroom**, which is what makes a job's page setup revert with the save level instead of persisting into the next. |
+| `.error` → `privatedict` | 1 name | `errordict`'s handlers bake `//.error` about a dozen times, so it has to be findable on the dictionary stack while `errordict` is built. |
+
+Everything else that used to move now does not: the language is read into
+`systemdict`, and the machinery anchors, the wrapped-procedure register and
+the device makers are defined into `privatedict` directly.
+
 ### Private — local machinery, in `privatedict` (off the dict stack)
 
 `privatedict` is a **local** dictionary rooted in the interpreter context

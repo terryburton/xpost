@@ -1510,6 +1510,22 @@ currentglobal true setglobal
 % language itself needs no moving: it is read into systemdict to begin with. loadgraphics does the loading; this does the
 % locking down -- so nothing unrelated to graphics is tied to loading it. The
 % shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
+% bool (what)  .mustbe  -
+% A start-up step whose order matters says so here. The steps below have
+% to run in one order and no other -- a name has to be an operator before
+% anything can freeze a reference to it, systemdict has to be open before
+% a name can be taken out of it -- and getting it wrong does not fail
+% where it happened. It fails later, somewhere unrelated, or not at all:
+% the interpreter finishes starting and answers wrongly ever after. So
+% each rule is checked where it is relied on, and a broken one stops the
+% run there rather than leaving a working-looking interpreter behind.
+.xpostsys /.mustbe {
+    exch { pop }{
+        (start-up ordering broken: ) print print (\n) print flush
+        /.finalize cvx /undefined signalerror
+    } ifelse
+} bind put
+
 .xpostsys /.finalize {
     //.internaldict /GRAPHICS_LOADED known { }{
         % Open a writeable window on systemdict. loadgraphics opens the same
@@ -1519,6 +1535,9 @@ currentglobal true setglobal
         % .internaldict. The matching relock below closes it, and closing it
         % spends the one-shot so a program cannot reopen it.
         .sysdictunlock
+        systemdict wcheck
+            (systemdict must be open for the steps below to take names out of it)
+            //.xpostsys /.mustbe get exec
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -1599,6 +1618,27 @@ currentglobal true setglobal
     % dictionaries -- the wrapped implementations, the device makers,
     % the graphics state template, the error handlers, and any table
     % inside a table -- has its operator references resolved now.
+    % Every name the promotion pass covered is an operator by now. Binding
+    % substitutes operators and leaves names alone, so a name still holding
+    % its procedure here would keep a dynamic reference in every machinery
+    % procedure that calls it, reachable by a program redefining the name.
+    % counted in a scratch dictionary, so the check leaves no name behind
+    1 dict begin
+    /n 0 def
+    .privatedict /.wrappedprocs get {
+        pop                                  % the value; the key is the name
+        dup type /nametype eq {
+            dup where {
+                1 index get type /operatortype ne { /n n 1 add store } if
+            }{ } ifelse
+        } if
+        pop
+    } forall
+    n 0 eq
+    end
+    (every promoted name must be an operator before references are frozen)
+    //.xpostsys /.mustbe get exec
+
     systemdict //.xpostsys /.bindscope get exec
     userdict //.xpostsys /.bindscope get exec
     % graphicsdict exists only once graphics has loaded; without it there is

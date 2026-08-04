@@ -1,0 +1,39 @@
+# Names implemented twice: once as a C operator and once in PostScript.
+#
+# One of the two is in force and the other is unreachable, and which one
+# it is settled while the language was read -- by the order the
+# dictionaries were filled and searched. Nothing announces the choice, and
+# the wrong one still answers: definefont bound against the C findfont
+# registers the font and then returns a substitute face, so a program's
+# own font is quietly replaced by another with the same operators and
+# different glyphs.
+#
+# So the choice is written down. One "name winner" per line.
+#
+#   postscript  the PostScript implementation is in force. It is wrapped,
+#               which is how it is recognised at run time: the wrapping
+#               pass found a procedure under the name, promoted it, and
+#               recorded it in the register of wrapped procedures.
+#
+#   c           the C operator is in force. The PostScript body is
+#               discarded as it is read, by the /override switch in
+#               path.ps -- defining PSOVERRIDE before loading swaps the
+#               pair over, which is what that switch is for.
+#
+# A name implemented twice and not listed here fails the check: it is a
+# choice nobody made on purpose.
+
+ashow       postscript
+awidthshow  postscript
+filter      postscript
+findfont    postscript
+setfont     postscript
+show        postscript
+stringwidth postscript
+widthshow   postscript
+
+arc         c
+arcn        c
+rcurveto    c
+rlineto     c
+rmoveto     c

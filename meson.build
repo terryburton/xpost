@@ -944,6 +944,15 @@ test('op-operand-shapes',
   args: [ xpost_exe, files('tests/op_operand_shapes_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Names implemented twice, in C and in PostScript: which of the two wins
+# is settled while the language loads and nothing reports it, so the set
+# is declared and checked.
+test('check-shadowed-operators',
+  find_program('tests/check-shadowed-operators.sh'),
+  args: [ meson.current_source_dir() / 'src/lib',
+          meson.current_source_dir() / 'data',
+          files('tests/shadowed_operators.golden') ])
+
 # Every wrapped operator states the operands it takes, or is named in
 # the shrinking list of those that do not yet.
 test('check-op-signatures',
