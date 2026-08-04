@@ -860,6 +860,20 @@ test('halftone-matrix',
   args: [ xpost_exe, files('tests/halftone_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What the error dictionary carries and what the standard handler does
+# to it: a program handling its own errors reads both.
+test('error-dict',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/error_dict_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The binary form of the error report, which has to be checked on the
+# bytes rather than from inside the interpreter.
+test('error-binary',
+  find_program('tests/run-error-binary-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.

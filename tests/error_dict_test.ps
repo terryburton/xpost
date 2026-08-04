@@ -1,0 +1,73 @@
+% What the error dictionary is defined to carry, and what the standard
+% handler is defined to do to it, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A program that handles its own errors reads $error, so every entry the
+% language names has to be there with the value it is defined to start
+% at -- an entry that is simply absent answers undefined at the moment a
+% program is already coping with something going wrong. The standard
+% handler in turn is defined to consume what it reported: it clears the
+% flag that says an error is outstanding, and the context entry that
+% belongs to the error just reported.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% ------------------------------------------------------------ the entries
+% Every entry the language names, present before anything has gone
+% wrong.
+
+/missing 0 def
+[ /newerror /errorname /command /errorinfo
+  /ostack /estack /dstack /recordstacks /binary ] {
+    dup $error exch known not {
+        (FAIL: $error has no ) print ==
+        /missing missing 1 add store
+    }{ pop } ifelse
+} forall
+missing 0 eq (every entry the language names is present) assert
+
+% and the two flags start at the values they are defined to start at
+$error /recordstacks get true eq (recordstacks starts true) assert
+$error /binary get false eq (binary starts false) assert
+
+% ------------------------------------------------------- what an error fills
+% An error records its own name and what was executing, and raises the
+% flag that says one is outstanding.
+
+{ 1 0 div } stopped (a divide by zero is caught) assert
+$error /newerror get (newerror is raised) assert
+$error /errorname get /undefinedresult eq (errorname is the error) assert
+$error /command get 40 string cvs (div) eq (command is what was executing) assert
+
+% the snapshots are taken while recordstacks says to
+$error /ostack get null ne (the operand stack is recorded) assert
+$error /estack get null ne (the execution stack is recorded) assert
+$error /dstack get null ne (the dictionary stack is recorded) assert
+
+% ------------------------------------------------- what the handler consumes
+% handleerror lowers the flag and clears the context of the error it
+% just reported, so the next reader is not told about the last error.
+
+$error /errorinfo [ /SomeKey 7 ] put
+errordict /handleerror get exec
+$error /newerror get not (handleerror lowers newerror) assert
+$error /errorinfo get null eq (handleerror clears errorinfo) assert
+
+% and a second call reports nothing, the flag being down
+errordict /handleerror get exec
+$error /newerror get not (handleerror stays quiet with no error) assert
+
+% ------------------------------------------------------ recordstacks obeyed
+% With the flag down the snapshots are not taken, which is the whole
+% point of a program lowering it.
+
+$error /recordstacks false put
+$error /ostack null put
+{ 1 0 div } stopped pop
+$error /ostack get null eq (no snapshot is taken when recordstacks is false) assert
+$error /recordstacks true put
+$error /newerror false put
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
