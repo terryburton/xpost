@@ -913,7 +913,7 @@ setglobal
 /setfont {
     % a font dictionary, not any dictionary: one without a FontMatrix
     % has nothing to set a size or an orientation from
-    dup type /dicttype ne { /setfont cvx /typecheck signalerror } if
+    /setfont [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /FontMatrix known not
         { /setfont cvx /invalidfont signalerror } if
     dup graphicsdict /currgstate get /rootfont 3 -1 roll put
@@ -933,9 +933,7 @@ setglobal
 % operators read and set the store itself
 /cachestatus { .cachestatus } def
 /setcachelimit {
-    % the operand is an integer
-    dup type /integertype ne
-        { /setcachelimit cvx /typecheck signalerror } if
+    /setcachelimit [ /integertype ] //.xpostsys /.checkargs get exec
     .setcachelimit
 } def
 % mark [size [lower]] upper  setcacheparams  -

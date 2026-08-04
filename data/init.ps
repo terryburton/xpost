@@ -164,9 +164,7 @@ setglobal
 /languagelevel 3 def
 
 /setvmthreshold {
-    % the threshold is not acted on; the operand is still an integer
-    dup type /integertype ne
-        { /setvmthreshold cvx /typecheck signalerror } if
+    /setvmthreshold [ /integertype ] //.xpostsys /.checkargs get exec
     pop
 } def
 

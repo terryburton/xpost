@@ -320,7 +320,7 @@ setglobal
 /setpattern {
     % a pattern dictionary, which is one that has been through
     % makepattern: without a PatternType there is nothing to paint with
-    dup type /dicttype ne { /setpattern cvx /typecheck signalerror } if
+    /setpattern [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /PatternType known not
         { /setpattern cvx /typecheck signalerror } if
     dup /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse not {

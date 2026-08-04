@@ -227,9 +227,7 @@ end
 % proc  settransfer  -
 % install the transfer procedure for every component
 /settransfer {
-    dup xcheck not { /settransfer cvx /typecheck signalerror } if
-    dup type dup /arraytype ne exch /packedarraytype ne and
-        { /settransfer cvx /typecheck signalerror } if
+    /settransfer [ /proctype ] //.xpostsys /.checkargs get exec
     dup /settransfer exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get
@@ -248,9 +246,7 @@ end
 % converts by the additive-complement formulae), and the colour
 % rendering dictionary (recorded only)
 /setblackgeneration {
-    dup xcheck not { /setblackgeneration cvx /typecheck signalerror } if
-    dup type dup /arraytype ne exch /packedarraytype ne and
-        { /setblackgeneration cvx /typecheck signalerror } if
+    /setblackgeneration [ /proctype ] //.xpostsys /.checkargs get exec
     dup /setblackgeneration exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /blackgen exch put
 } def
@@ -258,9 +254,7 @@ end
     graphicsdict /currgstate get /blackgen get
 } def
 /setundercolorremoval {
-    dup xcheck not { /setundercolorremoval cvx /typecheck signalerror } if
-    dup type dup /arraytype ne exch /packedarraytype ne and
-        { /setundercolorremoval cvx /typecheck signalerror } if
+    /setundercolorremoval [ /proctype ] //.xpostsys /.checkargs get exec
     dup /setundercolorremoval exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /ucr exch put
 } def
@@ -278,8 +272,10 @@ end
 % string  findcolorrendering  name bool
 % one rendering serves every condition: the default instance
 /findcolorrendering {
-    dup type dup /nametype ne exch /stringtype ne and
-        { /findcolorrendering cvx /typecheck signalerror } if
+    dup type /stringtype eq
+        { /findcolorrendering [ /stringtype ] //.xpostsys /.checkargs get exec }
+        { /findcolorrendering [ /nametype ] //.xpostsys /.checkargs get exec }
+      ifelse
     pop /DefaultColorRendering true
 } def
 currentglobal true setglobal
@@ -899,6 +895,7 @@ setglobal
 % int  setlinecap  -
 % set shape of the ends for stroke (0=butt, 1=round, 2=square)
 /setlinecap {
+    /setlinecap [ /integertype ] //.xpostsys /.checkargs get exec
     dup 0 lt 1 index 2 gt or
     { pop /setlinecap cvx /rangecheck signalerror }
     { graphicsdict /currgstate get exch /linecap exch put } ifelse
@@ -933,6 +930,7 @@ setglobal
 % int  setlinejoin  -
 % set shape of corners for stroke (0=miter, 1=round, 2=bevel)
 /setlinejoin {
+    /setlinejoin [ /integertype ] //.xpostsys /.checkargs get exec
     dup 0 lt 1 index 2 gt or
     { pop /setlinejoin cvx /rangecheck signalerror }
     { graphicsdict /currgstate get exch /linejoin exch put } ifelse
