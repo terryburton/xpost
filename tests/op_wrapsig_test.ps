@@ -1,0 +1,78 @@
+% An operator written in PostScript stating the operands it takes, run
+% through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% An operator written in C declares its operand types and the dispatcher
+% enforces the declaration before the function runs. An operator written
+% in PostScript is installed by wrapping a procedure, and a wrapped
+% operator carried no declaration: it took whatever it was given and had
+% to check for itself, which is what every operator that accepted an
+% operand it could not use had in common.
+%
+% .wrapopsig wraps a procedure with the same thing the C side declares.
+% The proof below is a procedure with no checks whatsoever, wrapped both
+% ways: the plain wrapping accepts a string, the declared one refuses
+% it, and nothing in the body differs.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/ID 1183615869 internaldict def
+ID /.wrapop known (the plain wrapper is reachable) assert
+ID /.wrapopsig known (the declaring wrapper is reachable) assert
+
+% one procedure, no checks of its own, wrapped two ways
+/body { pop } def
+/plainop /plainop /body load ID /.wrapop get exec def
+/oneint /oneint /body load [ /integertype ] ID /.wrapopsig get exec def
+
+/raises { % {proc} /errname (what)
+    /r.w exch def /r.e exch def /r.p exch def
+    clear
+    /r.p load stopped
+        { $error /errorname get r.e eq }{ false } ifelse
+    r.w assert
+    clear
+} def
+/accepts { % {proc} (what)
+    /a.w exch def /a.p exch def
+    clear
+    /a.p load stopped not a.w assert
+    clear
+} def
+
+% the plain wrapping takes anything it is handed
+{ 42 plainop } (the plain wrapping takes an integer) accepts
+{ (x) plainop } (the plain wrapping takes a string too) accepts
+{ plainop } /stackunderflow (the plain wrapping still needs an operand) raises
+
+% the declared one takes what it says and nothing else
+{ 42 oneint } (the declared operator takes an integer) accepts
+{ (x) oneint } /typecheck (the declared operator refuses a string) raises
+{ 4.5 oneint } /typecheck (the declared operator refuses a real) raises
+{ null oneint } /typecheck (the declared operator refuses a null) raises
+{ [1] oneint } /typecheck (the declared operator refuses an array) raises
+{ oneint } /stackunderflow (the declared operator reports a shortage) raises
+
+% more than one operand, and the families the declaration understands
+/twonum /twonum { pop pop } ID /.wrapop get exec pop
+/twonum /twonum { pop pop } [ /numbertype /numbertype ]
+    ID /.wrapopsig get exec def
+{ 1 2 twonum } (two integers) accepts
+{ 1 2.5 twonum } (an integer and a real) accepts
+{ 1 (x) twonum } /typecheck (a string in the second place) raises
+{ (x) 1 twonum } /typecheck (a string in the first place) raises
+{ 1 twonum } /stackunderflow (one operand where two are wanted) raises
+
+/aproc /aproc { pop } [ /proctype ] ID /.wrapopsig get exec def
+{ { 1 } aproc } (a procedure where one is wanted) accepts
+{ [ 1 ] aproc } /typecheck (a literal array is not a procedure) raises
+{ 42 aproc } /typecheck (a number is not a procedure) raises
+
+/anyone /anyone { pop } [ /anytype ] ID /.wrapopsig get exec def
+{ 42 anyone } (anytype takes a number) accepts
+{ (x) anyone } (anytype takes a string) accepts
+{ null anyone } (anytype takes a null) accepts
+{ anyone } /stackunderflow (anytype still needs an operand) raises
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

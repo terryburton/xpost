@@ -164,6 +164,18 @@
 { [1 2 3 4 5 6 7] setmatrix } /rangecheck (setmatrix a long array) refuses
 
 { /Helvetica findfont 12 scalefont setfont } (setfont a font) works
+
+% settransfer, xshow, yshow and xyshow carry no check of their own: the
+% statement of their operands is the only thing between them and an
+% operand they cannot use
+{ { pop 0.5 } settransfer } (settransfer a procedure) works
+{ 42 settransfer } /typecheck (settransfer a number) refuses
+{ (x) settransfer } /typecheck (settransfer a string) refuses
+{ newpath 10 10 moveto (A) [ 9 ] xshow } (xshow a string and an array) works
+{ newpath 10 10 moveto 42 [ 9 ] xshow } /typecheck (xshow a number) refuses
+{ newpath 10 10 moveto (A) 9 xshow } /typecheck (xshow a number for the array) refuses
+{ newpath 10 10 moveto (A) 9 yshow } /typecheck (yshow a number for the array) refuses
+{ newpath 10 10 moveto (A) 9 xyshow } /typecheck (xyshow a number for the array) refuses
 { 3 dict setfont } /invalidfont (setfont a plain dictionary) refuses
 { 42 setfont } /typecheck (setfont a number) refuses
 
@@ -309,6 +321,29 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 
 { 42 eexec } /typecheck (eexec a number) refuses
 { (x) eexec } /typecheck (eexec a string) refuses
+
+% ------------------------------------------ operators that state their operands
+% These are wrapped with a statement of the operands they take, and the
+% dispatcher enforces it before the procedure runs, as it does for an
+% operator written in C.
+
+/Helvetica findfont 12 scalefont setfont
+{ 0.5 setgray } (setgray a number) works
+{ (x) setgray } /typecheck (setgray a string) refuses
+{ setgray } /stackunderflow (setgray with nothing) refuses
+{ 1 0 0 setrgbcolor } (setrgbcolor three numbers) works
+{ 1 0 (x) setrgbcolor } /typecheck (setrgbcolor a string) refuses
+{ 0 0 0 1 setcmykcolor } (setcmykcolor four numbers) works
+{ 0 0 0 (x) setcmykcolor } /typecheck (setcmykcolor a string) refuses
+{ newpath 10 10 moveto (A) show } (show a string) works
+{ newpath 10 10 moveto 42 show } /typecheck (show a number) refuses
+{ newpath 10 10 moveto /A glyphshow } (glyphshow a name) works
+{ newpath 10 10 moveto (A) glyphshow } /typecheck (glyphshow a string) refuses
+{ (A) stringwidth pop pop } (stringwidth a string) works
+{ 42 stringwidth } /typecheck (stringwidth a number) refuses
+{ /Helvetica findfont 12 scalefont pop } (scalefont a font and a size) works
+{ /Helvetica findfont (x) scalefont } /typecheck (scalefont a string size) refuses
+{ /Helvetica findfont 12 scalefont setfont } (setfont a font) works
 
 bad 0 eq (every operator refuses what it cannot use) assert
 

@@ -1041,6 +1041,28 @@ currentglobal true setglobal
     end
 } put
 
+% The operands each wrapped operator takes, in operand order. An
+% operator named here is wrapped with its statement and the dispatcher
+% enforces it; one not named is wrapped as before and checks itself.
+.xpostsys /.opsigs <<
+    /setgray       [ /numbertype ]
+    /setrgbcolor   [ /numbertype /numbertype /numbertype ]
+    /sethsbcolor   [ /numbertype /numbertype /numbertype ]
+    /setcmykcolor  [ /numbertype /numbertype /numbertype /numbertype ]
+    /setfont       [ /dicttype ]
+    /settransfer   [ /proctype ]
+    /setcolorspace [ /anytype ]
+    /show          [ /stringtype ]
+    /stringwidth   [ /stringtype ]
+    /glyphshow     [ /nametype ]
+    /xshow         [ /stringtype /arraytype ]
+    /yshow         [ /stringtype /arraytype ]
+    /xyshow        [ /stringtype /arraytype ]
+    /image         [ /anytype ]
+    /makepattern   [ /dicttype /arraytype ]
+    /scalefont     [ /dicttype /numbertype ]
+>> put
+
 .xpostsys /.upathopset <<
     /setbbox 4 /moveto 2 /rmoveto 2 /lineto 2 /rlineto 2 /curveto 6
     /rcurveto 6 /arc 5 /arcn 5 /arct 5 /closepath 0 /ucache 0
@@ -1444,7 +1466,14 @@ currentglobal true setglobal
                 % that shadows an operator name reaches into the machinery.
                 bind
                 graphicsdict /.wrappedprocs get 2 index 2 index put
-                1 index exch .wrapop
+                % an operator that states its operands is wrapped with
+                % the statement, so the dispatcher enforces it before
+                % the procedure runs, exactly as for one written in C
+                1 index //.xpostsys /.opsigs get 2 index 2 copy known {
+                    get 3 1 roll exch .wrapopsig
+                }{
+                    pop pop exch .wrapop
+                } ifelse
                 userdict 3 1 roll put
             }{ pop pop } ifelse
         }{ pop } ifelse

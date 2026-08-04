@@ -227,7 +227,6 @@ end
 % proc  settransfer  -
 % install the transfer procedure for every component
 /settransfer {
-    /settransfer [ /proctype ] //.xpostsys /.checkargs get exec
     dup /settransfer exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get

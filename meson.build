@@ -896,6 +896,13 @@ test('op-operand-types',
   args: [ xpost_exe, files('tests/op_operand_types_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# An operator written in PostScript stating the operands it takes, so
+# the dispatcher enforces them as it does for one written in C.
+test('op-wrapsig',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # initgraphics on its own: the fault it guards against is invisible in a
 # file that has already been drawing, since the earlier drawing can
 # empty the path by itself.
