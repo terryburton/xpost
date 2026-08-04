@@ -105,7 +105,7 @@ currentdict /c undef
     % through the one it names
     /usecmap {
         dup type /nametype eq { /CMap findresource } if
-        dup type /dicttype ne { /usecmap cvx /typecheck signalerror } if
+        /usecmap [ /dicttype ] //.xpostsys /.checkargs get exec
         currentdict exch
         3 dict begin
         /src exch def
@@ -457,7 +457,7 @@ setglobal
 % resource categories, the CMap decodes the codes, the descendants
 % carry the glyphs
 /composefont {
-    dup type /arraytype ne { /composefont cvx /typecheck signalerror } if
+    /composefont [ /arraytype ] //.xpostsys /.checkargs get exec
     1 index type dup /nametype ne exch dup /stringtype ne exch /dicttype ne and and
         { /composefont cvx /typecheck signalerror } if
     [ exch { dup type /nametype eq { /CIDFont findresource } if } forall ]

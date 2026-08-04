@@ -641,7 +641,7 @@ setglobal
 % survives untouched
 .xpostsys begin
 userdict /shfill {
-    dup type /dicttype ne { /shfill cvx /typecheck signalerror } if
+    /shfill [ /dicttype ] //.xpostsys /.checkargs get exec
     gsave
     dup /ColorSpace get setcolorspace
     dup /BBox 2 copy known {

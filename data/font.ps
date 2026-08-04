@@ -697,7 +697,7 @@ setglobal
     /xshow 2 //.xpostsys /.needops get exec
     /xshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
-    dup type /arraytype ne { /xshow cvx /typecheck signalerror } if
+    /xshow [ /stringtype /arraytype ] //.xpostsys /.checkargs get exec
     5 dict begin
     /nums exch def /str exch def
     /p 0 def /i 0 def
@@ -717,7 +717,7 @@ setglobal
     /yshow 2 //.xpostsys /.needops get exec
     /yshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
-    dup type /arraytype ne { /yshow cvx /typecheck signalerror } if
+    /yshow [ /stringtype /arraytype ] //.xpostsys /.checkargs get exec
     5 dict begin
     /nums exch def /str exch def
     /p 0 def /i 0 def
@@ -737,7 +737,7 @@ setglobal
     /xyshow 2 //.xpostsys /.needops get exec
     /xyshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
-    dup type /arraytype ne { /xyshow cvx /typecheck signalerror } if
+    /xyshow [ /stringtype /arraytype ] //.xpostsys /.checkargs get exec
     5 dict begin
     /nums exch def /str exch def
     /p 0 def /i 0 def

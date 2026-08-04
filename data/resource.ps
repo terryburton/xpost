@@ -272,7 +272,7 @@ currentglobal true setglobal
     % effect is cumulative across calls; a key given a null value is set to
     % null (cancelled), an omitted key is left unchanged.
     /settrapparams {
-        dup type /dicttype ne { /settrapparams cvx /typecheck signalerror } if
+        /settrapparams [ /dicttype ] //.xpostsys /.checkargs get exec
         { .trapparams 3 1 roll put } forall
     } bind
     % -  currenttrapparams  dict
