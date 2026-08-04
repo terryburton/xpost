@@ -849,7 +849,8 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                        or two strings, so the pair is asked the same
                        question the operators ask before either road
                        reaches the comparison */
-                    if (rel_ >= XPOST_OP_REL_LT &&
+                    if (rel_ >= 0 &&
+                        xpost_op_relation_is_ordered((Xpost_Op_Relation)rel_) &&
                         !xpost_op_ordered_comparable(os_top->data[ot - 2],
                                                      os_top->data[ot - 1]))
                         rel_ = -1;

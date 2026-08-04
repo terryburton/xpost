@@ -47,6 +47,27 @@ typedef enum
     XPOST_OP_REL_GE
 } Xpost_Op_Relation;
 
+/**
+ * @brief whether a relation is one of the ordered four.
+ *
+ * eq and ne compare any two objects; lt, le, gt and ge order them, and
+ * only a pair of numbers or a pair of strings can be ordered. Asked by
+ * name rather than by where the relation sits in the enumeration, so
+ * that reordering the enumeration cannot quietly change which relations
+ * are restricted on one road and not the other.
+ */
+static inline int xpost_op_relation_is_ordered(Xpost_Op_Relation rel)
+{
+    switch (rel)
+    {
+        case XPOST_OP_REL_LT: /*@fallthrough@*/
+        case XPOST_OP_REL_LE: /*@fallthrough@*/
+        case XPOST_OP_REL_GT: /*@fallthrough@*/
+        case XPOST_OP_REL_GE: return 1;
+        default:              return 0;
+    }
+}
+
 static inline int xpost_op_relation(Xpost_Op_Relation rel, int cmp)
 {
     switch (rel)
