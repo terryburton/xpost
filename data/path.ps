@@ -1,12 +1,5 @@
 //.internaldict /QUIET known { }{ (loading path.ps...)print } ifelse
 
-%/PSOVERRIDE null def  % define PSOVERRIDE to use full postscript implementation
-% various functions have been reimplemented in C and their definitions here deactivated.
-
-/override { pop pop } def
-/PSOVERRIDE where { pop
-    /override { bind def } def
-} if
 
 % The current path is a packed byte string maintained by the operators
 % in xpost_op_path.c (see the layout comment there). PostScript code
@@ -21,127 +14,10 @@
 
 .xpostsys /cpath { graphicsdict /currgstate get /currpath get } bind put
 
-% dx dy  rmoveto  -
-% relative moveto
-/rmoveto {
-    currentpoint
-    3 2 roll add
-    3 1 roll add exch
-    moveto
-}
-override%pop pop%bind def
 
-% dx dy  rlineto  -
-% relative lineto
-/rlineto {
-    currentpoint
-    3 2 roll add
-    3 1 roll add exch
-    lineto
-}
-override%pop pop%bind def
 
-% dx1 dy1 dx2 dy2 dx3 dy3  rcurveto  -
-% relative curveto
-/rcurveto {
-    3 {
-        6 2 roll currentpoint
-        3 2 roll add
-        3 1 roll add exch
-    } repeat
-    curveto
-}
-override%pop pop%bind def
 
-% packs the center-point, radius and center-angle in a matrix
-% then performs the simpler task of calculating a bezier
-% for the arc that is symmetrical about the x-axis
-% formula derived from http://www.tinaja.com/glib/bezarc1.pdf
-.xpostsys /arcbez { % draw single bezier % x y r angle1 angle2  .  x1 y1 x2 y2 x3 y3 x0 y0
-	10 dict
-	begin
-    /mat matrix def
-    /mat1 matrix def
-    5 3 roll mat translate pop                         % r angle1 angle2
-    3 2 roll dup mat1 scale mat mat concatmatrix pop % angle1 angle2
-    2 copy exch sub /da exch def                       % da=a2-a1
-    add 2 div mat1 rotate mat mat concatmatrix pop
-    /da_2 da 2 div def
-    /sin_a da_2 sin def
-    /cos_a da_2 cos def
-    4 cos_a sub 3 div % x1
-    1 cos_a sub cos_a 3 sub mul
-    3 sin_a mul div   % x1 y1
-    neg
-    1 index           % x1 y1 x2(==x1)
-    1 index neg       % x1 y1 x2 y2(==-y1)
-    cos_a sin_a neg   % x1 y1 x2 y2 x3 y3
-    cos_a sin_a       %               ... x0 y0
-    4 { 8 2 roll mat transform } repeat
-    %pstack()=
-    end
-}
-dup 0 10 dict
-	dup /mat matrix put
-	dup /mat1 matrix put
-put
-bind put%override%pop pop%bind put
 
-% x y r angle1 angle2  arc  -
-% append a counterclockwise circular arc to the current path
-/arc {
-    { 2 copy le { exit } if 360 add } loop
-    %dup 0 lt { 360 add exch 360 add exch } if
-    %1 index 0 lt { 360 add exch 360 add exch } if
-    %2 { dup 720 gt { dup 720 div truncate 720 mul sub } if exch } repeat
-    %2 copy gt { 360 add } if % s.b. angle2 > angle1
-    %%2 { dup 0 lt { 360 add } if exch } repeat
-    %2 copy gt { 360 add } if % s.b. angle2 > angle1
-    2 copy exch sub dup 90 gt { % recurse
-        .5 mul % x y r a1 a2 da/2
-        6 copy
-        sub arc
-        3 2 roll add exch arc
-    }{ pop
-        % draw single bezier
-        //.xpostsys /arcbez get exec % x1 y1 x2 y2 x3 y3 x0 y0
-        4 2 roll % x1 y1 x2 y2 x0 y0  x3 y3
-        %{ currentpoint pop pop } stopped { moveto }{ lineto } ifelse
-		.pathempty { moveto }{ lineto } ifelse
-        6 2 roll % x0 y0 x1 y1 x2 y2
-        4 2 roll % x0 y0 x2 y2 x1 y1
-        6 4 roll % x2 y2 x1 y1 x0 y0
-        curveto
-    } ifelse
-}
-override%pop pop%bind def
-
-/arcn {
-    { 2 copy ge { exit } if 360 sub } loop
-    %dup 0 lt { 360 add exch 360 add exch } if
-    %1 index 0 lt { 360 add exch 360 add exch } if
-    %2 { dup 720 gt { dup 720 div truncate 720 mul sub } if exch } repeat
-    %2 copy lt { exch 360 add exch } if % s.b. angle1 > angle2
-    %%2 { dup 0 lt { 360 add } if exch } repeat
-    %2 copy lt { exch 360 add exch } if % s.b. angle1 > angle2
-    2 copy sub dup 90 gt { % recurse
-        .5 mul % x y r a1 a2 da/2
-        6 copy
-        3 2 roll exch sub exch arcn
-        add arcn
-    }{ pop
-        % draw single bezier
-        //.xpostsys /arcbez get exec % x1 y1 x2 y2 x3 y3  x0 y0
-        %4 2 roll
-        %{ currentpoint pop pop } stopped { moveto }{ lineto } ifelse
-		.pathempty { moveto }{ lineto } ifelse
-        %6 2 roll
-        %4 2 roll
-        %6 4 roll
-        curveto
-    } ifelse
-}
-override%pop pop%bind def
 
 %%-----------    above this line has be reimplemented in lib/xpost_op_path.c
 
@@ -779,10 +655,5 @@ setglobal
 } bind //.xpostsys /.defop get exec
 
 % pathbbox is implemented in xpost_op_path.c
-
-% override was the load-time switch between the C and PostScript implementations
-% of the operators above; it is not needed once this file has loaded, so it does
-% not join the language in systemdict.
-/override where { /override undef } if
 
 //.internaldict /QUIET known { }{ (eof path.ps\n)print } ifelse

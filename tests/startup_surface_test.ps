@@ -192,7 +192,7 @@ globaldict length 0 eq (globaldict starts empty) assert
 
 /WON.PS [ /ashow /awidthshow /filter /findfont /setfont /show
           /stringwidth /widthshow ] def
-/WON.C  [ /arc /arcn /rcurveto /rlineto /rmoveto ] def
+/WON.C  [ ] def   % no pair is arranged this way today
 
 WON.PS {
     dup .privatedict /.wrappedprocs get exch known

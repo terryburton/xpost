@@ -22,7 +22,6 @@
 .privatedict /newnulldevice
 .gscratch /.stencilcache
 .privatedict /.xpost
-.xpostsys /arcbez
 .xpostsys /.bindone
 .xpostsys /.bindscope
 .xpostsys /.bindscoped
