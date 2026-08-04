@@ -44,6 +44,7 @@
 #include "xpost_context.h"
 #include "xpost_name.h"
 #include "xpost_dict.h"
+#include "xpost_error.h"
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
@@ -82,6 +83,8 @@ int xpost_op_any_any_ge (Xpost_Context *ctx,
                          Xpost_Object x,
                          Xpost_Object y)
 {
+    if (!xpost_op_ordered_comparable(x, y))
+        return typecheck;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_bool_cons(xpost_op_relation(XPOST_OP_REL_GE,
                          xpost_dict_compare_objects(ctx, x, y))));
@@ -95,6 +98,8 @@ int xpost_op_any_any_gt (Xpost_Context *ctx,
                          Xpost_Object x,
                          Xpost_Object y)
 {
+    if (!xpost_op_ordered_comparable(x, y))
+        return typecheck;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_bool_cons(xpost_op_relation(XPOST_OP_REL_GT,
                          xpost_dict_compare_objects(ctx, x, y))));
@@ -108,6 +113,8 @@ int xpost_op_any_any_le (Xpost_Context *ctx,
                          Xpost_Object x,
                          Xpost_Object y)
 {
+    if (!xpost_op_ordered_comparable(x, y))
+        return typecheck;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_bool_cons(xpost_op_relation(XPOST_OP_REL_LE,
                          xpost_dict_compare_objects(ctx, x, y))));
@@ -121,6 +128,8 @@ int xpost_op_any_any_lt (Xpost_Context *ctx,
                          Xpost_Object x,
                          Xpost_Object y)
 {
+    if (!xpost_op_ordered_comparable(x, y))
+        return typecheck;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_bool_cons(xpost_op_relation(XPOST_OP_REL_LT,
                          xpost_dict_compare_objects(ctx, x, y))));

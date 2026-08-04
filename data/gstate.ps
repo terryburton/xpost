@@ -197,6 +197,10 @@ end
 % gstate  setgstate  -
 % set graphics state from gstate
 /setgstate {
+    % the operand is looked at before the current state is fetched: with
+    % nothing on the stack the fetch would go first and the copy would
+    % report the wrong shortage
+    dup type /dicttype ne { /setgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get copy pop
 } def
 

@@ -845,6 +845,14 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         w == (unsigned int)ctx->opcode_shortcuts.opge ? XPOST_OP_REL_GE : -1;
                     int cmp_;
 
+                    /* the ordered four are restricted to two numbers
+                       or two strings, so the pair is asked the same
+                       question the operators ask before either road
+                       reaches the comparison */
+                    if (rel_ >= XPOST_OP_REL_LT &&
+                        !xpost_op_ordered_comparable(os_top->data[ot - 2],
+                                                     os_top->data[ot - 1]))
+                        rel_ = -1;
                     if (rel_ >= 0 &&
                         xpost_dict_compare_simple(os_top->data[ot - 2],
                                                   os_top->data[ot - 1], &cmp_))

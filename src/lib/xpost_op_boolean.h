@@ -60,6 +60,27 @@ static inline int xpost_op_relation(Xpost_Op_Relation rel, int cmp)
     }
 }
 
+/**
+ * @brief whether the ordered relations may be applied to this pair.
+ *
+ * lt, le, gt and ge take two numbers or two strings; anything else,
+ * including one of each, is a typecheck (PLRM 8.2). eq and ne are the
+ * general pair and take any two objects, so they do not ask this.
+ * Shared with the interpreter's fused execution, which reaches the same
+ * comparison by another road and must reach the same answer.
+ */
+static inline int xpost_op_ordered_comparable(Xpost_Object x, Xpost_Object y)
+{
+    int xt = xpost_object_get_type(x);
+    int yt = xpost_object_get_type(y);
+    int xnum = (xt == integertype) || (xt == realtype);
+    int ynum = (yt == integertype) || (yt == realtype);
+
+    if (xnum && ynum)
+        return 1;
+    return (xt == stringtype) && (yt == stringtype);
+}
+
 int xpost_oper_init_bool_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 #endif
