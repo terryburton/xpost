@@ -163,7 +163,13 @@ setglobal
 % the interpreter answers for the whole language
 /languagelevel 3 def
 
-/setvmthreshold { pop } def
+/setvmthreshold {
+    % the threshold itself is not acted on, but the operand is still an
+    % integer: discarding anything at all accepted every mistake
+    dup type /integertype ne
+        { /setvmthreshold cvx /typecheck signalerror } if
+    pop
+} def
 
 % the shared-VM view of global VM, one and the same here
 /setshared /setglobal load def

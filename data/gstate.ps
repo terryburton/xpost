@@ -239,18 +239,26 @@ end
 % converts by the additive-complement formulae), and the colour
 % rendering dictionary (recorded only)
 /setblackgeneration {
+    dup xcheck not { /setblackgeneration cvx /typecheck signalerror } if
+    dup type dup /arraytype ne exch /packedarraytype ne and
+        { /setblackgeneration cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /blackgen exch put
 } def
 /currentblackgeneration {
     graphicsdict /currgstate get /blackgen get
 } def
 /setundercolorremoval {
+    dup xcheck not { /setundercolorremoval cvx /typecheck signalerror } if
+    dup type dup /arraytype ne exch /packedarraytype ne and
+        { /setundercolorremoval cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /ucr exch put
 } def
 /currentundercolorremoval {
     graphicsdict /currgstate get /ucr get
 } def
 /setcolorrendering {
+    dup type /dicttype ne
+        { /setcolorrendering cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /colorrendering exch put
 } def
 /currentcolorrendering {
@@ -829,6 +837,8 @@ setglobal
 
 % num  setsmoothness  -   (recorded only)
 /setsmoothness {
+    dup type dup /integertype ne exch /realtype ne and
+        { /setsmoothness cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /smoothness exch put
 } def
 /currentsmoothness {
