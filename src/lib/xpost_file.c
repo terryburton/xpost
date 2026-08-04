@@ -4325,7 +4325,12 @@ Xpost_Object xpost_file_cons_filter_subfile(Xpost_Memory_File *mem, Xpost_Object
         ff->pushback = -1;
         ff->eod = 0;
         ff->count = count;
-        memcpy(ff->eodstr, eod, eodlen);
+        /* an end-of-data string may be empty, and an empty one is
+           handed over as no string at all rather than as a pointer to
+           nothing: copying from it is undefined however few bytes are
+           asked for */
+        if (eodlen > 0)
+            memcpy(ff->eodstr, eod, eodlen);
         ff->eodlen = eodlen;
         ff->pendn = ff->pendi = 0;
     }
