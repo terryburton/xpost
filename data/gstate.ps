@@ -230,6 +230,7 @@ end
     dup xcheck not { /settransfer cvx /typecheck signalerror } if
     dup type dup /arraytype ne exch /packedarraytype ne and
         { /settransfer cvx /typecheck signalerror } if
+    dup /settransfer exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get
     dup dup /transfer get /redtransfer exch put
@@ -250,6 +251,7 @@ end
     dup xcheck not { /setblackgeneration cvx /typecheck signalerror } if
     dup type dup /arraytype ne exch /packedarraytype ne and
         { /setblackgeneration cvx /typecheck signalerror } if
+    dup /setblackgeneration exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /blackgen exch put
 } def
 /currentblackgeneration {
@@ -259,6 +261,7 @@ end
     dup xcheck not { /setundercolorremoval cvx /typecheck signalerror } if
     dup type dup /arraytype ne exch /packedarraytype ne and
         { /setundercolorremoval cvx /typecheck signalerror } if
+    dup /setundercolorremoval exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /ucr exch put
 } def
 /currentundercolorremoval {
@@ -330,6 +333,26 @@ setglobal
 % so the number of calls and the arguments match what paint later
 % sees, rather than collapsing to one sample where the cell spans a
 % single device pixel.
+% /opname {proc}  .sampletransfer  -
+% A transfer function maps one number in [0,1] to one number, and is
+% sampled across that range when it is set. The samples are taken for
+% their effect on the operand stack: a procedure that leaves anything
+% other than its one result is not a transfer function.
+.xpostsys /.sampletransfer {
+    graphicsdict exch /.tsproc exch put
+    graphicsdict exch /.tsop exch put
+    0 1 255 {
+        255 div
+        graphicsdict /.tsd count 2 sub put
+        graphicsdict /.tsproc get exec
+        count graphicsdict /.tsd get ne
+            { graphicsdict /.tsop get cvx /typecheck signalerror } if
+        dup type dup /integertype ne exch /realtype ne and
+            { graphicsdict /.tsop get cvx /typecheck signalerror } if
+        pop
+    } for
+} put
+
 .xpostsys /.samplespot {
     18 dict begin
     /proc exch def /ang exch def /freq exch def

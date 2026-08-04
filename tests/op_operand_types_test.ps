@@ -229,6 +229,37 @@
 { 10 400 exp } /undefinedresult (exp a power that overflows) refuses
 { 10 400 exp neg } /undefinedresult (exp a power overflowing downward) refuses
 
+% ------------------------------------------------------ transfer functions
+% A transfer function maps one number in [0,1] to one number, and is
+% sampled across that range when it is set, so a procedure that is not
+% one is refused where it is given rather than where it is next used.
+
+/tf.runs 0 def
+{ pop 0.5 /tf.runs tf.runs 1 add store } settransfer
+tf.runs 256 eq (a transfer function is sampled when it is set) assert
+count 0 eq (sampling leaves the operand stack as it found it) assert
+
+{ { } settransfer } (the identity transfer) works
+{ { pop 0.5 } settransfer } (a constant transfer) works
+{ { pop 0.5 } setblackgeneration } (a constant black generation) works
+{ { pop 0.5 } setundercolorremoval } (a constant undercolour removal) works
+
+% a procedure that does not consume its argument leaves the stack
+% deeper each time it is sampled
+{ { 1 } settransfer } /typecheck (a transfer that pushes without popping) refuses
+{ { pop } settransfer } /typecheck (a transfer that leaves no result) refuses
+{ { pop (x) } settransfer } /typecheck (a transfer whose result is a string) refuses
+{ { pop pop 0.5 } settransfer } /typecheck (a transfer that pops too much) refuses
+{ { 1 } setblackgeneration } /typecheck (a black generation that pushes) refuses
+{ { 1 } setundercolorremoval } /typecheck (an undercolour removal that pushes) refuses
+
+% the sampling runs against the caller's dictionaries, so a procedure
+% that keeps a count can keep one
+/tf.seen 0 def
+{ pop /tf.seen tf.seen 1 add store 0.5 } settransfer
+tf.seen 256 eq (the samples run where the caller can see them) assert
+{ } settransfer
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
