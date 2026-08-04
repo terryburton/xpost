@@ -182,10 +182,13 @@ errordict begin
 end
 //.internaldict /QUIET known { }{ (errordict installed...)print } ifelse
 
-currentglobal true setglobal   % handleerror is a global operator
-/handleerror { errordict /handleerror get exec } def
+end
 setglobal
 
-end
+% handleerror is a global operator in systemdict that calls the procedure
+% of the same name in errordict, so it is defined out here rather than
+% inside the userdict block the local error dictionaries needed.
+currentglobal true setglobal
+/handleerror { errordict /handleerror get exec } def
 setglobal
 //.internaldict /QUIET known { }{ (\neof err.ps\n)print } ifelse

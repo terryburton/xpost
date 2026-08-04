@@ -715,6 +715,51 @@ end % systemdict
 userdict begin
 false setglobal
 
+
+
+
+% (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
+
+
+
+%traceon
+%debugloadon
+
+currentglobal
+false setglobal
+% //.xpostsys /.fontsubstitutions get: findfont's substitute-face table, hidden in the private
+% global namespace where a program cannot reach it
+currentglobal true setglobal
+.xpostsys /.fontsubstitutions <<
+    /Times-Roman (Nimbus Roman No9 L)
+    dup (URW Bookman L)
+
+    /Courier (Liberation Mono)
+    dup /FreeMono
+    dup (Hershey\\-Plain\\-Triplex)
+    dup (DejaVu Sans Mono)
+
+    /Helvetica (DejaVu Sans)
+    dup (Nimbus Sans L)
+
+    /Palatino-Roman (URW Palladio L)
+>> put
+setglobal
+
+% The FontDirectory holds defined fonts; findfont dictionaries for
+% host faces state the type of the program that backs them.
+/FontDirectory
+<<
+>> def
+setglobal
+
+end % userdict
+
+% The rest of the boot file defines the language too, so it goes where the
+% language lives. systemdict is still writeable here -- the interpreter
+% seals it only after this file has been read.
+systemdict begin
+
 % executive is a global procedure in systemdict. It reaches $error by name,
 % not with a frozen reference: $error is a name in systemdict for a dictionary
 % in local VM, and a global procedure may not freeze a local object.
@@ -771,53 +816,11 @@ currentglobal true setglobal
 } bind //.xpostsys /.defop get exec
 setglobal
 
-
 (/qsort.ps) //.xpostsys /.loadmodule get exec
-
-% (s1) (s2) (s3) ... (sN) n  ncat  (s1s2s3...sN)
-
 
 % Named Resources: the Level 2 resource operators live in their own
 % data file
 (/resource.ps) //.xpostsys /.loadmodule get exec
-
-%traceon
-%debugloadon
-
-currentglobal
-false setglobal
-% //.xpostsys /.fontsubstitutions get: findfont's substitute-face table, hidden in the private
-% global namespace where a program cannot reach it
-currentglobal true setglobal
-.xpostsys /.fontsubstitutions <<
-    /Times-Roman (Nimbus Roman No9 L)
-    dup (URW Bookman L)
-
-    /Courier (Liberation Mono)
-    dup /FreeMono
-    dup (Hershey\\-Plain\\-Triplex)
-    dup (DejaVu Sans Mono)
-
-    /Helvetica (DejaVu Sans)
-    dup (Nimbus Sans L)
-
-    /Palatino-Roman (URW Palladio L)
->> put
-setglobal
-
-% The FontDirectory holds defined fonts; findfont dictionaries for
-% host faces state the type of the program that backs them.
-/FontDirectory
-<<
->> def
-setglobal
-
-end % userdict
-
-% The rest of the boot file defines the language too, so it goes where the
-% language lives. systemdict is still writeable here -- the interpreter
-% seals it only after this file has been read.
-systemdict begin
 
 /findfont [ /anytype ] {
     % a resource key is an object of any type except null (PLRM 3.9),
@@ -1800,9 +1803,9 @@ currentglobal true setglobal
 } put
 setglobal
 
-end % systemdict
-
 (/prepr.ps) //.xpostsys /.loadmodule get exec  % use nifty preview prompt!
+
+end % systemdict
 
 //.internaldict /QUIET known { }{ (eof init.ps\n)print } ifelse
 %loadgraphics %called by start* procs
