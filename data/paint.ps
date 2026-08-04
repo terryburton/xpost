@@ -30,7 +30,7 @@
 
 % -  erasepage  -
 % paint current page white
-/erasepage {
+/erasepage [ ] {
     % a device with an Erase method resets the page itself (the alpha
     % device clears to transparent); otherwise paint the page white
     DEVICE /Erase known {
@@ -48,7 +48,7 @@
         flushpage
     grestore
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % -  fill  -
 % fill current path with current color
@@ -80,7 +80,7 @@
     } if
 } bind put
 
-/fill {
+/fill [ ] {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
     //.xpostsys /.devtakespath get exec {
@@ -132,7 +132,7 @@
     newpath
     } ifelse
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % -  eofill  -
 % fill using the even-odd rule
@@ -141,7 +141,7 @@
 % winding-uniform -- then travel the ordinary pipeline: clip span
 % intersection and the device FillPoly. A vector device consuming
 % whole paths through FillPath carries the rule to its consumer.
-/eofill {
+/eofill [ ] {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patterneofill get exec }{
     //.xpostsys /.devtakespath get exec {
         graphicsdict /currgstate get /.eorule true put
@@ -171,7 +171,7 @@
         newpath
     } ifelse
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % x y proc  .intest  bool
 % upath proc  .intest  bool
@@ -282,7 +282,7 @@
 % (vector devices stroke with true joins, caps and width); raster
 % devices take the hairline DrawLine walk when the device-space width
 % is within a pixel, else the stroked outline is filled.
-/stroke {
+/stroke [ ] {
     //.xpostsys /.patternactive get exec {
         strokepath //.xpostsys /.patternfill get exec
     }{
@@ -361,7 +361,7 @@
     newpath
     } ifelse
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % Row machinery: image data arrives from datasrc in arbitrary
 % chunks; .fill assembles exact raw rows and .rownorm unpacks a
@@ -1011,7 +1011,7 @@
 % paint samples in the colour space current when image is invoked:
 % ImageType 1 plainly, 3 under an explicit mask, 4 under colour-key
 % masking
-/image {
+/image [ /anytype ] {
     dup type /dicttype eq {
         dup /ImageType get
         dup 1 eq {
@@ -1039,7 +1039,7 @@
         //.xpostsys /.imgsource get exec [ 0 1 ] 1 //.xpostsys /.imagepaint get exec
         grestore
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % width height bits matrix datasrc multi ncomp  colorimage  -
 % paint samples in the device space matching the component count: one

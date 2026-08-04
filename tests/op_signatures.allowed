@@ -24,6 +24,11 @@
 #                                       may carry
 # Each checks its own operands. Giving them statements needs an operator
 # to carry more than one, the way the C side already does.
+#
+# flattenpath and pathbbox are named in the wrapping list but are not
+# defined in PostScript at all: the loop wraps only what it finds in
+# userdict, so it passes over them and they stay the C operators they
+# always were, with the operand types C declares for them.
 colorimage
 imagemask
 ineofill
@@ -40,3 +45,5 @@ setcolor
 setcolorscreen
 setpattern
 setscreen
+flattenpath
+pathbbox

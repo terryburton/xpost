@@ -176,17 +176,17 @@ currentglobal true setglobal
 } bind put
 setglobal
 
-/showpage {
+/showpage [ ] {
     DEVICE dup /Emit get exec
 
     //.xpostsys /ShowpageSemanticsDict get ShowpageSemantics get exec
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/copypage {
+/copypage [ ] {
     DEVICE dup /Emit get exec
     flushpage
 
     //.xpostsys /CopypageSemanticsDict get ShowpageSemantics get exec
-} bind def
+} bind //.xpostsys /.defop get exec
 
 //.internaldict /QUIET known { }{ (eof device.ps\n)print } ifelse

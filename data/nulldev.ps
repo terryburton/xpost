@@ -1,10 +1,10 @@
 //.internaldict /QUIET known { }{ (loading nulldev.ps...)print } ifelse
 
-/nulldevice {
+/nulldevice [ ] {
     graphicsdict /currgstate get /device
     612 792 .privatedict /newnulldevice get exec
     put
-} def
+} //.xpostsys /.defop get exec
 /newnulldevice { % width height
     .privatedict /.xpost_NULLDEV get dup /Create get exec
 } def

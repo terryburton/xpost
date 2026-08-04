@@ -233,7 +233,7 @@ currentglobal true setglobal
 end
 setglobal
 
-/setcolorspace {
+/setcolorspace [ /anytype ] {
     dup //.xpostsys /.csvalidate get exec
     %[ currentcolor setcolordict currentcolorspace get counttomark 2 add -1 roll
     % record the space as set (what currentcolorspace reports), then the
@@ -276,16 +276,16 @@ setglobal
     graphicsdict /currgstate get /sepindex null put
     graphicsdict /currgstate get /tintcomps null put
     %exec pop
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/currentcolorspace {
+/currentcolorspace [ ] {
     % The space is reported as an array even when it was set as a bare
     % family name and has no parameters (PLRM 8.2), so that indexing the
     % result to ask which family it is works for every space rather than
     % for the parameterised ones only.
     graphicsdict /currgstate get /setspace get
     dup type /arraytype ne { 1 array astore } if
-} bind def
+} bind //.xpostsys /.defop get exec
 
 .xpostsys /setcolordict <<
     /DeviceGray /setgray cvx
@@ -511,7 +511,7 @@ setglobal
     % grey component, three RGB or four CMYK)
     /Process /currentcolor cvx
 >> put
-/currentcolor {
+/currentcolor [ ] {
     % a colour whose space records its components elsewhere than it
     % takes them -- Separation, DeviceN, Indexed, any CIE-based family --
     % reads back as the components it was set with, which setcolor put
@@ -522,7 +522,7 @@ setglobal
     }{
         //.xpostsys /currentcolordict get graphicsdict /currgstate get /colorspace get get exec
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 currentglobal true setglobal
 .xpostsys /.min { % x y  . x (if x < y)
@@ -618,33 +618,33 @@ setglobal
     >>
 >> put
 
-/setgray {
+/setgray [ /numbertype ] {
     graphicsdict /currgstate get /setspace /DeviceGray put
     graphicsdict /currgstate get /colorspace /DeviceGray put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
     graphicsdict /currgstate get /sepindex null put
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/currentgray {
+/currentgray [ ] {
     //.xpostsys /ColorConversion get /DeviceGray get
         graphicsdict /currgstate get /colorspace get
         get exec
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/setrgbcolor {
+/setrgbcolor [ /numbertype /numbertype /numbertype ] {
     graphicsdict /currgstate get /setspace /DeviceRGB put
     graphicsdict /currgstate get /colorspace /DeviceRGB put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp3 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
     graphicsdict /currgstate get /sepindex null put
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/currentrgbcolor {
+/currentrgbcolor [ ] {
     //.xpostsys /ColorConversion get /DeviceRGB get
         graphicsdict /currgstate get /colorspace get
         get exec
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % hue saturation brightness  sethsbcolor  -
 % the components are recorded in RGB, converted with the usual
@@ -652,7 +652,7 @@ setglobal
 % part blends between the derived p, q and t values). Each component is
 % clamped to [0,1] first, as the reference interpreters clamp hue rather
 % than wrap it.
-/sethsbcolor {
+/sethsbcolor [ /numbertype /numbertype /numbertype ] {
     3 { //.xpostsys /.c01 get exec 3 1 roll } repeat
     7 dict begin
     {/b /s /h}{exch def}forall
@@ -670,9 +670,9 @@ setglobal
              b p q } ifelse } ifelse } ifelse } ifelse } ifelse
     end
     setrgbcolor
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/currenthsbcolor {
+/currenthsbcolor [ ] {
     currentrgbcolor
     3 dict begin
     {/b /g /r}{exch def}forall
@@ -689,9 +689,9 @@ setglobal
         v                               % brightness
     } ifelse
     end
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/setcmykcolor {
+/setcmykcolor [ /numbertype /numbertype /numbertype /numbertype ] {
     graphicsdict /currgstate get /setspace /DeviceCMYK put
     graphicsdict /currgstate get /colorspace /DeviceCMYK put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp4 exch put
@@ -699,13 +699,13 @@ setglobal
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp2 exch put
     graphicsdict /currgstate get exch //.xpostsys /.c01 get exec /colorcomp1 exch put
     graphicsdict /currgstate get /sepindex null put
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/currentcmykcolor {
+/currentcmykcolor [ ] {
     //.xpostsys /ColorConversion get /DeviceCMYK get
         graphicsdict /currgstate get /colorspace get
         get exec
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % setcolordict and currentcolordict dispatch a device colour through the
 % operator named for its space. A program may redefine setgray/setrgbcolor/

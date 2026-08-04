@@ -139,18 +139,18 @@ setglobal
 
 % -  gsave  -
 % push graphics state
-/gsave {
+/gsave [ ] {
 graphicsdict begin
     /gptr gptr 1 add def
     gptr gstackarray length ge { /gsave cvx /limitcheck signalerror } if
     gstackarray gptr gstate currentgstate put % push copy on stack
     currgstate /currpath 2 copy get .copypath put % make a new working copy of path
 end
-} def
+} //.xpostsys /.defop get exec
 
 % -  grestore  -
 % pop graphics state
-/grestore {
+/grestore [ ] {
 graphicsdict begin
     gptr -1 gt {
         gstackarray gptr get
@@ -162,17 +162,17 @@ graphicsdict begin
         /gptr gptr 1 sub def
     } if
 end
-} def
+} //.xpostsys /.defop get exec
 
 % -  grestoreall  -
 % pop to bottommost graphics state
-/grestoreall {
+/grestoreall [ ] {
 graphicsdict begin
     /gptr -1 def
     gstackarray 0 get
     currgstate //.xpostsys /gstatecopy get exec pop
 end
-} def
+} //.xpostsys /.defop get exec
 
 % -  initgraphics  -
 % reset graphics state parameters
@@ -180,7 +180,7 @@ end
 % the graphics state back to its defaults, and nothing else: the
 % specification gives the equivalent code, and it neither touches raster
 % memory nor reports what it did
-/initgraphics {
+/initgraphics [ ] {
     gstate setgstate
     initmatrix
     newpath
@@ -191,7 +191,7 @@ end
     0 setlinejoin
     10 setmiterlimit
     [ ] 0 setdash
-} def
+} //.xpostsys /.defop get exec
 
 % -  gstate  gstate
 % create graphics state object
@@ -226,20 +226,20 @@ end
 
 % proc  settransfer  -
 % install the transfer procedure for every component
-/settransfer {
+/settransfer [ /proctype ] {
     dup /settransfer exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get
     dup dup /transfer get /redtransfer exch put
     dup dup /transfer get /greentransfer exch put
     dup /transfer get /bluetransfer exch put
-} def
+} //.xpostsys /.defop get exec
 
 % -  currenttransfer  proc
 % return the grey channel's transfer procedure
-/currenttransfer {
+/currenttransfer [ ] {
     graphicsdict /currgstate get /transfer get
-} def
+} //.xpostsys /.defop get exec
 
 % black generation and undercolor removal (recorded only: painting
 % converts by the additive-complement formulae), and the colour
@@ -285,21 +285,21 @@ setglobal
 % redproc greenproc blueproc grayproc  setcolortransfer  -
 % record one transfer procedure per component; the grey channel
 % shares its slot with settransfer, and is the one painting applies
-/setcolortransfer {
+/setcolortransfer [ /proctype /proctype /proctype /proctype ] {
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get exch /bluetransfer exch put
     graphicsdict /currgstate get exch /greentransfer exch put
     graphicsdict /currgstate get exch /redtransfer exch put
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentcolortransfer  redproc greenproc blueproc grayproc
 % return every component's transfer procedure
-/currentcolortransfer {
+/currentcolortransfer [ ] {
     graphicsdict /currgstate get /redtransfer get
     graphicsdict /currgstate get /greentransfer get
     graphicsdict /currgstate get /bluetransfer get
     graphicsdict /currgstate get /transfer get
-} def
+} //.xpostsys /.defop get exec
 
 % copy the grey screen to the colour channels: setscreen installs one
 % screen for every component
@@ -663,11 +663,11 @@ setglobal
 
 % -  currentscreen  freq angle proc
 % return the grey channel's screen parameters
-/currentscreen {
+/currentscreen [ ] {
     graphicsdict /currgstate get /screenfreq get
     graphicsdict /currgstate get /screenangle get
     graphicsdict /currgstate get /screenproc get
-} def
+} //.xpostsys /.defop get exec
 
 % rf ra rp gf ga gp bf ba bp kf ka kp  setcolorscreen  -
 % record one screen per component; the grey channel shares its slots
@@ -795,7 +795,7 @@ setglobal
 % the dictionary itself in the spot-function position: behind its own
 % frequency and angle for a type 1 dictionary, behind 60 and 0 for
 % any other type
-/sethalftone {
+/sethalftone [ /dicttype ] {
     dup type /dicttype ne {
         /sethalftone cvx /typecheck signalerror
     } if
@@ -825,12 +825,12 @@ setglobal
     } ifelse
     end
     //.xpostsys /.spreadgrayscreen get exec
-} def
+} //.xpostsys /.defop get exec
 
 % -  currenthalftone  halftonedict
 % return the halftone: the installed dictionary, or a type 1
 % dictionary over the grey screen when the screens were set directly
-/currenthalftone {
+/currenthalftone [ ] {
     graphicsdict /currgstate get /halftone get
     dup null eq {
         pop
@@ -840,11 +840,11 @@ setglobal
            /SpotFunction graphicsdict /currgstate get /screenproc get
         >>
     } if
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentcolorscreen  rf ra rp gf ga gp bf ba bp kf ka kp
 % return every component's screen parameters
-/currentcolorscreen {
+/currentcolorscreen [ ] {
     graphicsdict /currgstate get /redscreenfreq get
     graphicsdict /currgstate get /redscreenangle get
     graphicsdict /currgstate get /redscreenproc get
@@ -857,7 +857,7 @@ setglobal
     graphicsdict /currgstate get /screenfreq get
     graphicsdict /currgstate get /screenangle get
     graphicsdict /currgstate get /screenproc get
-} def
+} //.xpostsys /.defop get exec
 
 % flag  setstrokeadjust  -   (recorded only)
 /setstrokeadjust {

@@ -215,7 +215,7 @@ end
     } ifelse } ifelse } ifelse
 } bind put
 
-/reversepath {
+/reversepath [ ] {
 10 dict
 begin
     .pathempty not {
@@ -271,8 +271,7 @@ begin
         } loop
     } if
 end
-}
-bind def
+} bind //.xpostsys /.defop get exec
 
 % PLRM 3ed, 667:
 % The offset operand can be thought of as the "phase" of the dash pattern relative to
@@ -749,7 +748,7 @@ currentglobal false setglobal
 >> put
 setglobal
 
-/strokepath {
+/strokepath [ ] {
     flattenpath          % convert all curve segments to line approximations
     //.xpostsys /dashpath get exec             % apply dashing effect
     .gscratch /strokedict get /needcap false put
@@ -771,13 +770,13 @@ setglobal
         .gscratch /strokedict get /docaps get exec
         end
     } if
-} bind def
+} bind //.xpostsys /.defop get exec
 
-/clippath {
+/clippath [ ] {
     graphicsdict /currgstate get
         dup /clipregion get
         /currpath exch put
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % pathbbox is implemented in xpost_op_path.c
 

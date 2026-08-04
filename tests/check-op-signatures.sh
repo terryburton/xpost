@@ -10,6 +10,7 @@
 # common. Wrapping a new operator without stating its operands fails
 # here.
 #
+# An operator states its operands at its definition, through .defop.
 # tests/op_signatures.allowed lists the wrapped operators that do not yet
 # state theirs. The list only shrinks: an entry that has since gained a
 # statement is a failure too, so it cannot go stale.
@@ -20,6 +21,7 @@ set -eu
 
 initps=${1:?usage: check-op-signatures.sh <init.ps> <allowed>}
 allowed=${2:?usage: check-op-signatures.sh <init.ps> <allowed>}
+datadir=$(dirname "$initps")
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -42,12 +44,15 @@ if [ ! -s "$work/wrapped" ]; then
     ' "$initps" > "$work/wrapped"
 fi
 
-# The operators that state their operands.
-awk '
-    /^>> put$/ { insig = 0 }
-    insig && $1 ~ /^\// { print substr($1, 2) }
-    /\.xpostsys \/\.opsigs <</ { insig = 1 }
-' "$initps" > "$work/stated"
+# The operators that state their operands: each states it where it is
+# defined, so the statements are gathered from the definitions rather
+# than from a table someone maintains beside them.
+{
+    grep -h -o '^/[A-Za-z][A-Za-z0-9]* \[[^]]*\] {' "$datadir"/*.ps 2>/dev/null \
+        | sed 's|^/||; s| .*||'
+    grep -h -o '\.opsigs get /[A-Za-z][A-Za-z0-9]* \[' "$datadir"/*.ps 2>/dev/null \
+        | sed 's|.*/||; s| .*||'
+} > "$work/stated"
 
 LC_ALL=C sort -u "$work/wrapped" > "$work/w"
 LC_ALL=C sort -u "$work/stated" > "$work/s"

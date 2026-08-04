@@ -31,7 +31,7 @@ currentglobal true setglobal
 } put
 setglobal
 
-/definefont { % /fontname -dict-
+/definefont [ /anytype /dicttype ] { % /fontname -dict-
     dup type /dicttype ne
     2 index type /nulltype eq or {
         /definefont cvx /typecheck signalerror
@@ -120,7 +120,7 @@ setglobal
     } if
     FontDirectory exch 2 index exch put
     findfont
-} def
+} //.xpostsys /.defop get exec
 
 % scalefont and makefont build dictionaries and nothing else: each
 % returns a fresh copy of the font with the requested transform
@@ -132,26 +132,26 @@ setglobal
 % and makes the CTM matter where PostScript says it does: when the
 % glyphs are marked, not when the font is scaled.
 
-/scalefont { % font size  scalefont  font'
+/scalefont [ /dicttype /numbertype ] { % font size  scalefont  font'
     dup matrix scale makefont
-} def
+} //.xpostsys /.defop get exec
 
-/makefont { % font mat  makefont  font'
+/makefont [ /dicttype /arraytype ] { % font mat  makefont  font'
     exch dup length 2 add dict copy         % mat font'
     dup /FontMatrix 2 copy known { get }{ pop pop matrix } ifelse
                                             % mat font' oldfm
     3 -1 roll exch                          % font' mat oldfm
     matrix concatmatrix                     % font' newfm
     1 index /FontMatrix 3 -1 roll put       % font'
-} def
+} //.xpostsys /.defop get exec
 
-/setcharwidth {
+/setcharwidth [ /numbertype /numbertype ] {
     graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
     0 eq { /setcharwidth cvx /undefined signalerror } if
     graphicsdict /currgstate get /currfont get
     dup /xadvance 5 4 roll put
     /yadvance 3 2 roll put
-} def
+} //.xpostsys /.defop get exec
 
 % wx wy llx lly urx ury  .t3capture  -
 % declare the glyph's metrics and turn the build's marks into a
@@ -207,7 +207,7 @@ currentglobal true setglobal
 } put
 setglobal
 
-/setcachedevice {
+/setcachedevice [ /numbertype /numbertype /numbertype /numbertype /numbertype /numbertype ] {
     graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
     0 eq { /setcachedevice cvx /undefined signalerror } if
     graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse
@@ -218,7 +218,7 @@ setglobal
         pop pop pop pop
         setcharwidth
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % font code  .t3build  -
 % render a Type 3 glyph through the glyph cache: a hit replays the
@@ -341,7 +341,7 @@ currentglobal true setglobal
 } put
 setglobal
 
-/show {
+/show [ /stringtype ] {
     /show 1 //.xpostsys /.needops get exec
     /show //.xpostsys /.needfont get exec
     /show //.xpostsys /.needpoint get exec
@@ -403,9 +403,9 @@ setglobal
 
     } ifelse
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
-/widthshow {
+/widthshow [ /numbertype /numbertype /integertype /stringtype ] {
     /widthshow 4 //.xpostsys /.needops get exec
     /widthshow //.xpostsys /.needfont get exec
     /widthshow //.xpostsys /.needpoint get exec
@@ -455,9 +455,9 @@ setglobal
 
     } ifelse
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
-/ashow {
+/ashow [ /numbertype /numbertype /stringtype ] {
     /ashow 3 //.xpostsys /.needops get exec
     /ashow //.xpostsys /.needfont get exec
     /ashow //.xpostsys /.needpoint get exec
@@ -504,9 +504,9 @@ setglobal
 
     } ifelse
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
-/awidthshow {
+/awidthshow [ /numbertype /numbertype /integertype /numbertype /numbertype /stringtype ] {
     /awidthshow 6 //.xpostsys /.needops get exec
     /awidthshow //.xpostsys /.needfont get exec
     /awidthshow //.xpostsys /.needpoint get exec
@@ -565,7 +565,7 @@ setglobal
 
     } ifelse
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % kshow's compiled program paints through the implementation's own
 % show, captured here while the name still holds this file's
@@ -574,7 +574,7 @@ currentglobal true setglobal
 .xpostsys /.kshowshow /show load put
 setglobal
 
-/kshow {
+/kshow [ /proctype /stringtype ] {
     /kshow 2 //.xpostsys /.needops get exec
     /kshow //.xpostsys /.needfont get exec
     /kshow //.xpostsys /.needpoint get exec
@@ -613,7 +613,7 @@ setglobal
         ] cvx
     end
     exec
-} def
+} //.xpostsys /.defop get exec
 
 %   name  glyphshow  -
 % Paint the glyph the name selects, independent of the character
@@ -622,7 +622,7 @@ setglobal
 % only BuildChar is served through the first code its Encoding
 % assigns the name. Other font types resolve the name against the
 % font program.
-/glyphshow {
+/glyphshow [ /nametype ] {
     /glyphshow 1 //.xpostsys /.needops get exec
     /glyphshow //.xpostsys /.needfont get exec
     /glyphshow //.xpostsys /.needpoint get exec
@@ -663,7 +663,7 @@ setglobal
         itransform moveto
         end
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 %   str numarray  xshow  -
 % Show each character, replacing the glyph's advance with the
@@ -693,7 +693,7 @@ currentglobal true setglobal
 } put
 setglobal
 
-/xshow {
+/xshow [ /stringtype /anytype ] {
     /xshow 2 //.xpostsys /.needops get exec
     /xshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
@@ -710,9 +710,9 @@ setglobal
         /i i 1 add def
     } loop
     end
-} def
+} //.xpostsys /.defop get exec
 
-/yshow {
+/yshow [ /stringtype /anytype ] {
     /yshow 2 //.xpostsys /.needops get exec
     /yshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
@@ -729,9 +729,9 @@ setglobal
         /i i 1 add def
     } loop
     end
-} def
+} //.xpostsys /.defop get exec
 
-/xyshow {
+/xyshow [ /stringtype /anytype ] {
     /xyshow 2 //.xpostsys /.needops get exec
     /xyshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
@@ -750,9 +750,9 @@ setglobal
         /i i 1 add def
     } loop
     end
-} def
+} //.xpostsys /.defop get exec
 
-/stringwidth {
+/stringwidth [ /stringtype ] {
     /stringwidth 1 //.xpostsys /.needops get exec
     /stringwidth //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
@@ -768,7 +768,7 @@ setglobal
         currentpoint
     grestore
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 %   str bool  charpath  -
 % Append the text's glyph outlines to the current path. The segments
@@ -777,7 +777,7 @@ setglobal
 % transform), so each point is flipped to a device offset and mapped
 % to user space about the current point. Type 3 fonts only advance
 % the pen by the text's width.
-/charpath {
+/charpath [ /stringtype /booleantype ] {
     /charpath 2 //.xpostsys /.needops get exec
     /charpath //.xpostsys /.needfont get exec
     pop
@@ -809,7 +809,7 @@ setglobal
         cpstr stringwidth rmoveto
         end
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % the standard text encoding, as the PLRM's Appendix E defines it
 /StandardEncoding [
@@ -877,9 +877,9 @@ setglobal
 ] readonly def
 
 % key  undefinefont  -
-/undefinefont {
+/undefinefont [ /anytype ] {
     FontDirectory exch undef
-} def
+} //.xpostsys /.defop get exec
 
 % GlobalFontDirectory and SharedFontDirectory, aliases for FontDirectory, are
 % named in systemdict by copyudtosd (in C), alongside FontDirectory itself,
@@ -907,14 +907,14 @@ setglobal
 currentglobal true setglobal
 .xpostsys /.rootsetfont /setfont load put
 setglobal
-/setfont {
+/setfont [ /dicttype ] {
     % a font dictionary, not any dictionary: one without a FontMatrix
     % has nothing to set a size or an orientation from
     dup /FontMatrix known not
         { /setfont cvx /invalidfont signalerror } if
     dup graphicsdict /currgstate get /rootfont 3 -1 roll put
     //.xpostsys /.rootsetfont get exec
-} def
+} //.xpostsys /.defop get exec
 /rootfont {
     graphicsdict /currgstate get /rootfont 2 copy known
         { get }{ pop pop currentfont } ifelse

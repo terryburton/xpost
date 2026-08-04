@@ -32,6 +32,32 @@ true setglobal   % systemdict is global, so these allocations must be global
 currentglobal true setglobal
 userdict /.xpostsys 400 dict put
 setglobal
+
+currentglobal true setglobal
+% The operands each operator takes. The definitions fill this through
+% .defop, so the statement sits beside the body it describes; lockdown
+% reads it when it wraps them.
+.xpostsys /.opsigs 200 dict put
+
+% Four operators are defined in a form .defop cannot take -- inside a
+% dictionary being built, or put into userdict directly -- so their
+% statements are recorded here beside the mechanism instead.
+.xpostsys /.opsigs get /setpagedevice [ /dicttype ] put
+.xpostsys /.opsigs get /currentpagedevice [ ] put
+.xpostsys /.opsigs get /initclip [ ] put
+.xpostsys /.opsigs get /shfill [ /dicttype ] put
+
+% /name [ specs ] { proc }  .defop  -
+% Define an operator and record the operands it takes, in one place.
+.xpostsys /.defop {
+    3 dict begin
+    /d.proc exch def /d.sig exch def /d.name exch def
+    //.xpostsys /.opsigs get d.name d.sig put
+    d.name /d.proc load
+    end
+    def
+} put
+setglobal
 % privatedict -- the interpreter's private LOCAL machinery dictionary. Recorded
 % in the context (where the collector roots it and C reaches it) but never placed
 % on the dict stack, so a program can neither name nor enumerate its members. It
@@ -790,7 +816,7 @@ setglobal
 
 end % userdict
 
-/findfont {
+/findfont [ /anytype ] {
     % a resource key is an object of any type except null (PLRM 3.9),
     % so only null is refused here; anything else is looked up and, not
     % being found, substituted for like any other unknown name
@@ -819,7 +845,7 @@ end % userdict
             } ifelse
         } if
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % index any  defineuserobject  -
 % the user-object table lives in userdict, growing as indices demand
@@ -1056,79 +1082,6 @@ currentglobal true setglobal
     end
 } put
 
-.xpostsys /.opsigs <<
-    /setgray       [ /numbertype ]
-    /setrgbcolor   [ /numbertype /numbertype /numbertype ]
-    /sethsbcolor   [ /numbertype /numbertype /numbertype ]
-    /setcmykcolor  [ /numbertype /numbertype /numbertype /numbertype ]
-    /setfont       [ /dicttype ]
-    /settransfer   [ /proctype ]
-    /setcolorspace [ /anytype ]
-    /show          [ /stringtype ]
-    /stringwidth   [ /stringtype ]
-    /glyphshow     [ /nametype ]
-    /xshow         [ /stringtype /anytype ]
-    /yshow         [ /stringtype /anytype ]
-    /xyshow        [ /stringtype /anytype ]
-    /image         [ /anytype ]
-    /makepattern   [ /dicttype /arraytype ]
-    /scalefont     [ /dicttype /numbertype ]
-    /charpath       [ /stringtype /booleantype ]
-    /ashow          [ /numbertype /numbertype /stringtype ]
-    /widthshow      [ /numbertype /numbertype /integertype /stringtype ]
-    /awidthshow     [ /numbertype /numbertype /integertype /numbertype /numbertype /stringtype ]
-    /kshow          [ /proctype /stringtype ]
-    /cshow          [ /proctype /stringtype ]
-    /definefont     [ /anytype /dicttype ]
-    /undefinefont   [ /anytype ]
-    /findfont       [ /anytype ]
-    /makefont       [ /dicttype /arraytype ]
-    /selectfont     [ /anytype /numbertype ]
-    /sethalftone    [ /dicttype ]
-    /setpagedevice  [ /dicttype ]
-    /setcachedevice [ /numbertype /numbertype /numbertype /numbertype /numbertype /numbertype ]
-    /setcharwidth   [ /numbertype /numbertype ]
-    /setcolortransfer [ /proctype /proctype /proctype /proctype ]
-    /shfill         [ /dicttype ]
-    /uappend        [ /arraytype ]
-    /ueofill        [ /arraytype ]
-    /ufill          [ /arraytype ]
-    /ustroke        [ /arraytype ]
-    /ustrokepath    [ /arraytype ]
-    /upath          [ /booleantype ]
-    /composefont    [ /anytype /anytype /arraytype ]
-    /clip           [ ]
-    /clippath       [ ]
-    /copypage       [ ]
-    /currentcmykcolor [ ]
-    /currentcolor   [ ]
-    /currentcolorscreen [ ]
-    /currentcolorspace [ ]
-    /currentcolortransfer [ ]
-    /currentgray    [ ]
-    /currenthalftone [ ]
-    /currenthsbcolor [ ]
-    /currentpagedevice [ ]
-    /currentrgbcolor [ ]
-    /currentscreen  [ ]
-    /currenttransfer [ ]
-    /eoclip         [ ]
-    /eofill         [ ]
-    /erasepage      [ ]
-    /fill           [ ]
-    /flattenpath    [ ]
-    /grestore       [ ]
-    /grestoreall    [ ]
-    /gsave          [ ]
-    /initclip       [ ]
-    /initgraphics   [ ]
-    /nulldevice     [ ]
-    /pathbbox       [ ]
-    /reversepath    [ ]
-    /showpage       [ ]
-    /stroke         [ ]
-    /strokepath     [ ]
->> put
 
 .xpostsys /.upathopset <<
     /setbbox 4 /moveto 2 /rmoveto 2 /lineto 2 /rlineto 2 /curveto 6
@@ -1175,7 +1128,7 @@ currentglobal true setglobal
 setglobal
 
 % userpath  uappend  -
-/uappend {
+/uappend [ /arraytype ] {
     //.xpostsys /.upathcheck get exec
     dup xcheck {
         exec
@@ -1201,7 +1154,7 @@ setglobal
         } for
         end
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % matrix and user path operands tell apart by shape: a matrix is a
 % six-element literal array of numbers
@@ -1215,16 +1168,16 @@ currentglobal true setglobal
 } put
 setglobal
 
-/ufill { gsave newpath uappend fill grestore } def
-/ueofill { gsave newpath uappend eofill grestore } def
-/ustroke {
+/ufill [ /arraytype ] { gsave newpath uappend fill grestore } //.xpostsys /.defop get exec
+/ueofill [ /arraytype ] { gsave newpath uappend eofill grestore } //.xpostsys /.defop get exec
+/ustroke [ /arraytype ] {
     //.xpostsys /.isupmat get exec {
         gsave newpath exch uappend concat stroke grestore
     }{
         gsave newpath uappend stroke grestore
     } ifelse
-} def
-/ustrokepath {
+} //.xpostsys /.defop get exec
+/ustrokepath [ /arraytype ] {
     //.xpostsys /.isupmat get exec {
         matrix currentmatrix 3 1 roll
         exch newpath uappend
@@ -1233,17 +1186,17 @@ setglobal
     }{
         newpath uappend strokepath
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % bool  upath  userpath
 % the current path, written as a user path in current user space
-/upath {
+/upath [ /booleantype ] {
     [ exch { /ucache cvx } if
       pathbbox /setbbox cvx
       { /moveto cvx }{ /lineto cvx }{ /curveto cvx }{ /closepath cvx }
       pathforall
     ] cvx
-} def
+} //.xpostsys /.defop get exec
 
 % mark key value ... /TYPE  pdfmark  -
 % Route document metadata to a device that can carry it (the pdfwrite
@@ -1263,7 +1216,7 @@ setglobal
 
 %   /fontname size  selectfont  -
 % /fontname matrix  selectfont  -
-/selectfont {
+/selectfont [ /anytype /numbertype ] {
     dup type /arraytype eq {
         exch findfont
         exch makefont
@@ -1273,7 +1226,7 @@ setglobal
         exch scalefont
         setfont
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % x y w h
 currentglobal true setglobal   % global .xpostsys helpers

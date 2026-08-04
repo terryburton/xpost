@@ -456,8 +456,7 @@ setglobal
 % assemble a Type 0 composite font: names resolve through their
 % resource categories, the CMap decodes the codes, the descendants
 % carry the glyphs
-/composefont {
-    /composefont [ /arraytype ] //.xpostsys /.checkargs get exec
+/composefont [ /anytype /anytype /arraytype ] {
     1 index type dup /nametype ne exch dup /stringtype ne exch /dicttype ne and and
         { /composefont cvx /typecheck signalerror } if
     [ exch { dup type /nametype eq { /CIDFont findresource } if } forall ]
@@ -473,7 +472,7 @@ setglobal
     /WMode CMap /WMode 2 copy known { get }{ pop pop 0 } ifelse def
     currentdict end
     definefont
-} def
+} //.xpostsys /.defop get exec
 
 %   proc string  cshow  -
 % call the procedure for each character with its code and width,
@@ -505,7 +504,7 @@ setglobal
 % leavings preserved -- every compiled operand is pushed just before
 % its consumer. The helper procedures embed at scan time as arrays,
 % which the programs push and exec as data.
-/cshow {
+/cshow [ /proctype /stringtype ] {
     /cshow 2 //.xpostsys /.needops get exec
     /cshow //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
@@ -583,6 +582,6 @@ setglobal
         end
         exec
     } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 //.internaldict /QUIET known { }{ (eof cid.ps\n)print } ifelse
