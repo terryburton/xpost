@@ -45,18 +45,35 @@ mn mn add  { mn mn add }  (min+min agrees in and out of a procedure) pair
 mn 1 mul   { mn 1 mul }   (min*1 agrees in and out of a procedure) pair
 2 3 add    { 2 3 add }    (in-range add agrees in and out of a procedure) pair
 
-% and the types are what the PLRM requires, from inside a procedure
-/otype { mx 1 add type } def
-otype /realtype eq (an overflowing add in a procedure yields a real) assert
+% and the promotion happens at whatever the build's integer range is,
+% which is what this file says at the top it will not assume. The build
+% is asked where its range ends -- the narrow personality promotes past
+% 2^31, the wide one carries integers further -- and each is held to
+% arithmetic that leaves its own range rather than to a fixed number.
+/wideint mx 1 add type /integertype eq def
+/promotes wideint { /integertype }{ /realtype } ifelse def
+
 /itype { 2 3 add type } def
 itype /integertype eq (an in-range add in a procedure yields an integer) assert
-/stype { mn 1 sub type } def
-stype /realtype eq (an underflowing sub in a procedure yields a real) assert
-/mtype { mx 2 mul type } def
-mtype /realtype eq (an overflowing mul in a procedure yields a real) assert
 
-% the value survives the promotion
+/otype { mx 1 add type } def
+otype promotes eq (an add past the range agrees with the build) assert
+/stype { mn 1 sub type } def
+stype promotes eq (a sub past the range agrees with the build) assert
+/mtype { mx 2 mul type } def
+mtype promotes eq (a mul past the range agrees with the build) assert
+
+% and whichever personality this is, leaving the range never wraps: the
+% sign is kept, which is the property the type was standing in for. The
+% magnitudes are not compared against the range itself, since a promoted
+% value is a real and the range's own endpoint does not survive the
+% conversion exactly
+mx 1 add 0 gt (an add past the range stays positive) assert
+mn 1 sub 0 lt (a sub past the range stays negative) assert
+mx 2 mul 0 gt (a mul past the range stays positive) assert
+
+% the value survives, promoted or not
 /ovval { mx 1 add 2147483648.0 sub abs 1 lt } def
-ovval (an overflowing add in a procedure keeps its value) assert
+ovval (an add past the range keeps its value) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
