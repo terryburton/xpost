@@ -105,18 +105,43 @@ s 0 get 88 eq (putinterval on a string is left alone) assert
 /made where { pop false }{ true } ifelse
     (an array made after the save is discarded) assert
 
-% A reference left on a stack to such an object is specified to make
-% the restore itself an error. That check is not implemented, so the
-% restore is taken and the object goes on being readable -- it stays
-% reachable from the stack, which the collector treats as a root, so
-% nothing dangles and the deviation is one of permissiveness. Reported
-% rather than asserted, so that neither behaviour is written down here
-% as the correct one.
+% A stack still holding such an object makes the restore itself the
+% error: the object would be left pointing at storage the restore
+% reclaims.
 /vm save def
-{ [1 2 3] vm restore } stopped
-    { (note: a restore under a newer object on the stack is refused\n) print }
-    { (note: a restore under a newer object on the stack is permitted\n) print }
-  ifelse
+[ 1 2 3 ]
+{ vm restore } stopped
+    { $error /errorname get /invalidrestore eq }{ false } ifelse
+    (a restore under a newer array is refused) assert
+clear
+vm restore
+
+/vm save def
+(fresh)
+{ vm restore } stopped
+    { $error /errorname get /invalidrestore eq }{ false } ifelse
+    (a restore under a newer string is refused) assert
+clear
+vm restore
+
+/vm save def
+3 dict
+{ vm restore } stopped
+    { $error /errorname get /invalidrestore eq }{ false } ifelse
+    (a restore under a newer dictionary is refused) assert
+clear
+vm restore
+
+% what was made before the save is no reason to refuse
+[ 4 5 6 ]
+/vm save def
+{ vm restore } stopped not (a restore under an older array is allowed) assert
+clear
+
+% nor is anything that is not a composite
+/vm save def
+42 true /nm
+{ vm restore } stopped not (a restore under simple objects is allowed) assert
 clear
 
 % -------------------------------------------------------------- the files
