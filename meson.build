@@ -155,6 +155,14 @@ if libpng_dep.found()
   config_h.set('HAVE_LIBPNG', 1)
 endif
 
+# The object width the interpreter is built for. The sources gate on
+# this define; autotools sets it from the same option, and without it
+# here a build configured for large objects is silently a small-object
+# one.
+if get_option('large-object')
+  config_h.set('WANT_LARGE_OBJECT', 1)
+endif
+
 zlib_dep = dependency('zlib', required: false)
 if zlib_dep.found()
   config_h.set('HAVE_ZLIB', 1)
@@ -391,9 +399,13 @@ dict_grow_exe = executable('dict_grow_test',
   dependencies: libxpost_dep,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
+# Growing a dictionary past its allotment: the wide build's dictionaries
+# reach far further before the size field fills, so the same test does
+# very much more work there.
 test('dict-grow',
   dict_grow_exe,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
 
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
@@ -687,7 +699,8 @@ test('interrupt',
 test('large-object',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/large_object_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
 
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
 # is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
