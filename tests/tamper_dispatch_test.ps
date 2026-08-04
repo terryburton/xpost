@@ -95,9 +95,8 @@ nbad 0 eq (no internal dispatch dictionary stores an executable name) assert
 %     whenever binding ran, so their dynamic dispatch is the design, and the
 %     procedures carrying them are read-only now. ---
 /wrapped
-  .privatedict /.graphicsdict get dup type /dicttype eq
-  { /.wrappedprocs 2 copy known { get }{ pop pop 0 dict } ifelse }
-  { pop 0 dict } ifelse
+  .privatedict /.wrappedprocs 2 copy known
+  { get }{ pop pop 0 dict } ifelse
 def
 /nunbound 0 def
 /pscan { % proc label depth  -  (flag exec-name elements resolving to operators)

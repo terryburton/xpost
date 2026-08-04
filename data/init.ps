@@ -1522,12 +1522,10 @@ currentglobal true setglobal
     % .wrappedprocs, keeping them inside the collector's view (the
     % operator table is outside it).
     % The register keeps the procedures inside the collector's view, the
-    % operator table being outside it. It lives in graphicsdict when
-    % graphics has loaded and privatedict otherwise, and privatedict names
-    % whichever it is so the one loop below reaches it either way.
-    .privatedict /.wrapreg
-        /graphicsdict where { pop graphicsdict }{ .privatedict } ifelse put
-    .privatedict /.wrapreg get /.wrappedprocs 256 dict put
+    % operator table being outside it. It lives in privatedict, with the
+    % rest of the interpreter's own machinery, and exists whether or not
+    % graphics was loaded.
+    .privatedict /.wrappedprocs 256 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
         /ufill /ueofill /ustroke /ustrokepath /uappend /upath
@@ -1578,8 +1576,7 @@ currentglobal true setglobal
                 % helper call, among the rest) has to happen here, or a program
                 % that shadows an operator name reaches into the machinery.
                 bind
-                .privatedict /.wrapreg get /.wrappedprocs get
-                    2 index 2 index put
+                .privatedict /.wrappedprocs get 2 index 2 index put
                 % an operator that states its operands is wrapped with
                 % the statement, so the dispatcher enforces it before
                 % the procedure runs, exactly as for one written in C.

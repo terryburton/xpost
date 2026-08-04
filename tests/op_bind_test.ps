@@ -43,14 +43,13 @@
 % when its file is read, so it is settled a long way from the definition
 % and nothing else checks the result.
 
-/graphicsdict where {
-    pop
-    /wp graphicsdict /.wrappedprocs get def
+.privatedict /.wrappedprocs known {
+    /wp .privatedict /.wrappedprocs get def
     /local 0 def
     wp { pop gcheck not { /local local 1 add store } if } forall
     local 0 eq (every wrapped procedure is in global VM) assert
     wp length 0 gt (there are wrapped procedures to check) assert
-}{ (FAIL: graphicsdict is not reachable, nothing was checked\n) print
+}{ (FAIL: the wrapped-procedure register is not reachable\n) print
    /failcount failcount 1 add store } ifelse
 
 % ------------------------------- every wrapped operator reaches systemdict
@@ -78,8 +77,8 @@
     k.nothome 0 eq k.w assert
 } def
 
-/graphicsdict where {
-    pop graphicsdict /.wrappedprocs get
+.privatedict /.wrappedprocs known {
+    .privatedict /.wrappedprocs get
     (every wrapped operator is an operator in systemdict) checkreg
 } if
 .privatedict /.wrappedsysprocs known {
