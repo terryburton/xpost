@@ -1,0 +1,116 @@
+% The ordered comparisons and what they refuse, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% lt, le, gt and ge compare two numbers or two strings. Every other
+% pairing -- including one string against one number -- is a typecheck,
+% which is what separates them from eq and ne, the general pair that
+% compares any two objects. Getting this wrong is not a missing error
+% but a wrong answer: a program comparing a string with a number was
+% told which was greater rather than that the question is meaningless.
+%
+% The interpreter reaches these by two roads -- the operator, and a
+% fused path that recognises the relation while walking a procedure --
+% and the two drifted apart when the restriction was added to one of
+% them. That equivalence is fused_equivalence_test.ps's job and it
+% catches exactly this; what is checked here is the semantics itself,
+% which that test compares between the roads without saying what either
+% should answer.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store } def
+
+% {proc} (what)  -  the pairing is refused with a typecheck
+/refuses { % {proc} (what)
+    /c.w exch def /c.p exch def
+    clear /c.p load stopped {
+        $error /errorname get /typecheck ne
+            { c.w (raised something other than typecheck) note } if
+    }{ c.w (was not refused) note } ifelse
+    clear
+} def
+
+% {proc} expected (what)  -  the pairing answers as given
+/answers { % {proc} bool (what)
+    /a.w exch def /a.x exch def /a.p exch def
+    clear /a.p load exec a.x eq not { a.w (wrong answer) note } if
+    clear
+} def
+
+% ------------------------------------------------------------- the numbers
+
+{ 1 2 lt } true (1 2 lt) answers
+{ 2 1 lt } false (2 1 lt) answers
+{ 1 1 le } true (1 1 le) answers
+{ 2 1 gt } true (2 1 gt) answers
+{ 1 1 ge } true (1 1 ge) answers
+% across the two number types, which compare by value not by type
+{ 1 1.5 lt } true (an integer against a real) answers
+{ 1.5 1 gt } true (a real against an integer) answers
+{ 1.0 1 ge } true (a real equal to an integer) answers
+% and negatives, where a comparison done on magnitudes would go wrong
+{ -2 -1 lt } true (two negatives) answers
+{ -1 1 lt } true (a negative against a positive) answers
+
+% ------------------------------------------------------------- the strings
+
+{ (abc) (abd) lt } true (two strings differing at the end) answers
+{ (abc) (abc) le } true (two equal strings) answers
+{ (abd) (abc) gt } true (the greater string) answers
+% a prefix is less than what extends it, whatever the lengths
+{ (ab) (abc) lt } true (a prefix against its extension) answers
+{ (abc) (ab) gt } true (an extension against its prefix) answers
+{ () (a) lt } true (the empty string against a letter) answers
+% the elements compare as unsigned bytes, so the high half is greater
+{ (\001) (\377) lt } true (a low byte against a high one) answers
+
+% --------------------------------------------------------- what is refused
+% Everything that is neither two numbers nor two strings.
+
+{ (a) 1 lt }    (a string against a number) refuses
+{ 1 (a) gt }    (a number against a string) refuses
+{ null null lt } (two nulls) refuses
+{ /a /b lt }    (two names) refuses
+{ true false gt } (two booleans) refuses
+{ [1] [2] lt }  (two arrays) refuses
+{ 3 dict 3 dict le } (two dictionaries) refuses
+{ {1} {2} ge }  (two procedures) refuses
+{ 1 null lt }   (a number against a null) refuses
+{ (a) /a gt }   (a string against a name) refuses
+{ 1 true lt }   (a number against a boolean) refuses
+
+% ------------------------------------------------- the general pair differ
+% eq and ne compare any two objects and must keep doing so, since that
+% is the difference being drawn.
+
+1 1 eq (eq compares two numbers) assert
+(a) (a) eq (eq compares two strings) assert
+/a /a eq (eq compares two names) assert
+1 (a) ne (eq and ne take a number against a string) assert
+null null eq (eq compares two nulls) assert
+true true eq (eq compares two booleans) assert
+1 1.0 eq (eq compares across the number types) assert
+
+% --------------------------------------------------------- too few operands
+
+/short { % {proc} (what)
+    /s.w exch def /s.p exch def
+    clear /s.p load stopped {
+        $error /errorname get /stackunderflow ne
+            { s.w (did not report a shortage) note } if
+    }{ s.w (accepted a short stack) note } ifelse
+    clear
+} def
+{ lt } (lt with nothing) short
+{ 1 lt } (lt with one operand) short
+{ gt } (gt with nothing) short
+{ ge } (ge with nothing) short
+{ le } (le with nothing) short
+
+bad 0 eq (every comparison answers or refuses as defined) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

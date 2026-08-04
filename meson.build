@@ -873,6 +873,13 @@ test('halftone-matrix',
   args: [ xpost_exe, files('tests/halftone_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The ordered comparisons take two numbers or two strings, and refusing
+# anything else is what separates them from eq and ne.
+test('op-compare',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_compare_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What the error dictionary carries and what the standard handler does
 # to it: a program handling its own errors reads both.
 test('error-dict',
