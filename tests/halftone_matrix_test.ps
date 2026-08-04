@@ -1,0 +1,166 @@
+% Every halftone dictionary fault against the error it is defined to
+% raise, run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A halftone dictionary carries a type, and the type decides which
+% entries the rest of the dictionary must have. The specification gives
+% three separate answers for three separate faults: a type the
+% interpreter cannot screen with is a rangecheck, a required entry that
+% is absent is an undefined, and an entry of the wrong type is a
+% typecheck. A validator that raises something is not the same as one
+% that raises the right thing, and a program that distinguishes the
+% three -- to fall back on a simpler screen, say -- is told the wrong
+% story by the wrong error.
+%
+% So each fault is introduced in each type that can carry it, and the
+% error name is checked rather than the mere fact of an error.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { % (what) (which)
+    (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store
+} def
+
+% The tag is put away before the procedure runs: a procedure that fails
+% may leave anything at all on the stack.
+/raises { % {proc} /errname (what)  -  the named error, and no other
+    /h.w exch def /h.e exch def
+    stopped {
+        $error /errorname get dup h.e ne {
+            (FAIL: ) print h.w print ( raised ) print ==
+            /bad bad 1 add store
+        }{ pop } ifelse
+    }{
+        h.w (is not refused at all) note
+    } ifelse
+    clear
+} def
+/works { % {proc} (what)
+    /h.w exch def
+    stopped { h.w (is refused) note } if
+    clear
+} def
+
+% ----------------------------------------------------- the whole dictionaries
+% Each type this interpreter screens with, complete, is accepted.
+
+{ << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
+  sethalftone } (a complete type 1) works
+{ << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >>
+  sethalftone } (a complete type 3) works
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } (a complete type 5) works
+
+% and comes back as the type it was set to
+{ << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone
+  currenthalftone /HalftoneType get 3 ne
+    { (does not read back as type 3) (currenthalftone) note } if }
+  (a type 3 read back) works
+
+% ------------------------------------------------------------ the type itself
+% A dictionary with no type at all, a type that is not a number, and
+% types the interpreter does not screen with.
+
+{ << /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >> sethalftone }
+    /undefined (a dictionary with no HalftoneType) raises
+{ << /HalftoneType (three) /Width 2 /Height 2 /Thresholds <0180C8FF> >>
+  sethalftone } /typecheck (a HalftoneType that is not an integer) raises
+
+[ -1 0 2 4 6 9 10 16 99 ] {
+    /t exch def
+    { << /HalftoneType t /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
+      sethalftone }
+      /rangecheck (a type this interpreter does not screen with) raises
+} forall
+
+% ------------------------------------------------- the entries each type needs
+% Every required entry, removed one at a time, in the type that requires
+% it. A validator that checks only the first entry passes the first of
+% these and fails the rest.
+
+{ << /HalftoneType 1 /Angle 45 /SpotFunction { pop pop 0 } >> sethalftone }
+    /undefined (a type 1 with no Frequency) raises
+{ << /HalftoneType 1 /Frequency 60 /SpotFunction { pop pop 0 } >> sethalftone }
+    /undefined (a type 1 with no Angle) raises
+{ << /HalftoneType 1 /Frequency 60 /Angle 45 >> sethalftone }
+    /undefined (a type 1 with no SpotFunction) raises
+
+{ << /HalftoneType 3 /Height 2 /Thresholds <0180C8FF> >> sethalftone }
+    /undefined (a type 3 with no Width) raises
+{ << /HalftoneType 3 /Width 2 /Thresholds <0180C8FF> >> sethalftone }
+    /undefined (a type 3 with no Height) raises
+{ << /HalftoneType 3 /Width 2 /Height 2 >> sethalftone }
+    /undefined (a type 3 with no Thresholds) raises
+
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 1 /Frequency 60 /Angle 45
+              /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /undefined (a type 5 with no Default) raises
+
+% ------------------------------------------------- the entries of a wrong type
+{ << /HalftoneType 1 /Frequency (sixty) /Angle 45
+     /SpotFunction { pop pop 0 } >> sethalftone }
+    /typecheck (a type 1 whose Frequency is a string) raises
+{ << /HalftoneType 1 /Frequency 60 /Angle (forty-five)
+     /SpotFunction { pop pop 0 } >> sethalftone }
+    /typecheck (a type 1 whose Angle is a string) raises
+{ << /HalftoneType 1 /Frequency 60 /Angle 45 /SpotFunction 7 >> sethalftone }
+    /typecheck (a type 1 whose SpotFunction is a number) raises
+
+{ << /HalftoneType 3 /Width (two) /Height 2 /Thresholds <0180C8FF> >>
+  sethalftone } /typecheck (a type 3 whose Width is a string) raises
+{ << /HalftoneType 3 /Width 2 /Height 2 /Thresholds 7 >> sethalftone }
+    /typecheck (a type 3 whose Thresholds is a number) raises
+
+% ------------------------------------------------------ inside the composite
+% A type 5 is checked through to its components: a fault in one of them
+% is a fault in the whole, and a component may not itself be composite.
+
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 3 /Width 2 /Height 2 >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /undefined (a type 5 whose component lacks an entry) raises
+
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 99 >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /rangecheck (a type 5 whose component has a bad type) raises
+
+{ << /HalftoneType 5
+     /Gray << /HalftoneType 5
+              /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                          /SpotFunction { pop pop 0 } >> >>
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } /rangecheck (a type 5 nested in a type 5) raises
+
+% a name rather than a halftone alongside the components is not a
+% component, and does not make the dictionary invalid
+{ << /HalftoneType 5 /HalftoneName (screen)
+     /Default << /HalftoneType 1 /Frequency 60 /Angle 45
+                 /SpotFunction { pop pop 0 } >> >>
+  sethalftone } (a type 5 carrying a name) works
+
+% --------------------------------------------------- nothing is left behind
+% A rejected halftone must not have displaced the one already in force.
+
+<< /HalftoneType 1 /Frequency 33 /Angle 44 /SpotFunction { pop pop 0 } >>
+sethalftone
+{ << /HalftoneType 99 >> sethalftone } stopped pop clear
+currenthalftone /Frequency get 33 eq
+    (a rejected halftone leaves the current one in force) assert
+
+% and the operand is still refused when it is not a dictionary at all
+{ 7 sethalftone } /typecheck (a halftone that is not a dictionary) raises
+
+bad 0 eq (every halftone fault raises the error it is defined to) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

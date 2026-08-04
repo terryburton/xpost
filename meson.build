@@ -851,6 +851,15 @@ test('image-matrix',
   args: [ xpost_exe, files('tests/image_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every halftone dictionary fault against the error it is defined to
+# raise: the type, the missing entry and the wrongly-typed entry each
+# have their own answer, and raising something is not raising the right
+# thing.
+test('halftone-matrix',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/halftone_matrix_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
 # the save level and memory consumption, and vmreclaim takes the five values
 # PLRM 8.2 defines for it and refuses the rest.
