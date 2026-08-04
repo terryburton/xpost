@@ -118,6 +118,44 @@ spaces {
     clear
 } forall
 
+% ------------------------------------------------- the spaces that are not
+% A family this interpreter cannot record a colour in is refused when
+% the space is set, not by the next operator to ask a question of it:
+% otherwise the graphics state is left holding a space that answers
+% nothing, and the program is told at a place it has no way to connect
+% to the cause.
+/raises { % {proc} /errname (what)
+    /c.w exch def /c.e exch def
+    stopped {
+        $error /errorname get dup c.e ne {
+            (FAIL: ) print c.w print ( raised ) print ==
+            /bad bad 1 add store
+        }{ pop } ifelse
+    }{ c.w (is not refused) note } ifelse
+    clear
+} def
+
+{ /NoSuchFamily setcolorspace } /undefined (an unknown family) raises
+{ [/NoSuchFamily 1 2] setcolorspace } /undefined (an unknown family in an array) raises
+{ 7 setcolorspace } /typecheck (a number) raises
+
+% and one reached only through another space, since the family that
+% matters is the one a colour finally lands in
+{ [/Indexed /NoSuchBase 1 <0011>] setcolorspace }
+    /undefined (an Indexed space over an unknown base) raises
+{ [/Separation /Spot /NoSuchAlt { dup }] setcolorspace }
+    /undefined (a Separation over an unknown alternative) raises
+{ [/DeviceN [/A] /NoSuchAlt { dup }] setcolorspace }
+    /undefined (a DeviceN over an unknown alternative) raises
+{ [/Pattern /NoSuchUnder] setcolorspace }
+    /undefined (a Pattern over an unknown space) raises
+
+% a refused space leaves the one already in force untouched
+/DeviceCMYK setcolorspace 0 0 0 1 setcolor
+{ /NoSuchFamily setcolorspace } stopped pop clear
+currentcolorspace 0 get /DeviceCMYK eq
+    (a refused space leaves the current one in force) assert
+
 0 setgray
 bad 0 eq (every space works with every colour operator) assert
 
