@@ -1308,22 +1308,6 @@ currentglobal true setglobal
         % read. The finalizer closes it, and closing it spends the
         % one-shot, so a program cannot reopen it.
         .sysdictunlock
-    % Move the standard operators from userdict into the unlocked systemdict,
-    % leaving userdict for the program. Only global operator-valued names move;
-    % the local error state, the font directories and the interactive helpers
-    % stay. Machinery references to these names are already frozen (binding and
-    % .bindscope over the loaded procedures), and a runtime lookup finds them
-    % one dictionary further down the stack.
-    [ userdict {
-        exch dup type /nametype eq
-        1 index 60 string cvs 0 get 46 ne and   % not a private dotted name
-        % an operator, a bound procedure, or a standard array (the encodings)
-        2 index dup xcheck exch type /arraytype eq or and
-        2 index gcheck and
-        { exch pop }{ pop pop } ifelse
-    } forall ]
-    dup { dup userdict exch get systemdict 3 1 roll put } forall
-    { userdict exch undef } forall
 
         (/graphics.ps) //.xpostsys /.loadmodule get exec
 
@@ -1632,25 +1616,6 @@ currentglobal true setglobal
     .privatedict //.xpostsys /.bindscope get exec
 
 
-    % The same sweep loadgraphics runs at its head, repeated for the run
-    % that never loaded graphics -- and harmless when it did, userdict
-    % being empty by then.
-    % Move the standard operators from userdict into the unlocked systemdict,
-    % leaving userdict for the program. Only global operator-valued names move;
-    % the local error state, the font directories and the interactive helpers
-    % stay. Machinery references to these names are already frozen (binding and
-    % .bindscope over the loaded procedures), and a runtime lookup finds them
-    % one dictionary further down the stack.
-    [ userdict {
-        exch dup type /nametype eq
-        1 index 60 string cvs 0 get 46 ne and   % not a private dotted name
-        % an operator, a bound procedure, or a standard array (the encodings)
-        2 index dup xcheck exch type /arraytype eq or and
-        2 index gcheck and
-        { exch pop }{ pop pop } ifelse
-    } forall ]
-    dup { dup userdict exch get systemdict 3 1 roll put } forall
-    { userdict exch undef } forall
 
     % The device makers are global procedures the sweep just carried into
     % systemdict, but a program never constructs a device by calling one -- the
