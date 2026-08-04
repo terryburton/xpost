@@ -780,6 +780,10 @@ setglobal
 end % userdict
 
 /findfont {
+    % a resource key is an object of any type except null (PLRM 3.9),
+    % so only null is refused here; anything else is looked up and, not
+    % being found, substituted for like any other unknown name
+    dup type /nulltype eq { /findfont cvx /typecheck signalerror } if
     FontDirectory 1 index known {
         FontDirectory exch get
     }{
@@ -797,9 +801,12 @@ end % userdict
                 get
                 findfont % call proc (tail-)recursively 
             }{
-                exch pop
-                (no defined substitute for unfound font)=
-                =
+                % nothing found and nothing to substitute: the operator
+                % either yields a font or says why not. Printing a note
+                % and returning an empty stack left the caller to fail
+                % at whatever it did next, with nothing to connect it to
+                exch pop pop
+                /findfont cvx /invalidfont signalerror
             } ifelse
         } if
     } ifelse

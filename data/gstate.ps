@@ -219,6 +219,9 @@ end
 % proc  settransfer  -
 % install the transfer procedure for every component
 /settransfer {
+    dup xcheck not { /settransfer cvx /typecheck signalerror } if
+    dup type dup /arraytype ne exch /packedarraytype ne and
+        { /settransfer cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get
     dup dup /transfer get /redtransfer exch put
@@ -815,6 +818,8 @@ setglobal
 
 % flag  setstrokeadjust  -   (recorded only)
 /setstrokeadjust {
+    dup type /booleantype ne
+        { /setstrokeadjust cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /strokeadjust exch put
 } def
 /currentstrokeadjust {
@@ -904,6 +909,8 @@ setglobal
 
 % bool  setoverprint  -
 /setoverprint {
+    dup type /booleantype ne
+        { /setoverprint cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /overprint exch put
 } def
 

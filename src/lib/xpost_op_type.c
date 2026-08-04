@@ -143,12 +143,33 @@ int Areadonly(Xpost_Context *ctx,
     return 0;
 }
 
+/* rcheck and wcheck ask after an object's access, and only the
+   composite types carry one: array, packed array, dictionary, file and
+   string. Any other operand is a typecheck (PLRM 8.2) rather than a
+   verdict about an access it does not have. */
+static
+int _carries_access(Xpost_Object o)
+{
+    switch (xpost_object_get_type(o))
+    {
+        case arraytype: /*@fallthrough@*/
+        case dicttype: /*@fallthrough@*/
+        case filetype: /*@fallthrough@*/
+        case stringtype:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 /* obj  rcheck  bool
    test obj for read-access */
 static
 int Archeck(Xpost_Context *ctx,
             Xpost_Object o)
 {
+    if (!_carries_access(o))
+        return typecheck;
     //xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK) >> XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET >= XPOST_OBJECT_TAG_ACCESS_READ_ONLY ));
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(xpost_object_get_access(ctx, o) >= XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
     return 0;
@@ -160,6 +181,8 @@ static
 int Awcheck(Xpost_Context *ctx,
             Xpost_Object o)
 {
+    if (!_carries_access(o))
+        return typecheck;
     //xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK) >> XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET == XPOST_OBJECT_TAG_ACCESS_UNLIMITED ));
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_UNLIMITED));
     return 0;
