@@ -561,8 +561,8 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
 Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
                                          Xpost_Object name,
                                          Xpost_Object proc,
-                                         int in,
-                                         const byte *types)
+                                         int nsig,
+                                         const Xpost_Wrapped_Signature *sigs)
 {
     Xpost_Operator *optab;
     Xpost_Operator op;
@@ -623,40 +623,56 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
     optab[opcode] = op;
     ++_xpost_noops;
 
-    if (in >= 0)
+    if (nsig > 0)
     {
         /* the operator states the operands it takes, and the dispatcher
            enforces the statement exactly as it does for one written in
-           C: a signature with no function of its own, whose procedure
-           runs once the types have matched */
+           C: signatures with no function of their own, whose procedure
+           runs once one of them has matched. An operator taking more
+           than one operand shape states each, and the dispatcher tries
+           them in turn, as it does for a C operator installed under
+           several prototypes. */
         unsigned int sigadr;
-        unsigned int tadr;
-        Xpost_Signature *sig;
-        byte *b;
-        int k;
+        int s;
 
-        if (!xpost_memory_file_alloc(ctx->gl, sizeof(Xpost_Signature), &sigadr))
+        if (!xpost_memory_file_alloc(ctx->gl,
+                                     nsig * sizeof(Xpost_Signature), &sigadr))
         {
             XPOST_LOG_ERR("cannot allocate signature block for %s", buf);
             return null;
         }
-        if (!xpost_memory_file_alloc(ctx->gl, (unsigned int)(in ? in : 1), &tadr))
+        for (s = 0; s < nsig; s++)
         {
-            XPOST_LOG_ERR("cannot allocate type block for %s", buf);
-            return null;
+            unsigned int tadr;
+            Xpost_Signature *sig;
+            byte *b;
+            int in = sigs[s].in;
+            int k;
+
+            if (!xpost_memory_file_alloc(ctx->gl,
+                                         (unsigned int)(in ? in : 1), &tadr))
+            {
+                XPOST_LOG_ERR("cannot allocate type block for %s", buf);
+                return null;
+            }
+            /* an allocation moves the file, so every pointer into it is
+               taken afresh from its address */
+            sig = (void *)(ctx->gl->base + sigadr);
+            b = (void *)(ctx->gl->base + tadr);
+            for (k = 0; k < in; k++)
+                b[k] = sigs[s].types[k];
+            sig[s].in = in;
+            sig[s].out = 0;
+            sig[s].t = tadr;
+            sig[s].fp = NULL;
+            sig[s].checkstack = NULL;
         }
+        /* the count goes in last: an allocation that failed part way
+           leaves the operator stating nothing rather than stating a
+           signature that was never filled in */
         optab = (void *)(ctx->gl->base + optadr);
-        sig = (void *)(ctx->gl->base + sigadr);
-        b = (void *)(ctx->gl->base + tadr);
-        for (k = 0; k < in; k++)
-            b[k] = types[k];
-        sig[0].in = in;
-        sig[0].out = 0;
-        sig[0].t = tadr;
-        sig[0].fp = NULL;
-        sig[0].checkstack = NULL;
-        optab[opcode].n = 1;
         optab[opcode].sigadr = sigadr;
+        optab[opcode].n = nsig;
     }
 
     return xpost_operator_cons_opcode(opcode);
@@ -780,16 +796,17 @@ int xpost_operator_exec(Xpost_Context *ctx,
     op = optab[opcode];
     sp = (void *)(ctx->gl->base + op.sigadr);
 
-    /* signatures take at most 8 args, so ct only needs to reach 8; no
-       full segment walk is needed. The top segment settles it: 8 or more
-       in it, or -- when a full segment (never partial) sits below it --
-       at least SEGMENT_SIZE, likewise >= 8. Only a lone segment can hold
-       fewer, and then its own top is the count. */
+    /* a signature states at most XPOST_OPERATOR_MAX_SIG operands, so ct
+       only needs to reach that many; no full segment walk is needed. The
+       top segment settles it: that many or more in it, or -- when a full
+       segment (never partial) sits below it -- at least SEGMENT_SIZE,
+       likewise enough. Only a lone segment can hold fewer, and then its
+       own top is the count. */
     os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os);
     os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg);
-    ct = (os_top->top >= 8) ? 8
+    ct = (os_top->top >= XPOST_OPERATOR_MAX_SIG) ? XPOST_OPERATOR_MAX_SIG
         : (os_top == os_root) ? (int)os_top->top
-        : 8;
+        : XPOST_OPERATOR_MAX_SIG;
     if (op.n == 0)
     {
         /* a wrapped operator carries no C signatures: it runs its

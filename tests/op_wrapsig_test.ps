@@ -75,4 +75,71 @@ ID /.wrapopsig known (the declaring wrapper is reachable) assert
 { null anyone } (anytype takes a null) accepts
 { anyone } /stackunderflow (anytype still needs an operand) raises
 
+% ------------------------------------------------- more than one shape
+% Several standard operators take more than one shape of operand list:
+% rectfill takes four numbers or one array, imagemask five operands or
+% one dictionary. Each shape is stated as an array of its own, and the
+% dispatcher tries them in the order given -- the same way a C operator
+% installed under several prototypes is dispatched.
+
+/twoshape /twoshape { pop }
+    [ [ /integertype ] [ /stringtype ] ] ID /.wrapopsig get exec def
+{ 42 twoshape } (the first shape) accepts
+{ (x) twoshape } (the second shape) accepts
+{ 4.5 twoshape } /typecheck (neither shape) raises
+{ null twoshape } /typecheck (neither shape, again) raises
+{ twoshape } /stackunderflow (no operand for either shape) raises
+
+% shapes of different length: the longer is stated first, so it gets
+% first refusal, and the shorter answers when the longer cannot
+/mixed /mixed { }
+    [ [ /integertype /integertype ] [ /stringtype ] ] ID /.wrapopsig get exec def
+{ 1 2 mixed clear } (the longer shape) accepts
+{ (x) mixed clear } (the shorter shape) accepts
+{ mixed } /stackunderflow (nothing for either) raises
+
+% a shorter shape matches on the operands it names, whatever lies
+% beneath them: those belong to the program, not to the operator
+{ 1 (x) mixed clear } (the shorter shape, with the caller's own operand beneath) accepts
+
+% a wrong-typed operand where a shape's arity was met is a typecheck,
+% not the shortage reported by a longer shape that ran out of operands
+{ null mixed clear } /typecheck (the shortage does not mask the mismatch) raises
+
+% ------------------------------------------------------- what a shape says
+% A shape may state fewer operands than the operator consumes, which is
+% all a variadic operator can state: the types named are the ones
+% nearest the top of the stack, and the body answers for the rest.
+/partial /partial { pop pop } [ /integertype ] ID /.wrapopsig get exec def
+{ (x) 42 partial } (an unstated operand beneath a stated one) accepts
+{ 1 (x) partial } /typecheck (the stated operand is still checked) raises
+
+% the widest shape the dispatcher takes, which is what setcolorscreen
+% states: twelve operands, checked to the last
+/twelve /twelve { clear }
+    [ /integertype /integertype /integertype /integertype /integertype /integertype
+      /integertype /integertype /integertype /integertype /integertype /integertype ]
+    ID /.wrapopsig get exec def
+{ 1 2 3 4 5 6 7 8 9 10 11 12 twelve } (twelve operands) accepts
+{ (x) 2 3 4 5 6 7 8 9 10 11 12 twelve } /typecheck
+    (the deepest of twelve is checked) raises
+{ 1 2 3 4 5 6 7 8 9 10 11 twelve } /stackunderflow (eleven where twelve are wanted) raises
+
+% ------------------------------------------------------------ the limits
+{ /toowide { } [ /integertype /integertype /integertype /integertype
+    /integertype /integertype /integertype /integertype /integertype
+    /integertype /integertype /integertype /integertype ]
+  ID /.wrapopsig get exec } /limitcheck (a shape wider than the dispatcher takes) raises
+
+{ /toomany { } [ [/integertype] [/integertype] [/integertype] [/integertype]
+    [/integertype] [/integertype] [/integertype] [/integertype] [/integertype] ]
+  ID /.wrapopsig get exec } /limitcheck (more shapes than are allowed) raises
+
+{ /notatype { } [ [ /integertype ] [ 42 ] ] ID /.wrapopsig get exec }
+    /typecheck (a shape holding something that is not a type name) raises
+{ /notashape { } [ [ /integertype ] 42 ] ID /.wrapopsig get exec }
+    /typecheck (a shape list holding something that is not a shape) raises
+{ /nosuchtype { } [ /notatypename ] ID /.wrapopsig get exec }
+    /rangecheck (a name that is not a type) raises
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

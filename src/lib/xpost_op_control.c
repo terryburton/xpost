@@ -617,7 +617,7 @@ int xpost_op_wrapop(Xpost_Context *ctx,
 {
     Xpost_Object o;
 
-    o = xpost_operator_cons_wrapped(ctx, name, proc, -1, NULL);
+    o = xpost_operator_cons_wrapped(ctx, name, proc, 0, NULL);
     if (xpost_object_get_type(o) != operatortype)
         return unregistered;
     if (!xpost_stack_push(ctx->lo, ctx->os, o))
@@ -625,21 +625,13 @@ int xpost_op_wrapop(Xpost_Context *ctx,
     return 0;
 }
 
-/* name proc array  .wrapopsig  operator
-   install an operator that runs the procedure, stating the operands it
-   takes. The array names one type per operand in operand order, using
-   the names the type operator answers plus numbertype for either
-   number, proctype for an executable array, and anytype for no
-   restriction. The dispatcher enforces the statement before the
-   procedure runs, exactly as for an operator written in C. */
+/* read one operand shape: an array naming a type per operand, in
+   operand order */
 static
-int xpost_op_wrapopsig(Xpost_Context *ctx,
-                       Xpost_Object name,
-                       Xpost_Object proc,
-                       Xpost_Object sig)
+int _read_operand_shape(Xpost_Context *ctx,
+                        Xpost_Object sig,
+                        Xpost_Wrapped_Signature *out)
 {
-    Xpost_Object o;
-    byte types[XPOST_OPERATOR_MAX_SIG];
     int n = sig.comp_.sz;
     int i;
 
@@ -657,9 +649,64 @@ int xpost_op_wrapopsig(Xpost_Context *ctx,
             return rangecheck;
         /* the dispatcher reads its type pattern from the top of the
            stack down, and the array reads bottom up */
-        types[n - 1 - i] = (byte)t;
+        out->types[n - 1 - i] = (byte)t;
     }
-    o = xpost_operator_cons_wrapped(ctx, name, proc, n, types);
+    out->in = n;
+    return 0;
+}
+
+/* name proc array  .wrapopsig  operator
+   install an operator that runs the procedure, stating the operands it
+   takes. The array names one type per operand in operand order, using
+   the names the type operator answers plus numbertype for either
+   number, proctype for an executable array, and anytype for no
+   restriction. The dispatcher enforces the statement before the
+   procedure runs, exactly as for an operator written in C.
+
+   An operator that takes more than one shape of operand list states
+   each as an array of its own, and gives the array of those. The
+   dispatcher tries them in the order stated, so a longer shape stated
+   before a shorter one it extends gets first refusal. A shape may
+   state fewer operands than the operator consumes, which is all a
+   variadic operator can say: the types stated are the ones nearest the
+   top of the stack, and the procedure answers for the rest. */
+static
+int xpost_op_wrapopsig(Xpost_Context *ctx,
+                       Xpost_Object name,
+                       Xpost_Object proc,
+                       Xpost_Object sig)
+{
+    Xpost_Object o;
+    Xpost_Wrapped_Signature sigs[XPOST_OPERATOR_MAX_ALT];
+    int n;
+    int i;
+    int ret;
+
+    /* one shape names types, and a list of shapes holds arrays */
+    if ((sig.comp_.sz > 0) &&
+        (xpost_object_get_type(xpost_array_get(ctx, sig, 0)) == arraytype))
+    {
+        n = sig.comp_.sz;
+        if (n > XPOST_OPERATOR_MAX_ALT)
+            return limitcheck;
+        for (i = 0; i < n; i++)
+        {
+            Xpost_Object alt = xpost_array_get(ctx, sig, i);
+
+            if (xpost_object_get_type(alt) != arraytype)
+                return typecheck;
+            if ((ret = _read_operand_shape(ctx, alt, &sigs[i])) != 0)
+                return ret;
+        }
+    }
+    else
+    {
+        n = 1;
+        if ((ret = _read_operand_shape(ctx, sig, &sigs[0])) != 0)
+            return ret;
+    }
+
+    o = xpost_operator_cons_wrapped(ctx, name, proc, n, sigs);
     if (xpost_object_get_type(o) != operatortype)
         return unregistered;
     if (!xpost_stack_push(ctx->lo, ctx->os, o))

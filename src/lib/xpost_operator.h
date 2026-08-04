@@ -130,8 +130,17 @@ enum typepat
 /**
  * @def XPOST_OPERATOR_MAX_SIG
  * @brief the most operands a signature may state
+ *
+ * Wide enough for the longest operand list in the language, the
+ * twelve of setcolorscreen.
  */
-#define XPOST_OPERATOR_MAX_SIG 8
+#define XPOST_OPERATOR_MAX_SIG 12
+
+/**
+ * @def XPOST_OPERATOR_MAX_ALT
+ * @brief the most operand shapes one operator may state
+ */
+#define XPOST_OPERATOR_MAX_ALT 8
 
 /**
  * @brief constant size of optab structure
@@ -170,6 +179,18 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                                  ...);
 
 /**
+ * @brief one operand shape a wrapped operator accepts
+ *
+ * The types are held as the dispatcher reads them, from the top of the
+ * operand stack down.
+ */
+typedef struct
+{
+    int in;                              /**< operands taken */
+    byte types[XPOST_OPERATOR_MAX_SIG];  /**< one type per operand */
+} Xpost_Wrapped_Signature;
+
+/**
  * @brief construct an operator that runs a procedure
  *
  * Installs a fresh operator-table entry under the given name whose
@@ -177,12 +198,17 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
  * that implements a standard operator becomes indistinguishable from
  * one coded in C: load answers operatortype and bind substitutes it.
  * The caller must keep the procedure reachable by the collector.
+ *
+ * The signatures state the operand shapes the operator accepts, and
+ * the dispatcher tries them in the order given, running the procedure
+ * once one has matched. An operator that states none is dispatched
+ * unchecked and answers for its own operands.
  */
 Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
                                          Xpost_Object name,
                                          Xpost_Object proc,
-                                         int in,
-                                         const byte *types);
+                                         int nsig,
+                                         const Xpost_Wrapped_Signature *sigs);
 
 /**
  * @brief execute an operator
