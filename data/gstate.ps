@@ -678,6 +678,68 @@ setglobal
     end
 } put
 
+% obj  .htnum  bool
+% a halftone parameter that has to be a number
+.xpostsys /.htnum {
+    type dup /integertype eq exch /realtype eq or
+} bind put
+
+% ht [ keys ]  .htrequire  -
+% every key the declared type demands, or the missing one is undefined
+.xpostsys /.htrequire {
+    { 1 index exch known not
+        { /sethalftone cvx /undefined signalerror } if } forall
+    pop
+} bind put
+
+% ht  .htvalidate  -
+% check a halftone dictionary against the type it declares before any
+% of it is recorded: a type this interpreter cannot screen with is a
+% rangecheck, a required entry that is absent an undefined, and an
+% entry of the wrong type a typecheck
+.xpostsys /.htvalidate {
+    1 dict begin
+    /ht exch def
+    ht /HalftoneType known not
+        { /sethalftone cvx /undefined signalerror } if
+    ht /HalftoneType get dup type /integertype ne
+        { /sethalftone cvx /typecheck signalerror } if
+    dup 1 eq {
+        pop
+        ht [ /Frequency /Angle /SpotFunction ] //.xpostsys /.htrequire get exec
+        ht /Frequency get //.xpostsys /.htnum get exec
+        ht /Angle get //.xpostsys /.htnum get exec and not
+            { /sethalftone cvx /typecheck signalerror } if
+        ht /SpotFunction get type dup /arraytype ne exch /nametype ne and
+            { /sethalftone cvx /typecheck signalerror } if
+    }{ dup 3 eq {
+        pop
+        ht [ /Width /Height /Thresholds ] //.xpostsys /.htrequire get exec
+        ht /Width get type /integertype eq
+        ht /Height get type /integertype eq and not
+            { /sethalftone cvx /typecheck signalerror } if
+        ht /Thresholds get type dup /stringtype ne exch /filetype ne and
+            { /sethalftone cvx /typecheck signalerror } if
+    }{ 5 eq {
+        % a composite dictionary: one halftone per colorant, and the
+        % Default the components that have no entry of their own fall
+        % back to. A component may not itself be composite
+        ht /Default known not
+            { /sethalftone cvx /undefined signalerror } if
+        ht {
+            exch pop
+            dup type /dicttype eq {
+                dup //.xpostsys /.htvalidate get exec
+                /HalftoneType get 5 eq
+                    { /sethalftone cvx /rangecheck signalerror } if
+            }{ pop } ifelse
+        } forall
+    }{
+        /sethalftone cvx /rangecheck signalerror
+    } ifelse } ifelse } ifelse
+    end
+} put
+
 % halftonedict  sethalftone  -
 % record the halftone dictionary. Every screen channel then answers
 % the dictionary itself in the spot-function position: behind its own
@@ -687,6 +749,7 @@ setglobal
     dup type /dicttype ne {
         /sethalftone cvx /typecheck signalerror
     } if
+    dup //.xpostsys /.htvalidate get exec
     graphicsdict /currgstate get exch /halftone exch put
     1 dict begin
     /ht graphicsdict /currgstate get /halftone get //.xpostsys /.ht5component get exec def
