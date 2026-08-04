@@ -1497,6 +1497,22 @@ currentglobal true setglobal
     } def
     end % systemdict
 
+    } ifelse
+} put
+
+% The interpreter lockdown. Runs once, after loadgraphics has loaded whatever it
+% is going to (or on its own if graphics is never loaded), when every helper the
+% machinery needs has been defined. It freezes the machinery's operator
+% references, relocates the language into systemdict and the private C operators
+% into .internaldict, seals and hides the private namespaces, and returns the
+% device classes to local VM. loadgraphics does the loading; this does the
+% locking down -- so nothing unrelated to graphics is tied to loading it. The
+% shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
+.xpostsys /.finalize {
+    //.internaldict /GRAPHICS_LOADED known { }{
+        % Open a writeable window on systemdict so the standard operators can be
+        % relocated into it; the matching relock below closes it.
+        .sysdictunlock
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
     % substitutes them, so the classic self-redefinition idiom
@@ -1505,7 +1521,13 @@ currentglobal true setglobal
     % executable arrays promote; the procedures stay defed in
     % .wrappedprocs, keeping them inside the collector's view (the
     % operator table is outside it).
-    graphicsdict /.wrappedprocs 256 dict put
+    % The register keeps the procedures inside the collector's view, the
+    % operator table being outside it. It lives in graphicsdict when
+    % graphics has loaded and privatedict otherwise, and privatedict names
+    % whichever it is so the one loop below reaches it either way.
+    .privatedict /.wrapreg
+        /graphicsdict where { pop graphicsdict }{ .privatedict } ifelse put
+    .privatedict /.wrapreg get /.wrappedprocs 256 dict put
     [
         /fill /eofill /stroke /strokepath /rectfill /rectstroke
         /ufill /ueofill /ustroke /ustrokepath /uappend /upath
@@ -1556,7 +1578,8 @@ currentglobal true setglobal
                 % helper call, among the rest) has to happen here, or a program
                 % that shadows an operator name reaches into the machinery.
                 bind
-                graphicsdict /.wrappedprocs get 2 index 2 index put
+                .privatedict /.wrapreg get /.wrappedprocs get
+                    2 index 2 index put
                 % an operator that states its operands is wrapped with
                 % the statement, so the dispatcher enforces it before
                 % the procedure runs, exactly as for one written in C.
@@ -1565,48 +1588,6 @@ currentglobal true setglobal
                 % defines a few of these into userdict first.
                 //.xpostsys /.wrapwithsig get exec
             }{ pop pop pop } ifelse
-        }{ pop } ifelse
-    } forall
-    } ifelse
-} put
-
-% The interpreter lockdown. Runs once, after loadgraphics has loaded whatever it
-% is going to (or on its own if graphics is never loaded), when every helper the
-% machinery needs has been defined. It freezes the machinery's operator
-% references, relocates the language into systemdict and the private C operators
-% into .internaldict, seals and hides the private namespaces, and returns the
-% device classes to local VM. loadgraphics does the loading; this does the
-% locking down -- so nothing unrelated to graphics is tied to loading it. The
-% shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
-.xpostsys /.finalize {
-    //.internaldict /GRAPHICS_LOADED known { }{
-        % Open a writeable window on systemdict so the standard operators can be
-        % relocated into it; the matching relock below closes it.
-        .sysdictunlock
-    % A few standard operators are defined straight into systemdict rather
-    % than into userdict, so the wrapping pass over userdict never reached
-    % them and they stayed plain procedures, invisible to bind. Wrap them
-    % now, while systemdict is open and before anything is bound: the sweep
-    % below can only freeze a reference to an operator that is one already.
-    % Their procedures are held in privatedict rather than the graphics
-    % scratch, since these operators exist whether or not graphics loaded.
-    .privatedict /.wrappedsysprocs 2 copy known not
-        { 32 dict put }{ pop pop } ifelse
-    % = and filter are left out: making them operators exposes machinery
-    % procedures that name them without binding them, which .bindscope
-    % does not reach and tamper_dispatch_test.ps rightly reports. The
-    % references predate this and wrapping only makes them visible.
-    [ /run /stack /startjob /internaldict
-      /setvmthreshold /setuserparams /currentuserparams
-      /setsystemparams /currentsystemparams
-      /setdevparams /currentdevparams ] {
-        dup systemdict exch known {
-            dup systemdict exch get
-            dup type /arraytype eq 1 index xcheck and {
-                bind
-                .privatedict /.wrappedsysprocs get 2 index 2 index put
-                systemdict 3 1 roll //.xpostsys /.wrapwithsig get exec
-            }{ pop pop } ifelse
         }{ pop } ifelse
     } forall
     % With the standard operators now operator-typed, freeze the
