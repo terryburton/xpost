@@ -118,10 +118,10 @@ setglobal
         dup /.fontid graphicsdict /.fontserial get put
         graphicsdict /.fontserial graphicsdict /.fontserial get 1 add put
     } if
-    % the allocation mode decides which directory takes it: a font built in
-    % global VM belongs to GlobalFontDirectory and outlives the local one
-    currentglobal { GlobalFontDirectory }{ FontDirectory } ifelse
-    exch 2 index exch put
+    % FontDirectory denotes the global directory while the allocation mode
+    % is global, so a font built there is filed there and outlives the
+    % restores that empty the local one
+    FontDirectory exch 2 index exch put
     findfont
 } //.xpostsys /.defop get exec
 

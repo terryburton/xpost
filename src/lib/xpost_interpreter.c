@@ -2118,7 +2118,13 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
         /* GlobalFontDirectory and its older name SharedFontDirectory are a
            different, global dictionary holding only the fonts defined while
            the allocation mode was global; the boot file defines them into
-           systemdict itself, being global and so permitted to. */
+           systemdict itself, being global and so permitted to. Keep both
+           directories to hand: the name FontDirectory is rebound to one or
+           the other as the allocation mode changes (PLRM), and setglobal
+           does that without having to look either up. */
+        ctx->localfontdir = fd;
+        ctx->globalfontdir = xpost_dict_get(ctx, sd,
+                                 xpost_name_cons(ctx, "GlobalFontDirectory"));
     }
     /* statusdict and serverdict are local dictionaries a program mutates, so
        save/restore isolates a job's changes; systemdict names them (PLRM). */

@@ -165,13 +165,50 @@ int Vrestore(Xpost_Context *ctx,
     return 0;
 }
 
+/* The name FontDirectory denotes the local font directory while the
+   allocation mode is local and GlobalFontDirectory while it is global
+   (PLRM), so a font defined in terms of another finds the directory its
+   own fonts are going into. Rebinding it is a write to systemdict, which
+   is read-only once the language has loaded; the write replaces an entry
+   that is already there, so it allocates nothing and is safe on the error
+   path, where setglobal is reached while an error is being reported. */
+static
+void _rebind_fontdirectory(Xpost_Context *ctx)
+{
+    Xpost_Object sd;
+    Xpost_Object fd;
+    Xpost_Object_Tag_Access access;
+    int ignore;
+
+    /* both are null until the boot file has defined them */
+    if (xpost_object_get_type(ctx->globalfontdir) != dicttype)
+        return;
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    if (xpost_object_get_type(sd) != dicttype)
+        return;
+
+    fd = (ctx->vmmode == GLOBAL) ? ctx->globalfontdir : ctx->localfontdir;
+    ignore = ctx->ignoreinvalidaccess;
+    access = xpost_object_get_access(ctx, sd);
+    ctx->ignoreinvalidaccess = 1;
+    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
+    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+    xpost_object_set_access(ctx, sd, access);
+    ctx->ignoreinvalidaccess = ignore;
+}
+
 /* bool  setglobal  -
    set vm allocation mode in current context. true is global. */
 static
 int Bsetglobal(Xpost_Context *ctx,
                Xpost_Object B)
 {
-    ctx->vmmode = B.int_.val? GLOBAL: LOCAL;
+    unsigned int mode = B.int_.val? GLOBAL: LOCAL;
+
+    if (mode == ctx->vmmode)
+        return 0;
+    ctx->vmmode = mode;
+    _rebind_fontdirectory(ctx);
     return 0;
 }
 

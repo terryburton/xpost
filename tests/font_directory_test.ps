@@ -44,6 +44,21 @@ GlobalFontDirectory gcheck
 FontDirectory gcheck not
     (FontDirectory is in local VM) assert
 
+% ------------------------------------------------- the name follows the mode
+% FontDirectory denotes the local directory while the allocation mode is
+% local and the global one while it is global, so a font defined in terms
+% of another finds the directory its own fonts are going into.
+
+false setglobal
+FontDirectory GlobalFontDirectory ne
+    (in local mode FontDirectory is the local directory) assert
+true setglobal
+FontDirectory GlobalFontDirectory eq
+    (in global mode FontDirectory is GlobalFontDirectory) assert
+false setglobal
+FontDirectory GlobalFontDirectory ne
+    (leaving global mode puts FontDirectory back) assert
+
 % ------------------------------------------- each font lands in one of them
 
 false setglobal

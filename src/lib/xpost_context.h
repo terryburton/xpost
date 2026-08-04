@@ -142,6 +142,12 @@ struct _Xpost_Context {
     unsigned int os, es, ds, hold; /**< stack addresses in local VM */
     unsigned long rand_next; /**< random number seed */
     unsigned int vmmode; /**< allocating in GLOBAL or LOCAL */
+
+    /** The two font directories, so setglobal can rebind the name
+        FontDirectory to whichever the allocation mode calls for (PLRM).
+        Both are null until the boot file has defined them. */
+    Xpost_Object localfontdir;
+    Xpost_Object globalfontdir;
     unsigned int state;  /**< process state: running, blocked, iowait */
     unsigned int quit;  /**< if 1 cause mainloop() to return, if 0 keep looping */
 
