@@ -1296,6 +1296,10 @@ setglobal
 currentglobal true setglobal
 .xpostsys /loadgraphics {
     //.internaldict /GRAPHICS_LOADED known { }{
+        % Open the writeable window on systemdict before the language is
+        % read. The finalizer closes it, and closing it spends the
+        % one-shot, so a program cannot reopen it.
+        .sysdictunlock
         (/graphics.ps) //.xpostsys /.loadmodule get exec
 
     % Page device selection and configuration. Keys:

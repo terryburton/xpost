@@ -53,6 +53,40 @@
 }{ (FAIL: graphicsdict is not reachable, nothing was checked\n) print
    /failcount failcount 1 add store } ifelse
 
+% ------------------------------- every wrapped operator reaches systemdict
+% The registers above name exactly the operators that were wrapped, so
+% they say what the finished interpreter must look like: each of those
+% names is an operator, and it is in systemdict, where a standard
+% operator lives. A name that failed to reach systemdict, or that
+% arrived still holding its procedure, shows up here.
+%
+% This is the check that the definitions' homes are not left to whatever
+% dictionary happened to be current when a file was read.
+
+/checkreg { % dict (what)  -
+    /k.w exch def /k.d exch def
+    /k.notop 0 def /k.nothome 0 def
+    k.d {
+        pop
+        systemdict 1 index known
+            { dup systemdict exch get type /operatortype ne
+                { /k.notop k.notop 1 add store } if }
+            { /k.nothome k.nothome 1 add store } ifelse
+        pop
+    } forall
+    k.notop 0 eq k.w assert
+    k.nothome 0 eq k.w assert
+} def
+
+/graphicsdict where {
+    pop graphicsdict /.wrappedprocs get
+    (every wrapped operator is an operator in systemdict) checkreg
+} if
+.privatedict /.wrappedsysprocs known {
+    .privatedict /.wrappedsysprocs get
+    (every systemdict-wrapped operator is an operator in systemdict) checkreg
+} if
+
 % {test} (what)  -  run the test on every name, naming any that fail
 /eachop {
     /e.w exch def /e.t exch def /e.bad 0 def
