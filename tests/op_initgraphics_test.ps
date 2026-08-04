@@ -1,0 +1,66 @@
+% initgraphics, run through `xpost -q --no-sandbox -d null` by
+% run-ps-test.sh.
+%
+% The operator is defined by the equivalent code the specification
+% gives, and it is the whole of that code that matters: it resets the
+% graphics state, which includes emptying the current path and leaving
+% no current point, and it does not touch raster memory.
+%
+% This stands on its own rather than joining the path tests, because the
+% fault it guards against is invisible in a file that has already been
+% drawing: whatever the earlier drawing left behind can empty the path
+% by itself, and the assertion then holds for a reason that has nothing
+% to do with initgraphics. For the same reason the paths below are built
+% without a newpath in front of them -- a program resetting the state
+% mid-page has not just started a path, and starting one hides the
+% fault.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/erris { % {proc} /want (tag)
+    /e.tag exch def /e.want exch def
+    stopped { $error /errorname get e.want eq }{ false } ifelse
+    e.tag assert clear
+} def
+
+% --------------------------------------------------------- the path goes
+
+100 100 moveto 130 130 lineto
+initgraphics
+{ currentpoint } /nocurrentpoint (no current point remains) erris
+
+100 100 moveto 130 130 lineto
+initgraphics
+{ pathbbox } /nocurrentpoint (no path remains to measure) erris
+
+100 100 moveto 130 130 lineto
+initgraphics
+{ 10 10 lineto } /nocurrentpoint (nothing remains to line to) erris
+
+100 100 moveto 130 130 lineto
+initgraphics
+{ 10 10 rmoveto } /nocurrentpoint (nothing remains to move from) erris
+
+% and a fresh path can be started afterwards, so the path was emptied
+% rather than made unusable
+initgraphics
+newpath 50 50 moveto 60 60 lineto
+currentpoint exch 60.0 eq exch 60.0 eq and (a fresh path works after it) assert
+
+% ------------------------------------------------- the rest of the state
+
+newpath 100 100 moveto
+3 setlinewidth 2 setlinecap 1 setlinejoin 4 setmiterlimit
+[3 2] 1 setdash 0.5 setgray
+initgraphics
+currentlinewidth 1.0 eq (the line width is reset) assert
+currentlinecap 0 eq (the line cap is reset) assert
+currentlinejoin 0 eq (the line join is reset) assert
+currentmiterlimit 10.0 eq (the miter limit is reset) assert
+currentdash pop length 0 eq (the dash pattern is reset) assert
+currentdash exch pop 0 eq (the dash offset is reset) assert
+currentgray 0.0 eq (the colour is reset) assert
+currentcolorspace 0 get /DeviceGray eq (the colour space is reset) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

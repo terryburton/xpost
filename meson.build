@@ -888,6 +888,14 @@ test('op-operand-types',
   args: [ xpost_exe, files('tests/op_operand_types_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# initgraphics on its own: the fault it guards against is invisible in a
+# file that has already been drawing, since the earlier drawing can
+# empty the path by itself.
+test('op-initgraphics',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_initgraphics_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What the error dictionary carries and what the standard handler does
 # to it: a program handling its own errors reads both.
 test('error-dict',
