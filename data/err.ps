@@ -25,6 +25,10 @@ $error begin
     /ostack null def
     /estack null def
     /dstack null def
+    % whether the standard handler reports an error as a binary object
+    % sequence rather than as text; the sequence needs binary encoding
+    % to be enabled as well
+    /binary false def
 end
 //.internaldict /QUIET known { }{ ($error installed...)print } ifelse
 
@@ -93,6 +97,32 @@ errordict begin
         //$error begin
             newerror {
                 /newerror false def
+                % reported as a binary object sequence when one is asked
+                % for and binary encoding is enabled: a four element
+                % array under tag 250 carrying the class of error, its
+                % name, what was executing, and the flag the display
+                % extension reads
+                currentdict /binary known { binary }{ false } ifelse
+                currentobjectformat 0 ne and {
+                    [ /Error errorname
+                      /command load dup type
+                      dup /nulltype eq exch
+                      dup /integertype eq exch
+                      dup /realtype eq exch
+                      dup /nametype eq exch
+                      dup /booleantype eq exch
+                      dup /stringtype eq exch
+                          /arraytype eq
+                      or or or or or or not {
+                          % an operator, or anything else no sequence
+                          % can carry, stands in as its name
+                          128 string cvs cvn
+                      } if
+                      false ]
+                    250 printobject
+                    flush
+                    /errorinfo null def
+                }{
                 (%%[ Error: ) print
                 errorname //=print exec
                 (; OffendingCommand: ) print
@@ -117,6 +147,9 @@ errordict begin
                     estack { == } forall
                 } if
                 flush
+                % the handler consumes the context it reported
+                /errorinfo null def
+                } ifelse
             } if
         end
     } def
