@@ -36,6 +36,27 @@ meson test -C "$builddir" >/dev/null 2>&1
 
 builddir=$(cd "$builddir" && pwd)
 
+# Which personality was measured. The two object widths compile different
+# halves of every alternative the sources choose between, so a report has
+# to say which one it is looking at.
+probe=$(mktemp)
+cat > "$probe" <<'PROBEEOF'
+2147483647 1 add type /integertype eq
+    { (XPOSTWIDTH=wide) }{ (XPOSTWIDTH=narrow) } ifelse =
+quit
+PROBEEOF
+width=$(XPOST_DATA_DIR="$(dirname "$0")/../data" \
+        "$builddir/src/bin/xpost" -q --no-sandbox -d null "$probe" \
+        </dev/null 2>/dev/null \
+        | grep -o 'XPOSTWIDTH=[a-z]*' | head -1 | cut -d= -f2)
+rm -f "$probe"
+case $width in
+    wide)   widthname='large-object'; othername='small-object' ;;
+    narrow) widthname='small-object'; othername='large-object' ;;
+    *)      echo "coverage.sh: could not tell which object width $builddir has" >&2
+            exit 1 ;;
+esac
+
 # gcov writes its .gcov files beside itself, so give it a directory of its own
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -99,21 +120,19 @@ done < "$work/gcda"
 sort -u "$work/files" > "$work/files.u"
 sort -u "$work/zero" > "$work/zero.u"
 
-printf '# Test coverage\n\n'
+printf '# Test coverage (%s build)\n\n' "$widthname"
 printf 'How much of the C sources the test suite executes. Regenerate with\n'
 printf '`tools/coverage.sh > doc/COVERAGE.md` (needs gcov; takes a few minutes,\n'
 printf 'since it builds an instrumented tree and runs the whole suite in it).\n\n'
 printf 'Coverage is a floor, not a score: a covered line is one that ran, not one\n'
 printf 'whose behaviour anything asserted. Read the second table as the list of\n'
 printf 'places where there is nothing to argue about.\n\n'
-printf 'These numbers are one platform and one object width. Code chosen at\n'
-printf 'build time for another -- the Windows halves of the compatibility layer,\n'
-printf 'the portable path confinement used where the kernel has no openat2, and\n'
-printf 'the wide halves of every WANT_LARGE_OBJECT alternative -- cannot run here\n'
-printf 'and reads as uncovered whatever the other CI lanes do with it. The two\n'
-printf 'object widths are separate personalities that share most of their lines\n'
-printf 'but not all of them, so this is the small-object figure, not the\n'
-printf "interpreter's.\n\n"
+printf 'These numbers are one platform and one object width: this run measured\n'
+printf 'the **%s** build. Code chosen at build time for anything else --\n' "$widthname"
+printf 'the Windows halves of the compatibility layer, the portable path\n'
+printf 'confinement used where the kernel has no openat2, and the %s\n' "$othername"
+printf 'half of every WANT_LARGE_OBJECT alternative -- cannot run here and reads\n'
+printf 'as uncovered whatever the other CI lanes do with it.\n\n'
 
 awk -F'|' '
     { pct[$1] = $2; lines[$1] = $3 }
