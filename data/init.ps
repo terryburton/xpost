@@ -1006,10 +1006,53 @@ currentglobal true setglobal
 setglobal
 currentglobal true setglobal
 .xpostsys /.upathargs [ 4 2 2 2 2 6 6 5 5 5 0 0 ] put
+.xpostsys /.upathopset <<
+    /setbbox 4 /moveto 2 /rmoveto 2 /lineto 2 /rlineto 2 /curveto 6
+    /rcurveto 6 /arc 5 /arcn 5 /arct 5 /closepath 0 /ucache 0
+>> put
+setglobal
+
+% obj  .upathcheck  obj
+% A user path is an executable array of numbers and user-path operator
+% names, or the encoded pair of an argument list and an operator string.
+currentglobal true setglobal
+.xpostsys /.upathcheck {
+    4 dict begin
+    /u.p exch def
+    /u.pend 0 def
+    /u.p load type dup /arraytype ne exch /packedarraytype ne and
+        { /uappend cvx /typecheck signalerror } if
+    /u.p load xcheck {
+        0 1 /u.p load length 1 sub {
+            /u.p load exch get
+            dup type dup /integertype eq exch /realtype eq or {
+                pop /u.pend u.pend 1 add def
+            }{
+                dup type /nametype eq not
+                    { /uappend cvx /typecheck signalerror } if
+                //.xpostsys /.upathopset get 1 index known not
+                    { /uappend cvx /typecheck signalerror } if
+                //.xpostsys /.upathopset get exch get u.pend ne
+                    { /uappend cvx /typecheck signalerror } if
+                /u.pend 0 def
+            } ifelse
+        } for
+        u.pend 0 ne { /uappend cvx /typecheck signalerror } if
+    }{
+        /u.p load length 2 ne { /uappend cvx /typecheck signalerror } if
+        /u.p load 0 get type dup /stringtype ne exch /arraytype ne and
+            { /uappend cvx /typecheck signalerror } if
+        /u.p load 1 get type dup /stringtype ne exch /arraytype ne and
+            { /uappend cvx /typecheck signalerror } if
+    } ifelse
+    /u.p load
+    end
+} put
 setglobal
 
 % userpath  uappend  -
 /uappend {
+    //.xpostsys /.upathcheck get exec
     dup xcheck {
         exec
     }{
@@ -1072,7 +1115,7 @@ setglobal
 % the current path, written as a user path in current user space
 /upath {
     [ exch { /ucache cvx } if
-      { pathbbox } stopped { 0.0 0.0 0.0 0.0 } if /setbbox cvx
+      pathbbox /setbbox cvx
       { /moveto cvx }{ /lineto cvx }{ /curveto cvx }{ /closepath cvx }
       pathforall
     ] cvx

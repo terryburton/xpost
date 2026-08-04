@@ -359,8 +359,16 @@ int xpost_op_any_where(Xpost_Context *ctx,
                        Xpost_Object K)
 {
     int i;
-    int z = xpost_stack_count(ctx->lo, ctx->ds);
-    int isname = xpost_object_get_type(K) == nametype;
+    int z;
+    int isname;
+
+    /* a key may be any object except null, so asking which dictionary
+       defines null is not a question with a false for an answer */
+    if (xpost_object_get_type(K) == nulltype)
+        return typecheck;
+
+    z = xpost_stack_count(ctx->lo, ctx->ds);
+    isname = xpost_object_get_type(K) == nametype;
     for (i = 0; i < z; i++)
     {
         Xpost_Object D = xpost_stack_topdown_fetch(ctx->lo, ctx->ds, i);

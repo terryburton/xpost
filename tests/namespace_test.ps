@@ -136,7 +136,9 @@ systemdict {
 
 % nothing is missing: every golden name key is present in systemdict
 golden {
-  pop dup cvn systemdict exch known { pop }{ (missing systemdict key) bad } ifelse
+  pop
+  dup type /stringtype eq { dup cvn }{ dup } ifelse
+  systemdict exch known { pop }{ (missing systemdict key) bad } ifelse
 } forall
 
 fail 0 eq { (SUCCESS) = }{ (FAILURES: ) print fail = } ifelse

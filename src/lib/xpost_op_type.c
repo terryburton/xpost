@@ -327,14 +327,6 @@ int Scvn(Xpost_Context *ctx,
     return 0;
 }
 
-static
-int Ncvn(Xpost_Context *ctx,
-         Xpost_Object n)
-{
-    xpost_stack_push(ctx->lo, ctx->os, n);
-    return 0;
-}
-
 /* number  cvr  real
    convert number to real */
 static
@@ -627,9 +619,9 @@ int xpost_oper_init_type_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "cvi", (Xpost_Op_Func)Scvi, 1, 1, stringtype);
     INSTALL;
+    /* cvn converts a string, and only a string: a name handed back
+       unchanged made the operator look like it accepted one */
     op = xpost_operator_cons(ctx, "cvn", (Xpost_Op_Func)Scvn, 1, 1, stringtype);
-    INSTALL;
-    op = xpost_operator_cons(ctx, "cvn", (Xpost_Op_Func)Ncvn, 1, 1, nametype);
     INSTALL;
     op = xpost_operator_cons(ctx, "cvr", (Xpost_Op_Func)Ncvr, 1, 1, numbertype);
     INSTALL;

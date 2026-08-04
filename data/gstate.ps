@@ -619,6 +619,15 @@ setglobal
 % the graphics state and round-trip through currentscreen and
 % currentcolorscreen
 /setscreen {
+    % frequency and angle are numbers and the spot function is either a
+    % procedure or the name of one; a number in the spot's place was
+    % taken and then never called
+    dup type dup /arraytype ne exch /nametype ne and
+        { /setscreen cvx /typecheck signalerror } if
+    1 index type dup /integertype ne exch /realtype ne and
+        { /setscreen cvx /typecheck signalerror } if
+    2 index type dup /integertype ne exch /realtype ne and
+        { /setscreen cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch /screenproc exch put
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put

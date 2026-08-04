@@ -271,6 +271,13 @@ int _set_matrix(Xpost_Context *ctx,
                 Xpost_Object psmat)
 {
     Xpost_Object ctm;
+
+    /* a transformation matrix is six numbers: a shorter array was
+       copied into the current one, leaving whatever the current matrix
+       already held in the elements it did not reach */
+    if (psmat.comp_.sz != 6)
+        return rangecheck;
+
     ctm = _get_ctm(ctx);
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     xpost_stack_push(ctx->lo, ctx->os, ctm);

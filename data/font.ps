@@ -855,6 +855,11 @@ currentglobal true setglobal
 .xpostsys /.rootsetfont /setfont load put
 setglobal
 /setfont {
+    % a font dictionary, not any dictionary: one without a FontMatrix
+    % has nothing to set a size or an orientation from
+    dup type /dicttype ne { /setfont cvx /typecheck signalerror } if
+    dup /FontMatrix known not
+        { /setfont cvx /invalidfont signalerror } if
     dup graphicsdict /currgstate get /rootfont 3 -1 roll put
     //.xpostsys /.rootsetfont get exec
 } def

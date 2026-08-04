@@ -142,6 +142,60 @@
 % a key may be any object except null, so only null is refused outright
 { null findfont } /typecheck (findfont a null key) refuses
 
+% ------------------------------------------------------------ conversions
+% cvn converts a string. A name is not a string.
+
+{ (str) cvn pop } (cvn a string) works
+{ /nm cvn } /typecheck (cvn a name) refuses
+{ 42 cvn } /typecheck (cvn a number) refuses
+(abc) cvn /abc eq (cvn yields the name of its string) assert
+
+% ------------------------------------------------------------- dictionaries
+% where asks which dictionary defines a key, and a key is never null.
+
+{ /pop where pop pop } (where a name) works
+{ (pop) where pop pop } (where a string) works
+{ null where } /typecheck (where a null) refuses
+
+% ------------------------------------------------------- matrices and state
+
+{ matrix setmatrix } (setmatrix six numbers) works
+{ [1 2] setmatrix } /rangecheck (setmatrix a short array) refuses
+{ [1 2 3 4 5 6 7] setmatrix } /rangecheck (setmatrix a long array) refuses
+
+{ /Helvetica findfont 12 scalefont setfont } (setfont a font) works
+{ 3 dict setfont } /invalidfont (setfont a plain dictionary) refuses
+{ 42 setfont } /typecheck (setfont a number) refuses
+
+{ 60 45 { pop pop 0 } setscreen } (setscreen a frequency, angle and spot) works
+{ 60 45 60 setscreen } /typecheck (setscreen a number for the spot) refuses
+{ (x) 45 { pop pop 0 } setscreen } /typecheck (setscreen a string frequency) refuses
+{ 60 (x) { pop pop 0 } setscreen } /typecheck (setscreen a string angle) refuses
+
+{ << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 8 8]
+     /XStep 8 /YStep 8 /PaintProc { pop } >> matrix makepattern setpattern
+  0 setgray } (setpattern a pattern) works
+{ 3 dict setpattern } /typecheck (setpattern a plain dictionary) refuses
+{ 42 setpattern } /typecheck (setpattern a number) refuses
+
+% ------------------------------------------------------------- user paths
+% A user path is numbers and user-path operators, each operator preceded
+% by exactly the arguments it takes.
+
+{ { 0 0 100 100 setbbox 10 10 moveto 50 50 lineto } uappend } (a user path) works
+{ { 0 0 100 100 setbbox 10 10 moveto } ufill } (ufill a user path) works
+{ { 1 } uappend } /typecheck (numbers with no operator) refuses
+{ { 10 10 show } uappend } /typecheck (an operator that is not a path operator) refuses
+{ { 10 moveto } uappend } /typecheck (an operator short of an argument) refuses
+{ { 10 10 10 moveto } uappend } /typecheck (an operator with an argument too many) refuses
+{ 42 uappend } /typecheck (a number) refuses
+{ { 1 } ufill } /typecheck (ufill something that is not a user path) refuses
+
+% the in-tests take a point or a user path, and nothing else
+{ 10 10 moveto 20 20 lineto 15 15 infill pop } (infill a point) works
+{ { 1 } { 1 } infill } /typecheck (infill something that is not a point) refuses
+{ { 1 } { 1 } ineofill } /typecheck (ineofill something that is not a point) refuses
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

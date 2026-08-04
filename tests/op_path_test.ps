@@ -54,9 +54,11 @@ initgraphics newpath 3 4 moveto pathbbox bbox4
 llx 3 (moveto-only bbox llx) assertnear  urx 3 (moveto-only bbox urx) assertnear
 lly 4 (moveto-only bbox lly) assertnear  ury 4 (moveto-only bbox ury) assertnear
 
-% --- upath tolerates an empty path (emits 0 0 0 0 setbbox), as the reference does ---
-{ initgraphics newpath false upath pop } stopped not (upath on an empty path does not error) assert
-initgraphics newpath false upath length 0 gt (upath of an empty path yields a userpath) assert
+% --- upath describes a path, so there has to be one ---
+{ initgraphics newpath false upath } /nocurrentpoint
+    (upath on an empty path) erris
+initgraphics newpath 10 10 moveto 20 20 lineto
+false upath length 0 gt (upath of a path yields a userpath) assert
 
 % --- setbbox takes four numbers (llx lly urx ury) ---
 { initgraphics newpath 12 24 36 48 setbbox } stopped not (setbbox accepts four numbers) assert
