@@ -73,6 +73,54 @@ withfont (Ag) stringwidth /w.y exch def /w.x exch def
 withfont 100 200 moveto (Ag) stringwidth
 w.y eq exch w.x eq and (a width does not depend on the current point) assert
 
+% ------------------------------------------------ a font has to be selected
+% The current font starts as an invalid font dictionary, so nothing
+% shows or measures until a program selects one.
+
+/nofont { initgraphics newpath 10 10 moveto } def
+/needsfont { % {proc} (what)
+    /f.w exch def /f.p exch def
+    clear nofont
+    /f.p load stopped {
+        $error /errorname get /invalidfont ne
+            { f.w (raised something other than invalidfont) note } if
+    }{ f.w (was accepted with no font selected) note } ifelse
+    clear
+} def
+
+{ (A) show } (show) needsfont
+{ 1 0 (A) ashow } (ashow) needsfont
+{ 1 0 8#040 (A) widthshow } (widthshow) needsfont
+{ 1 0 8#040 1 0 (A) awidthshow } (awidthshow) needsfont
+{ { pop pop } (AB) kshow } (kshow) needsfont
+{ (A) [ 9 ] xshow } (xshow) needsfont
+{ (A) [ 9 ] yshow } (yshow) needsfont
+{ (A) [ 9 0 ] xyshow } (xyshow) needsfont
+{ { pop } (A) cshow } (cshow) needsfont
+{ /A glyphshow } (glyphshow) needsfont
+{ (A) stringwidth } (stringwidth) needsfont
+{ (A) true charpath } (charpath) needsfont
+
+% the shortage of an operand is settled before the state
+/short { % {proc} (what)
+    /s.w exch def /s.p exch def
+    clear nofont
+    /s.p load stopped {
+        $error /errorname get /stackunderflow ne
+            { s.w (did not report the shortage first) note } if
+    }{ s.w (accepted a short stack) note } ifelse
+    clear
+} def
+{ show } (show with nothing) short
+{ ashow } (ashow with nothing) short
+{ 1 0 ashow } (ashow with two of three) short
+{ widthshow } (widthshow with nothing) short
+{ awidthshow } (awidthshow with nothing) short
+{ kshow } (kshow with nothing) short
+{ glyphshow } (glyphshow with nothing) short
+{ stringwidth } (stringwidth with nothing) short
+{ charpath } (charpath with nothing) short
+
 bad 0 eq (each showing operator requires what it uses) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

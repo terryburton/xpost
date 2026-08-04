@@ -506,6 +506,8 @@ setglobal
 % its consumer. The helper procedures embed at scan time as arrays,
 % which the programs push and exec as data.
 /cshow {
+    /cshow 2 //.xpostsys /.needops get exec
+    /cshow //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
     dup /FMapType get 9 ne {
