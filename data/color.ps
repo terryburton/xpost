@@ -317,10 +317,11 @@ setglobal
 % shorthand for entering the pattern colour space and setting the
 % pattern as the colour; an uncoloured pattern takes the current
 % colour space as its underlying space, with the components beneath
-/setpattern {
+% The components beneath vary with the underlying space, so the
+% pattern itself is the operand stated.
+/setpattern [ /dicttype ] {
     % a pattern dictionary, which is one that has been through
     % makepattern: without a PatternType there is nothing to paint with
-    /setpattern [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /PatternType known not
         { /setpattern cvx /typecheck signalerror } if
     dup /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse not {
@@ -336,7 +337,7 @@ setglobal
         [ /Pattern 3 -1 roll ] setcolorspace
     } ifelse
     setcolor
-} bind def
+} bind //.xpostsys /.defop get exec
 
 % -  .ncomponents  n
 % the number of colour components the current colour space takes: an
@@ -401,7 +402,10 @@ currentglobal true setglobal
     end
 } put
 setglobal
-/setcolor {
+% The component count follows the current colour space, so the operand
+% stated is the topmost one: a component, or the pattern of a pattern
+% space.
+/setcolor [ [ /numbertype ] [ /dicttype ] ] {
     currentcolorspace
     dup type /arraytype eq { dup 0 get /Indexed eq } { false } ifelse {
         % [/Indexed base hival lookup] index setcolor: resolve the
@@ -500,7 +504,7 @@ setglobal
     } ifelse
     } ifelse
     } ifelse
-} bind def
+} bind //.xpostsys /.defop get exec
 
 .xpostsys /currentcolordict <<
     /DeviceGray /currentgray cvx

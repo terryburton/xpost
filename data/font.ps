@@ -921,9 +921,10 @@ setglobal
 } def
 
 % the wider glyph metrics reduce to the horizontal ones
-/setcachedevice2 {
+/setcachedevice2 [ /numbertype /numbertype /numbertype /numbertype /numbertype
+                   /numbertype /numbertype /numbertype /numbertype /numbertype ] {
     pop pop pop pop setcachedevice
-} def
+} //.xpostsys /.defop get exec
 
 % the glyph cache: rendered rasters replay across shows, and the
 % operators read and set the store itself

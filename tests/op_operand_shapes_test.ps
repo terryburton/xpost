@@ -1,0 +1,182 @@
+% The operators taking more than one shape of operand list, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Most operators take one list of operands and state it as one list of
+% types. These take several: rectfill takes four numbers, or the same
+% numbers gathered in an array, or encoded in a string; imagemask takes
+% five operands or one dictionary; infill takes a point or a user path.
+% Each shape is stated separately and the dispatcher tries them in turn,
+% so what is checked here is that every shape the language defines is
+% still reached, and that an operand list matching none of them is
+% refused before the body runs.
+%
+% The refusals matter as much as the acceptances. An operator whose
+% shapes are stated too narrowly rejects a program that was correct,
+% which is the worse failure of the two and the one a test written only
+% from the error cases would not catch.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/accepts { % {proc} (what)
+    /a.w exch def /a.p exch def
+    clear /a.p load stopped not a.w assert clear
+} def
+/raises { % {proc} /errname (what)
+    /r.w exch def /r.e exch def /r.p exch def
+    clear
+    /r.p load stopped { $error /errorname get r.e eq }{ false } ifelse
+    r.w assert clear
+} def
+% the shape was accepted and the body took over: whatever went wrong
+% afterwards, it was not the dispatcher refusing the operands
+/gate { % {proc} (what)
+    /t.w exch def /t.p exch def
+    clear /t.p load stopped
+        { $error /errorname get dup /typecheck eq exch /stackunderflow eq or not }
+        { true } ifelse
+    t.w assert clear
+} def
+
+/upath { {0 0 moveto 100 0 lineto 100 100 lineto closepath} } def
+% four numbers as a homogeneous number array: 10 20 30 40
+/numstring <95200004000A0014001E0028> def
+/pat << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10]
+        /XStep 10 /YStep 10 /PaintProc { pop } >> matrix makepattern def
+
+% ------------------------------------------------------- the rectangle trio
+% x y width height  |  numarray  |  numstring, and for rectstroke a
+% matrix may follow any of the three
+
+{ 10 20 30 40 rectfill } (rectfill takes four numbers) accepts
+{ [ 10 20 30 40 ] rectfill } (rectfill takes a numarray) accepts
+{ numstring rectfill } (rectfill takes a numstring) accepts
+{ [ 10 20 30 40 20 20 30 30 ] rectfill } (rectfill takes several rectangles) accepts
+{ 10 20 30 40 rectclip } (rectclip takes four numbers) accepts
+{ [ 10 20 30 40 ] rectclip } (rectclip takes a numarray) accepts
+{ numstring rectclip } (rectclip takes a numstring) accepts
+{ 10 20 30 40 rectstroke } (rectstroke takes four numbers) accepts
+{ [ 10 20 30 40 ] rectstroke } (rectstroke takes a numarray) accepts
+{ numstring rectstroke } (rectstroke takes a numstring) accepts
+{ 10 20 30 40 matrix rectstroke } (rectstroke takes four numbers and a matrix) accepts
+{ [ 10 20 30 40 ] matrix rectstroke } (rectstroke takes a numarray and a matrix) accepts
+{ numstring matrix rectstroke } (rectstroke takes a numstring and a matrix) accepts
+
+{ 10 20 30 null rectfill } /typecheck (rectfill refuses a null for a length) raises
+{ null rectfill } /typecheck (rectfill refuses a null) raises
+{ 10 20 30 rectfill } /typecheck (rectfill refuses three numbers) raises
+{ rectfill } /stackunderflow (rectfill reports a shortage) raises
+% a string on top is the numstring shape, whatever lies beneath it, so
+% one that is not an encoded number string fails on its contents
+{ 10 20 30 (x) rectfill } /rangecheck (rectfill reads a string as a numstring) raises
+{ null rectclip } /typecheck (rectclip refuses a null) raises
+{ true rectstroke } /typecheck (rectstroke refuses a boolean) raises
+
+% ------------------------------------------------------------- the in tests
+% x y  |  userpath, and the user-path forms take the aperture on top
+
+{ 10 20 infill } (infill takes a point) accepts
+{ upath infill } (infill takes a user path) accepts
+{ 10 20 ineofill } (ineofill takes a point) accepts
+{ upath ineofill } (ineofill takes a user path) accepts
+{ 10 20 instroke } (instroke takes a point) accepts
+{ upath instroke } (instroke takes a user path) accepts
+{ 10 20 upath inufill } (inufill takes a point and an aperture) accepts
+{ upath upath inufill } (inufill takes two user paths) accepts
+{ 10 20 upath inueofill } (inueofill takes a point and an aperture) accepts
+{ upath upath inueofill } (inueofill takes two user paths) accepts
+{ 10 20 upath inustroke } (inustroke takes a point and an aperture) accepts
+{ upath upath inustroke } (inustroke takes two user paths) accepts
+{ 10 20 upath matrix inustroke } (inustroke takes a point, an aperture and a matrix) accepts
+{ upath upath matrix inustroke } (inustroke takes two user paths and a matrix) accepts
+
+{ (x) (y) infill } /typecheck (infill refuses two strings) raises
+{ null infill } /typecheck (infill refuses a null) raises
+{ infill } /stackunderflow (infill reports a shortage) raises
+{ 10 20 30 inufill } /typecheck (inufill refuses a number for the aperture) raises
+{ (x) upath inufill } /typecheck (inufill refuses a string beneath the aperture) raises
+{ upath inufill } /stackunderflow (inufill reports a shortage) raises
+{ true instroke } /typecheck (instroke refuses a boolean) raises
+
+% ----------------------------------------------------------------- the images
+% five operands  |  one dictionary
+
+{ 8 8 true [8 0 0 -8 0 8] {<ff00ff00ff00ff00>} imagemask }
+    (imagemask takes five operands) accepts
+{ 8 8 true [8 0 0 -8 0 8] (\377\000\377\000\377\000\377\000) imagemask }
+    (imagemask takes a string source) accepts
+{ << /ImageType 1 /Width 8 /Height 8 /Decode [1 0] /ImageMatrix [8 0 0 -8 0 8]
+     /DataSource {<ff00ff00ff00ff00>} >> imagemask }
+    (imagemask takes a dictionary) accepts
+
+{ 8.5 8 true [8 0 0 -8 0 8] {<ff>} imagemask }
+    /typecheck (imagemask refuses a real width) raises
+{ 8 8 (x) [8 0 0 -8 0 8] {<ff>} imagemask }
+    /typecheck (imagemask refuses a string for the polarity) raises
+{ 8 8 true (x) {<ff>} imagemask }
+    /typecheck (imagemask refuses a string for the matrix) raises
+{ true imagemask } /typecheck (imagemask refuses a boolean) raises
+{ imagemask } /stackunderflow (imagemask reports a shortage) raises
+
+{ 4 4 8 [4 0 0 -4 0 4] {<010203040506070809101112>} false 3 colorimage }
+    (colorimage takes an interleaved source) accepts
+{ 4 4 8 [4 0 0 -4 0 4] {<01020304>} {<05060708>} {<09101112>} true 3 colorimage }
+    (colorimage takes one source per component) accepts
+{ 4 4 8 [4 0 0 -4 0 4] {<01>} false 3.5 colorimage }
+    /typecheck (colorimage refuses a real component count) raises
+{ 4 4 8 [4 0 0 -4 0 4] {<01>} 0 3 colorimage }
+    /typecheck (colorimage refuses a number where the flag belongs) raises
+{ colorimage } /stackunderflow (colorimage reports a shortage) raises
+
+% ------------------------------------------------------------------ the colour
+% a component  |  a pattern, and setpattern always takes the pattern
+
+{ /DeviceGray setcolorspace 0.5 setcolor } (setcolor takes a component) accepts
+{ /DeviceRGB setcolorspace 0.1 0.2 0.3 setcolor } (setcolor takes three components) accepts
+{ /DeviceGray setcolorspace 1 setcolor } (setcolor takes an integer component) accepts
+{ pat dup /Pattern setcolorspace setcolor } (setcolor takes a pattern) accepts
+{ pat setpattern } (setpattern takes a pattern) accepts
+
+{ /DeviceGray setcolorspace (x) setcolor } /typecheck (setcolor refuses a string) raises
+{ /DeviceGray setcolorspace /Gray setcolor } /typecheck (setcolor refuses a name) raises
+{ /DeviceGray setcolorspace true setcolor } /typecheck (setcolor refuses a boolean) raises
+{ setcolor } /stackunderflow (setcolor reports a shortage) raises
+{ [ 1 2 3 ] setpattern } /typecheck (setpattern refuses an array) raises
+{ 0.5 setpattern } /typecheck (setpattern refuses a number) raises
+{ setpattern } /stackunderflow (setpattern reports a shortage) raises
+
+% ----------------------------------------------------------------- the screens
+% frequency angle spot, where the spot may be named
+
+{ 60 45 {dup mul exch dup mul add 1 exch sub} setscreen }
+    (setscreen takes a spot function) accepts
+{ 60 45 /Round setscreen } (setscreen takes a named spot function) accepts
+{ 60 45 (x) setscreen } /typecheck (setscreen refuses a string spot) raises
+{ 60 (x) {pop pop 1} setscreen } /typecheck (setscreen refuses a string angle) raises
+{ 60 45 setscreen } /stackunderflow (setscreen refuses two operands) raises
+{ setscreen } /stackunderflow (setscreen reports a shortage) raises
+
+{ 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1}
+  setcolorscreen } (setcolorscreen takes twelve operands) accepts
+{ 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} (x) 45 {pop pop 1}
+  setcolorscreen } /typecheck (setcolorscreen checks the deepest frequency) raises
+{ 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} 60 (x) {pop pop 1}
+  setcolorscreen } /typecheck (setcolorscreen checks an angle) raises
+{ 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45 {pop pop 1} 60 45
+  setcolorscreen } /stackunderflow (setcolorscreen refuses eleven operands) raises
+{ setcolorscreen } /stackunderflow (setcolorscreen reports a shortage) raises
+
+% ------------------------------------------------------------- the glyph metrics
+% ten numbers, which only mean anything inside a glyph description: the
+% shape is what is under test, so the body is only required to be reached
+
+{ 1 2 3 4 5 6 7 8 9 10 setcachedevice2 } (setcachedevice2 takes ten numbers) gate
+{ 1 2 3 4 5 6 7 8 9 (x) setcachedevice2 }
+    /typecheck (setcachedevice2 refuses a string) raises
+{ (x) 2 3 4 5 6 7 8 9 10 setcachedevice2 }
+    /typecheck (setcachedevice2 checks the deepest of ten) raises
+{ 1 2 3 4 5 6 7 8 9 setcachedevice2 }
+    /stackunderflow (setcachedevice2 reports a shortage) raises
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

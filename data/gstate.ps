@@ -642,13 +642,9 @@ setglobal
 % the screen does not affect the raster; the parameters are part of
 % the graphics state and round-trip through currentscreen and
 % currentcolorscreen
-/setscreen {
-    % the spot function may be named rather than given
-    dup type /nametype ne
-        { /setscreen [ /numbertype /numbertype /proctype ]
-          //.xpostsys /.checkargs get exec }
-        { /setscreen [ /numbertype /numbertype /nametype ]
-          //.xpostsys /.checkargs get exec } ifelse
+% The spot function may be named rather than given.
+/setscreen [ [ /numbertype /numbertype /proctype ]
+             [ /numbertype /numbertype /nametype ] ] {
     graphicsdict /currgstate get exch /screenproc exch put
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put
@@ -659,7 +655,7 @@ setglobal
         graphicsdict /currgstate get /screenproc get
         dup xcheck { //.xpostsys /.samplespot get exec }{ pop pop pop } ifelse
     }{ pop } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentscreen  freq angle proc
 % return the grey channel's screen parameters
@@ -672,7 +668,12 @@ setglobal
 % rf ra rp gf ga gp bf ba bp kf ka kp  setcolorscreen  -
 % record one screen per component; the grey channel shares its slots
 % with setscreen
-/setcolorscreen {
+% Each spot function may be named rather than given, as setscreen's
+% may, so the frequencies and angles are what the shape can pin down.
+/setcolorscreen [ /numbertype /numbertype /anytype
+                  /numbertype /numbertype /anytype
+                  /numbertype /numbertype /anytype
+                  /numbertype /numbertype /anytype ] {
     graphicsdict /currgstate get exch /screenproc exch put
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put
@@ -686,7 +687,7 @@ setglobal
     graphicsdict /currgstate get exch /redscreenangle exch put
     graphicsdict /currgstate get exch /redscreenfreq exch put
     graphicsdict /currgstate get /halftone null put
-} def
+} //.xpostsys /.defop get exec
 
 % ht  .ht5component  ht'
 % a type 5 dictionary carries one halftone per colorant: grey

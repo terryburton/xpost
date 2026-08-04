@@ -1264,8 +1264,17 @@ setglobal
 % rectclip clips by the rectangles alone and clears the path, as the language
 % specifies. rectstroke also accepts a trailing matrix, which is concatenated
 % to the CTM after the path is built but before stroking (PLRM 8.2).
-/rectfill { gsave newpath //.xpostsys /rect get exec fill grestore } def
-/rectstroke {
+% Each takes four numbers, or the same numbers gathered into an array
+% or encoded in a string; rectstroke takes the matrix on top of any of
+% those, so its longer shapes are stated first to get first refusal.
+/rectfill [ [ /numbertype /numbertype /numbertype /numbertype ]
+            [ /arraytype ] [ /stringtype ] ]
+    { gsave newpath //.xpostsys /rect get exec fill grestore }
+    //.xpostsys /.defop get exec
+/rectstroke [ [ /numbertype /numbertype /numbertype /numbertype /arraytype ]
+              [ /numbertype /numbertype /numbertype /numbertype ]
+              [ /arraytype /arraytype ] [ /stringtype /arraytype ]
+              [ /arraytype ] [ /stringtype ] ] {
     gsave newpath
     % a trailing matrix is a six-element array; a numarray always holds 4n
     % numbers, so length six is unambiguously the optional stroke matrix
@@ -1274,8 +1283,11 @@ setglobal
         { //.xpostsys /rect get exec }
     ifelse
     stroke grestore
-} def
-/rectclip { newpath //.xpostsys /rect get exec clip newpath } def
+} //.xpostsys /.defop get exec
+/rectclip [ [ /numbertype /numbertype /numbertype /numbertype ]
+            [ /arraytype ] [ /stringtype ] ]
+    { newpath //.xpostsys /rect get exec clip newpath }
+    //.xpostsys /.defop get exec
 
 % load graphics support. Global: the device-maker procedures baked into this
 % body are global, matching the global .xpostsys their table installs into.

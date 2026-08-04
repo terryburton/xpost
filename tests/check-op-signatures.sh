@@ -46,9 +46,13 @@ fi
 
 # The operators that state their operands: each states it where it is
 # defined, so the statements are gathered from the definitions rather
-# than from a table someone maintains beside them.
+# than from a table someone maintains beside them. A definition opens
+# its statement on the line naming the operator; an operator taking
+# more than one shape of operand list runs the statement over several
+# lines, so what is recognised is the opening, not the whole of it.
 {
-    grep -h -o '^/[A-Za-z][A-Za-z0-9]* \[[^]]*\] {' "$datadir"/*.ps 2>/dev/null \
+    grep -h '^/[A-Za-z][A-Za-z0-9]* \[' "$datadir"/*.ps 2>/dev/null \
+        | grep -v '^/[A-Za-z][A-Za-z0-9]* \[[^][]*\][[:space:]]*def[[:space:]]*$' \
         | sed 's|^/||; s| .*||'
     grep -h -o '\.opsigs get /[A-Za-z][A-Za-z0-9]* \[' "$datadir"/*.ps 2>/dev/null \
         | sed 's|.*/||; s| .*||'
@@ -94,4 +98,5 @@ if [ -s "$work/unknown" ]; then
 fi
 
 [ "$fail" = 0 ] || exit 1
-echo "SUCCESS ($(wc -l < "$work/s" | tr -d ' ') of $(wc -l < "$work/w" | tr -d ' ') wrapped operators state their operands)"
+LC_ALL=C comm -12 "$work/w" "$work/s" > "$work/both"
+echo "SUCCESS ($(wc -l < "$work/both" | tr -d ' ') of $(wc -l < "$work/w" | tr -d ' ') wrapped operators state their operands)"

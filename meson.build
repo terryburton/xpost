@@ -903,6 +903,13 @@ test('op-wrapsig',
   args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The operators taking more than one shape of operand list: every shape
+# the language defines is reached, and one matching none is refused.
+test('op-operand-shapes',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_operand_shapes_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every wrapped operator states the operands it takes, or is named in
 # the shrinking list of those that do not yet.
 test('check-op-signatures',

@@ -1,49 +1,6 @@
 # Wrapped operators that do not yet state the operands they take.
 #
-# An operator installed by wrapping a procedure registers no signature
-# unless it is given one, so the dispatcher cannot check its operands
-# and the body must. Each name here is one that still checks for itself,
-# or does not check at all.
-#
-# The list only shrinks. tests/check-op-signatures.sh fails on a wrapped
-# operator that is neither listed here nor stating its operands, and on
-# an entry here that has since gained a statement.
-#
-# The names below take operands a single statement cannot describe:
-#   colorimage imagemask                a source that is one string or
-#                                       one per colour component
-#   rectclip rectfill rectstroke        four numbers, an array, or an
-#                                       encoded string
-#   infill ineofill instroke            a point or a user path
-#   inufill inueofill inustroke
-#   setcolor setpattern                 components whose number and kind
-#                                       follow the current colour space
-#   setscreen                           a spot function given or named,
-#                                       sampled against the caller's stack
-#   setcolorscreen setcachedevice2      more operands than a statement
-#                                       may carry
-# Each checks its own operands. Giving them statements needs an operator
-# to carry more than one, the way the C side already does.
-#
-# flattenpath and pathbbox are named in the wrapping list but are not
-# defined in PostScript at all: the loop wraps only what it finds in
-# userdict, so it passes over them and they stay the C operators they
-# always were, with the operand types C declares for them.
-colorimage
-imagemask
-ineofill
-infill
-instroke
-inueofill
-inufill
-inustroke
-rectclip
-rectfill
-rectstroke
-setcachedevice2
-setcolor
-setcolorscreen
-setpattern
-setscreen
+# The list only shrinks. An operator added here must be one the
+# dispatcher cannot be told about, not one nobody has got to yet.
 flattenpath
 pathbbox
