@@ -5,6 +5,10 @@
 % are newly-allocated arrays. The template embeds local objects (the initial
 % path storage and the device), so it and its accessor stay in local VM.
 currentglobal false setglobal
+% the template embeds local objects, so it is a local dictionary and takes a
+% userdict anchor: systemdict is global and refuses a local value. The bake
+% below finds it there, and .finalize drops the anchor once it is frozen.
+userdict begin
 /.gstatetemplate <<
     % the space as set (what currentcolorspace reports; may be an array)
     /setspace /DeviceGray
@@ -79,6 +83,7 @@ currentglobal false setglobal
     /currfont 1 dict
     /device DEVICE
 >> def
+end
 % the template proc lives in privatedict, off the dict stack; it freezes the
 % template dictionary defined above, so that dictionary needs no userdict anchor
 % and .finalize drops it. Callers reach the proc through .privatedict.

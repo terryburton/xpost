@@ -9,31 +9,50 @@
 }ifelse
 
 true setglobal
-userdict begin
+% The language is defined into systemdict, its final home, rather than
+% staged in userdict and swept there afterwards. systemdict is open here
+% -- the caller unlocked it -- and the finalizer relocks it.
+systemdict begin
 
     %/CONSTRAINFLATNESS null def
 
     % graphicsdict holds the live per-render graphics state -- currgstate and
     % the gstack of local gstate copies -- so it and its accessors stay in
-    % local VM.
-    currentglobal false setglobal
-    /graphicsdict <<
-        /currgstate 12 dict
-        /gstackarray 100 array
-        /gptr -1
-    >> def
+    % local VM. Being local they cannot be anchored in systemdict, which is
+    % global and refuses a local value; they take a userdict anchor instead,
+    % which is the one the finalizer moves into privatedict.
     % The machinery reaches its state dictionary and its device
     % through operators, promoted here before any machinery file
     % loads: every procedure binding as it loads freezes these
     % references, and a program may take either name for itself.
     % The implementation procedures anchor under reserved names so
     % the collector keeps them.
-    .privatedict /.graphicsdict graphicsdict put   % the C operators' direct road in, off the dict stack
-    /.graphicsdictproc [ //graphicsdict ] cvx def
-    /graphicsdict dup /.graphicsdictproc load .wrapop def
-    /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
-    /DEVICE dup /.DEVICEproc load .wrapop def
+    currentglobal false setglobal
+    userdict begin
+        /graphicsdict <<
+            /currgstate 12 dict
+            /gstackarray 100 array
+            /gptr -1
+        >> def
+        .privatedict /.graphicsdict graphicsdict put   % the C operators' direct road in, off the dict stack
+        /.graphicsdictproc [ //graphicsdict ] cvx def
+    end
+    % the dictionary was an anchor for the bake above and nothing else; the
+    % name belongs to the operator, and a userdict entry would shadow it
+    userdict /graphicsdict undef
     setglobal
+    % the operator is not local, so it is defined here, in systemdict
+    /graphicsdict dup userdict /.graphicsdictproc get .wrapop def
+
+    % .DEVICEproc is bound only now, with graphicsdict already an operator,
+    % so bind freezes the operator into it rather than leaving a name a
+    % program could take for itself
+    currentglobal false setglobal
+    userdict begin
+        /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
+    end
+    setglobal
+    /DEVICE dup userdict /.DEVICEproc get .wrapop def
 
     %breakhere
     (/device.ps) //.xpostsys /.loadmodule get exec %loads and uses (/image.ps)
@@ -65,6 +84,6 @@ false setglobal
 % dispatch through the dict stack.
 [ currentdict systemdict ] { //.xpostsys /.bindscope get exec } forall
 
-end %userdict
+end %systemdict
 
 //.internaldict /QUIET known { }{ (eof graphics.ps\n)print } ifelse

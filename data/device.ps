@@ -51,12 +51,14 @@ setglobal
 
 % Mirror the device class dictionaries into privatedict, where the makers and
 % the C drivers reach them, before the default device is made below. They stay
-% in userdict too, for the load-time methods still to come, until .finalize
-% replaces them with local copies in privatedict and drops the userdict anchors.
+% where they were defined too, for the load-time methods still to come, until
+% .finalize replaces them with local copies in privatedict and drops those
+% anchors. The device files define into the dictionary current here, which is
+% the one the language is being read into.
 [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
   /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
-{ dup userdict exch known
-    { dup userdict exch get .privatedict 3 1 roll put }
+{ dup currentdict exch known
+    { dup currentdict exch get .privatedict 3 1 roll put }
     { pop } ifelse
 } forall
 

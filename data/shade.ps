@@ -640,7 +640,7 @@ setglobal
 % paint the shading over the current clip region; the current path
 % survives untouched
 .xpostsys begin
-userdict /shfill {
+systemdict /shfill {
     gsave
     dup /ColorSpace get setcolorspace
     dup /BBox 2 copy known {
