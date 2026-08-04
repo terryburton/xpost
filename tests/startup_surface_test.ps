@@ -1,0 +1,229 @@
+% The interpreter's surface as a program finds it, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Startup puts every operator, procedure and dictionary somewhere, in one
+% of the two memory spaces, with one set of access attributes. Each of
+% those three is decided a long way from the definition -- by the
+% dictionary current when a file was read, the allocation mode in force,
+% and a sealing pass at the end -- and none of them announces itself when
+% it goes wrong.
+%
+% What goes wrong is quiet rather than loud. A private operator left in
+% systemdict is reachable by a program that should not see it. A wrapped
+% procedure left in local VM dangles after a restore, with the operator
+% table still pointing at it. A dictionary left writable lets a program
+% replace machinery the interpreter will go on calling. None of these
+% stops anything working on the day.
+%
+% So this states the finished shape: for each group of names, which
+% dictionary holds it, which space it is in, and what a program is
+% allowed to do to it.
+
+% read userdict's size before anything below defines into it
+userdict length /st.udlen exch def
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+/raises { % {proc} /errname (what)
+    /r.w exch def /r.e exch def /r.p exch def
+    clear /r.p load stopped { $error /errorname get r.e eq }{ false } ifelse
+    r.w assert clear
+} def
+/ID 1183615869 internaldict def
+% bool /name (what)  -  assert, naming the entry when it fails
+/named { 3 -1 roll { pop pop }{
+    (FAIL: ) print exch 40 string cvs print ( ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+
+% ============================================ 1. the standard operators
+% They live in systemdict, which is global and read-only: a program may
+% shadow a standard name in its own dictionary but may not replace the
+% one the machinery calls.
+
+systemdict gcheck (systemdict is in global VM) assert
+systemdict wcheck not (systemdict is read-only) assert
+{ systemdict /st.intruder 1 put } /invalidaccess
+    (systemdict refuses a program's definition) raises
+
+/OPS [ /add /get /put /exch /dup /forall /known /length /type /bind
+       /stroke /fill /show /setlinewidth /setdash /findfont /definefont
+       /setcolorspace /image /shfill /gsave /grestore /save /restore
+       /findresource /defineresource /filter /run /token /=  /== ] def
+/eachop { /e.w exch def /e.t exch def /e.bad 0 def
+    OPS { dup e.t exec { pop }{ (FAIL: ) print 30 string cvs print ( ) print
+          e.w print (\n) print /e.bad e.bad 1 add store } ifelse } forall
+    e.bad 0 eq e.w assert } def
+
+{ systemdict exch known } (is in systemdict) eachop
+{ load type /operatortype eq } (is an operator) eachop
+{ userdict exch known not } (is not in userdict) eachop
+{ globaldict exch known not } (is not in globaldict) eachop
+
+% ============================================= 2. the private operators
+% The interpreter's own operators are in internaldict, which a program
+% reaches only through the guarded accessor. They are not in systemdict,
+% where a program enumerating the language would find them.
+
+ID gcheck (internaldict is in global VM) assert
+ID wcheck not (internaldict is read-only) assert
+ID length 0 gt (internaldict has members to check) assert
+{ 1183615869 internaldict /st.intruder 1 put } /invalidaccess
+    (internaldict refuses a program's definition) raises
+{ 42 internaldict } /invalidaccess
+    (the accessor refuses the wrong password) raises
+
+% Its members are the private operators, the scratch-string anchor the
+% =string operator runs, and the latches the interpreter keeps out of a
+% program's sight. Anything else arriving here would be a name that
+% escaped its own home.
+/NONOPS << /.=stringproc true /QUIET true
+           /GRAPHICS_LOADED true /USEDRAWLINE true >> def
+/priv.odd 0 def /priv.leaked 0 def
+ID {
+    pop dup type /nametype eq {
+        dup ID exch get type /operatortype ne {
+            dup NONOPS exch known not { /priv.odd priv.odd 1 add store } if } if
+        dup systemdict exch known { /priv.leaked priv.leaked 1 add store } if
+    } if pop
+} forall
+priv.odd 0 eq (internaldict holds only operators, the anchor and the latches) assert
+priv.leaked 0 eq (no member of internaldict is also in systemdict) assert
+
+% the few private names that stay in systemdict do so because the
+% machinery names them at run time, past the reach of the binding sweep
+[ /.lockdown /.permitfileread /.permitfilewrite /.resourcefileopen
+  /.privatedict /.gscratch ]
+{ dup systemdict exch known exch
+  (is reachable, being named at run time) named } forall
+
+% ================================================== 3. the machinery
+% privatedict holds the interpreter's own local objects. It is never on
+% the dictionary stack, so a program can neither name its members nor
+% enumerate them; it is writable because the machinery writes to it.
+
+.privatedict gcheck not (privatedict is in local VM) assert
+.privatedict wcheck (privatedict is writable by the machinery) assert
+.privatedict length 0 gt (privatedict has members to check) assert
+
+/mach.leaked 0 def
+.privatedict {
+    pop dup type /nametype eq {
+        dup systemdict exch known { /mach.leaked mach.leaked 1 add store } if
+        dup userdict exch known { /mach.leaked mach.leaked 1 add store } if
+    } if pop
+} forall
+mach.leaked 0 eq (no member of privatedict is visible to a program) assert
+
+% the private namespaces cannot be named at all
+/.xpostsys where not (the helper namespace cannot be named) assert
+/.internaldict where not (internaldict cannot be named directly) assert
+/graphicsdict where { pop /graphicsdict load type /operatortype eq }{ true } ifelse
+    (the graphics state is reached through an operator, not a name) assert
+
+% ======================================= 4. the standard dictionaries
+% The specification names each in systemdict and says which space it is
+% in: userdict, errordict, $error, statusdict and FontDirectory are
+% local, systemdict, globaldict and GlobalFontDirectory are global.
+
+/LOCALDICTS [ /userdict /errordict /$error /statusdict /FontDirectory ] def
+/GLOBALDICTS [ /systemdict /globaldict /GlobalFontDirectory ] def
+
+LOCALDICTS {
+    dup systemdict exch known
+        { dup systemdict exch get gcheck not }
+        { false } ifelse
+    exch (is a local dictionary named in systemdict) named
+} forall
+
+GLOBALDICTS {
+    dup systemdict exch known
+        { dup systemdict exch get gcheck }
+        { false } ifelse
+    exch (is a global dictionary named in systemdict) named
+} forall
+
+% the program's own namespaces start empty: nothing of the interpreter's
+% was left behind in them
+st.udlen 0 eq (userdict starts empty) assert
+globaldict length 0 eq (globaldict starts empty) assert
+
+% ==================================== 5. the wrapped procedures' space
+% A wrapped operator runs a procedure the operator table points at, and
+% the table is outside the collector's view: the register is what keeps
+% the procedure alive. A local procedure would be invalidated by a
+% restore past its creation with the table still pointing at it.
+
+.privatedict /.wrappedprocs known
+    (the register of wrapped procedures is reachable) assert
+.privatedict /.wrappedprocs known {
+    /WP .privatedict /.wrappedprocs get def
+    WP length 0 gt (there are wrapped procedures) assert
+    /wp.local 0 def /wp.notop 0 def /wp.nothome 0 def
+    WP {
+        pop
+        gcheck not { /wp.local wp.local 1 add store } if
+    } forall
+    WP {
+        pop dup type /nametype eq {
+            systemdict 1 index known
+                { dup systemdict exch get type /operatortype ne
+                    { /wp.notop wp.notop 1 add store } if }
+                { /wp.nothome wp.nothome 1 add store } ifelse
+        } if pop
+    } forall
+    wp.local 0 eq (every wrapped procedure is in global VM) assert
+    wp.notop 0 eq (every wrapped name is an operator) assert
+    wp.nothome 0 eq (every wrapped name is in systemdict) assert
+} if
+
+% =========================================== 6. the machinery resists
+% A program may take any standard name for itself. The machinery must go
+% on working, because its own references were frozen before the program
+% ran. This is the behavioural half of the guarantee that
+% tamper_dispatch_test.ps checks structurally.
+
+% A verdict reached inside a save level cannot be recorded there: restore
+% would revert the counter along with everything else the program did. So
+% each probe leaves a boolean, which is a simple object and survives the
+% restore on the stack, and the judging happens afterwards.
+
+/st.sv save def
+% the operators the machinery leans on hardest, all taken at once
+/get { (stolen) } def
+/put { (stolen) } def
+/exch { (stolen) } def
+/dup { (stolen) } def
+/known { (stolen) } def
+/length { (stolen) } def
+/forall { (stolen) } def
+/type { (stolen) } def
+/index { (stolen) } def
+/copy { (stolen) } def
+/eq { (stolen) } def
+/if { (stolen) } def
+/ifelse { (stolen) } def
+/roll { (stolen) } def
+/exec { (stolen) } def
+
+{ gsave newpath 0 0 moveto 100 100 lineto 4 setlinewidth stroke grestore } stopped not
+{ gsave newpath 10 10 40 40 rectfill grestore } stopped not
+{ gsave 0.5 setgray currentgray pop grestore } stopped not
+{ matrix currentmatrix pop } stopped not
+{ 1 dict begin currentdict end pop } stopped not
+
+st.sv restore
+
+% judged now, with the counter back where restore cannot reach it. The
+% booleans come off in the order they were pushed, last first.
+(the dictionary operators survive them) assert
+(the matrix operators survive them) assert
+(the colour operators survive them) assert
+(filling survives them) assert
+(stroking survives fifteen stolen operators) assert
+
+% the redefinitions are gone with the save level, and the standard
+% operators answer for themselves again
+/get load type /operatortype eq (the standard get is back) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

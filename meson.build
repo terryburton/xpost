@@ -290,6 +290,19 @@ test('interpreter',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# The interpreter's surface as an embedding program finds it: the same
+# homes, spaces and access attributes the CLI-side test states, reached
+# through xpost_create and xpost_run instead of a start procedure.
+startup_surface_api_exe = executable('startup_surface_api_test',
+  'tests/startup_surface_api_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('startup-surface-api',
+  startup_surface_api_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: run-status outcomes and error identity across a
 # persistent context.
 run_status_exe = executable('run_status_test',
@@ -908,6 +921,13 @@ test('op-wrapsig',
 test('font-directory',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_directory_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Where every group of names ends up: which dictionary, which VM, and
+# what a program is allowed to do to it.
+test('startup-surface',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/startup_surface_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Standard operators written in PostScript are operator objects, so bind
