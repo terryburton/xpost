@@ -2,5 +2,3 @@
 #
 # The list only shrinks. An operator added here must be one the
 # dispatcher cannot be told about, not one nobody has got to yet.
-flattenpath
-pathbbox
