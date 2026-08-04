@@ -894,7 +894,7 @@ setglobal
 % dictionary is popped when the stream is exhausted -- the program
 % inside closes its own file with currentfile closefile
 /eexec {
-    dup type /filetype ne { /eexec cvx /typecheck signalerror } if
+    /eexec [ /filetype ] //.xpostsys /.checkargs get exec
     .eexecdecode cvx
     systemdict begin
     exec

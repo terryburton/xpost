@@ -203,7 +203,7 @@ end
 % set graphics state from gstate
 /setgstate {
     % the operand is examined before the current state is fetched
-    dup type /dicttype ne { /setgstate cvx /typecheck signalerror } if
+    /setgstate [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /currmatrix known not
         { /setgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get copy pop
@@ -212,7 +212,7 @@ end
 % gstate  currentgstate  gstate
 % copy current graphics state into given gstate object
 /currentgstate {
-    dup type /dicttype ne { /currentgstate cvx /typecheck signalerror } if
+    /currentgstate [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /currmatrix known not
         { /currentgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec

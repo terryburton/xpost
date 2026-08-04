@@ -299,6 +299,17 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 { currentcolortransfer pop pop pop pop } (currentcolortransfer) works
 { currenttransfer pop } (currenttransfer) works
 
+% ------------------------------------------------- the dictionary operands
+% Operators whose one operand is a dictionary of a particular shape:
+% the type is settled first, so a number is refused as a number rather
+% than as a dictionary missing an entry.
+
+{ 42 shfill } /typecheck (shfill a number) refuses
+{ (x) shfill } /typecheck (shfill a string) refuses
+
+{ 42 eexec } /typecheck (eexec a number) refuses
+{ (x) eexec } /typecheck (eexec a string) refuses
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

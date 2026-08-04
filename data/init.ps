@@ -905,7 +905,7 @@ setglobal
 % form's own execform calls run inside its capture, so nested forms
 % cache independently.
 /execform {
-    dup type /dicttype ne { /execform cvx /typecheck signalerror } if
+    /execform [ /dicttype ] //.xpostsys /.checkargs get exec
     dup /FormType 2 copy known { get 1 eq }{ pop pop false } ifelse
     not { /execform cvx /rangecheck signalerror } if
     DEVICE /ImgData known
