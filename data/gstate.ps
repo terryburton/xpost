@@ -913,6 +913,7 @@ setglobal
 % array offset  setdash  -
 % a non-empty dash array must hold no negative element and not be all zero
 /setdash {
+    /setdash [ /arraytype /numbertype ] //.xpostsys /.checkargs get exec
     1 index dup length 0 gt {
         false exch
         { dup 0 lt { pop pop /setdash cvx /rangecheck signalerror } if

@@ -260,6 +260,45 @@ count 0 eq (sampling leaves the operand stack as it found it) assert
 tf.seen 256 eq (the samples run where the caller can see them) assert
 { } settransfer
 
+% --------------------------------------------- the line and dash parameters
+
+{ [ 3 2 ] 0 setdash } (setdash an array and an offset) works
+{ [ ] 0 setdash } (setdash an empty array) works
+{ [ 3 2 ] 1.5 setdash } (setdash a real offset) works
+{ (x) 0 setdash } /typecheck (setdash a string for the pattern) refuses
+{ 42 0 setdash } /typecheck (setdash a number for the pattern) refuses
+{ [ 3 2 ] (x) setdash } /typecheck (setdash a string for the offset) refuses
+{ [ 3 2 ] setdash } /stackunderflow (setdash with no offset) refuses
+{ [ 3 -2 ] 0 setdash } /rangecheck (setdash a negative element) refuses
+
+{ 1 setlinecap } (setlinecap a code) works
+{ (x) setlinecap } /typecheck (setlinecap a string) refuses
+{ 9 setlinecap } /rangecheck (setlinecap a code out of range) refuses
+{ 1 setlinejoin } (setlinejoin a code) works
+{ (x) setlinejoin } /typecheck (setlinejoin a string) refuses
+{ 9 setlinejoin } /rangecheck (setlinejoin a code out of range) refuses
+{ 4 setmiterlimit } (setmiterlimit a number) works
+{ (x) setmiterlimit } /typecheck (setmiterlimit a string) refuses
+{ 0.5 setmiterlimit } /rangecheck (setmiterlimit below one) refuses
+
+% -------------------------------------------------------- rectangles and forms
+
+{ newpath 10 10 30 30 rectclip } (rectclip four numbers) works
+{ newpath (x) 10 30 30 rectclip } /typecheck (rectclip a string) refuses
+{ 3 dict execform } /rangecheck (execform a dictionary that is not a form) refuses
+{ 42 execform } /typecheck (execform a number) refuses
+
+% ------------------------------------------------------------- user objects
+
+{ 0 { 1 } defineuserobject } (defineuserobject an index and a value) works
+{ (x) { 1 } defineuserobject } /typecheck (defineuserobject a string index) refuses
+{ -1 { 1 } defineuserobject } /rangecheck (defineuserobject a negative index) refuses
+
+% ------------------------------------------------------ the transfer readers
+
+{ currentcolortransfer pop pop pop pop } (currentcolortransfer) works
+{ currenttransfer pop } (currenttransfer) works
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
