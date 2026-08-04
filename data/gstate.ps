@@ -176,16 +176,21 @@ end
 
 % -  initgraphics  -
 % reset graphics state parameters
+% -  initgraphics  -
+% the graphics state back to its defaults, and nothing else: the
+% specification gives the equivalent code, and it neither touches raster
+% memory nor reports what it did
 /initgraphics {
     gstate setgstate
     initmatrix
-    //.internaldict /QUIET known { }{ matrix currentmatrix == } ifelse
-    %(initclip)=
+    newpath
     initclip
-    %(erasepage)=
-    erasepage
-    %(0 setgray)=
     0 setgray
+    1 setlinewidth
+    0 setlinecap
+    0 setlinejoin
+    10 setmiterlimit
+    [ ] 0 setdash
 } def
 
 % -  gstate  gstate

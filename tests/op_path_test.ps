@@ -111,4 +111,39 @@ reversepath reversepath
 currentpoint exch 130 (reversing twice ends where the path ended, x) assertnear
     100 (reversing twice ends where the path ended, y) assertnear
 
+% ------------------------------------------------------- initgraphics
+% The graphics state back to its defaults, which includes an empty path
+% and no current point. It used to leave both standing, so a program
+% that reset the state and then drew found itself continuing whatever
+% path was there before -- and every operator needing a current point
+% answered as though one existed.
+
+/pathgone { { currentpoint pop pop } stopped } def
+
+100 100 moveto 130 130 lineto
+initgraphics
+pathgone (initgraphics leaves no current point) assert
+{ pathbbox pop pop pop pop } stopped
+    (initgraphics leaves no path for pathbbox to measure) assert
+{ 10 10 lineto } stopped (initgraphics leaves nothing to line to) assert
+{ 10 10 rmoveto } stopped (initgraphics leaves nothing to move from) assert
+
+% and the rest of the state it is defined to reset
+100 100 moveto
+3 setlinewidth 2 setlinecap 1 setlinejoin 4 setmiterlimit
+[3 2] 1 setdash 0.5 setgray
+initgraphics
+currentlinewidth 1.0 eq (initgraphics resets the line width) assert
+currentlinecap 0 eq (initgraphics resets the line cap) assert
+currentlinejoin 0 eq (initgraphics resets the line join) assert
+currentmiterlimit 10.0 eq (initgraphics resets the miter limit) assert
+currentdash pop length 0 eq (initgraphics resets the dash pattern) assert
+currentgray 0.0 eq (initgraphics resets the colour) assert
+
+% a fresh moveto works afterwards, so the path was emptied rather than
+% made unusable
+initgraphics 50 50 moveto
+currentpoint exch 50 (a moveto after initgraphics sets x) assertnear
+    50 (a moveto after initgraphics sets y) assertnear
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

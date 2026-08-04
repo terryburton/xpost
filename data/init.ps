@@ -1547,6 +1547,10 @@ currentglobal true setglobal
             pop
             //.internaldict /QUIET known { }{ (graphics loaded, calling initgraphics\n)print } ifelse
             initgraphics
+            % the first page starts clear. Every later one is cleared by
+            % showpage; initgraphics does not clear any of them, since it
+            % resets the graphics state and not raster memory
+            erasepage
         } if
     } ifelse
 } put
