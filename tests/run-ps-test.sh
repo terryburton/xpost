@@ -4,6 +4,23 @@
 # the suite's internal failcount reached zero.
 #   $1  path to the built xpost binary
 #   $2  path to test.ps
+#
+# Two things a test written for this harness has to get right, both of
+# which fail by reporting success rather than by reporting anything:
+#
+#   A verdict reached inside save/restore cannot be recorded there.
+#   restore reverts local VM, and the failcount lives in userdict, so a
+#   failure detected between a save and its restore is erased before it
+#   can be printed -- the run reports SUCCESS with the failing assertion
+#   already forgotten. Leave the verdict on the operand stack instead,
+#   where a boolean survives the restore, and judge after restoring.
+#
+#   A test that reaches into an internal dictionary must fail when it
+#   cannot find what it is looking for, not skip. A lookup guarded by
+#   `known` that falls back to an empty result turns a moved member into
+#   a differently-shaped test that still passes, or -- worse -- into a
+#   run whose exemptions have quietly vanished and whose failures are
+#   therefore inventions. Both have happened here.
 set -u
 xpost=$1
 script=$2

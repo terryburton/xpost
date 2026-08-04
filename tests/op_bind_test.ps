@@ -81,11 +81,6 @@
     .privatedict /.wrappedprocs get
     (every wrapped operator is an operator in systemdict) checkreg
 } if
-.privatedict /.wrappedsysprocs known {
-    .privatedict /.wrappedsysprocs get
-    (every systemdict-wrapped operator is an operator in systemdict) checkreg
-} if
-
 % --------------------- a PostScript operator is not shadowed by a C one
 % Some standard operators are written in PostScript over a C operator of
 % the same name: findfont keeps the resource table the C operator knows
