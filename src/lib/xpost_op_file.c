@@ -453,19 +453,32 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         char *ceod = NULL;
         int eodlen = 0;
 
+        Xpost_Object cnt;
+
         free(cname);
         if (!xpost_object_is_readable(ctx, F))
             return invalidaccess;
+        /* both parameters are required of the dictionary form (PLRM
+           3.13.3). Defaulted, the filter reaches its end of data at
+           once and hands back a stream that is merely empty, so a
+           dictionary that names neither -- or names them wrongly --
+           reads as a truncation rather than as the mistake it is */
         eod = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EODString"));
-        if (xpost_object_get_type(eod) == stringtype)
-        {
-            if (!xpost_object_is_readable(ctx, eod))
-                return invalidaccess;
-            ceod = xpost_string_get_pointer(ctx, eod);
-            eodlen = eod.comp_.sz;
-        }
+        cnt = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EODCount"));
+        if ((xpost_object_get_type(eod) == invalidtype)
+            || (xpost_object_get_type(cnt) == invalidtype))
+            return undefined;
+        if ((xpost_object_get_type(eod) != stringtype)
+            || (xpost_object_get_type(cnt) != integertype))
+            return typecheck;
+        if (!xpost_object_is_readable(ctx, eod))
+            return invalidaccess;
+        if (cnt.int_.val < 0)
+            return rangecheck;
+        ceod = xpost_string_get_pointer(ctx, eod);
+        eodlen = eod.comp_.sz;
         f = xpost_file_cons_filter_subfile(ctx->lo, F,
-                _dict_int(ctx, dict, "EODCount", 0), ceod, eodlen);
+                cnt.int_.val, ceod, eodlen);
         if (xpost_object_get_type(f) == invalidtype)
             return ioerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
