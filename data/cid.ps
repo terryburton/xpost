@@ -458,6 +458,8 @@ setglobal
 % carry the glyphs
 /composefont {
     dup type /arraytype ne { /composefont cvx /typecheck signalerror } if
+    1 index type dup /nametype ne exch dup /stringtype ne exch /dicttype ne and and
+        { /composefont cvx /typecheck signalerror } if
     [ exch { dup type /nametype eq { /CIDFont findresource } if } forall ]
     exch dup type /nametype eq { /CMap findresource } if
     exch

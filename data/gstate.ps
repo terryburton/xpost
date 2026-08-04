@@ -202,16 +202,20 @@ end
 % gstate  setgstate  -
 % set graphics state from gstate
 /setgstate {
-    % the operand is looked at before the current state is fetched: with
-    % nothing on the stack the fetch would go first and the copy would
-    % report the wrong shortage
+    % the operand is examined before the current state is fetched, so
+    % an empty stack reports the shortage rather than a type
     dup type /dicttype ne { /setgstate cvx /typecheck signalerror } if
+    dup /currmatrix known not
+        { /setgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get copy pop
 } def
 
 % gstate  currentgstate  gstate
 % copy current graphics state into given gstate object
 /currentgstate {
+    dup type /dicttype ne { /currentgstate cvx /typecheck signalerror } if
+    dup /currmatrix known not
+        { /currentgstate cvx /typecheck signalerror } if
     graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec
 } def
 
@@ -272,7 +276,11 @@ end
 
 % string  findcolorrendering  name bool
 % one rendering serves every condition: the default instance
-/findcolorrendering { pop /DefaultColorRendering true } def
+/findcolorrendering {
+    dup type dup /nametype ne exch /stringtype ne and
+        { /findcolorrendering cvx /typecheck signalerror } if
+    pop /DefaultColorRendering true
+} def
 currentglobal true setglobal
 /DefaultColorRendering 0 dict dup /ColorRenderingType 1 put
 /ColorRendering defineresource pop

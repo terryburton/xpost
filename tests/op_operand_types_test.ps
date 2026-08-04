@@ -196,6 +196,39 @@
 { { 1 } { 1 } infill } /typecheck (infill something that is not a point) refuses
 { { 1 } { 1 } ineofill } /typecheck (ineofill something that is not a point) refuses
 
+% -------------------------------------------------------- graphics states
+% A gstate is a dictionary carrying the graphics state's own entries,
+% which is not the same as any dictionary.
+
+{ gstate setgstate } (setgstate a gstate) works
+{ gstate currentgstate pop } (currentgstate a gstate) works
+{ 3 dict setgstate } /typecheck (setgstate a plain dictionary) refuses
+{ 3 dict currentgstate } /typecheck (currentgstate a plain dictionary) refuses
+{ 42 currentgstate } /typecheck (currentgstate a number) refuses
+
+% ------------------------------------------------------------ resources
+% A rendering intent is a name or a string.
+
+{ /RelativeColorimetric findcolorrendering pop pop } (a rendering intent by name) works
+{ (RelativeColorimetric) findcolorrendering pop pop } (a rendering intent by string) works
+{ 42 findcolorrendering } /typecheck (a rendering intent that is a number) refuses
+{ null findcolorrendering } /typecheck (a rendering intent that is null) refuses
+
+% composefont takes a key, a CMap named or given, and an array of fonts
+{ /F { 1 } [ ] composefont } /typecheck (a CMap that is a procedure) refuses
+{ /F 42 [ ] composefont } /typecheck (a CMap that is a number) refuses
+{ /F /Identity-H 42 composefont } /typecheck (a font list that is a number) refuses
+
+% ---------------------------------------------------------------- arithmetic
+% A result that cannot be represented is not a result.
+
+{ 2 3 exp pop } (exp a small power) works
+{ 2 0.5 exp pop } (exp a fractional power) works
+% the range of a real differs between the two object widths, so the
+% power here is one that overflows either
+{ 10 400 exp } /undefinedresult (exp a power that overflows) refuses
+{ 10 400 exp neg } /undefinedresult (exp a power overflowing downward) refuses
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

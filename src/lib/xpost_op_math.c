@@ -338,10 +338,14 @@ int Rexp(Xpost_Context *ctx,
          Xpost_Object base,
          Xpost_Object expn)
 {
+    double r;
+
     if (base.real_.val < 0)
         expn.real_.val = (real)trunc(expn.real_.val);
-    xpost_stack_push(ctx->lo, ctx->os,
-                     xpost_real_cons((real)pow(base.real_.val, expn.real_.val)));
+    r = pow(base.real_.val, expn.real_.val);
+    if (!isfinite(r) || !isfinite((double)(real)r))
+        return undefinedresult;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)r));
     return 0;
 }
 
