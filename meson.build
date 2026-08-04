@@ -910,6 +910,13 @@ test('op-showstate',
   args: [ xpost_exe, files('tests/op_showstate_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The printer's descent into a structure that contains itself.
+test('op-printdepth',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_printdepth_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 60)
+
 # What the error dictionary carries and what the standard handler does
 # to it: a program handling its own errors reads both.
 test('error-dict',
