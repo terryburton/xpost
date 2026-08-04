@@ -27,32 +27,32 @@ systemdict begin
     % references, and a program may take either name for itself.
     % The implementation procedures anchor under reserved names so
     % the collector keeps them.
+    % Both the state dictionary and the procedures that reach it are local,
+    % and privatedict is the local dictionary they belong in, so they are
+    % put there outright rather than anchored in userdict for the finalizer
+    % to move. The procedure takes the dictionary as a value rather than
+    % baking the name, which is what a // reference would have needed the
+    % name on the dictionary stack for.
     currentglobal false setglobal
-    userdict begin
-        /graphicsdict <<
-            /currgstate 12 dict
-            /gstackarray 100 array
-            /gptr -1
-        >> def
-        .privatedict /.graphicsdict graphicsdict put   % the C operators' direct road in, off the dict stack
-        /.graphicsdictproc [ //graphicsdict ] cvx def
-    end
-    % the dictionary was an anchor for the bake above and nothing else; the
-    % name belongs to the operator, and a userdict entry would shadow it
-    userdict /graphicsdict undef
+    .privatedict /.graphicsdict <<
+        /currgstate 12 dict
+        /gstackarray 100 array
+        /gptr -1
+    >> put
+    .privatedict /.graphicsdictproc
+        [ .privatedict /.graphicsdict get ] cvx put
     setglobal
     % the operator is not local, so it is defined here, in systemdict
-    /graphicsdict dup userdict /.graphicsdictproc get .wrapop def
+    /graphicsdict dup .privatedict /.graphicsdictproc get .wrapop def
 
     % .DEVICEproc is bound only now, with graphicsdict already an operator,
     % so bind freezes the operator into it rather than leaving a name a
     % program could take for itself
     currentglobal false setglobal
-    userdict begin
-        /.DEVICEproc { graphicsdict /currgstate get /device get } bind def
-    end
+    .privatedict /.DEVICEproc
+        { graphicsdict /currgstate get /device get } bind put
     setglobal
-    /DEVICE dup userdict /.DEVICEproc get .wrapop def
+    /DEVICE dup .privatedict /.DEVICEproc get .wrapop def
 
     %breakhere
     (/device.ps) //.xpostsys /.loadmodule get exec %loads and uses (/image.ps)

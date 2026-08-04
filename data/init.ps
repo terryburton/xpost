@@ -80,13 +80,14 @@ userdict /DATA_DIR known {
 % collector reclaims. A bound reference to the operator resists shadowing.
 % Defined before any module loads.
 currentglobal false setglobal
-userdict /.gscratchdict 64 dict put
-% .gscratchproc freezes the local scratch dictionary, so it is itself a local
-% object and lives in userdict, where the operator table keeps it reachable; a
-% global home would hold a local reference. Only the .gscratch operator that
-% wraps it is a simple object fit for systemdict.
-userdict /.gscratchproc [ //.gscratchdict ] cvx put
-/.gscratch dup userdict /.gscratchproc get .wrapop def
+% Both are local, and privatedict is the local dictionary the machinery
+% lives in, so they go there outright. The procedure takes the scratch
+% dictionary as a value: a // reference would have needed the name on the
+% dictionary stack, which is what forced the userdict anchor before. Only
+% the .gscratch operator that wraps it is a simple object fit for systemdict.
+.privatedict /.gscratchdict 64 dict put
+.privatedict /.gscratchproc [ .privatedict /.gscratchdict get ] cvx put
+/.gscratch dup .privatedict /.gscratchproc get .wrapop def
 setglobal
 
 currentglobal true setglobal
@@ -1738,7 +1739,7 @@ currentglobal true setglobal
     % which the privatedict root keeps alive, so the objects move by reference
     % (no copy) and dropping the userdict anchor hides them without breaking a
     % thing.
-    [ /.gscratchdict /.gscratchproc /.graphicsdictproc /.DEVICEproc /.error ]
+    [ /.error ]
     { dup userdict exch known
         { dup dup userdict exch get .privatedict 3 1 roll put userdict exch undef }
         { pop } ifelse
