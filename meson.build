@@ -808,6 +808,14 @@ test('filter-matrix',
   args: [ xpost_exe, files('tests/filter_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The predictor stage over a compressed stream: a stage that did nothing
+# would return the differences, which read as an image rather than as an
+# error.
+test('filter-predictor',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_predictor_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every mutating operator against restore. Whether an operator records
 # what it overwrites is a property of the operator, not of the type, so
 # one reverting says nothing about the next.

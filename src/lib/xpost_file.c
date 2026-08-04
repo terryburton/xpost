@@ -2097,6 +2097,188 @@ struct Xpost_File_Methods dct_methods =
 static Xpost_Object _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff);
 static Xpost_File *_filter_underlying_stream(Xpost_File *f);
 
+/* Predictor stage (PLRM Table 3.20). The compressed data of an LZW or
+   Flate stream may have been differenced before compression, either
+   horizontally (TIFF predictor 2) or by one of the PNG row filters
+   (predictor 10 and above). Undoing that is a transformation of the
+   decompressed bytes and nothing to do with either decompressor, so it
+   layers over whichever one produced them.
+
+   A PNG row carries a leading byte naming the filter used for it; a
+   TIFF row does not. Both need the previous decoded row, so a row is
+   decoded whole and handed out a byte at a time. */
+typedef struct Xpost_PredFile
+{
+    Xpost_File methods;
+    Xpost_File *source;
+    int pushback;
+    int eod;
+    int predictor;
+    int colors;
+    int bpc;
+    int columns;
+    int rowbytes;    /* bytes in one decoded row */
+    int bpp;         /* bytes between a byte and its left neighbour */
+    unsigned char *cur;
+    unsigned char *prev;
+    int have;        /* bytes decoded into cur */
+    int pos;         /* next byte to hand out */
+} Xpost_PredFile;
+
+static int
+_paeth(int a, int b, int c)
+{
+    int p = a + b - c;
+    int pa = abs(p - a), pb = abs(p - b), pc = abs(p - c);
+
+    if (pa <= pb && pa <= pc) return a;
+    return (pb <= pc) ? b : c;
+}
+
+/* fill cur with one decoded row; 0 at end of data */
+static int
+_pred_row(Xpost_PredFile *ff)
+{
+    int i;
+    int ft = 0;
+
+    if (ff->predictor >= 10)
+    {
+        ft = ff->source->methods->readch(ff->source);
+        if (ft == EOF)
+            return 0;
+        if (ft < 0 || ft > 4)
+            return -1;
+    }
+    for (i = 0; i < ff->rowbytes; i++)
+    {
+        int c = ff->source->methods->readch(ff->source);
+        if (c == EOF)
+        {
+            if (i == 0)
+                return 0;
+            break;
+        }
+        ff->cur[i] = (unsigned char)c;
+    }
+    ff->have = i;
+    if (ff->predictor == 2)
+    {
+        /* horizontal differencing, defined here for whole-byte samples */
+        for (i = ff->bpp; i < ff->have; i++)
+            ff->cur[i] = (unsigned char)(ff->cur[i] + ff->cur[i - ff->bpp]);
+    }
+    else
+    {
+        for (i = 0; i < ff->have; i++)
+        {
+            int a = (i >= ff->bpp) ? ff->cur[i - ff->bpp] : 0;
+            int b = ff->prev[i];
+            int c = (i >= ff->bpp) ? ff->prev[i - ff->bpp] : 0;
+            int x = ff->cur[i];
+
+            switch (ft)
+            {
+                case 0: break;
+                case 1: x += a; break;
+                case 2: x += b; break;
+                case 3: x += (a + b) / 2; break;
+                default: x += _paeth(a, b, c); break;
+            }
+            ff->cur[i] = (unsigned char)x;
+        }
+    }
+    memcpy(ff->prev, ff->cur, (size_t)ff->have);
+    ff->pos = 0;
+    return 1;
+}
+
+static int
+pred_readch(Xpost_File *f)
+{
+    Xpost_PredFile *ff = (Xpost_PredFile *)f;
+
+    if (ff->pushback >= 0)
+    {
+        int c = ff->pushback;
+        ff->pushback = -1;
+        return c;
+    }
+    if (ff->eod)
+        return EOF;
+    while (ff->pos >= ff->have)
+    {
+        int r = _pred_row(ff);
+
+        if (r <= 0)
+        {
+            ff->eod = 1;
+            return EOF;
+        }
+    }
+    return ff->cur[ff->pos++];
+}
+
+static int
+pred_close(Xpost_File *f)
+{
+    Xpost_PredFile *ff = (Xpost_PredFile *)f;
+
+    free(ff->cur);
+    free(ff->prev);
+    ff->cur = ff->prev = NULL;
+    ff->eod = 1;
+    return filter_close(f);
+}
+
+static struct Xpost_File_Methods pred_methods =
+{
+    pred_readch, filter_writech, pred_close, filter_flush,
+    filter_purge, filter_unreadch, filter_tell, filter_seek
+};
+
+Xpost_Object xpost_file_cons_filter_predictor(Xpost_Memory_File *mem,
+                                              Xpost_Object src,
+                                              int predictor, int colors,
+                                              int bpc, int columns)
+{
+    Xpost_File *source = xpost_file_get_file_pointer(mem, src);
+    Xpost_PredFile *ff;
+    int rowbits;
+
+    if (!source)
+        return invalid;
+    if (colors < 1 || columns < 1)
+        return invalid;
+    if (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8 && bpc != 16)
+        return invalid;
+    ff = calloc(1, sizeof *ff);
+    if (!ff)
+        return invalid;
+    rowbits = colors * bpc * columns;
+    ff->methods.methods = &pred_methods;
+    ff->source = source;
+    ff->pushback = -1;
+    ff->predictor = predictor;
+    ff->colors = colors;
+    ff->bpc = bpc;
+    ff->columns = columns;
+    ff->rowbytes = (rowbits + 7) / 8;
+    ff->bpp = (colors * bpc + 7) / 8;
+    if (ff->bpp < 1)
+        ff->bpp = 1;
+    ff->cur = calloc(1, (size_t)ff->rowbytes);
+    ff->prev = calloc(1, (size_t)ff->rowbytes);
+    if (!ff->cur || !ff->prev)
+    {
+        free(ff->cur);
+        free(ff->prev);
+        free(ff);
+        return invalid;
+    }
+    return _filter_object_cons(mem, &ff->methods);
+}
+
 /* LZWDecode filter: the variable-width LZW codes PostScript and PDF
    share -- 9 to 12 bits, packed high bit first, code 256 clearing
    the table and 257 ending the data, with the width growing one
@@ -4764,7 +4946,7 @@ static Xpost_File *_filter_underlying_stream(Xpost_File *f)
 
     if (m != &a85_methods && m != &hex_methods && m != &rle_methods
         && m != &subfile_methods && m != &lzw_methods && m != &fax_methods
-        && m != &eexec_methods && m != &rsd_methods
+        && m != &eexec_methods && m != &rsd_methods && m != &pred_methods
         && m != &nullenc_methods && m != &hexenc_methods
         && m != &a85enc_methods && m != &rleenc_methods
         && m != &lzwenc_methods && m != &faxenc_methods

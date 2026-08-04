@@ -259,6 +259,50 @@ int xpost_op_file_filter_int (Xpost_Context *ctx,
     return 0;
 }
 
+/* Layer the predictor stage over a decoding filter just built, taking
+   its parameters from the filter's dictionary (PLRM Table 3.20). The
+   filter object is read and replaced in place. */
+static
+int _layer_predictor(Xpost_Context *ctx, Xpost_Object dict, Xpost_Object *f)
+{
+    Xpost_Object p;
+    int predictor, colors, bpc, columns;
+    Xpost_Object layered;
+
+    p = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "Predictor"));
+    if (xpost_object_get_type(p) == invalidtype)
+        return 0;
+    if (xpost_object_get_type(p) != integertype)
+        return typecheck;
+    predictor = p.int_.val;
+    if (predictor == 1)
+        return 0;
+    if (predictor != 2 && (predictor < 10 || predictor > 15))
+        return rangecheck;
+
+    colors = _dict_int(ctx, dict, "Colors", 1);
+    bpc = _dict_int(ctx, dict, "BitsPerComponent", 8);
+    columns = _dict_int(ctx, dict, "Columns", 1);
+    if (colors < 1 || colors > 4 || columns < 1)
+        return rangecheck;
+    if (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8 && bpc != 16)
+        return rangecheck;
+    /* the differencing the predictors undo is defined on whole bytes
+       here, so a sample narrower than one is not screened out silently */
+    if (bpc < 8)
+        return rangecheck;
+
+    layered = xpost_file_cons_filter_predictor(ctx->lo, *f, predictor,
+                                               colors, bpc, columns);
+    if (xpost_object_get_type(layered) == invalidtype)
+        return ioerror;
+    layered.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    layered.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                    << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    *f = layered;
+    return 0;
+}
+
 /* file dict /FilterName  filter  file'
    the optional parameter dictionary form. LZWDecode reads its
    EarlyChange switch and CCITTFaxDecode its coding layout from the
@@ -381,6 +425,13 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
             return ioerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (unsigned int)access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        if (!enc)
+        {
+            int ret = _layer_predictor(ctx, dict, &f);
+
+            if (ret)
+                return ret;
+        }
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
         return 0;
     }
@@ -481,6 +532,24 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
                   << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
+        return 0;
+    }
+    /* the two compressing decoders may have been given a predictor;
+       everything else takes its parameters and needs no stage */
+    if (cname && strcmp(cname, "FlateDecode") == 0)
+    {
+        Xpost_Object f;
+        int ret;
+
+        free(cname);
+        ret = xpost_op_file_filter(ctx, F, name);
+        if (ret)
+            return ret;
+        f = xpost_stack_pop(ctx->lo, ctx->os);
+        ret = _layer_predictor(ctx, dict, &f);
+        if (ret)
+            return ret;
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(f));
         return 0;
     }

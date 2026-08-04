@@ -1,0 +1,70 @@
+% Predictor stages on a compressed stream, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% An LZW or Flate stream may have been differenced before compression.
+% Undoing it is a stage over the decompressor, so each case here
+% compresses a known image with a known differencing and requires the
+% original bytes back: a stage that did nothing would return the
+% differences, which read as an image rather than as an error.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/want <0a141e28323c46505a646e780c16202a343e48525c66707a0f19232d37414b555f69737d> def
+/rd { % <<params>> <compressed>  ->  string
+    /r.d exch def /r.p exch def
+    r.d r.p /FlateDecode filter 64 string readstring pop
+} def
+
+/plain << /Colors 3 /BitsPerComponent 8 /Columns 4 >> def
+
+% no differencing at all, named and unnamed
+<789ce31291d330b2710b884ac9abe01153d032b1f3088a492ba8e29754d63577f40e8dcf2cae05009bbe0979> << >> exch rd want eq (an undifferenced stream) assert
+<789ce31291d330b2710b884ac9abe01153d032b1f3088a492ba8e29754d63577f40e8dcf2cae05009bbe0979> << /Predictor 1 >> exch rd want eq (predictor 1 changes nothing) assert
+
+% horizontal differencing
+<789ce3129183031e3105389b5f5219ce0600470d03f4> plain dup /Predictor 2 put exch rd
+want eq (predictor 2 undoes horizontal differencing) assert
+
+% each of the five row filters, all under predictor 12
+<789c63e01291d330b2710b884ac9ab60e01153d032b1f3088a492ba862e09754d63577f40e8dcf2cae0500a4fd0979>
+plain dup /Predictor 12 put exch rd
+want eq (the none row filter is undone) assert
+<789c63e412918303461e310504875f5219ce01004b4203f7>
+plain dup /Predictor 12 put exch rd
+want eq (the sub row filter is undone) assert
+<789c63e21291d330b2710b884ac9ab604201cc48000060f1034f>
+plain dup /Predictor 12 put exch rd
+want eq (the up row filter is undone) assert
+<789c63e6129153d6d03532b77174f36666e711148001664e3e614118000056a503ac>
+plain dup /Predictor 12 put exch rd
+want eq (the average row filter is undone) assert
+<789c63e112918303162624c0c28c04002d670193>
+plain dup /Predictor 12 put exch rd
+want eq (the paeth row filter is undone) assert
+
+% and a stream whose rows use a different filter each
+<789c63e41291830366761e4101186061460200387a022b>
+plain dup /Predictor 15 put exch rd
+want eq (rows may each use their own filter) assert
+
+% the parameters the stage is defined for
+/refuses { % {proc} /errname (what)
+    /e.w exch def /e.e exch def /e.p exch def
+    clear
+    /e.p load stopped {
+        $error /errorname get e.e eq e.w assert
+    }{ false e.w assert } ifelse
+    clear
+} def
+/src <789ce3129183031e3105389b5f5219ce0600470d03f4> def
+{ src << /Predictor 99 >> /FlateDecode filter } /rangecheck (a predictor out of range) refuses
+{ src << /Predictor 9 >> /FlateDecode filter } /rangecheck (a predictor below the png range) refuses
+{ src << /Predictor 16 >> /FlateDecode filter } /rangecheck (a predictor above the png range) refuses
+{ src << /Predictor (two) >> /FlateDecode filter } /typecheck (a predictor that is not an integer) refuses
+{ src << /Predictor 2 /BitsPerComponent 4 >> /FlateDecode filter } /rangecheck (a sample narrower than a byte) refuses
+{ src << /Predictor 2 /Colors 9 >> /FlateDecode filter } /rangecheck (more colours than a pixel carries) refuses
+{ src << /Predictor 2 /Columns 0 >> /FlateDecode filter } /rangecheck (a row of no columns) refuses
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

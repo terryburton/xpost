@@ -197,6 +197,17 @@ Xpost_Object xpost_file_cons_filter_flate(Xpost_Memory_File *mem, Xpost_Object s
 Xpost_Object xpost_file_cons_filter_dct(Xpost_Memory_File *mem, Xpost_Object src);
 Xpost_Object xpost_file_cons_filter_rsd(Xpost_Memory_File *mem, Xpost_Object src);
 Xpost_Object xpost_file_cons_filter_lzw(Xpost_Memory_File *mem, Xpost_Object src, int early);
+
+/**
+ * @brief undo the differencing an LZW or Flate stream was compressed with.
+ *
+ * Layers over the decompressing filter: predictor 2 is horizontal
+ * differencing, 10 and above the PNG row filters (PLRM Table 3.20).
+ */
+Xpost_Object xpost_file_cons_filter_predictor(Xpost_Memory_File *mem,
+                                              Xpost_Object src,
+                                              int predictor, int colors,
+                                              int bpc, int columns);
 Xpost_Object xpost_file_cons_filter_ccitt(Xpost_Memory_File *mem, Xpost_Object src, int k, int columns, int rows, int blackis1, int byteal, int eol, int eob);
 Xpost_Object xpost_file_cons_filter_enc_null(Xpost_Memory_File *mem, Xpost_Object tgt);
 Xpost_Object xpost_file_cons_filter_enc_hex(Xpost_Memory_File *mem, Xpost_Object tgt);
