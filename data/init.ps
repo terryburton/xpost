@@ -112,8 +112,8 @@ userdict /.internaldict 256 dict put
 
 % Debug aids and the internal context-state markers are C operators, not part of
 % the language, and must not sit in a program's lookup path. The machinery
-% operators above are relocated near the end of graphics loading, once the bind
-% pass has frozen the procedures that use them; these are graphics-independent
+% operators above are moved out of systemdict by the lockdown step, once its
+% bind pass has frozen the procedures that use them; these are graphics-independent
 % and used by nothing, so they move into .internaldict here, during init, and are
 % hidden whether or not graphics is ever loaded.
 1 dict begin
@@ -565,9 +565,9 @@ setglobal
 
 % No-graphics start procedures, selected by --no-graphics. Each mirrors its
 % graphics-loading counterpart above but runs .finalize alone, without
-% loadgraphics: the interpreter is still locked down -- the language relocates
-% into systemdict and the private namespaces are sealed and hidden -- while the
-% graphics modules are never loaded. This exercises the path in which loadgraphics
+% loadgraphics: the interpreter is still locked down -- the standard operators
+% are promoted, the machinery's references frozen and the private namespaces
+% sealed and hidden -- while the graphics modules are never loaded. This exercises the path in which loadgraphics
 % is genuinely optional, and lets a program that needs no graphics avoid the cost.
 /startstdinnographics {
     { //.xpostsys /.finalize get exec } stopped {
@@ -1362,9 +1362,10 @@ currentglobal true setglobal
     >> put
     setglobal
 
-    % These two belong with the rest of the language, in systemdict: the
-    % sweep that put it there ran before graphics loaded, so a definition
-    % made here would otherwise be left behind in userdict.
+    % The language is read into systemdict, but this pair is defined here,
+    % by loadgraphics itself, after graphics.ps has returned and closed the
+    % block that made systemdict current. They name it so they land with the
+    % operators they belong beside rather than in the program's namespace.
     systemdict begin
     % pagedevicedict  setpagedevice  -
     /setpagedevice {
@@ -1503,15 +1504,20 @@ currentglobal true setglobal
 % The interpreter lockdown. Runs once, after loadgraphics has loaded whatever it
 % is going to (or on its own if graphics is never loaded), when every helper the
 % machinery needs has been defined. It freezes the machinery's operator
-% references, relocates the language into systemdict and the private C operators
-% into .internaldict, seals and hides the private namespaces, and returns the
-% device classes to local VM. loadgraphics does the loading; this does the
+% references, promotes the procedure-implemented standard operators to real
+% operators, moves the private C operators into .internaldict, seals and hides
+% the private namespaces, and returns the device classes to local VM. The
+% language itself needs no moving: it is read into systemdict to begin with. loadgraphics does the loading; this does the
 % locking down -- so nothing unrelated to graphics is tied to loading it. The
 % shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
 .xpostsys /.finalize {
     //.internaldict /GRAPHICS_LOADED known { }{
-        % Open a writeable window on systemdict so the standard operators can be
-        % relocated into it; the matching relock below closes it.
+        % Open a writeable window on systemdict. loadgraphics opens the same
+        % one before reading the language into it; this call covers the run
+        % that never loads graphics, and is what lets the steps below undefine
+        % the private C operators from systemdict once they are copied into
+        % .internaldict. The matching relock below closes it, and closing it
+        % spends the one-shot so a program cannot reopen it.
         .sysdictunlock
     % Promote the procedure-implemented standard operators to real
     % operators: load answers operatortype for them and bind
@@ -1662,8 +1668,7 @@ currentglobal true setglobal
     .internaldict /GRAPHICS_LOADED true put
     .internaldict /USEDRAWLINE true put
     % device -- so a job's page setup does not leak into the next. In local VM the
-    % ordinary save/restore reverts those writes; a global home does not. (They
-    % were local until the language moved into global VM and were swept along.)
+    % ordinary save/restore reverts those writes; a global home does not.
     % Rebind each to a local copy in privatedict now that the device modules have
     % finished loading, with headroom for the parameters setpagedevice adds, and
     % drop the userdict anchor: the classes leave the program's namespace entirely

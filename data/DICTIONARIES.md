@@ -60,8 +60,10 @@ Exactly three deep, searched top-down: `systemdict` (0, bottom), `globaldict`
 (1, empty), `userdict` (2, top). `statusdict`, `serverdict`, `$error`,
 `errordict`, `FontDirectory` are **not** on the stack; `systemdict` *names* them
 (they resolve by bare name through that entry) but they are local dictionaries.
-**`userdict` is empty at start-up** — every interpreter name has been relocated
-into `systemdict` or a private home, so a program starts with a clean namespace.
+**`userdict` is empty at start-up** — every interpreter name is *defined* in its
+final home (`systemdict` for the language, a private dictionary for the
+machinery), so a program starts with a clean namespace. Nothing is staged in
+`userdict` and moved out afterwards.
 
 ## The dictionaries
 
@@ -74,8 +76,9 @@ into `systemdict` or a private home, so a program starts with a clean namespace.
 | `userdict` | local | program-owned | no | the program's own dictionary; **empty at start-up** |
 | `$error`, `errordict` | local | mutable | no | error record and handlers; local so a job's error state reverts; **named in** `systemdict` |
 | `statusdict`, `serverdict` | local | mutable | no | device/product status and job-server state a program may change; local so changes revert; **named in** `systemdict` |
-| `FontDirectory` | local | mutable | no | fonts defined this job; local, so they revert (global fonts persist as resources); **named in** `systemdict` |
-| `GlobalFontDirectory`, `SharedFontDirectory` | global | persistent | no | gs-compatible font-directory aliases, deliberately program-facing (see below) |
+| `FontDirectory` | local | mutable | no | fonts defined while the allocation mode was local; they revert with the save level that defined them; **named in** `systemdict`. `setglobal` rebinds the name to `GlobalFontDirectory` while the mode is global, so a font defined in terms of another finds the directory its own is going into (PLRM) |
+| `GlobalFontDirectory` | global | persistent | no | fonts defined while the allocation mode was global, and only those; survives the restores that empty `FontDirectory` (PLRM 3.7, Table 3.4) |
+| `SharedFontDirectory` | global | persistent | no | the same dictionary as `GlobalFontDirectory` under its older name |
 | `StandardEncoding`, `ISOLatin1Encoding` | global | static | read-only | shared encoding vectors; read-only per PLRM (findfont copies before installing) |
 
 Local dictionaries named in `systemdict` (`$error`, `statusdict`, …) use the
@@ -115,9 +118,11 @@ live in `.internaldict` or `privatedict`, not `systemdict`.
 Start-up runs in two separated stages, each a proc the start procedures call in
 turn. `loadgraphics` **loads** — it pulls in the graphics modules and nothing
 else. `.finalize` **locks down** — it freezes the machinery's operator
-references, relocates the language into `systemdict` and the private C operators
-into `.internaldict`, seals and hides the private namespaces, and returns the
-device classes to local VM in `privatedict`. The lockdown is not graphics work;
+references, promotes the procedure-implemented standard operators to real
+operators, moves the private C operators into `.internaldict`, seals and hides
+the private namespaces, and returns the device classes to local VM in
+`privatedict`. The language itself needs no moving: `loadgraphics` opens
+`systemdict` and reads it straight in. The lockdown is not graphics work;
 it only runs after `loadgraphics` because it must seal *after* everything that
 will ever be loaded. `.finalize` guards its graphics-only steps behind
 `/graphicsdict where`, so it hardens the interpreter with or without graphics —
@@ -159,7 +164,8 @@ machinery that is *both* local *and* private.
 | `.graphicsdict` | per-render mutable | the live graphics state: `currgstate` and the gstack of local gstate copies |
 | `.gstatetemplate` | mutable (device change) | the template a fresh gstate is copied from; `setpagedevice` writes its device |
 | `.gscratchdict` | per-render mutable | the scratch the machinery rewrites every render (stroke, caches, local resources) |
-| `.gscratchproc`, `.graphicsdictproc`, `.DEVICEproc` | static | procedures wrapped into operators; anchored so the collector keeps them (the operator table is outside its view) |
+| `.gscratchproc`, `.graphicsdictproc`, `.DEVICEproc` | static | the procedures the `.gscratch`, `graphicsdict` and `DEVICE` operators run; kept here because the operator table is outside the collector's view. Each takes its dictionary as a value rather than baking the name, which is what lets it be defined here — an immediately-evaluated reference would need the name on the dict stack, and `privatedict` is deliberately off it |
+| `.wrappedprocs` | static | the procedures behind every wrapped standard operator, for the same reason: the operator table cannot keep them alive. Each is in **global** VM — a local one would be freed by a `restore` past its creation with the table still pointing at it |
 | `.error` | mutable | the error hook `signalerror` runs; records into the local `$error` |
 | `.resourcepath` | static after host setup | resource search path; the host appends directories at start-up |
 | `DATA_DIR` | static | the directory modules load from |
