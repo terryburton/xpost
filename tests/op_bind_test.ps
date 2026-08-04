@@ -87,6 +87,37 @@
     (every systemdict-wrapped operator is an operator in systemdict) checkreg
 } if
 
+% --------------------- a PostScript operator is not shadowed by a C one
+% Some standard operators are written in PostScript over a C operator of
+% the same name: findfont keeps the resource table the C operator knows
+% nothing about, and reaches the C one through a frozen reference. Which
+% of the two a name resolves to depends on the order the dictionaries
+% were filled and searched while the language was read, so it is settled
+% a long way from here and by nothing that announces itself.
+%
+% Getting it wrong is silent. definefont registers the font and then
+% returns findfont's answer; bound against the C operator it answers
+% with a substitute face instead, and a program's own font is quietly
+% replaced by another that has all the same operators and different
+% glyphs. The round trip below is what says which one is in force.
+
+/tf.dict 10 dict def
+tf.dict begin
+  /FontType 3 def /FontMatrix [0.001 0 0 0.001 0 0] def
+  /FontBBox [0 0 1000 1000] def
+  /Encoding 256 array def 0 1 255 { Encoding exch /.notdef put } for
+  /CharProcs 1 dict def CharProcs /.notdef {} put
+  /BuildChar { exch begin Encoding exch get CharProcs exch get exec end } def
+end
+/tf.made /tf.testfont tf.dict definefont def
+tf.made /FontType get 3 eq
+    (definefont answers with the font it was given) assert
+/tf.testfont findfont /FontType get 3 eq
+    (findfont answers with the font definefont registered) assert
+FontDirectory /tf.testfont known
+    (definefont registered the font in FontDirectory) assert
+FontDirectory /tf.testfont undef
+
 % {test} (what)  -  run the test on every name, naming any that fail
 /eachop {
     /e.w exch def /e.t exch def /e.bad 0 def
