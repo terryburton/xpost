@@ -61,6 +61,14 @@ static inline const char *xpost_op_type_name(unsigned int index)
                                               : xpost_object_type_names[index];
 }
 
+/**
+ * @brief the type-pattern code a type name denotes, or -1.
+ *
+ * The names the type operator answers, plus the pattern names the
+ * signature machinery understands: numbertype, proctype, anytype.
+ */
+int xpost_op_type_code(Xpost_Context *ctx, Xpost_Object name);
+
 int xpost_oper_init_type_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 #endif

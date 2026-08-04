@@ -295,6 +295,7 @@ xpost_oplib_init_ops
 xpost_op_privatedict_load
 xpost_op_record_run_error
 xpost_op_stop
+xpost_op_type_code
 xpost_path_control_engage
 xpost_path_control_is_engaged
 xpost_path_permit_read

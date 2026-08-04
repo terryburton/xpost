@@ -89,39 +89,6 @@ int Vrestore(Xpost_Context *ctx,
     int z;
     unsigned int vs;
     int ret;
-    unsigned int stacks[4];
-    int k, n, i;
-
-    /* A composite created since the save is discarded by the restore,
-       so a stack still holding one would be left pointing at storage
-       that has gone; the restore is refused instead (PLRM 3.7.3).
-       Global VM is not restored, so only local composites count. */
-    stacks[0] = ctx->os; stacks[1] = ctx->es;
-    stacks[2] = ctx->ds; stacks[3] = ctx->hold;
-    for (k = 0; k < 4; k++)
-    {
-        n = xpost_stack_count(ctx->lo, stacks[k]);
-        for (i = 0; i < n; i++)
-        {
-            Xpost_Object o = xpost_stack_bottomup_fetch(ctx->lo, stacks[k], i);
-            int ent;
-            unsigned int stamp;
-
-            if (!xpost_object_is_composite(o))
-                continue;
-            if (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)
-                continue;
-            ent = xpost_object_get_ent(o);
-            if (ent < 0 || (unsigned int)ent >= ctx->lo->table.nextent)
-                continue;
-            stamp = (ctx->lo->table.tab[ent].mark
-                     & XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK)
-                    >> XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
-            if (stamp > (unsigned int)V.save_.lev)
-                return invalidrestore;
-        }
-    }
-
     ++ctx->namebind_gen; /* restored dicts may change bindings */
 
     ret = xpost_memory_table_get_addr(ctx->lo,
@@ -145,9 +112,10 @@ int Vrestore(Xpost_Context *ctx,
        3.8.2): sweep the local table for file entities born above the
        restored depth and release them -- closing and freeing exactly as
        the collector would, since nothing surviving the restore can
-       reach them. A file still referenced from a stack stays open; a
-       composite still referenced has already refused the restore
-       above. */
+       reach them. A file still referenced from a stack stays open: the
+       spec answers that situation with invalidrestore, which is not
+       implemented -- see the note in tests/save_restore_test.ps -- and
+       closing under a live reference would be worse. */
     if (ctx->lo->file_birth_max > (unsigned int)V.save_.lev + 1)
     {
         unsigned int ent, i, stamp;

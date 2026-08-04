@@ -560,7 +560,9 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
 
 Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
                                          Xpost_Object name,
-                                         Xpost_Object proc)
+                                         Xpost_Object proc,
+                                         int in,
+                                         const byte *types)
 {
     Xpost_Operator *optab;
     Xpost_Operator op;
@@ -620,6 +622,42 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
     op.proc = proc;
     optab[opcode] = op;
     ++_xpost_noops;
+
+    if (in >= 0)
+    {
+        /* the operator states the operands it takes, and the dispatcher
+           enforces the statement exactly as it does for one written in
+           C: a signature with no function of its own, whose procedure
+           runs once the types have matched */
+        unsigned int sigadr;
+        unsigned int tadr;
+        Xpost_Signature *sig;
+        byte *b;
+        int k;
+
+        if (!xpost_memory_file_alloc(ctx->gl, sizeof(Xpost_Signature), &sigadr))
+        {
+            XPOST_LOG_ERR("cannot allocate signature block for %s", buf);
+            return null;
+        }
+        if (!xpost_memory_file_alloc(ctx->gl, (unsigned int)(in ? in : 1), &tadr))
+        {
+            XPOST_LOG_ERR("cannot allocate type block for %s", buf);
+            return null;
+        }
+        optab = (void *)(ctx->gl->base + optadr);
+        sig = (void *)(ctx->gl->base + sigadr);
+        b = (void *)(ctx->gl->base + tadr);
+        for (k = 0; k < in; k++)
+            b[k] = types[k];
+        sig[0].in = in;
+        sig[0].out = 0;
+        sig[0].t = tadr;
+        sig[0].fp = NULL;
+        sig[0].checkstack = NULL;
+        optab[opcode].n = 1;
+        optab[opcode].sigadr = sigadr;
+    }
 
     return xpost_operator_cons_opcode(opcode);
 }
@@ -688,6 +726,37 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
 /* execute an operator function by opcode
    the opcode is the payload of an operator object
 */
+/* Schedule a wrapped operator's procedure. The call's frame rides the
+   exec stack beneath it -- the operator and the operand and dict depths
+   at the call, under a finish marker that carries them off when the
+   procedure completes. An unwind that discards the marker discards the
+   record with it, and the error path reads the live records straight
+   off the stack to name this operator and put the stack depths back
+   (see _onerror). The operands stay where they are: the procedure takes
+   them from the operand stack itself. */
+static
+int _exec_wrapped_proc(Xpost_Context *ctx, unsigned opcode, Xpost_Object proc)
+{
+    Xpost_Object fr[5];
+    int k;
+
+    fr[0] = xpost_int_cons((integer)opcode);
+    fr[1] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->os));
+    fr[2] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->ds));
+    fr[3] = xpost_operator_cons_opcode(ctx->opcode_shortcuts.wrapdone);
+    fr[4] = xpost_object_cvx(proc);
+    for (k = 0; k < 5; k++)
+    {
+        if (!xpost_stack_push(ctx->lo, ctx->es, fr[k]))
+        {
+            while (k--)
+                (void)xpost_stack_pop(ctx->lo, ctx->es);
+            return execstackoverflow;
+        }
+    }
+    return 0;
+}
+
 int xpost_operator_exec(Xpost_Context *ctx,
                         unsigned opcode)
 {
@@ -733,26 +802,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
            live records straight off the stack to name this operator
            and put the stack depths back (see _onerror) */
         if (xpost_object_get_type(op.proc) == arraytype)
-        {
-            Xpost_Object fr[5];
-            int k;
-
-            fr[0] = xpost_int_cons((integer)opcode);
-            fr[1] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->os));
-            fr[2] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->ds));
-            fr[3] = xpost_operator_cons_opcode(ctx->opcode_shortcuts.wrapdone);
-            fr[4] = xpost_object_cvx(op.proc);
-            for (k = 0; k < 5; k++)
-            {
-                if (!xpost_stack_push(ctx->lo, ctx->es, fr[k]))
-                {
-                    while (k--)
-                        (void)xpost_stack_pop(ctx->lo, ctx->es);
-                    return execstackoverflow;
-                }
-            }
-            return 0;
-        }
+            return _exec_wrapped_proc(ctx, opcode, op.proc);
         XPOST_LOG_ERR("operator has no signatures");
         return unregistered;
     }
@@ -835,6 +885,11 @@ int xpost_operator_exec(Xpost_Context *ctx,
     return err;
 
   call:
+    /* a signature whose procedure is written in PostScript: the types
+       have matched, and the body takes the operands from the stack */
+    if (!sp[i].fp && (xpost_object_get_type(op.proc) == arraytype))
+        return _exec_wrapped_proc(ctx, opcode, op.proc);
+
     /* If we're executing the context's "currentobject",
        set the number of arguments consumed in the pad0 of currentobject,
        and set a flag declaring that this has been done.

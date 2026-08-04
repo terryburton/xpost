@@ -55,6 +55,7 @@
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
+#include "xpost_op_type.h"
 #include "xpost_op_control.h"
 
 /* any  exec  -
@@ -616,7 +617,49 @@ int xpost_op_wrapop(Xpost_Context *ctx,
 {
     Xpost_Object o;
 
-    o = xpost_operator_cons_wrapped(ctx, name, proc);
+    o = xpost_operator_cons_wrapped(ctx, name, proc, -1, NULL);
+    if (xpost_object_get_type(o) != operatortype)
+        return unregistered;
+    if (!xpost_stack_push(ctx->lo, ctx->os, o))
+        return stackoverflow;
+    return 0;
+}
+
+/* name proc array  .wrapopsig  operator
+   install an operator that runs the procedure, stating the operands it
+   takes. The array names one type per operand in operand order, using
+   the names the type operator answers plus numbertype for either
+   number, proctype for an executable array, and anytype for no
+   restriction. The dispatcher enforces the statement before the
+   procedure runs, exactly as for an operator written in C. */
+static
+int xpost_op_wrapopsig(Xpost_Context *ctx,
+                       Xpost_Object name,
+                       Xpost_Object proc,
+                       Xpost_Object sig)
+{
+    Xpost_Object o;
+    byte types[XPOST_OPERATOR_MAX_SIG];
+    int n = sig.comp_.sz;
+    int i;
+
+    if (n > XPOST_OPERATOR_MAX_SIG)
+        return limitcheck;
+    for (i = 0; i < n; i++)
+    {
+        Xpost_Object el = xpost_array_get(ctx, sig, i);
+        int t;
+
+        if (xpost_object_get_type(el) != nametype)
+            return typecheck;
+        t = xpost_op_type_code(ctx, el);
+        if (t < 0)
+            return rangecheck;
+        /* the dispatcher reads its type pattern from the top of the
+           stack down, and the array reads bottom up */
+        types[n - 1 - i] = (byte)t;
+    }
+    o = xpost_operator_cons_wrapped(ctx, name, proc, n, types);
     if (xpost_object_get_type(o) != operatortype)
         return unregistered;
     if (!xpost_stack_push(ctx->lo, ctx->os, o))
@@ -744,6 +787,9 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
         xpost_operator_cons(ctx, ".rundied", (Xpost_Op_Func)xpost_op_rundied, 0, 0));
     INSTALL;
     op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".wrapopsig", (Xpost_Op_Func)xpost_op_wrapopsig, 1, 3,
+                             nametype, proctype, arraytype);
     INSTALL;
     op = xpost_operator_cons(ctx, "stopped", (Xpost_Op_Func)xpost_op_any_stopped, 0, 1, anytype);
     INSTALL;

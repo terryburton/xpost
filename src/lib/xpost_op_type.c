@@ -70,6 +70,35 @@ int Atype(Xpost_Context *ctx,
     return 0;
 }
 
+int xpost_op_type_code(Xpost_Context *ctx, Xpost_Object name)
+{
+    Xpost_Object str = xpost_name_get_string(ctx, name);
+    char buf[64];
+    unsigned int len;
+    unsigned int i;
+
+    if (xpost_object_get_type(str) != stringtype)
+        return -1;
+    len = str.comp_.sz;
+    if (len >= sizeof buf)
+        return -1;
+    memcpy(buf, xpost_string_get_pointer(ctx, str), len);
+    buf[len] = '\0';
+
+    if (strcmp(buf, "anytype") == 0)
+        return anytype;
+    if (strcmp(buf, "numbertype") == 0)
+        return numbertype;
+    if (strcmp(buf, "floattype") == 0)
+        return floattype;
+    if (strcmp(buf, "proctype") == 0)
+        return proctype;
+    for (i = 0; i < XPOST_OBJECT_NTYPES; i++)
+        if (strcmp(buf, xpost_object_type_names[i]) == 0)
+            return (int)i;
+    return -1;
+}
+
 /* obj   cvlit  obj
    set executable attribute in obj to literal (quoted) */
 static

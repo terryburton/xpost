@@ -128,6 +128,12 @@ enum typepat
     proctype };
 
 /**
+ * @def XPOST_OPERATOR_MAX_SIG
+ * @brief the most operands a signature may state
+ */
+#define XPOST_OPERATOR_MAX_SIG 8
+
+/**
  * @brief constant size of optab structure
  */
 #define MAXOPS 1024
@@ -174,7 +180,9 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
  */
 Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
                                          Xpost_Object name,
-                                         Xpost_Object proc);
+                                         Xpost_Object proc,
+                                         int in,
+                                         const byte *types);
 
 /**
  * @brief execute an operator
