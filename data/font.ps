@@ -933,8 +933,7 @@ setglobal
 % operators read and set the store itself
 /cachestatus { .cachestatus } def
 /setcachelimit {
-    % the operand is an integer; converting whatever arrived took a
-    % real, a string and anything else cvi would swallow
+    % the operand is an integer
     dup type /integertype ne
         { /setcachelimit cvx /typecheck signalerror } if
     .setcachelimit

@@ -97,11 +97,10 @@ errordict begin
         //$error begin
             newerror {
                 /newerror false def
-                % reported as a binary object sequence when one is asked
-                % for and binary encoding is enabled: a four element
-                % array under tag 250 carrying the class of error, its
-                % name, what was executing, and the flag the display
-                % extension reads
+                % a binary object sequence when one is asked for and
+                % binary encoding is enabled: a four element array under
+                % tag 250 carrying the class of error, its name, what
+                % was executing, and a boolean
                 currentdict /binary known { binary }{ false } ifelse
                 currentobjectformat 0 ne and {
                     [ /Error errorname
@@ -147,7 +146,7 @@ errordict begin
                     estack { == } forall
                 } if
                 flush
-                % the handler consumes the context it reported
+                % the context belongs to the error just reported
                 /errorinfo null def
                 } ifelse
             } if

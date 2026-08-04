@@ -722,8 +722,7 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
     int ret;
 
     /* a key may be any object except null (PLRM 3.3.5): null is what an
-       empty slot holds, so a null key names nothing and the entry could
-       never be found again. Stored quietly, it discarded the value */
+       empty slot holds, so a null key names nothing */
     if (xpost_object_get_type(k) == nulltype)
         return typecheck;
 

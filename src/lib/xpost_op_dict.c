@@ -362,8 +362,7 @@ int xpost_op_any_where(Xpost_Context *ctx,
     int z;
     int isname;
 
-    /* a key may be any object except null, so asking which dictionary
-       defines null is not a question with a false for an answer */
+    /* a key may be any object except null (PLRM 3.3.5) */
     if (xpost_object_get_type(K) == nulltype)
         return typecheck;
 

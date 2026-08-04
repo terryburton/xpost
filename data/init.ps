@@ -164,8 +164,7 @@ setglobal
 /languagelevel 3 def
 
 /setvmthreshold {
-    % the threshold itself is not acted on, but the operand is still an
-    % integer: discarding anything at all accepted every mistake
+    % the threshold is not acted on; the operand is still an integer
     dup type /integertype ne
         { /setvmthreshold cvx /typecheck signalerror } if
     pop
@@ -807,10 +806,8 @@ end % userdict
                 get
                 findfont % call proc (tail-)recursively 
             }{
-                % nothing found and nothing to substitute: the operator
-                % either yields a font or says why not. Printing a note
-                % and returning an empty stack left the caller to fail
-                % at whatever it did next, with nothing to connect it to
+                % nothing found and nothing to substitute: the
+                % operator yields a font or says why not
                 exch pop pop
                 /findfont cvx /invalidfont signalerror
             } ifelse

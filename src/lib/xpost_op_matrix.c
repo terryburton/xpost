@@ -272,9 +272,7 @@ int _set_matrix(Xpost_Context *ctx,
 {
     Xpost_Object ctm;
 
-    /* a transformation matrix is six numbers: a shorter array was
-       copied into the current one, leaving whatever the current matrix
-       already held in the elements it did not reach */
+    /* a transformation matrix is six numbers */
     if (psmat.comp_.sz != 6)
         return rangecheck;
 

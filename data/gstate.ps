@@ -202,8 +202,7 @@ end
 % gstate  setgstate  -
 % set graphics state from gstate
 /setgstate {
-    % the operand is examined before the current state is fetched, so
-    % an empty stack reports the shortage rather than a type
+    % the operand is examined before the current state is fetched
     dup type /dicttype ne { /setgstate cvx /typecheck signalerror } if
     dup /currmatrix known not
         { /setgstate cvx /typecheck signalerror } if
@@ -627,9 +626,8 @@ setglobal
 % the graphics state and round-trip through currentscreen and
 % currentcolorscreen
 /setscreen {
-    % frequency and angle are numbers and the spot function is either a
-    % procedure or the name of one; a number in the spot's place was
-    % taken and then never called
+    % frequency and angle are numbers; the spot function is a
+    % procedure or the name of one
     dup type dup /arraytype ne exch /nametype ne and
         { /setscreen cvx /typecheck signalerror } if
     1 index type dup /integertype ne exch /realtype ne and

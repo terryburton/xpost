@@ -459,10 +459,7 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         if (!xpost_object_is_readable(ctx, F))
             return invalidaccess;
         /* both parameters are required of the dictionary form (PLRM
-           3.13.3). Defaulted, the filter reaches its end of data at
-           once and hands back a stream that is merely empty, so a
-           dictionary that names neither -- or names them wrongly --
-           reads as a truncation rather than as the mistake it is */
+           3.13.3) */
         eod = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EODString"));
         cnt = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "EODCount"));
         if ((xpost_object_get_type(eod) == invalidtype)

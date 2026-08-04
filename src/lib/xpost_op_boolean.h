@@ -88,7 +88,7 @@ static inline int xpost_op_relation(Xpost_Op_Relation rel, int cmp)
  * including one of each, is a typecheck (PLRM 8.2). eq and ne are the
  * general pair and take any two objects, so they do not ask this.
  * Shared with the interpreter's fused execution, which reaches the same
- * comparison by another road and must reach the same answer.
+ * comparison by another road.
  */
 static inline int xpost_op_ordered_comparable(Xpost_Object x, Xpost_Object y)
 {
