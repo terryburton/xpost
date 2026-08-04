@@ -331,7 +331,7 @@ setglobal
 /stack [ ] { count dup 1 add copy //= repeat pop } //.xpostsys /.defop get exec
 
 %(6\n)print
-userdict begin
+systemdict begin
 % ==
 24 dict begin
 /==dict currentdict def
@@ -813,6 +813,11 @@ setglobal
 setglobal
 
 end % userdict
+
+% The rest of the boot file defines the language too, so it goes where the
+% language lives. systemdict is still writeable here -- the interpreter
+% seals it only after this file has been read.
+systemdict begin
 
 /findfont [ /anytype ] {
     % a resource key is an object of any type except null (PLRM 3.9),
@@ -1794,6 +1799,8 @@ currentglobal true setglobal
     (Xpost is running. Type '(filename)run' to run a program.\n)print
 } put
 setglobal
+
+end % systemdict
 
 (/prepr.ps) //.xpostsys /.loadmodule get exec  % use nifty preview prompt!
 
