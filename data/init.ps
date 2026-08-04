@@ -1011,6 +1011,38 @@ currentglobal true setglobal
 setglobal
 currentglobal true setglobal
 .xpostsys /.upathargs [ 4 2 2 2 2 6 6 5 5 5 0 0 ] put
+% obj /spec  .argok  bool
+% A spec names an object type, or one of two families: numbertype for
+% either number, proctype for an executable array.
+.xpostsys /.argok {
+    dup /anytype eq { pop pop true }{
+    dup /numbertype eq {
+        pop type dup /integertype eq exch /realtype eq or
+    }{
+    dup /proctype eq {
+        pop dup xcheck exch type dup /arraytype eq exch /packedarraytype eq or and
+    }{
+        exch type eq
+    } ifelse } ifelse } ifelse
+} put
+
+% /opname [ specs ]  .checkargs  -
+% The operands an operator takes, listed in operand order. The count is
+% settled before the types, so a short stack reports the shortage.
+.xpostsys /.checkargs {
+    2 dict begin
+    /a.t exch def /a.op exch def
+    count a.t length lt { a.op cvx /stackunderflow signalerror } if
+    0 1 a.t length 1 sub {
+        /a.i exch def
+        a.t length 1 sub a.i sub index
+        a.t a.i get
+        //.xpostsys /.argok get exec not
+            { a.op cvx /typecheck signalerror } if
+    } for
+    end
+} put
+
 .xpostsys /.upathopset <<
     /setbbox 4 /moveto 2 /rmoveto 2 /lineto 2 /rlineto 2 /curveto 6
     /rcurveto 6 /arc 5 /arcn 5 /arct 5 /closepath 0 /ucache 0

@@ -268,8 +268,7 @@ end
     graphicsdict /currgstate get /ucr get
 } def
 /setcolorrendering {
-    dup type /dicttype ne
-        { /setcolorrendering cvx /typecheck signalerror } if
+    /setcolorrendering [ /dicttype ] //.xpostsys /.checkargs get exec
     graphicsdict /currgstate get exch /colorrendering exch put
 } def
 /currentcolorrendering {
@@ -649,14 +648,12 @@ setglobal
 % the graphics state and round-trip through currentscreen and
 % currentcolorscreen
 /setscreen {
-    % frequency and angle are numbers; the spot function is a
-    % procedure or the name of one
-    dup type dup /arraytype ne exch /nametype ne and
-        { /setscreen cvx /typecheck signalerror } if
-    1 index type dup /integertype ne exch /realtype ne and
-        { /setscreen cvx /typecheck signalerror } if
-    2 index type dup /integertype ne exch /realtype ne and
-        { /setscreen cvx /typecheck signalerror } if
+    % the spot function may be named rather than given
+    dup type /nametype ne
+        { /setscreen [ /numbertype /numbertype /proctype ]
+          //.xpostsys /.checkargs get exec }
+        { /setscreen [ /numbertype /numbertype /nametype ]
+          //.xpostsys /.checkargs get exec } ifelse
     graphicsdict /currgstate get exch /screenproc exch put
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put
@@ -869,8 +866,7 @@ setglobal
 
 % flag  setstrokeadjust  -   (recorded only)
 /setstrokeadjust {
-    dup type /booleantype ne
-        { /setstrokeadjust cvx /typecheck signalerror } if
+    /setstrokeadjust [ /booleantype ] //.xpostsys /.checkargs get exec
     graphicsdict /currgstate get exch /strokeadjust exch put
 } def
 /currentstrokeadjust {
@@ -880,8 +876,7 @@ setglobal
 
 % num  setsmoothness  -   (recorded only)
 /setsmoothness {
-    dup type dup /integertype ne exch /realtype ne and
-        { /setsmoothness cvx /typecheck signalerror } if
+    /setsmoothness [ /numbertype ] //.xpostsys /.checkargs get exec
     graphicsdict /currgstate get exch /smoothness exch put
 } def
 /currentsmoothness {
@@ -962,8 +957,7 @@ setglobal
 
 % bool  setoverprint  -
 /setoverprint {
-    dup type /booleantype ne
-        { /setoverprint cvx /typecheck signalerror } if
+    /setoverprint [ /booleantype ] //.xpostsys /.checkargs get exec
     graphicsdict /currgstate get exch /overprint exch put
 } def
 
