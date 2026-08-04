@@ -1044,6 +1044,18 @@ currentglobal true setglobal
 % The operands each wrapped operator takes, in operand order. An
 % operator named here is wrapped with its statement and the dispatcher
 % enforces it; one not named is wrapped as before and checks itself.
+.xpostsys /.wrapwithsig {
+    2 dict begin
+    /w.proc exch def /w.name exch def
+    userdict w.name
+    w.name /w.proc load
+    //.xpostsys /.opsigs get w.name 2 copy known
+        { get .wrapopsig }
+        { pop pop .wrapop } ifelse
+    put
+    end
+} put
+
 .xpostsys /.opsigs <<
     /setgray       [ /numbertype ]
     /setrgbcolor   [ /numbertype /numbertype /numbertype ]
@@ -1055,12 +1067,67 @@ currentglobal true setglobal
     /show          [ /stringtype ]
     /stringwidth   [ /stringtype ]
     /glyphshow     [ /nametype ]
-    /xshow         [ /stringtype /arraytype ]
-    /yshow         [ /stringtype /arraytype ]
-    /xyshow        [ /stringtype /arraytype ]
+    /xshow         [ /stringtype /anytype ]
+    /yshow         [ /stringtype /anytype ]
+    /xyshow        [ /stringtype /anytype ]
     /image         [ /anytype ]
     /makepattern   [ /dicttype /arraytype ]
     /scalefont     [ /dicttype /numbertype ]
+    /charpath       [ /stringtype /booleantype ]
+    /ashow          [ /numbertype /numbertype /stringtype ]
+    /widthshow      [ /numbertype /numbertype /integertype /stringtype ]
+    /awidthshow     [ /numbertype /numbertype /integertype /numbertype /numbertype /stringtype ]
+    /kshow          [ /proctype /stringtype ]
+    /cshow          [ /proctype /stringtype ]
+    /definefont     [ /anytype /dicttype ]
+    /undefinefont   [ /anytype ]
+    /findfont       [ /anytype ]
+    /makefont       [ /dicttype /arraytype ]
+    /selectfont     [ /anytype /numbertype ]
+    /sethalftone    [ /dicttype ]
+    /setpagedevice  [ /dicttype ]
+    /setcachedevice [ /numbertype /numbertype /numbertype /numbertype /numbertype /numbertype ]
+    /setcharwidth   [ /numbertype /numbertype ]
+    /setcolortransfer [ /proctype /proctype /proctype /proctype ]
+    /shfill         [ /dicttype ]
+    /uappend        [ /arraytype ]
+    /ueofill        [ /arraytype ]
+    /ufill          [ /arraytype ]
+    /ustroke        [ /arraytype ]
+    /ustrokepath    [ /arraytype ]
+    /upath          [ /booleantype ]
+    /composefont    [ /anytype /anytype /arraytype ]
+    /clip           [ ]
+    /clippath       [ ]
+    /copypage       [ ]
+    /currentcmykcolor [ ]
+    /currentcolor   [ ]
+    /currentcolorscreen [ ]
+    /currentcolorspace [ ]
+    /currentcolortransfer [ ]
+    /currentgray    [ ]
+    /currenthalftone [ ]
+    /currenthsbcolor [ ]
+    /currentpagedevice [ ]
+    /currentrgbcolor [ ]
+    /currentscreen  [ ]
+    /currenttransfer [ ]
+    /eoclip         [ ]
+    /eofill         [ ]
+    /erasepage      [ ]
+    /fill           [ ]
+    /flattenpath    [ ]
+    /grestore       [ ]
+    /grestoreall    [ ]
+    /gsave          [ ]
+    /initclip       [ ]
+    /initgraphics   [ ]
+    /nulldevice     [ ]
+    /pathbbox       [ ]
+    /reversepath    [ ]
+    /showpage       [ ]
+    /stroke         [ ]
+    /strokepath     [ ]
 >> put
 
 .xpostsys /.upathopset <<
@@ -1469,12 +1536,7 @@ currentglobal true setglobal
                 % an operator that states its operands is wrapped with
                 % the statement, so the dispatcher enforces it before
                 % the procedure runs, exactly as for one written in C
-                1 index //.xpostsys /.opsigs get 2 index 2 copy known {
-                    get 3 1 roll exch .wrapopsig
-                }{
-                    pop pop exch .wrapop
-                } ifelse
-                userdict 3 1 roll put
+                //.xpostsys /.wrapwithsig get exec
             }{ pop pop } ifelse
         }{ pop } ifelse
     } forall
