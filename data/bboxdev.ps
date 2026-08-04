@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading bboxdev.ps...)print } ifelse
 
-/newbboxdevice { % width height  .  IMAGE-device-dict
+.privatedict /newbboxdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_BBOX get dup /Create get exec
-} def
+} put
 
 % .xpost_BBOX computes the bounding box of all marks and prints it on Emit --
 % without rasterizing (NoOutput). Coordinates arrive in device space; Emit
@@ -157,7 +157,7 @@
 
 /TESTGRAPHICS where {pop
     (TESTGRAPHICS bboxdev)=
-    /dev 100 100 newbboxdevice def
+    /dev 100 100 .privatedict /newbboxdevice get exec def
     % a filled triangle spanning device x[10,30] y[20,40]
     0 [ [10 20] [30 20] [30 40] ] dev dup /FillPoly get exec
     % a white rect must not mark (WhiteIsOpaque unset), and the page

@@ -5,9 +5,9 @@
 % thresholds each row at half coverage, black where dark, packed
 % most significant bit first as the portable bitmap format wants.
 
-/newPBMIMAGEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newPBMIMAGEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PBMIMAGE get dup /Create get exec
-} def
+} put
 
 /.xpost_PBMIMAGE .xpost_PGMIMAGE dup length 2 add dict copy def
 

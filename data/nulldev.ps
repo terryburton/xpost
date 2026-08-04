@@ -5,9 +5,9 @@
     612 792 .privatedict /newnulldevice get exec
     put
 } //.xpostsys /.defop get exec
-/newnulldevice { % width height
+.privatedict /newnulldevice { % width height
     .privatedict /.xpost_NULLDEV get dup /Create get exec
-} def
+} put
 
 % .xpost_NULLDEV device implements the "nulldevice", which
 % does no drawing, but otherwise performs all graphics operations

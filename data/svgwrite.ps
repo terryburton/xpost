@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading svgwrite.ps...)print } ifelse
 
-/newSVGWRITEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newSVGWRITEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_SVGWRITE get dup /Create get exec
-} def
+} put
 
 % .xpost_SVGWRITE writes a single-page vector SVG: the marking methods append
 % path and rect elements and Emit wraps them in the document structure.

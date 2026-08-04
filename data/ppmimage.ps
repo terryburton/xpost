@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading ppmimage.ps...)print } ifelse
 
-/newPPMIMAGEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newPPMIMAGEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PPMIMAGE get dup /Create get exec
-} def
+} put
 
 % .xpost_PPMIMAGE, the 24-bit rgb raster class: the shared raster method
 % suite (.makerasterclass, image.ps) over three colour components per

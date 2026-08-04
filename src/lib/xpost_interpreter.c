@@ -1899,8 +1899,14 @@ void setlocalconfig(Xpost_Context *ctx,
         { "jpeg",    "loadjpegdevice",   "newjpegdevice"      },
         { NULL, NULL, NULL }
     };
+    /* The maker is looked for in privatedict first, where the makers
+       written in PostScript live, and in systemdict otherwise, where the
+       ones a C driver registers live. That way neither has to be visible
+       to a program for this to reach it. */
     const char *strtemplate = "currentglobal false setglobal "
-                        "%s graphicsdict /currgstate get /device %s %s put "
+                        "%s graphicsdict /currgstate get /device %s "
+                        ".privatedict /%s 2 copy known "
+                        "{ get }{ pop pop /%s load } ifelse exec put "
                         "graphicsdict /.outputdevice /%s put "
                         "setglobal";
     Xpost_Object namenewdev;
@@ -1946,15 +1952,15 @@ void setlocalconfig(Xpost_Context *ctx,
         dimensions = x;
     }
     newdevstr = xpost_string_cons(ctx,
-                                  strlen(strtemplate) - 8
+                                  strlen(strtemplate) - 10  /* five %s */
                                   + strlen(device_strings[i][1])
                                   + strlen(dimensions)
-                                  + strlen(device_strings[i][2])
+                                  + 2 * strlen(device_strings[i][2])
                                   + strlen(device_strings[i][0]) + 1,
                                   NULL);
     sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
             device_strings[i][1], dimensions, device_strings[i][2],
-            device_strings[i][0]);
+            device_strings[i][2], device_strings[i][0]);
     --newdevstr.comp_.sz; /* trim the '\0' */
 
     namenewdev = xpost_name_cons(ctx, "newdefaultdevice");

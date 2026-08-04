@@ -6,9 +6,9 @@
 % image file directory, and the pixels as a single uncompressed
 % strip of rgb triplets at 72 dots per inch.
 
-/newTIFFIMAGEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newTIFFIMAGEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_TIFFIMAGE get dup /Create get exec
-} def
+} put
 
 /.xpost_TIFFIMAGE .xpost_PPMIMAGE dup length 2 add dict copy def
 

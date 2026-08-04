@@ -1637,20 +1637,6 @@ currentglobal true setglobal
 
 
 
-    % The device makers are global procedures the sweep just carried into
-    % systemdict, but a program never constructs a device by calling one -- the
-    % device is chosen through the default device or the nulldevice operator -- so
-    % they are interpreter internals. Move them on into privatedict (systemdict is
-    % still unlocked here), where the runtime device paths reach them by frozen
-    % reference. Guard per name: without graphics they were never defined, and the
-    % on-demand C-driver makers register only when their device is selected.
-    [ /newPGMIMAGEdevice /newPBMIMAGEdevice /newPPMIMAGEdevice /newTIFFIMAGEdevice
-      /newnulldevice /newbboxdevice /newPDFWRITEdevice /newSVGWRITEdevice
-      /newDSCWRITEdevice ]
-    { dup systemdict exch known
-        { dup systemdict 1 index get .privatedict 3 1 roll put systemdict exch undef }
-        { pop } ifelse
-    } forall
 
     % userdict, errordict, $error and FontDirectory are names in systemdict for
     % local dictionaries; the userdict copies are dropped so each name resolves

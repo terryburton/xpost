@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading dscwrite.ps...)print } ifelse
 
-/newDSCWRITEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newDSCWRITEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_DSCWRITE get dup /Create get exec
-} def
+} put
 
 % .xpost_DSCWRITE writes a DSC-conforming PostScript program of the marks the
 % pages received, in the manner of a distiller: a multi-page job collects every

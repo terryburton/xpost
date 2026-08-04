@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading pgmimage.ps...)print } ifelse
 
-/newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newPGMIMAGEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PGMIMAGE get dup /Create get exec
-} def
+} put
 
 % .xpost_PGMIMAGE, the 8-bit grayscale raster class: the shared raster
 % method suite (.makerasterclass, image.ps) over one grey component per

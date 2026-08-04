@@ -1,8 +1,8 @@
 //.internaldict /QUIET known { }{ (loading pdfwrite.ps...)print } ifelse
 
-/newPDFWRITEdevice { % width height  .  IMAGE-device-dict
+.privatedict /newPDFWRITEdevice { % width height  .  IMAGE-device-dict
     .privatedict /.xpost_PDFWRITE get dup /Create get exec
-} def
+} put
 
 % .xpost_PDFWRITE writes a vector PDF: the marking methods append content-stream
 % operators and the device wraps them in the PDF file structure. A multi-page
