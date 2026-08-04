@@ -32,8 +32,12 @@
   /d exch def /o exch cvlit def
   d 0 gt found null eq and {
     o type /dicttype eq { { o /.strcat known { /found o store } if } stopped pop }
-    { o type /arraytype eq o rcheck and {
-        0 1 o length 1 sub { o exch get d 1 sub probe } for } if } ifelse
+    % and evaluates both its operands, so the type test has to stand as
+    % its own condition: asking a non-composite whether it is readable
+    % is a typecheck, not a false
+    { o type /arraytype eq {
+        o rcheck {
+          0 1 o length 1 sub { o exch get d 1 sub probe } for } if } if } ifelse
   } if
   end
 } def
@@ -99,7 +103,9 @@ def
 /pscan { % proc label depth  -  (flag exec-name elements resolving to operators)
   4 dict begin
   /d exch def /label exch def /p exch cvlit def
-  p rcheck {
+  % the same: p is only asked whether it is readable once it is known to
+  % be something that carries an access at all
+  p type /arraytype eq { p rcheck }{ false } ifelse {
     0 1 p length 1 sub {
       p exch get
       dup xcheck exch cvlit /v exch def /vx exch def

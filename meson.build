@@ -880,6 +880,14 @@ test('op-compare',
   args: [ xpost_exe, files('tests/op_compare_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Operators handed an operand of a type they cannot want. Accepting one
+# is not a lenient failure: it answers a question with no answer, or
+# stores what can never be read back.
+test('op-operand-types',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_operand_types_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What the error dictionary carries and what the standard handler does
 # to it: a program handling its own errors reads both.
 test('error-dict',

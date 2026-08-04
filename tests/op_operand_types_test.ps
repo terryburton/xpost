@@ -1,0 +1,119 @@
+% Operators handed operands of a type they cannot want, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% An operator that accepts what it cannot use does not fail cleanly: it
+% answers a question that has no answer, or stores something that can
+% never be read back, or consumes its operand and pushes nothing so that
+% whatever runs next fails instead, with nothing to connect the failure
+% to its cause. Each of these was found by handing every operator in the
+% language an operand of the wrong type and reading what came back.
+%
+% Every case here was adjudicated against Adobe Distiller, which answers
+% typecheck to all of them.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/bad 0 def
+/note { (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store } def
+
+/refuses { % {proc} /errname (what)
+    /t.w exch def /t.e exch def /t.p exch def
+    clear /t.p load stopped {
+        $error /errorname get dup t.e ne {
+            (FAIL: ) print t.w print ( raised ) print ==
+            /bad bad 1 add store
+        }{ pop } ifelse
+    }{ t.w (was not refused) note } ifelse
+    clear
+} def
+/works { % {proc} (what)
+    /t.w exch def /t.p exch def
+    clear /t.p load stopped { t.w (was refused) note } if
+    clear
+} def
+
+% ------------------------------------------------------- access questions
+% rcheck and wcheck ask after an access, and only the composite types
+% carry one. Asking anything else is not a false, it is a typecheck.
+
+{ [1 2] rcheck pop } (rcheck an array) works
+{ 3 dict rcheck pop } (rcheck a dictionary) works
+{ (str) rcheck pop } (rcheck a string) works
+{ (str) wcheck pop } (wcheck a string) works
+
+(str) readonly rcheck (a readonly string is readable) assert
+(str) readonly wcheck not (a readonly string is not writeable) assert
+(str) noaccess rcheck not (a noaccess string is not readable) assert
+
+{ null rcheck } /typecheck (rcheck a null) refuses
+{ 42 rcheck } /typecheck (rcheck an integer) refuses
+{ /nm rcheck } /typecheck (rcheck a name) refuses
+{ true rcheck } /typecheck (rcheck a boolean) refuses
+{ null wcheck } /typecheck (wcheck a null) refuses
+{ 42 wcheck } /typecheck (wcheck an integer) refuses
+{ true wcheck } /typecheck (wcheck a boolean) refuses
+
+% ----------------------------------------------------------- the null key
+% A key may be any object except null. Stored quietly, a null key
+% discarded the value: nothing could ever ask for it again, since null
+% is what an empty slot holds.
+
+{ null 42 def } /typecheck (def with a null key) refuses
+{ 3 dict null 42 put } /typecheck (put with a null key) refuses
+{ 3 dict begin null 42 def end } /typecheck (def in a dictionary) refuses
+
+% and every other key type still works
+{ /nm 42 def } (def with a name key) works
+{ (str) 42 def } (def with a string key) works
+{ 3 dict 42 43 put } (put with an integer key) works
+3 dict dup /k 42 put /k get 42 eq (a name key reads back) assert
+3 dict dup 7 42 put 7 get 42 eq (an integer key reads back) assert
+
+% -------------------------------------------------- the graphics setters
+% Each takes one kind of operand, and took anything.
+
+{ true setstrokeadjust } (setstrokeadjust a boolean) works
+{ false setoverprint } (setoverprint a boolean) works
+{ { } settransfer } (settransfer a procedure) works
+
+{ null setstrokeadjust } /typecheck (setstrokeadjust a null) refuses
+{ 1 setstrokeadjust } /typecheck (setstrokeadjust an integer) refuses
+{ (yes) setstrokeadjust } /typecheck (setstrokeadjust a string) refuses
+{ null setoverprint } /typecheck (setoverprint a null) refuses
+{ 0 setoverprint } /typecheck (setoverprint an integer) refuses
+{ null settransfer } /typecheck (settransfer a null) refuses
+{ 42 settransfer } /typecheck (settransfer a number) refuses
+% a literal array is not a procedure: settransfer is given something to
+% execute, and an array that is not executable cannot be
+{ [1 2] settransfer } /typecheck (settransfer a literal array) refuses
+
+% ------------------------------------------------ the operand before the work
+% setgstate fetched the current graphics state before looking at what it
+% was given, so an empty stack was reported as a type error about an
+% object the program never supplied.
+
+{ setgstate } /stackunderflow (setgstate with an empty stack) refuses
+{ 42 setgstate } /typecheck (setgstate an integer) refuses
+{ null setgstate } /typecheck (setgstate a null) refuses
+{ gstate setgstate } (setgstate a gstate) works
+
+% ------------------------------------------------------------- findfont
+% findfont yields a font or says why not. It used to print a note and
+% return an empty stack, so the caller failed at whatever it did next.
+
+{ /Helvetica findfont pop } (findfont a name) works
+{ (Helvetica) findfont pop } (findfont a string) works
+{ /NoSuchFontWhatsoever findfont pop } (findfont an unknown name) works
+/Helvetica findfont type /dicttype eq (findfont yields a dictionary) assert
+/NoSuchFontWhatsoever findfont type /dicttype eq
+    (an unknown name still yields a dictionary) assert
+
+% a key may be any object except null, so only null is refused outright
+{ null findfont } /typecheck (findfont a null key) refuses
+
+bad 0 eq (every operator refuses what it cannot use) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
