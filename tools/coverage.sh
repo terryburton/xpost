@@ -106,10 +106,14 @@ printf 'since it builds an instrumented tree and runs the whole suite in it).\n\
 printf 'Coverage is a floor, not a score: a covered line is one that ran, not one\n'
 printf 'whose behaviour anything asserted. Read the second table as the list of\n'
 printf 'places where there is nothing to argue about.\n\n'
-printf 'These numbers are one platform. Code chosen at build time for another --\n'
-printf 'the Windows halves of the compatibility layer, and the portable path\n'
-printf 'confinement used where the kernel has no openat2 -- cannot run here and\n'
-printf 'reads as uncovered whatever the other CI lanes do with it.\n\n'
+printf 'These numbers are one platform and one object width. Code chosen at\n'
+printf 'build time for another -- the Windows halves of the compatibility layer,\n'
+printf 'the portable path confinement used where the kernel has no openat2, and\n'
+printf 'the wide halves of every WANT_LARGE_OBJECT alternative -- cannot run here\n'
+printf 'and reads as uncovered whatever the other CI lanes do with it. The two\n'
+printf 'object widths are separate personalities that share most of their lines\n'
+printf 'but not all of them, so this is the small-object figure, not the\n'
+printf "interpreter's.\n\n"
 
 awk -F'|' '
     { pct[$1] = $2; lines[$1] = $3 }

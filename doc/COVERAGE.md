@@ -8,12 +8,16 @@ Coverage is a floor, not a score: a covered line is one that ran, not one
 whose behaviour anything asserted. Read the second table as the list of
 places where there is nothing to argue about.
 
-These numbers are one platform. Code chosen at build time for another --
-the Windows halves of the compatibility layer, and the portable path
-confinement used where the kernel has no openat2 -- cannot run here and
-reads as uncovered whatever the other CI lanes do with it.
+These numbers are one platform and one object width. Code chosen at
+build time for another -- the Windows halves of the compatibility layer,
+the portable path confinement used where the kernel has no openat2, and
+the wide halves of every WANT_LARGE_OBJECT alternative -- cannot run here
+and reads as uncovered whatever the other CI lanes do with it. The two
+object widths are separate personalities that share most of their lines
+but not all of them, so this is the small-object figure, not the
+interpreter's.
 
-**81.0% of 17337 lines**, across 49 files.
+**81.1% of 17346 lines**, across 49 files.
 
 ## By file, most uncovered lines first
 
@@ -22,13 +26,13 @@ small file at 50% hides less than a large one at 85%.
 
 | File | Covered | Lines | Uncovered |
 |---|---:|---:|---:|
-| `src/lib/xpost_file.c` | 78.63% | 2204 | 471 |
+| `src/lib/xpost_file.c` | 78.55% | 2205 | 473 |
 | `src/lib/xpost_op_font.c` | 81.27% | 2008 | 376 |
 | `src/lib/xpost_dev_generic.c` | 86.67% | 1403 | 187 |
-| `src/lib/xpost_interpreter.c` | 82.50% | 1040 | 182 |
+| `src/lib/xpost_interpreter.c` | 82.88% | 1040 | 178 |
 | `src/lib/xpost_dsc_parse.c` | 70.70% | 587 | 172 |
 | `src/lib/xpost_font.c` | 71.23% | 570 | 164 |
-| `src/lib/xpost_op_file.c` | 85.27% | 896 | 132 |
+| `src/lib/xpost_op_file.c` | 86.17% | 904 | 125 |
 | `src/lib/xpost_garbage.c` | 67.76% | 335 | 108 |
 | `src/lib/xpost_op_token.c` | 84.42% | 674 | 105 |
 | `src/lib/xpost_op_path.c` | 89.80% | 980 | 100 |
@@ -48,9 +52,9 @@ small file at 50% hides less than a large one at 85%.
 | `src/lib/xpost_dict.c` | 87.50% | 344 | 43 |
 | `src/lib/xpost_dev_raster.c` | 85.11% | 282 | 42 |
 | `src/lib/xpost_op_array.c` | 84.15% | 246 | 39 |
-| `src/lib/xpost_op_string.c` | 84.58% | 214 | 33 |
 | `src/lib/xpost_dev_bgr.c` | 79.50% | 161 | 33 |
 | `src/lib/xpost_save.c` | 75.76% | 132 | 32 |
+| `src/lib/xpost_op_string.c` | 85.05% | 214 | 32 |
 | `src/lib/xpost_op_type.c` | 90.49% | 284 | 27 |
 | `src/lib/xpost_name.c` | 83.44% | 157 | 26 |
 | `src/lib/xpost_garbage_diag.c` | 84.43% | 122 | 19 |
@@ -60,9 +64,9 @@ small file at 50% hides less than a large one at 85%.
 | `src/lib/xpost_op_stack.c` | 89.29% | 112 | 12 |
 | `src/lib/xpost_op_param.c` | 78.18% | 55 | 12 |
 | `src/lib/xpost_dsc_file.c` | 76.60% | 47 | 11 |
-| `src/lib/xpost_string.c` | 85.00% | 60 | 9 |
 | `src/lib/xpost_main.c` | 78.05% | 41 | 9 |
-| `src/lib/xpost_op_matrix.c` | 96.86% | 255 | 8 |
+| `src/lib/xpost_string.c` | 86.67% | 60 | 8 |
+| `src/lib/xpost_op_matrix.c` | 97.25% | 255 | 7 |
 | `src/lib/xpost_oplib.c` | 87.76% | 49 | 6 |
 | `src/lib/xpost_array.c` | 89.29% | 56 | 6 |
 | `src/lib/xpost_op_save.c` | 93.24% | 74 | 5 |
