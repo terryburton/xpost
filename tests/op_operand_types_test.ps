@@ -90,6 +90,34 @@
 % execute, and an array that is not executable cannot be
 { [1 2] settransfer } /typecheck (settransfer a literal array) refuses
 
+% ------------------------------------------- the rest of the state setters
+% Each of these stored or discarded whatever it was handed. The two that
+% take a procedure are checked for executability as well as shape, since
+% a literal array is an array that cannot be run.
+
+{ { } setblackgeneration } (setblackgeneration a procedure) works
+{ { } setundercolorremoval } (setundercolorremoval a procedure) works
+{ 3 dict setcolorrendering } (setcolorrendering a dictionary) works
+{ 0.5 setsmoothness } (setsmoothness a real) works
+{ 1 setsmoothness } (setsmoothness an integer) works
+{ 100 setcachelimit } (setcachelimit an integer) works
+{ 1000 setvmthreshold } (setvmthreshold an integer) works
+
+{ null setblackgeneration } /typecheck (setblackgeneration a null) refuses
+{ 42 setblackgeneration } /typecheck (setblackgeneration a number) refuses
+{ [1 2] setblackgeneration } /typecheck (setblackgeneration a literal array) refuses
+{ null setundercolorremoval } /typecheck (setundercolorremoval a null) refuses
+{ 42 setundercolorremoval } /typecheck (setundercolorremoval a number) refuses
+{ null setcolorrendering } /typecheck (setcolorrendering a null) refuses
+{ 42 setcolorrendering } /typecheck (setcolorrendering a number) refuses
+{ (x) setsmoothness } /typecheck (setsmoothness a string) refuses
+{ null setsmoothness } /typecheck (setsmoothness a null) refuses
+% the operand is an integer, so a real is refused rather than converted
+{ 1.5 setcachelimit } /typecheck (setcachelimit a real) refuses
+{ (100) setcachelimit } /typecheck (setcachelimit a string) refuses
+{ null setvmthreshold } /typecheck (setvmthreshold a null) refuses
+{ 1.5 setvmthreshold } /typecheck (setvmthreshold a real) refuses
+
 % ------------------------------------------------ the operand before the work
 % setgstate fetched the current graphics state before looking at what it
 % was given, so an empty stack was reported as a type error about an
