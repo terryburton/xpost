@@ -882,35 +882,33 @@ setglobal
 
 % num  setlinewidth  -
 % set line width
-/setlinewidth {
+/setlinewidth [ /numbertype ] {
     graphicsdict /currgstate get exch cvr /linewidth exch put
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentlinewidth  num
 % return current line width
-/currentlinewidth {
+/currentlinewidth [ ] {
     graphicsdict /currgstate get /linewidth get
-} def
+} //.xpostsys /.defop get exec
 
 % int  setlinecap  -
 % set shape of the ends for stroke (0=butt, 1=round, 2=square)
-/setlinecap {
-    /setlinecap [ /integertype ] //.xpostsys /.checkargs get exec
+/setlinecap [ /integertype ] {
     dup 0 lt 1 index 2 gt or
     { pop /setlinecap cvx /rangecheck signalerror }
     { graphicsdict /currgstate get exch /linecap exch put } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentlinecap  int
 % return current line cap
-/currentlinecap {
+/currentlinecap [ ] {
     graphicsdict /currgstate get /linecap get
-} def
+} //.xpostsys /.defop get exec
 
 % array offset  setdash  -
 % a non-empty dash array must hold no negative element and not be all zero
-/setdash {
-    /setdash [ /arraytype /numbertype ] //.xpostsys /.checkargs get exec
+/setdash [ /arraytype /numbertype ] {
     1 index dup length 0 gt {
         false exch
         { dup 0 lt { pop pop /setdash cvx /rangecheck signalerror } if
@@ -919,40 +917,39 @@ setglobal
     } { pop } ifelse
     graphicsdict /currgstate get exch cvr /dashoffset exch put
     graphicsdict /currgstate get exch /dasharray exch put
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentdash  array offset
-/currentdash {
+/currentdash [ ] {
     graphicsdict /currgstate get /dasharray get
     graphicsdict /currgstate get /dashoffset get
-} def
+} //.xpostsys /.defop get exec
 
 % int  setlinejoin  -
 % set shape of corners for stroke (0=miter, 1=round, 2=bevel)
-/setlinejoin {
-    /setlinejoin [ /integertype ] //.xpostsys /.checkargs get exec
+/setlinejoin [ /integertype ] {
     dup 0 lt 1 index 2 gt or
     { pop /setlinejoin cvx /rangecheck signalerror }
     { graphicsdict /currgstate get exch /linejoin exch put } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentlinejoin  int
 % return current line join
-/currentlinejoin {
+/currentlinejoin [ ] {
     graphicsdict /currgstate get /linejoin get
-} def
+} //.xpostsys /.defop get exec
 
 % num  setmiterlimit  -
-/setmiterlimit {
+/setmiterlimit [ /numbertype ] {
     dup 1 lt
     { pop /setmiterlimit cvx /rangecheck signalerror }
     { graphicsdict /currgstate get exch cvr /miterlimit exch put } ifelse
-} def
+} //.xpostsys /.defop get exec
 
 % -  currentmiterlimit  num
-/currentmiterlimit {
+/currentmiterlimit [ ] {
     graphicsdict /currgstate get /miterlimit get
-} def
+} //.xpostsys /.defop get exec
 
 % bool  setoverprint  -
 /setoverprint {
@@ -968,15 +965,15 @@ setglobal
 
 % Graphics State Operators -- Device Dependent
 
-/setflat {
+/setflat [ /numbertype ] {
     /CONSTRAINFLATNESS where{
         pop dup 100 gt{pop 100}if dup .2 lt{pop .2}if } if
     graphicsdict /currgstate get exch cvr /flat exch put
-} def
+} //.xpostsys /.defop get exec
 
-/currentflat {
+/currentflat [ ] {
     graphicsdict /currgstate get /flat get
-} def
+} //.xpostsys /.defop get exec
 
 
 //.internaldict /QUIET known { }{ (eof gstate.ps\n)print } ifelse

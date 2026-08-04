@@ -903,6 +903,13 @@ test('op-wrapsig',
   args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Standard operators written in PostScript are operator objects, so bind
+# reaches them and a prolog redefining one in terms of itself terminates.
+test('op-bind',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_bind_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The operators taking more than one shape of operand list: every shape
 # the language defines is reached, and one matching none is refused.
 test('op-operand-shapes',

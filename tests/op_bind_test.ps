@@ -1,0 +1,128 @@
+% Standard operators reached by bind, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% bind replaces an executable name with an operator only when the name's
+% value is an operator (PLRM 3.12.1). A standard operator implemented as
+% a plain procedure is therefore invisible to bind, and the name in a
+% bound procedure stays a name, looked up afresh on every execution.
+%
+% That breaks the idiom a prolog is written with:
+%
+%     /setlinewidth { 2 mul setlinewidth } bind def
+%
+% The intent is that the inner name is the standard operator, frozen by
+% bind at definition. If bind could not see it, the inner name resolves
+% at run time to the definition just made, and the procedure calls
+% itself for ever. The failure is a hang, not an error, so nothing is
+% reported and nothing recovers.
+%
+% PLRM permits a standard feature to be a built-in procedure -- it names
+% findfont as one -- so this is not a conformance requirement. It is
+% what a program written against the idiom needs in order to run.
+%
+% The operators below are implemented in PostScript and wrapped so that
+% they are operator objects. What is checked is that bind reaches them
+% and that the idiom terminates.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/OPS [ /setlinewidth /currentlinewidth /setlinecap /currentlinecap
+       /setlinejoin /currentlinejoin /setmiterlimit /currentmiterlimit
+       /setdash /currentdash /setflat /currentflat ] def
+
+% {test} (what)  -  run the test on every name, naming any that fail
+/eachop {
+    /e.w exch def /e.t exch def /e.bad 0 def
+    OPS { dup e.t exec { pop }{ (FAIL: ) print 40 string cvs print ( ) print
+          e.w print (\n) print /e.bad e.bad 1 add store } ifelse } forall
+    e.bad 0 eq e.w assert
+} def
+
+% ------------------------------------------------- they are operators
+% load answers operatortype, which is what makes bind substitute them
+% and what the type operator reports for a standard operator.
+
+{ load type /operatortype eq } (is an operator) eachop
+
+% ------------------------------------------------------- bind sees them
+% A procedure holding just the name, bound: the element left behind must
+% be the operator, not the name. This is the property the idiom rests
+% on, checked without running anything that could fail to terminate.
+
+{ [ exch cvx ] cvx bind 0 get type /operatortype eq } (is reached by bind) eachop
+
+% --------------------------------------------------------- the idiom runs
+% Each redefinition calls the operator it replaces. Bound, the inner name
+% is the standard operator and the procedure terminates; unbound, it
+% would call itself until the interpreter stopped, so reaching the
+% assertion at all is half of what is being checked.
+%
+% That is also why this part runs only when the checks above have
+% passed. Were bind unable to reach these operators, the redefinitions
+% would not return, and a run that hangs reports nothing at all; the
+% guard turns that into the failures already counted.
+
+failcount 0 eq {
+
+save
+/setlinewidth { 2 mul setlinewidth } bind def
+3 setlinewidth
+currentlinewidth 6 eq (a scaling setlinewidth reaches the standard one) assert
+restore
+
+save
+/setlinecap { pop 2 setlinecap } bind def
+0 setlinecap
+currentlinecap 2 eq (a forcing setlinecap reaches the standard one) assert
+restore
+
+save
+/setflat { 3 div setflat } bind def
+3 setflat
+currentflat 1 eq (a dividing setflat reaches the standard one) assert
+restore
+
+save
+/setdash { pop pop [ 1 1 ] 0 setdash } bind def
+[ 9 9 ] 4 setdash
+currentdash exch length 2 eq exch 0 eq and
+    (a replacing setdash reaches the standard one) assert
+restore
+
+% the redefinitions are gone with the save levels that held them
+3 setlinewidth currentlinewidth 3 eq (the standard operator is back) assert
+
+} { (SKIPPED: the idiom is not run, bind does not reach these\n) print } ifelse
+
+% ------------------------------------------- and they still check operands
+% Wrapping moved each statement of operands to the definition, where the
+% dispatcher enforces it before the body runs. PLRM gives setlinewidth a
+% number, and a string is not one, whatever cvr would have made of it.
+
+/raises { % {proc} /errname (what)
+    /r.w exch def /r.e exch def /r.p exch def
+    clear /r.p load stopped { $error /errorname get r.e eq }{ false } ifelse
+    r.w assert clear
+} def
+
+{ (3) setlinewidth } /typecheck (setlinewidth refuses a string) raises
+{ (3) setflat } /typecheck (setflat refuses a string) raises
+{ (3) setmiterlimit } /typecheck (setmiterlimit refuses a string) raises
+{ (0) setlinecap } /typecheck (setlinecap refuses a string) raises
+{ 1.5 setlinecap } /typecheck (setlinecap refuses a real) raises
+{ [ 3 3 ] (0) setdash } /typecheck (setdash refuses a string offset) raises
+{ 3 0 setdash } /typecheck (setdash refuses a number for the array) raises
+{ setlinewidth } /stackunderflow (setlinewidth reports a shortage) raises
+{ setdash } /stackunderflow (setdash reports a shortage) raises
+
+% and the values they do take still arrive
+clear
+2 setlinewidth currentlinewidth 2 eq (setlinewidth takes an integer) assert
+2.5 setlinewidth currentlinewidth 2.5 eq (setlinewidth takes a real) assert
+1 setlinecap currentlinecap 1 eq (setlinecap takes an integer) assert
+[ 2 2 ] 1 setdash currentdash 1 eq exch length 2 eq and
+    (setdash takes an array and an offset) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
