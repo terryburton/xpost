@@ -1,0 +1,101 @@
+% The two font directories, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% FontDirectory and GlobalFontDirectory are different dictionaries holding
+% different things (PLRM 3.7, Tables 3.3 and 3.4). FontDirectory is local:
+% a font defined in local VM goes away with the save level that defined
+% it. GlobalFontDirectory is global and holds only the fonts defined while
+% the allocation mode was global, so it survives those restores.
+% SharedFontDirectory is an older name for the same global dictionary.
+%
+% They were one local dictionary under three names. Nothing failed
+% visibly: definefont and findfont agreed with each other, so fonts
+% resolved. What a program could not do was tell the two populations
+% apart -- GlobalFontDirectory reported fonts that would vanish at the
+% next restore, which is the one question it exists to answer.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% the fonts are built in global VM so their parts are global too: a
+% global dictionary may not hold a local object, so a font destined for
+% GlobalFontDirectory has to be assembled there
+currentglobal true setglobal
+/fd.mk {
+    10 dict
+    dup /FontType 3 put
+    dup /FontMatrix [0.001 0 0 0.001 0 0] put
+    dup /FontBBox [0 0 1000 1000] put
+    dup /Encoding 256 array put
+    dup /CharProcs 1 dict put
+    dup /BuildChar { pop pop } put
+} def
+setglobal
+
+% ------------------------------------------------------- they are distinct
+
+FontDirectory GlobalFontDirectory ne
+    (FontDirectory and GlobalFontDirectory are different dictionaries) assert
+SharedFontDirectory GlobalFontDirectory eq
+    (SharedFontDirectory is the same dictionary as GlobalFontDirectory) assert
+GlobalFontDirectory gcheck
+    (GlobalFontDirectory is in global VM) assert
+FontDirectory gcheck not
+    (FontDirectory is in local VM) assert
+
+% ------------------------------------------- each font lands in one of them
+
+false setglobal
+/fd.local fd.mk definefont pop
+FontDirectory /fd.local known
+    (a font defined in local VM is in FontDirectory) assert
+GlobalFontDirectory /fd.local known not
+    (a font defined in local VM is not in GlobalFontDirectory) assert
+
+true setglobal
+/fd.global fd.mk definefont pop
+false setglobal
+GlobalFontDirectory /fd.global known
+    (a font defined in global VM is in GlobalFontDirectory) assert
+FontDirectory /fd.global known not
+    (a font defined in global VM is not in FontDirectory) assert
+
+% --------------------------------------------- both are reachable by name
+% Which directory a font went into is the program's business, not
+% findfont's: a prolog defines its fonts in global VM and the pages that
+% use them run in local VM.
+
+/fd.local findfont /FontType get 3 eq
+    (findfont answers for a font defined in local VM) assert
+/fd.global findfont /FontType get 3 eq
+    (findfont answers for a font defined in global VM) assert
+
+% ------------------------------------------------- undefinefont reaches both
+
+/fd.global undefinefont
+GlobalFontDirectory /fd.global known not
+    (undefinefont removes a font from GlobalFontDirectory) assert
+/fd.local undefinefont
+FontDirectory /fd.local known not
+    (undefinefont removes a font from FontDirectory) assert
+
+% ------------------------------------------ the global one outlives a restore
+% This is the difference that matters, and the one a single shared
+% dictionary could not express: a font defined in global VM is still
+% there after a restore that discards everything local.
+
+true setglobal
+/fd.keep fd.mk definefont pop
+false setglobal
+save
+false setglobal
+/fd.drop fd.mk definefont pop
+restore
+GlobalFontDirectory /fd.keep known
+    (a font defined in global VM survives a restore) assert
+FontDirectory /fd.drop known not
+    (a font defined in local VM does not survive a restore) assert
+/fd.keep undefinefont
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

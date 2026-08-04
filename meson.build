@@ -903,6 +903,13 @@ test('op-wrapsig',
   args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The two font directories hold different populations: the local one goes
+# away with the save level that defined its fonts, the global one does not.
+test('font-directory',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_directory_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Standard operators written in PostScript are operator objects, so bind
 # reaches them and a prolog redefining one in terms of itself terminates.
 test('op-bind',

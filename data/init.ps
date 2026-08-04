@@ -747,13 +747,25 @@ currentglobal true setglobal
 setglobal
 
 % The FontDirectory holds defined fonts; findfont dictionaries for
-% host faces state the type of the program that backs them.
+% host faces state the type of the program that backs them. It is a local
+% dictionary: a font defined in local VM goes away with the save level
+% that defined it.
 /FontDirectory
 <<
 >> def
 setglobal
 
 end % userdict
+
+% GlobalFontDirectory holds the fonts defined while the allocation mode was
+% global, and only those (PLRM 3.7). It is itself a global dictionary, so it
+% survives the restores that empty the local one, and it is a different
+% dictionary -- a program reading it must not see the local fonts.
+% SharedFontDirectory is the same dictionary under an older name.
+currentglobal true setglobal
+systemdict /GlobalFontDirectory << >> put
+systemdict /SharedFontDirectory systemdict /GlobalFontDirectory get put
+setglobal
 
 % The rest of the boot file defines the language too, so it goes where the
 % language lives. systemdict is still writeable here -- the interpreter
@@ -827,8 +839,14 @@ setglobal
     % so only null is refused here; anything else is looked up and, not
     % being found, substituted for like any other unknown name
     dup type /nulltype eq { /findfont cvx /typecheck signalerror } if
+    % both directories are consulted: the local one first, as the
+    % specification says, then the global one for a font a prolog defined
+    % while the allocation mode was global
     FontDirectory 1 index known {
         FontDirectory exch get
+    }{
+    GlobalFontDirectory 1 index known {
+        GlobalFontDirectory exch get
     }{
         {   % try the operator, which states FontType, FontMatrix
             % and FontBBox for the face behind the name
@@ -850,6 +868,7 @@ setglobal
                 /findfont cvx /invalidfont signalerror
             } ifelse
         } if
+    } ifelse
     } ifelse
 } //.xpostsys /.defop get exec
 
