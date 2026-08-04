@@ -50,12 +50,14 @@ fi
 # its statement on the line naming the operator; an operator taking
 # more than one shape of operand list runs the statement over several
 # lines, so what is recognised is the opening, not the whole of it.
+# An operator's name is whatever the language allows one to be, so the
+# patterns take any run of non-blanks: = and == are operators too.
 {
-    grep -h '^/[A-Za-z][A-Za-z0-9]* \[' "$datadir"/*.ps 2>/dev/null \
-        | grep -v '^/[A-Za-z][A-Za-z0-9]* \[[^][]*\][[:space:]]*def[[:space:]]*$' \
+    grep -h '^/[^[:space:]][^[:space:]]* \[' "$datadir"/*.ps 2>/dev/null \
+        | grep -v '^/[^[:space:]][^[:space:]]* \[[^][]*\][[:space:]]*def[[:space:]]*$' \
         | sed 's|^/||; s| .*||'
-    grep -h -o '\.opsigs get /[A-Za-z][A-Za-z0-9]* \[' "$datadir"/*.ps 2>/dev/null \
-        | sed 's|.*/||; s| .*||'
+    grep -h -o '\.opsigs get /[^[:space:]][^[:space:]]* \[' "$datadir"/*.ps 2>/dev/null \
+        | sed 's|.*get /||; s| .*||'
 } > "$work/stated"
 
 LC_ALL=C sort -u "$work/wrapped" > "$work/w"
