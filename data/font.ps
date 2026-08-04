@@ -313,7 +313,19 @@ currentglobal true setglobal
 } put
 setglobal
 
+currentglobal true setglobal
+% /opname  .needpoint  -
+% The showing operators place glyphs from the current point, so there
+% has to be one.
+.xpostsys /.needpoint {
+    { currentpoint pop pop } stopped
+        { cvx /nocurrentpoint signalerror }
+        { pop } ifelse
+} put
+setglobal
+
 /show {
+    /show //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         exch //.xpostsys /.showtype0 get exec
@@ -375,6 +387,7 @@ setglobal
 } def
 
 /widthshow {
+    /widthshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font: add the delta after the character whose full
@@ -424,6 +437,7 @@ setglobal
 } def
 
 /ashow {
+    /ashow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font decodes to descendant glyphs; walk it with the
@@ -470,6 +484,7 @@ setglobal
 } def
 
 /awidthshow {
+    /awidthshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font: the ashow delta after every character, plus the
@@ -535,6 +550,7 @@ currentglobal true setglobal
 setglobal
 
 /kshow {
+    /kshow //.xpostsys /.needpoint get exec
     % kshow steps the string one byte at a time, which a composite font
     % cannot decode; the reference rejects it with invalidfont rather than
     % the rangecheck the byte-wise decode would otherwise raise
@@ -580,6 +596,7 @@ setglobal
 % assigns the name. Other font types resolve the name against the
 % font program.
 /glyphshow {
+    /glyphshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 3 ne {
         pop .glyphshow

@@ -1,0 +1,78 @@
+% The showing operators and the state they require, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Glyphs are placed from the current point, so the operators that place
+% them require one. The operators that measure or decode do not:
+% stringwidth reports a width from nothing, and cshow hands each
+% character to a procedure rather than painting it.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/bad 0 def
+/note { (FAIL: ) print print ( ) print print (\n) print
+    /bad bad 1 add store } def
+
+/withfont { initgraphics newpath /Helvetica findfont 12 scalefont setfont } def
+
+/needspoint { % {proc} (what)
+    /n.w exch def /n.p exch def
+    clear withfont
+    /n.p load stopped {
+        $error /errorname get /nocurrentpoint ne
+            { n.w (raised something other than nocurrentpoint) note } if
+    }{ n.w (was accepted with no current point) note } ifelse
+    clear
+} def
+/worksfrompoint { % {proc} (what)
+    /w.w exch def /w.p exch def
+    clear withfont 10 10 moveto
+    /w.p load stopped { w.w (was refused from a current point) note } if
+    clear
+} def
+/nopointneeded { % {proc} (what)
+    /o.w exch def /o.p exch def
+    clear withfont
+    /o.p load stopped { o.w (was refused with no current point) note } if
+    clear
+} def
+
+% --------------------------------------------- placing glyphs needs a point
+
+{ (A) show } (show) needspoint
+{ 1 0 (A) ashow } (ashow) needspoint
+{ 1 0 8#040 (A) widthshow } (widthshow) needspoint
+{ 1 0 8#040 1 0 (A) awidthshow } (awidthshow) needspoint
+{ { pop pop } (AB) kshow } (kshow) needspoint
+{ (A) [ 9 ] xshow } (xshow) needspoint
+{ (A) [ 9 ] yshow } (yshow) needspoint
+{ (A) [ 9 0 ] xyshow } (xyshow) needspoint
+{ /A glyphshow } (glyphshow) needspoint
+{ (A) true charpath } (charpath) needspoint
+
+% and each places them once there is one
+
+{ (A) show } (show) worksfrompoint
+{ 1 0 (A) ashow } (ashow) worksfrompoint
+{ 1 0 8#040 (A) widthshow } (widthshow) worksfrompoint
+{ 1 0 8#040 1 0 (A) awidthshow } (awidthshow) worksfrompoint
+{ { pop pop } (AB) kshow } (kshow) worksfrompoint
+{ (A) [ 9 ] xshow } (xshow) worksfrompoint
+{ (A) [ 9 ] yshow } (yshow) worksfrompoint
+{ (A) [ 9 0 ] xyshow } (xyshow) worksfrompoint
+{ /A glyphshow } (glyphshow) worksfrompoint
+{ (A) true charpath } (charpath) worksfrompoint
+
+% ------------------------------------------- measuring and decoding do not
+
+{ (A) stringwidth pop pop } (stringwidth) nopointneeded
+{ { pop } (A) cshow } (cshow) nopointneeded
+
+% stringwidth reports the same width wherever the current point is
+withfont (Ag) stringwidth /w.y exch def /w.x exch def
+withfont 100 200 moveto (Ag) stringwidth
+w.y eq exch w.x eq and (a width does not depend on the current point) assert
+
+bad 0 eq (each showing operator requires what it uses) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

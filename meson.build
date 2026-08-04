@@ -896,6 +896,12 @@ test('op-initgraphics',
   args: [ xpost_exe, files('tests/op_initgraphics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The showing operators and the state each requires.
+test('op-showstate',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_showstate_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What the error dictionary carries and what the standard handler does
 # to it: a program handling its own errors reads both.
 test('error-dict',
