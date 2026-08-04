@@ -84,6 +84,46 @@ cases {
       e read pop pop }                          (reading an output filter) fn refuses
 } forall
 
+% ------------------------------------------- the parameters a filter needs
+% A filter given its parameters in a dictionary has to be told when the
+% dictionary does not carry them. Defaulted, SubFileDecode reaches its
+% end of data at once and hands back an empty stream, which reads as a
+% truncated file rather than as the mistake it is.
+/raises { % {proc} /errname (what)
+    /m.f2 exch def /m.e exch def
+    stopped {
+        $error /errorname get dup m.e ne {
+            (FAIL: ) print m.f2 print ( raised ) print ==
+            /bad bad 1 add store
+        }{ pop } ifelse
+    }{ m.f2 (is not refused) note } ifelse
+    clear
+} def
+
+{ (abcXdef) 1 (X) /SubFileDecode filter 16 string readstring pop pop }
+    (the operand form) (SubFileDecode) works
+{ (abcXdef) << /EODCount 1 /EODString (X) >> /SubFileDecode filter
+  16 string readstring pop pop } (the dictionary form) (SubFileDecode) works
+
+{ (abcXdef) << >> /SubFileDecode filter }
+    /undefined (a dictionary carrying neither parameter) raises
+{ (abcXdef) << /EODCount 1 >> /SubFileDecode filter }
+    /undefined (a dictionary with no EODString) raises
+{ (abcXdef) << /EODString (X) >> /SubFileDecode filter }
+    /undefined (a dictionary with no EODCount) raises
+{ (abcXdef) << /EODCount (one) /EODString (X) >> /SubFileDecode filter }
+    /typecheck (an EODCount that is not an integer) raises
+{ (abcXdef) << /EODCount 1 /EODString 7 >> /SubFileDecode filter }
+    /typecheck (an EODString that is not a string) raises
+{ (abcXdef) << /EODCount -1 /EODString (X) >> /SubFileDecode filter }
+    /rangecheck (a negative EODCount) raises
+
+% and the two forms agree with each other
+/opform (abcXdef) 1 (X) /SubFileDecode filter 16 string readstring pop def
+/dictform (abcXdef) << /EODCount 1 /EODString (X) >> /SubFileDecode filter
+    16 string readstring pop def
+opform dictform eq (both forms read the same) assert
+
 bad 0 eq (every operator works on every filter that takes it) assert
 
 (fmatrix.scratch) status { pop pop pop pop (fmatrix.scratch) deletefile } if
