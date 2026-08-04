@@ -1,0 +1,81 @@
+# Wrapped operators that do not yet state the operands they take.
+#
+# An operator installed by wrapping a procedure registers no signature
+# unless it is given one, so the dispatcher cannot check its operands
+# and the body must. Each name here is one that still checks for itself,
+# or does not check at all.
+#
+# The list only shrinks. tests/check-op-signatures.sh fails on a wrapped
+# operator that is neither listed here nor stating its operands, and on
+# an entry here that has since gained a statement.
+ashow
+awidthshow
+charpath
+clip
+clippath
+colorimage
+composefont
+copypage
+cshow
+currentcmykcolor
+currentcolor
+currentcolorscreen
+currentcolorspace
+currentcolortransfer
+currentgray
+currenthalftone
+currenthsbcolor
+currentpagedevice
+currentrgbcolor
+currentscreen
+currenttransfer
+definefont
+eoclip
+eofill
+erasepage
+fill
+findfont
+flattenpath
+grestore
+grestoreall
+gsave
+imagemask
+ineofill
+infill
+initclip
+initgraphics
+instroke
+inueofill
+inufill
+inustroke
+kshow
+makefont
+nulldevice
+pathbbox
+rectclip
+rectfill
+rectstroke
+reversepath
+selectfont
+setcachedevice
+setcachedevice2
+setcharwidth
+setcolor
+setcolorscreen
+setcolortransfer
+sethalftone
+setpagedevice
+setpattern
+setscreen
+shfill
+showpage
+stroke
+strokepath
+uappend
+ueofill
+ufill
+undefinefont
+upath
+ustroke
+ustrokepath
+widthshow

@@ -903,6 +903,12 @@ test('op-wrapsig',
   args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every wrapped operator states the operands it takes, or is named in
+# the shrinking list of those that do not yet.
+test('check-op-signatures',
+  find_program('tests/check-op-signatures.sh'),
+  args: [ files('data/init.ps'), files('tests/op_signatures.allowed') ])
+
 # initgraphics on its own: the fault it guards against is invisible in a
 # file that has already been drawing, since the earlier drawing can
 # empty the path by itself.
