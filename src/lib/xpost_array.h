@@ -67,7 +67,7 @@ Xpost_Object xpost_array_cons(Xpost_Context *ctx, unsigned sz);
 /**
  * @brief store value in an array
 */
-int xpost_array_put_memory(Xpost_Memory_File *mem, Xpost_Object a, integer i, Xpost_Object o);
+XPOST_MUST_CHECK int xpost_array_put_memory(Xpost_Memory_File *mem, Xpost_Object a, integer i, Xpost_Object o);
 
 /**
  * @brief store value in a banked array

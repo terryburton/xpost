@@ -80,7 +80,11 @@ int xpost_name_init(Xpost_Context *ctx)
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
         XPOST_LOG_ERR("Warning: name tree is not in special position");
 
-    xpost_stack_init(ctx->gl, &t);
+    if (!xpost_stack_init(ctx->gl, &t))
+    {
+        XPOST_LOG_ERR("cannot create the name stack");
+        return 0;
+    }
     tab = &ctx->gl->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
@@ -107,7 +111,11 @@ int xpost_name_init(Xpost_Context *ctx)
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
         XPOST_LOG_ERR("Warning: name tree is not in special position");
 
-    xpost_stack_init(ctx->lo, &t);
+    if (!xpost_stack_init(ctx->lo, &t))
+    {
+        XPOST_LOG_ERR("cannot create the name stack");
+        return 0;
+    }
     tab = &ctx->lo->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;

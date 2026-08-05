@@ -1,0 +1,133 @@
+% closefile on an encoding filter writes the coding's end-of-data marker
+% to the data target (PLRM 3.13.1, "applying closefile to an encoding
+% filter flushes both the buffered data and the filter's internal state.
+% This causes all encoded data to be written to the data target, followed
+% by an EOD marker"). The same section says that writing to a filter whose
+% data target cannot accept data causes an ioerror, so a target that has
+% run out of room must not leave closefile reporting success over a stream
+% that stops short of its own terminator.
+%
+% The target here is a character device that answers every write with "no
+% space left". A platform that has no such target cannot pose the question:
+% the run then reports INCONCLUSIVE and the harness skips.
+%
+% Prints SUCCESS iff every encoding filter reports the end-of-data it could
+% not write.
+
+% Two layers of buffering stand between a write and the target's refusal,
+% and both have to be defeated for the refusal to have happened by the
+% time the filter is closed. The coding buffers, so the data has to be
+% data it cannot shrink: a block of zeros, or the same block twice, comes
+% out of every one of these codings small enough to sit in the target's
+% buffer for the whole run. The target buffers too, so enough of it has
+% to go in to force the flush that reaches the device.
+% The generator is written out here rather than taken from rand, whose
+% sequence repeats often enough within one block for every coding to
+% shrink the block to a few hundred bytes.
+/blk 16384 string def
+/seed 1 def
+/refill { % -  .  -   the next block of the sequence
+    0 1 blk length 1 sub {
+        /seed seed 75 mul 74 add 65537 mod def
+        blk exch seed 255 and put
+    } for
+} bind def
+/failures 0 def
+
+/pump { % file  .  -
+    /pumped exch def
+    8 { refill pumped blk writestring } repeat
+} bind def
+
+/shut { % file  .  -   close, ignoring whatever it has to say
+    { closefile } stopped pop
+} bind def
+
+% ---- is there a target here that refuses bytes? ----
+/refuses false def
+/t0 null def
+mark
+{
+    /t0 (/dev/full) (w) file def
+    t0 pump
+} stopped {
+    $error /errorname get /ioerror eq { /refuses true def } if
+} if
+t0 null ne { t0 shut } if
+cleartomark
+
+refuses not {
+    (INCONCLUSIVE: no data target that refuses data on this platform\n) print
+    flush
+    quit
+} if
+
+% ---- every coding with an end-of-data marker reports the one it lost ----
+/reports { % /FilterName  .  bool
+    /nm exch def
+    /rep false def
+    mark
+    /tgt (/dev/full) (w) file def
+    /enc tgt nm filter def
+    { enc pump } stopped pop      % the target refuses: that is the premise
+    { enc closefile } stopped /rep exch def
+    tgt shut
+    cleartomark
+    rep
+} bind def
+
+/available { % /FilterName  .  bool
+    /nm2 exch def
+    /av false def
+    mark
+    {
+        /probe (/dev/null) (w) file def
+        probe nm2 filter shut
+        probe shut
+    } stopped not /av exch def
+    cleartomark
+    av
+} bind def
+
+/check { % /FilterName  .  -
+    dup available {
+        dup reports {
+            pop
+        }{
+            (FAIL: closefile hid the end-of-data of ) print ==
+            /failures failures 1 add def
+        } ifelse
+    }{
+        pop
+    } ifelse
+} bind def
+
+/ASCIIHexEncode check
+/ASCII85Encode check
+/RunLengthEncode check
+/LZWEncode check
+/CCITTFaxEncode check
+/FlateEncode check
+
+% DCTEncode fixes its extent up front, so it takes a parameter dictionary,
+% and the image has to be big enough for the compressed form to reach the
+% target rather than sit in its buffer
+/dctrep false def
+/dctran false def
+mark
+{
+    /tgt2 (/dev/full) (w) file def
+    /enc2 tgt2 << /Columns 256 /Rows 256 /Colors 1 >> /DCTEncode filter def
+    /dctran true def
+    { enc2 pump } stopped pop
+    { enc2 closefile } stopped /dctrep exch def
+    tgt2 shut
+} stopped pop
+cleartomark
+dctran dctrep not and {
+    (FAIL: closefile hid the end-of-data of /DCTEncode\n) print
+    /failures failures 1 add def
+} if
+
+failures 0 eq { (SUCCESS\n) print } if
+flush

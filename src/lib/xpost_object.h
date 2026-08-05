@@ -32,7 +32,7 @@
 #define XPOST_OBJECT_H
 
 #include "xpost.h"
-#include "xpost_private.h" /* XPCHECKAPI */
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
 
 /**
  * @file xpost_object.h
@@ -447,7 +447,7 @@ Xpost_Object xpost_bool_cons(int b);
  * It sets the type to integertype, sest unlimited access, sets the
  * pad to 0, set the value to @p i. It returns the object as literal.
  */
-XPCHECKAPI Xpost_Object xpost_int_cons(integer i);
+XPOST_TEST_VISIBLE Xpost_Object xpost_int_cons(integer i);
 
 /**
  * @brief Construct a realtype object with the given value.

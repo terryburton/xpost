@@ -285,7 +285,8 @@ int xpost_oper_init_stack_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "count", (Xpost_Op_Func)Zcount, 1, 0);
     INSTALL;
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark);
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark))
+        return VMerror;
     op = xpost_operator_cons(ctx, "cleartomark", (Xpost_Op_Func)xpost_op_cleartomark, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "counttomark", (Xpost_Op_Func)xpost_op_counttomark, 1, 0);

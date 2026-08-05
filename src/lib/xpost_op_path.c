@@ -409,8 +409,11 @@ int _path_ctm(Xpost_Context *ctx, Xpost_Object gstate, real *m)
     psm = xpost_dict_get(ctx, gstate, namecurrmatrix);
     if (xpost_object_get_type(psm) != arraytype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, psm),
-                     xpost_object_get_ent(psm), 0, sizeof arr, arr);
+    /* the bulk read takes six objects at once, so a shorter matrix in the
+       graphics state would run off the end of its storage */
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, psm),
+                          xpost_object_get_ent(psm), 0, sizeof arr, arr))
+        return rangecheck;
     for (i = 0; i < 6; i++)
         m[i] = xpost_object_get_type(arr[i]) == integertype
              ? (real)arr[i].int_.val : arr[i].real_.val;

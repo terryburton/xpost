@@ -1,0 +1,31 @@
+# Functions whose refusal a caller may not ignore, and the number of
+# sites claiming a refusal cannot arise. Checked by
+# tests/check-must-check.sh: the first list may grow and may not shrink.
+#
+# A function belongs here when it can decline to do what it was asked and
+# the caller cannot tell from anything else -- an out-parameter left
+# untouched, a store that did not land. It does not belong here merely
+# for returning a status nobody happens to want.
+
+xpost_array_put
+xpost_array_put_memory
+xpost_dev_pdf_append
+xpost_dev_private_put
+xpost_dict_put
+xpost_dict_put_memory
+xpost_free_memory_ent
+xpost_memory_file_alloc
+xpost_memory_file_grow
+xpost_memory_file_init
+xpost_memory_get
+xpost_memory_put
+xpost_memory_table_alloc
+xpost_memory_table_init
+xpost_stack_bottomup_replace
+xpost_stack_init
+xpost_stack_topdown_replace
+xpost_string_put
+_pdf_acc_put
+
+# Sites consuming an answer because the refusal cannot arise there.
+refusal-impossible 11

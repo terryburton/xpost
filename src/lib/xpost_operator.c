@@ -152,7 +152,11 @@ int _stack_float(Xpost_Context *ctx)
             return stackunderflow;
         case integertype:
             _op_restore_note(ctx, 0, s0);
-            xpost_stack_topdown_replace(ctx->lo, ctx->os, 0, s0 = _promote_integer_to_real(s0));
+            /* the fetch just above reached this index, and nothing has
+               touched the stack since, so the store reaches it too */
+            XPOST_REFUSAL_IMPOSSIBLE(
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, 0,
+                                            s0 = _promote_integer_to_real(s0)));
             /* fallthrough */
         case realtype:
             return 0;
@@ -235,7 +239,11 @@ int _stack_float_float(Xpost_Context *ctx)
             return stackunderflow;
         case integertype:
             _op_restore_note(ctx, 0, s0);
-            xpost_stack_topdown_replace(ctx->lo, ctx->os, 0, s0 = _promote_integer_to_real(s0));
+            /* the fetch just above reached this index, and nothing has
+               touched the stack since, so the store reaches it too */
+            XPOST_REFUSAL_IMPOSSIBLE(
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, 0,
+                                            s0 = _promote_integer_to_real(s0)));
             /* fallthrough */
         case realtype:
             s1 = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 1);
@@ -245,7 +253,10 @@ int _stack_float_float(Xpost_Context *ctx)
                     return stackunderflow;
                 case integertype:
                     _op_restore_note(ctx, 1, s1);
-                    xpost_stack_topdown_replace(ctx->lo, ctx->os, 1, s1 = _promote_integer_to_real(s1));
+                    /* as above: the index was just fetched from */
+                    XPOST_REFUSAL_IMPOSSIBLE(
+                        xpost_stack_topdown_replace(ctx->lo, ctx->os, 1,
+                                                    s1 = _promote_integer_to_real(s1)));
                     /* fallthrough */
                 case realtype:
                     return 0;
@@ -897,8 +908,12 @@ int xpost_operator_exec(Xpost_Context *ctx,
        integer to real before failing. The operator never ran, so the operands
        are still on the stack; put back the integers the program pushed. */
     for (i = 0; i < ctx->op_restore_n; i++)
-        xpost_stack_topdown_replace(ctx->lo, ctx->os,
-                ctx->op_restore_idx[i], ctx->op_restore_val[i]);
+        /* each index was reached when the note was taken, and the trial
+           that failed left the stack as it found it */
+        XPOST_REFUSAL_IMPOSSIBLE(
+            xpost_stack_topdown_replace(ctx->lo, ctx->os,
+                                        ctx->op_restore_idx[i],
+                                        ctx->op_restore_val[i]));
     return err;
 
   call:

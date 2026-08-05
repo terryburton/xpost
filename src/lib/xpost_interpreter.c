@@ -228,7 +228,13 @@ int _xpost_interpreter_extra_context_init(Xpost_Context *ctx, const char *device
     if (xpost_object_get_type((nameerrordict = xpost_name_cons(ctx, "errordict"))) == invalidtype)
         return 0;
 
-    xpost_oplib_init_ops(ctx); /* populate the optab (and systemdict) with operators */
+    /* populate the optab (and systemdict) with operators */
+    if (!xpost_oplib_init_ops(ctx))
+    {
+        xpost_memory_file_exit(ctx->lo);
+        xpost_memory_file_exit(ctx->gl);
+        return 0;
+    }
 
     {
         Xpost_Object gd; /*globaldict */
@@ -1479,9 +1485,12 @@ void _onerror(Xpost_Context *ctx,
         for (i = 0; i < ctx->op_restore_n; i++)
         {
             int idx = ctx->op_restore_idx[i];
+            /* the n arguments were just pushed back, so an index
+               below n is one the stack now has */
             if (idx < n)
-                xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
-                        ctx->op_restore_val[i]);
+                XPOST_REFUSAL_IMPOSSIBLE(
+                    xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
+                                                ctx->op_restore_val[i]));
         }
     }
 
@@ -1867,16 +1876,16 @@ int initalldata(const char *device)
     also creates the definitions PACKAGE_DATA_DIR PACKAGE_INSTALL_DIR and EXE_DIR
  */
 static
-void setlocalconfig(Xpost_Context *ctx,
-                    Xpost_Object sd,
-                    const char *device,
-                    const char *outfile,
-                    const char *bufferin,
-                    char **bufferout,
-                    Xpost_Showpage_Semantics semantics,
-                    Xpost_Set_Size set_size,
-                    int width,
-                    int height)
+int setlocalconfig(Xpost_Context *ctx,
+                   Xpost_Object sd,
+                   const char *device,
+                   const char *outfile,
+                   const char *bufferin,
+                   char **bufferout,
+                   Xpost_Showpage_Semantics semantics,
+                   Xpost_Set_Size set_size,
+                   int width,
+                   int height)
 {
     const char *device_strings[][3] =
     {
@@ -1916,18 +1925,24 @@ void setlocalconfig(Xpost_Context *ctx,
     char *subdevice;
     char *dimensions;
     char dimensions_buf[48]; /* holds "%d %d" for any int width/height */
+    int ret;
 
     ctx->vmmode = GLOBAL;
 
 #ifdef _WIN32
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "WIN32"), xpost_bool_cons(1));
+    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "WIN32"), xpost_bool_cons(1));
+    if (ret)
+        return ret;
 #endif
 
     devstr = strdup(device); /*  Parse device string for mode selector "dev:mode" */
     if ((subdevice=strchr(devstr, ':'))) {
         *subdevice++ = '\0';
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SUBDEVICE"),
-                xpost_object_cvlit(xpost_string_cons(ctx, strlen(subdevice), subdevice)));
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SUBDEVICE"),
+                             xpost_object_cvlit(xpost_string_cons(ctx,
+                                     strlen(subdevice), subdevice)));
+        if (ret)
+            goto done;
     }
 
     /* define the /newdefaultdevice name called by /start */
@@ -1941,8 +1956,8 @@ void setlocalconfig(Xpost_Context *ctx,
     if (!device_strings[i][0])
     {
         XPOST_LOG_ERR("unknown device %s", devstr);
-        free(devstr);
-        return;
+        ret = undefined;
+        goto done;
     }
     if (set_size == XPOST_USE_SIZE){
         snprintf(dimensions_buf, sizeof(dimensions_buf), "%d %d", width, height);
@@ -1964,15 +1979,23 @@ void setlocalconfig(Xpost_Context *ctx,
     --newdevstr.comp_.sz; /* trim the '\0' */
 
     namenewdev = xpost_name_cons(ctx, "newdefaultdevice");
-    xpost_dict_put(ctx, sd, namenewdev, xpost_object_cvx(newdevstr));
+    ret = xpost_dict_put(ctx, sd, namenewdev, xpost_object_cvx(newdevstr));
+    if (ret)
+        goto done;
 
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "ShowpageSemantics"), xpost_int_cons(semantics));
+    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "ShowpageSemantics"),
+                         xpost_int_cons(semantics));
+    if (ret)
+        goto done;
 
     if (outfile)
     {
-        xpost_dict_put(ctx, sd,
-                       xpost_name_cons(ctx, "OutputFileName"),
-                       xpost_object_cvlit(xpost_string_cons(ctx, strlen(outfile), outfile)));
+        ret = xpost_dict_put(ctx, sd,
+                             xpost_name_cons(ctx, "OutputFileName"),
+                             xpost_object_cvlit(xpost_string_cons(ctx,
+                                     strlen(outfile), outfile)));
+        if (ret)
+            goto done;
     }
 
     if (bufferin)
@@ -1980,7 +2003,9 @@ void setlocalconfig(Xpost_Context *ctx,
         Xpost_Object s = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(bufferin), NULL));
         xpost_object_set_access(ctx, s, XPOST_OBJECT_TAG_ACCESS_NONE);
         memcpy(xpost_string_get_pointer(ctx, s), &bufferin, sizeof(bufferin));
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"), s);
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"), s);
+        if (ret)
+            goto done;
     }
 
     if (bufferout)
@@ -1988,11 +2013,16 @@ void setlocalconfig(Xpost_Context *ctx,
         Xpost_Object s = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(bufferout), NULL));
         xpost_object_set_access(ctx, s, XPOST_OBJECT_TAG_ACCESS_NONE);
         memcpy(xpost_string_get_pointer(ctx, s), &bufferout, sizeof(bufferout));
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"), s);
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"), s);
+        if (ret)
+            goto done;
     }
 
+    ret = 0;
+done:
     ctx->vmmode = LOCAL;
     free(devstr);
+    return ret;
 }
 
 /*
@@ -2098,29 +2128,38 @@ void loadinitps(Xpost_Context *ctx)
 static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
 {
     Xpost_Object ed, de, fd, st, sv;
+    int ret;
 
     ctx->ignoreinvalidaccess = 1;
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
+    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "userdict"), ud);
+    if (ret)
+        goto done;
     ed = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "errordict"));
     if (xpost_object_get_type(ed) == invalidtype)
     {
-        ctx->ignoreinvalidaccess = 0;
-        return undefined;
+        ret = undefined;
+        goto done;
     }
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "errordict"), ed);
+    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "errordict"), ed);
+    if (ret)
+        goto done;
     de = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "$error"));
     if (xpost_object_get_type(de) == invalidtype)
     {
-        ctx->ignoreinvalidaccess = 0;
-        return undefined;
+        ret = undefined;
+        goto done;
     }
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "$error"), de);
+    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "$error"), de);
+    if (ret)
+        goto done;
     /* FontDirectory is likewise a name in systemdict for a local dictionary
        (PLRM). It exists in userdict by the time this runs. */
     fd = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "FontDirectory"));
     if (xpost_object_get_type(fd) == dicttype)
     {
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+        if (ret)
+            goto done;
         /* GlobalFontDirectory and its older name SharedFontDirectory are a
            different, global dictionary holding only the fonts defined while
            the allocation mode was global; the boot file defines them into
@@ -2136,12 +2175,24 @@ static int copyudtosd(Xpost_Context *ctx, Xpost_Object ud, Xpost_Object sd)
        save/restore isolates a job's changes; systemdict names them (PLRM). */
     st = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "statusdict"));
     if (xpost_object_get_type(st) == dicttype)
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "statusdict"), st);
+    {
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "statusdict"), st);
+        if (ret)
+            goto done;
+    }
     sv = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "serverdict"));
     if (xpost_object_get_type(sv) == dicttype)
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serverdict"), sv);
+    {
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serverdict"), sv);
+        if (ret)
+            goto done;
+    }
+    ret = 0;
+    /* the window in which a global dictionary may name a local one closes
+       here, on every path out */
+done:
     ctx->ignoreinvalidaccess = 0;
-    return 0;
+    return ret;
 }
 
 
@@ -2224,9 +2275,15 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     sd = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 0);
     ud = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 2);
 
-    setlocalconfig(xpost_ctx, sd,
-                   device, outfile, bufferin, bufferout,
-                   semantics, set_size, width, height);
+    ret = setlocalconfig(xpost_ctx, sd,
+                         device, outfile, bufferin, bufferout,
+                         semantics, set_size, width, height);
+    if (ret)
+    {
+        XPOST_LOG_ERR("%s recording the interpreter's configuration",
+                      errorname[ret]);
+        return NULL;
+    }
 
     xpost_ctx->quiet = quiet;
     if (quiet)
@@ -2236,10 +2293,15 @@ XPAPI Xpost_Context *xpost_create(const char *device,
            private .internaldict as soon as that dictionary is built, so the
            load-time banner guards read it through a frozen reference and a
            program can neither see nor shadow it. */
-        xpost_dict_put(xpost_ctx,
-                       sd /*xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)*/ ,
-                       xpost_name_cons(xpost_ctx, "QUIET"),
-                       xpost_bool_cons(1));
+        ret = xpost_dict_put(xpost_ctx,
+                             sd /*xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)*/ ,
+                             xpost_name_cons(xpost_ctx, "QUIET"),
+                             xpost_bool_cons(1));
+        if (ret)
+        {
+            XPOST_LOG_ERR("%s naming QUIET in systemdict", errorname[ret]);
+            return NULL;
+        }
     }
 
     xpost_stack_clear(xpost_ctx->lo, xpost_ctx->hold);
@@ -2254,7 +2316,12 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     }
 
     /* make systemdict readonly FIXME: use new access semantics */
-    xpost_dict_put(xpost_ctx, sd, xpost_name_cons(xpost_ctx, "systemdict"), sd);
+    ret = xpost_dict_put(xpost_ctx, sd, xpost_name_cons(xpost_ctx, "systemdict"), sd);
+    if (ret)
+    {
+        XPOST_LOG_ERR("%s naming systemdict in itself", errorname[ret]);
+        return NULL;
+    }
     xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
 #if 0
     if (!xpost_stack_bottomup_replace(xpost_ctx->lo, xpost_ctx->ds, 0, xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY)))
@@ -2300,16 +2367,18 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
         if (eq)
         {
             *eq++ = '\0';
-            xpost_dict_put(ctx, ud,
-                    xpost_name_cons(ctx, defs[i]),
-                    get_token(ctx, eq));
+            if (xpost_dict_put(ctx, ud,
+                        xpost_name_cons(ctx, defs[i]),
+                        get_token(ctx, eq)))
+                return 0;
             eq[-1] = '=';
         }
         else
         {
-            xpost_dict_put(ctx, ud,
-                    xpost_name_cons(ctx, defs[i]),
-                    null);
+            if (xpost_dict_put(ctx, ud,
+                        xpost_name_cons(ctx, defs[i]),
+                        null))
+                return 0;
         }
     }
     return 1;
@@ -2365,7 +2434,8 @@ XPAPI int xpost_add_resource_dir(Xpost_Context *ctx, const char *dir)
     }
     ctx->vmmode = vmmode;
 
-    xpost_dict_put(ctx, ud, key, newrp);
+    if (xpost_dict_put(ctx, ud, key, newrp))
+        return 0;
     return 1;
 }
 

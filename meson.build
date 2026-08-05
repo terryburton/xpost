@@ -1224,6 +1224,14 @@ test('filter-eod',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# The write-side counterpart: closefile on an encoding filter writes the
+# coding's end-of-data marker, and a target that cannot accept it leaves a
+# stream that stops short of its own terminator. Needs a target that
+# refuses data, so it skips where the platform has none.
+test('filter-close-eod',
+  find_program('tests/run-refusing-target-test.sh'),
+  args: [ xpost_exe, files('tests/filter_close_eod_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 test('stream-exec',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
@@ -1437,6 +1445,15 @@ test('fopen-funnel',
 test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
+
+# A function that can refuse returns that fact and no caller may ignore
+# it. The compiler enforces that wherever XPOST_MUST_CHECK is applied;
+# this holds the set it is applied to, so the enforcement cannot be
+# undone by dropping a mark, and counts the sites that claim a refusal
+# cannot arise.
+test('must-check',
+  find_program('tests/check-must-check.sh'),
+  args: [ meson.current_source_dir() ])
 
 # Machinery stays born in its final home: every registered private-namespace
 # member keeps its dictionary and every graphics-state template slot survives,

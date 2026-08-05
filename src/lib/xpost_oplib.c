@@ -129,7 +129,11 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
         XPOST_LOG_ERR("cannot allocate systemdict");
         return 0;
     }
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "systemdict"), sd);
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "systemdict"), sd))
+    {
+        XPOST_LOG_ERR("cannot name systemdict in itself");
+        return 0;
+    }
     xpost_stack_push(ctx->lo, ctx->ds, sd); // push systemdict on dictstack
     ent = xpost_object_get_ent(sd);
     tab = &ctx->gl->table;
@@ -142,7 +146,9 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     puts("");
 #endif
 
-    xpost_oper_init_stack_ops(ctx, sd);
+    if (xpost_oper_init_stack_ops(ctx, sd))
+
+        return 0;
 
 //#ifdef DEBUGOP
     //printf("\nops:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
@@ -151,64 +157,109 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     op = xpost_operator_cons(ctx, "breakhere", (Xpost_Op_Func)xpost_op_breakhere, 0, 0);
     INSTALL;
 
-    xpost_oper_init_string_ops(ctx, sd);
+    if (xpost_oper_init_string_ops(ctx, sd))
+
+        return 0;
     //printf("\nopst:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_array_ops(ctx, sd);
+    if (xpost_oper_init_array_ops(ctx, sd))
+
+        return 0;
     //printf("\nopar:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_dict_ops(ctx, sd);
+    if (xpost_oper_init_dict_ops(ctx, sd))
+
+        return 0;
     //printf("\nopdi:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_bool_ops(ctx, sd);
+    if (xpost_oper_init_bool_ops(ctx, sd))
+
+        return 0;
     //printf("\nopb:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_control_ops(ctx, sd);
+    if (xpost_oper_init_control_ops(ctx, sd))
+
+        return 0;
     //printf("\nopc:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_type_ops(ctx, sd);
+    if (xpost_oper_init_type_ops(ctx, sd))
+
+        return 0;
     //printf("\nopt:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_token_ops(ctx, sd);
+    if (xpost_oper_init_token_ops(ctx, sd))
+
+        return 0;
     //printf("\noptok:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_math_ops(ctx, sd);
+    if (xpost_oper_init_math_ops(ctx, sd))
+
+        return 0;
     //printf("\nopm:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_file_ops(ctx, sd);
+    if (xpost_oper_init_file_ops(ctx, sd))
+
+        return 0;
     //printf("\nopf:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_save_ops(ctx, sd);
+    if (xpost_oper_init_save_ops(ctx, sd))
+
+        return 0;
     //printf("\nopv:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_misc_ops(ctx, sd);
+    if (xpost_oper_init_misc_ops(ctx, sd))
+
+        return 0;
     //printf("\nopx:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
-    xpost_oper_init_packedarray_ops(ctx, sd);
-    xpost_oper_init_param_ops(ctx, sd);
-    xpost_oper_init_matrix_ops(ctx, sd);
-    xpost_oper_init_path_ops (ctx, sd);
-    xpost_oper_init_font_ops(ctx, sd);
-    xpost_oper_init_generic_device_ops(ctx, sd);
+    if (xpost_oper_init_packedarray_ops(ctx, sd))
+
+        return 0;
+    if (xpost_oper_init_param_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_matrix_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_path_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_font_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_generic_device_ops(ctx, sd))
+        return 0;
 #ifdef _WIN32
-    xpost_oper_init_win32_device_ops(ctx, sd);
+    if (xpost_oper_init_win32_device_ops(ctx, sd))
+        return 0;
 #endif
 #ifdef HAVE_XCB
-    xpost_oper_init_xcb_device_ops(ctx, sd);
+    if (xpost_oper_init_xcb_device_ops(ctx, sd))
+        return 0;
     //printf("xcb:\n");
 #endif
-    xpost_oper_init_bgr_device_ops(ctx, sd);
-    xpost_oper_init_raster_device_ops(ctx, sd);
+    if (xpost_oper_init_bgr_device_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_raster_device_ops(ctx, sd))
+        return 0;
 #ifdef HAVE_LIBPNG
-    xpost_oper_init_png_device_ops(ctx, sd);
+    if (xpost_oper_init_png_device_ops(ctx, sd))
+        return 0;
 #endif
 #ifdef HAVE_LIBJPEG
-    xpost_oper_init_jpeg_device_ops(ctx, sd);
+    if (xpost_oper_init_jpeg_device_ops(ctx, sd))
+        return 0;
 #endif
-    xpost_oper_init_context_ops(ctx, sd);
+    if (xpost_oper_init_context_ops(ctx, sd))
+        return 0;
 
-    /* Every module has registered by here. A shortcut still holding
-       the uncaptured marker names no operator. */
+    /* Every module has registered by here. A registration that could
+       not place its operator in systemdict left the interpreter without
+       it, and there is no recovering from that. */
+    if (ctx->operator_install_refused)
+    {
+        XPOST_LOG_ERR("an operator could not be installed in systemdict");
+        return 0;
+    }
+
+    /* A shortcut still holding the uncaptured marker names no
+       operator. */
     {
         const int *sc = (const int *)&ctx->opcode_shortcuts;
         size_t nshortcuts = sizeof ctx->opcode_shortcuts / sizeof *sc;

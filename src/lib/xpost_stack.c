@@ -58,13 +58,17 @@ typedef struct
 */
 
 /* allocate memory for one stack segment */
-XPCHECKAPI int xpost_stack_init(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem,
                                 unsigned int *paddr)
 {
     unsigned int adr;
     Xpost_Stack *s;
 
-    xpost_memory_file_alloc(mem, sizeof(Xpost_Stack), &adr);
+    if (!xpost_memory_file_alloc(mem, sizeof(Xpost_Stack), &adr))
+    {
+        XPOST_LOG_ERR("cannot allocate a stack segment");
+        return 0;
+    }
     s = (Xpost_Stack *)(mem->base + adr);
     s->nextseg = 0;
     s->prevseg = adr;
@@ -120,7 +124,7 @@ int xpost_stack_count(Xpost_Memory_File *mem,
     return ct + s->top;
 }
 
-XPCHECKAPI int xpost_stack_push(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
                                 unsigned int stackadr,
                                 Xpost_Object obj)
 {
@@ -336,7 +340,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
     return 1;
 }
 
-XPCHECKAPI Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
                                         unsigned int stackadr)
 {
     Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);

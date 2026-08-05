@@ -338,8 +338,14 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 XPOST_LOG_ERR("free list corrupt at ent %u (tag %u): discarding",
                         e, e < mem->table.nextent ? mem->table.tab[e].tag : 0);
                 for (bb = 0; bb < XPOST_FREE_NBUCKETS; bb++)
-                    xpost_memory_put(mem, 0, bb * sizeof(unsigned int),
-                                     sizeof zero, &zero);
+                    if (!xpost_memory_put(mem, 0, bb * sizeof(unsigned int),
+                                          sizeof zero, &zero))
+                    {
+                        /* the lists are still corrupt, so a collection
+                           would walk straight back into this */
+                        XPOST_LOG_ERR("cannot discard the free lists");
+                        return 0;
+                    }
                 return XPOST_FREE_WANT_COLLECTION; /* refill the list first */
             }
             ret = xpost_memory_table_get_size(mem, e, &tsz);
@@ -449,8 +455,9 @@ unsigned int xpost_free_realloc(Xpost_Memory_File *mem,
     tab->tab[rent].adr = oldadr;
     tab->tab[rent].sz = oldsize;
 
-    /* free it */
-    (void) xpost_free_memory_ent(mem, ent);
+    /* free it. The entity was allocated moments ago in this same
+       function, so the list can take it back. */
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_free_memory_ent(mem, ent));
 
 #ifdef DEBUGFREE
     printf("final ");

@@ -79,7 +79,9 @@ int main(void)
 
     /* overfill far past the birth size, forcing repeated regrowth */
     for (i = 0; i < 100; i++)
-        xpost_dict_put(ctx, d, xpost_int_cons(i), xpost_int_cons(i));
+        check(xpost_dict_put(ctx, d, xpost_int_cons(i),
+                             xpost_int_cons(i)) == 0,
+              "a put into a growing dict is accepted");
 
     for (i = 0; i < 100; i++)
     {
@@ -108,7 +110,13 @@ int main(void)
 
         check(xpost_object_get_type(big) == dicttype, "a growable dict constructs");
         for (j = 0; j < N; j++)
-            xpost_dict_put(ctx, big, xpost_int_cons(j), xpost_int_cons(j + 1));
+            if (xpost_dict_put(ctx, big, xpost_int_cons(j),
+                               xpost_int_cons(j + 1)) != 0)
+            {
+                printf("FAIL: a put into the relocating dict was refused\n");
+                failures++;
+                break;
+            }
 
         for (j = 0; j < N; j++)
         {

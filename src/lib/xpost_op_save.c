@@ -72,6 +72,10 @@ int Zsave(Xpost_Context *ctx)
         && xpost_stack_count(ctx->lo, vs) >= 255)
         return limitcheck;
     v = xpost_save_create_snapshot_object(ctx->lo);
+    /* the snapshot answers null when it could not be recorded, and a
+       save object that records nothing would restore nothing */
+    if (xpost_object_get_type(v) != savetype)
+        return VMerror;
     /* remember the packing mode at this level so restore reverts it */
     if (v.save_.lev < sizeof ctx->packing_hist)
         ctx->packing_hist[v.save_.lev] = (unsigned char)ctx->packing;
@@ -155,9 +159,15 @@ int Vrestore(Xpost_Context *ctx,
                 o.mark_.tag = filetype;
                 o.mark_.pad0 = 0;
                 o.mark_.padw = ent;
-                xpost_file_object_close(ctx->lo, o);
+                /* restore is not a place a stream can refuse to close:
+                   the file object is going away with the save level
+                   whatever the close had left to write (PLRM 3.7.2) */
+                (void)xpost_file_object_close(ctx->lo, o);
+                /* ent was found by walking this memory file's own
+                   table, so the free list can take it back */
                 if (xpost_file_get_file_pointer(ctx->lo, o) == NULL)
-                    xpost_free_memory_ent(ctx->lo, ent);
+                    XPOST_REFUSAL_IMPOSSIBLE(
+                        xpost_free_memory_ent(ctx->lo, ent));
             }
         keep:;
         }
@@ -192,7 +202,11 @@ void _rebind_fontdirectory(Xpost_Context *ctx)
     access = xpost_object_get_access(ctx, sd);
     ctx->ignoreinvalidaccess = 1;
     xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd);
+    /* the name is already in systemdict, so the store replaces an entry
+       rather than making one: it allocates nothing and cannot be
+       refused, which is what makes this safe on the error path */
+    XPOST_REFUSAL_IMPOSSIBLE(
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd));
     xpost_object_set_access(ctx, sd, access);
     ctx->ignoreinvalidaccess = ignore;
 }

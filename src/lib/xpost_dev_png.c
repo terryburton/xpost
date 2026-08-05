@@ -104,11 +104,17 @@ int _create(Xpost_Context *ctx,
             Xpost_Object height,
             Xpost_Object classdic)
 {
+    int ret;
+
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
     xpost_stack_push(ctx->lo, ctx->os, classdic);
-    xpost_dict_put(ctx, classdic, namewidth, width);
-    xpost_dict_put(ctx, classdic, nameheight, height);
+    ret = xpost_dict_put(ctx, classdic, namewidth, width);
+    if (ret)
+        return ret;
+    ret = xpost_dict_put(ctx, classdic, nameheight, height);
+    if (ret)
+        return ret;
 
     /* call device class's ps-level .copydict procedure,
        //call base-class's Create procedure (to initialize ImgData array)
@@ -140,6 +146,7 @@ int _create_cont(Xpost_Context *ctx,
     integer width = w.int_.val;
     integer height = h.int_.val;
     int compression_level;
+    int ret;
     //printf("create_cont\n");
 
     /* create a string to contain device data structure */
@@ -149,7 +156,9 @@ int _create_cont(Xpost_Context *ctx,
         XPOST_LOG_ERR("cannot allocat private data structure");
         return unregistered;
     }
-    xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    ret = xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    if (ret)
+        return ret;
 
     private.width = width;
     private.height = height;
@@ -271,7 +280,8 @@ int _create_cont(Xpost_Context *ctx,
         png_set_filler(private.png_ptr, 0, PNG_FILLER_AFTER);
 
     /* save private data struct in string */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -326,7 +336,8 @@ int _putpix(Xpost_Context *ctx,
         private.buf->data[iy * private.width + ix] = pixel;
     }
 
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }
@@ -466,7 +477,8 @@ int _emit(Xpost_Context *ctx,
     }
 
     private.emitted = 1;
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     /* pass data back to client application */
     xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data);
@@ -526,7 +538,8 @@ int _destroy(Xpost_Context *ctx,
         fclose(private.f);
     private.f = NULL;
     /* store the cleared pointers back so a repeated destroy is a no-op */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
     return 0;
 }
 
@@ -633,6 +646,8 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     int ret;
 
     ret = xpost_dict_put(ctx, classdic, namenativecolorspace, nameDeviceRGB);
+    if (ret)
+        return ret;
 
     op = xpost_operator_cons(ctx, "pngCreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;

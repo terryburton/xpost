@@ -45,6 +45,7 @@
 #endif
 
 #include "xpost.h"
+#include "xpost_log.h"
 #include "xpost_compat.h" /* xpost_mkstemp */
 #include "xpost_object.h"
 #include "xpost_memory.h"
@@ -99,13 +100,18 @@ int xpost_context_append_ctxlist(Xpost_Memory_File *mem,
 }
 
 
-/* build a stack, return address */
+/* Build a stack and answer its address, or zero if the memory file
+   would not give one. Zero is not a stack address: the memory table
+   itself occupies the foot of every memory file, so a caller can tell a
+   refusal from an address. */
 static
 unsigned int makestack(Xpost_Memory_File *mem)
 {
-    unsigned int ret;
-    xpost_stack_init(mem, &ret);
-    return ret;
+    unsigned int adr;
+
+    if (!xpost_stack_init(mem, &adr))
+        return 0;
+    return adr;
 }
 
 /* set up global vm in the context
@@ -145,7 +151,14 @@ int initglobal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->gl);
         return 0;
     }
-    xpost_memory_file_alloc(ctx->gl, 64, &safeadr); //safety buffer
+    /* safety buffer: nothing addresses it, but the allocation must
+       succeed for the memory file to be in the state the rest of
+       initialisation assumes */
+    if (!xpost_memory_file_alloc(ctx->gl, 64, &safeadr))
+    {
+        xpost_memory_file_exit(ctx->gl);
+        return 0;
+    }
     ret = xpost_free_init(ctx->gl);
     if (!ret)
     {
@@ -218,7 +231,14 @@ int initlocal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->lo);
         return 0;
     }
-    xpost_memory_file_alloc(ctx->lo, 64, &safeadr); //safety buffer
+    /* safety buffer: nothing addresses it, but the allocation must
+       succeed for the memory file to be in the state the rest of
+       initialisation assumes */
+    if (!xpost_memory_file_alloc(ctx->lo, 64, &safeadr))
+    {
+        xpost_memory_file_exit(ctx->lo);
+        return 0;
+    }
     ret = xpost_free_init(ctx->lo);
     if (!ret)
     {
@@ -252,6 +272,12 @@ int initlocal(Xpost_Context *ctx,
     ctx->es = makestack(ctx->lo);
     ctx->ds = makestack(ctx->lo);
     ctx->hold = makestack(ctx->lo);
+    if (!ctx->os || !ctx->es || !ctx->ds || !ctx->hold)
+    {
+        XPOST_LOG_ERR("cannot create the interpreter stacks");
+        xpost_memory_file_exit(ctx->lo);
+        return 0;
+    }
     //ctx->lo->roots[1] = DS;
     //ctx->lo->start = HOLD + 1; /* so HOLD is not collected and not scanned. */
     //ctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST + 1;
@@ -298,6 +324,7 @@ int xpost_context_init(Xpost_Context *ctx,
         return 0;
     }
     ctx->event_handler = null;
+    ctx->operator_install_refused = 0;
     ctx->ignoreinvalidaccess = 0;
     ctx->es_over = 0;
     ctx->os_over = 0;
@@ -461,6 +488,11 @@ unsigned int xpost_context_fork3(Xpost_Context *ctx,
     newctx->es = makestack(newctx->lo);
     newctx->ds = makestack(newctx->lo);
     newctx->hold = makestack(newctx->lo);
+    if (!newctx->os || !newctx->es || !newctx->ds || !newctx->hold)
+    {
+        XPOST_LOG_ERR("cannot create the stacks for the new context");
+        return 0;
+    }
     newctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1;
 
     xpost_stack_push(newctx->lo, newctx->ds,

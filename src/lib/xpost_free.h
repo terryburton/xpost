@@ -141,7 +141,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
 /**
  * @brief  explicitly add ent to free list
  */
-int xpost_free_memory_ent(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK int xpost_free_memory_ent(Xpost_Memory_File *mem,
                           unsigned int ent);
 
 /**
