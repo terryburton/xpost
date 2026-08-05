@@ -80,13 +80,29 @@ typedef struct
 } Xpost_Stack;
 
 /**
+ * @brief the stack segment at address @p stackadr in @p mem.
+ *
+ * The one spelling of a stack pointer. Stacks are reached from an address
+ * far more often than anything else in virtual memory is, so the cast was
+ * written out at eighty-four sites; it is written here instead. As with
+ * every pointer into a memory file, an allocation in @p mem may move the
+ * file and invalidate the result, so it is derived where it is used
+ * rather than held across a call that can allocate.
+ */
+static inline Xpost_Stack *
+xpost_stack_at(Xpost_Memory_File *mem, unsigned int stackadr)
+{
+    return (Xpost_Stack *)xpost_vm_ptr(mem, stackadr);
+}
+
+/**
  * @brief the next segment of a full walk, or NULL when the walk is done.
  *
  * The termination rule for walking a segmented stack, in one place: a
  * segment shorter than full is the stack's top and ends the walk; an
  * exactly-full segment continues into its successor if it has one. Walk
  * a whole stack as
- *     for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+ *     for (s = xpost_stack_at(mem, stackadr); s;
  *          s = xpost_stack_next_segment(mem, s))
  *         for (i = 0; i < s->top; i++) ... s->data[i] ...
  * The usual caveat applies: an allocation in @p mem invalidates @p s.
@@ -95,7 +111,7 @@ static inline Xpost_Stack *
 xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
 {
     if (s->top == XPOST_STACK_SEGMENT_SIZE && s->nextseg)
-        return (Xpost_Stack *)(mem->base + s->nextseg);
+        return xpost_stack_at(mem, s->nextseg);
     return NULL;
 }
 

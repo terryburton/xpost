@@ -168,8 +168,8 @@ int _stack_float(Xpost_Context *ctx)
 static
 int _stack_any(Xpost_Context *ctx)
 {
-    Xpost_Stack *os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os);
-    Xpost_Stack *os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg);
+    Xpost_Stack *os_root = xpost_stack_at(ctx->lo, ctx->os);
+    Xpost_Stack *os_top = xpost_stack_at(ctx->lo, os_root->prevseg);
     /* at least one operand without walking the whole stack: the top
        segment holds one, or a full segment sits below it (only the top
        segment is ever partial) -- counting is O(n) in the stack depth */
@@ -298,8 +298,8 @@ int _stack_number_number(Xpost_Context *ctx)
 static
 int _stack_any_any(Xpost_Context *ctx)
 {
-    Xpost_Stack *os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os);
-    Xpost_Stack *os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg);
+    Xpost_Stack *os_root = xpost_stack_at(ctx->lo, ctx->os);
+    Xpost_Stack *os_top = xpost_stack_at(ctx->lo, os_root->prevseg);
     /* at least two operands in O(1): two in the top segment, or a full
        segment (never partial) below it */
     if (os_top->top >= 2 || os_top != os_root)
@@ -368,7 +368,7 @@ void xpost_operator_dump(Xpost_Context *ctx,
     o.mark_.padw = op.name;
     str = xpost_name_get_string(ctx, o);
     s = xpost_string_get_pointer(ctx, str);
-    sig = (void *)(ctx->gl->base + op.sigadr);
+    sig = xpost_vm_ptr(ctx->gl, op.sigadr);
     memcpy(&fp, &sig[0].fp, sizeof fp);
     /*
     printf("<operator %d %d:%*s %p>",
@@ -493,7 +493,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
             si = optab[opcode].n++; /* index of last sig */
         }
 
-        sp = (void *)(ctx->gl->base + optab[opcode].sigadr);
+        sp = xpost_vm_ptr(ctx->gl, optab[opcode].sigadr);
         {
             unsigned int ad;
             if (!xpost_memory_file_alloc(ctx->gl, in, &ad))
@@ -503,12 +503,12 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 return null;
             }
             optab = xpost_operator_table(ctx->gl); // recalc
-            sp = (void *)(ctx->gl->base + optab[opcode].sigadr); // recalc
+            sp = xpost_vm_ptr(ctx->gl, optab[opcode].sigadr); // recalc
             sp[si].t = ad;
         }
         {
             va_list args;
-            byte *b = (void *)(ctx->gl->base + sp[si].t);
+            byte *b = xpost_vm_ptr(ctx->gl, sp[si].t);
             va_start(args, in);
             for (i = in-1; i >= 0; i--) {
                 b[i] = va_arg(args, int);
@@ -658,8 +658,8 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
             }
             /* an allocation moves the file, so every pointer into it is
                taken afresh from its address */
-            sig = (void *)(ctx->gl->base + sigadr);
-            b = (void *)(ctx->gl->base + tadr);
+            sig = xpost_vm_ptr(ctx->gl, sigadr);
+            b = xpost_vm_ptr(ctx->gl, tadr);
             for (k = 0; k < in; k++)
                 b[k] = sigs[s].types[k];
             sig[s].in = in;
@@ -714,9 +714,9 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
 
     /* when all args sit in the stack's top segment, copy them into the
        hold segment directly, sparing a segment walk per fetch/push/pop */
-    s = (Xpost_Stack *)(mem->base + stacadr);
-    s = (Xpost_Stack *)(mem->base + s->prevseg); /* load top segment */
-    hold = (Xpost_Stack *)(ctx->lo->base + ctx->hold);
+    s = xpost_stack_at(mem, stacadr);
+    s = xpost_stack_at(mem, s->prevseg); /* load top segment */
+    hold = xpost_stack_at(ctx->lo, ctx->hold);
     if ((int)s->top >= n)
     {
         hold->prevseg = ctx->hold;
@@ -793,7 +793,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
 
     optab = xpost_operator_table(ctx->gl);
     op = optab[opcode];
-    sp = (void *)(ctx->gl->base + op.sigadr);
+    sp = xpost_vm_ptr(ctx->gl, op.sigadr);
 
     /* a signature states at most XPOST_OPERATOR_MAX_SIG operands, so ct
        only needs to reach that many; no full segment walk is needed. The
@@ -801,8 +801,8 @@ int xpost_operator_exec(Xpost_Context *ctx,
        segment (never partial) sits below it -- at least SEGMENT_SIZE,
        likewise enough. Only a lone segment can hold fewer, and then its
        own top is the count. */
-    os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os);
-    os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg);
+    os_root = xpost_stack_at(ctx->lo, ctx->os);
+    os_top = xpost_stack_at(ctx->lo, os_root->prevseg);
     ct = (os_top->top >= XPOST_OPERATOR_MAX_SIG) ? XPOST_OPERATOR_MAX_SIG
         : (os_top == os_root) ? (int)os_top->top
         : XPOST_OPERATOR_MAX_SIG;
@@ -852,7 +852,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
 
         /* check type-pattern against stack */
         pass = 1;
-        t = (void *)(ctx->gl->base + sp[i].t);
+        t = xpost_vm_ptr(ctx->gl, sp[i].t);
         for (j=0; j < sp[i].in; j++)
         {
             Xpost_Object el = (j < (int)os_top->top)
@@ -932,7 +932,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
     }
 
     _xpost_operator_push_args_to_hold(ctx, ctx->lo, ctx->os, sp[i].in);
-    hold = (void *)(ctx->lo->base + ctx->hold);
+    hold = xpost_vm_ptr(ctx->lo, ctx->hold);
 
     switch(sp[i].in)
     {

@@ -625,7 +625,7 @@ int xpost_oper_init_type_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
     //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
+    //optab = xpost_vm_ptr(ctx->gl, optadr);
 
     op = xpost_operator_cons(ctx, "type", (Xpost_Op_Func)Atype, 1, 1, anytype);
     INSTALL;

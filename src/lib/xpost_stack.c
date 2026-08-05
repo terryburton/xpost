@@ -69,7 +69,7 @@ XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate a stack segment");
         return 0;
     }
-    s = (Xpost_Stack *)(mem->base + adr);
+    s = xpost_stack_at(mem, adr);
     s->nextseg = 0;
     s->prevseg = adr;
     s->top = 0;
@@ -80,7 +80,7 @@ XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem,
 void xpost_stack_clear(Xpost_Memory_File *mem,
                        unsigned int stackadr)
 {
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, stackadr);
     s->top = 0;
     s->prevseg = stackadr;
 }
@@ -88,7 +88,7 @@ void xpost_stack_clear(Xpost_Memory_File *mem,
 void xpost_stack_dump(Xpost_Memory_File *mem,
                       unsigned int stackadr)
 {
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, stackadr);
     unsigned int i;
     unsigned int a;
 
@@ -104,7 +104,7 @@ void xpost_stack_dump(Xpost_Memory_File *mem,
             break;
         if (s->nextseg == 0)
             break;
-        s = (Xpost_Stack *)(mem->base + s->nextseg);
+        s = xpost_stack_at(mem, s->nextseg);
     }
 }
 
@@ -112,14 +112,14 @@ void xpost_stack_dump(Xpost_Memory_File *mem,
 int xpost_stack_count(Xpost_Memory_File *mem,
                       unsigned int stackadr)
 {
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, stackadr);
     unsigned int ct = 0;
     while (s->top == XPOST_STACK_SEGMENT_SIZE)
     {
         ct += XPOST_STACK_SEGMENT_SIZE;
         if (s->nextseg == 0)
             return ct; /* a full segment with no successor is a legal topmost state */
-        s = (Xpost_Stack *)(mem->base + s->nextseg);
+        s = xpost_stack_at(mem, s->nextseg);
     }
     return ct + s->top;
 }
@@ -128,8 +128,8 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
                                 unsigned int stackadr,
                                 Xpost_Object obj)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + root->prevseg); /* load top segment */
+    Xpost_Stack *root = xpost_stack_at(mem, stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, root->prevseg); /* load top segment */
 
     if (xpost_object_get_type(obj) == invalidtype)
         return 0;
@@ -150,13 +150,13 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
             ret = xpost_stack_init(mem, &newst);
             if (!ret)
                 return 0;
-            s = (Xpost_Stack *)(mem->base + stadr);
-            root = (Xpost_Stack *)(mem->base + stackadr);
+            s = xpost_stack_at(mem, stadr);
+            root = xpost_stack_at(mem, stackadr);
             s->nextseg = newst;
-            ((Xpost_Stack *)(mem->base + newst))->prevseg = stadr;
+            (xpost_stack_at(mem, newst))->prevseg = stadr;
         }
         root->prevseg = s->nextseg;
-        s = (Xpost_Stack *)(mem->base + s->nextseg);
+        s = xpost_stack_at(mem, s->nextseg);
         s->top = 0;
     }
 
@@ -176,19 +176,19 @@ Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
     return xpost_stack_bottomup_fetch(mem, stackadr, cnt - 1 - i);
 #else
     int i = idx;
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, stackadr);
 
-    if (s->prevseg) s = (Xpost_Stack *)(mem->base + s->prevseg); /* find top seg */
+    if (s->prevseg) s = xpost_stack_at(mem, s->prevseg); /* find top seg */
 
     while (i >= (signed)(s->top)){
         i -= s->top;
-        if (s == (Xpost_Stack *)(mem->base + stackadr)){
+        if (s == xpost_stack_at(mem, stackadr)){
             XPOST_LOG_ERR("%d can't find stack segment for index -%d in stack of size %u",
                     unregistered, idx,
                     xpost_stack_count(mem, stackadr));
             return invalid;
         }
-        s = (Xpost_Stack *)(mem->base + s->prevseg);
+        s = xpost_stack_at(mem, s->prevseg);
     }
     return s->data[s->top - 1 - i];
 #endif
@@ -206,18 +206,18 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
     return xpost_stack_bottomup_replace(mem, stackadr, cnt - 1 - i, obj);
 #else
     int i = idx;
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + stackadr);
-    if (s->prevseg) s = (Xpost_Stack *)(mem->base + s->prevseg); /* find top seg */
+    Xpost_Stack *s = xpost_stack_at(mem, stackadr);
+    if (s->prevseg) s = xpost_stack_at(mem, s->prevseg); /* find top seg */
 
     while (i >= (signed)(s->top)){
         i -= s->top;
-        if (s == (Xpost_Stack *)(mem->base + stackadr)){
+        if (s == xpost_stack_at(mem, stackadr)){
             XPOST_LOG_ERR("%d can't find stack segment for index -%d in stack of size %u",
                     unregistered, idx,
                     xpost_stack_count(mem, stackadr));
             return 0;
         }
-        s = (Xpost_Stack *)(mem->base + s->prevseg);
+        s = xpost_stack_at(mem, s->prevseg);
     }
     s->data[s->top - 1 - i] = obj;
     return 1;
@@ -288,7 +288,7 @@ Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
                                         unsigned int stackadr,
                                         int idx)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *root = xpost_stack_at(mem, stackadr);
     Xpost_Stack *s = root;
     int i = idx;
 
@@ -303,7 +303,7 @@ Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
                     xpost_stack_count(mem, stackadr));
             return invalid;
         }
-        s = (Xpost_Stack *)(mem->base + s->nextseg);
+        s = xpost_stack_at(mem, s->nextseg);
     }
     if (i >= (signed)s->top){
         return invalid;
@@ -316,7 +316,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
                                  int idx,
                                  Xpost_Object obj)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);
+    Xpost_Stack *root = xpost_stack_at(mem, stackadr);
     Xpost_Stack *s = root;
     int i = idx;
 
@@ -331,7 +331,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
                           xpost_stack_count(mem, stackadr));
             return 0;
         }
-        s = (Xpost_Stack *)(mem->base + s->nextseg);
+        s = xpost_stack_at(mem, s->nextseg);
     }
     if (i >= (signed)s->top){
         return 0;
@@ -343,8 +343,8 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
 XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
                                         unsigned int stackadr)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);
-    Xpost_Stack *s = (Xpost_Stack *)(mem->base + root->prevseg); /* load top seg */
+    Xpost_Stack *root = xpost_stack_at(mem, stackadr);
+    Xpost_Stack *s = xpost_stack_at(mem, root->prevseg); /* load top seg */
     Xpost_Object val;
 
     if (s->top == 0) /* back up if top is empty */
@@ -352,7 +352,7 @@ XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
         if (s != root)
         {
             unsigned int soff = s->prevseg;
-            s = (Xpost_Stack *)(mem->base + soff);
+            s = xpost_stack_at(mem, soff);
             root->prevseg = soff; // update root->top
             if (s->top == 0)
                 return invalid;

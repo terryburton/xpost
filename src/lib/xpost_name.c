@@ -144,7 +144,7 @@ unsigned int tstsearch(Xpost_Memory_File *mem,
                        unsigned int n)
 {
     while (tadr) {
-        tst *p = (void *)(mem->base + tadr);
+        tst *p = xpost_vm_ptr(mem, tadr);
         unsigned int key = n ? (unsigned char)*s : TST_END;
 
         if (key < p->val) {
@@ -180,23 +180,23 @@ int tstinsert(Xpost_Memory_File *mem,
             XPOST_LOG_ERR("cannot allocate tree node");
             return VMerror;
         }
-        p = (void *)(mem->base + tadr);
+        p = xpost_vm_ptr(mem, tadr);
         p->val = key;
         p->lo = p->eq = p->hi = 0;
     }
-    p = (void *)(mem->base + tadr);
+    p = xpost_vm_ptr(mem, tadr);
     if (key < p->val) {
         ret = tstinsert(mem, p->lo, s, n, &t);
         if (ret)
             return ret;
-        p = (void *)(mem->base + tadr); //recalc pointer
+        p = xpost_vm_ptr(mem, tadr); //recalc pointer
         p->lo = t;
     } else if (key == p->val) {
         if (key != TST_END) {
             ret = tstinsert(mem, p->eq, s + 1, n - 1, &t);
             if (ret)
                 return ret;
-            p = (void *)(mem->base + tadr); //recalc pointer
+            p = xpost_vm_ptr(mem, tadr); //recalc pointer
             p->eq = t;
         }else {
             nstk = xpost_memory_name_stack_adr(mem);
@@ -206,7 +206,7 @@ int tstinsert(Xpost_Memory_File *mem,
         ret = tstinsert(mem, p->hi, s, n, &t);
         if (ret)
             return ret;
-        p = (void *)(mem->base + tadr); //recalc pointer
+        p = xpost_vm_ptr(mem, tadr); //recalc pointer
         p->hi = t;
     }
     //return tadr;

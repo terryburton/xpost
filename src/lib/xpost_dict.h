@@ -96,7 +96,7 @@ xpost_dict_head(Xpost_Memory_File *mem, unsigned int ent)
 static inline dichead *
 xpost_dict_head_at(Xpost_Memory_File *mem, unsigned int adr)
 {
-    return (dichead *)(mem->base + adr);
+    return (dichead *)xpost_vm_ptr(mem, adr);
 }
 
 static inline dicrec *

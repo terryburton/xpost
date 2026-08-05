@@ -196,8 +196,8 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     z += xpost_free_bucket_for_size(sz) * sizeof(unsigned int);
 
     /* push onto the bucket: link word lives in the ent's data area */
-    memcpy(mem->base + a, mem->base + z, sizeof(unsigned int));
-    memcpy(mem->base + z, &ent, sizeof(unsigned int));
+    memcpy(xpost_vm_ptr(mem, a), xpost_vm_ptr(mem, z), sizeof(unsigned int));
+    memcpy(xpost_vm_ptr(mem, z), &ent, sizeof(unsigned int));
 
     return sz;
 }
@@ -205,14 +205,14 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
 static void _dump_chain(Xpost_Memory_File *mem, unsigned int z)
 {
     unsigned int e;
-    memcpy(&e, mem->base + z, sizeof(unsigned int));
+    memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
     while (e)
     {
         unsigned int sz;
         if (!xpost_memory_table_get_size(mem, e, &sz)) return;
         printf("%u(%u) ", e, sz);
         if (!xpost_memory_table_get_addr(mem, e, &z)) return;
-        memcpy(&e, mem->base + z, sizeof(unsigned int));
+        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
     }
 }
 
@@ -231,13 +231,13 @@ void xpost_free_dump(Xpost_Memory_File *mem)
         for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
         {
             z = headz + b * sizeof(unsigned int);
-            memcpy(&e, mem->base + z, sizeof(unsigned int));
+            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
             if (e) printf("[bucket %u] ", b);
             _dump_chain(mem, z);
         }
     }
     return;
-    memcpy(&e, mem->base + z, sizeof(unsigned int));
+    memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
     while (e)
     {
         unsigned int sz;
@@ -252,7 +252,7 @@ void xpost_free_dump(Xpost_Memory_File *mem)
         {
             return;
         }
-        memcpy(&e, mem->base + z, sizeof(unsigned int));
+        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
     }
 }
 
@@ -304,7 +304,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
         unsigned int best = 0, bestz = 0, bestsz = 0;
 
         z = headz + b * sizeof(unsigned int);
-        memcpy(&e, mem->base + z, sizeof(unsigned int));
+        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
         while (e) /* e is not zero */
         {
             unsigned int tsz;
@@ -363,7 +363,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 return 0;
             }
             z = ta;
-            memcpy(&e, mem->base + z, sizeof(unsigned int));
+            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
         }
 
         if (best)
@@ -379,7 +379,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
             }
             /* unlink: the predecessor link slot was recorded when the
                node was reached */
-            memcpy(mem->base + bestz, mem->base + ad, sizeof(unsigned int));
+            memcpy(xpost_vm_ptr(mem, bestz), xpost_vm_ptr(mem, ad), sizeof(unsigned int));
             tab->tab[best].tag = tag;
             *entity = best;
             return 1; /* found, return SUCCESS */
@@ -435,7 +435,7 @@ unsigned int xpost_free_realloc(Xpost_Memory_File *mem,
     newadr = tab->tab[rent].adr;
 
     /* copy data */
-    memcpy(mem->base + newadr, mem->base + oldadr, oldsize);
+    memcpy(xpost_vm_ptr(mem, newadr), xpost_vm_ptr(mem, oldadr), oldsize);
 
     /* stash old adr */
     tab->tab[rent].adr = oldadr;

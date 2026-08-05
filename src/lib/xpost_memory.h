@@ -232,12 +232,34 @@ xpost_ent_valid(Xpost_Memory_File *mem, unsigned int ent)
 }
 
 /**
+ * @brief the pointer an address in @p mem denotes.
+ *
+ * The one derivation of a pointer into virtual memory. Every other
+ * spelling is built on this one, so the arithmetic that turns an offset
+ * into an address in this process appears once.
+ *
+ * That is worth a function because the base MOVES. Any allocation in a
+ * memory file may reallocate it, and every pointer taken before that
+ * moment is then stale -- pointing into freed memory, or into the middle
+ * of somebody else's entity. The hazard is why XPOST_GROW_MOVES and
+ * tests/run-reloc-stress-test.sh exist, and it is what a SIGSEGV in
+ * dictionary growth turned out to be, at a site whose comment still
+ * described the defence a refactor had removed. A rule spelled a hundred
+ * and fifty ways has a hundred and fifty places to lapse.
+ */
+static inline void *
+xpost_vm_ptr(Xpost_Memory_File *mem, unsigned int adr)
+{
+    return mem->base + adr;
+}
+
+/**
  * @brief pointer to entity @p ent's data; @p ent must be valid.
  */
 static inline void *
 xpost_ent_ptr(Xpost_Memory_File *mem, unsigned int ent)
 {
-    return mem->base + mem->table.tab[ent].adr;
+    return xpost_vm_ptr(mem, mem->table.tab[ent].adr);
 }
 
 /**

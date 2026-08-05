@@ -427,7 +427,7 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     { /* hanging error case */
 #else
     /* initialize mem (valgrind) */
-    memset(mem->base + mem->used, 0, mem->max - mem->used);
+    memset(xpost_vm_ptr(mem, mem->used), 0, mem->max - mem->used);
     if (getenv("XPOST_GROW_MOVES"))
     {
         /* debug: force every grow to relocate, so a stale pointer into
@@ -500,7 +500,7 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
             }
         }
 
-        memset(mem->base + adr, 0, sz);
+        memset(xpost_vm_ptr(mem, adr), 0, sz);
     }
 
     mem->used = adr + sz;
@@ -836,7 +836,7 @@ xpost_memory_get(Xpost_Memory_File *mem,
         return 0;
     }
 
-    memcpy(dest, mem->base + mem->table.tab[ent].adr + offset * sz, sz);
+    memcpy(dest, (unsigned char *)xpost_ent_ptr(mem, ent) + offset * sz, sz);
     return 1;
 }
 
@@ -857,7 +857,7 @@ xpost_memory_put(Xpost_Memory_File *mem,
         return 0;
     }
 
-    memcpy(mem->base + mem->table.tab[ent].adr + offset * sz, src, sz);
+    memcpy((unsigned char *)xpost_ent_ptr(mem, ent) + offset * sz, src, sz);
     return 1;
 }
 

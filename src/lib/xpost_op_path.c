@@ -865,7 +865,7 @@ int _fillpolyargs(Xpost_Context *ctx)
     {
         unsigned int adr;
         xpost_memory_table_get_addr(ctx->lo, xpost_object_get_ent(backing), &adr);
-        bk = (Xpost_Object *)(ctx->lo->base + adr);
+        bk = (Xpost_Object *)xpost_vm_ptr(ctx->lo, adr);
     }
 
     /* second pass: fill the backing coordinates and the pair views,

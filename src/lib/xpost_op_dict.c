@@ -618,7 +618,7 @@ int xpost_op_cleardictstack(Xpost_Context *ctx)
         XPOST_LOG_ERR("cannot retrieve address for dict stack");
         return VMerror;
     }
-    ds = (Xpost_Stack *)(ctx->lo->base + dsaddr);
+    ds = xpost_stack_at(ctx->lo, dsaddr);
     ds->top = 3;
     */
     return 0;

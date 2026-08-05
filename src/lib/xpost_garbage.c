@@ -197,7 +197,7 @@ int _xpost_garbage_mark_array(Xpost_Context *ctx,
 #endif
 
     {
-        Xpost_Object *op = (void *)(mem->base + adr);
+        Xpost_Object *op = xpost_vm_ptr(mem, adr);
         unsigned int j;
 
         for (j = 0; j < sz; j++)
@@ -422,7 +422,7 @@ int _xpost_garbage_mark_names(Xpost_Context *ctx,
     printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+    for (s = xpost_stack_at(mem, stackadr); s;
          s = xpost_stack_next_segment(mem, s), start = 0)
     {
         for (i = start; i < s->top; i++)
@@ -451,7 +451,7 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
     printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+    for (s = xpost_stack_at(mem, stackadr); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -486,7 +486,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
         printf("marking saverec stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+    for (s = xpost_stack_at(mem, stackadr); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -575,7 +575,7 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
     printf("marking save stack of size %u\n", xpost_stack_count(mem, stackadr));
 #endif
 
-    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+    for (s = xpost_stack_at(mem, stackadr); s;
          s = xpost_stack_next_segment(mem, s))
     {
         for (i = 0; i < s->top; i++)
@@ -611,7 +611,7 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
 
     /* discard the lists; previously-freed entities are gathered again */
     for (i = 0; i < XPOST_FREE_NBUCKETS; i++)
-        memcpy(mem->base + z + i * sizeof(unsigned int), &zero, sizeof zero);
+        memcpy(xpost_vm_ptr(mem, z + i * sizeof(unsigned int)), &zero, sizeof zero);
 
     {
     unsigned int bstat[XPOST_FREE_NBUCKETS] = {0};
@@ -626,8 +626,8 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
             b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;
             bz = z + b * sizeof(unsigned int);
-            memcpy(mem->base + mem->table.tab[i].adr, mem->base + bz, sizeof(unsigned int));
-            memcpy(mem->base + bz, &i, sizeof(unsigned int));
+            memcpy(xpost_ent_ptr(mem, i), xpost_vm_ptr(mem, bz), sizeof(unsigned int));
+            memcpy(xpost_vm_ptr(mem, bz), &i, sizeof(unsigned int));
             sz += mem->table.tab[i].sz;
         }
     }
@@ -724,7 +724,7 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     /* determine global/local */
     isglobal = 0;
     ad = xpost_memory_context_list_adr(mem);
-    cid = (void *)(mem->base + ad);
+    cid = xpost_vm_ptr(mem, ad);
     for (i = 0; i < MAXCONTEXT && cid[i]; i++)
     {
         ctx = mem->interpreter_cid_get_context(cid[i]);
@@ -1054,7 +1054,7 @@ void exit_test_garbage(void)
 static
 int _clear_hold(Xpost_Context *_ctx)
 {
-    //Xpost_Stack *s = (Xpost_Stack *)(_ctx->lo->base + _ctx->hold);
+    //Xpost_Stack *s = xpost_stack_at(_ctx->lo, _ctx->hold);
     //s->top = 0;
     xpost_stack_clear(_ctx->lo, _ctx->hold);
     return 1;

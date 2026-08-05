@@ -240,7 +240,7 @@ int xpost_operator_exec(Xpost_Context *ctx,
 static inline Xpost_Operator *
 xpost_operator_table(Xpost_Memory_File *gl)
 {
-    return (Xpost_Operator *)(gl->base + xpost_memory_operator_table_adr(gl));
+    return (Xpost_Operator *)xpost_vm_ptr(gl, xpost_memory_operator_table_adr(gl));
 }
 
 /**

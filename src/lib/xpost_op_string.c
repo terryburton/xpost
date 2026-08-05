@@ -314,14 +314,14 @@ static int xpost_op_string_forall_iterate(Xpost_Context *ctx)
     Xpost_Object S, P;
     integer val;
     int ret;
-    Xpost_Stack *es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-    Xpost_Stack *es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg);
+    Xpost_Stack *es_root = xpost_stack_at(ctx->lo, ctx->es);
+    Xpost_Stack *es_top = xpost_stack_at(ctx->lo, es_root->prevseg);
 
     /* frame in the top segment, with room for the two pushes */
     if (es_top->top >= 3 && es_top->top < XPOST_STACK_SEGMENT_SIZE - 2)
     {
-        Xpost_Stack *os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os);
-        Xpost_Stack *os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg);
+        Xpost_Stack *os_root = xpost_stack_at(ctx->lo, ctx->os);
+        Xpost_Stack *os_top = xpost_stack_at(ctx->lo, os_root->prevseg);
 
         S = es_top->data[es_top->top - 1];
         P = es_top->data[es_top->top - 2];
@@ -329,7 +329,7 @@ static int xpost_op_string_forall_iterate(Xpost_Context *ctx)
         {
             es_top->top -= 3; /* drop the frame */
             if (es_top->top == 0 &&
-                (unsigned char *)es_top != ctx->lo->base + ctx->es)
+                es_top != xpost_stack_at(ctx->lo, ctx->es))
                 es_root->prevseg = es_top->prevseg;
             return 0;
         }
@@ -344,8 +344,8 @@ static int xpost_op_string_forall_iterate(Xpost_Context *ctx)
                 return stackoverflow;
             /* the push may grow the memory file and move its base:
                re-derive the frame pointers before writing through them */
-            es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-            es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg);
+            es_root = xpost_stack_at(ctx->lo, ctx->es);
+            es_top = xpost_stack_at(ctx->lo, es_root->prevseg);
         }
         es_top->data[es_top->top - 1] =
             xpost_object_cvlit(xpost_object_get_interval(S, 1, S.comp_.sz - 1));

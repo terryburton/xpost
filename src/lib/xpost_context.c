@@ -61,7 +61,6 @@
 int xpost_context_init_ctxlist(Xpost_Memory_File *mem)
 {
     unsigned int ent;
-    Xpost_Memory_Table *tab;
     int ret;
 
     ret = xpost_memory_table_alloc(mem, MAXCONTEXT * sizeof(unsigned int), 0, &ent);
@@ -70,8 +69,7 @@ int xpost_context_init_ctxlist(Xpost_Memory_File *mem)
         return 0; /* was unregistered error */
     }
     assert(ent == XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST);
-    tab = &mem->table;
-    memset(mem->base + tab->tab[XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST].adr, 0,
+    memset(xpost_vm_ptr(mem, xpost_memory_context_list_adr(mem)), 0,
            MAXCONTEXT * sizeof(unsigned int));
 
     return 1;
@@ -84,7 +82,7 @@ int xpost_context_append_ctxlist(Xpost_Memory_File *mem,
     int i;
     unsigned int *ctxlist;
 
-    ctxlist = (void *)(mem->base + xpost_memory_context_list_adr(mem));
+    ctxlist = xpost_vm_ptr(mem, xpost_memory_context_list_adr(mem));
     // find first empty
     for (i=0; i < MAXCONTEXT; i++)
     {

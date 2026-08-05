@@ -72,7 +72,7 @@ static void _verify_stack(Xpost_Context *ctx, Xpost_Memory_File *mem,
 {
     Xpost_Stack *s;
     unsigned int i;
-    for (s = (Xpost_Stack *)(mem->base + stackadr); s;
+    for (s = xpost_stack_at(mem, stackadr); s;
          s = xpost_stack_next_segment(mem, s))
         for (i = 0; i < s->top; i++)
             _verify_push(ctx, s->data[i], 0xFFFFFFFF, 2);
@@ -122,7 +122,7 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
             for (off = 0; off + sizeof(Xpost_Object) <= used; off += sizeof(Xpost_Object))
             {
                 Xpost_Object o;
-                memcpy(&o, m->base + adr + off, sizeof o);
+                memcpy(&o, xpost_vm_ptr(m, adr + off), sizeof o);
                 _verify_push(ctx, o, it.ent, it.bank);
             }
         }
@@ -208,14 +208,14 @@ void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem)
 
             if (gtag == arraytype)
             {
-                memcpy(&pair[0], gl->base + gadr + off, sizeof pair[0]);
+                memcpy(&pair[0], xpost_vm_ptr(gl, gadr + off), sizeof pair[0]);
                 n = 1;
             }
             else
             {
                 dicrec rec;
 
-                memcpy(&rec, gl->base + gadr + off, sizeof rec);
+                memcpy(&rec, xpost_vm_ptr(gl, gadr + off), sizeof rec);
                 pair[0] = rec.key;
                 pair[1] = rec.value;
                 n = 2;
@@ -249,7 +249,8 @@ void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem)
                         for (k = 0; k < o.comp_.sz; k++)
                         {
                             unsigned char c =
-                                *(mem->base + mem->table.tab[te].adr + o.comp_.off + k);
+                                ((unsigned char *)xpost_ent_ptr(mem, te))
+                                    [o.comp_.off + k];
 
                             fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
                         }

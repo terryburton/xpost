@@ -1,5 +1,9 @@
 #!/bin/sh
-# Guard how the address of a special entity is obtained.
+# Guard how a VM address is obtained, and how a VM pointer is derived from
+# one. Two rules, one subject: the translation from "which entity" to
+# "where its bytes are" happens in xpost_memory.h and nowhere else.
+#
+# RULE 1 -- a special entity's address is reached through its own accessor.
 #
 # The first few table slots hold structures the interpreter always has: the
 # free lists, the save stack, the context list, the two halves of the name
@@ -20,6 +24,21 @@
 # So the enumerators are named in the header that defines them and in the
 # five constructors that build the entities. Everywhere else calls the
 # accessor named for the entity, which returns the address directly.
+#
+# RULE 2 -- a pointer into VM is derived through xpost_vm_ptr.
+#
+# An address is an offset into a memory file that MOVES: any allocation may
+# reallocate it, and every pointer taken before that moment is then stale.
+# The hazard is why XPOST_GROW_MOVES and run-reloc-stress-test.sh exist, and
+# it is what a SIGSEGV in dictionary growth turned out to be, at a site whose
+# comment still described the defence a refactor had removed.
+#
+# It was spelled out at a hundred and fifty-six sites, eighty-four of them
+# the identical cast to a stack pointer. That is a hundred and fifty-six
+# places for the rule to lapse and one for it to be stated. It is now stated
+# in xpost_memory.h, with the typed spellings -- xpost_stack_at,
+# xpost_dict_head, xpost_operator_table -- built on top of it, so a later
+# change to how a VM pointer is checked or tagged has one place to go.
 #
 # Usage: check-vm-address.sh <source root>
 
@@ -132,10 +151,69 @@ if [ "$naccessor" -ne 6 ]; then
     exit 1
 fi
 
+# ---------------------------------------------------------------- rule 2
+#
+# Two structures unrelated to virtual memory also have a member called
+# base, and adding to one is not a VM derivation: a DSC document's own
+# byte buffer, and the record buffer of the binary-object-sequence writer,
+# whose base is the header length rather than a memory file. They are
+# exempted by the spelling that makes them what they are, so a real VM
+# derivation cannot be mistaken for either.
+for f in "$lib"/*.c "$lib"/*.h; do
+    [ -e "$f" ] || continue
+    [ "$f" = "$header" ] && continue
+    awk '
+    {
+        line = $0; code = ""
+        while (length(line)) {
+            if (incomment) {
+                i = index(line, "*/")
+                if (i == 0) { line = ""; break }
+                line = substr(line, i + 2); incomment = 0; continue
+            }
+            i = index(line, "/*"); j = index(line, "//")
+            if (j > 0 && (i == 0 || j < i)) { code = code substr(line, 1, j - 1); break }
+            if (i == 0) { code = code line; break }
+            code = code substr(line, 1, i - 1)
+            line = substr(line, i + 2); incomment = 1
+        }
+        if (code !~ /->base[ \t]*\+/) next
+        if (code ~ /b->buf[ \t]*\+[ \t]*b->base/) next     # record buffer
+        if (code ~ /ctx->base[ \t]*\+[ \t]*ctx->length/) next  # DSC document
+        printf "%s %d\n", FILENAME, FNR
+    }' "$f"
+done | sed "s|^$lib/||" > "$work/derivations"
+
+if [ -s "$work/derivations" ]; then
+    echo "FAIL: a VM pointer is derived without xpost_vm_ptr:"
+    sed 's/ /:/; s/^/      /' "$work/derivations"
+    echo "      use xpost_vm_ptr(mem, adr), or the typed spelling built on"
+    echo "      it -- xpost_stack_at, xpost_dict_head, xpost_operator_table."
+    echo "      The base moves under any allocation; one spelling is what"
+    echo "      lets that be dealt with in one place rather than 156"
+    fail=1
+fi
+
+# and the one spelling must still be there, or rule 2 passes because
+# nothing derives a VM pointer at all any more
+for want in xpost_vm_ptr xpost_ent_ptr; do
+    if ! grep -q "^$want(Xpost_Memory_File" "$header"; then
+        echo "FAILURES: $want is not defined in xpost_memory.h; the one"
+        echo "      spelling moved and this check no longer guards it"
+        exit 1
+    fi
+done
+if ! grep -q 'return xpost_vm_ptr(' "$header"; then
+    echo "FAILURES: xpost_ent_ptr no longer derives through xpost_vm_ptr;"
+    echo "      the header has two spellings of its own"
+    exit 1
+fi
+nstack=$(grep -c 'xpost_stack_at(' "$lib"/*.c "$lib"/*.h | grep -v ':0$' | wc -l)
+
 if [ "$fail" -ne 0 ]; then
-    echo "FAILURES: a special entity's address is obtained off the one path"
+    echo "FAILURES: a VM address is obtained or derived off the one path"
     exit 1
 fi
 
-echo "SUCCESS ($naccessor accessors; the enumerators named only in xpost_memory.h and $(grep -c . "$work/permitted") constructors)"
+echo "SUCCESS ($naccessor accessors; enumerators only in xpost_memory.h and $(grep -c . "$work/permitted") constructors; every VM pointer through xpost_vm_ptr, xpost_stack_at used in $nstack files)"
 exit 0

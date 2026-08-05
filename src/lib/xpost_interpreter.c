@@ -455,8 +455,8 @@ int evalload(Xpost_Context *ctx, Xpost_Object n)
 
         /* walk the dictionary stack segments directly, topmost first */
         {
-        Xpost_Stack *ds_root = (Xpost_Stack *)(ctx->lo->base + ctx->ds);
-        Xpost_Stack *seg = (Xpost_Stack *)(ctx->lo->base + ds_root->prevseg);
+        Xpost_Stack *ds_root = xpost_stack_at(ctx->lo, ctx->ds);
+        Xpost_Stack *seg = xpost_stack_at(ctx->lo, ds_root->prevseg);
 
         for (;;)
         {
@@ -506,7 +506,7 @@ int evalload(Xpost_Context *ctx, Xpost_Object n)
             }
             if (seg == ds_root)
                 break;
-            seg = (Xpost_Stack *)(ctx->lo->base + seg->prevseg);
+            seg = xpost_stack_at(ctx->lo, seg->prevseg);
         }
         }
     }
@@ -563,10 +563,10 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
 
 #define EVALARRAY_RESOLVE_STACKS() \
     do { \
-        es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es); \
-        es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg); \
-        os_root = (Xpost_Stack *)(ctx->lo->base + ctx->os); \
-        os_top = (Xpost_Stack *)(ctx->lo->base + os_root->prevseg); \
+        es_root = xpost_stack_at(ctx->lo, ctx->es); \
+        es_top = xpost_stack_at(ctx->lo, es_root->prevseg); \
+        os_root = xpost_stack_at(ctx->lo, ctx->os); \
+        os_top = xpost_stack_at(ctx->lo, os_root->prevseg); \
     } while (0)
 
     /* a stack push can allocate a fresh segment, growing (and so
@@ -617,19 +617,19 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             { \
                 --es_top->top; \
                 if (es_top->top == 0 && \
-                    (unsigned char *)es_top != ctx->lo->base + ctx->es) \
+                    es_top != xpost_stack_at(ctx->lo, ctx->es)) \
                 { \
                     /* the drop can retreat the top segment: the cached \
                        pointer must follow, or a later slot write lands \
                        above the live top and is silently lost */ \
                     es_root->prevseg = es_top->prevseg; \
-                    es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg); \
+                    es_top = xpost_stack_at(ctx->lo, es_root->prevseg); \
                 } \
             } \
             else \
             { \
                 (void)xpost_stack_pop(ctx->lo, ctx->es); \
-                es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg); \
+                es_top = xpost_stack_at(ctx->lo, es_root->prevseg); \
             } \
             have_tail = 0; \
         } \
@@ -902,8 +902,8 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     Xpost_Object v_ = os_top->data[ot - 1];
                     if (xpost_object_get_type(k_) == nametype)
                     {
-                        Xpost_Stack *ds_root = (Xpost_Stack *)(ctx->lo->base + ctx->ds);
-                        Xpost_Stack *ds_top = (Xpost_Stack *)(ctx->lo->base + ds_root->prevseg);
+                        Xpost_Stack *ds_root = xpost_stack_at(ctx->lo, ctx->ds);
+                        Xpost_Stack *ds_top = xpost_stack_at(ctx->lo, ds_root->prevseg);
                         if (ds_top->top > 0)
                         {
                             Xpost_Object d_ = ds_top->data[ds_top->top - 1];
@@ -1080,7 +1080,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
 
             /* remember the execution stack position of our interval */
             seen_seg = es_root->prevseg;
-            es_top = (Xpost_Stack *)(ctx->lo->base + seen_seg);
+            es_top = xpost_stack_at(ctx->lo, seen_seg);
             seen_top = es_top->top;
 
             ctx->currentobject = b;
@@ -1099,10 +1099,10 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
 
             /* if the execution stack changed, what was pushed (or the
                unwound state) takes precedence: resume via the loop */
-            es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
+            es_root = xpost_stack_at(ctx->lo, ctx->es);
             if (es_root->prevseg != seen_seg)
                 return 0;
-            es_top = (Xpost_Stack *)(ctx->lo->base + seen_seg);
+            es_top = xpost_stack_at(ctx->lo, seen_seg);
             if (es_top->top != seen_top)
                 return 0;
             if (have_tail)
@@ -1346,8 +1346,8 @@ int eval(Xpost_Context *ctx)
     Xpost_Object_Type type;
 
     /* pop the next object, directly off the top segment when possible */
-    es_root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-    es_top = (Xpost_Stack *)(ctx->lo->base + es_root->prevseg);
+    es_root = xpost_stack_at(ctx->lo, ctx->es);
+    es_top = xpost_stack_at(ctx->lo, es_root->prevseg);
     if (es_top->top > 0)
         t = es_top->data[--es_top->top];
     else
@@ -1515,9 +1515,9 @@ void _onerror(Xpost_Context *ctx,
            stopped context (a bool false); above it, each wrapped
            call's finish marker is followed, deeper, by its ds, os
            and opcode integers. */
-        Xpost_Stack *esroot = (Xpost_Stack *)(ctx->lo->base + ctx->es);
+        Xpost_Stack *esroot = xpost_stack_at(ctx->lo, ctx->es);
         Xpost_Stack *seg = esroot->prevseg
-            ? (Xpost_Stack *)(ctx->lo->base + esroot->prevseg) : esroot;
+            ? xpost_stack_at(ctx->lo, esroot->prevseg) : esroot;
         int p = (int)seg->top - 1;
         int pending = 0; /* frame ints still to read: 3->ds 2->os 1->opcode */
         int fds = 0, fos = 0;
@@ -1529,7 +1529,7 @@ void _onerror(Xpost_Context *ctx,
             {
                 if (seg == esroot)
                     break;
-                seg = (Xpost_Stack *)(ctx->lo->base + seg->prevseg);
+                seg = xpost_stack_at(ctx->lo, seg->prevseg);
                 p = (int)seg->top - 1;
                 continue;
             }

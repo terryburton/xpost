@@ -121,7 +121,7 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
         Xpost_Stack *s;
         v.save_.stk = mem->free_substack;
         mem->free_substack = 0;
-        s = (Xpost_Stack *)(mem->base + v.save_.stk);
+        s = xpost_stack_at(mem, v.save_.stk);
         s->top = 0;
         s->prevseg = v.save_.stk;
     }
@@ -222,8 +222,8 @@ unsigned int _copy_ent(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
     }
-    memcpy(mem->base + adr,
-           mem->base + tab->tab[ent].adr,
+    memcpy(xpost_vm_ptr(mem, adr),
+           xpost_ent_ptr(mem, ent),
            tab->tab[ent].sz);
 
     XPOST_LOG_INFO("ent %u copied to ent %u in %s", ent, new, mem->fname);
@@ -364,7 +364,7 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
        -- the overwhelming common case, and it keeps reuse a plain top reset;
        a stack that grew across segments is left as it was. */
     {
-        Xpost_Stack *sub = (Xpost_Stack *)(mem->base + sav.save_.stk);
+        Xpost_Stack *sub = xpost_stack_at(mem, sav.save_.stk);
         if (mem->free_substack == 0 && sub->nextseg == 0)
         {
             sub->top = 0;

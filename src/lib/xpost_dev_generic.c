@@ -163,7 +163,7 @@ int _yxsort (Xpost_Context *ctx, Xpost_Object arr)
     mem = xpost_context_select_memory(ctx, arr);
     if (!xpost_memory_table_get_addr(mem, xpost_object_get_ent(arr), &arradr))
         return VMerror;
-    arrcontents = (mem->base + arradr);
+    arrcontents = xpost_vm_ptr(mem, arradr);
 
     localctx = ctx;
     qsort(arrcontents, arr.comp_.sz, sizeof(arr), _yxcomp);

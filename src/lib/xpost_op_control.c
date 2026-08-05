@@ -188,8 +188,8 @@ static int _for_done(Xpost_Object i, Xpost_Object incr, Xpost_Object lim)
 static
 int xpost_op_for_iterate (Xpost_Context *ctx)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-    Xpost_Stack *top = (Xpost_Stack *)(ctx->lo->base + root->prevseg);
+    Xpost_Stack *root = xpost_stack_at(ctx->lo, ctx->es);
+    Xpost_Stack *top = xpost_stack_at(ctx->lo, root->prevseg);
     Xpost_Object i, lim, incr, P;
 
     if (top->top >= 5 && top->top < XPOST_STACK_SEGMENT_SIZE - 2)
@@ -207,8 +207,8 @@ int xpost_op_for_iterate (Xpost_Context *ctx)
             return stackoverflow;
         /* the push may grow the memory file and move its base:
            re-derive the frame pointers before writing through them */
-        root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-        top = (Xpost_Stack *)(ctx->lo->base + root->prevseg);
+        root = xpost_stack_at(ctx->lo, ctx->es);
+        top = xpost_stack_at(ctx->lo, root->prevseg);
         top->data[top->top - 1] = _for_next(i, incr);
         top->data[top->top]     = XPOST_OP(ctx, forcont);
         top->data[top->top + 1] = xpost_object_cvx(P);
@@ -313,8 +313,8 @@ int xpost_op_int_proc_repeat (Xpost_Context *ctx,
 static
 int xpost_op_repeat_iterate (Xpost_Context *ctx)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-    Xpost_Stack *top = (Xpost_Stack *)(ctx->lo->base + root->prevseg);
+    Xpost_Stack *root = xpost_stack_at(ctx->lo, ctx->es);
+    Xpost_Stack *top = xpost_stack_at(ctx->lo, root->prevseg);
     Xpost_Object n, P;
 
     if (top->top >= 3 && top->top < XPOST_STACK_SEGMENT_SIZE - 2)
@@ -378,8 +378,8 @@ int xpost_op_proc_loop (Xpost_Context *ctx,
 static
 int xpost_op_loop_iterate (Xpost_Context *ctx)
 {
-    Xpost_Stack *root = (Xpost_Stack *)(ctx->lo->base + ctx->es);
-    Xpost_Stack *top = (Xpost_Stack *)(ctx->lo->base + root->prevseg);
+    Xpost_Stack *root = xpost_stack_at(ctx->lo, ctx->es);
+    Xpost_Stack *top = xpost_stack_at(ctx->lo, root->prevseg);
     Xpost_Object P;
 
     if (top->top >= 2 && top->top < XPOST_STACK_SEGMENT_SIZE - 2)
