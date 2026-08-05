@@ -491,7 +491,7 @@ int _currentpoint(Xpost_Context *ctx)
     _path_get_coords(p, last, co, n);
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(co[n - 2]));
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(co[n - 1]));
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.itransform));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, itransform));
 
     return 0;
 }
@@ -1982,13 +1982,18 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
             numbertype, numbertype, numbertype, dicttype);
     INSTALL;
 
+    /* The procedure that reaches an arc's starting point holds the three
+       operators it runs. A name would resolve through the dictionary stack
+       when the arc ran, so a program's moveto, lineto or ifelse would take
+       over the inside of arc, arcn, arct and arcto. */
     _arc_start_proc = xpost_array_cons(ctx, 4);
     ret = xpost_array_put(ctx, _arc_start_proc, 0, pathempty_op);
     if (ret)
         return ret;
     {
         Xpost_Object true_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
-        ret = xpost_array_put(ctx, true_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "moveto")));
+        ret = xpost_array_put(ctx, true_clause, 0,
+                              XPOST_OP(ctx, moveto));
         if (ret)
             return ret;
         ret = xpost_array_put(ctx, _arc_start_proc, 1, true_clause);
@@ -1997,7 +2002,8 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     }
     {
         Xpost_Object false_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
-        ret = xpost_array_put(ctx, false_clause, 0, xpost_object_cvx(xpost_name_cons(ctx, "lineto")));
+        ret = xpost_array_put(ctx, false_clause, 0,
+                              XPOST_OP(ctx, lineto));
         if (ret)
             return ret;
         ret = xpost_array_put(ctx, _arc_start_proc, 2, false_clause);
@@ -2005,5 +2011,5 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
             return ret;
     }
     return xpost_array_put(ctx, _arc_start_proc, 3,
-                           xpost_object_cvx(xpost_name_cons(ctx, "ifelse")));
+                           XPOST_OP(ctx, opifelse));
 }

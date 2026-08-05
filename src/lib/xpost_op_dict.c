@@ -499,14 +499,14 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
     /* loop frame: the sentinel forall operator (which exit searches
        for) under literal state that the iterate operator consumes */
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.forall)))
+                          XPOST_OP(ctx, forall)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(D)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.dictforallcont)))
+                          XPOST_OP(ctx, dictforallcont)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, P))
         return execstackoverflow;
@@ -539,7 +539,7 @@ int xpost_op_dict_forall_iterate (Xpost_Context *ctx)
     if (!xpost_stack_topdown_replace(ctx->lo, ctx->es, 0, xpost_object_cvlit(D)))
         return execstackunderflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.dictforallcont)))
+                          XPOST_OP(ctx, dictforallcont)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(P)))
         return execstackoverflow;
@@ -652,11 +652,9 @@ int xpost_oper_init_dict_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "end", (Xpost_Op_Func)xpost_op_end, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "def", (Xpost_Op_Func)xpost_op_any_any_def, 0, 2, anytype, anytype);
-    ctx->opcode_shortcuts.opdef = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "load", (Xpost_Op_Func)xpost_op_any_load, 1, 1, anytype);
     INSTALL;
-    ctx->opcode_shortcuts.load = op.mark_.padw;
     op = xpost_operator_cons(ctx, "store", (Xpost_Op_Func)xpost_op_any_store, 0, 2, anytype, anytype);
     INSTALL;
     op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)xpost_op_dict_any_get, 1, 2, dicttype, anytype);
@@ -674,9 +672,7 @@ int xpost_oper_init_dict_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "forall", (Xpost_Op_Func)xpost_op_dict_proc_forall, 0, 2, dicttype, proctype);
     INSTALL;
-    ctx->opcode_shortcuts.forall = op.mark_.padw;
     op = xpost_operator_cons(ctx, "forall.dict.iterate", (Xpost_Op_Func)xpost_op_dict_forall_iterate, 0, 0);
-    ctx->opcode_shortcuts.dictforallcont = op.mark_.padw;
     op = xpost_operator_cons(ctx, "currentdict", (Xpost_Op_Func)xpost_op_currentdict, 1, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "countdictstack", (Xpost_Op_Func)xpost_op_countdictstack, 1, 0);

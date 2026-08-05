@@ -53,54 +53,109 @@ enum { LOCAL, GLOBAL };
  */
 enum { C_FREE, C_IDLE, C_RUN, C_WAIT, C_IOBLOCK, C_ZOMB };
 
+/**
+ * @def XPOST_OP_REFS
+ * @brief every operator the interpreter itself reaches for, by name
+ *
+ * C reaches a standard operator by holding the operator object. Pushing
+ * the operator's name instead defers the decision to the dictionary stack
+ * as it stands when the name runs, so a program that defines that name --
+ * which PLRM 3.3 entitles it to do -- takes over the inside of a standard
+ * operator. Resolving a name at run time also costs a global name intern
+ * and a linear walk of the operator table, and answers null for a name
+ * that is not there, which the interpreter then schedules.
+ *
+ * This is the one statement of that set. Each entry gives the C spelling
+ * of the reference and the operator's name in the language; the operator
+ * prefix on some of them keeps a C keyword out of a member name. From it
+ * are generated the member that holds each opcode, the marker written
+ * before registration begins, and the check that every one was captured.
+ * Capture happens inside xpost_operator_cons keyed by the name, so it
+ * cannot be forgotten at a registration or attached to the wrong operator
+ * -- both of which the marker and the check exist because of.
+ *
+ * Reach an entry through XPOST_OP (the operator object, to schedule it) or
+ * XPOST_OP_CODE (its opcode, to recognise it); tests/check-op-references.sh
+ * holds the tree to that.
+ */
+#define XPOST_OP_REFS(_) \
+    /* recognised inline by the procedure walker */ \
+    _(oppop,               "pop") \
+    _(opexch,              "exch") \
+    _(opdup,               "dup") \
+    _(opindex,             "index") \
+    _(oproll,              "roll") \
+    _(opadd,               "add") \
+    _(opsub,               "sub") \
+    _(opmul,               "mul") \
+    _(opeq,                "eq") \
+    _(opne,                "ne") \
+    _(oplt,                "lt") \
+    _(ople,                "le") \
+    _(opgt,                "gt") \
+    _(opge,                "ge") \
+    _(opif,                "if") \
+    _(opifelse,            "ifelse") \
+    _(opdef,               "def") \
+    _(opget,               "get") \
+    _(opput,               "put") \
+    _(optype,              "type") \
+    /* iteration: the operator that starts one and the continuation that \
+       carries it, which is scheduled beneath each pass */ \
+    _(opfor,               "for") \
+    _(repeat,              "repeat") \
+    _(loop,                "loop") \
+    _(forall,              "forall") \
+    _(filenameforall,      "filenameforall") \
+    _(forcont,             "for.iterate") \
+    _(repeatcont,          "repeat.iterate") \
+    _(loopcont,            "loop.iterate") \
+    _(arrayforallcont,     "forall.array.iterate") \
+    _(stringforallcont,    "forall.string.iterate") \
+    _(dictforallcont,      "forall.dict.iterate") \
+    _(contfilenameforall,  "contfilenameforall") \
+    /* scheduled by an operator implemented in C to finish its own work */ \
+    _(cvx,                 "cvx") \
+    _(load,                "load") \
+    _(exec,                "exec") \
+    _(token,               "token") \
+    _(copy,                "copy") \
+    _(stop,                "stop") \
+    _(quit,                "quit") \
+    _(join,                "join") \
+    _(matrix,              "matrix") \
+    _(defaultmatrix,       "defaultmatrix") \
+    _(setmatrix,           "setmatrix") \
+    _(concat,              "concat") \
+    _(concatmatrix,        "concatmatrix") \
+    _(rotate,              "rotate") \
+    _(transform,           "transform") \
+    _(itransform,          "itransform") \
+    _(moveto,              "moveto") \
+    _(lineto,              "lineto") \
+    /* the frame marker a wrapped operator leaves on the execution stack */ \
+    _(wrapdone,            "wrap.done")
+
+/**
+ * @def XPOST_OP_CODE
+ * @brief the opcode of a referenced operator, for recognising one
+ */
+#define XPOST_OP_CODE(ctx, ref) ((ctx)->opcode_shortcuts.ref)
+
+#define XPOST_OP_REF_MEMBER(ref, name) int ref;
+
 /** @struct Xpost_Context
  * @brief The context structure for a thread of execution of ps code
  */
 struct _Xpost_Context {
 
+    /**< opcode of each operator the interpreter reaches for, captured as
+         the operators are registered; see XPOST_OP_REFS */
     struct
     {
-        int contfilenameforall;
-        int filenameforall;
-        int cvx;
-        int opfor;
-        int forall;
-        int load;
-        int loop;
-        int repeat;
-        int forcont;
-        int repeatcont;
-        int loopcont;
-        int arrayforallcont;
-        int stringforallcont;
-        int dictforallcont;
-        int oppop;
-        int opexch;
-        int opdup;
-        int opindex;
-        int opadd;
-        int opget;
-        int opsub;
-        int opmul;
-        int opeq;
-        int opne;
-        int oplt;
-        int ople;
-        int opgt;
-        int opge;
-        int opif;
-        int opifelse;
-        int opdef;
-        int opput;
-        int optype;
-        int oproll;
-        int token;
-        int transform;
-        int itransform;
-        int rotate;
-        int concatmatrix;
-        int wrapdone;
-    } opcode_shortcuts;  /**< opcodes for internal use, to avoid lookups */
+        XPOST_OP_REFS(XPOST_OP_REF_MEMBER)
+    } opcode_shortcuts;
+#undef XPOST_OP_REF_MEMBER
 
     Xpost_Object currentobject;  /**< currently-executing object, for error() */
 

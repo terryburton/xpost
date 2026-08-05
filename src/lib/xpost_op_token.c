@@ -1482,6 +1482,5 @@ int xpost_oper_init_token_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Stoken, 3, 1, stringtype);
     INSTALL;
-    ctx->opcode_shortcuts.token = op.mark_.padw;
     return 0;
 }

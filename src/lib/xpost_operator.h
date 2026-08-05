@@ -168,6 +168,18 @@ void xpost_operator_dump(Xpost_Context *ctx, int opcode);
 Xpost_Object xpost_operator_cons_opcode(int opcode);
 
 /**
+ * @def XPOST_OP
+ * @brief the operator object a reference-table entry names
+ *
+ * The way C schedules a standard operator. The entry is one of those
+ * listed by XPOST_OP_REFS in xpost_context.h, so a misspelling is a
+ * compile error rather than a null object pushed on the execution stack,
+ * and the operator is settled here rather than looked up by the
+ * dictionary stack when the step runs.
+ */
+#define XPOST_OP(ctx, ref) xpost_operator_cons_opcode(XPOST_OP_CODE(ctx, ref))
+
+/**
  * @brief construct an operator object by name,
  *        possibly installing a new operator
  */

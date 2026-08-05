@@ -564,6 +564,18 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
         return null;
     }
 
+    /* Capture the opcode of any operator the interpreter itself reaches
+       for. Doing it here, keyed by the name being registered, is what
+       makes the reference table impossible to get wrong: a registration
+       cannot forget its capture, and a capture cannot end up holding the
+       operator registered on the line above. The cost is one pass of
+       first-character comparisons per registration, at startup only. */
+#define XPOST_OP_REF_CAPTURE(ref, refname) \
+    if (name[0] == (refname)[0] && !strcmp(name, refname)) \
+        XPOST_OP_CODE(ctx, ref) = opcode;
+    XPOST_OP_REFS(XPOST_OP_REF_CAPTURE)
+#undef XPOST_OP_REF_CAPTURE
+
     o.tag = operatortype;
     o.mark_.padw = opcode;
     return o;
@@ -770,7 +782,7 @@ int _exec_wrapped_proc(Xpost_Context *ctx, unsigned opcode, Xpost_Object proc)
     fr[0] = xpost_int_cons((integer)opcode);
     fr[1] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->os));
     fr[2] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->ds));
-    fr[3] = xpost_operator_cons_opcode(ctx->opcode_shortcuts.wrapdone);
+    fr[3] = XPOST_OP(ctx, wrapdone);
     fr[4] = xpost_object_cvx(proc);
     for (k = 0; k < 5; k++)
     {

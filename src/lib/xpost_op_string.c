@@ -295,14 +295,14 @@ int Sforall(Xpost_Context *ctx,
     (void)val;
     (void)ret;
     /* loop frame, as for the array forall */
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.forall)))
+    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, forall)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(S)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                xpost_operator_cons_opcode(ctx->opcode_shortcuts.stringforallcont)))
+                XPOST_OP(ctx, stringforallcont)))
         return execstackoverflow;
     return 0;
 }
@@ -350,7 +350,7 @@ static int xpost_op_string_forall_iterate(Xpost_Context *ctx)
         es_top->data[es_top->top - 1] =
             xpost_object_cvlit(xpost_object_get_interval(S, 1, S.comp_.sz - 1));
         es_top->data[es_top->top] =
-            xpost_operator_cons_opcode(ctx->opcode_shortcuts.stringforallcont);
+            XPOST_OP(ctx, stringforallcont);
         es_top->data[es_top->top + 1] = xpost_object_cvx(P);
         es_top->top += 2;
         return 0;
@@ -376,7 +376,7 @@ static int xpost_op_string_forall_iterate(Xpost_Context *ctx)
             xpost_object_cvlit(xpost_object_get_interval(S, 1, S.comp_.sz - 1))))
         return execstackunderflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                xpost_operator_cons_opcode(ctx->opcode_shortcuts.stringforallcont)))
+                XPOST_OP(ctx, stringforallcont)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(P)))
         return execstackoverflow;
@@ -429,6 +429,5 @@ int xpost_oper_init_string_ops (Xpost_Context *ctx,
                              stringtype, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "forall.string.iterate", (Xpost_Op_Func)xpost_op_string_forall_iterate, 0, 0);
-    ctx->opcode_shortcuts.stringforallcont = op.mark_.padw;
     return 0;
 }

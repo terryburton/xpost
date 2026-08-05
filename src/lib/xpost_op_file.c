@@ -1097,11 +1097,9 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
         ++oglob.glob_.off;
     if (oglob.glob_.off < globbuf->gl_pathc)
     {
-        /* xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "contfilenameforall", NULL,0,0)); */
-        xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.contfilenameforall));
+        xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, contfilenameforall));
         xpost_stack_push(ctx->lo, ctx->es, Scr);
-        /* xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "cvx", NULL,0,0)); */
-        xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.cvx));
+        xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, cvx));
         xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(Proc));
         ++oglob.glob_.off;
         xpost_stack_push(ctx->lo, ctx->es, oglob);
@@ -1173,7 +1171,7 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
        stays beneath the per-iteration continuation until iteration
        completes or exit finds it */
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(ctx->opcode_shortcuts.filenameforall)))
+                          XPOST_OP(ctx, filenameforall)))
     {
         xpost_glob_free(globbuf);
         free(globbuf);
@@ -1845,9 +1843,7 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     INSTALL;
 //#ifndef _WIN32
     op = xpost_operator_cons(ctx, "contfilenameforall", (Xpost_Op_Func)xpost_op_contfilenameforall, 0, 3, globtype, proctype, stringtype);
-    ctx->opcode_shortcuts.contfilenameforall = op.mark_.padw;
     op = xpost_operator_cons(ctx, "filenameforall", (Xpost_Op_Func)xpost_op_filenameforall, 0, 3, stringtype, proctype, stringtype);
-    ctx->opcode_shortcuts.filenameforall = op.mark_.padw;
     INSTALL;
 //#endif
     op = xpost_operator_cons(ctx, "setfileposition", (Xpost_Op_Func)xpost_op_setfileposition, 0, 2, filetype, integertype);

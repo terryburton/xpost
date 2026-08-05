@@ -1527,10 +1527,10 @@ void _draw_bitmap(Xpost_Context *ctx,
     tmp = buffer;
     /* The operator itself, not its name: a name pushed for execution is
        resolved against the dictionary stack at that moment, so a program
-       that has defined /exec would supply the body instead. Resolved once
-       because doing so for every set pixel dominates the glyph loop when
-       putpix is a procedure rather than an operator. */
-    exec_op = xpost_operator_cons(ctx, "exec", NULL, 0, 0);
+       that has defined /exec would supply the body instead. Held in a local
+       because the glyph loop pushes it for every set pixel when putpix is a
+       procedure rather than an operator. */
+    exec_op = XPOST_OP(ctx, exec);
     XPOST_LOG_INFO("bitmap rows = %d, bitmap width = %d", rows, width);
     XPOST_LOG_INFO("bitmap pitch = %d", pitch);
     XPOST_LOG_INFO("bitmap pixel_mode = %d", pixel_mode);
@@ -1874,7 +1874,7 @@ int _show_glyph(Xpost_Context *ctx,
             {
                 xpost_stack_push(ctx->lo, ctx->os, ts->fillrect);
                 xpost_stack_push(ctx->lo, ctx->es,
-                                 xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+                                 XPOST_OP(ctx, exec));
             }
         }
     }
@@ -2028,12 +2028,12 @@ int _show_finalize_cons(Xpost_Context *ctx,
     if ((ret = xpost_array_put(ctx, f, 0, xpost_real_cons(xpos))) != 0
      || (ret = xpost_array_put(ctx, f, 1, xpost_real_cons(ypos))) != 0
      || (ret = xpost_array_put(ctx, f, 2,
-             xpost_operator_cons_opcode(ctx->opcode_shortcuts.itransform))) != 0
+             XPOST_OP(ctx, itransform))) != 0
      || (ret = xpost_array_put(ctx, f, 3,
-             xpost_operator_cons(ctx, "moveto", NULL, 0, 0))) != 0
+             XPOST_OP(ctx, moveto))) != 0
      || (ret = xpost_array_put(ctx, f, 4, flushpage)) != 0
      || (ret = xpost_array_put(ctx, f, 5,
-             xpost_operator_cons(ctx, "exec", NULL, 0, 0))) != 0)
+             XPOST_OP(ctx, exec))) != 0)
         return ret;
     *out = f;
     return 0;

@@ -1,0 +1,151 @@
+% An operator implemented in C reaches another operator by holding that
+% operator, not by pushing its name.
+%
+% A name pushed on the execution stack is resolved against the dictionary
+% stack at the moment it runs, so a program that defines the same name
+% takes over the inside of a standard operator: the redefinition runs, with
+% the operator's own operands, in the middle of the operator's work. PLRM
+% 3.3 makes redefinition the program's right and PLRM 8.2 states what each
+% operator does; the two agree only if an operator's own steps are settled
+% when the operator is built rather than when it runs.
+%
+% Each case redefines the names an operator was observed to push, runs the
+% operator, and requires both that no redefinition was reached and that the
+% operator still did its own job. Prints SUCCESS iff every case holds.
+
+% Everything the test defines lives in a scratch dictionary, the
+% redefinitions included -- they have to be visible on the dictionary stack
+% to be capturable at all, and userdict is not the test's to disturb.
+64 dict begin
+
+% Every counter here is written with store, never def: the redefinitions run
+% wherever the operator under test happens to have taken the interpreter, and
+% a def would land in whatever dictionary is current there -- for the failure
+% counter that means the verdict is discarded and the run reports SUCCESS
+% having already printed its FAIL lines.
+/failures 0 def
+/bad { (FAIL: ) print print (\n) print /failures failures 1 add store } bind def
+/want { exch { pop } { bad } ifelse } bind def
+
+% two transformation matrices agree to within single-precision slop
+/matrixeq {
+    /mb exch def
+    /ma exch def
+    true
+    0 1 5 {
+        /mi exch def
+        ma mi get mb mi get sub abs 0.00001 gt { pop false } if
+    } for
+} bind def
+
+% ---------------------------------------------------------------- initmatrix
+%
+% initmatrix replaces the current transformation matrix with the device's
+% default (PLRM 8.2). It once did so by pushing the names matrix,
+% defaultmatrix and setmatrix.
+
+/hitmatrix 0 def
+/hitdefaultmatrix 0 def
+/hitsetmatrix 0 def
+
+/matrix
+    { /hitmatrix hitmatrix 1 add store
+      systemdict /matrix get exec } bind def
+/defaultmatrix
+    { /hitdefaultmatrix hitdefaultmatrix 1 add store
+      systemdict /defaultmatrix get exec } bind def
+/setmatrix
+    { /hitsetmatrix hitsetmatrix 1 add store
+      systemdict /setmatrix get exec } bind def
+
+gsave
+    2 3 scale
+    initmatrix
+    systemdict /matrix get exec systemdict /currentmatrix get exec
+    systemdict /matrix get exec systemdict /defaultmatrix get exec
+grestore
+
+currentdict /matrix undef
+currentdict /defaultmatrix undef
+currentdict /setmatrix undef
+
+matrixeq (initmatrix left a matrix other than the device default) want
+
+hitmatrix 0 eq
+    (initmatrix reached a program's definition of matrix) want
+hitdefaultmatrix 0 eq
+    (initmatrix reached a program's definition of defaultmatrix) want
+hitsetmatrix 0 eq
+    (initmatrix reached a program's definition of setmatrix) want
+
+% ----------------------------------------------------------------------- arc
+%
+% arc appends an arc to the current path, reaching the arc's starting point
+% with a moveto when the path is empty and with a lineto when it is not
+% (PLRM 8.2). That choice was made by a procedure built in C which pushed
+% the names moveto, lineto and ifelse.
+
+/hitmoveto 0 def
+/hitlineto 0 def
+/hitifelse 0 def
+
+/nmoveto 0 def
+/nlineto 0 def
+/ncurveto 0 def
+/countpath {
+    /nmoveto 0 store /nlineto 0 store /ncurveto 0 store
+    { pop pop /nmoveto nmoveto 1 add store }
+    { pop pop /nlineto nlineto 1 add store }
+    { pop pop pop pop pop pop /ncurveto ncurveto 1 add store }
+    { }
+    pathforall
+} bind def
+
+/moveto
+    { /hitmoveto hitmoveto 1 add store
+      systemdict /moveto get exec } bind def
+/lineto
+    { /hitlineto hitlineto 1 add store
+      systemdict /lineto get exec } bind def
+/ifelse
+    { /hitifelse hitifelse 1 add store
+      systemdict /ifelse get exec } bind def
+
+gsave
+    newpath
+    200 200 50 0 90 arc
+    countpath
+    /emptymoveto nmoveto store
+    /emptylineto nlineto store
+    /emptycurveto ncurveto store
+
+    newpath
+    0 0 systemdict /moveto get exec
+    200 200 50 0 90 arc
+    countpath
+    /joinedmoveto nmoveto store
+    /joinedlineto nlineto store
+    /joinedcurveto ncurveto store
+    newpath
+grestore
+
+currentdict /moveto undef
+currentdict /lineto undef
+currentdict /ifelse undef
+
+emptymoveto 1 eq emptylineto 0 eq and emptycurveto 0 gt and
+    (arc on an empty path did not start with a moveto) want
+joinedmoveto 1 eq joinedlineto 1 eq and joinedcurveto 0 gt and
+    (arc on an open path did not reach its start with a lineto) want
+
+hitmoveto 0 eq
+    (arc reached a program's definition of moveto) want
+hitlineto 0 eq
+    (arc reached a program's definition of lineto) want
+hitifelse 0 eq
+    (arc reached a program's definition of ifelse) want
+
+% ------------------------------------------------------------------- verdict
+
+failures 0 eq { (SUCCESS) = } { (FAILURES) = } ifelse
+end

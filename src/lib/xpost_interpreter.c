@@ -740,26 +740,26 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                 unsigned int ot = os_top->top;
 
                 ctx->currentobject = b;
-                if (w == (unsigned int)ctx->opcode_shortcuts.oppop && ot >= 1)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, oppop) && ot >= 1)
                 {
                     --os_top->top;
                     goto next_element;
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opexch && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opexch) && ot >= 2)
                 {
                     Xpost_Object t_ = os_top->data[ot - 1];
                     os_top->data[ot - 1] = os_top->data[ot - 2];
                     os_top->data[ot - 2] = t_;
                     goto next_element;
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opdup && ot >= 1 &&
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opdup) && ot >= 1 &&
                     ot < XPOST_STACK_SEGMENT_SIZE - 1)
                 {
                     os_top->data[ot] = os_top->data[ot - 1];
                     ++os_top->top;
                     goto next_element;
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opindex && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opindex) && ot >= 2)
                 {
                     Xpost_Object n_ = os_top->data[ot - 1];
                     /* the operator's own selection rule, applied to the
@@ -772,7 +772,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         goto next_element;
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opget && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opget) && ot >= 2)
                 {
                     Xpost_Object a_ = os_top->data[ot - 2];
                     Xpost_Object i_ = os_top->data[ot - 1];
@@ -794,9 +794,9 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                     }
                 }
                 if (ot >= 2 &&
-                    (w == (unsigned int)ctx->opcode_shortcuts.opadd ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opsub ||
-                     w == (unsigned int)ctx->opcode_shortcuts.opmul))
+                    (w == (unsigned int)XPOST_OP_CODE(ctx, opadd) ||
+                     w == (unsigned int)XPOST_OP_CODE(ctx, opsub) ||
+                     w == (unsigned int)XPOST_OP_CODE(ctx, opmul)))
                 {
                     Xpost_Object x_ = os_top->data[ot - 2];
                     Xpost_Object y_ = os_top->data[ot - 1];
@@ -807,9 +807,9 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                            so an out-of-range result becomes the same real
                            here as it does there (see xpost_op_math.h) */
                         Xpost_Object r_ =
-                            w == (unsigned int)ctx->opcode_shortcuts.opadd
+                            w == (unsigned int)XPOST_OP_CODE(ctx, opadd)
                                 ? xpost_int_add(x_.int_.val, y_.int_.val)
-                            : w == (unsigned int)ctx->opcode_shortcuts.opsub
+                            : w == (unsigned int)XPOST_OP_CODE(ctx, opsub)
                                 ? xpost_int_sub(x_.int_.val, y_.int_.val)
                                 : xpost_int_mul(x_.int_.val, y_.int_.val);
                         --os_top->top;
@@ -817,7 +817,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         goto next_element;
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.optype && ot >= 1)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, optype) && ot >= 1)
                 {
                     /* the operator's own naming, so a packed array is
                        reported as its own type here as it is there
@@ -843,12 +843,12 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                        the same here as it does there (see xpost_dict.h
                        and xpost_op_boolean.h) */
                     int rel_ =
-                        w == (unsigned int)ctx->opcode_shortcuts.opeq ? XPOST_OP_REL_EQ :
-                        w == (unsigned int)ctx->opcode_shortcuts.opne ? XPOST_OP_REL_NE :
-                        w == (unsigned int)ctx->opcode_shortcuts.oplt ? XPOST_OP_REL_LT :
-                        w == (unsigned int)ctx->opcode_shortcuts.ople ? XPOST_OP_REL_LE :
-                        w == (unsigned int)ctx->opcode_shortcuts.opgt ? XPOST_OP_REL_GT :
-                        w == (unsigned int)ctx->opcode_shortcuts.opge ? XPOST_OP_REL_GE : -1;
+                        w == (unsigned int)XPOST_OP_CODE(ctx, opeq) ? XPOST_OP_REL_EQ :
+                        w == (unsigned int)XPOST_OP_CODE(ctx, opne) ? XPOST_OP_REL_NE :
+                        w == (unsigned int)XPOST_OP_CODE(ctx, oplt) ? XPOST_OP_REL_LT :
+                        w == (unsigned int)XPOST_OP_CODE(ctx, ople) ? XPOST_OP_REL_LE :
+                        w == (unsigned int)XPOST_OP_CODE(ctx, opgt) ? XPOST_OP_REL_GT :
+                        w == (unsigned int)XPOST_OP_CODE(ctx, opge) ? XPOST_OP_REL_GE : -1;
                     int cmp_;
 
                     /* the ordered four are restricted to two numbers
@@ -870,7 +870,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         goto next_element;
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.oproll && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, oproll) && ot >= 2)
                 {
                     Xpost_Object j_ = os_top->data[ot - 1];
                     Xpost_Object n_ = os_top->data[ot - 2];
@@ -896,7 +896,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         goto next_element;
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opdef && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opdef) && ot >= 2)
                 {
                     Xpost_Object k_ = os_top->data[ot - 2];
                     Xpost_Object v_ = os_top->data[ot - 1];
@@ -933,7 +933,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         }
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opput && ot >= 3)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opput) && ot >= 3)
                 {
                     Xpost_Object a_ = os_top->data[ot - 3];
                     Xpost_Object i_ = os_top->data[ot - 2];
@@ -965,7 +965,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                            re-executes the put for the exact protocol */
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opif && ot >= 2)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opif) && ot >= 2)
                 {
                     Xpost_Object p_ = os_top->data[ot - 1];
                     Xpost_Object b_ = os_top->data[ot - 2];
@@ -991,7 +991,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         continue;
                     }
                 }
-                if (w == (unsigned int)ctx->opcode_shortcuts.opifelse && ot >= 3)
+                if (w == (unsigned int)XPOST_OP_CODE(ctx, opifelse) && ot >= 3)
                 {
                     Xpost_Object p2_ = os_top->data[ot - 1];
                     Xpost_Object p1_ = os_top->data[ot - 2];
@@ -1158,8 +1158,7 @@ int evalstring(Xpost_Context *ctx, Xpost_Object s)
     if (!xpost_stack_push(ctx->lo, ctx->os, s))
         return stackoverflow;
     assert(ctx->gl->base);
-    /*xpost_operator_exec(ctx, xpost_operator_cons(ctx, "token",NULL,0,0).mark_.padw); */
-    ret = xpost_operator_exec(ctx, ctx->opcode_shortcuts.token);
+    ret = xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
     if (ret)
         return ret;
     b = xpost_stack_pop(ctx->lo, ctx->os);
@@ -1205,8 +1204,7 @@ int evalfile(Xpost_Context *ctx, Xpost_Object f)
     if (!xpost_stack_push(ctx->lo, ctx->os, f))
         return stackoverflow;
     assert(ctx->gl->base);
-    /*xpost_operator_exec(ctx, xpost_operator_cons(ctx, "token",NULL,0,0).mark_.padw); */
-    ret = xpost_operator_exec(ctx, ctx->opcode_shortcuts.token);
+    ret = xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
     if (ret)
         return ret;
     b = xpost_stack_pop(ctx->lo, ctx->os);
@@ -1569,7 +1567,7 @@ void _onerror(Xpost_Context *ctx,
             if (xpost_dict_compare_objects(ctx, fmark, x) == 0)
                 break; /* the coming stop unwinds to here */
             if (xpost_object_get_type(x) == operatortype &&
-                x.mark_.padw == (unsigned int)ctx->opcode_shortcuts.wrapdone)
+                x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
                 pending = 3;
         }
         if (found)
@@ -1605,8 +1603,7 @@ void _onerror(Xpost_Context *ctx,
     {
         XPOST_LOG_ERR("cannot load $error dict for error: %s",
                 errorname[err]);
-        xpost_stack_push(ctx->lo, ctx->es,
-                xpost_object_cvx(xpost_name_cons(ctx, "stop")));
+        xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, stop));
         /*itpdata->in_onerror = 0; */
         return;
     }
@@ -1616,12 +1613,6 @@ void _onerror(Xpost_Context *ctx,
     /* printf("5\n"); */
     xpost_stack_push(ctx->lo, ctx->os, ctx->currentobject);
 
-#if 0
-    /* printf("6\n"); */
-    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_name_cons(ctx, errorname[err])));
-    /* printf("7\n"); */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "signalerror")));
-#endif
     ed = xpost_dict_get(ctx, sd, nameerrordict);
     handler = xpost_dict_get(ctx, ed, xpost_name_cons(ctx, errorname[err]));
     /* the handler runs when the interpreter schedules it, so it has to
@@ -2040,7 +2031,7 @@ void loadinitps(Xpost_Context *ctx)
     int n;
 
     assert(ctx->gl->base);
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "quit", NULL,0,0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
 
 #define XPOST_PATH_INIT \
     do \
@@ -2340,7 +2331,7 @@ static
 Xpost_Object get_token(Xpost_Context *ctx, char *str){
     Xpost_Object o;
     xpost_stack_push(ctx->lo, ctx->os, xpost_string_cons(ctx, strlen(str), str));
-    xpost_operator_exec(ctx, xpost_operator_cons(ctx, "token",NULL,0,0).mark_.padw);
+    xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
     if (xpost_stack_pop(ctx->lo, ctx->os).int_.val){
         o = xpost_stack_pop(ctx->lo, ctx->os);
         xpost_stack_pop(ctx->lo, ctx->os);
@@ -2532,7 +2523,7 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
        These procedures are all defined in data/init.ps
      */
     ctx->es_run_base = xpost_stack_count(ctx->lo, ctx->es);
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "quit", NULL,0,0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
     /*
        if ps_file is NULL:
          if stdin is a tty
@@ -2614,7 +2605,7 @@ run:
     /*xpost_operator_dump(ctx, 1); // is this pointer value constant? */
     if (xpost_object_get_type(device) == arraytype){
         XPOST_LOG_INFO("running proc");
-        xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "quit", NULL,0,0));
+        xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
         xpost_stack_push(ctx->lo, ctx->es, device);
 
         ctx->quit = 0;

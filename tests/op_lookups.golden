@@ -1,0 +1,21 @@
+# Operators still looked up by string at run time, as "file operator".
+#
+# Each line is a global name intern plus a linear walk of the operator
+# table, performed every time the code around it runs, and answering a null
+# object rather than an error for a name that is not there. The way to
+# retire one is XPOST_OP(ctx, <entry>), adding the entry to XPOST_OP_REFS
+# in xpost_context.h if it is not already listed there.
+#
+# tests/check-op-references.sh holds this register to shrinking only: a
+# lookup that appears anywhere and is not listed here fails the build, and
+# a line here that no longer describes a lookup fails it too.
+#
+# What is left, and why: xpost_dev_generic.c assembles the argument list
+# and the loop for a device method call, and its five lookups all sit in
+# that one builder. Retiring them belongs with the work on the device
+# layer rather than beside it.
+xpost_dev_generic.c ]
+xpost_dev_generic.c cvx
+xpost_dev_generic.c exec
+xpost_dev_generic.c repeat
+xpost_dev_generic.c roll

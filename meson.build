@@ -1327,6 +1327,17 @@ test('clean-startup',
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# An operator implemented in C reaches another operator by holding it, not by
+# pushing its name: a name is resolved against the dictionary stack when it
+# runs, so a program's definition of that name would take over the inside of
+# a standard operator. Each case redefines the names an operator was observed
+# to push and requires that the operator neither reached them nor lost its
+# own behaviour.
+test('op-references',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_reference_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Fused-execution equivalence: the interpreter inlines the hottest operators
 # while walking a procedure, and those copies must behave exactly as the
 # operators they stand in for -- same results, same errors, same access
@@ -1335,6 +1346,15 @@ test('fused-equivalence',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/fused_equivalence_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# ... and the complement of the op-references test: that one shows the rule
+# holding where it was broken, this one shows it cannot be broken again.
+# No name pushed for execution, the reference table reached only through its
+# accessors, and every surviving by-string lookup on a register that only
+# shrinks.
+test('check-op-references',
+  find_program('tests/check-op-references.sh'),
+  args: [ meson.current_source_dir() ])
 
 # ... and every fused operator must actually have those cases: adding one
 # to the fast path without equivalence coverage fails here.
