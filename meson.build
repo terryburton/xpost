@@ -994,6 +994,15 @@ test('error-dict',
   args: [ xpost_exe, files('tests/error_dict_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# An error is named in C, by the ERRORS enumeration, and in PostScript, by
+# the list errordict's standard handlers are built from. The two sets have
+# to be the same one: a C name with no handler is reported through the
+# interpreter's fallback instead of through errordict, and a handler for a
+# name C never returns reads as coverage it is not.
+test('check-error-names',
+  find_program('tests/check-error-names.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ])
+
 # The binary form of the error report, which has to be checked on the
 # bytes rather than from inside the interpreter.
 test('error-binary',

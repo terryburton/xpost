@@ -157,34 +157,33 @@ errordict begin
             } if
         end
     } def
-    /VMerror {/VMerror //.error exec} def
-    /dictfull {/dictfull //.error exec} def
-    /dictstackoverflow {/dictstackoverflow //.error exec} def
-    /dictstackunderflow {/dictstackunderflow //.error exec} def
-    /execstackoverflow {/execstackoverflow //.error exec} def
-    /execstackunderflow {/execstackunderflow //.error exec} def
-    /invalidaccess {/invalidaccess //.error exec} def
-    /invalidexit {/invalidexit //.error exec} def
-    /invalidfileaccess {/invalidfileaccess //.error exec} def
-    /invalidfont {/invalidfont //.error exec} def
-    /invalidrestore {/invalidrestore //.error exec} def
-    /ioerror {/ioerror //.error exec} def
-    /limitcheck {/limitcheck //.error exec} def
-    /nocurrentpoint {/nocurrentpoint //.error exec} def
-    /rangecheck {/rangecheck //.error exec} def
-    /stackoverflow {/stackoverflow //.error exec} def
-    /stackunderflow {/stackunderflow //.error exec} def
-    /syntaxerror {/syntaxerror //.error exec} def
-    /timeout {/timeout /timeout //.error exec} def
-    /typecheck {/typecheck //.error exec} def
-    /undefined {/undefined //.error exec} def
-    /undefinedfilename {/undefinedfilename //.error exec} def
-    /undefinedresult {/undefinedresult //.error exec} def
-    /undefinedresource {/undefinedresource //.error exec} def
-    /unmatchedmark {/unmatchedmark //.error exec} def
-    /unregistered {/unregistered //.error exec} def
+    % The errors a program can catch, each named once. The standard
+    % handler is the same procedure for all of them -- name the error,
+    % run .error, which records it in $error and stops -- so it is built
+    % from the name rather than written out again beside every name.
+    % Adding an error here is adding it to this list.
+    %
+    % tests/check-error-names.sh holds the list to the interpreter's own
+    % error enumeration, ERRORS in src/lib/xpost_error.h, so a name the C
+    % side gains cannot be left without a handler and a name it loses
+    % cannot be left with one.
+    [ /dictfull /dictstackoverflow /dictstackunderflow
+      /execstackoverflow /execstackunderflow
+      /invalidaccess /invalidexit /invalidfileaccess /invalidfont
+      /invalidrestore /ioerror /limitcheck /nocurrentpoint /rangecheck
+      /stackoverflow /stackunderflow /syntaxerror /typecheck
+      /undefined /undefinedfilename /undefinedresource /undefinedresult
+      /unmatchedmark /unregistered /unknownerror /VMerror ]
+    { dup [ 3 -1 roll //.error /exec cvx ] cvx def } forall
+
+    % Two errors are initiated by events outside the interpreter, and
+    % PLRM 3.11.1 has it omit steps 1 and 2 for them: it neither restores
+    % the operand stack nor pushes the object being executed, so neither
+    % handler has an object below it to report as the command. interrupt
+    % reports nothing and stops; timeout names itself in the command's
+    % place. Anywhere else the doubled name would be a typo.
     /interrupt { stop } def
-    /unknownerror { /unknownerror //.error exec} def
+    /timeout {/timeout /timeout //.error exec} def
 end
 //.internaldict /QUIET known { }{ (errordict installed...)print } ifelse
 
