@@ -872,6 +872,40 @@ void _region_memo_store(int serial, Xpost_Object clip,
     _region_memo[victim].used = ++_region_memo_clock;
 }
 
+/* Fold a run of resolved band spans to the pixel columns they reach,
+ * merging the ones that then touch, and return how many are left. The
+ * columns a span reaches are the ones a fill of it would paint: from the
+ * floor of its left edge up to, but not including, the ceiling of its
+ * right, which is the range the fill loop takes. A span that reaches no
+ * pixel's interior drops out. The run stays ascending and disjoint within
+ * each band, which the merge below relies on: real spans in a band are
+ * ascending and disjoint, and flooring and ceiling preserve the order,
+ * so the only pairs the fold can bring together are neighbours. */
+static int _rspans_to_columns(struct rspan *r, int n)
+{
+    int i, m = 0;
+
+    for (i = 0; i < n; i++)
+    {
+        real lo = (real)floor(r[i].lo);
+        real hi = (real)ceil(r[i].hi);
+
+        if (hi <= lo)
+            continue;
+        if (m > 0 && r[m - 1].band == r[i].band && lo <= r[m - 1].hi)
+        {
+            if (hi > r[m - 1].hi)
+                r[m - 1].hi = hi;
+            continue;
+        }
+        r[m].band = r[i].band;
+        r[m].lo = lo;
+        r[m].hi = hi;
+        m++;
+    }
+    return m;
+}
+
 /* subjectpoly clippoly serial  .regionmeet  spanpoly
  *
  * THE intersection of two device regions. Each operand is a
@@ -880,28 +914,30 @@ void _region_memo_store(int serial, Xpost_Object clip,
  * consumer downstream treats by either insideness rule because the
  * rectangles are winding-uniform.
  *
- * THE BOUNDARY CONVENTION, stated once. A device region is the set of
- * pixel-row bands it reaches and, within each band, the real x extent it
- * covers there. Both operands are scan-converted to that form under the
- * nonzero winding rule and the any-part-of-pixel rule of PLRM 7.5.1
- * ("a shape is scan-converted by painting any pixel whose square region
- * intersects the shape, no matter how small the intersection is"). They
- * then meet band by band, taking the later left edge and the earlier
- * right edge of each pair of overlapping extents.
+ * THE BOUNDARY CONVENTION, stated once. A device region is a set of
+ * pixels. Each operand is scan-converted to pixel-row bands under the
+ * nonzero winding rule and the any-part-of-pixel rule of PLRM 7.5.1 ("a
+ * shape is scan-converted by painting any pixel whose square region
+ * intersects the shape, no matter how small the intersection is"), and
+ * the x extent each band reaches is then taken out to the columns that
+ * rule paints. They meet band by band, taking the later left edge and
+ * the earlier right edge of each pair of overlapping runs, which on
+ * whole columns is the intersection of the two pixel sets.
  *
- * So the result is snapped to whole pixel rows in y and left continuous
- * in x. PLRM 7.5.1 states the rule for clipping in both axes at once --
- * "the clipping region consists of the set of pixels that would be
- * included by a fill operation. Subsequent painting operations affect a
- * region that is the intersection of the set of pixels defined by the
- * clipping region with the set of pixels for the region to be painted"
- * -- and in y that is exactly what this computes, because expanding each
- * operand to whole rows before meeting them is the same as meeting the
- * row sets. In x it differs in one case only: two regions that reach the
- * same pixel column without their real extents overlapping inside it are
- * a meeting under the pixel-set rule and not under this one. The columns
- * a surviving extent covers are otherwise the same either way, because
- * floor and ceiling commute with the max and min taken here.
+ * That is what PLRM 7.5.1 asks for in both axes at once: "the clipping
+ * region consists of the set of pixels that would be included by a fill
+ * operation. Subsequent painting operations affect a region that is the
+ * intersection of the set of pixels defined by the clipping region with
+ * the set of pixels for the region to be painted." Meeting the real
+ * extents instead would drop the pixels two regions share without their
+ * extents overlapping inside one -- a column each reaches, and which a
+ * fill of either paints.
+ *
+ * Whole columns are also what makes the result a region in its own
+ * right. The output goes back out as a polygon, and a polygon's vertices
+ * are quantized to the 1/256 device grid when they are read again; a
+ * boundary already on a pixel edge survives that, an arbitrary real one
+ * can cross to the next column and take a column of the region with it.
  *
  * A boundary question about this operation is settled by PLRM 7.5.1 and
  * by self-consistency: a region painted in pieces -- a pattern's cells,
@@ -925,6 +961,7 @@ int _regionmeet(Xpost_Context *ctx,
     code = _poly_resolved_spans(ctx, subj, &S, &nS, 0);
     if (code)
         return code;
+    nS = _rspans_to_columns(S, nS);
 
     sn = serial.int_.val;
     si = sn > 0 ? _region_memo_find(sn, clip) : -1;
@@ -942,6 +979,9 @@ int _regionmeet(Xpost_Context *ctx,
             free(S);
             return code;
         }
+        /* the kept form is the folded one: it is what every meeting
+           against this region uses */
+        nC = _rspans_to_columns(C, nC);
         if (sn > 0)
         {
             _region_memo_store(sn, clip, C, nC);

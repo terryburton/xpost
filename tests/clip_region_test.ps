@@ -288,6 +288,110 @@ solidink pattink eq
     (a pattern fill covers the pixels a solid fill of the same path covers)
     assert
 
+% and again on edges that meet no pixel boundary anywhere. A slanted
+% edge crosses a pixel column part way, so which columns it reaches and
+% how much of each it covers are different questions, and PLRM 7.5.1
+% answers in columns: the clipping region is a set of pixels and what a
+% painting operation marks is the intersection of two such sets. Meeting
+% the real extents instead loses the columns two regions both reach
+% without their extents overlapping inside one -- a pixel each of them
+% covers part of, which a fill of either marks. The rectangle above has
+% its edges on the grid in one axis and would not ask the question.
+%
+% The rotation is also what makes the answer stay put: the region goes
+% back out as a polygon and its vertices are quantized to the device
+% grid when it is read again, so a boundary that is not already on a
+% pixel edge can move to the next column on the way through.
+
+/slant {
+    matrix currentmatrix
+    48 48 translate 15 rotate
+    newpath -34 -25 moveto 68 0 rlineto 0 50 rlineto -68 0 rlineto closepath
+    setmatrix
+} bind def
+
+initgraphics erasepage
+0 setgray slant fill
+/slantink snapshot def
+
+initgraphics erasepage
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 8 8] /XStep 8 /YStep 8
+   /PaintProc { begin 0 setgray 0 0 8 8 rectfill end } >>
+matrix makepattern
+/Pattern setcolorspace setcolor
+slant fill
+/slantpatt snapshot def
+
+slantink inkcount 0 gt (the slanted solid fill marked something) assert
+slantink slantpatt eq
+    (a pattern fill covers a slanted edge's pixels too) assert
+
+% the same rule reached without the pattern machinery in front of it:
+% painting the whole device under a clip set to the shape marks the
+% pixels a fill of the shape marks, since the clip's pixels are all of
+% them
+initgraphics erasepage
+slant clip
+newpath 0 0 moveto 96 0 lineto 96 96 lineto 0 96 lineto closepath
+0 setgray fill
+/slantclip snapshot def
+
+slantclip inkcount 0 gt (the fill under the slanted clip marked something) assert
+slantink slantclip eq
+    (a fill under a clip covers the pixels a fill of the clip's own shape covers)
+    assert
+
+% --- what a fill under a clip marks, stated as the rule --------------
+% "the clipping region consists of the set of pixels that would be
+% included by a fill operation. Subsequent painting operations affect a
+% region that is the intersection of the set of pixels defined by the
+% clipping region with the set of pixels for the region to be painted"
+% (PLRM 7.5.1). Both sides are sets of pixels, so the answer is the
+% intersection of two sets that can each be measured on their own: fill
+% the clip's shape, fill the subject, and require the clipped fill to
+% mark exactly the pixels both marked.
+%
+% The two shapes below meet in one pixel column and nowhere else -- the
+% clip stops at 20.2 and the subject starts at 20.5, both inside column
+% 20 -- so the whole answer rides on the rule rather than on where a
+% rounding happened to land. Meeting the real extents finds nothing
+% there; meeting the pixels finds the column both shapes cover part of,
+% and which a fill of either marks whole.
+%
+% eoclip resolves its region to pixel-band spans, which is the route a
+% region of any shape takes; a rectangular region goes through the
+% half-plane clipper in clip.ps instead, which answers about shape and
+% says so.
+
+/andink { % a b  .  string   (the pixels in both)
+    /ai.b exch def /ai.a exch def
+    ai.a length string
+    0 1 ai.a length 1 sub {
+        /ai.i exch def
+        dup ai.i ai.a ai.i get ai.b ai.i get mul put
+    } for
+} bind def
+
+/nearclipshape { newpath 10 10 moveto 20.2 10 lineto
+                         20.2 40 lineto 10 40 lineto closepath } bind def
+/nearfillshape { newpath 20.5 15 moveto 60 15 lineto
+                         60 35 lineto 20.5 35 lineto closepath } bind def
+
+initgraphics erasepage 0 setgray nearclipshape fill
+/nearclipink snapshot def
+initgraphics erasepage 0 setgray nearfillshape fill
+/nearfillink snapshot def
+initgraphics erasepage nearclipshape eoclip 0 setgray nearfillshape fill
+/nearbothink snapshot def
+
+nearclipink nearfillink andink /nearwant exch def
+nearwant inkcount 0 gt
+    (the clip and the subject share pixels to ask about) assert
+nearbothink nearwant eq
+    (a fill under a clip marks the pixels the clip and the subject both cover)
+    assert
+
 % --- clipsave's depth limit is the exhaustion PLRM 8.2 names for it ---
 % The stack is a fixed depth. Running past it is the operator running out
 % of storage, not a bad index handed to it, and a program that catches the
