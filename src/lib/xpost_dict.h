@@ -240,12 +240,12 @@ Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
 /**
    store key and value in dictionary
 */
-int xpost_dict_put_memory(Xpost_Context *ctx, /*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d, Xpost_Object k, Xpost_Object v);
+XPOST_MUST_CHECK int xpost_dict_put_memory(Xpost_Context *ctx, /*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d, Xpost_Object k, Xpost_Object v);
 
 /**
    store key and value in banked dictionary
 */
-int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Object v);
+XPOST_MUST_CHECK int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Object v);
 
 /**
    undefine key in dictionary, re-slotting any later entry whose probe

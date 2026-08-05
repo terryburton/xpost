@@ -830,8 +830,11 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "stop", (Xpost_Op_Func)xpost_op_stop, 0, 0);
     if (xpost_object_get_type(op) == invalidtype)
         return VMerror;
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, ".rundied"),
-        xpost_operator_cons(ctx, ".rundied", (Xpost_Op_Func)xpost_op_rundied, 0, 0));
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, ".rundied"),
+                       xpost_operator_cons(ctx, ".rundied",
+                                           (Xpost_Op_Func)xpost_op_rundied,
+                                           0, 0)))
+        return VMerror;
     INSTALL;
     op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
     INSTALL;

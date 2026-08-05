@@ -225,16 +225,32 @@ int xpost_operator_exec(Xpost_Context *ctx,
  * 3. constructs a name object n
  * 4. defines the name/operator-object pair in systemdict
  * 5. refreshes the optab pointer yet again
+ *
+ * A systemdict that would not take the pair leaves the interpreter
+ * without that operator, which no program can work around. The
+ * registrations are several hundred calls across two dozen modules, so
+ * rather than each one carrying the answer back by hand the refusal is
+ * recorded on the context and xpost_oplib_init_ops reads it once, after
+ * they have all run.
  */
 #define INSTALL \
-    xpost_memory_table_get_addr(ctx->gl, \
-            XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr), \
-    optab = (void *)(ctx->gl->base + optadr), \
-    n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK, \
-    n.mark_.pad0 = 0, \
-    n.mark_.padw = optab[op.mark_.padw].name, \
-    xpost_dict_put(ctx, sd, n, op), \
-    optab = (void *)(ctx->gl->base + optadr); // recalc
+    do { \
+        if (!xpost_memory_table_get_addr(ctx->gl, \
+                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr)) \
+        { \
+            ctx->operator_install_refused = 1; \
+        } \
+        else \
+        { \
+            optab = (void *)(ctx->gl->base + optadr); \
+            n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK; \
+            n.mark_.pad0 = 0; \
+            n.mark_.padw = optab[op.mark_.padw].name; \
+            if (xpost_dict_put(ctx, sd, n, op)) \
+                ctx->operator_install_refused = 1; \
+            optab = (void *)(ctx->gl->base + optadr); /* recalc */ \
+        } \
+    } while (0)
 
 /**
  * @}

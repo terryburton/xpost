@@ -369,7 +369,10 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
            safe point, nothing else names cent, and the collector's sweep
            rebuilds the free list from the mark bits so a freed entity is
            never double-listed. */
-        (void)xpost_free_memory_ent(mem, cent);
+        /* cent is the backup copy this restore has just finished
+           reading, so it is an entity of this memory file and free to
+           take back */
+        XPOST_REFUSAL_IMPOSSIBLE(xpost_free_memory_ent(mem, cent));
 
         /* the object is back to its pre-save contents, so clear its
            "backed up here" marker (reset tlev to its birth level llev).

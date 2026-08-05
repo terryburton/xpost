@@ -455,8 +455,9 @@ unsigned int xpost_free_realloc(Xpost_Memory_File *mem,
     tab->tab[rent].adr = oldadr;
     tab->tab[rent].sz = oldsize;
 
-    /* free it */
-    (void) xpost_free_memory_ent(mem, ent);
+    /* free it. The entity was allocated moments ago in this same
+       function, so the list can take it back. */
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_free_memory_ent(mem, ent));
 
 #ifdef DEBUGFREE
     printf("final ");

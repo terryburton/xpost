@@ -291,14 +291,14 @@ int xpost_oper_init_bool_ops(Xpost_Context *ctx,
     INSTALL;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "true"), xpost_bool_cons(1));
     if (ret)
-        return 0;
+        return ret;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "false"), xpost_bool_cons(0));
     if (ret)
-        return 0;
+        return ret;
     op = xpost_operator_cons(ctx, "bitshift", (Xpost_Op_Func)xpost_op_int_int_bitshift, 1, 2, integertype, integertype);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL); */
 
-    return 1;
+    return 0;
 }

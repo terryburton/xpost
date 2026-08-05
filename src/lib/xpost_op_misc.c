@@ -126,8 +126,12 @@ Xpost_Object bind(Xpost_Context *ctx,
                                is read-only once packed: the raw layer
                                writes without the program-facing access
                                check */
-                            xpost_array_put_memory(
-                                xpost_context_select_memory(ctx, p), p, i, t);
+                            /* the index was just read from this same
+                               array, so the store reaches it */
+                            XPOST_REFUSAL_IMPOSSIBLE(
+                                xpost_array_put_memory(
+                                    xpost_context_select_memory(ctx, p),
+                                    p, i, t));
                         }
                         break;
                     }
@@ -142,8 +146,10 @@ Xpost_Object bind(Xpost_Context *ctx,
                 if (xpost_object_is_exe(t))
                 {
                     t = bind(ctx, t, seen);
-                    xpost_array_put_memory(
-                        xpost_context_select_memory(ctx, p), p, i, t);
+                    /* as above: i indexes the array being walked */
+                    XPOST_REFUSAL_IMPOSSIBLE(
+                        xpost_array_put_memory(
+                            xpost_context_select_memory(ctx, p), p, i, t));
                 }
         }
     }
@@ -452,18 +458,27 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, ".sysdictrelock", (Xpost_Op_Func)op_sysdictrelock, 0, 0);
     INSTALL;
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "null"), null);
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "version"),
-                   xpost_object_cvlit(xpost_string_cons(ctx, strlen(versionstr), versionstr)));
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "null"), null))
+        return VMerror;
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "version"),
+                       xpost_object_cvlit(xpost_string_cons(ctx,
+                               strlen(versionstr), versionstr))))
+        return VMerror;
     op = xpost_operator_cons(ctx, "realtime", (Xpost_Op_Func)realtime, 1, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "usertime", (Xpost_Op_Func)usertime, 1, 0);
     INSTALL;
     //languagelevel
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "product"),
-                   xpost_object_cvlit(xpost_string_cons(ctx, strlen(productstr), productstr)));
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "revision"), xpost_int_cons(revno));
-    xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serialnumber"), xpost_int_cons(serno));
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "product"),
+                       xpost_object_cvlit(xpost_string_cons(ctx,
+                               strlen(productstr), productstr))))
+        return VMerror;
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "revision"),
+                       xpost_int_cons(revno)))
+        return VMerror;
+    if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "serialnumber"),
+                       xpost_int_cons(serno)))
+        return VMerror;
     //executive: see init.ps
     //echo: see opf.c
     //prompt: see init.ps

@@ -483,7 +483,7 @@ int xpost_oper_init_array_ops (Xpost_Context *ctx,
     INSTALL;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "["), mark);
     if (ret)
-        return 0;
+        return ret;
     op = xpost_operator_cons(ctx, "]", (Xpost_Op_Func)xpost_op_array_to_mark, 1, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)xpost_op_array_length, 1, 1,
@@ -521,6 +521,6 @@ int xpost_oper_init_array_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "forall.array.iterate", (Xpost_Op_Func)xpost_op_array_forall_iterate, 0, 0);
     ctx->opcode_shortcuts.arrayforallcont = op.mark_.padw;
 
-    return 1;
+    return 0;
 }
 

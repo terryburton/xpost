@@ -386,7 +386,13 @@ int dicgrow(Xpost_Context *ctx,
         tp = xpost_dict_table_of(dp);
         if (xpost_object_get_type(tp[i].key) != nulltype)
         {
-            xpost_dict_put_memory(ctx, mem, n, tp[i].key, tp[i].value);
+            /* an entry that does not reach the larger dictionary is an
+               entry the growth would drop */
+            if (xpost_dict_put_memory(ctx, mem, n, tp[i].key, tp[i].value))
+            {
+                XPOST_LOG_ERR("cannot rehash a dict entry into the larger dict");
+                return 0;
+            }
         }
     }
 #ifdef DEBUGDIC

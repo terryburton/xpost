@@ -104,6 +104,15 @@ struct _Xpost_Context {
 
     Xpost_Object currentobject;  /**< currently-executing object, for error() */
 
+    /* Set when a registration could not place an operator in systemdict.
+       Registration is several hundred calls spread over two dozen
+       modules, each of which would otherwise have to carry the answer
+       back by hand; this collects it in one place, which
+       xpost_oplib_init_ops reads once when they have all run. An
+       interpreter missing an operator is not one that can run a
+       program. */
+    int operator_install_refused;
+
     /* operands the dispatcher coerced from integer to real for the current
        operator; an error restores them to the originals the program pushed,
        as PLRM 3.11 requires. Empty for operators that coerce nothing. */

@@ -389,8 +389,9 @@ _t1_charstrings_from_file(Xpost_Context *ctx, const char *path)
 
                 str = xpost_object_set_access(ctx, str,
                           XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
-                xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, namebuf),
-                               str);
+                if (xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, namebuf),
+                                   str))
+                    break;
             }
             i += (size_t)len;
             entries++;
@@ -663,7 +664,8 @@ _cff_charstrings_from_file(Xpost_Context *ctx, const char *path, void *face)
 
                 str = xpost_object_set_access(ctx, str,
                           XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
-                xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, nbuf), str);
+                if (xpost_dict_put(ctx, csdict, xpost_name_cons(ctx, nbuf), str))
+                    break;
                 entries++;
             }
         }
@@ -695,6 +697,7 @@ int _findfont(Xpost_Context *ctx,
     Xpost_Object sfnts_obj = null;
     int istt = 0;
     int cffreal = 0;
+    int ret;
 
     if (xpost_object_get_type(fontname) == nametype)
         fontstr = xpost_name_get_string(ctx, fontname);
@@ -704,8 +707,18 @@ int _findfont(Xpost_Context *ctx,
 
     fontdict = xpost_dict_cons (ctx, 10);
     privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontName"), fontname);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    if (ret)
+    {
+        free(fname);
+        return ret;
+    }
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontName"), fontname);
+    if (ret)
+    {
+        free(fname);
+        return ret;
+    }
 
     /* initialize font data, with x-scale and y-scale set to 1.
        Faces are cached per name: each face maps the font file and
@@ -829,8 +842,13 @@ int _findfont(Xpost_Context *ctx,
         {
             if (face_cache[slot].csreal && xpost_font_face_is_cff(data.face))
                 cffreal = 1;
-            xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
-                           face_cache[slot].charstrings);
+            ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
+                               face_cache[slot].charstrings);
+            if (ret)
+            {
+                free(fname);
+                return ret;
+            }
         }
         else
         {
@@ -851,8 +869,13 @@ int _findfont(Xpost_Context *ctx,
                 {
                     face_cache[slot].charstrings = cs;
                     face_cache[slot].csreal = 1;
-                    xpost_dict_put(ctx, fontdict,
-                                   xpost_name_cons(ctx, "CharStrings"), cs);
+                    ret = xpost_dict_put(ctx, fontdict,
+                                       xpost_name_cons(ctx, "CharStrings"), cs);
+                    if (ret)
+                    {
+                        free(fname);
+                        return ret;
+                    }
                     goto have_charstrings;
                 }
             }
@@ -868,8 +891,13 @@ int _findfont(Xpost_Context *ctx,
                     face_cache[slot].charstrings = cs;
                     face_cache[slot].csreal = 1;
                     cffreal = 1;
-                    xpost_dict_put(ctx, fontdict,
-                                   xpost_name_cons(ctx, "CharStrings"), cs);
+                    ret = xpost_dict_put(ctx, fontdict,
+                                       xpost_name_cons(ctx, "CharStrings"), cs);
+                    if (ret)
+                    {
+                        free(fname);
+                        return ret;
+                    }
                     goto have_charstrings;
                 }
             }
@@ -883,17 +911,32 @@ int _findfont(Xpost_Context *ctx,
                 ctx->vmmode = GLOBAL;
                 csdict = xpost_dict_cons(ctx, nglyphs);
                 for (gi = 0; gi < nglyphs; gi++)
-                    if (xpost_font_face_glyph_name_get(data.face, gi, nbuf, sizeof nbuf))
-                        xpost_dict_put(ctx, csdict,
-                                       xpost_name_cons(ctx, nbuf),
-                                       xpost_int_cons((integer)gi));
+                {
+                    if (!xpost_font_face_glyph_name_get(data.face, gi, nbuf,
+                                                        sizeof nbuf))
+                        continue;
+                    ret = xpost_dict_put(ctx, csdict,
+                                         xpost_name_cons(ctx, nbuf),
+                                         xpost_int_cons((integer)gi));
+                    if (ret)
+                    {
+                        ctx->vmmode = oldmode;
+                        free(fname);
+                        return ret;
+                    }
+                }
                 ctx->vmmode = oldmode;
                 csdict = xpost_object_set_access(ctx, csdict,
                                                  XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
                 if (slot >= 0)
                     face_cache[slot].charstrings = csdict;
-                xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
-                               csdict);
+                ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
+                                   csdict);
+                if (ret)
+                {
+                    free(fname);
+                    return ret;
+                }
             }
 have_charstrings: ;
         }
@@ -909,7 +952,12 @@ have_charstrings: ;
         free(fname);
         return VMerror;
     }
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    if (ret)
+    {
+        free(fname);
+        return ret;
+    }
 
     /* the dictionary states what backs it: a TrueType program makes
        a Type 42 font, its character space one unit to the em and its
@@ -918,8 +966,13 @@ have_charstrings: ;
        space a thousand units to the em. FontBBox shares the
        character space, and scalefont and makefont concatenate onto
        FontMatrix in dictionary copies */
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontType"),
-                   xpost_int_cons(istt ? 42 : cffreal ? 2 : 1));
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontType"),
+                       xpost_int_cons(istt ? 42 : cffreal ? 2 : 1));
+    if (ret)
+    {
+        free(fname);
+        return ret;
+    }
     {
         /* the constructors answer executable objects; a font's matrix
            is data, so it says so at its construction, as
@@ -937,10 +990,23 @@ have_charstrings: ;
                 return mret;
             }
         }
-        xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"), fontmatrix);
+        ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontMatrix"), fontmatrix);
+        if (ret)
+        {
+            free(fname);
+            return ret;
+        }
     }
     if (istt && xpost_object_get_type(sfnts_obj) == arraytype)
-        xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "sfnts"), sfnts_obj);
+    {
+        ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "sfnts"),
+                             sfnts_obj);
+        if (ret)
+        {
+            free(fname);
+            return ret;
+        }
+    }
 
     if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                           xpost_object_get_ent(privatestr), 0,
@@ -977,6 +1043,7 @@ int _loadfont42(Xpost_Context *ctx,
     unsigned char *buf;
     size_t total;
     int i;
+    int ret;
 
     sfnts = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "sfnts"));
     if (xpost_object_get_type(sfnts) != arraytype)
@@ -1018,14 +1085,18 @@ int _loadfont42(Xpost_Context *ctx,
                           xpost_object_get_ent(fontbbox),
                           0, 4 * sizeof(Xpost_Object), fontbboxarray))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    if (ret)
+        return ret;
 
     privatestr = xpost_string_cons(ctx, sizeof data, NULL);
     if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                           xpost_object_get_ent(privatestr), 0,
                           sizeof data, &data))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    if (ret)
+        return ret;
     return 0;
 #else
     (void)ctx;
@@ -1049,6 +1120,7 @@ int _setfont(Xpost_Context *ctx,
     Xpost_Object userdict;
     Xpost_Object gd;
     Xpost_Object gs;
+    int ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
@@ -1056,7 +1128,9 @@ int _setfont(Xpost_Context *ctx,
     gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
 
-    xpost_dict_put(ctx, gs, xpost_name_cons(ctx, "currfont"), fontdict);
+    ret = xpost_dict_put(ctx, gs, xpost_name_cons(ctx, "currfont"), fontdict);
+    if (ret)
+        return ret;
 
     return 0;
 }
@@ -2268,6 +2342,7 @@ int _loadcidfont0(Xpost_Context *ctx,
     size_t glen, gpos, wlen;
     int i;
     unsigned int k;
+    int ret;
 
     gdata = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "GlyphData"));
     if (xpost_object_get_type(gdata) == stringtype)
@@ -2418,14 +2493,18 @@ int _loadcidfont0(Xpost_Context *ctx,
                           xpost_object_get_ent(fontbbox),
                           0, 4 * sizeof(Xpost_Object), fontbboxarray))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    if (ret)
+        return ret;
 
     privatestr = xpost_string_cons(ctx, sizeof data, NULL);
     if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                           xpost_object_get_ent(privatestr), 0,
                           sizeof data, &data))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    if (ret)
+        return ret;
     return 0;
 fail:
 fail2:
@@ -2486,6 +2565,7 @@ int _loadfont1(Xpost_Context *ctx,
     size_t wlen;
     int i;
     unsigned int k;
+    int ret;
 
     if (xpost_object_get_type(csflat) != arraytype)
         return invalidfont;
@@ -2646,16 +2726,22 @@ int _loadfont1(Xpost_Context *ctx,
                           xpost_object_get_ent(fontbbox),
                           0, 4 * sizeof(Xpost_Object), fontbboxarray))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    if (ret)
+        return ret;
 
     privatestr = xpost_string_cons(ctx, sizeof data, NULL);
     if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                           xpost_object_get_ent(privatestr), 0,
                           sizeof data, &data))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, ".emunits"),
-                   xpost_int_cons(xpost_font_face_units(data.face)));
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    if (ret)
+        return ret;
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, ".emunits"),
+                       xpost_int_cons(xpost_font_face_units(data.face)));
+    if (ret)
+        return ret;
     return 0;
 fails:
     xpost_strbuf_free(&sec);
@@ -3069,6 +3155,7 @@ int _loadcidfont2(Xpost_Context *ctx,
     unsigned int ntab, nglyphs;
     unsigned int headoff = 0, maxpoff = 0;
     int i;
+    int ret;
 
     sfnts = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "sfnts"));
     if (xpost_object_get_type(sfnts) != arraytype)
@@ -3296,14 +3383,18 @@ int _loadcidfont2(Xpost_Context *ctx,
                           xpost_object_get_ent(fontbbox),
                           0, 4 * sizeof(Xpost_Object), fontbboxarray))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontBBox"), fontbbox);
+    if (ret)
+        return ret;
 
     privatestr = xpost_string_cons(ctx, sizeof data, NULL);
     if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
                           xpost_object_get_ent(privatestr), 0,
                           sizeof data, &data))
         return VMerror;
-    xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    if (ret)
+        return ret;
     return 0;
 #else
     (void)ctx;
