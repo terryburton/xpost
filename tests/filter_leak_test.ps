@@ -170,6 +170,24 @@ mark
              /failcount failcount 1 add store } if } if
 cleartomark
 
+% A coding that cannot be built once its filter object already exists.
+% The row buffer DCTEncode wants for an image four thousand million bytes
+% wide is larger than the address space the wrapper allows, so the
+% coding fails after the entity, the struct and the claim on the target
+% are all in place. Giving those three back is the whole of what the
+% refusal has to do, and none of it has any expression here: the checker
+% outside says whether it happened. Where the allowance cannot be
+% lowered the request is granted and the filter is built instead, and
+% closing it says the same thing about the ordinary path.
+dctbuilt {
+    mark
+    { /r.t scratchfile (w) file def
+      { r.t << /Columns 1073741823 /Rows 1 /Colors 4 >> /DCTEncode filter
+        closefile } stopped pop
+      r.t closefile } stopped pop
+    cleartomark
+} if
+
 mark { scratchfile deletefile } stopped pop cleartomark
 
 failcount 0 eq { (SUCCESS\n) print } if

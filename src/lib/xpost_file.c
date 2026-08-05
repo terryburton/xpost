@@ -895,19 +895,16 @@ static Xpost_File *
 xpost_diskfile_open(const FILE *fp)
 {
     Xpost_DiskFile *df = malloc(sizeof *df);
+    struct stat st;
 
-    if (df)
-    {
-        struct stat st;
-
-        _plain_file_init(&df->methods, &disk_methods);
-        df->file = (FILE*)fp;
-        /* reads from a regular file never block, so only poll fds that
-           can stall (pipes, terminals, sockets) */
-        df->poll_before_read = !(fstat(fileno(df->file), &st) == 0 &&
-                                 S_ISREG(st.st_mode));
-    }
-
+    if (!df)
+        return NULL;
+    _plain_file_init(&df->methods, &disk_methods);
+    df->file = (FILE*)fp;
+    /* reads from a regular file never block, so only poll fds that
+       can stall (pipes, terminals, sockets) */
+    df->poll_before_read = !(fstat(fileno(df->file), &st) == 0 &&
+                             S_ISREG(st.st_mode));
     return &df->methods;
 }
 
@@ -1042,16 +1039,14 @@ xpost_memoryfile_open_read(unsigned char *ptr, size_t limit)
 {
     Xpost_MemoryFile *mf = malloc(sizeof *mf);
 
-    if (mf)
-    {
-        _plain_file_init(&mf->methods, &memory_methods);
-        mf->contents = ptr;
-        mf->is_read = 1;
-        mf->is_malloc = 0;
-        mf->read_next = 0;
-        mf->read_limit = limit;
-    }
-
+    if (!mf)
+        return NULL;
+    _plain_file_init(&mf->methods, &memory_methods);
+    mf->contents = ptr;
+    mf->is_read = 1;
+    mf->is_malloc = 0;
+    mf->read_next = 0;
+    mf->read_limit = limit;
     return &mf->methods;
 }
 
@@ -1401,10 +1396,14 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
 #endif
     f.tag = filetype /*| (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET)*/;
     df = xpost_diskfile_open(fp);
+    if (!df)
+        return invalid;
     /* xpost_memory_table_alloc(mem, sizeof(FILE *), 0, &f.mark_.padw); */
     if (!xpost_memory_table_alloc(mem, sizeof df, filetype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
+        /* the stream is being abandoned before any program saw it */
+        free(df);
         return invalid;
     }
     _file_bind_entity(mem, ent, df);
@@ -1413,6 +1412,11 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
     if (!ret)
     {
         XPOST_LOG_ERR("cannot save file pointer in VM");
+        /* the entity was allocated and stamped as a file born at this
+           save depth, and holds no stream at all: take it back out of
+           the census, so no restore goes looking for one in it */
+        _file_retire_stamp(mem, ent);
+        free(df);
         return invalid;
     }
     return f;
@@ -1457,6 +1461,10 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
     if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
     {
         XPOST_LOG_ERR("cannot save file pointer in VM");
+        /* the entity was allocated and stamped as a file born at this
+           save depth, and holds no stream at all: take it back out of
+           the census, so no restore goes looking for one in it */
+        _file_retire_stamp(mem, ent);
         (void)xpost_file_close(mf);
         free(mf);
         return invalid;
@@ -4106,6 +4114,7 @@ _enc_cons(Xpost_Memory_File *mem, Xpost_Object tgt, size_t size,
 {
     Xpost_File *target = xpost_file_get_file_pointer(mem, tgt);
     Xpost_EncBase *ff;
+    Xpost_Object f;
 
     *out = NULL;
     if (!target)
@@ -4115,9 +4124,32 @@ _enc_cons(Xpost_Memory_File *mem, Xpost_Object tgt, size_t size,
         return invalid;
     ff->target = target;
     ff->coding = coding;
-    *out = ff;
-    return _filter_object_cons(mem, &ff->methods, &enc_methods,
-                               XPOST_FILE_WRAPS_TARGET, target);
+    f = _filter_object_cons(mem, &ff->methods, &enc_methods,
+                            XPOST_FILE_WRAPS_TARGET, target);
+    /* the base is handed back only once it is registered: a refusal has
+       already given the struct up, and a coding that went on writing
+       into it would be writing into freed memory */
+    if (xpost_object_get_type(f) == filetype)
+        *out = ff;
+    return f;
+}
+
+/* Give up a filter whose coding could not be built.
+
+   The object exists by the time a coding fails: the entity holds the
+   struct and the filter's claim is on the stream beneath, and the object
+   naming all three is about to be discarded. Closing is what gives them
+   back -- the claim, the struct, and the entity's pointer to it -- and
+   leaves an entity holding no stream, which is a thing the collector
+   knows how to reclaim. The coding is marked finished first, so that a
+   filter which never encoded a byte writes no end-of-data marker to the
+   target on its way out. */
+static Xpost_Object
+_enc_cons_abandon(Xpost_Memory_File *mem, Xpost_Object f, Xpost_EncBase *base)
+{
+    base->closed = 1;
+    (void)xpost_file_object_close(mem, f);
+    return invalid;
 }
 
 Xpost_Object xpost_file_cons_filter_enc_null(Xpost_Memory_File *mem, Xpost_Object tgt)
@@ -4164,10 +4196,7 @@ Xpost_Object xpost_file_cons_filter_enc_flate(Xpost_Memory_File *mem, Xpost_Obje
     if (!ff)
         return f;
     if (deflateInit(&ff->strm, Z_DEFAULT_COMPRESSION) != Z_OK)
-    {
-        ff->base.closed = 1;
-        return invalid;
-    }
+        return _enc_cons_abandon(mem, f, &ff->base);
     ff->strm.next_out = ff->out;
     ff->strm.avail_out = sizeof(ff->out);
     return f;
@@ -4218,10 +4247,9 @@ Xpost_Object xpost_file_cons_filter_enc_ccitt(Xpost_Memory_File *mem,
     ff->row = malloc((size_t)ff->rowbytes);
     if (!ff->ref || !ff->cur || !ff->row)
     {
+        /* whichever of the three arrived is the coding's to give up */
         faxenc_release(&ff->base.base);
-        /* the coding never started, so it has no end-of-data to write */
-        ff->base.base.closed = 1;
-        return invalid;
+        return _enc_cons_abandon(mem, f, &ff->base.base);
     }
     return f;
 }
@@ -4255,10 +4283,7 @@ Xpost_Object xpost_file_cons_filter_enc_dct(Xpost_Memory_File *mem,
     ff->jerr.output_message = dctenc_output_message;
     ff->cinfo.client_data = ff;
     if (setjmp(ff->jmp))
-    {
-        ff->base.closed = 1;
-        return invalid;
-    }
+        return _enc_cons_abandon(mem, f, &ff->base);
     jpeg_create_compress(&ff->cinfo);
     ff->jdst.init_destination = dctenc_init_destination;
     ff->jdst.empty_output_buffer = dctenc_empty_output_buffer;
@@ -4291,9 +4316,9 @@ Xpost_Object xpost_file_cons_filter_enc_dct(Xpost_Memory_File *mem,
     ff->row = malloc((size_t)ff->rowbytes);
     if (!ff->row)
     {
+        /* the compressor is built by now and is the coding's to give up */
         jpeg_destroy_compress(&ff->cinfo);
-        ff->base.closed = 1;
-        return invalid;
+        return _enc_cons_abandon(mem, f, &ff->base);
     }
     return f;
 }
@@ -4539,7 +4564,33 @@ struct Xpost_File_Methods rsd_methods =
  * Recording the claim it lays on that stream is therefore not a thing a
  * filter can be written without: there is no other way to make one, and
  * the two entry points below ask for the stream by name.
+ *
+ * The struct belongs to this call: on any refusal it is given up here and
+ * the caller is handed the invalid object, since no object naming it
+ * comes back and nothing else knows it is there. That includes a refusal
+ * after the entity exists, which leaves an entity tagged as a file whose
+ * payload was never written -- it is retired from the birth census so
+ * that no restore reads a stream out of it.
  */
+static void
+_filter_cons_abandon(Xpost_File *ff)
+{
+    /* torn down as far as a close tears a filter down: the coding gives
+       up whatever it is already holding, a reusable stream gives up the
+       copy of its source, and the struct goes. What a close does beyond
+       that -- releasing the stream beneath, clearing the entity's
+       pointer -- has nothing to undo here, since the claim was never
+       laid and the entity holds nothing. An encode coding is marked
+       finished first: a filter that never wrote a byte has no
+       end-of-data marker to leave in somebody's file on its way out. */
+    if (ff->methods == &enc_methods)
+        ((Xpost_EncBase *)ff)->closed = 1;
+    (void)xpost_file_close(ff);
+    if (ff->methods == &rsd_methods)
+        free(((Xpost_RsdFile *)ff)->data);
+    free(ff);
+}
+
 static Xpost_Object
 _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
                     Xpost_File_Methods *methods,
@@ -4561,6 +4612,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
     if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
+        _filter_cons_abandon(ff);
         return invalid;
     }
     _file_bind_entity(mem, ent, ff);
@@ -4569,6 +4621,8 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
     if (!ret)
     {
         XPOST_LOG_ERR("cannot save file pointer in VM");
+        _file_retire_stamp(mem, ent);
+        _filter_cons_abandon(ff);
         return invalid;
     }
     if (under)

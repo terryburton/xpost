@@ -36,9 +36,19 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# One allocation the workload asks for is meant to be refused: a coding
+# whose buffer is four thousand million bytes, so that a filter fails
+# after its object, its struct and its claim on the target already exist.
+# A host that hands out address space it does not have would grant the
+# request, so the allowance is capped below it -- far above what the
+# checker and the interpreter need together, and nothing else in the
+# workload comes near it. Where the shell cannot lower the allowance the
+# request is granted, the filter is built, and the workload closes it
+# instead.
 log=$work/valgrind.log
 out=$(
     cd "$work" || exit 1
+    ulimit -v 3145728 2>/dev/null
     valgrind --leak-check=full --show-leak-kinds=definite,indirect \
              --error-exitcode=9 --log-file="$log" \
              --suppressions="$supp" \
