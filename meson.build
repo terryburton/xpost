@@ -1427,6 +1427,14 @@ test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
   args: [ meson.current_source_dir() ])
 
+# The complement of dict-homes: that guards a registered member against
+# moving, this guards a reference against landing nowhere. Every bare
+# fetch from a private namespace must name something the namespace holds,
+# checked against a live startup rather than a second set of patterns.
+test('private-refs',
+  find_program('tests/check-private-refs.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ])
+
 # The raster classes stay a single generated suite: pgm/ppm are parameter
 # files over .makerasterclass, pbm/tiff dict-copies overriding emission,
 # and every shared method is defined exactly once, in the prototype.
