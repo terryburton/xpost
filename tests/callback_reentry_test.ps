@@ -1,0 +1,305 @@
+% Every place the graphics machinery runs a procedure the program wrote,
+% held to the same contract, run through `xpost -q --no-sandbox -d null`
+% by run-ps-test.sh.
+%
+% A callback is the one moment the machinery is half way through its own
+% work and the program has the interpreter. Whatever the machinery was
+% mid-use of at that moment -- a scratch slot it will read back, the
+% dictionary it is running in, the graphics state it means to restore --
+% is exposed to whatever the callback does, including calling the very
+% operator that made the callback. The machinery that gets this right
+% and the machinery that does not look identical from outside until
+% something re-enters.
+%
+% So every callback is asked the same questions. Does the caller's state
+% survive a callback that re-enters the same operator? And does the
+% callback run in the caller's dictionary scope rather than the
+% machinery's own? One site answering yes says nothing about the next,
+% because each stashes what it is mid-use of in a slot of its own and
+% escapes its own scope in a spelling of its own, so both are a separate
+% decision every time.
+
+/bad 0 def
+/note { % (what)  .  -
+    (FAIL: ) print print (\n) print /bad bad 1 add store
+} bind def
+
+/join { % (a) (b)  .  (ab)
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 4 -1 roll length 4 -1 roll putinterval
+} bind def
+
+/same { % got want (what)  .  -
+    3 1 roll eq { pop }{ note } ifelse
+} bind def
+
+% componentwise, so a space reporting the right count of the wrong
+% numbers is not mistaken for a space that survived
+/samenums { % [got] [want] (what)  .  -
+    /nwhat exch def /nwant exch def /ngot exch def
+    ngot length nwant length ne { nwhat note }{
+        /nok true def
+        0 1 nwant length 1 sub {
+            dup ngot exch get exch nwant exch get sub abs
+            0.0001 gt { /nok false def } if
+        } for
+        nok not { nwhat note } if
+    } ifelse
+} bind def
+
+% --- the spaces ----------------------------------------------------
+% Each entry: a space, a colour in it, and a name for the report. The
+% conversion procedure of each re-enters setcolor on a space of the same
+% family before returning its result, so the machinery is asked to hold
+% its stash across a call that overwrites it.
+
+/wp [0.9505 1.0 1.089] def
+
+% the spaces the callbacks re-enter with -- distinct objects, so that a
+% space surviving the call can be told from one replaced by it
+/inSep [/Separation /Inner /DeviceGray { 1 exch sub }] def
+/inDevN [/DeviceN [/InnerA /InnerB] /DeviceGray { pop 1 exch sub }] def
+/inIdx [/Indexed /DeviceGray 3 { 4 div }] def
+/inCIEA [/CIEBasedA << /WhitePoint wp /DecodeA { 2 div } >>] def
+/inCIEABC [/CIEBasedABC << /WhitePoint wp
+    /DecodeABC [ { 2 div } { 2 div } { 2 div } ] >>] def
+
+/spaces [
+    [ [/Separation /Outer /DeviceGray { inSep setcolorspace 0.25 setcolor 0.5 mul }]
+      [0.4] (Separation) ]
+    [ [/DeviceN [/OuterA /OuterB] /DeviceGray
+        { inDevN setcolorspace 0.25 0.75 setcolor pop 0.5 mul }]
+      [0.4 0.6] (DeviceN) ]
+    [ [/Indexed /DeviceGray 3 { inIdx setcolorspace 1 setcolor 8 div }]
+      [2] (Indexed) ]
+    [ [/CIEBasedA << /WhitePoint wp
+        /DecodeA { inCIEA setcolorspace 0.25 setcolor 0.5 mul } >>]
+      [0.8] (CIEBasedA) ]
+    [ [/CIEBasedABC << /WhitePoint wp
+        /DecodeABC [ { inCIEABC setcolorspace 0.25 0.25 0.25 setcolor 0.5 mul }
+                     { 0.5 mul } { 0.5 mul } ] >>]
+      [0.8 0.6 0.4] (CIEBasedABC) ]
+] def
+
+% --- re-entry: the space and the colour as given survive the call ---
+% Each family is asked on its own, under stopped: a family that leaves
+% the operand stack in a state the next one cannot run from would
+% otherwise report the next family's failure instead of its own.
+/checkspace { % [ space comps name ]  .  -
+    aload pop /nm exch def /comps exch def /sp exch def
+    {
+        /DeviceGray setcolorspace
+        sp setcolorspace
+        comps aload pop setcolor
+        currentcolorspace sp
+            (space replaced by a re-entrant conversion: ) nm join same
+        [ currentcolor ] comps
+            (colour replaced by a re-entrant conversion: ) nm join samenums
+    } stopped { (a re-entrant conversion raised an error: ) nm join note } if
+    clear
+} bind def
+spaces { checkspace } forall
+
+% --- and across families: an Indexed palette whose lookup sets a
+% Separation colour, and a Separation whose transform sets an Indexed
+% one. A stash held per family survives this by accident; a stash held
+% as a stack survives it by construction.
+/xIdx [/Indexed /DeviceGray 3 { inSep setcolorspace 0.25 setcolor 8 div }] def
+xIdx setcolorspace
+2 setcolor
+currentcolorspace xIdx (Indexed space lost to a Separation set in its lookup) same
+[ currentcolor ] [2] (Indexed colour lost to a Separation set in its lookup) samenums
+
+/xSep [/Separation /Outer /DeviceGray { inIdx setcolorspace 1 setcolor 0.5 mul }] def
+xSep setcolorspace
+0.4 setcolor
+currentcolorspace xSep (Separation space lost to an Indexed set in its transform) same
+[ currentcolor ] [0.4] (Separation colour lost to an Indexed set in its transform) samenums
+
+% --- sampling: a screen or a transfer installed from inside the very
+% procedure the installation is sampling. Both sample across a range
+% and check the depth of the operand stack after each call, so both
+% keep what they are mid-use of where the procedure can reach it.
+/inner { 1 exch sub } def
+{ { dup 0.5 lt { /inner load settransfer } if } settransfer } stopped
+    { (a transfer function that installs one raised an error) note } if
+clear
+currenttransfer /inner load eq
+    { (a transfer function installed from inside the sample loop won) note } if
+
+/spotinner { pop pop 0.5 } def
+/n 0 def
+count /depth exch def
+{ 60 0 { /n n 1 add def
+         n 1 eq { 30 0 /spotinner load setscreen } if
+         pop pop 0.25 } setscreen } stopped
+    { (a spot function that installs a screen raised an error) note } if
+count depth (a spot function that installs a screen cost the caller operands) same
+clear
+currentscreen exch pop exch pop /spotinner load eq
+    { (a screen installed from inside the sample loop won) note } if
+
+% --- the dictionary scope a callback runs in -----------------------
+% The machinery reaches its own locals through a dictionary of its own.
+% A callback that runs with that dictionary still on the stack has the
+% machinery's names shadowing its own and its definitions landing
+% somewhere they will be thrown away, so every site drops its scope
+% before it calls out. Each callback below records the dictionary it
+% found itself in; the caller's is userdict.
+/seen null def
+/inscope { /seen currentdict store } bind def
+
+/scoped { % (what)  .  -
+    seen userdict eq { pop }{ ( ran in the machinery's own scope) join note } ifelse
+    /seen null store
+} bind def
+
+% a Type 3 font, shown one glyph at a time through BuildChar and by
+% name through BuildGlyph
+/T3 8 dict def
+T3 begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildGlyph { pop pop inscope 750 0 setcharwidth } def
+end
+T3 /CallbackFont exch definefont pop
+/CallbackFont findfont 12 scalefont setfont
+gsave 0 0 moveto /box glyphshow grestore
+(a BuildGlyph procedure) scoped
+
+/T3c 8 dict def
+T3c begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildChar { pop pop inscope 750 0 setcharwidth } def
+end
+T3c /CallbackCharFont exch definefont pop
+/CallbackCharFont findfont 12 scalefont setfont
+gsave 0 0 moveto (A) show grestore
+(a BuildChar procedure) scoped
+
+% a tiling pattern's paint procedure
+/pat <<
+    /PatternType 1 /PaintType 1 /TilingType 1
+    /BBox [0 0 8 8] /XStep 8 /YStep 8
+    /PaintProc { pop inscope }
+>> def
+gsave
+    pat matrix makepattern setpattern
+    newpath 0 0 moveto 12 0 lineto 12 12 lineto closepath fill
+grestore
+(a pattern's paint procedure) scoped
+
+% an image's data source procedure
+/rows 0 def
+gsave
+    newpath 0 0 moveto 8 0 lineto 8 8 lineto closepath clip
+    8 8 8 [8 0 0 -8 0 8]
+    { inscope /rows rows 1 add store <FF00FF00FF00FF00> }
+    image
+grestore
+rows 0 eq { (the image never called its data source) note } if
+(an image's data source) scoped
+
+% a tint transform and a CIE decode procedure, both run while the
+% colour machinery is reducing a space under a dictionary of its own
+gsave
+[/Separation /Scoped /DeviceGray { inscope 0.5 mul }] setcolorspace
+0.4 setcolor
+grestore
+(a tint transform) scoped
+
+gsave
+[/CIEBasedABC << /WhitePoint wp
+    /DecodeABC [ { inscope 0.5 mul } { 0.5 mul } { 0.5 mul } ] >>] setcolorspace
+0.8 0.6 0.4 setcolor
+grestore
+(a CIE decode procedure) scoped
+
+% a spot function and a transfer function
+gsave 60 0 { inscope pop pop 0.25 } setscreen grestore
+(a spot function) scoped
+gsave { inscope } settransfer grestore
+(a transfer function) scoped
+clear
+
+% --- what an error inside a callback leaves behind ------------------
+% A callback that raises walks out through the machinery's own frames,
+% past every gsave it opened and every dictionary it pushed. Nothing
+% below can catch the error and put those back, because the error
+% belongs to the program: the bracket has to unwind and raise it again.
+/d0 countdictstack def
+/g0 0.75 def
+
+/unwinds { % {what-to-run} (what)  .  -
+    /uwhat exch def
+    3 setlinewidth
+    stopped not { uwhat ( did not raise the error out of the machinery) join note } if
+    clear
+    countdictstack d0 ne
+        { uwhat ( left the dictionary stack deeper) join note } if
+    currentdict userdict ne
+        { uwhat ( left another dictionary current) join note } if
+    currentlinewidth 3 ne
+        { uwhat ( left a graphics state open) join note } if
+    3 setlinewidth
+} bind def
+
+/erpat <<
+    /PatternType 1 /PaintType 1 /TilingType 1
+    /BBox [0 0 8 8] /XStep 8 /YStep 8
+    /PaintProc { pop gsave 9 setlinewidth 4 dict begin mumble }
+>> def
+{ gsave
+  erpat matrix makepattern setpattern
+  newpath 0 0 moveto 12 0 lineto 12 12 lineto closepath fill
+  grestore }
+(a pattern's paint procedure) unwinds
+
+/T3e 8 dict def
+T3e begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildChar { pop pop gsave 9 setlinewidth 4 dict begin mumble } def
+end
+T3e /CallbackErrFont exch definefont pop
+{ gsave /CallbackErrFont findfont 12 scalefont setfont
+  0 0 moveto (A) show grestore }
+(a BuildChar procedure) unwinds
+
+{ gsave
+  newpath 0 0 moveto 8 0 lineto 8 8 lineto closepath clip
+  8 8 8 [8 0 0 -8 0 8] { gsave 9 setlinewidth 4 dict begin mumble } image
+  grestore }
+(an image's data source) unwinds
+
+{ [/Separation /Erring /DeviceGray { pop gsave 9 setlinewidth 4 dict begin mumble }]
+  setcolorspace 0.4 setcolor }
+(a tint transform) unwinds
+
+{ [/CIEBasedA << /WhitePoint wp
+      /DecodeA { pop gsave 9 setlinewidth 4 dict begin mumble } >>]
+  setcolorspace 0.8 setcolor }
+(a CIE decode procedure) unwinds
+
+{ { pop gsave 9 setlinewidth 4 dict begin mumble } settransfer }
+(a transfer function) unwinds
+
+{ 60 0 { pop pop gsave 9 setlinewidth 4 dict begin mumble } setscreen }
+(a spot function) unwinds
+clear
+
+bad 0 eq { (SUCCESS\n) print }{ (FAILURES: ) print bad == } ifelse

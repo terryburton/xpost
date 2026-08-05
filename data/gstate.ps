@@ -329,7 +329,18 @@ setglobal
 % sampled across that range when it is set. The samples are taken for
 % their effect on the operand stack: a procedure that leaves anything
 % other than its one result is not a transfer function.
+% The procedure being sampled is the program's, and a procedure that
+% installs a transfer function of its own re-enters this one against the
+% same three slots, so the sampling runs inside the bracket. Nothing of
+% the bracket's own sits on the operand stack while the procedure runs,
+% which the depth check below depends on.
+.xpostsys /.tskeys [ /.tsproc /.tsop /.tsd ] put
 .xpostsys /.sampletransfer {
+    //.xpostsys /.sampletransferbody get
+    //.xpostsys /.tskeys get 0
+    //.xpostsys /.callout get exec
+} put
+.xpostsys /.sampletransferbody {
     graphicsdict exch /.tsproc exch put
     graphicsdict exch /.tsop exch put
     0 1 255 {
@@ -344,7 +355,43 @@ setglobal
     } for
 } put
 
+% freq ang proc  .installscreen  -
+% Sample the spot function and leave this call's screen recorded. The
+% record is what setscreen is mid-use of across the sampling: the spot
+% function may install a screen of its own, which records over it in the
+% same graphics state slots, so the record is kept in a slot the bracket
+% holds and written again when the sampling is done.
+.xpostsys /.ssreckeys [ /.ssrec ] put
+.xpostsys /.installscreen {
+    //.xpostsys /.installscreenbody get
+    //.xpostsys /.ssreckeys get 0
+    //.xpostsys /.callout get exec
+} put
+.xpostsys /.installscreenbody {
+    3 array astore
+    dup graphicsdict exch /.ssrec exch put
+    aload pop
+    //.xpostsys /.samplespot get exec
+    graphicsdict /.ssrec get aload pop
+    graphicsdict /currgstate get exch /screenproc exch put
+    graphicsdict /currgstate get exch /screenangle exch put
+    graphicsdict /currgstate get exch /screenfreq exch put
+    //.xpostsys /.spreadgrayscreen get exec
+} put
+
+% The spot function is the program's, and a screen installed from inside
+% it re-enters the sampling against the same depth slot, so the sampling
+% runs inside the bracket. Nothing of the bracket's own sits on the
+% operand stack while the procedure runs, which the depth comparison
+% compiled into the program below depends on -- and which is also why a
+% spot function may leave entries there for the caller to harvest.
+.xpostsys /.sskeys [ /.ssd0 ] put
 .xpostsys /.samplespot {
+    //.xpostsys /.samplespotbody get
+    //.xpostsys /.sskeys get 0
+    //.xpostsys /.callout get exec
+} put
+.xpostsys /.samplespotbody {
     18 dict begin
     /proc exch def /ang exch def /freq exch def
     freq ang //.xpostsys /.screenlattice get exec
@@ -650,7 +697,7 @@ setglobal
     graphicsdict /currgstate get /screenfreq get dup 0 gt {
         graphicsdict /currgstate get /screenangle get
         graphicsdict /currgstate get /screenproc get
-        dup xcheck { //.xpostsys /.samplespot get exec }{ pop pop pop } ifelse
+        dup xcheck { //.xpostsys /.installscreen get exec }{ pop pop pop } ifelse
     }{ pop } ifelse
 } //.xpostsys /.defop get exec
 

@@ -853,6 +853,23 @@ test('colorspace-matrix',
   args: [ xpost_exe, files('tests/colorspace_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Program code is called out to through one bracket. This holds the tree
+# to it: every graphicsdict slot is registered as one a bracket saves or
+# one the render owns outright, and the dictionary-scope escape has one
+# spelling. Both failures are silent until a program re-enters or raises.
+test('callout-bracket',
+  find_program('tests/check-callout-bracket.sh'),
+  args: [ meson.current_source_dir() ])
+
+# Every procedure the graphics machinery calls out to, asked whether the
+# caller's state survives the call. A callback is the one moment the
+# machinery is half way through its own work with the program holding
+# the interpreter, and each site decides for itself what it saves.
+test('callback-reentry',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/callback_reentry_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every text-showing operator against both kinds of font. Each operator
 # walks its string its own way, so one positioning a glyph correctly says
 # nothing about the next.
