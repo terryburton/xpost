@@ -17,17 +17,28 @@
 % run a glyph-description procedure with the glyph flag raised: the
 % stencil painter blends mask edges only for glyphs, the way the
 % device's TextAlphaBits asks
+% A build procedure runs through the bracket: it is the program's, and
+% the operator that runs it works out of a dictionary of its own, which
+% the build must not inherit. The nesting count is what the operator is
+% mid-use of across the call -- a build procedure may show text, which
+% builds glyphs against the same count -- so the bracket puts it back.
 currentglobal true setglobal
+.xpostsys /.buildkeys [ /.inglyph ] put
+% the capture pair the glyph cache is mid-use of while a build runs
+.xpostsys /.t3capkeys [ /.t3want /.t3cap ] put
 .xpostsys /.runbuild { % ... proc  .runbuild  ...
-    % .inglyph counts glyph-build nesting: a build procedure may itself show
-    % text, so a bare flag would clear on the inner build and read false while
-    % the outer build is still running. setcachedevice/setcharwidth are valid
-    % while it is nonzero.
+    //.xpostsys /.runbuildbody get
+    //.xpostsys /.buildkeys get 1
+    //.xpostsys /.callout get exec
+} put
+% .inglyph counts glyph-build nesting: a build procedure may itself show
+% text, so a bare flag would clear on the inner build and read false while
+% the outer build is still running. setcachedevice/setcharwidth are valid
+% while it is nonzero.
+.xpostsys /.runbuildbody {
     graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 1 add
     graphicsdict exch /.inglyph exch put
     exec
-    graphicsdict /.inglyph get 1 sub
-    graphicsdict exch /.inglyph exch put
 } put
 setglobal
 
@@ -86,11 +97,14 @@ setglobal
             } if
             % a font defining only BuildGlyph serves the string
             % operators through the standard derivation: the code's
-            % Encoding entry names the glyph to build
+            % Encoding entry names the glyph to build. The derivation is
+            % this interpreter's own procedure and reaches BuildGlyph
+            % from inside the bracket the caller already opened around
+            % it, so it runs the glyph procedure directly
             dup /BuildChar known not {
                 dup /BuildChar {
                     1 index /Encoding get exch get
-                    1 index /BuildGlyph get //.xpostsys /.runbuild get exec
+                    1 index /BuildGlyph get exec
                 } put
             } if
         }{
@@ -235,9 +249,16 @@ setglobal
 % render a Type 3 glyph through the glyph cache: a hit replays the
 % stored mask and its advances; a miss runs the build procedure,
 % capturing its marks when it declares setcachedevice, and paints
-% the fresh entry the same way a hit does
+% the fresh entry the same way a hit does.
+% The whole of it goes through the bracket. The capture pair is what
+% this procedure is mid-use of while a build runs, and a build may show
+% text of its own, which builds glyphs against the same pair; the
+% graphics states the build branches open, and this procedure's own
+% dictionary, are closed by the same bracket whichever way a build
+% leaves.
 currentglobal true setglobal
 .xpostsys /.t3build {
+    {
     10 dict begin
     /code exch def /font exch def
     /devmat matrix currentmatrix def
@@ -262,22 +283,14 @@ currentglobal true setglobal
         % ordinary paint pipeline
         gsave
         font code font /BuildChar get
-        currentdict end 4 1 roll
         //.xpostsys /.runbuild get exec
-        begin
         grestore
     }{
-        /oldwant graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse def
-        /oldcap graphicsdict /.t3cap 2 copy known { get }{ pop pop null } ifelse def
         gsave
         graphicsdict /.t3want true put
         graphicsdict /.t3cap null put
-        % the build runs outside this scope, so its defs reach the
-        % caller's dictionaries; the locals ride the operand stack
         font code font /BuildChar get
-        currentdict end 4 1 roll
         //.xpostsys /.runbuild get exec
-        begin
         /cap graphicsdict /.t3cap get def
         cap null ne {
             /buf cap /w get cap /h get mul string def
@@ -296,8 +309,6 @@ currentglobal true setglobal
                 /mat devmat /key //.xpostsys /.glyphkey get exec
             >> .maskcacheput
         } if
-        graphicsdict /.t3want oldwant put
-        graphicsdict /.t3cap oldcap put
         grestore
         cap null ne {
             clipok
@@ -312,15 +323,14 @@ currentglobal true setglobal
                 % past the cache ceiling: build again, painting direct
                 gsave
                 font code font /BuildChar get
-                currentdict end 4 1 roll
                 //.xpostsys /.runbuild get exec
-                begin
                 grestore
             } ifelse
         } if
     } ifelse
     } ifelse
     end
+    } //.xpostsys /.t3capkeys get 0 //.xpostsys /.callout get exec
 } put
 setglobal
 
@@ -654,14 +664,8 @@ setglobal
             fnt /yadvance 0 put
             gsave
                 fnt /BuildGlyph 2 copy known {
-                    % the build runs outside this scope, the way a
-                    % BuildChar does: its defs are its own, and the
-                    % names this operator works under are not its to
-                    % inherit. The locals ride the operand stack
                     get fnt gname 3 -1 roll
-                    currentdict end 4 1 roll
                     //.xpostsys /.runbuild get exec
-                    begin
                 }{
                     pop pop
                     /code null def

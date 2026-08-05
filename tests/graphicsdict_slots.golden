@@ -1,0 +1,36 @@
+# Every slot of graphicsdict the machinery reaches by a dotted name, and
+# which of the two kinds it is. check-callout-bracket.sh holds the tree
+# to this register, so a slot added later cannot quietly become a third
+# kind: it is one or the other, and saying which is part of adding it.
+#
+#   bracketed  something a procedure parks across a call out to program
+#              code and reads back afterwards. It must be named in a key
+#              array handed to .callout, so that a callback re-entering
+#              the machinery cannot cost the caller what it parked.
+#
+#   lifetime   state of the render itself, which no callback is mid-use
+#              of: it means the same thing before a callback and after,
+#              and putting the outgoing value back would undo work the
+#              callback was called to do.
+#
+# The distinction is not about how long the value lives but about who is
+# mid-use of it. A cache the whole render shares is lifetime; a value one
+# procedure left in a slot because the operand stack belongs to the
+# callback is bracketed.
+
+bracketed /.csspace
+bracketed /.csstash
+bracketed /.inglyph
+bracketed /.t3want
+bracketed /.t3cap
+bracketed /.tsproc
+bracketed /.tsop
+bracketed /.tsd
+bracketed /.ssd0
+bracketed /.ssrec
+
+lifetime /.formcache
+lifetime /.formserial
+lifetime /.exactpagedims
+lifetime /.outputdevice
+lifetime /.fontserial

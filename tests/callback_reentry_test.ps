@@ -137,6 +137,8 @@ count /depth exch def
     { (a spot function that installs a screen raised an error) note } if
 count depth (a spot function that installs a screen cost the caller operands) same
 clear
+currentscreen exch pop exch pop /spotinner load eq
+    { (a screen installed from inside the sample loop won) note } if
 
 % --- the dictionary scope a callback runs in -----------------------
 % The machinery reaches its own locals through a dictionary of its own.
@@ -207,5 +209,97 @@ gsave
 grestore
 rows 0 eq { (the image never called its data source) note } if
 (an image's data source) scoped
+
+% a tint transform and a CIE decode procedure, both run while the
+% colour machinery is reducing a space under a dictionary of its own
+gsave
+[/Separation /Scoped /DeviceGray { inscope 0.5 mul }] setcolorspace
+0.4 setcolor
+grestore
+(a tint transform) scoped
+
+gsave
+[/CIEBasedABC << /WhitePoint wp
+    /DecodeABC [ { inscope 0.5 mul } { 0.5 mul } { 0.5 mul } ] >>] setcolorspace
+0.8 0.6 0.4 setcolor
+grestore
+(a CIE decode procedure) scoped
+
+% a spot function and a transfer function
+gsave 60 0 { inscope pop pop 0.25 } setscreen grestore
+(a spot function) scoped
+gsave { inscope } settransfer grestore
+(a transfer function) scoped
+clear
+
+% --- what an error inside a callback leaves behind ------------------
+% A callback that raises walks out through the machinery's own frames,
+% past every gsave it opened and every dictionary it pushed. Nothing
+% below can catch the error and put those back, because the error
+% belongs to the program: the bracket has to unwind and raise it again.
+/d0 countdictstack def
+/g0 0.75 def
+
+/unwinds { % {what-to-run} (what)  .  -
+    /uwhat exch def
+    3 setlinewidth
+    stopped not { uwhat ( did not raise the error out of the machinery) join note } if
+    clear
+    countdictstack d0 ne
+        { uwhat ( left the dictionary stack deeper) join note } if
+    currentdict userdict ne
+        { uwhat ( left another dictionary current) join note } if
+    currentlinewidth 3 ne
+        { uwhat ( left a graphics state open) join note } if
+    3 setlinewidth
+} bind def
+
+/erpat <<
+    /PatternType 1 /PaintType 1 /TilingType 1
+    /BBox [0 0 8 8] /XStep 8 /YStep 8
+    /PaintProc { pop gsave 9 setlinewidth 4 dict begin mumble }
+>> def
+{ gsave
+  erpat matrix makepattern setpattern
+  newpath 0 0 moveto 12 0 lineto 12 12 lineto closepath fill
+  grestore }
+(a pattern's paint procedure) unwinds
+
+/T3e 8 dict def
+T3e begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildChar { pop pop gsave 9 setlinewidth 4 dict begin mumble } def
+end
+T3e /CallbackErrFont exch definefont pop
+{ gsave /CallbackErrFont findfont 12 scalefont setfont
+  0 0 moveto (A) show grestore }
+(a BuildChar procedure) unwinds
+
+{ gsave
+  newpath 0 0 moveto 8 0 lineto 8 8 lineto closepath clip
+  8 8 8 [8 0 0 -8 0 8] { gsave 9 setlinewidth 4 dict begin mumble } image
+  grestore }
+(an image's data source) unwinds
+
+{ [/Separation /Erring /DeviceGray { pop gsave 9 setlinewidth 4 dict begin mumble }]
+  setcolorspace 0.4 setcolor }
+(a tint transform) unwinds
+
+{ [/CIEBasedA << /WhitePoint wp
+      /DecodeA { pop gsave 9 setlinewidth 4 dict begin mumble } >>]
+  setcolorspace 0.8 setcolor }
+(a CIE decode procedure) unwinds
+
+{ { pop gsave 9 setlinewidth 4 dict begin mumble } settransfer }
+(a transfer function) unwinds
+
+{ 60 0 { pop pop gsave 9 setlinewidth 4 dict begin mumble } setscreen }
+(a spot function) unwinds
+clear
 
 bad 0 eq { (SUCCESS\n) print }{ (FAILURES: ) print bad == } ifelse

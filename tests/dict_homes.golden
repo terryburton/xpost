@@ -83,7 +83,6 @@
 .xpostsys /.resources
 .xpostsys /.rownorm
 .xpostsys /.sampleat
-.xpostsys /.sepalt
 .xpostsys /setcolordict
 .xpostsys /ShowpageSemanticsDict
 .xpostsys /.spacecomps
@@ -118,6 +117,24 @@
 .xpostsys /.isupmat
 .xpostsys /.execformdirect
 .xpostsys /.execformbox
+.xpostsys /.callout
+.xpostsys /.cskeys
+.xpostsys /.withspace
+.xpostsys /.withspacebody
+.xpostsys /.csalt
+.xpostsys /.idxconv
+.xpostsys /.sepconv
+.xpostsys /.cieconv
+.xpostsys /.buildkeys
+.xpostsys /.t3capkeys
+.xpostsys /.runbuildbody
+.xpostsys /.tskeys
+.xpostsys /.sampletransferbody
+.xpostsys /.sskeys
+.xpostsys /.samplespotbody
+.xpostsys /.ssreckeys
+.xpostsys /.installscreen
+.xpostsys /.installscreenbody
 # Graphics-state template slots (data/gstate.ps); each theme appends
 # the slots it adds, and none may be dropped or renamed.
 gstate /colorspace

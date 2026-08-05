@@ -42,7 +42,11 @@ currentglobal true setglobal
 % cells paint with the underlying colour; a coloured pattern's
 % procedure sets its own (the colour is reset first, so a procedure
 % that paints without setting one cannot re-enter the tiling).
+% The whole walk goes through the bracket: each cell opens a graphics
+% state and a paint procedure that raises would otherwise leave it open,
+% with this procedure's own dictionary on the stack behind it.
 /.patterntile {
+    {
     16 dict begin
     /pat graphicsdict /currgstate get /patdict get def
     pat null ne {
@@ -107,9 +111,8 @@ currentglobal true setglobal
                     } ifelse
                     % the paint procedure runs on the caller's stacks:
                     % its defs are its own, out of this dict's names
-                    currentdict
                     pat dup /PaintProc get
-                    end exec begin
+                    null 1 //.xpostsys /.callout get exec
                     grestore
                 } for
             } for
@@ -118,6 +121,7 @@ currentglobal true setglobal
     } ifelse
     } if
     end
+    } null 0 //.xpostsys /.callout get exec
 } bind def
 
 % -  .patternfill  -

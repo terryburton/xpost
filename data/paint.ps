@@ -402,7 +402,7 @@
             % run the source on the caller's stacks: its defs are the
             % program's own business, and the machinery's scratch names
             % stay out of its reach
-            currentdict currentdict /datasrc get end exec exch begin
+            currentdict /datasrc get null 1 //.xpostsys /.callout get exec
             /pend exch def
         } if
         pend length 0 eq {
@@ -548,6 +548,10 @@
 % of min,max pairs of normalized sample values (a pixel whose every
 % raw component falls within its pair is left unpainted)
 .xpostsys /.imagepaintm {
+    % the data source is the program's procedure: the whole painting
+    % goes through the bracket, so a source that raises cannot leave
+    % this graphics state open or this dictionary current
+    {
     gsave
         newpath
         24 dict begin
@@ -841,6 +845,7 @@
 
         end
     grestore
+    } null 0 //.xpostsys /.callout get exec
 } put
 
 .xpostsys /.imagepaint {
@@ -1201,6 +1206,7 @@ setglobal
 } put
 
 .xpostsys /.stencilmask {
+    {
     gsave
         newpath
         10 dict begin
@@ -1211,7 +1217,7 @@ setglobal
         { % collect the sample data
             bp buf length ge {exit} if
             % the source runs on the caller's stacks (see .fill)
-            currentdict currentdict /datasrc get end exec exch begin
+            currentdict /datasrc get null 1 //.xpostsys /.callout get exec
             dup length 0 eq {pop exit} if
             dup length bp add buf length gt {
                 0 buf length bp sub getinterval
@@ -1292,6 +1298,7 @@ setglobal
         } if
         end
     grestore
+    } null 0 //.xpostsys /.callout get exec
 } put
 
 % width height polarity matrix datasrc  imagemask  -
