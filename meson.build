@@ -58,6 +58,32 @@ strict_warnings = [
 ]
 add_project_arguments(cc.get_supported_arguments(strict_warnings), language: 'c')
 
+# The two comparison diagnostics are errors rather than warnings, in both
+# object widths.
+#
+# word is the type every composite carries its element count in, and
+# large-object doubles it: an unsigned short that promotes to int in the
+# default build, an unsigned int that does not promote in the wide one. A
+# comparison between a counter and a count therefore changes meaning
+# between the two builds without changing shape, and the compiler says so
+# in only one of them -- so the wide build accumulated forty-six of these
+# while the default build reported none, and nobody building the default
+# way could see them. -Wtype-limits catches the other half of the same
+# thing: a bound whose width the personality decides can put a comparison
+# permanently one side of its answer.
+#
+# Both are long-standing diagnostics in every compiler this builds with,
+# and both builds are clean of them, so promoting them costs nothing and
+# leaves no way for a comparison that means two things to be committed
+# from behind whichever build reports nothing about it. They go through
+# get_supported_arguments like the rest, so a compiler that does not know
+# them drops them rather than failing.
+comparison_errors = [
+  '-Werror=sign-compare',
+  '-Werror=type-limits',
+]
+add_project_arguments(cc.get_supported_arguments(comparison_errors), language: 'c')
+
 # Release builds enable link-time optimization by default: it inlines the hot
 # cross-translation-unit interpreter accessors and is the single largest
 # speedup. debug and debugoptimized builds stay LTO-free for fast compiles, so
