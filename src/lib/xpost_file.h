@@ -99,6 +99,13 @@ typedef struct Xpost_File_Methods
    which no program object names: the filter above it is the only thing
    that can close it, so it does, along with itself.
 
+   ent is the file entity holding the pointer to this struct. No program
+   object naming a stream does not mean no ENTITY names it -- an owned
+   stream still has one, and restore's close sweep walks entities rather
+   than objects, so it reaches one. Whoever frees the struct must
+   therefore clear the entity first, and can only do that if the struct
+   says which entity that is.
+
    wraps says which stream, if any, this file holds beneath it, and so
    which of the two filter bases it begins with. */
 struct Xpost_File
@@ -107,6 +114,7 @@ struct Xpost_File
     int refs;
     int closed;
     int owned;
+    unsigned int ent;
     Xpost_File_Wraps wraps;
 };
 

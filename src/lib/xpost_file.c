@@ -887,6 +887,7 @@ _plain_file_init(Xpost_File *f, Xpost_File_Methods *methods)
     f->refs = 0;
     f->closed = 0;
     f->owned = 0;
+    f->ent = 0;
     f->wraps = XPOST_FILE_WRAPS_NOTHING;
 }
 
@@ -1288,14 +1289,22 @@ struct Xpost_File_Methods a85_methods =
     Xpost_Object f = readonly(xpost_file_cons(fp)).
  */
 
-/* Record the save depth at which a file entity is born (as depth+1,
-   zero meaning unstamped) in the entity's low-level mark field: restore
-   closes a file created since the corresponding save (PLRM 3.8.2), and
-   the sweep needs the birth depth to tell such a file from an older
-   one. The field is otherwise unused for files, which take no part in
-   copy-on-write snapshots. */
+/* Tie a freshly allocated file entity to the stream it holds.
+
+   Records the save depth at which the entity is born (as depth+1, zero
+   meaning unstamped) in its low-level mark field: restore closes a file
+   created since the corresponding save (PLRM 3.8.2), and the sweep needs
+   the birth depth to tell such a file from an older one. The field is
+   otherwise unused for files, which take no part in copy-on-write
+   snapshots.
+
+   And records the entity on the stream, so that whoever frees the struct
+   can clear the entity that points at it. The two facts are written
+   together because they are one fact -- this entity and this struct
+   belong to each other -- and a stream that knew its depth but not its
+   entity is how a freed struct came to be closed a second time. */
 static void
-_file_birth_stamp(Xpost_Memory_File *mem, unsigned int ent)
+_file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
 {
     unsigned int vs, depth = 0, mk;
 
@@ -1311,6 +1320,22 @@ _file_birth_stamp(Xpost_Memory_File *mem, unsigned int ent)
     mem->file_births[depth + 1]++;
     if (depth + 1 > mem->file_birth_max)
         mem->file_birth_max = depth + 1;
+    if (fp)
+        fp->ent = ent;
+}
+
+/* Clear the entity that points at this stream, just before the struct
+   goes. Entity zero is the free list, never a file, so it stands for "no
+   entity" on a stream that never had one. */
+static void
+_file_forget_entity(Xpost_Memory_File *mem, Xpost_File *fp)
+{
+    Xpost_File *none = NULL;
+
+    if (!fp->ent || !xpost_ent_valid(mem, fp->ent))
+        return;
+    if (!xpost_memory_put(mem, fp->ent, 0, sizeof none, &none))
+        XPOST_LOG_ERR("cannot clear the file pointer of a released stream");
 }
 
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
@@ -1332,7 +1357,7 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
-    _file_birth_stamp(mem, ent);
+    _file_bind_entity(mem, ent, df);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof df, &df);
     if (!ret)
@@ -1377,7 +1402,7 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         free(mf);
         return invalid;
     }
-    _file_birth_stamp(mem, ent);
+    _file_bind_entity(mem, ent, mf);
     f.mark_.padw = ent;
     if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
     {
@@ -4480,6 +4505,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
     ff->refs = 0;
     ff->closed = 0;
     ff->owned = 0;
+    ff->ent = 0;
     ff->wraps = wraps;
     f.tag = filetype;
     if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
@@ -4487,7 +4513,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
         XPOST_LOG_ERR("cannot allocate file record");
         return invalid;
     }
-    _file_birth_stamp(mem, ent);
+    _file_bind_entity(mem, ent, ff);
     f.mark_.padw = ent;
     ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof ff, &ff);
     if (!ret)
@@ -5004,7 +5030,7 @@ void xpost_file_hand_over(Xpost_Memory_File *mem, Xpost_Object f)
    filter alone has no other route to a close, so it is closed here -- and
    since such a stream can itself be a filter over another, the release runs
    on down the chain from it. */
-static void _release_underlying(Xpost_File *f)
+static void _release_underlying(Xpost_Memory_File *mem, Xpost_File *f)
 {
     Xpost_File *under = _filter_underlying_stream(f);
 
@@ -5014,12 +5040,21 @@ static void _release_underlying(Xpost_File *f)
     {
         (void)xpost_file_close(under);
         under->closed = 1;
-        _release_underlying(under);
+        _release_underlying(mem, under);
     }
     if (under->refs > 0)
         --under->refs;
     if (under->closed && under->refs == 0)
+    {
+        /* an owned stream has an entity of its own even though no program
+           object names it -- the string forms of filter build one, and
+           hand it to the filter -- and restore's close sweep walks
+           entities. Clear it before the struct goes, or the sweep reaches
+           this stream again through a pointer to freed memory and
+           dispatches a close on it. */
+        _file_forget_entity(mem, under);
         free(under);
+    }
 }
 
 /* close the file,
@@ -5056,7 +5091,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
             rf->pos = 0;
         }
         fp->closed = 1;
-        _release_underlying(fp);
+        _release_underlying(mem, fp);
         /* the close method released the stream's own resources; the object's
            only pointer to the backing struct is cleared next, and file
            entities are never collected, so free the struct here or it leaks.

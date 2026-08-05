@@ -89,6 +89,30 @@ src5 status (closing a filter leaves its source open) assert
 src5 read pop 52 eq (the source still reads its own bytes after the filter closes) assert
 src5 closefile
 
+% --- a filter over a string, dropped by the restore that swept it ---
+% The string forms of filter build a hidden source stream for the filter to
+% read from. It has a file entity of its own even though no program object
+% names it, and restore closes files born since the save by walking the
+% entity table -- so the sweep meets the source as well as the filter above
+% it. Closing the filter frees the source's stream; unless the source's
+% entity is cleared at the same moment, the sweep reaches that freed struct
+% through the entity and dispatches a close through its method table.
+% Two rounds: it takes entity reuse to place the source ABOVE its filter in
+% the table, which is the order that has the sweep arrive at the source
+% second, after the filter has already freed it.
+save
+  /a (41>) /ASCIIHexDecode filter def
+restore
+save
+  /s (41>) /ASCIIHexDecode filter def
+restore
+
+% and the machinery still works afterwards
+/after (41>) /ASCIIHexDecode filter def
+after 1 string readstring pop 0 get 65 eq
+    (a string-sourced filter still reads after restore has swept its kind) assert
+after closefile
+
 scr deletefile
 (filtertgt.scratch) deletefile
 
