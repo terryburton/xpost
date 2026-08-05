@@ -61,6 +61,21 @@
 
 typedef struct Xpost_File Xpost_File;
 
+/* What a file is a filter over. A decode filter is a file over the source
+   it reads; an encode filter is a file over the target it writes; a file
+   that is a stream in its own right is over nothing. Which of the three
+   is not a question about the coding, so it is not asked of the coding:
+   the constructor a filter is born through states it, in the same call
+   that names the filter's methods and hands it the stream, and the
+   machinery that takes and gives up the claim on that stream reads the
+   answer off the file. */
+typedef enum
+{
+    XPOST_FILE_WRAPS_NOTHING = 0,
+    XPOST_FILE_WRAPS_SOURCE,
+    XPOST_FILE_WRAPS_TARGET
+} Xpost_File_Wraps;
+
 typedef struct Xpost_File_Methods
 {
     int (*readch)(Xpost_File*);
@@ -78,12 +93,21 @@ typedef struct Xpost_File_Methods
    refs counts the filters holding this stream; closed records that its
    own file object has been closed. A closed stream whose refs have not
    all been released stays allocated -- its methods then report end of
-   data and refuse writes -- and the last filter to release it frees it. */
+   data and refuse writes -- and the last filter to release it frees it.
+
+   owned marks a stream the file machinery made for one filter's use and
+   which no program object names: the filter above it is the only thing
+   that can close it, so it does, along with itself.
+
+   wraps says which stream, if any, this file holds beneath it, and so
+   which of the two filter bases it begins with. */
 struct Xpost_File
 {
     Xpost_File_Methods *methods;
     int refs;
     int closed;
+    int owned;
+    Xpost_File_Wraps wraps;
 };
 
 typedef struct Xpost_DiskFile
@@ -174,6 +198,18 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp);
  * pointer and size.
  */
 Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem, const unsigned char *ptr, unsigned int len);
+
+/**
+ * @brief Hand a synthesised stream to the filter that will wrap it.
+ *
+ * The file machinery makes a stream for one filter's use -- an in-memory
+ * file over a copy of a string, a decoding filter that a predictor stage
+ * is layered over -- and no program object names it. Marking it here is
+ * what makes the wrapping filter close and free it when it closes;
+ * without that the stream, and everything it holds, is unreachable and
+ * unreleasable.
+ */
+void xpost_file_hand_over(Xpost_Memory_File *mem, Xpost_Object f);
 
 /**
  * @brief Construct an ASCII85Decode filter file over a source file object.
