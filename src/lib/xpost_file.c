@@ -3002,26 +3002,89 @@ Xpost_Object xpost_file_cons_filter_ccitt(Xpost_Memory_File *mem,
    closing the filter writes the coding's end-of-data marker and
    leaves the target open.
 
-   A close method answers 0 for a coding that reached its target, and EOF
-   for one whose closing bytes -- the end of the encoded data, the marker
+   Every coding says the same three things about being closed: a closed
+   filter takes no more bytes, the end-of-data is written once and only on
+   the first close, and whatever the coding holds is given up there too.
+   None of that varies with the coding, so none of it is written by one:
+   the base below decides it, and a coding supplies only how a byte is
+   encoded, what its end-of-data is, and what it has to release.
+
+   The close answers 0 for a coding that reached its target, and EOF for
+   one whose closing bytes -- the end of the encoded data, the marker
    after it, or both -- the target would not take. That answer reaches
    closefile, because a stream that stops short of its own terminator is
    not one a program can be told it wrote (PLRM 3.13.1). The close still
    runs to the end and releases whatever the coding holds, so the file is
    closed either way. */
 
+typedef struct Xpost_EncBase Xpost_EncBase;
+
 typedef struct
+{
+    /* one byte onto the target, encoded: the byte, or EOF if the target
+       would not take it */
+    int (*encode)(Xpost_EncBase *, int);
+    /* the coding's end-of-data, written once; EOF if it did not arrive */
+    int (*finish)(Xpost_EncBase *);
+    /* whatever the coding holds beyond its own struct */
+    void (*release)(Xpost_EncBase *);
+} Xpost_Enc_Coding;
+
+struct Xpost_EncBase
 {
     Xpost_File methods;
     Xpost_File *target;
     int closed;
-} Xpost_EncBase;
+    const Xpost_Enc_Coding *coding;
+};
 
 static int
 enc_readch(Xpost_File *f)
 {
     (void)f;
     return EOF;
+}
+
+/* A coding with no end-of-data marker has nothing that can be refused it,
+   and one that holds nothing beyond its own struct has nothing to give
+   up. Both say so, rather than leaving a hole for the base to test for. */
+static int
+enc_finish_none(Xpost_EncBase *ff)
+{
+    (void)ff;
+    return 0;
+}
+
+static void
+enc_release_none(Xpost_EncBase *ff)
+{
+    (void)ff;
+}
+
+static int
+enc_writech(Xpost_File *f, int c)
+{
+    Xpost_EncBase *ff = (Xpost_EncBase *)f;
+
+    if (ff->closed)
+        return EOF;
+    return ff->coding->encode(ff, c & 0xff);
+}
+
+static int
+enc_close(Xpost_File *f)
+{
+    Xpost_EncBase *ff = (Xpost_EncBase *)f;
+    int ret = 0;
+
+    if (!ff->closed)
+    {
+        ff->closed = 1;
+        if (ff->coding->finish(ff) == EOF)
+            ret = EOF;
+        ff->coding->release(ff);
+    }
+    return ret;
 }
 
 static int
@@ -3052,35 +3115,27 @@ enc_unreadch(Xpost_File *f, int c)
     return EOF;
 }
 
-/* NullEncode: bytes pass through untouched */
-static int
-nullenc_writech(Xpost_File *f, int c)
+/* the one method table of the encode family: every coding answers with
+   these, and differs only in the coding hooks below */
+static struct Xpost_File_Methods enc_methods =
 {
-    Xpost_EncBase *ff = (Xpost_EncBase *)f;
+    enc_readch, enc_writech, enc_close, enc_flush,
+    enc_purge, enc_unreadch, filter_tell, filter_seek
+};
 
-    if (ff->closed)
-        return EOF;
-    c &= 0xff;
+/* NullEncode: bytes pass through untouched, and there is no end-of-data
+   marker to lose */
+static int
+nullenc_encode(Xpost_EncBase *ff, int c)
+{
     if (xpost_file_putc(ff->target, c) == EOF)
         return EOF;
     return c;
 }
 
-/* NullEncode has no end-of-data marker, so there is nothing left to
-   refuse it */
-static int
-nullenc_close(Xpost_File *f)
+static const Xpost_Enc_Coding nullenc_coding =
 {
-    Xpost_EncBase *ff = (Xpost_EncBase *)f;
-
-    ff->closed = 1;
-    return 0;
-}
-
-struct Xpost_File_Methods nullenc_methods =
-{
-    enc_readch, nullenc_writech, nullenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    nullenc_encode, enc_finish_none, enc_release_none
 };
 
 /* ASCIIHexEncode: two hex digits per byte, a newline every
@@ -3092,14 +3147,11 @@ typedef struct
 } Xpost_HexEncFile;
 
 static int
-hexenc_writech(Xpost_File *f, int c)
+hexenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_HexEncFile *ff = (Xpost_HexEncFile *)f;
+    Xpost_HexEncFile *ff = (Xpost_HexEncFile *)base;
     static const char digit[] = "0123456789ABCDEF";
 
-    if (ff->base.closed)
-        return EOF;
-    c &= 0xff;
     if (xpost_file_putc(ff->base.target, digit[(c >> 4) & 15]) == EOF)
         return EOF;
     if (xpost_file_putc(ff->base.target, digit[c & 15]) == EOF)
@@ -3114,24 +3166,14 @@ hexenc_writech(Xpost_File *f, int c)
 }
 
 static int
-hexenc_close(Xpost_File *f)
+hexenc_finish(Xpost_EncBase *ff)
 {
-    Xpost_HexEncFile *ff = (Xpost_HexEncFile *)f;
-    int ret = 0;
-
-    if (!ff->base.closed)
-    {
-        ff->base.closed = 1;
-        if (xpost_file_putc(ff->base.target, '>') == EOF)
-            ret = EOF;
-    }
-    return ret;
+    return xpost_file_putc(ff->target, '>') == EOF ? EOF : 0;
 }
 
-struct Xpost_File_Methods hexenc_methods =
+static const Xpost_Enc_Coding hexenc_coding =
 {
-    enc_readch, hexenc_writech, hexenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    hexenc_encode, hexenc_finish, enc_release_none
 };
 
 /* ASCII85Encode: four bytes become five base-85 digits, an all-zero
@@ -3182,13 +3224,10 @@ a85enc_group(Xpost_A85EncFile *ff, int nbytes)
 }
 
 static int
-a85enc_writech(Xpost_File *f, int c)
+a85enc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_A85EncFile *ff = (Xpost_A85EncFile *)f;
+    Xpost_A85EncFile *ff = (Xpost_A85EncFile *)base;
 
-    if (ff->base.closed)
-        return EOF;
-    c &= 0xff;
     ff->tuple = ff->tuple << 8 | (unsigned int)c;
     if (++ff->n == 4)
     {
@@ -3201,32 +3240,27 @@ a85enc_writech(Xpost_File *f, int c)
 }
 
 static int
-a85enc_close(Xpost_File *f)
+a85enc_finish(Xpost_EncBase *base)
 {
-    Xpost_A85EncFile *ff = (Xpost_A85EncFile *)f;
+    Xpost_A85EncFile *ff = (Xpost_A85EncFile *)base;
     int ret = 0;
 
-    if (!ff->base.closed)
+    if (ff->n)
     {
-        ff->base.closed = 1;
-        if (ff->n)
-        {
-            ff->tuple <<= 8 * (4 - ff->n);
-            if (a85enc_group(ff, ff->n) == EOF)
-                ret = EOF;
-        }
-        if (xpost_file_putc(ff->base.target, '~') == EOF)
-            ret = EOF;
-        if (xpost_file_putc(ff->base.target, '>') == EOF)
+        ff->tuple <<= 8 * (4 - ff->n);
+        if (a85enc_group(ff, ff->n) == EOF)
             ret = EOF;
     }
+    if (xpost_file_putc(ff->base.target, '~') == EOF)
+        ret = EOF;
+    if (xpost_file_putc(ff->base.target, '>') == EOF)
+        ret = EOF;
     return ret;
 }
 
-struct Xpost_File_Methods a85enc_methods =
+static const Xpost_Enc_Coding a85enc_coding =
 {
-    enc_readch, a85enc_writech, a85enc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    a85enc_encode, a85enc_finish, enc_release_none
 };
 
 /* RunLengthEncode: runs of three or more repeated bytes become a
@@ -3288,13 +3322,10 @@ rleenc_flushrun(Xpost_RleEncFile *ff)
 }
 
 static int
-rleenc_writech(Xpost_File *f, int c)
+rleenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_RleEncFile *ff = (Xpost_RleEncFile *)f;
+    Xpost_RleEncFile *ff = (Xpost_RleEncFile *)base;
 
-    if (ff->base.closed)
-        return EOF;
-    c &= 0xff;
     if (ff->recsize > 0 && ff->reccnt == ff->recsize)
     {
         if (ff->runcnt >= 3)
@@ -3329,38 +3360,33 @@ rleenc_writech(Xpost_File *f, int c)
 }
 
 static int
-rleenc_close(Xpost_File *f)
+rleenc_finish(Xpost_EncBase *base)
 {
-    Xpost_RleEncFile *ff = (Xpost_RleEncFile *)f;
+    Xpost_RleEncFile *ff = (Xpost_RleEncFile *)base;
     int ret = 0;
 
-    if (!ff->base.closed)
+    if (ff->runcnt >= 3)
     {
-        ff->base.closed = 1;
-        if (ff->runcnt >= 3)
-        {
-            if (rleenc_flushlit(ff) == EOF)
-                ret = EOF;
-            if (rleenc_flushrun(ff) == EOF)
-                ret = EOF;
-        }
-        else
-        {
-            if (rleenc_flushrun(ff) == EOF)
-                ret = EOF;
-            if (rleenc_flushlit(ff) == EOF)
-                ret = EOF;
-        }
-        if (xpost_file_putc(ff->base.target, 128) == EOF)
+        if (rleenc_flushlit(ff) == EOF)
+            ret = EOF;
+        if (rleenc_flushrun(ff) == EOF)
             ret = EOF;
     }
+    else
+    {
+        if (rleenc_flushrun(ff) == EOF)
+            ret = EOF;
+        if (rleenc_flushlit(ff) == EOF)
+            ret = EOF;
+    }
+    if (xpost_file_putc(ff->base.target, 128) == EOF)
+        ret = EOF;
     return ret;
 }
 
-struct Xpost_File_Methods rleenc_methods =
+static const Xpost_Enc_Coding rleenc_coding =
 {
-    enc_readch, rleenc_writech, rleenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    rleenc_encode, rleenc_finish, enc_release_none
 };
 
 #ifdef HAVE_ZLIB
@@ -3386,15 +3412,11 @@ flateenc_drain(Xpost_FlateEncFile *ff)
 }
 
 static int
-flateenc_writech(Xpost_File *f, int c)
+flateenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)f;
-    unsigned char b;
+    Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)base;
+    unsigned char b = (unsigned char)c;
 
-    if (ff->base.closed)
-        return EOF;
-    c &= 0xff;
-    b = (unsigned char)c;
     ff->strm.next_in = &b;
     ff->strm.avail_in = 1;
     while (ff->strm.avail_in)
@@ -3408,36 +3430,38 @@ flateenc_writech(Xpost_File *f, int c)
 }
 
 static int
-flateenc_close(Xpost_File *f)
+flateenc_finish(Xpost_EncBase *base)
 {
-    Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)f;
+    Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)base;
     int zret;
     int ret = 0;
 
-    if (!ff->base.closed)
+    ff->strm.avail_in = 0;
+    do
     {
-        ff->base.closed = 1;
-        ff->strm.avail_in = 0;
-        do
+        zret = deflate(&ff->strm, Z_FINISH);
+        if (flateenc_drain(ff) == EOF)
         {
-            zret = deflate(&ff->strm, Z_FINISH);
-            if (flateenc_drain(ff) == EOF)
-            {
-                ret = EOF;
-                break;
-            }
-        } while (zret == Z_OK);
-        if (zret != Z_STREAM_END)
             ret = EOF;
-        deflateEnd(&ff->strm);
-    }
+            break;
+        }
+    } while (zret == Z_OK);
+    if (zret != Z_STREAM_END)
+        ret = EOF;
     return ret;
 }
 
-struct Xpost_File_Methods flateenc_methods =
+static void
+flateenc_release(Xpost_EncBase *base)
 {
-    enc_readch, flateenc_writech, flateenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)base;
+
+    deflateEnd(&ff->strm);
+}
+
+static const Xpost_Enc_Coding flateenc_coding =
+{
+    flateenc_encode, flateenc_finish, flateenc_release
 };
 #endif
 
@@ -3533,11 +3557,11 @@ dctenc_term_destination(j_compress_ptr cinfo)
 }
 
 static int
-dctenc_writech(Xpost_File *f, int c)
+dctenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)f;
+    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)base;
 
-    if (ff->base.closed || ff->failed)
+    if (ff->failed)
         return EOF;
     if (setjmp(ff->jmp))
     {
@@ -3565,50 +3589,50 @@ dctenc_writech(Xpost_File *f, int c)
 }
 
 static int
-dctenc_close(Xpost_File *f)
+dctenc_finish(Xpost_EncBase *base)
 {
-    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)f;
-    volatile int ret = 0;
+    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)base;
 
-    if (!ff->base.closed)
+    if (ff->failed)
+        return EOF;
+    if (setjmp(ff->jmp))
+        return EOF;
+    if (!ff->started)
     {
-        ff->base.closed = 1;
-        if (ff->failed)
-            ret = EOF;
-        else if (setjmp(ff->jmp))
-            ret = EOF;
-        else
-        {
-            if (!ff->started)
-            {
-                jpeg_start_compress(&ff->cinfo, TRUE);
-                ff->started = 1;
-            }
-            if (ff->rowi || ff->wrote < ff->rows)
-            {
-                JSAMPROW rp = ff->row;
-
-                memset(ff->row + ff->rowi, 0, ff->rowbytes - ff->rowi);
-                while (ff->wrote < ff->rows)
-                {
-                    jpeg_write_scanlines(&ff->cinfo, &rp, 1);
-                    ff->wrote++;
-                    memset(ff->row, 0, ff->rowbytes);
-                }
-            }
-            jpeg_finish_compress(&ff->cinfo);
-        }
-        jpeg_destroy_compress(&ff->cinfo);
-        free(ff->row);
-        ff->row = NULL;
+        jpeg_start_compress(&ff->cinfo, TRUE);
+        ff->started = 1;
     }
-    return ret;
+    /* input short of the declared height is completed with zero rows, so
+       the stream always ends well-formed */
+    if (ff->rowi || ff->wrote < ff->rows)
+    {
+        JSAMPROW rp = ff->row;
+
+        memset(ff->row + ff->rowi, 0, ff->rowbytes - ff->rowi);
+        while (ff->wrote < ff->rows)
+        {
+            jpeg_write_scanlines(&ff->cinfo, &rp, 1);
+            ff->wrote++;
+            memset(ff->row, 0, ff->rowbytes);
+        }
+    }
+    jpeg_finish_compress(&ff->cinfo);
+    return 0;
 }
 
-struct Xpost_File_Methods dctenc_methods =
+static void
+dctenc_release(Xpost_EncBase *base)
 {
-    enc_readch, dctenc_writech, dctenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)base;
+
+    jpeg_destroy_compress(&ff->cinfo);
+    free(ff->row);
+    ff->row = NULL;
+}
+
+static const Xpost_Enc_Coding dctenc_coding =
+{
+    dctenc_encode, dctenc_finish, dctenc_release
 };
 #endif
 
@@ -3683,14 +3707,11 @@ lzwenc_emit(Xpost_LzwEncFile *ff, int code)
 }
 
 static int
-lzwenc_writech(Xpost_File *f, int c)
+lzwenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)f;
+    Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)base;
     int i;
 
-    if (ff->base.base.closed)
-        return EOF;
-    c &= 0xff;
     if (ff->prefix < 0)
     {
         ff->prefix = c;
@@ -3727,28 +3748,23 @@ lzwenc_writech(Xpost_File *f, int c)
 }
 
 static int
-lzwenc_close(Xpost_File *f)
+lzwenc_finish(Xpost_EncBase *base)
 {
-    Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)f;
+    Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)base;
     int ret = 0;
 
-    if (!ff->base.base.closed)
-    {
-        ff->base.base.closed = 1;
-        if (ff->prefix >= 0 && lzwenc_emit(ff, ff->prefix) == EOF)
-            ret = EOF;
-        if (lzwenc_emit(ff, 257) == EOF)
-            ret = EOF;
-        if (bitenc_pad(&ff->base) == EOF)
-            ret = EOF;
-    }
+    if (ff->prefix >= 0 && lzwenc_emit(ff, ff->prefix) == EOF)
+        ret = EOF;
+    if (lzwenc_emit(ff, 257) == EOF)
+        ret = EOF;
+    if (bitenc_pad(&ff->base) == EOF)
+        ret = EOF;
     return ret;
 }
 
-struct Xpost_File_Methods lzwenc_methods =
+static const Xpost_Enc_Coding lzwenc_coding =
 {
-    enc_readch, lzwenc_writech, lzwenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    lzwenc_encode, lzwenc_finish, enc_release_none
 };
 
 /* CCITTFaxEncode: rows buffer until complete, become changing-element
@@ -3953,13 +3969,10 @@ faxenc_row(Xpost_FaxEncFile *ff)
 }
 
 static int
-faxenc_writech(Xpost_File *f, int c)
+faxenc_encode(Xpost_EncBase *base, int c)
 {
-    Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)f;
+    Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)base;
 
-    if (ff->base.base.closed)
-        return EOF;
-    c &= 0xff;
     ff->row[ff->rowpos++] = (unsigned char)c;
     if (ff->rowpos == ff->rowbytes && faxenc_row(ff) == EOF)
         return EOF;
@@ -3967,52 +3980,54 @@ faxenc_writech(Xpost_File *f, int c)
 }
 
 static int
-faxenc_close(Xpost_File *f)
+faxenc_finish(Xpost_EncBase *base)
 {
-    Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)f;
+    Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)base;
     int ret = 0;
 
-    if (!ff->base.base.closed)
+    if (ff->eob)
     {
-        ff->base.base.closed = 1;
-        if (ff->eob)
-        {
-            int i, n = ff->k < 0 ? 2 : 6;
+        int i, n = ff->k < 0 ? 2 : 6;
 
-            /* the block marker starts a fresh byte when rows do */
-            if (ff->byteal && bitenc_pad(&ff->base) == EOF)
-                ret = EOF;
-            for (i = 0; i < n; i++)
-            {
-                if (faxenc_eol(ff) == EOF)
-                    ret = EOF;
-                if (ff->k > 0 &&
-                    bitenc_put(&ff->base, 1, 1) == EOF)
-                    ret = EOF;
-            }
-        }
-        if (bitenc_pad(&ff->base) == EOF)
+        /* the block marker starts a fresh byte when rows do */
+        if (ff->byteal && bitenc_pad(&ff->base) == EOF)
             ret = EOF;
+        for (i = 0; i < n; i++)
+        {
+            if (faxenc_eol(ff) == EOF)
+                ret = EOF;
+            if (ff->k > 0 &&
+                bitenc_put(&ff->base, 1, 1) == EOF)
+                ret = EOF;
+        }
     }
+    if (bitenc_pad(&ff->base) == EOF)
+        ret = EOF;
+    return ret;
+}
+
+static void
+faxenc_release(Xpost_EncBase *base)
+{
+    Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)base;
+
     free(ff->ref);
     free(ff->cur);
     free(ff->row);
     ff->ref = ff->cur = NULL;
     ff->row = NULL;
-    return ret;
 }
 
-struct Xpost_File_Methods faxenc_methods =
+static const Xpost_Enc_Coding faxenc_coding =
 {
-    enc_readch, faxenc_writech, faxenc_close, enc_flush,
-    enc_purge, enc_unreadch, filter_tell, filter_seek
+    faxenc_encode, faxenc_finish, faxenc_release
 };
 
 /* An encode filter: the target it writes and the latch that says its
    end-of-data has been written, whatever the coding above them. */
 static Xpost_Object
 _enc_cons(Xpost_Memory_File *mem, Xpost_Object tgt, size_t size,
-          struct Xpost_File_Methods *methods, Xpost_EncBase **out)
+          const Xpost_Enc_Coding *coding, Xpost_EncBase **out)
 {
     Xpost_File *target = xpost_file_get_file_pointer(mem, tgt);
     Xpost_EncBase *ff;
@@ -4024,8 +4039,9 @@ _enc_cons(Xpost_Memory_File *mem, Xpost_Object tgt, size_t size,
     if (!ff)
         return invalid;
     ff->target = target;
+    ff->coding = coding;
     *out = ff;
-    return _filter_object_cons(mem, &ff->methods, methods,
+    return _filter_object_cons(mem, &ff->methods, &enc_methods,
                                XPOST_FILE_WRAPS_TARGET, target);
 }
 
@@ -4033,28 +4049,28 @@ Xpost_Object xpost_file_cons_filter_enc_null(Xpost_Memory_File *mem, Xpost_Objec
 {
     Xpost_EncBase *ff;
 
-    return _enc_cons(mem, tgt, sizeof *ff, &nullenc_methods, &ff);
+    return _enc_cons(mem, tgt, sizeof *ff, &nullenc_coding, &ff);
 }
 
 Xpost_Object xpost_file_cons_filter_enc_hex(Xpost_Memory_File *mem, Xpost_Object tgt)
 {
     Xpost_EncBase *ff;
 
-    return _enc_cons(mem, tgt, sizeof(Xpost_HexEncFile), &hexenc_methods, &ff);
+    return _enc_cons(mem, tgt, sizeof(Xpost_HexEncFile), &hexenc_coding, &ff);
 }
 
 Xpost_Object xpost_file_cons_filter_enc_a85(Xpost_Memory_File *mem, Xpost_Object tgt)
 {
     Xpost_EncBase *ff;
 
-    return _enc_cons(mem, tgt, sizeof(Xpost_A85EncFile), &a85enc_methods, &ff);
+    return _enc_cons(mem, tgt, sizeof(Xpost_A85EncFile), &a85enc_coding, &ff);
 }
 
 Xpost_Object xpost_file_cons_filter_enc_rle(Xpost_Memory_File *mem, Xpost_Object tgt, int recsize)
 {
     Xpost_EncBase *base;
     Xpost_Object f = _enc_cons(mem, tgt, sizeof(Xpost_RleEncFile),
-                               &rleenc_methods, &base);
+                               &rleenc_coding, &base);
     Xpost_RleEncFile *ff = (Xpost_RleEncFile *)base;
 
     if (ff)
@@ -4067,7 +4083,7 @@ Xpost_Object xpost_file_cons_filter_enc_flate(Xpost_Memory_File *mem, Xpost_Obje
 {
     Xpost_EncBase *base;
     Xpost_Object f = _enc_cons(mem, tgt, sizeof(Xpost_FlateEncFile),
-                               &flateenc_methods, &base);
+                               &flateenc_coding, &base);
     Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)base;
 
     if (!ff)
@@ -4087,7 +4103,7 @@ Xpost_Object xpost_file_cons_filter_enc_lzw(Xpost_Memory_File *mem, Xpost_Object
 {
     Xpost_EncBase *base;
     Xpost_Object f = _enc_cons(mem, tgt, sizeof(Xpost_LzwEncFile),
-                               &lzwenc_methods, &base);
+                               &lzwenc_coding, &base);
     Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)base;
 
     if (!ff)
@@ -4110,7 +4126,7 @@ Xpost_Object xpost_file_cons_filter_enc_ccitt(Xpost_Memory_File *mem,
 
     if (columns < 1 || columns > (1 << 20))
         return invalid;
-    f = _enc_cons(mem, tgt, sizeof(Xpost_FaxEncFile), &faxenc_methods, &base);
+    f = _enc_cons(mem, tgt, sizeof(Xpost_FaxEncFile), &faxenc_coding, &base);
     ff = (Xpost_FaxEncFile *)base;
     if (!ff)
         return f;
@@ -4127,7 +4143,8 @@ Xpost_Object xpost_file_cons_filter_enc_ccitt(Xpost_Memory_File *mem,
     ff->row = malloc((size_t)ff->rowbytes);
     if (!ff->ref || !ff->cur || !ff->row)
     {
-        free(ff->ref); free(ff->cur); free(ff->row);
+        faxenc_release(&ff->base.base);
+        /* the coding never started, so it has no end-of-data to write */
         ff->base.base.closed = 1;
         return invalid;
     }
@@ -4154,7 +4171,7 @@ Xpost_Object xpost_file_cons_filter_enc_dct(Xpost_Memory_File *mem,
         || qfactor <= 0.0)
         return invalid;
     f = _enc_cons(mem, tgt, sizeof(Xpost_DctEncFile),
-                  &dctenc_methods, &base);
+                  &dctenc_coding, &base);
     ff = (Xpost_DctEncFile *)base;
     if (!ff)
         return f;

@@ -1,8 +1,6 @@
 
-a85enc_methods
 a85_methods
 _currentpoint
-dctenc_methods
 dct_methods
 DEBUGLOAD
 disk_methods
@@ -25,27 +23,21 @@ evalnull
 evalreal
 evalsave
 evaltype
-faxenc_methods
 fax_methods
-flateenc_methods
 flate_methods
 fsm_dec
 fsm_rad
 fsm_real
 hex
-hexenc_methods
 hex_methods
 idleproc
 invalid
 itpdata
-lzwenc_methods
 lzw_methods
 mainloop
 mark
 memory_methods
 null
-nullenc_methods
-rleenc_methods
 rle_methods
 rsd_methods
 subfile_methods

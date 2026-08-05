@@ -1,7 +1,8 @@
 #!/bin/sh
-# Guard the filter base: what every filter shares is declared once, and
-# what a filter is a filter over is a property it states rather than a
-# name on a list.
+# Guard the filter base: what every filter shares is declared once, what a
+# filter is a filter over is a property it states rather than a name on a
+# list, and what happens when an encode filter is closed is decided in one
+# place rather than in each coding.
 #
 # Nineteen filters once re-spelled the same leading members -- the method
 # table, the stream beneath, the pushback byte, the end-of-data latch --
@@ -12,11 +13,17 @@
 # off that list had its source freed while it still held the pointer, with
 # no diagnostic, no assertion and no test.
 #
-# So: every filter struct begins with one of the two bases and adds only
-# what its own coding needs; the base is declared once; and the wrapping
-# is stated in the one call every filter is constructed through, which
-# asks for the stream by name, so a filter cannot be written that does not
-# say what it is over.
+# The eight encoders separately wrote out the same three statements about
+# being closed -- refuse further bytes, write the end-of-data once, give up
+# what the coding holds -- which is eight places for one rule to differ.
+#
+# So: every filter struct begins with one of the bases and adds only what
+# its own coding needs; the base is declared once; the wrapping is stated
+# in the one call every filter is constructed through, which asks for the
+# stream by name, so a filter cannot be written that does not say what it
+# is over; and the encode family has one method table, with a coding
+# supplying only how a byte is encoded, what its end-of-data is, and what
+# it has to release.
 #
 # Sources are read by name. A built tree leaves object files beside them
 # and their debug information matches source patterns, so a sweep of the
@@ -114,6 +121,32 @@ if ! grep -q 'f->wraps = XPOST_FILE_WRAPS_NOTHING;' "$f"; then
     fail=1
 fi
 
+# ---- one place decides what a closed encoder does ----
+# Every coding once wrote out the same three statements: a closed filter
+# takes no more bytes, the end-of-data goes out once and only on the first
+# close, and what the coding holds is released there. Eight copies of a
+# rule is eight places for it to differ.
+n=$(count '^static struct Xpost_File_Methods enc_methods =$' "$f")
+if [ "$n" != 1 ]; then
+    echo "check-filter-base: the encode family has $n method tables, expected 1"
+    fail=1
+fi
+stray=$(grep -nE '^[a-z0-9]+enc_(writech|close)\(' "$f" || true)
+if [ -n "$stray" ]; then
+    echo "check-filter-base: a coding has taken back the decision about being"
+    echo "      closed, which the encode base makes for all of them:"
+    printf '%s\n' "$stray" | sed 's/^/      /'
+    fail=1
+fi
+# and no coding leaves a hook out for the base to test for
+holes=$(awk '/^static const Xpost_Enc_Coding /,/^};$/ { if (/NULL/) print }' "$f")
+if [ -n "$holes" ]; then
+    echo "check-filter-base: a coding leaves one of its three hooks empty;"
+    echo "      the shared ones exist so the base never tests for absence:"
+    printf '%s\n' "$holes" | sed 's/^/      /'
+    fail=1
+fi
+
 # ---- and the cast the whole arrangement rests on is asserted ----
 if ! grep -q 'offsetof(Xpost_FilterBase, methods) == 0' "$f"; then
     echo "check-filter-base: nothing asserts that the base begins with the file,"
@@ -125,5 +158,6 @@ if [ "$fail" -ne 0 ]; then
     echo "check-filter-base: the filter base is no longer the single declaration."
     exit 1
 fi
-echo "check-filter-base: ok (one base per family, one birth point, no allowlist)"
+echo "check-filter-base: ok (one base per family, one birth point, no allowlist,"
+echo "                       one decision about a closed encoder)"
 exit 0
