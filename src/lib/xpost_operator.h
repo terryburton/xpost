@@ -229,6 +229,17 @@ int xpost_operator_exec(Xpost_Context *ctx,
                         unsigned opcode);
 
 /**
+ * @brief let go of the operands saved for a wrapped-operator call.
+ *
+ * @p run is the array object a call's frame carries, naming the operands
+ * copied when the call was made. Every way a call ends passes here: the
+ * finish marker when its procedure completes, and each unwinder for a
+ * call the unwinding discards. Releasing a call's operands releases
+ * those of every call it enclosed.
+ */
+void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run);
+
+/**
  * @brief the operator table of @p gl.
  *
  * The one derivation of the table's pointer. It lives in global memory as

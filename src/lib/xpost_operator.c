@@ -51,6 +51,7 @@
 #include "xpost_string.h"  // uses string function to dump operator name
 #include "xpost_name.h"  // operator objects have associated names
 #include "xpost_dict.h"  // install operators in systemdict, a dict
+#include "xpost_array.h"  // a wrapped call's operands are saved in an array
 
 //#include "xpost_interpreter.h"  // works with context struct
 #include "xpost_operator.h"  // double-check prototypes
@@ -740,32 +741,175 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
     }
 }
 
+/* An operator's operands are its caller's to keep: an error leaving the
+   operator puts them back (PLRM 3.11.1 step 1). For an operator written
+   in C the dispatcher below already holds them -- it took them off the
+   operand stack into the hold stack to pass them as arguments. An
+   operator written in PostScript is passed nothing: its body reads the
+   operand stack itself, and what it consumes there is gone. So the call
+   copies them first.
+
+   The copies go into one array per context, kept in privatedict, where
+   the collector roots it and a program cannot name it: a composite
+   operand stays reachable for as long as it is saved. Slot zero counts
+   the slots in use; each live call owns a run above that, and the run is
+   named by an array object in the call's frame -- its offset and size
+   are the run, so the frame grows by one slot rather than by a base and
+   a count. Releasing a run clears it, so nothing stays reachable through
+   the array once the call it belongs to is over.
+
+   A call saves the widest operand list an operator can state, and no
+   more. That is a bound on the operands rather than a count of them: a
+   statement may name fewer operands than its body takes, so the arity
+   stated is not the measure. A body that consumes more than the bound
+   keeps whatever the truncation leaves it, as every body did before
+   there were any copies at all. */
+#define XPOST_WRAPPED_SAVE_MAX XPOST_OPERATOR_MAX_SIG
+
+/* The array is a fixed size rather than a growing one, because growth
+   would move the runs live calls have already been handed. Nesting
+   deeper than it holds saves nothing, which is a weaker guarantee for
+   those calls and not a wrong one.
+
+   It is small because it is allocated once and never dies, and local VM
+   grows in steps: an array of this size is lost in the noise, while one
+   eight times it moved the point at which a long job's VM grew and cost
+   a graphics-heavy page a couple of megabytes of peak. The room it does
+   hold is a hundred or so nested calls at the operand depths calls are
+   really made at, and forty at the widest a call can save. */
+#define XPOST_WRAPPED_SAVE_SLOTS 512
+
+static Xpost_Object namewrapsave; /* cached xpost_name_cons(ctx, ".wrapsave") */
+
+/* the context's saved-operand array, made on first use */
+static
+Xpost_Object _wrapped_save_array(Xpost_Context *ctx)
+{
+    Xpost_Object arr;
+
+    if (xpost_object_get_type(ctx->privatedict) != dicttype)
+        return null;
+    if (xpost_object_get_type(namewrapsave) != nametype)
+    {
+        namewrapsave = xpost_name_cons(ctx, ".wrapsave");
+        if (xpost_object_get_type(namewrapsave) != nametype)
+            return null;
+    }
+    arr = xpost_dict_get(ctx, ctx->privatedict, namewrapsave);
+    if (xpost_object_get_type(arr) == arraytype)
+        return arr;
+    /* LOCAL: what it holds are the operands of calls being made, which
+       may be local objects, and a global array may not hold those */
+    arr = xpost_array_cons_memory(ctx->lo, XPOST_WRAPPED_SAVE_SLOTS);
+    if (xpost_object_get_type(arr) != arraytype)
+        return null;
+    if (xpost_array_put_memory(ctx->lo, arr, 0, xpost_int_cons(1)) != 0)
+        return null;
+    if (xpost_dict_put(ctx, ctx->privatedict, namewrapsave, arr) != 0)
+        return null;
+    return arr;
+}
+
+/* Copy the operands a wrapped call is about to run on, and answer the
+   run holding them: a null object where there is nothing to save or
+   nowhere to put it, which an unwind reads as no copies taken. */
+static
+Xpost_Object _wrapped_save_operands(Xpost_Context *ctx)
+{
+    Xpost_Object arr;
+    Xpost_Object *data;
+    Xpost_Stack *s;
+    int d, n, top;
+
+    d = xpost_stack_count(ctx->lo, ctx->os);
+    if (d <= 0)
+        return null;
+    n = (d < XPOST_WRAPPED_SAVE_MAX) ? d : XPOST_WRAPPED_SAVE_MAX;
+    arr = _wrapped_save_array(ctx);
+    if (xpost_object_get_type(arr) != arraytype)
+        return null;
+    data = xpost_ent_ptr_checked(ctx->lo, xpost_object_get_ent(arr));
+    if (!data)
+        return null;
+    if (xpost_object_get_type(data[0]) != integertype)
+        return null;
+    top = (int)data[0].int_.val;
+    if ((top < 1) || (top + n > (int)arr.comp_.sz))
+        return null;
+    /* written straight into the entity: the copies are the
+       interpreter's own bookkeeping and not program-visible VM state,
+       so they neither stash for restore nor copy the array on write */
+    s = xpost_stack_at(ctx->lo, ctx->os);
+    s = xpost_stack_at(ctx->lo, s->prevseg); /* load top segment */
+    if ((int)s->top >= n)
+        memcpy(data + top, s->data + s->top - n, (size_t)n * sizeof(*data));
+    else
+    {
+        int j;
+
+        for (j = 0; j < n; j++)
+            data[top + j] = xpost_stack_topdown_fetch(ctx->lo, ctx->os,
+                                                      n - 1 - j);
+    }
+    data[0] = xpost_int_cons(top + n);
+    arr.comp_.off = (word)top;
+    arr.comp_.sz = (word)n;
+    return arr;
+}
+
+void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run)
+{
+    Xpost_Object *data;
+    int base, top, i;
+
+    if (xpost_object_get_type(run) != arraytype)
+        return;
+    data = xpost_ent_ptr_checked(ctx->lo, xpost_object_get_ent(run));
+    if (!data)
+        return;
+    if (xpost_object_get_type(data[0]) != integertype)
+        return;
+    base = (int)run.comp_.off;
+    top = (int)data[0].int_.val;
+    if ((base < 1) || (top > XPOST_WRAPPED_SAVE_SLOTS))
+        return;
+    /* everything from this run up belongs to the calls this one
+       enclosed: they are over too, whether or not each got to release
+       its own */
+    for (i = base; i < top; i++)
+        data[i] = null;
+    data[0] = xpost_int_cons(base);
+}
+
 /* execute an operator function by opcode
    the opcode is the payload of an operator object
 */
 /* Schedule a wrapped operator's procedure. The call's frame rides the
-   exec stack beneath it -- the operator and the operand and dict depths
-   at the call, under a finish marker that carries them off when the
-   procedure completes. An unwind that discards the marker discards the
-   record with it, and the error path reads the live records straight
-   off the stack to name this operator and put the stack depths back
-   (see _onerror). The operands stay where they are: the procedure takes
-   them from the operand stack itself. */
+   exec stack beneath it -- the operator, the operand and dict depths at
+   the call, and the operands themselves -- under a finish marker that
+   carries them off when the procedure completes. An unwind that
+   discards the marker discards the record with it, and the error path
+   reads the live records straight off the stack to name this operator,
+   put the stack depths back and hand the operands back (see _onerror).
+   The operands stay on the operand stack as well: the procedure takes
+   them from there itself. */
 static
 int _exec_wrapped_proc(Xpost_Context *ctx, unsigned opcode, Xpost_Object proc)
 {
-    Xpost_Object fr[5];
+    Xpost_Object fr[6];
     int k;
 
     fr[0] = xpost_int_cons((integer)opcode);
     fr[1] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->os));
     fr[2] = xpost_int_cons(xpost_stack_count(ctx->lo, ctx->ds));
-    fr[3] = XPOST_OP(ctx, wrapdone);
-    fr[4] = xpost_object_cvx(proc);
-    for (k = 0; k < 5; k++)
+    fr[3] = _wrapped_save_operands(ctx);
+    fr[4] = XPOST_OP(ctx, wrapdone);
+    fr[5] = xpost_object_cvx(proc);
+    for (k = 0; k < 6; k++)
     {
         if (!xpost_stack_push(ctx->lo, ctx->es, fr[k]))
         {
+            xpost_operator_wrapped_release(ctx, fr[3]);
             while (k--)
                 (void)xpost_stack_pop(ctx->lo, ctx->es);
             return execstackoverflow;
@@ -811,12 +955,13 @@ int xpost_operator_exec(Xpost_Context *ctx,
         /* a wrapped operator carries no C signatures: it runs its
            recorded procedure, which checks its own operands. The
            call's frame rides the exec stack beneath the procedure --
-           the operator and the operand and dict depths at the call,
-           under a finish marker that carries them off when the
-           procedure completes. An unwind that discards the marker
-           discards the record with it, and the error path reads the
-           live records straight off the stack to name this operator
-           and put the stack depths back (see _onerror) */
+           the operator, the operand and dict depths at the call, and
+           the operands themselves -- under a finish marker that
+           carries them off when the procedure completes. An unwind
+           that discards the marker discards the record with it, and
+           the error path reads the live records straight off the
+           stack to name this operator, put the stack depths back and
+           hand the operands back (see _onerror) */
         if (xpost_object_get_type(op.proc) == arraytype)
             return _exec_wrapped_proc(ctx, opcode, op.proc);
         XPOST_LOG_ERR("operator has no signatures");

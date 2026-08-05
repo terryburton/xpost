@@ -1407,20 +1407,31 @@ int eval(Xpost_Context *ctx)
 }
 
 /* An error leaving a wrapped operator is the operator's error.
-   Each live call left its frame on the exec stack -- the operator and
-   the operand and dict depths at the call, under the finish marker --
-   so the frames above the nearest stopped context are exactly the
-   calls the coming stop will unwind out of: the innermost names the
-   command, and the stacks go back to their depths at the calls --
-   dropping what the calls part-way pushed, though what they had
-   already consumed stays consumed. A call whose frame sits below the
-   stopped context is left alone: its procedure keeps running and its
-   stacks are its own business.
+   Each live call left its frame on the exec stack -- the operator, the
+   operand and dict depths at the call, and the operands it was called
+   with, under the finish marker -- so the frames above the nearest
+   stopped context are exactly the calls the coming stop will unwind
+   out of: the innermost names the command, and the stacks go back to
+   what the outermost found. A call whose frame sits below the stopped
+   context is left alone: its procedure keeps running and its stacks
+   are its own business.
 
-   Both ways an error is raised come here: the interpreter's own, and
-   the one a PostScript body raises with signalerror. An operator
-   leaves nothing behind when it fails whichever way it failed, so
-   neither path may skip this.
+   Two things stand between the stacks as they are and the state the
+   outermost call found (PLRM 3.11.1 step 1): values the calls pushed
+   and did not consume, dropped by going back to the shallowest depth
+   any of them recorded, and operands they did consume, put back from
+   the copies the outermost call took. Where a body consumed deeper
+   than the copies reach, the stack keeps what the truncation leaves
+   it, which is the whole of what an unwind could do before there were
+   any copies.
+
+   Every way an error is raised comes here: the interpreter's own, the
+   one a PostScript body raises with signalerror, and stop, which is
+   where all of them end and the only place a re-raise reaches. An
+   operator leaves nothing behind however it failed, so no path may
+   skip this. Several paths therefore run it over the same frames, and
+   it is written to be read twice: it reads the copies and never spends
+   them, and the frames are let go by whatever finally discards them.
 
    Returns 1 if a frame was found, having set ctx->currentobject to the
    operator it names. */
@@ -1428,8 +1439,9 @@ static int
 _unwind_wrapped_calls(Xpost_Context *ctx)
 {
     Xpost_Object fmark = xpost_bool_cons(0);
+    Xpost_Object outrun = null; /* the outermost call's saved operands */
     int found = 0;
-    int minos = 0, minds = 0;
+    int minos = 0, minds = 0, outos = 0;
     unsigned int cmdop = 0;
     /* Walk the exec stack top-down in a SINGLE pass over its
        segments -- O(depth), not the O(depth^2) that repeated
@@ -1437,14 +1449,15 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
        runaway or a cascading error handler) would otherwise make
        error handling itself the bottleneck. Stop at the nearest
        stopped context (a bool false); above it, each wrapped
-       call's finish marker is followed, deeper, by its ds, os
-       and opcode integers. */
+       call's finish marker is followed, deeper, by its saved
+       operands and its ds, os and opcode integers. */
     Xpost_Stack *esroot = xpost_stack_at(ctx->lo, ctx->es);
     Xpost_Stack *seg = esroot->prevseg
         ? xpost_stack_at(ctx->lo, esroot->prevseg) : esroot;
     int p = (int)seg->top - 1;
-    int pending = 0; /* frame ints still to read: 3->ds 2->os 1->opcode */
+    int pending = 0; /* frame slots to read: 4->operands 3->ds 2->os 1->opcode */
     int fds = 0, fos = 0;
+    Xpost_Object frun = null;
 
     for (;;)
     {
@@ -1461,12 +1474,14 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
         p--;
         if (pending)
         {
-            if (xpost_object_get_type(x) != integertype)
+            if (pending == 4)
+                frun = x; /* an array of operands, or null for none */
+            else if (xpost_object_get_type(x) != integertype)
             {
                 pending = 0; /* malformed frame -- ignore it */
                 continue;
             }
-            if (pending == 3)
+            else if (pending == 3)
                 fds = (int)x.int_.val;
             else if (pending == 2)
                 fos = (int)x.int_.val;
@@ -1484,6 +1499,11 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
                     if (fos < minos) minos = fos;
                     if (fds < minds) minds = fds;
                 }
+                /* the walk reads the innermost call first, so the last
+                   frame it reads is the outermost: the call whose
+                   caller is about to be handed the stack */
+                outos = fos;
+                outrun = frun;
             }
             --pending;
             continue;
@@ -1492,7 +1512,7 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
             break; /* the coming stop unwinds to here */
         if (xpost_object_get_type(x) == operatortype &&
             x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
-            pending = 3;
+            pending = 4;
     }
     if (found)
     {
@@ -1504,6 +1524,32 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
         {
             (void)xpost_stack_pop(ctx->lo, ctx->os);
             --oscount;
+        }
+        if (xpost_object_get_type(outrun) == arraytype)
+        {
+            /* The copies are the operands the call was made with, the
+               deepest of them at the depth outos - size. All of them go
+               back, not only as many as are missing: a body that
+               consumed two and pushed two again stands at the depth it
+               started from holding values of its own. */
+            int base = outos - (int)outrun.comp_.sz;
+
+            if (oscount >= base)
+            {
+                while (oscount > base)
+                {
+                    (void)xpost_stack_pop(ctx->lo, ctx->os);
+                    --oscount;
+                }
+                while (oscount < outos)
+                {
+                    if (!xpost_stack_push(ctx->lo, ctx->os,
+                                          xpost_array_get(ctx, outrun,
+                                                          oscount - base)))
+                        break;
+                    ++oscount;
+                }
+            }
         }
         dscount = xpost_stack_count(ctx->lo, ctx->ds);
         if (dscount > minds && minds >= 3)
@@ -1519,12 +1565,10 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
     return found;
 }
 
-/* The same unwinding, for an error a PostScript body raises with
-   signalerror. That path ends in a PostScript stop and never reaches
-   _onerror, so without this an operator written in PostScript left its
-   working values behind when it refused -- the operand stack held what
-   the body had pushed, which for the machinery's own operators means a
-   program is handed structures it never made. */
+/* The same unwinding, asked for from PostScript. An error a body
+   raises with signalerror never reaches _onerror, and the hook that
+   handles it wants the stacks unwound before it records them in
+   $error, so it asks here. stop asks too, for the calls it abandons. */
 int xpost_op_errorunwind(Xpost_Context *ctx)
 {
     (void)_unwind_wrapped_calls(ctx);
@@ -2609,9 +2653,19 @@ run:
            accumulates them, and an error unwind can later walk
            down into a stale frame and execute it out of context.
            Discard everything this run left behind, for errored
-           runs just as for completed ones. */
+           runs just as for completed ones. A run abandoned inside a
+           wrapped operator leaves that call's frame here too: let go
+           of the operands saved for it, or a context serving run after
+           run fills the room the copies are taken from. */
         while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
-            (void)xpost_stack_pop(ctx->lo, ctx->es);
+        {
+            Xpost_Object x = xpost_stack_pop(ctx->lo, ctx->es);
+
+            if (xpost_object_get_type(x) == operatortype &&
+                x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+                xpost_operator_wrapped_release(ctx,
+                        xpost_stack_pop(ctx->lo, ctx->es));
+        }
 
         _close_run_input(ctx);
         return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;

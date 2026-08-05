@@ -1,23 +1,33 @@
-% An operator leaves nothing behind when it refuses.
+% An operator leaves nothing behind when it refuses, and its caller has
+% its operands back.
 %
 % PLRM 3.11.1 gives the interpreter three steps at an error, the first
 % of which is "restores the operand stack to the state it was in when it
 % began executing the current object". For an operator that is one, the
-% stack a caught error leaves is the operands it was called with, and
-% nothing the body pushed on its way to failing.
+% stack a caught error leaves is the operands it was called with:
+% nothing the body pushed on its way to failing, and nothing missing
+% that the body consumed before it failed.
 %
-% There are two ways an error is raised here: the interpreter raises its
-% own, and a body written in PostScript raises one with signalerror. The
-% second ends in a PostScript stop and does not pass through the
-% interpreter's handler, so the unwinding has to be asked for there --
-% and an operator whose body signalled used to leave its working values
-% behind. That matters beyond tidiness: the machinery's own operators
-% hold the machinery's own structures while they work, and a program
-% left holding one can read and write it.
+% An operator written in C is passed its operands as arguments, and the
+% dispatcher has them in hand to put back. One written in PostScript is
+% passed nothing and reads the operand stack itself, so its operands are
+% copied when it is called, and an unwind puts the copies back.
 %
-% The operators built here are built rather than borrowed so the claim
-% is about the mechanism and not about whichever library operator
-% happens to fail this way today.
+% There are three ways an error reaches a caller here. The interpreter
+% raises its own; a body written in PostScript raises one with
+% signalerror, which ends in a PostScript stop and never passes through
+% the interpreter's handler; and the graphics machinery catches an error
+% raised inside a program's procedure, unwinds the bracket it had open,
+% and raises it again with a bare stop. All three end in that stop,
+% which is where the unwinding is done, so a path added later inherits
+% it. That matters beyond tidiness: the machinery's own operators hold
+% the machinery's own structures while they work, and a program left
+% holding one can read and write it.
+%
+% The operators built here are built rather than borrowed so the claims
+% are about the mechanism and not about whichever library operator
+% happens to fail this way today. Two library operators are asserted
+% alongside them, so that the mechanism is known to reach real ones.
 
 /ID 1183615869 internaldict def
 /fail false def
@@ -32,6 +42,13 @@
     /lb.p load stopped not { (FAIL: the probe did not fail\n) print /fail true def } if
     count lb.d sub
     dup 0 gt { dup { exch pop } repeat }{ } ifelse
+} def
+
+% clear back to a recorded depth, answering false: the arm of a value
+% check that runs when the depth is already wrong, so that a failing
+% assertion leaves the stack as a passing one does
+/wrongdepth { % int  .  false
+    count 1 sub exch sub dup 0 gt { { pop } repeat }{ pop } ifelse false
 } def
 
 % --- an operator whose body signals with values on the stack ---------
@@ -53,18 +70,14 @@ def
                        (.sigleak) eq }{ false } ifelse
     (the refusal still names the operator) assert
 
-% --- how far back an operator that consumed its operands goes -------
+% --- the operands a body consumed before it refused -------------------
 %
-% The frame records the depth at the call. Going back to it drops
-% whatever the body pushed beyond that depth -- but a body that consumed
-% its operands and then pushed as many again is already at that depth,
-% and what it is holding stays. So the guarantee here is that an
-% operator's refusal leaves the stack no deeper than the call found it,
-% which is not the whole of PLRM 3.11.1 step 1: restoring operands a
-% body has consumed would need them saved at entry, as the interpreter
-% saves a C operator's. Stated as it is rather than as the rule, so that
-% closing the gap is a test that changes rather than one that starts
-% passing silently.
+% The whole of PLRM 3.11.1 step 1: not merely that the stack is no
+% deeper than the call found it, but that it holds what the call found.
+% This body consumes both its operands and pushes two of its own, so it
+% signals at exactly the depth it was called at -- a check on the depth
+% alone passes here whether or not the operands came back. The values
+% are what says so.
 
 /.sigargs
     /.sigargs { pop pop 44 55 /.sigargs cvx /rangecheck signalerror }
@@ -73,48 +86,124 @@ def
 count /d0 exch def
 { 1 2 .sigargs } stopped pop
 count d0 sub 2 eq
-    (a refusal leaves the stack no deeper than the call found it) assert
-count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    { 2 eq exch 1 eq and }{ d0 wrongdepth } ifelse
+    (an operator that signals gives its operands back) assert
+
+% the same for an error the interpreter raises rather than the body
+/.cargs
+    /.cargs { pop pop pop 66 77 1 0 div }
+    [ /anytype /anytype /anytype ] ID /.wrapopsig get exec
+def
+count /d0 exch def
+{ 7 8 9 .cargs } stopped pop
+count d0 sub 3 eq
+    { 9 eq exch 8 eq and exch 7 eq and }{ d0 wrongdepth } ifelse
+    (an operator whose body faults gives its operands back) assert
+
+% --- an error caught inside a body and raised again ------------------
+%
+% The third path: the body runs something in a stopped context of its
+% own, and on catching the failure raises it again with a bare stop.
+% That stop never passes an error hook, so the unwinding lives in stop
+% itself. The frame below the body's own stopped context is left alone
+% while that context is live -- the body is still running -- and is
+% unwound by the stop that finally leaves it.
+
+/.sigcatch
+    /.sigcatch { pop pop { 1 0 div } stopped { 44 55 stop } if }
+    [ /anytype /anytype ] ID /.wrapopsig get exec
+def
+count /d0 exch def
+{ 3 4 .sigcatch } stopped pop
+count d0 sub 2 eq
+    { 4 eq exch 3 eq and }{ d0 wrongdepth } ifelse
+    (an operator that re-raises with stop gives its operands back) assert
 
 % --- nesting: only the calls the stop unwinds out of ------------------
 %
 % An operator that calls another which refuses. Both frames are live, so
-% the stack goes back to the outer call, not to the inner one.
+% the stack goes back to what the outer call found -- its own operands,
+% not the inner call's.
 
 /.siginner
-    /.siginner { 66 77 /.siginner cvx /typecheck signalerror } [ ]
-    ID /.wrapopsig get exec
+    /.siginner { pop 66 77 /.siginner cvx /typecheck signalerror }
+    [ /anytype ] ID /.wrapopsig get exec
 def
 /.sigouter
-    /.sigouter { 88 99 .siginner } [ ]
-    ID /.wrapopsig get exec
+    /.sigouter { pop pop 88 .siginner }
+    [ /anytype /anytype ] ID /.wrapopsig get exec
 def
-{ .sigouter } leftby 0 eq
-    (a nested refusal unwinds every live call) assert
+count /d0 exch def
+{ 5 6 .sigouter } stopped pop
+count d0 sub 2 eq
+    { 6 eq exch 5 eq and }{ d0 wrongdepth } ifelse
+    (a nested refusal unwinds to what the outermost call found) assert
 
 % --- a refusal inside a procedure the program is running --------------
 %
 % A call whose frame sits below the caught context keeps running: what
 % the program itself pushed before calling is not the operator's to
 % take. Here the program pushes two values, then the operator refuses;
-% the two stay.
+% the two stay, and are still themselves.
 
 count /d0 exch def
 { 1 2 .sigleak } stopped pop
 count d0 sub 2 eq
+    { 2 eq exch 1 eq and }{ d0 wrongdepth } ifelse
     (what the program pushed before the call is left alone) assert
-count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
 
 % --- the interpreter's own errors were already unwound ----------------
 %
-% The other path, asserted alongside so that the two stay together: a C
-% operator's operands come back, which is the same clause of the same
-% rule.
+% The other kind of operator, asserted alongside so that the two stay
+% together: a C operator's operands come back, which is the same clause
+% of the same rule.
 
 count /d0 exch def
 { 1 0 div } stopped pop
 count d0 sub 2 eq
+    { 0 eq exch 1 eq and }{ d0 wrongdepth } ifelse
     (the interpreter restores an operand it consumed) assert
-count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+% --- library operators ------------------------------------------------
+%
+% Two operators of the language itself, written in PostScript, whose
+% bodies consume their operands well before they discover they cannot
+% go on. findresource signals; image fails inside a procedure the
+% machinery runs for it, which is caught, unwound and raised again.
+% They are here so that the mechanism is known to reach operators
+% nobody wrote for this test.
+
+count /d0 exch def
+{ /zzz /zzz findresource } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (findresource gives back the operands it was called with) assert
+
+/im.m [ 1 0 0 1 0 0 ] def
+/im.p { } def
+count /d0 exch def
+{ 300 300 8 im.m /im.p load image } stopped pop
+count d0 sub 5 eq
+    { /im.p load eq exch im.m eq and exch 8 eq and
+      exch 300 eq and exch 300 eq and }{ d0 wrongdepth } ifelse
+    (image gives back the operands it was called with) assert
+
+% --- what a successful call leaves ------------------------------------
+%
+% The copies are taken on every call and let go on every return, so a
+% call that does not fail is unaffected by them, and the ones taken for
+% it do not outlive it: a call made after many others has room for its
+% own, which it would not if theirs were still held.
+
+/.sigok /.sigok { add 1 add } [ /anytype /anytype ] ID /.wrapopsig get exec def
+count /d0 exch def
+0 1 2000 { pop 2 3 .sigok pop } for
+count d0 sub 0 eq (a call that does not fail leaves nothing) assert
+2 3 .sigok 6 eq (and answers what it was written to answer) assert
+count /d0 exch def
+{ 1 2 .sigargs } stopped pop
+count d0 sub 2 eq
+    { 2 eq exch 1 eq and }{ d0 wrongdepth } ifelse
+    (and the copies are still there for a call that does fail) assert
 
 fail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse

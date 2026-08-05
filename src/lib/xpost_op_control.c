@@ -475,6 +475,15 @@ int xpost_op_exit (Xpost_Context *ctx)
             free(globbuf);
             continue;
         }
+        if (xpost_object_get_type(x) == operatortype &&
+            x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+        {
+            /* a wrapped call going with the loop: its finish marker will
+               never run, so the operands saved for it are let go here */
+            xpost_operator_wrapped_release(ctx,
+                                           xpost_stack_pop(ctx->lo, ctx->es));
+            continue;
+        }
         if ((xpost_dict_compare_objects(ctx, x, opfor)    == 0) ||
             (xpost_dict_compare_objects(ctx, x, oprepeat) == 0) ||
             (xpost_dict_compare_objects(ctx, x, oploop)   == 0) ||
@@ -550,6 +559,16 @@ int xpost_op_stop(Xpost_Context *ctx)
        run is recovering (or quitting cleanly): the error cascade, if any,
        has broken. Clear the consecutive-error count that _onerror keeps. */
     ctx->onerr_run = 0;
+    /* A wrapped operator between here and that context is abandoned
+       part-way through, so it leaves nothing behind and its caller has
+       its operands back (PLRM 3.11.1 step 1). This is where every way
+       of abandoning one arrives: an error the interpreter raised, an
+       error a body raised with signalerror, and an error caught and
+       raised again with a bare stop, which is how the machinery
+       re-raises what it unwound its own brackets for. The raise sites
+       that unwind before recording $error do it again here, over the
+       same frames, to the same end. */
+    (void)xpost_op_errorunwind(ctx);
     /* Unwind the exec stack to the nearest enclosing stopped context --
        the false that `stopped` pushed. Pop straight to it: counting the
        whole stack first to bound the loop is O(depth) yet the marker is
@@ -567,6 +586,16 @@ int xpost_op_stop(Xpost_Context *ctx)
             glob_t *globbuf = x.glob_.ptr;
             xpost_glob_free(globbuf);
             free(globbuf);
+            continue;
+        }
+        if (xpost_object_get_type(x) == operatortype &&
+            x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+        {
+            /* a wrapped call going with the stopped context: its finish
+               marker will never run, so the operands saved for it are
+               let go here instead */
+            xpost_operator_wrapped_release(ctx,
+                                           xpost_stack_pop(ctx->lo, ctx->es));
             continue;
         }
         if(xpost_dict_compare_objects(ctx, f, x) == 0) {
@@ -589,11 +618,13 @@ int xpost_op_stop(Xpost_Context *ctx)
 /* -  wrap.done  -
    the finish marker of a wrapped-operator call: the recorded
    procedure ran to completion, so the frame beneath the marker --
-   the dict and operand depths at the call and the operator itself
-   -- leaves the exec stack with it */
+   the saved operands, the dict and operand depths at the call and the
+   operator itself -- leaves the exec stack with it. The call ended the
+   way it meant to, so the copies taken against its failing go too. */
 static
 int xpost_op_wrapdone(Xpost_Context *ctx)
 {
+    xpost_operator_wrapped_release(ctx, xpost_stack_pop(ctx->lo, ctx->es));
     (void)xpost_stack_pop(ctx->lo, ctx->es);
     (void)xpost_stack_pop(ctx->lo, ctx->es);
     (void)xpost_stack_pop(ctx->lo, ctx->es);
