@@ -69,6 +69,82 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% devdict sx sy  .completedevice  -
+% Finish a freshly created device, on every path that creates one: the
+% device the interpreter starts with and the device setpagedevice makes
+% take the same finishing, so the same device behaves the same however
+% it was selected. sx and sy are the device resolution's scale from
+% points; a raw 1:1 device passes 1 1.
+%
+% Written once because it was written twice, and the two were not the
+% same: only one adopted the requested process colour model, so the
+% next key added to one would be missed by the other.
+%
+% Local, in privatedict: it freezes a reference to .internaldict to
+% reach the compiled rasterisers, and a global object may not hold a
+% local one.
+.privatedict /.completedevice { % devdict sx sy  .  -
+    % the scratch dictionary and the matrix built below hold the device,
+    % which is a local object, so they are made in local VM whatever the
+    % caller was allocating in
+    currentglobal false setglobal
+    4 dict begin
+    /og exch def /sy exch def /sx exch def /dev exch def
+
+    % The page's default matrix: device space runs y-down from the top
+    % of the page, scaled by the device resolution, and by the ratio a
+    % window device adopted when it opened smaller than the page asked
+    % for. The flip translate must match the height the device actually
+    % adopted, or marks sit offset within the page.
+    dev /windowscale 2 copy known { get }{ pop pop 1 } ifelse
+    /ws exch def
+    dev /defaultmatrix
+        [ ws sx mul 0 0 ws sy mul neg 0 dev /height get ] put
+
+    % A device declaring support for the requested process colour model
+    % adopts it as its native space; the colour pipeline then delivers
+    % that model's components to the marking methods. Before the fills
+    % are chosen below, because which compiled fill fits depends on it.
+    dev /ProcessColorModel 2 copy known {
+        get dev /.colormodels 2 copy known {
+            get 1 index known {
+                dev /nativecolorspace 3 -1 roll put
+            }{ pop } ifelse
+        }{ pop pop pop } ifelse
+    }{ pop pop } ifelse
+
+    % Override the class's scanline FillPoly with the compiled
+    % rasterizer, except where the device declares it draws nothing:
+    % rasterizing into the null device would burn the whole render cost
+    % of a page to discard every span.
+    dev /NoOutput known not {
+        dev /FillPoly //.internaldict /.fillpoly get put
+        % grayscale array-of-strings devices (.xpost_PGMIMAGE) get the
+        % compiled FillRect too; erasepage clears the page through it.
+        % Fetch the value with get: some devices store nativecolorspace
+        % as an executable name, which a bare reference would execute.
+        dev /nativecolorspace get /DeviceGray eq {
+            dev /FillRect //.internaldict /.fillrectgray get put
+        } if
+        % packed-integer rgb devices whose raster is a PS-level ImgData
+        % array (PPMIMAGE) likewise -- .fillrectrgb writes those rows
+        % directly, so a device that keeps its raster in a C buffer
+        % (bgr) has no ImgData and stays on its own FillRect. Skip a
+        % device that brought a compiled FillRect of its own (the png
+        % family) too.
+        dev /nativecolorspace get /DeviceRGB eq {
+            dev /ImgData known {
+                dev /FillRect get type /operatortype ne {
+                    dev /FillRect //.internaldict /.fillrectrgb get put
+                } if
+            } if
+        } if
+    } if
+    og
+    end
+    setglobal
+} bind put
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device
@@ -95,42 +171,10 @@ setglobal
 % state's /device -- the DEVICE wrapped operator below reads it back
 newdefaultdevice
 
-DEVICE begin
-    % a window device that adopted a smaller, scaled window records the
-    % ratio in /windowscale; the page's device matrix carries it
-    /defaultmatrix [
-        currentdict /windowscale 2 copy known { get }{ pop pop 1 } ifelse
-        0 0
-        currentdict /windowscale 2 copy known { get }{ pop pop 1 } ifelse neg
-        0 height ] def
-
-    % override the class's scanline FillPoly with the compiled
-    % rasterizer, except where the device declares it draws nothing:
-    % rasterizing into the null device would burn the whole render
-    % cost of a page to discard every span
-    currentdict /NoOutput known not {
-        /FillPoly //.internaldict /.fillpoly get def
-        % grayscale array-of-strings devices (.xpost_PGMIMAGE) get the compiled
-        % FillRect too; erasepage clears the page through it. Fetch the
-        % value with get: some devices store nativecolorspace as an
-        % executable name, which a bare reference would try to execute.
-        currentdict /nativecolorspace get /DeviceGray eq {
-            /FillRect //.internaldict /.fillrectgray get def
-        } if
-        % packed-integer rgb devices whose raster is a PS-level ImgData
-        % array (PPMIMAGE) likewise -- .fillrectrgb writes those rows
-        % directly, so a device that keeps its raster in a C buffer (bgr)
-        % has no ImgData and stays on its own FillRect. Skip a device that
-        % brought a compiled FillRect of its own (the png family) too.
-        currentdict /nativecolorspace get /DeviceRGB eq {
-            currentdict /ImgData known {
-                currentdict /FillRect get type /operatortype ne {
-                    /FillRect //.internaldict /.fillrectrgb get def
-                } if
-            } if
-        } if
-    } if
-end
+% the interpreter's own device takes the same finishing setpagedevice
+% gives the ones it makes; the startup page is at the device's own
+% resolution, so the point-to-device scale is 1:1
+DEVICE 1 1 .privatedict /.completedevice get exec
 
 /flushpage {
     DEVICE /Flush known {

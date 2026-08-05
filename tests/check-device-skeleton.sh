@@ -176,8 +176,64 @@ if [ "$(grep -c '\.xpostsys /\.classcopydict {' "$src/data/device.ps")" != 1 ]; 
     fail=1
 fi
 
+# 8. A device is completed once, identically, on every path that
+#    creates one. The finishing a fresh device takes -- the page's
+#    default matrix, the compiled rasterisers its raster shape can
+#    take, the process colour model it was asked for -- is
+#    .completedevice, and only it installs them. It was written twice,
+#    for the device the interpreter starts with and the device
+#    setpagedevice makes, and the two were not the same: one adopted the
+#    process colour model and the other did not, so the same device
+#    behaved differently according to how it had been selected.
+#
+#    Two sites install a compiled rasteriser on a device that is not a
+#    page device and never becomes one -- the glyph cache in font.ps and
+#    the form cache in init.ps, each a scratch raster the machinery
+#    paints into and reads back. They are named here rather than left to
+#    slip through a looser pattern.
+scratch=0
+for f in device.ps font.ps init.ps image.ps pgmimage.ps pbmimage.ps \
+         ppmimage.ps tiffimage.ps nulldev.ps bboxdev.ps pdfwrite.ps \
+         svgwrite.ps dscwrite.ps paint.ps graphics.ps gstate.ps; do
+    p="$src/data/$f"
+    [ -f "$p" ] || continue
+    while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        case "$f:$hit" in
+            device.ps:*"dev /Fill"*)   continue ;;   # .completedevice itself
+            font.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
+            init.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
+        esac
+        echo "check-device-skeleton: a device is completed outside .completedevice:" >&2
+        echo "  $f:$hit" >&2
+        echo "A page device is finished by .completedevice (data/device.ps); the only" >&2
+        echo "sites that may install a rasteriser directly are the two scratch rasters," >&2
+        echo "font.ps's glyph cache and init.ps's form cache, both named mdev." >&2
+        fail=1
+    done <<EOF
+$(grep -nE '/(FillPoly|FillRect)([ \t]+//\.internaldict|$)' "$p" || true)
+EOF
+done
+if [ "$scratch" -ne 4 ]; then
+    echo "check-device-skeleton: $scratch scratch-raster completions, expected 4." >&2
+    echo "A new one is another place a device gets finished; give it" >&2
+    echo ".completedevice or add it here with its reason." >&2
+    fail=1
+fi
+if [ "$(grep -c '\.privatedict /\.completedevice {' "$src/data/device.ps")" != 1 ]; then
+    echo "check-device-skeleton: the device completion is not defined once in device.ps." >&2
+    fail=1
+fi
+callers=$(grep -c '/\.completedevice get exec' "$src/data/device.ps" "$src/data/init.ps" \
+          | cut -d: -f2 | paste -sd+ - | bc)
+if [ "$callers" -lt 2 ]; then
+    echo "check-device-skeleton: only $callers path completes a device;" >&2
+    echo "both the startup device and setpagedevice's must call .completedevice." >&2
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion)"

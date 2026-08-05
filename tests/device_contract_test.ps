@@ -249,4 +249,46 @@ showpage
 { << /PageSize [200 200] >> setpagedevice }
     (the running device accepts a page-device request) try
 
+% --- and it was completed the same way -------------------------------
+%
+% A freshly created device is finished off before it is installed: the
+% page's default matrix, the compiled rasterisers its raster shape can
+% take, the process colour model it was asked for. The device the
+% interpreter starts with and the device setpagedevice makes take that
+% same finishing, or the same device behaves differently according to
+% how it was selected. Compare the two, slot by slot.
+
+/newdev .privatedict /.graphicsdict get /currgstate get /device get def
+/slotsame { % /key (what)  .  -
+    /csw exch def /csk exch def
+    dev csk known newdev csk known eq
+    dev csk known newdev csk known and {
+        dev csk get type newdev csk get type eq and
+    } if
+    csw assert
+} def
+newdev dev ne {
+    /FillPoly (both devices complete FillPoly the same way) slotsame
+    /FillRect (both devices complete FillRect the same way) slotsame
+    /nativecolorspace
+        (both devices settle on the same native colour space) slotsame
+    /defaultmatrix (both devices carry a default matrix) slotsame
+    /BlendPix (both devices agree on the coverage blender) slotsame
+    % the default matrix is the page's, so its shape is fixed even
+    % though the page size just changed
+    dev /defaultmatrix known newdev /defaultmatrix known and {
+        dev /defaultmatrix get length newdev /defaultmatrix get length eq
+            (both default matrices have six entries) assert
+        dev /defaultmatrix get 1 get 0 eq
+        newdev /defaultmatrix get 1 get 0 eq and
+            (both default matrices are unskewed) assert
+        dev /defaultmatrix get 0 get 0 gt
+        newdev /defaultmatrix get 0 get 0 gt and
+            (both default matrices scale x forwards) assert
+        dev /defaultmatrix get 3 get 0 lt
+        newdev /defaultmatrix get 3 get 0 lt and
+            (both default matrices flip y) assert
+    } if
+} if
+
 contractfail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse

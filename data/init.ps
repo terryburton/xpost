@@ -1493,29 +1493,9 @@ currentglobal true setglobal
         /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
         graphicsdict /.exactpagedims undef
 
-        % post-construction fixups, as the initial device receives.
-        % The flip translate must match the height the device adopted,
-        % or marks sit offset within a fractional page.
-        newdev /defaultmatrix
-            [ newdev /windowscale 2 copy known { get }{ pop pop 1 } ifelse
-              dup sx mul 0 0
-              4 -1 roll sy mul neg 0
-              newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
-        newdev /NoOutput known not {
-            newdev /FillPoly //.internaldict /.fillpoly get put
-            newdev /nativecolorspace get /DeviceGray eq {
-                newdev /FillRect //.internaldict /.fillrectgray get put
-            } if
-            newdev /nativecolorspace get /DeviceRGB eq {
-                newdev /ImgData known {
-                    newdev /FillRect get type /operatortype ne {
-                        newdev /FillRect //.internaldict /.fillrectrgb get put
-                    } if
-                } if
-            } if
-        } if
-
-        % remaining keys are device features
+        % remaining keys are device features, recorded before the device
+        % is finished: the process colour model arrives among them, and
+        % which marking methods fit the device depends on it
         merged { % key value
             1 index /OutputDevice eq
             2 index /PageSize eq or
@@ -1527,16 +1507,9 @@ currentglobal true setglobal
         merged /OutputDevice dev put
         userdict /.pagedevice merged put
 
-        % a device declaring support for the requested process colour
-        % model adopts it as its native space; the colour pipeline then
-        % delivers that model's components to the marking methods
-        newdev /ProcessColorModel 2 copy known {
-            get newdev /.colormodels 2 copy known {
-                get 1 index known {
-                    newdev /nativecolorspace 3 -1 roll put
-                }{ pop } ifelse
-            }{ pop pop pop } ifelse
-        }{ pop pop } ifelse
+        % post-construction fixups, the same ones the device the
+        % interpreter started with receives (data/device.ps)
+        newdev sx sy .privatedict /.completedevice get exec
 
         % the template and the live gstate carry the device; painting
         % and the defaultmatrix operator resolve it through them
