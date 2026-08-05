@@ -72,6 +72,10 @@ int Zsave(Xpost_Context *ctx)
         && xpost_stack_count(ctx->lo, vs) >= 255)
         return limitcheck;
     v = xpost_save_create_snapshot_object(ctx->lo);
+    /* the snapshot answers null when it could not be recorded, and a
+       save object that records nothing would restore nothing */
+    if (xpost_object_get_type(v) != savetype)
+        return VMerror;
     /* remember the packing mode at this level so restore reverts it */
     if (v.save_.lev < sizeof ctx->packing_hist)
         ctx->packing_hist[v.save_.lev] = (unsigned char)ctx->packing;

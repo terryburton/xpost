@@ -203,8 +203,14 @@ static
 int xpost_op_detach (Xpost_Context *ctx, Xpost_Object context)
 {
     Xpost_Context *child = ctx->gl->interpreter_cid_get_context(context.mark_.padw);
-    xpost_stack_bottomup_replace(child->lo, child->es, 0,
-                                 xpost_operator_cons(child, "_i_am_free_", NULL,0,0));
+
+    /* the marker sits at the bottom of the child's exec stack, where
+       its own start-up put it; a child whose stack is empty has already
+       run to its end and there is nothing left to detach */
+    if (!xpost_stack_bottomup_replace(child->lo, child->es, 0,
+                                      xpost_operator_cons(child, "_i_am_free_",
+                                                          NULL, 0, 0)))
+        return invalidaccess;
     return contextswitch;
 }
 

@@ -102,7 +102,7 @@ xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
 /**
  * @brief Create a stack data structure, returns vm address in addr.
  */
-XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
 
 /**
  * @brief Empty the stack.
@@ -136,7 +136,7 @@ Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
 /**
  * @brief Index the stack from the top down, replacing object.
  */
-int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
                                 unsigned stackadr,
                                 int i,
                                 Xpost_Object obj);
@@ -174,7 +174,7 @@ Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
 /**
  * @brief Index the stack from the bottom up, replacing object.
  */
-int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
                                  unsigned stackadr,
                                  int i,
                                  Xpost_Object obj);

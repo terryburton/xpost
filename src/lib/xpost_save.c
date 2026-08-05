@@ -76,7 +76,11 @@ int xpost_save_init(Xpost_Memory_File *mem)
     }
     assert(ent == XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK);
 
-    xpost_stack_init(mem, &t);
+    if (!xpost_stack_init(mem, &t))
+    {
+        XPOST_LOG_ERR("cannot create the save stack");
+        return 0;
+    }
     tab = &mem->table;
     tab->tab[ent].adr = t;
 
@@ -139,7 +143,11 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
            field on a wide-word build: land it whole */
         unsigned int stk;
 
-        xpost_stack_init(mem, &stk);
+        if (!xpost_stack_init(mem, &stk))
+        {
+            XPOST_LOG_ERR("cannot create the substack for a save level");
+            return null;
+        }
         v.save_.stk = stk;
     }
     xpost_stack_push(mem, vs, v);

@@ -53,6 +53,14 @@
 # define XPOST_MUST_CHECK
 #endif
 
+/* Consumes the answer of an XPOST_MUST_CHECK function at a site where
+   the refusal it reports cannot arise -- an index the line above just
+   read from, a resource the caller has already established. Naming the
+   claim is the point: it is a statement that can be read and checked,
+   where a bare cast would say nothing, and it greps. Every use carries
+   a comment saying why the refusal cannot happen there. */
+#define XPOST_REFUSAL_IMPOSSIBLE(call) do { if (call) { } } while (0)
+
 /**
  * @brief Initialize the log module.
  *

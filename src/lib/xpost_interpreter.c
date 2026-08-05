@@ -1479,9 +1479,12 @@ void _onerror(Xpost_Context *ctx,
         for (i = 0; i < ctx->op_restore_n; i++)
         {
             int idx = ctx->op_restore_idx[i];
+            /* the n arguments were just pushed back, so an index
+               below n is one the stack now has */
             if (idx < n)
-                xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
-                        ctx->op_restore_val[i]);
+                XPOST_REFUSAL_IMPOSSIBLE(
+                    xpost_stack_topdown_replace(ctx->lo, ctx->os, idx,
+                                                ctx->op_restore_val[i]));
         }
     }
 
