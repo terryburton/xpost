@@ -102,6 +102,48 @@ dev /BlendPix known dev /GetPix known and {
             7 11 readpix ground arreq
                 (a coverage below none leaves the ground alone) assert
 
+            % --- and the ends of the range are the ends of the blend ----
+            % The weighted step is rounded to the nearest whole level, and
+            % rounding is about a distance, which has no sign: a step
+            % toward black has to round as far as the same step toward
+            % white, or full coverage of one lands on its endpoint and
+            % full coverage of the other stops a level short. The pair
+            % below is the whole of that -- full ink on the opposite
+            % ground, each way round -- and the half-coverage pair after
+            % it says the same thing where the rounding actually happens,
+            % since a step of half from either end has to leave the two
+            % results a whole level apart.
+
+            /blk [ ncomp { 0 } repeat ] def
+            /wht [ ncomp { 255 } repeat ] def
+            /sums255 { % a b  .  bool
+                /s.b exch def /s.a exch def
+                true
+                0 1 s.a length 1 sub {
+                    /s.i exch def
+                    s.a s.i get s.b s.i get add 255 eq and
+                } for
+            } bind def
+
+            white 7 11 putpix
+            black 255 7 11 blend
+            7 11 readpix blk arreq
+                (full black over white paints black) assert
+
+            black 7 11 putpix
+            white 255 7 11 blend
+            7 11 readpix wht arreq
+                (full white over black paints white) assert
+
+            white 7 11 putpix
+            black 128 7 11 blend
+            /halfdark 7 11 readpix def
+            black 7 11 putpix
+            white 128 7 11 blend
+            /halflight 7 11 readpix def
+            halfdark halflight sums255
+                (a half step darkens as far as it lightens) assert
+
             /witness true def
         } ifelse
     } ifelse
