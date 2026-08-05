@@ -640,7 +640,7 @@ setglobal
 % paint the shading over the current clip region; the current path
 % survives untouched
 .xpostsys begin
-systemdict /shfill {
+systemdict /shfill [ /dicttype ] {
     gsave
     dup /ColorSpace get setcolorspace
     dup /BBox 2 copy known {
@@ -661,7 +661,7 @@ systemdict /shfill {
         pop /shfill cvx /rangecheck signalerror
     } ifelse } ifelse } ifelse } ifelse } ifelse
     grestore
-} put
+} //.xpostsys /.defopin get exec
 end
 
 //.internaldict /QUIET known { }{ (eof shade.ps\n)print } ifelse
