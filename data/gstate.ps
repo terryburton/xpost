@@ -74,8 +74,19 @@ userdict begin
     % path or because it is the whole page and constrains nothing.
     % This slot and the region above are two faces of one value: a site
     % that replaces one replaces the other, or the clip goes on being
-    % enforced as one shape and written out as another.
+    % enforced as one shape and written out as another. .setclipregion
+    % in clip.ps is the only site that replaces either.
     /clipsource null
+    % what has been worked out about the region and belongs to it alone:
+    % its serial, and its resolved form once anything has asked for it.
+    % A dictionary, so that a graphics state copy shares it by reference
+    % rather than copying its contents, and .setclipregion installs a
+    % fresh one with each clip rather than emptying this one -- which is
+    % what leaves a gsave holding the answer for the region it saved.
+    % The one here is shared by every state built from this template
+    % until its first clip, so it is serial zero: the serial no region is
+    % ever given, and the signal that nothing may be kept here.
+    /clipcache << /serial 0 >>
     /flat 1.0
     /linewidth 1.0
     /linecap 0

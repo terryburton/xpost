@@ -106,7 +106,7 @@
         .cliprect { pop pop pop pop true }{ false } ifelse {
             //.xpostsys /doclip get exec .fillpolyargs
         }{
-            .fillpolyargs //.xpostsys /.clippolyargs get exec .clipfillpoly
+            .fillpolyargs //.xpostsys /.clipmeet get exec
         } ifelse
     }{
         .fillpolyargs
@@ -154,7 +154,7 @@
         flattenpath
         .fillpolyargs .eospanpoly
         .cliptrivial not {
-            //.xpostsys /.clippolyargs get exec .clipfillpoly
+            //.xpostsys /.clipmeet get exec
         } if
 
         dup length 2 gt {
@@ -196,7 +196,7 @@
     }{
         gsave newpath uappend flattenpath .fillpolyargs grestore
     } ifelse
-    gsave .insp exec exch .clipfillpoly length 2 gt grestore
+    gsave .insp exec exch 0 .regionmeet length 2 gt grestore
     end
 } put
 
@@ -495,7 +495,7 @@
       [DEVICE /dimensions get 0 get 0]
       [DEVICE /dimensions get 0 get DEVICE /dimensions get 1 get]
       [0 DEVICE /dimensions get 1 get] ]
-    .clipfillpoly
+    0 .regionmeet
     grestore
     6 dict begin
     /q exch def

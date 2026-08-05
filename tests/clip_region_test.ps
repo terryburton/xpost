@@ -170,6 +170,66 @@ DEV /clipagreed true put
 wide 0 setgray fill
 DEV /clipagreed get (cliprestore leaves no older shape behind) assert
 
+% --- what is cached about the clip belongs to the clip ----------------
+% The resolved form of the region is worked out once and kept, because
+% every mark painted under a clip is met against the same region. What
+% is kept therefore has to belong to the region and not to the moment: a
+% clip taken inside a gsave, or a graphics state set from one taken
+% earlier, has to leave the outer clip's answer where it was.
+%
+% A region resolved to pixel-band spans is used throughout, since that is
+% the route the resolved form is kept for; a rectangular region takes the
+% shape route instead and would leave the question unasked.
+
+/DEV2 300 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV2 begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV2 put
+graphicsdict /currgstate get /device DEV2 put
+initgraphics
+
+/inkat { % ux uy  .  bool
+    transform floor cvi exch floor cvi exch
+    DEV2 dup /GetPix get exec 128 lt
+} bind def
+
+% a clip inside a gsave, and the clip that comes back after it
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+gsave
+    120 120 140 140 boxpath eoclip
+    wide 0 setgray fill
+grestore
+erasepage
+wide 0 setgray fill
+105 105 inkat (a fill after grestore reaches the restored clip) assert
+250 250 inkat not (a fill after grestore stays inside the restored clip) assert
+
+% and the clip a graphics state carries, set again after another was taken
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+/gsouter gstate currentgstate def
+120 120 140 140 boxpath eoclip
+wide 0 setgray fill
+gsouter setgstate
+erasepage
+wide 0 setgray fill
+105 105 inkat (a fill after setgstate reaches that state's clip) assert
+250 250 inkat not (a fill after setgstate stays inside that state's clip) assert
+
+% and the clip inside the gsave is the one that was asked for
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+gsave
+    120 120 140 140 boxpath eoclip
+    wide 0 setgray fill
+    125 125 inkat (a fill inside the gsave reaches its own clip) assert
+    105 105 inkat not (a fill inside the gsave stays inside its own clip) assert
+grestore
+
 count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit
