@@ -224,8 +224,10 @@ if [ "$(grep -c '\.privatedict /\.completedevice {' "$src/data/device.ps")" != 1
     echo "check-device-skeleton: the device completion is not defined once in device.ps." >&2
     fail=1
 fi
+# summed with awk rather than bc: bc is not present in every environment
+# this runs in, and a guard that cannot run is a guard that is not checking
 callers=$(grep -c '/\.completedevice get exec' "$src/data/device.ps" "$src/data/init.ps" \
-          | cut -d: -f2 | paste -sd+ - | bc)
+          | cut -d: -f2 | awk '{ n += $1 } END { print n + 0 }')
 if [ "$callers" -lt 2 ]; then
     echo "check-device-skeleton: only $callers path completes a device;" >&2
     echo "both the startup device and setpagedevice's must call .completedevice." >&2

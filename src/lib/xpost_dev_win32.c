@@ -769,13 +769,6 @@ int _flush(Xpost_Context *ctx,
     return 0;
 }
 
-/* Emit here is the same as Flush
-   But Flush is called (if available) by all raster operators
-   for smoother previewing.
- */
-static
-int (*_emit)(Xpost_Context *ctx, Xpost_Object devdic) = _flush;
-
 static
 int _destroy(Xpost_Context *ctx,
              Xpost_Object devdic)
@@ -898,7 +891,10 @@ int loadwin32devicecont(Xpost_Context *ctx,
         { "GetPix", "win32GetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
         { "DrawLine", "win32DrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
         { "FillRect", "win32FillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
-        { "Emit", "win32Emit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        /* showing the page and flushing it are the same act on a window;
+           Flush is named separately because the raster operators call it
+           when it is there, to keep a preview moving */
+        { "Emit", "win32Emit", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
         { "Flush", "win32Flush", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
         { "Destroy", "win32Destroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
     };

@@ -173,6 +173,11 @@ if xcb_dep.found()
   config_h.set('HAVE_XCB', 1)
 endif
 
+# the maths library is a separate object on unix and part of the C runtime
+# on windows; asking for it either way keeps the name defined on both, so a
+# target that needs maths does not have to know which platform it is on
+m_dep = cc.find_library('m', required : false)
+
 if sys_windows
   bcrypt_dep = cc.find_library('bcrypt')
   gdi_dep = cc.find_library('gdi32')
@@ -183,8 +188,6 @@ else
   if cc.has_header('sys/select.h')
     config_h.set10('HAVE_SYS_SELECT_H', true)
   endif
-
-  m_dep = cc.find_library('m', required : false)
 
 # dladdr
   dl_dep = dependency('dl')
