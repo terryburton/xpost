@@ -34,6 +34,11 @@ set -u
 src=${1:?usage: check-filter-base.sh <source root>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
+guard_workdir
+trap 'rm -rf "$work"' EXIT
+# read a tree whose lines end where the scans below expect them to
+guard_mirror_tree "$src"
+src=$mirror
 lib=$src/src/lib
 f=$lib/xpost_file.c
 h=$lib/xpost_file.h

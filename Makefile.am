@@ -29,6 +29,7 @@ include src/lib/Makefile.mk
 include src/bin/Makefile.mk
 include data/Makefile.mk
 include doc/Makefile.mk
+include tests/Makefile.mk
 
 sed_process = \
 $(SED) \
@@ -128,16 +129,23 @@ check-local:
 
 endif
 
+# The meson build description. A tarball that carries one of the two
+# build systems is not the project: meson is what the tests are
+# registered in and what CI builds, so a release without it cannot run
+# any of them, and the structural guards it now ships are unreachable.
+EXTRA_DIST += \
+meson.build \
+meson_options.txt \
+data/meson.build \
+doc/meson.build \
+src/bin/meson.build \
+src/lib/meson.build
+
 EXTRA_DIST += \
 COMPLIANCE \
 autogen.sh \
 xpost.pc.in \
 m4/xpost.m4 \
-tests/run-ps-test.sh \
-tests/run-bbox-test.sh \
-tests/run-pdf-test.sh \
-tests/bbox_test.ps \
-tests/pdf_bigfill_test.ps \
 valgrind_wrapper.sh \
 glibc.supp \
 visual_studio/vc10/xpost.sln \

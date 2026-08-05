@@ -33,6 +33,13 @@ guard_require_file "$golden" "the register of doubly-implemented names"
 guard_workdir
 trap 'rm -rf "$work"' EXIT
 
+# every scan below is line-anchored, so read the inputs with their line
+# endings taken out
+guard_mirror ps "$datadir"/*.ps
+datadir=$mirror
+guard_mirror reg "$golden" "$(dirname "$golden")/startup_surface_test.ps"
+golden="$mirror/$(basename "$golden")"
+
 # every name a C operator is installed under
 grep -ho 'xpost_operator_cons(ctx, "[^"]*"' "$srcdir"/*.c 2>/dev/null \
     | sed 's/.*"\(.*\)"/\1/' | LC_ALL=C sort -u > "$work/c"

@@ -74,6 +74,54 @@ guard_workdir() {
     fi
 }
 
+# Mirror text files into the scratch directory with carriage returns
+# taken out, and set `mirror` to where they landed. Requires guard_workdir.
+#
+# A carriage return is a line ending, not content. A checkout that brought
+# CRLF in -- which is what git does on Windows by default, and what the
+# .gitattributes file exists to stop -- leaves one at the end of every
+# line, where it makes `$` match nothing: a sed range then never closes
+# and runs to the end of the file, a grep for a whole line finds none, and
+# the guard reports about a fraction of the tree without saying so. One
+# guard went green that way with five sixths of its population missing.
+# Guards read the mirror, so they hold the same rule on either checkout.
+guard_mirror() {
+    mirror="$work/mirror-$1"
+    shift
+    if ! mkdir -p "$mirror"; then
+        echo "FAILURES: could not make a scratch directory under $work"
+        exit 1
+    fi
+    for f in "$@"; do
+        [ -f "$f" ] || continue
+        tr -d '\r' < "$f" > "$mirror/$(basename "$f")"
+    done
+}
+
+# The same, for a guard that reads across the tree rather than one
+# directory: mirrors the source root and sets `mirror` to the copy, which
+# the guard then uses as its source root. Requires guard_workdir.
+guard_mirror_tree() {
+    mirror="$work/tree"
+    if ! mkdir -p "$mirror"; then
+        echo "FAILURES: could not make a scratch directory under $work"
+        exit 1
+    fi
+    ( cd "$1" && find data src tests -type f -print ) 2>/dev/null \
+    | while read -r rel; do
+        d=${rel%/*}
+        [ -d "$mirror/$d" ] || mkdir -p "$mirror/$d"
+        tr -d '\r' < "$1/$rel" > "$mirror/$rel"
+    done
+    for f in Makefile.am meson.build; do
+        [ -f "$1/$f" ] && tr -d '\r' < "$1/$f" > "$mirror/$f"
+    done
+    if [ ! -r "$mirror/data/init.ps" ] || [ ! -r "$mirror/tests/guard-paths.sh" ]; then
+        echo "FAILURES: could not mirror the source tree under $1"
+        exit 1
+    fi
+}
+
 # Read C sources as C rather than as text: every named file is emitted as
 # "<path>:<line>:<code>" with comments and string literals removed, so a
 # guard scanning for a construct is not answered by a mention of it in a
@@ -88,6 +136,7 @@ guard_workdir() {
 guard_c_source() {
     awk '
         FNR == 1 { inblock = 0; instr = 0 }
+        { sub(/\r$/, "") }
         {
             line = $0
             sub(/\r$/, "", line)

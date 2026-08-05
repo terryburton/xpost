@@ -28,6 +28,12 @@ src=${1:?usage: check-device-roster.sh <srcroot>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 
+guard_workdir
+trap 'rm -rf "$work"' EXIT
+# read a tree whose lines end where the scans below expect them to
+guard_mirror_tree "$src"
+src=$mirror
+
 main_c="$src/src/bin/xpost_main.c"
 interp_c="$src/src/lib/xpost_interpreter.c"
 init_ps="$src/data/init.ps"
@@ -35,9 +41,6 @@ init_ps="$src/data/init.ps"
 guard_require_file "$main_c" "the option parser"
 guard_require_file "$interp_c" "the interpreter"
 guard_require_file "$init_ps" "the interpreter's PostScript"
-
-guard_workdir
-trap 'rm -rf "$work"' EXIT
 
 fail=0
 

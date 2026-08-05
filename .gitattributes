@@ -1,0 +1,38 @@
+# Line endings are a property of the repository, not of the machine that
+# checked it out.
+#
+# Git converts to CRLF on checkout wherever core.autocrlf says so, which
+# on Windows is the installer's default. The structural guards read the
+# sources as text and anchor to the end of a line, so a carriage return
+# there does not merely look untidy: `$` stops matching, a sed range runs
+# past its close to the end of the file, and a guard reports about a
+# fraction of the tree while printing the same SUCCESS it prints for all
+# of it. One of them was found green over a planted violation with five
+# sixths of its population silently gone.
+#
+# So the working tree is LF, everywhere, whatever the platform. A shell
+# script with a carriage return in it is a syntax error to every shell
+# that is not Windows's, PostScript sources are read line-wise by both
+# the interpreter and the guards, and the registers are compared as
+# sorted sets of whole lines.
+* text=auto eol=lf
+
+# What is not text, and must not be touched at all.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.sha256 text eol=lf
+
+# The Visual Studio project files are stored as Visual Studio writes
+# them, CRLF and a byte-order mark, and are left exactly as they are:
+# nothing here reads them, and normalising them would rewrite every one.
+*.sln -text
+*.vcxproj -text
+*.vcxproj.filters -text
+visual_studio/config.h -text
+
+# Written by a drawing program and stored as it wrote it.
+doc/stack.eps -text

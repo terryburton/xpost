@@ -40,6 +40,10 @@ guard_require_dir "$src/src/lib" "the library source directory"
 guard_workdir
 tmp=$work
 trap 'rm -rf "$tmp"' EXIT INT TERM
+# the register is read line-wise and its counts word-wise, so read it
+# with the line endings taken out
+guard_mirror register "$golden"
+golden="$mirror/$(basename "$golden")"
 
 fail=0
 

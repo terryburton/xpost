@@ -41,9 +41,17 @@ guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 
+# Every scan below anchors to the end of a line, so it is run against a
+# mirror with the line endings taken out. On a CRLF checkout this check
+# used to report SUCCESS over three references where there are eight: the
+# range that cuts the writer out never closed, so most of clip.ps went
+# with it, taking any violation written there along too.
+guard_mirror data "$src"/data/*.ps
+data=$mirror
+
 # ---- the writer, and that it really writes all three ----
 sed -n '/^\.xpostsys \/\.setclipregion {/,/^} bind put$/p' \
-    "$src/data/clip.ps" > "$work/writer"
+    "$data/clip.ps" > "$work/writer"
 guard_require_file "$work/writer" "the .setclipregion writer in data/clip.ps"
 for name in clipregion clipsource clipcache; do
     if ! grep -q "/$name exch put" "$work/writer"; then
@@ -53,7 +61,7 @@ for name in clipregion clipsource clipcache; do
 done
 
 # ---- the graphics state template, which declares the slots ----
-sed -n '/\/\.gstatetemplate <</,/>> def/p' "$src/data/gstate.ps" \
+sed -n '/\/\.gstatetemplate <</,/>> def/p' "$data/gstate.ps" \
     > "$work/template"
 guard_require_file "$work/template" "the .gstatetemplate literal in data/gstate.ps"
 for name in clipregion clipsource clipcache; do
@@ -67,7 +75,7 @@ done
 # each file is emitted as one token per line, with the exempt block cut
 # out of the two files that have one, and with comments dropped
 seen=0
-for f in "$src"/data/*.ps; do
+for f in "$data"/*.ps; do
     base=$(basename "$f")
     case $base in
         clip.ps)

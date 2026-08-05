@@ -47,13 +47,17 @@ src=${1:?usage: check-vm-address.sh <source root>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 
+guard_workdir
+trap 'rm -rf "$work"' EXIT
+# read a tree whose lines end where the scans below expect them to
+guard_mirror_tree "$src"
+src=$mirror
+
 lib="$src/src/lib"
 guard_require_dir "$lib" "the library source directory"
 header="$lib/xpost_memory.h"
 guard_require_file "$header" "the header holding the accessors"
 
-guard_workdir
-trap 'rm -rf "$work"' EXIT
 fail=0
 
 # The five constructors, each of which allocates its entity and asserts it
