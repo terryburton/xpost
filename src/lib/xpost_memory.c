@@ -76,6 +76,27 @@
 
 size_t xpost_memory_page_size;
 
+#if defined(_WIN64)
+/* A pagefile-backed section charges its whole nominal size against the
+   system commit limit the moment it is created, where an anonymous
+   mmap only reserves address space and charges a page when the page is
+   touched. A memory file grows geometrically and leaves most of the
+   growth untouched, so backing it with sections asks the system to
+   commit gigabytes that are never written -- and asks for the old and
+   the new size at once, because the contents have to be copied across.
+   Reserving the range the file can address, and committing more of it
+   as the file fills, is the same arrangement the mmap path has: the
+   base never moves, no copy is made, and only what is in use is
+   charged. */
+# define XPOST_MEMORY_RESERVED_VM 1
+/* an object addresses the file through an unsigned int offset, so the
+   file cannot exceed 4G and a reservation of that size always covers it */
+# define XPOST_MEMORY_RESERVE ((size_t)0x100000000ULL)
+/* capacity is committed in steps of this size, so a file that fills
+   byte by byte does not make a system call per allocation */
+# define XPOST_MEMORY_COMMIT_STEP ((size_t)0x100000)
+#endif
+
 /*
    initialize the global extern page_size variable
  */
@@ -166,6 +187,31 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     }
 
 
+#ifdef XPOST_MEMORY_RESERVED_VM
+    if (fd == -1)
+    {
+        mem->base = (unsigned char *)VirtualAlloc(NULL, XPOST_MEMORY_RESERVE,
+                                                  MEM_RESERVE, PAGE_READWRITE);
+        if (mem->base &&
+            !VirtualAlloc(mem->base, sz, MEM_COMMIT, PAGE_READWRITE))
+        {
+            VirtualFree((void *)mem->base, 0, MEM_RELEASE);
+            mem->base = NULL;
+        }
+        if (!mem->base)
+        {
+            XPOST_LOG_ERR("%d failed to reserve memory-file data (%ld)",
+                          VMerror, GetLastError());
+            return 0;
+        }
+        mem->used = 0;
+        mem->max = sz;
+        /* a freshly committed page reads as zero, which is what the
+           caller of a new memory file is promised */
+        return 1;
+    }
+#endif
+
 #ifdef _WIN32
     if (fd == -1)
         h = INVALID_HANDLE_VALUE;
@@ -250,7 +296,12 @@ xpost_memory_file_exit(Xpost_Memory_File *mem)
     }
     XPOST_LOG_INFO("exit memory file %s", mem->fname);
 
-#ifdef _WIN32
+#if defined(XPOST_MEMORY_RESERVED_VM)
+    if (mem->fd == -1)
+        VirtualFree((void *)mem->base, 0, MEM_RELEASE);
+    else
+        UnmapViewOfFile(mem->base);
+#elif defined(_WIN32)
     UnmapViewOfFile(mem->base);
 #elif defined (HAVE_MMAP)
     munmap((void *)mem->base, mem->max);
@@ -320,6 +371,41 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         sz = xpost_memory_page_size;
     else
         sz = (sz / xpost_memory_page_size + 1) * xpost_memory_page_size;
+
+#ifdef XPOST_MEMORY_RESERVED_VM
+    if (mem->fd == -1)
+    {
+        /* the range is already reserved and the base does not move, so
+           capacity is added by committing a further step of it: the
+           over-allocation a copying grow needs to keep its cost down
+           would only be commit charge for bytes the file never writes */
+        size_t want = (size_t)mem->used + sz;
+
+        if (want > 0xffffffffu)
+        {
+            XPOST_LOG_ERR("%d memory file full: cannot grow beyond addressable size", VMerror);
+            return 0;
+        }
+        want = (want / XPOST_MEMORY_COMMIT_STEP + 1) * XPOST_MEMORY_COMMIT_STEP;
+        if (want > 0xffffffffu)
+            want = 0xffffffffu;
+        if (want <= mem->max)
+            return 1;
+
+        XPOST_LOG_INFO("commit memory file%s%s (old: %d  new: %d)",
+                       mem->fname[0] ? " for " : "", mem->fname[0] ? mem->fname : "",
+                       mem->max, want);
+
+        if (!VirtualAlloc(mem->base, want, MEM_COMMIT, PAGE_READWRITE))
+        {
+            XPOST_LOG_ERR("%d unable to commit memory (%ld)", VMerror, GetLastError());
+            return 0;
+        }
+        mem->max = want;
+        return 1;
+    }
+#endif
+
     {
         /* objects address the file through unsigned int offsets, which
            caps a memory file at 4G: clamp the geometric growth to that
