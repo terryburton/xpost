@@ -101,13 +101,32 @@ guard_mirror() {
 # The same, for a guard that reads across the tree rather than one
 # directory: mirrors the source root and sets `mirror` to the copy, which
 # the guard then uses as its source root. Requires guard_workdir.
+#
+# A corpus is left out. Its programs are fetched and belong to their own
+# sources, no guard scans them, and its scratch directory is written
+# while the corpus tests run -- a walk that copies it races them and
+# dies on a file that went away between being listed and being read.
+# Which paths those are is stated once, in tests/corpus/.gitignore; that
+# file is distributed, so a tarball states it too.
 guard_mirror_tree() {
     mirror="$work/tree"
     if ! mkdir -p "$mirror"; then
         echo "FAILURES: could not make a scratch directory under $work"
         exit 1
     fi
-    ( cd "$1" && find data src tests -type f -print ) 2>/dev/null \
+    gm_prune=
+    gm_pats=$(tr -d '\r' < "$1/tests/corpus/.gitignore" 2>/dev/null \
+        | sed 's/#.*//' | tr -s ' \t' '\n' | grep .)
+    set -f
+    for gm_p in $gm_pats; do
+        case $gm_p in
+        */) gm_prune="$gm_prune -path 'tests/corpus/${gm_p%/}' -prune -o" ;;
+        *)  gm_prune="$gm_prune -path 'tests/corpus/$gm_p' -prune -o" ;;
+        esac
+    done
+    set +f
+    eval "( cd \"\$1\" && find data src tests $gm_prune -type f -print )" \
+        2>/dev/null \
     | while read -r rel; do
         d=${rel%/*}
         [ -d "$mirror/$d" ] || mkdir -p "$mirror/$d"

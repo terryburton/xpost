@@ -46,6 +46,7 @@ tests/check-vm-address.sh \
 tests/check-wrapped-bind.sh \
 tests/clip_region_test.ps \
 tests/colorspace_matrix_test.ps \
+tests/colour_range_test.ps \
 tests/context_reuse_test.c \
 tests/corpus/.gitignore \
 tests/corpus/README.md \
@@ -60,6 +61,8 @@ tests/dev_rect_test.c \
 tests/device_contract_test.ps \
 tests/device_destroy_test.ps \
 tests/device_features_test.ps \
+tests/device_getpix_destroyed_test.ps \
+tests/device_restore_retired_test.ps \
 tests/dict_grow_test.c \
 tests/dict_homes.golden \
 tests/dsc_parse_test.c \
@@ -86,6 +89,7 @@ tests/golden_page.ps \
 tests/graphics_regression_test.ps \
 tests/graphicsdict_slots.golden \
 tests/gstate_matrix_test.ps \
+tests/gstate_object_test.ps \
 tests/guard-paths.sh \
 tests/halftone_matrix_test.ps \
 tests/image_matrix_test.ps \
@@ -164,9 +168,12 @@ tests/run-bbox-test.sh \
 tests/run-bintok-test.sh \
 tests/run-clean-startup-test.sh \
 tests/run-cli-options-test.sh \
+tests/run-colour-range-test.sh \
 tests/run-device-contract-test.sh \
 tests/run-device-destroy-test.sh \
 tests/run-device-features-test.sh \
+tests/run-device-getpix-test.sh \
+tests/run-device-restore-test.sh \
 tests/run-devices-test.sh \
 tests/run-error-binary-test.sh \
 tests/run-error-format-test.sh \
@@ -186,6 +193,7 @@ tests/run-ps-test.sh \
 tests/run-raster-formats-test.sh \
 tests/run-refusing-target-test.sh \
 tests/run-reloc-stress-test.sh \
+tests/run-setpagedevice-failure-test.sh \
 tests/run-statementedit-test.sh \
 tests/run-strict-ps-test.sh \
 tests/run-svg-test.sh \
@@ -198,6 +206,7 @@ tests/save_restore_matrix_test.ps \
 tests/save_restore_test.ps \
 tests/scanner_eof_test.ps \
 tests/semantics_test.ps \
+tests/setpagedevice_failure_test.ps \
 tests/shadowed_operators.golden \
 tests/showop_matrix_test.ps \
 tests/startup_surface_api_test.c \

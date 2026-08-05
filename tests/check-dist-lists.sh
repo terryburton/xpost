@@ -94,6 +94,14 @@ sed -n "/xpost_data_src = files(\[/,/\])/p" "$tree/data/meson.build" \
 hold "interpreter data" "$tree/data/Makefile.mk" data "$work/data" '\.ps$'
 
 # ---- the test suite, guards and registers included ----
+#
+# A corpus is fetched, not distributed: the programs it holds belong to
+# their own sources. The mirror this reads has already left those out,
+# by the statement in tests/corpus/.gitignore, so what is walked here is
+# what a release carries. What remains under tests/corpus -- the fetch
+# and evaluate scripts, the preludes that let a corpus run -- is
+# distributed like anything else, or a tarball can fetch a corpus and
+# still not run it.
 ( cd "$tree" && find tests -type f -print ) > "$work/tests"
 hold "test suite" "$tree/tests/Makefile.mk" tests "$work/tests" '.'
 
@@ -102,7 +110,15 @@ hold "test suite" "$tree/tests/Makefile.mk" tests "$work/tests" '.'
 # The tests are registered in meson and CI builds with it, so a release
 # that ships only the autotools half ships a tree in which nothing here
 # can be run -- including the guards the lists above now distribute.
-( cd "$src" && find . -name 'meson.build' -o -name 'meson_options.txt' ) \
+#
+# The walk stops at a nested checkout. A working copy may hold other
+# trees inside it -- a second worktree, a clone -- and their build
+# descriptions belong to those trees, not to this distribution. A
+# checkout announces itself by carrying .git; the tarball this all
+# exists to protect carries none anywhere, so nothing is pruned there.
+( cd "$src" && find . -mindepth 1 -name .git -prune \
+      -o -type d -exec test -e '{}/.git' ';' -prune \
+      -o \( -name 'meson.build' -o -name 'meson_options.txt' \) -print ) \
   | sed 's|^\./||' | LC_ALL=C sort -u > "$work/meson-have"
 tr -d '\r' < "$tree/Makefile.am" | sed 's/#.*//' | tr ' \t\\' '\n\n\n' \
   | grep -E '(^|/)meson(\.build|_options\.txt)$' | LC_ALL=C sort -u \
