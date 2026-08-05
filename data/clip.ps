@@ -1,17 +1,16 @@
 //.internaldict /QUIET known { }{ (loading clip.ps...)print } ifelse
 
-/initclip {
-    %(initclip)=
-
-    %stash current path and matrix on stack
-    %graphicsdict /currgstate get 
-    %    dup /currpath get   % currpath
-    %    exch /currmatrix get % currmatrix
+% -  initclip  -
+% Replace the clip region with the whole page (PLRM 8.2). The device
+% reports its dimensions in device pixels, so the rectangle is built with
+% the identity in force and the matrix put back afterwards; the program's
+% own current path is stashed over the construction and restored, since
+% initclip changes the clip and nothing else. The corners are walked
+% counter-clockwise so the region has the winding the painters expect.
+/initclip [ ] {
     graphicsdict /currgstate get /currpath get
     matrix currentmatrix
 
-    %construct the initial clipping path CCW
-    % with an identity matrix (ie. userspace==devicespace)
     newpath
     matrix setmatrix
     DEVICE /dimensions get
@@ -22,35 +21,11 @@
     neg 0 rlineto
     closepath
 
-    %move path to clipregion, restore matrix and path from stack
-    %graphicsdict /currgstate get
-    %    dup dup /currpath get /clipregion exch put
-    %    dup 3 2 roll /currmatrix exch put
-    %    exch /currpath exch put
-    %pstack() =
     setmatrix
     graphicsdict /currgstate get
         dup dup /currpath get /clipregion exch put
         exch /currpath exch put
-} %pop
-{
-    gsave
-        newpath
-        DEVICE /dimensions get
-        aload pop
-        idtransform
-        abs exch abs exch
-        0 0 moveto
-        1 index 0 rlineto
-        0 exch rlineto
-        neg 0 rlineto
-        closepath
-    graphicsdict /currgstate get /currpath get
-    grestore
-    graphicsdict /currgstate get exch
-    /clipregion exch put
-} pop
-def
+} //.xpostsys /.defop get exec
 
 
 /clip [ ] {

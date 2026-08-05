@@ -39,10 +39,6 @@ currentglobal true setglobal
 % reads it when it wraps them.
 .xpostsys /.opsigs 200 dict put
 
-% Four operators are defined in a form .defop cannot take -- inside a
-% dictionary being built, or put into userdict directly -- so their
-% statements are recorded here beside the mechanism instead.
-.xpostsys /.opsigs get /initclip [ ] put
 
 % The operators whose bodies arrived already read-only. A body is bound
 % once the whole set has been promoted, which is the only moment at which

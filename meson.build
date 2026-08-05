@@ -1487,6 +1487,13 @@ test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
   args: [ meson.current_source_dir() ])
 
+# An operator's operand statement is recorded where the operator is
+# defined, through the one mechanism that files it. Four operators once
+# could not reach it and had their statements written by hand instead.
+test('opsigs-writer',
+  find_program('tests/check-opsigs-writer.sh'),
+  args: [ meson.current_source_dir() ])
+
 # The complement of dict-homes: that guards a registered member against
 # moving, this guards a reference against landing nowhere. Every bare
 # fetch from a private namespace must name something the namespace holds,
