@@ -491,7 +491,7 @@ int _currentpoint(Xpost_Context *ctx)
     _path_get_coords(p, last, co, n);
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(co[n - 2]));
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(co[n - 1]));
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(ctx->opcode_shortcuts.itransform));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, itransform));
 
     return 0;
 }
@@ -1993,7 +1993,7 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     {
         Xpost_Object true_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
         ret = xpost_array_put(ctx, true_clause, 0,
-                              xpost_operator_cons(ctx, "moveto", NULL, 0, 0));
+                              XPOST_OP(ctx, moveto));
         if (ret)
             return ret;
         ret = xpost_array_put(ctx, _arc_start_proc, 1, true_clause);
@@ -2003,7 +2003,7 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     {
         Xpost_Object false_clause = xpost_object_cvx(xpost_array_cons(ctx, 1));
         ret = xpost_array_put(ctx, false_clause, 0,
-                              xpost_operator_cons(ctx, "lineto", NULL, 0, 0));
+                              XPOST_OP(ctx, lineto));
         if (ret)
             return ret;
         ret = xpost_array_put(ctx, _arc_start_proc, 2, false_clause);
@@ -2011,5 +2011,5 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
             return ret;
     }
     return xpost_array_put(ctx, _arc_start_proc, 3,
-                           xpost_operator_cons(ctx, "ifelse", NULL, 0, 0));
+                           XPOST_OP(ctx, opifelse));
 }

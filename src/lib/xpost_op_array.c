@@ -324,14 +324,14 @@ int xpost_op_array_proc_forall(Xpost_Context *ctx,
     /* loop frame: the sentinel forall operator (which exit searches
        for) under literal state that the iterate operator consumes */
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                xpost_operator_cons_opcode(ctx->opcode_shortcuts.forall)))
+                XPOST_OP(ctx, forall)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(P)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(A)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                xpost_operator_cons_opcode(ctx->opcode_shortcuts.arrayforallcont)))
+                XPOST_OP(ctx, arrayforallcont)))
         return execstackoverflow;
     return 0;
 }
@@ -377,7 +377,7 @@ static int xpost_op_array_forall_iterate(Xpost_Context *ctx)
         es_top->data[es_top->top - 1] =
             xpost_object_cvlit(xpost_object_get_interval(A, 1, A.comp_.sz - 1));
         es_top->data[es_top->top] =
-            xpost_operator_cons_opcode(ctx->opcode_shortcuts.arrayforallcont);
+            XPOST_OP(ctx, arrayforallcont);
         es_top->data[es_top->top + 1] = xpost_object_cvx(P);
         es_top->top += 2;
         return 0;
@@ -403,7 +403,7 @@ static int xpost_op_array_forall_iterate(Xpost_Context *ctx)
             xpost_object_cvlit(xpost_object_get_interval(A, 1, A.comp_.sz - 1))))
         return execstackunderflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                xpost_operator_cons_opcode(ctx->opcode_shortcuts.arrayforallcont)))
+                XPOST_OP(ctx, arrayforallcont)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(P)))
         return execstackoverflow;
@@ -492,11 +492,9 @@ int xpost_oper_init_array_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)xpost_op_array_int_get, 1, 2,
             arraytype, integertype);
     INSTALL;
-    ctx->opcode_shortcuts.opget = op.mark_.padw;
     op = xpost_operator_cons(ctx, "put", (Xpost_Op_Func)xpost_op_array_int_any_put, 0, 3,
             arraytype, integertype, anytype);
     INSTALL;
-    ctx->opcode_shortcuts.opput = op.mark_.padw;
     op = xpost_operator_cons(ctx, "getinterval", (Xpost_Op_Func)xpost_op_array_int_int_getinterval, 1, 3,
             arraytype, integertype, integertype);
     INSTALL;
@@ -519,7 +517,6 @@ int xpost_oper_init_array_ops (Xpost_Context *ctx,
             arraytype, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "forall.array.iterate", (Xpost_Op_Func)xpost_op_array_forall_iterate, 0, 0);
-    ctx->opcode_shortcuts.arrayforallcont = op.mark_.padw;
 
     return 0;
 }

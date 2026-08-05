@@ -200,11 +200,11 @@ int _init_matrix(Xpost_Context *ctx)
     /* schedule the operators themselves: a name would resolve through the
        dict stack and could be captured by a user definition */
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_operator_cons(ctx, "setmatrix", NULL, 0, 0));
+                     XPOST_OP(ctx, setmatrix));
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_operator_cons(ctx, "defaultmatrix", NULL, 0, 0));
+                     XPOST_OP(ctx, defaultmatrix));
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_operator_cons(ctx, "matrix", NULL, 0, 0));
+                     XPOST_OP(ctx, matrix));
     /*
     _matrix(ctx);
     _default_matrix(ctx, xpost_stack_pop(ctx->lo, ctx->os));
@@ -248,7 +248,7 @@ int _default_matrix(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "copy", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, copy));
     return 0;
 }
 
@@ -264,7 +264,7 @@ int _current_matrix(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "copy", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, copy));
     return 0;
 }
 
@@ -285,10 +285,10 @@ int _set_matrix(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, ctm);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "pop", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, oppop));
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "copy", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, copy));
     return 0;
 }
 
@@ -307,7 +307,7 @@ int _translate(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "concat", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, concat));
     return 0;
 }
 
@@ -341,7 +341,7 @@ int _scale(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "concat", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, concat));
     return 0;
 }
 
@@ -374,7 +374,7 @@ int _rotate(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, psmat);
     /* schedule the operator itself: a name would resolve through the
        dict stack and could be captured by a user definition */
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "concat", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, concat));
     return 0;
 }
 
@@ -641,7 +641,6 @@ int xpost_oper_init_matrix_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_rotate, 0, 1,
                              floattype);
-    ctx->opcode_shortcuts.rotate = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_mat_rotate, 1, 2,
                              floattype, arraytype);
@@ -652,12 +651,10 @@ int xpost_oper_init_matrix_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "concatmatrix", (Xpost_Op_Func)_concat_matrix, 1, 3,
                              arraytype, arraytype, arraytype);
-    ctx->opcode_shortcuts.concatmatrix = op.mark_.padw;
     INSTALL;
 
     op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_transform, 2, 2,
                              floattype, floattype);
-    ctx->opcode_shortcuts.transform = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_mat_transform, 2, 3,
                              floattype, floattype, arraytype);
@@ -670,7 +667,6 @@ int xpost_oper_init_matrix_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_itransform, 2, 2,
                              floattype, floattype);
-    ctx->opcode_shortcuts.itransform = op.mark_.padw;
     INSTALL;
     op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_mat_itransform, 2, 3,
                              floattype, floattype, arraytype);

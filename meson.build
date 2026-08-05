@@ -1347,6 +1347,15 @@ test('fused-equivalence',
   args: [ xpost_exe, files('tests/fused_equivalence_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# ... and the complement of the op-references test: that one shows the rule
+# holding where it was broken, this one shows it cannot be broken again.
+# No name pushed for execution, the reference table reached only through its
+# accessors, and every surviving by-string lookup on a register that only
+# shrinks.
+test('check-op-references',
+  find_program('tests/check-op-references.sh'),
+  args: [ meson.current_source_dir() ])
+
 # ... and every fused operator must actually have those cases: adding one
 # to the fast path without equivalence coverage fails here.
 test('check-fused-ops',

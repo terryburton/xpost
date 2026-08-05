@@ -109,19 +109,15 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     Xpost_Operator *optab;
     unsigned int optadr;
 
-    /* Mark every opcode shortcut uncaptured before any module registers.
-       Zero cannot serve as the marker: it is a valid opcode -- the first
-       operator registered holds it -- so a field left zero would be
-       indistinguishable from a genuine capture of that operator. An
-       unset field must also never match a real opcode in the fused
-       comparisons, which -1 satisfies. */
-    {
-        int *sc = (int *)&ctx->opcode_shortcuts;
-        size_t n_ = sizeof ctx->opcode_shortcuts / sizeof *sc;
-        size_t i_;
-        for (i_ = 0; i_ < n_; i_++)
-            sc[i_] = -1;
-    }
+    /* Mark every reference-table entry uncaptured before any module
+       registers. Zero cannot serve as the marker: it is a valid opcode --
+       the first operator registered holds it -- so an entry left zero
+       would be indistinguishable from a genuine capture of that operator.
+       An unset entry must also never match a real opcode where the
+       procedure walker recognises one, which -1 satisfies. */
+#define XPOST_OP_REF_UNSET(ref, refname) XPOST_OP_CODE(ctx, ref) = -1;
+    XPOST_OP_REFS(XPOST_OP_REF_UNSET)
+#undef XPOST_OP_REF_UNSET
 
     sd = xpost_dict_cons (ctx, SDSIZE);
     if (xpost_object_get_type(sd) == nulltype)
@@ -258,21 +254,21 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
         return 0;
     }
 
-    /* A shortcut still holding the uncaptured marker names no
-       operator. */
+    /* An entry still holding the uncaptured marker names an operator no
+       module registered, so nothing the interpreter schedules through it
+       would be an operator at all. */
     {
-        const int *sc = (const int *)&ctx->opcode_shortcuts;
-        size_t nshortcuts = sizeof ctx->opcode_shortcuts / sizeof *sc;
-        size_t i;
-        for (i = 0; i < nshortcuts; i++)
-        {
-            if (sc[i] == -1)
-            {
-                XPOST_LOG_ERR("opcode shortcut %u was never captured",
-                              (unsigned int)i);
-                return 0;
-            }
+        int uncaptured = 0;
+#define XPOST_OP_REF_CHECK(ref, refname) \
+        if (XPOST_OP_CODE(ctx, ref) == -1) \
+        { \
+            XPOST_LOG_ERR("no operator named %s to reach for", refname); \
+            uncaptured = 1; \
         }
+        XPOST_OP_REFS(XPOST_OP_REF_CHECK)
+#undef XPOST_OP_REF_CHECK
+        if (uncaptured)
+            return 0;
     }
 
 #ifdef DEBUGOP

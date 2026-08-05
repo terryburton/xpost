@@ -639,12 +639,10 @@ int xpost_oper_init_type_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "type", (Xpost_Op_Func)Atype, 1, 1, anytype);
     INSTALL;
-    ctx->opcode_shortcuts.optype = op.mark_.padw;
     op = xpost_operator_cons(ctx, "cvlit", (Xpost_Op_Func)Acvlit, 1, 1, anytype);
     INSTALL;
     op = xpost_operator_cons(ctx, "cvx", (Xpost_Op_Func)Acvx, 1, 1, anytype);
     INSTALL;
-    ctx->opcode_shortcuts.cvx = op.mark_.padw;
     op = xpost_operator_cons(ctx, "xcheck", (Xpost_Op_Func)Axcheck, 1, 1, anytype);
     INSTALL;
     op = xpost_operator_cons(ctx, "executeonly", (Xpost_Op_Func)Aexecuteonly, 1, 1, anytype);

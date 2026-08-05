@@ -178,7 +178,7 @@ int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 
     /* continue */
     xpost_stack_push(ctx->lo, ctx->os, context);
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "join", NULL,0,0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, join));
     ctx->state = C_WAIT;
     return contextswitch;
 }
