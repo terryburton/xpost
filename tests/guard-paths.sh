@@ -16,15 +16,18 @@
 # before use. tests/check-guard-paths.sh holds them to that.
 
 guard_require_dir() {
-    if [ ! -d "$1" ]; then
-        echo "FAILURES: $2 is not a directory: $1"
+    if [ ! -d "$1" ] || [ ! -r "$1" ]; then
+        echo "FAILURES: $2 is not a readable directory: $1"
         exit 1
     fi
 }
 
+# -s alone answers yes for a file that cannot be opened, and a guard that
+# cannot read its own register reports whatever an empty read gives it,
+# which is usually agreement.
 guard_require_file() {
-    if [ ! -s "$1" ]; then
-        echo "FAILURES: $2 is missing or empty: $1"
+    if [ ! -s "$1" ] || [ ! -r "$1" ]; then
+        echo "FAILURES: $2 is missing, empty or unreadable: $1"
         exit 1
     fi
 }
@@ -43,6 +46,30 @@ guard_require_srcroot() {
         if [ -f "$1/init.ps" ]; then
             echo "      that looks like the data directory itself; pass its parent"
         fi
+        exit 1
+    fi
+    # Two directories of the right names prove nothing: an empty pair
+    # passes, and the interpreter then finds the real tree by its own
+    # search and answers about that instead -- a true report about a tree
+    # nobody asked for. Name a file that only the tree being checked has.
+    if [ ! -r "$1/data/init.ps" ] || [ ! -r "$1/tests/guard-paths.sh" ]; then
+        echo "FAILURES: not a source root (data/init.ps and tests/guard-paths.sh must be readable under it): $1"
+        exit 1
+    fi
+}
+
+# A guard whose scratch directory was never made writes its intermediate
+# files to /, reads nothing back, and reports agreement between two empty
+# sets. Checked here so every guard that sources this is covered without
+# each having to remember.
+# Sets `work` in the caller, rather than answering on stdout: an exit
+# inside a command substitution ends only the subshell, so a guard that
+# wrote `work=$(guard_workdir)` would print the refusal and carry on with
+# an empty path -- which is the failure this exists to stop.
+guard_workdir() {
+    work=$(mktemp -d 2>/dev/null) || work=
+    if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
+        echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
         exit 1
     fi
 }

@@ -34,7 +34,7 @@ src=${2:?usage: check-error-names.sh <xpost> <srcroot>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 

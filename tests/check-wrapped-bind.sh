@@ -37,7 +37,7 @@ golden=${3:?usage: check-wrapped-bind.sh <xpost> <srcroot> <golden>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 
@@ -86,7 +86,7 @@ if [ -z "${n:-}" ] || [ "$n" -lt 100 ]; then
     exit 1
 fi
 
-if [ ! -s "$golden" ]; then
+if [ ! -s "$golden" ] || [ ! -r "$golden" ]; then
     echo "FAILURES: the declared list $golden is empty; the check is unusable"
     exit 1
 fi

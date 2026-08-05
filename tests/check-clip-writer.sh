@@ -37,7 +37,7 @@ guard_require_srcroot "$src"
 guard_require_file "$src/data/clip.ps" "the clip module"
 guard_require_file "$src/data/gstate.ps" "the graphics state module"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 

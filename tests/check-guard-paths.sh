@@ -20,7 +20,7 @@ src=${1:?usage: check-guard-paths.sh <srcroot>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 
 # a directory that is emphatically not a source root, and looks like the

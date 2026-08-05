@@ -52,7 +52,7 @@ guard_require_dir "$lib" "the library source directory"
 header="$lib/xpost_memory.h"
 guard_require_file "$header" "the header holding the accessors"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 

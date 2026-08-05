@@ -39,7 +39,7 @@ guard_require_file "$table" "the header holding XPOST_OP_REFS"
 register="$src/tests/op_lookups.golden"
 guard_require_file "$register" "the run-time operator lookup register"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 

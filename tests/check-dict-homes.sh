@@ -19,7 +19,7 @@ src=$1
 guard_require_srcroot "$src"
 golden="$src/tests/dict_homes.golden"
 # a missing or empty register would make every check below vacuous
-if [ ! -s "$golden" ]; then
+if [ ! -s "$golden" ] || [ ! -r "$golden" ]; then
     echo "FAILURES: no usable register at $golden"
     exit 1
 fi

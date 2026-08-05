@@ -274,7 +274,7 @@ done
 #     .writepage read the row array too, but nothing reaches them except
 #     Create and Emit, which are on the list, so a device that overrides
 #     those never runs them.
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 sed -n 's/^#define XPOST_DEV_RASTER_SLOTS { \(.*\) }$/\1/p' \
     "$libdir/xpost_dev_driver.h" | tr -d '" ' | tr ',' '\n' \

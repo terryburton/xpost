@@ -33,7 +33,7 @@ guard_require_srcroot "$src"
 golden="$src/tests/graphicsdict_slots.golden"
 [ -s "$golden" ] || { echo "FAILURES: no usable register at $golden"; exit 1; }
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')
 

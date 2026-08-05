@@ -36,7 +36,7 @@ guard_require_file "$main_c" "the option parser"
 guard_require_file "$interp_c" "the interpreter"
 guard_require_file "$init_ps" "the interpreter's PostScript"
 
-work=$(mktemp -d)
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 
 fail=0
