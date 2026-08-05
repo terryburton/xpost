@@ -392,7 +392,7 @@ int grok(Xpost_Context *ctx,
                             }
                     }
                     if (!defer) break;
-                    if (sp - s > NBUF)
+                    if (sp - s >= NBUF)
                     {
                         XPOST_LOG_ERR("string exceeds buf");
                         return limitcheck;
@@ -544,7 +544,7 @@ int grok(Xpost_Context *ctx,
                         return syntaxerror;
                     }
                     d |= c;
-                    if (sp - s > NBUF)
+                    if (sp - s >= NBUF)
                     {
                         XPOST_LOG_ERR("hexstring exceeds buf");
                         return limitcheck;

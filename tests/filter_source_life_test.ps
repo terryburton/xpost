@@ -117,3 +117,27 @@ scr deletefile
 (filtertgt.scratch) deletefile
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+
+% --- an entity a released stream once used is not written through again ---
+%
+% A filter over a string builds a source stream of its own, with its own
+% entity. Closing the filter releases that stream, and the stream
+% remembers the entity number so it can clear it -- but the entity may
+% have been reclaimed and handed out again by then, and the number now
+% names something else. The write lands in whatever holds it.
+%
+% Here the surviving filter is closed after a restore has freed its
+% source and a new file has taken the number. The new file must still be
+% open afterwards: it is a different object and nothing the filter does
+% may reach it.
+/lifescratch (filter_source_life.scratch) def
+/w lifescratch (w) file def w (hello) writestring w closefile
+save
+  (41>) /ASCIIHexDecode filter
+exch restore
+/victim lifescratch (r) file def
+victim status (a fresh file opens) assert
+closefile
+victim status (closing the filter above a released source leaves an unrelated file alone) assert
+victim closefile
+

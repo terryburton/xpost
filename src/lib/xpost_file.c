@@ -1328,13 +1328,25 @@ _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
 
 /* Clear the entity that points at this stream, just before the struct
    goes. Entity zero is the free list, never a file, so it stands for "no
-   entity" on a stream that never had one. */
+   entity" on a stream that never had one.
+
+   The number is remembered, not held: the entity it named can be
+   reclaimed while this struct is still alive, and the free list hands
+   the same number out again to whatever asks next. Being in range says
+   only that some entity is there, not that it is still this stream's, so
+   the tag is what decides. Without that, releasing a stream writes a
+   pointer's worth of zeroes into whichever object holds the number
+   now -- a file that reports itself open and then answers nothing, or a
+   string, or a link in the free list. */
 static void
 _file_forget_entity(Xpost_Memory_File *mem, Xpost_File *fp)
 {
     Xpost_File *none = NULL;
+    unsigned int tag;
 
     if (!fp->ent || !xpost_ent_valid(mem, fp->ent))
+        return;
+    if (!xpost_memory_table_get_tag(mem, fp->ent, &tag) || tag != filetype)
         return;
     if (!xpost_memory_put(mem, fp->ent, 0, sizeof none, &none))
         XPOST_LOG_ERR("cannot clear the file pointer of a released stream");
@@ -5101,6 +5113,13 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
            struct alive instead, and frees it when it closes. */
         if (fp->refs == 0)
             free(fp);
+        else
+            /* The struct outlives the object, but the entity below does
+               not: it is cleared just after this and can then be handed
+               out again to whatever asks. Forget the number now, or
+               releasing this struct later writes through whatever holds
+               it by then. */
+            fp->ent = 0;
         fp = NULL;
         ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof fp, &fp);
         if (!ret)
