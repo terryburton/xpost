@@ -230,6 +230,64 @@ gsave
     105 105 inkat not (a fill inside the gsave stays inside its own clip) assert
 grestore
 
+% --- a region painted in pieces covers what one fill covers -----------
+% The rule two device regions meet by is stated at .regionmeet, and this
+% is the case that settles a boundary question about it. A tiling pattern
+% paints its region as a clip and then meets every cell against it, so
+% the pixels it ends up marking are the region intersection's answer
+% several times over; a solid fill of the same path meets nothing and
+% marks the pixels PLRM 7.5.1 asks for directly. The two have to agree,
+% and the coordinates below are deliberately fractional, since a rule
+% that snapped where it should not would agree everywhere else.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/DEV3 96 96 .privatedict /newPGMIMAGEdevice get exec def
+DEV3 begin
+    /defaultmatrix [ 1 0 0 -1 0 96 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV3 put
+graphicsdict /currgstate get /device DEV3 put
+
+/snapshot { % -  .  string   (one byte per pixel, 1 where inked)
+    9216 string
+    0 1 95 { /sy exch def
+        0 1 95 { /sx exch def
+            dup sy 96 mul sx add
+            sx sy DEV3 dup /GetPix get exec 128 lt { 1 }{ 0 } ifelse
+            put
+        } for
+    } for
+} bind def
+/inkcount { % string  .  n
+    0 exch { add } forall
+} bind def
+
+/shapes {
+    newpath 10.3 12.7 moveto 70.4 12.7 lineto
+            70.4 60.2 lineto 10.3 60.2 lineto closepath fill
+    newpath 20 65 moveto 85.6 72.25 lineto 45.5 92.9 lineto closepath fill
+} bind def
+
+initgraphics erasepage
+0 setgray shapes
+/solidink snapshot def
+
+initgraphics erasepage
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 8 8] /XStep 8 /YStep 8
+   /PaintProc { begin 0 setgray 0 0 8 8 rectfill end } >>
+matrix makepattern
+/Pattern setcolorspace setcolor
+shapes
+/pattink snapshot def
+
+solidink inkcount 0 gt (the solid fill marked something) assert
+solidink pattink eq
+    (a pattern fill covers the pixels a solid fill of the same path covers)
+    assert
+
 count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit
