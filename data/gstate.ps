@@ -163,7 +163,7 @@ setglobal
 graphicsdict begin
     /gptr gptr 1 add def
     gptr gstackarray length ge { /gsave cvx /limitcheck signalerror } if
-    gstackarray gptr gstate currentgstate put % push copy on stack
+    gstackarray gptr gstate put % push copy on stack
     currgstate /currpath 2 copy get .copypath put % make a new working copy of path
 end
 } //.xpostsys /.defop get exec
@@ -200,8 +200,12 @@ end
 % the graphics state back to its defaults, and nothing else: the
 % specification gives the equivalent code, and it neither touches raster
 % memory nor reports what it did
+%
+% The defaults come from the template directly. gstate is a copy of the
+% current state, so setting the state from one would reinstate what is
+% already in force.
 /initgraphics [ ] {
-    gstate setgstate
+    .privatedict /.gstatetemplate get exec dup length dict copy setgstate
     initmatrix
     newpath
     initclip
@@ -214,9 +218,15 @@ end
 } //.xpostsys /.defop get exec
 
 % -  gstate  gstate
-% create graphics state object
+% A copy of the current graphics state, as a new gstate object (PLRM
+% 8.2). The template supplies the shape -- every slot the state has, and
+% freshly allocated matrices -- and the current state supplies the
+% values; the deep copy is gstatecopy's, the same one gsave and grestore
+% carry a state by, so the object holds its own arrays rather than
+% sharing the live state's.
 /gstate [ ] {
     .privatedict /.gstatetemplate get exec dup length dict copy
+    graphicsdict /currgstate get exch //.xpostsys /gstatecopy get exec
 } //.xpostsys /.defop get exec
 
 % gstate  setgstate  -

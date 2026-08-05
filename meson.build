@@ -890,6 +890,15 @@ test('gstate-matrix',
   args: [ xpost_exe, files('tests/gstate_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The gstate object: gstate returns a copy of the current graphics state,
+# and setgstate takes it back out. A copy holding the defaults instead
+# answers every parameter with the default and looks like a state that
+# was reset -- and the default clip region admits no ink at all.
+test('gstate-object',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gstate_object_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Every colour space family through every colour operator. Each family
 # decides for itself how many components it takes and how a colour in it
 # is recorded, so one working says little about the next.

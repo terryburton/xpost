@@ -1,0 +1,190 @@
+% The gstate object: what gstate puts in one and what setgstate takes
+% back out. Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% gstate returns a copy of the current graphics state (PLRM 8.2). Every
+% parameter of that state is carried by the copy, and whether a given one
+% is carried is a property of that parameter rather than of the
+% mechanism -- so each is set to a value distinguishable from its default
+% before the copy is taken, the state is then reset, and the parameter is
+% looked at again after setgstate has put the copy back. A copy that
+% carried the defaults instead would answer every one of these with the
+% default and look like a state that had simply been reset.
+%
+% The clip is the parameter with the most riding on it: it is not a
+% number that comes back wrong but a region, and a region that comes back
+% as the empty path is one that admits no ink at all.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+/assertnear { % val expected (name)  .  -
+    3 1 roll sub abs 0.001 lt exch assert
+} def
+/samearray { % [a] [b]  .  bool
+    /sa.b exch def /sa.a exch def
+    sa.a length sa.b length eq {
+        true 0 1 sa.a length 1 sub {
+            /sa.i exch def
+            sa.a sa.i get sa.b sa.i get eq not { pop false exit } if
+        } for
+    }{ false } ifelse
+} def
+
+% ---------------------------------------------- the state the copy carries
+
+initgraphics
+3 setlinewidth
+2 setlinecap
+1 setlinejoin
+7 setmiterlimit
+[ 4 2 ] 1 setdash
+0.5 setflat
+0.25 0.5 0.75 setrgbcolor
+2 3 scale
+newpath 10 20 moveto 30 40 lineto
+
+% where a point lands under the CTM in force, to compare with where it
+% lands after the round trip: the default matrix is the device's, so the
+% device coordinates themselves are not the test's to name
+1 1 transform /wanty exch def /wantx exch def
+
+/G gstate def
+
+% everything moved away from what the copy holds, by more than a reset
+initgraphics
+1 setlinewidth
+
+G setgstate
+
+currentlinewidth 3 (the line width is the one the copy was taken at) assertnear
+currentlinecap 2 eq (the line cap is carried) assert
+currentlinejoin 1 eq (the line join is carried) assert
+currentmiterlimit 7 (the miter limit is carried) assertnear
+currentflat 0.5 (the flatness is carried) assertnear
+currentdash
+    exch [ 4 2 ] samearray exch 1 eq and
+    (the dash pattern and offset are carried) assert
+currentrgbcolor
+    /b0 exch def /g0 exch def /r0 exch def
+r0 0.25 (the red component is carried) assertnear
+g0 0.5 (the green component is carried) assertnear
+b0 0.75 (the blue component is carried) assertnear
+
+% the transformation matrix travels with the state, so a point measures
+% the same on either side of the round trip
+1 1 transform /ty1 exch def /tx1 exch def
+tx1 wantx (the CTM comes back in x) assertnear
+ty1 wanty (the CTM comes back in y) assertnear
+
+% "if a nonempty current path exists at the time that gsave, gstate, or
+% currentgstate is executed, that path will be reinstated by the
+% corresponding grestore or setgstate" (PLRM 8.2)
+% a state carrying no path at all answers pathbbox with an error rather
+% than a wrong number, so the reading is taken through the error and the
+% stack put back where it was: the assertions after this one have as much
+% to say as this one does
+/depth0 count def
+{ pathbbox } stopped {
+    (FAIL: setgstate left no current path\n) print
+    /failcount failcount 1 add store
+    /px0 0 def /py0 0 def /px1 0 def /py1 0 def
+}{
+    /py1 exch def /px1 exch def /py0 exch def /px0 exch def
+} ifelse
+count depth0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+px0 10 (the current path comes back with the state) assertnear
+py0 20 (the current path's low corner comes back) assertnear
+px1 30 (the current path's far corner comes back) assertnear
+py1 40 (the current path's high corner comes back) assertnear
+
+% --------------------------------------------------- the copy is a copy
+% The object holds its own values: what the state does afterwards is not
+% supposed to reach into it, and setgstate is supposed to reinstate what
+% was there when the copy was taken rather than what is there now.
+
+initgraphics
+5 setlinewidth
+/H gstate def
+9 setlinewidth
+H setgstate
+currentlinewidth 5 (the copy holds the value it was taken with) assertnear
+
+% two copies taken at different moments stay different
+initgraphics
+2 setlinewidth /H1 gstate def
+6 setlinewidth /H2 gstate def
+H1 setgstate currentlinewidth 2 (the earlier copy is still the earlier one) assertnear
+H2 setgstate currentlinewidth 6 (the later copy is still the later one) assertnear
+
+% --------------------------------------------- initgraphics still resets
+% initgraphics is the state's defaults and nothing else; it cannot be
+% written in terms of a copy of the state it is resetting.
+
+initgraphics
+4 setlinewidth 2 setlinecap [ 3 1 ] 0 setdash 0.75 setgray
+initgraphics
+currentlinewidth 1 (initgraphics resets the line width) assertnear
+currentlinecap 0 eq (initgraphics resets the line cap) assert
+currentdash exch length 0 eq exch 0 eq and
+    (initgraphics resets the dash pattern) assert
+currentgray 0 (initgraphics resets the colour) assertnear
+
+% ------------------------------------------------------------- the clip
+% A region is the parameter whose loss does not read as a wrong number.
+% The template's clip region is the empty path, and a region that admits
+% nothing admits nothing: a page painted under a state carrying it comes
+% out with no ink on it at all. So the check is what reached the raster.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+/DEV 300 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/boxpath { % x0 y0 x1 y1  .  -
+    /bp.y1 exch def /bp.x1 exch def /bp.y0 exch def /bp.x0 exch def
+    newpath bp.x0 bp.y0 moveto bp.x1 bp.y0 lineto
+            bp.x1 bp.y1 lineto bp.x0 bp.y1 lineto closepath
+} bind def
+/wide { 0 0 300 300 boxpath } bind def
+/inkat { % ux uy  .  bool
+    transform floor cvi exch floor cvi exch
+    DEV dup /GetPix get exec 128 lt
+} bind def
+/inkcount { % -  .  n
+    0
+    0 10 299 { /ic.y exch def
+        0 10 299 { /ic.x exch def
+            ic.x ic.y DEV dup /GetPix get exec 128 lt { 1 add } if
+        } for
+    } for
+} bind def
+
+% the clip in force when the copy was taken is the clip the copy carries
+initgraphics erasepage
+100 100 200 200 boxpath clip
+/GC gstate def
+GC setgstate
+wide 0 setgray fill
+inkcount 0 gt (a fill under a clip carried by a gstate marks the page) assert
+150 150 inkat (the carried clip admits ink inside itself) assert
+250 250 inkat not (the carried clip keeps ink out of the rest) assert
+
+% and it is that clip, not whatever clip is in force at setgstate
+initgraphics erasepage
+100 100 200 200 boxpath clip
+/GC2 gstate def
+newpath 210 210 260 260 boxpath clip
+GC2 setgstate
+wide 0 setgray fill
+150 150 inkat (setgstate installs the clip its operand carries) assert
+230 230 inkat not (setgstate replaces the clip that was in force) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
