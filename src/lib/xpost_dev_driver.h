@@ -101,7 +101,10 @@ xpost_dev_num_to_byte(Xpost_Object obj)
 /* Load the device's private C struct out of the string stored under
    key in the instance dictionary. Returns 1 on success and leaves the
    backing string in *privatestr for a later put; returns 0 when the
-   instance carries no such string (the caller reports undefined). */
+   instance carries no such string, or one too small to hold the struct
+   (the caller reports undefined). A short string is reachable: the
+   instance dictionary is an ordinary dictionary, and what it holds under
+   this key is whatever was last stored there. */
 static inline int
 xpost_dev_private_get(Xpost_Context *ctx,
                       Xpost_Object devdic,
@@ -113,22 +116,24 @@ xpost_dev_private_get(Xpost_Context *ctx,
     *privatestr = xpost_dict_get(ctx, devdic, key);
     if (xpost_object_get_type(*privatestr) != stringtype)
         return 0;
-    xpost_memory_get(xpost_context_select_memory(ctx, *privatestr),
-                     xpost_object_get_ent(*privatestr), 0,
-                     size, priv);
-    return 1;
+    return xpost_memory_get(xpost_context_select_memory(ctx, *privatestr),
+                            xpost_object_get_ent(*privatestr), 0,
+                            size, priv);
 }
 
-/* store the private struct back into its backing string */
-static inline void
+/* Store the private struct back into its backing string. Returns 1 on
+   success, 0 when the string will not hold it -- the same reachable
+   case xpost_dev_private_get answers, seen from the other side, and the
+   device state the caller was about to record is then lost. */
+static inline XPOST_MUST_CHECK int
 xpost_dev_private_put(Xpost_Context *ctx,
                       Xpost_Object privatestr,
                       const void *priv,
                       size_t size)
 {
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     size, priv);
+    return xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                            xpost_object_get_ent(privatestr), 0,
+                            size, priv);
 }
 
 /* The rectangle FillRect paints, as inclusive device-clipped bounds:

@@ -92,8 +92,9 @@ int _psmat2xmat(Xpost_Context *ctx,
        the bulk read below run off the end of its storage (PLRM: rangecheck) */
     if (xpost_object_get_type(psm) != arraytype || psm.comp_.sz != 6)
         return rangecheck;
-    xpost_memory_get(xpost_context_select_memory(ctx, psm),
-            xpost_object_get_ent(psm), 0, sizeof arr, arr);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, psm),
+                          xpost_object_get_ent(psm), 0, sizeof arr, arr))
+        return rangecheck;
     for (i = 0; i < 6; i++)
     {
         if (xpost_object_get_type(arr[i]) == integertype)
@@ -158,7 +159,8 @@ int _xmat2psmat(Xpost_Context *ctx,
        save -- the CTM, under scale/concat/rotate -- is not reverted by the
        matching restore, so a transform set inside a save leaks past it. */
     (void)xpost_save_cow(mem, arraytype, psm.comp_.sz, ent);
-    xpost_memory_put(mem, ent, 0, sizeof arr, arr);
+    if (!xpost_memory_put(mem, ent, 0, sizeof arr, arr))
+        return rangecheck;
     return 0;
 }
 

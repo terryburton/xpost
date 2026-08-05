@@ -142,9 +142,10 @@ int _event_handler(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     while (PeekMessage(&msg, private.window, 0, 0, PM_REMOVE))
     {
@@ -446,9 +447,10 @@ int _create_cont(Xpost_Context *ctx,
                                         devdic);
 
     /* save private data struct in string */
-    xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return VMerror;
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -502,9 +504,10 @@ int _putpix(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     /* check bounds */
     if ((x.int_.val < 0) ||
@@ -559,9 +562,10 @@ int _getpix(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (!rd)
@@ -638,8 +642,10 @@ int _drawline(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0, sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     _x1 = x1.int_.val;
     _x2 = x2.int_.val;
@@ -833,9 +839,10 @@ int _fillrect(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     if (x.int_.val >= private.width || y.int_.val >= private.height)
         return 0;
@@ -899,9 +906,10 @@ int _flush(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (!rd)
@@ -944,9 +952,10 @@ int _destroy(Xpost_Context *ctx,
     privatestr = xpost_dict_get(ctx, devdic, namePrivate);
     if (xpost_object_get_type(privatestr) == invalidtype)
         return undefined;
-    xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                     xpost_object_get_ent(privatestr), 0,
-                     sizeof(private), &private);
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0,
+                          sizeof(private), &private))
+        return undefined;
 
     xpost_context_install_event_handler(ctx, null, null);
 

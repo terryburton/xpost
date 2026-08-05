@@ -224,7 +224,8 @@ int _create_cont(Xpost_Context *ctx,
     }
 
     /* save private data struct in string */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -284,7 +285,8 @@ int _blendpix(Xpost_Context *ctx,
         p->blue = (unsigned char)(p->blue + ((b - p->blue) * c + 127) / 255);
     }
 
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }
@@ -326,7 +328,8 @@ int _putpix(Xpost_Context *ctx,
         private.buf->data[iy * private.width + ix] = pixel;
     }
 
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }
@@ -423,7 +426,8 @@ int _destroy(Xpost_Context *ctx,
         fclose(private.f);
     private.f = NULL;
     /* store the cleared pointers back so a repeated destroy is a no-op */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
     return 0;
 }
 

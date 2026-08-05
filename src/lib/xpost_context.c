@@ -145,7 +145,14 @@ int initglobal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->gl);
         return 0;
     }
-    xpost_memory_file_alloc(ctx->gl, 64, &safeadr); //safety buffer
+    /* safety buffer: nothing addresses it, but the allocation must
+       succeed for the memory file to be in the state the rest of
+       initialisation assumes */
+    if (!xpost_memory_file_alloc(ctx->gl, 64, &safeadr))
+    {
+        xpost_memory_file_exit(ctx->gl);
+        return 0;
+    }
     ret = xpost_free_init(ctx->gl);
     if (!ret)
     {
@@ -218,7 +225,14 @@ int initlocal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->lo);
         return 0;
     }
-    xpost_memory_file_alloc(ctx->lo, 64, &safeadr); //safety buffer
+    /* safety buffer: nothing addresses it, but the allocation must
+       succeed for the memory file to be in the state the rest of
+       initialisation assumes */
+    if (!xpost_memory_file_alloc(ctx->lo, 64, &safeadr))
+    {
+        xpost_memory_file_exit(ctx->lo);
+        return 0;
+    }
     ret = xpost_free_init(ctx->lo);
     if (!ret)
     {

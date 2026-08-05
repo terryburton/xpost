@@ -323,7 +323,8 @@ int _create_cont(Xpost_Context *ctx,
 
 
     /* save private data struct in string */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -382,7 +383,8 @@ int _putpix(Xpost_Context *ctx,
     }
 
     /* save private data struct in string */
-    xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }
@@ -641,7 +643,8 @@ int _destroy(Xpost_Context *ctx,
         private.c = NULL;
         /* store the cleared connection back so a repeated destroy is a
            no-op instead of disconnecting freed state */
-        xpost_dev_private_put(ctx, privatestr, &private, sizeof(private));
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
     }
 
     return 0;

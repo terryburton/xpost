@@ -64,7 +64,11 @@ XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem,
     unsigned int adr;
     Xpost_Stack *s;
 
-    xpost_memory_file_alloc(mem, sizeof(Xpost_Stack), &adr);
+    if (!xpost_memory_file_alloc(mem, sizeof(Xpost_Stack), &adr))
+    {
+        XPOST_LOG_ERR("cannot allocate a stack segment");
+        return 0;
+    }
     s = (Xpost_Stack *)(mem->base + adr);
     s->nextseg = 0;
     s->prevseg = adr;

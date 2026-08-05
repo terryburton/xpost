@@ -302,7 +302,7 @@ int xpost_memory_init(void);
  * This function initializes the memory file @p mem, possibly from
  * file specified by the file descriptor @p fd, if not -1.
  */
-XPOST_TEST_VISIBLE int xpost_memory_file_init(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_file_init(Xpost_Memory_File *mem,
                                       const char *fname,
                                       int fd,
                                       struct _Xpost_Context *(*xpost_interpreter_cid_get_context)(unsigned int cid),
@@ -331,7 +331,7 @@ XPOST_TEST_VISIBLE int xpost_memory_file_exit(Xpost_Memory_File *mem);
  *
  * This function increases the memory used by @p mem by @p sz bites.
  */
-XPOST_TEST_VISIBLE int xpost_memory_file_grow(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_file_grow(Xpost_Memory_File *mem,
                                       size_t sz);
 
 /**
@@ -351,7 +351,7 @@ XPOST_TEST_VISIBLE int xpost_memory_file_grow(Xpost_Memory_File *mem,
  * derived from mem->base. MUST recalculate all VM pointers after this
  * function.
  */
-XPOST_TEST_VISIBLE int xpost_memory_file_alloc(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_file_alloc(Xpost_Memory_File *mem,
                                        unsigned int sz,
                                        unsigned int *addr);
 
@@ -384,7 +384,7 @@ void xpost_memory_file_dump(const Xpost_Memory_File *mem);
  * MUST recalculate all VM pointers after this function.
  * See note in xpost_memory_file_alloc().
  */
-XPOST_TEST_VISIBLE int xpost_memory_table_init(Xpost_Memory_File *mem);
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_init(Xpost_Memory_File *mem);
 
 int xpost_memory_register_free_list_alloc_function(Xpost_Memory_File *mem,
                                                    int (*free_list_alloc)(struct Xpost_Memory_File *mem,
@@ -413,7 +413,7 @@ int xpost_memory_register_garbage_collect_function(Xpost_Memory_File *mem,
  * MUST recalculate all VM pointers after this function.
  * See note in xpost_memory_file_alloc().
  */
-XPOST_TEST_VISIBLE int xpost_memory_table_alloc(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_table_alloc(Xpost_Memory_File *mem,
                                         unsigned int sz,
                                         unsigned int tag,
                                         unsigned int *entity);
@@ -553,7 +553,7 @@ int xpost_memory_table_set_tag(Xpost_Memory_File *mem,
  * It is used to retrieve bytes from strings, objects from arrays,
  * FILE*s from files.
  */
-XPOST_TEST_VISIBLE int xpost_memory_get(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_get(Xpost_Memory_File *mem,
                                 unsigned int ent,
                                 unsigned int offset,
                                 unsigned int sz,
@@ -573,7 +573,7 @@ XPOST_TEST_VISIBLE int xpost_memory_get(Xpost_Memory_File *mem,
  * or other VM entity such as a file.
  * It is used to store bytes in strings, and objects in arrays.
  */
-XPOST_TEST_VISIBLE int xpost_memory_put(Xpost_Memory_File *mem,
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_memory_put(Xpost_Memory_File *mem,
                                 unsigned int ent,
                                 unsigned int offset,
                                 unsigned int sz,

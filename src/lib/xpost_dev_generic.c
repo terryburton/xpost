@@ -2427,9 +2427,10 @@ static int _pdf_acc_get(Xpost_Context *ctx, Xpost_Object devdic,
                                  priv, a, sizeof(*a));
 }
 
-static void _pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
+static XPOST_MUST_CHECK int
+_pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
 {
-    xpost_dev_private_put(ctx, priv, a, sizeof(*a));
+    return xpost_dev_private_put(ctx, priv, a, sizeof(*a));
 }
 
 /* Create the content accumulator and stash it in the device's /Private. Called
@@ -2449,7 +2450,8 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
         xpost_strbuf_free(&a.content);
         return VMerror;
     }
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
 }
 
@@ -2466,7 +2468,8 @@ static int _pdfput(Xpost_Context *ctx, Xpost_Object str, Xpost_Object devdic)
                               xpost_string_get_pointer(ctx, str), str.comp_.sz);
     if (ret)
         return ret;
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return 0;
 }
 
@@ -2485,7 +2488,8 @@ int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdic,
     ret = xpost_strbuf_append(&a.content, s, n);
     if (ret)
         return ret;
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return 0;
 }
 
@@ -2544,7 +2548,8 @@ static int _pdffillpoly(Xpost_Context *ctx,
     /* the struct is stored back even when an append failed: the appends
        that did land may have moved the buffer, and the stored copy must
        follow it */
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return ret;
 }
 
@@ -2606,7 +2611,8 @@ static int _svgfillpoly(Xpost_Context *ctx,
     /* the struct is stored back even when an append failed: the appends
        that did land may have moved the buffer, and the stored copy must
        follow it */
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return ret;
 #undef PDFNUMVAL
 }
@@ -2730,7 +2736,8 @@ static int _pdfregsep(Xpost_Context *ctx,
         a.sepcap = nc;
         /* the grown array must reach /Private even if a copy below
            fails: the old block is gone */
-        _pdf_acc_put(ctx, priv, &a);
+        if (!_pdf_acc_put(ctx, priv, &a))
+            return VMerror;
     }
     s = &a.seps[a.nseps];
     s->name = _pdf_sep_strdup(ctx, name);
@@ -2747,7 +2754,8 @@ static int _pdfregsep(Xpost_Context *ctx,
         return VMerror;
     }
     i = a.nseps++;
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(i));
     return 0;
 }
@@ -2793,7 +2801,8 @@ static int _pdfreset(Xpost_Context *ctx, Xpost_Object devdic)
     if (!_pdf_acc_get(ctx, devdic, &priv, &a))
         return 0;
     a.content.len = 0;
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return 0;
 }
 
@@ -2816,7 +2825,8 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
     a.seps = NULL;
     a.nseps = 0;
     a.sepcap = 0;
-    _pdf_acc_put(ctx, priv, &a);
+    if (!_pdf_acc_put(ctx, priv, &a))
+        return VMerror;
     return 0;
 }
 
