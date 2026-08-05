@@ -1,8 +1,21 @@
-
-a85_methods
-_currentpoint
-dct_methods
+# The library's exported symbol set, one name per line, C-collation sorted.
+#
+# Checked by tests/check-exported-symbols.sh: an addition is a deliberate
+# act recorded here in the same commit, and a removal breaks a consumer.
+#
+# The reserved-exception lines at the end name the exports that begin with
+# an underscore. C99 7.1.3 reserves every file-scope identifier that does,
+# so exporting one is a collision waiting on a libc that uses the same
+# name. These five predate the rule and are recorded rather than renamed;
+# the list may shrink and may not grow.
 DEBUGLOAD
+_currentpoint
+_xpost_garbage_diag_verify
+_xpost_garbage_diag_xbank
+_xpost_interpreter_is_tracing
+_xpost_time_start
+a85_methods
+dct_methods
 disk_methods
 echooff
 echoon
@@ -66,11 +79,11 @@ xpost_create
 xpost_ctx
 xpost_data_dir_get
 xpost_destroy
-xpost_device_get_filename
 xpost_dev_jpeg_options_set
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
 xpost_dev_png_options_set
+xpost_device_get_filename
 xpost_dict_compare_objects
 xpost_dict_cons
 xpost_dict_cons_memory
@@ -171,8 +184,6 @@ xpost_free_init
 xpost_free_memory_ent
 xpost_free_realloc
 xpost_garbage_collect
-_xpost_garbage_diag_verify
-_xpost_garbage_diag_xbank
 xpost_get_realtime_ms
 xpost_get_usertime_ms
 xpost_glob
@@ -183,7 +194,6 @@ xpost_interpreter_cid_get_context
 xpost_interpreter_exit
 xpost_interpreter_get_initializing
 xpost_interpreter_init
-_xpost_interpreter_is_tracing
 xpost_interpreter_set_initializing
 xpost_interrupt
 xpost_isatty
@@ -253,14 +263,12 @@ xpost_op_array_to_mark
 xpost_op_breakhere
 xpost_op_cleartomark
 xpost_op_counttomark
-xpost_openat2_beneath
+xpost_op_privatedict_load
+xpost_op_record_run_error
+xpost_op_stop
+xpost_op_type_code
 xpost_open_beneath
-xpost_operator_cons
-xpost_operator_cons_opcode
-xpost_operator_cons_wrapped
-xpost_operator_dump
-xpost_operator_exec
-xpost_operator_init_optab
+xpost_openat2_beneath
 xpost_oper_init_array_ops
 xpost_oper_init_bgr_device_ops
 xpost_oper_init_bool_ops
@@ -285,11 +293,13 @@ xpost_oper_init_string_ops
 xpost_oper_init_token_ops
 xpost_oper_init_type_ops
 xpost_oper_init_xcb_device_ops
+xpost_operator_cons
+xpost_operator_cons_opcode
+xpost_operator_cons_wrapped
+xpost_operator_dump
+xpost_operator_exec
+xpost_operator_init_optab
 xpost_oplib_init_ops
-xpost_op_privatedict_load
-xpost_op_record_run_error
-xpost_op_stop
-xpost_op_type_code
 xpost_path_control_engage
 xpost_path_control_is_engaged
 xpost_path_permit_read
@@ -330,6 +340,11 @@ xpost_string_get_memory
 xpost_string_get_pointer
 xpost_string_put
 xpost_string_put_memory
-_xpost_time_start
 xpost_unlinkat_beneath
 xpost_version_get
+
+reserved-exception _currentpoint
+reserved-exception _xpost_garbage_diag_verify
+reserved-exception _xpost_garbage_diag_xbank
+reserved-exception _xpost_interpreter_is_tracing
+reserved-exception _xpost_time_start

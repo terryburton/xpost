@@ -11,8 +11,21 @@
 # commit; a symbol that disappears breaks a consumer.
 #
 # Names beginning with an underscore are reserved at file scope (C99
-# 7.1.3), so an exported one is flagged whether or not it is in the
-# register.
+# 7.1.3), so an exported one has to be declared twice over: once in the
+# register, as any export must be, and once as a "reserved-exception"
+# line saying that a reserved name is being used anyway. That second list
+# may shrink and may not grow. Five such exports predate the rule and are
+# recorded there; a sixth fails.
+#
+# Everything the linker will hand out counts, including weak definitions:
+# taking only the strong ones let a weak symbol be exported without
+# appearing here at all.
+#
+# The comparison is a set comparison, so it is done in one collation --
+# the C one, which is also the one a POSIX default environment sorts in.
+# Sorting the register in the author's locale and comparing it without
+# saying so left this check reporting "not in sorted order" and failing
+# for everyone whose environment did not match.
 #
 # Usage: check-exported-symbols.sh <path to libxpost.so> <golden file>
 
@@ -20,27 +33,60 @@ set -u
 lib=${1:?usage: check-exported-symbols.sh <library> <golden>}
 golden=${2:?usage: check-exported-symbols.sh <library> <golden>}
 
+LC_ALL=C
+export LC_ALL
+
 if ! command -v nm >/dev/null 2>&1; then
     echo "SKIP: nm is not available"
     exit 77
 fi
+# A library that is not there is a wrong path, not a platform without
+# shared libraries: answering that with a skip made every misdirection of
+# this check permanently silent.
 if [ ! -f "$lib" ]; then
-    echo "SKIP: $lib is not a shared library on this platform"
-    exit 77
+    echo "FAILURES: no library to read at $lib"
+    exit 1
 fi
-if [ ! -s "$golden" ]; then
+if [ ! -s "$golden" ] || [ ! -r "$golden" ]; then
     echo "FAILURES: no usable register at $golden"
     exit 1
 fi
 
-work=$(mktemp -d)
-nm -D --defined-only "$lib" 2>/dev/null | awk '$2 ~ /^[TDBR]$/ { print $3 }' \
-    | sort -u > "$work/have"
+work=$(mktemp -d 2>/dev/null) || work=
+if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
+    echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
+    exit 1
+fi
+trap 'rm -rf "$work"' EXIT
+
+# every defined dynamic symbol, whatever section or linkage it has
+nm -D --defined-only "$lib" 2>/dev/null | tr -d '\r' \
+    | awk 'NF == 3 && $2 !~ /^[a-z]$/ { print $3 }' | sort -u > "$work/have"
+
+if [ ! -s "$work/have" ]; then
+    case $lib in
+        *.a|*.lib)
+            echo "SKIP: $lib is a static library; it has no dynamic symbol table"
+            exit 77 ;;
+    esac
+    echo "FAILURES: nm read no defined dynamic symbols from $lib"
+    exit 1
+fi
+
+sed 's/\r$//' "$golden" | grep -vE '^[[:space:]]*(#|$)' \
+    | grep -v '^reserved-exception ' | sort -u > "$work/register"
+sed 's/\r$//' "$golden" | sed -n 's/^reserved-exception //p' \
+    | sort -u > "$work/allowed-reserved"
+
+if [ ! -s "$work/register" ]; then
+    echo "FAILURES: the register at $golden names no symbols"
+    exit 1
+fi
 
 fail=0
 
-added=$(comm -13 "$golden" "$work/have")
-removed=$(comm -23 "$golden" "$work/have")
+added=$(comm -13 "$work/register" "$work/have")
+removed=$(comm -23 "$work/register" "$work/have")
 
 if [ -n "$added" ]; then
     echo "FAIL: newly exported symbols not in the register:"
@@ -53,10 +99,29 @@ if [ -n "$removed" ]; then
     fail=1
 fi
 
-rm -rf "$work"
+# the reserved-identifier rule, on what is actually exported
+grep '^_' "$work/have" > "$work/reserved" || true
+undeclared=$(comm -23 "$work/reserved" "$work/allowed-reserved")
+if [ -n "$undeclared" ]; then
+    echo "FAIL: exported names reserved to the implementation (C99 7.1.3):"
+    printf '%s\n' "$undeclared" | sed 's/^/      /'
+    echo "      give the symbol a name of its own, or -- if it truly cannot"
+    echo "      have one -- add a reserved-exception line saying why."
+    fail=1
+fi
+# the list may shrink and may not grow, so an exception for a name that is
+# no longer exported is retired rather than left standing
+stale=$(comm -13 "$work/reserved" "$work/allowed-reserved")
+if [ -n "$stale" ]; then
+    echo "FAIL: reserved-exception recorded for a name that is not exported:"
+    printf '%s\n' "$stale" | sed 's/^/      /'
+    echo "      remove the line; the exception list only shrinks."
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the exported symbol set changed"
     exit 1
 fi
-echo SUCCESS
+echo "SUCCESS"
 exit 0
