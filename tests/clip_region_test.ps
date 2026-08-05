@@ -1,0 +1,51 @@
+% The clip region: what a program may do to it, and what the machinery
+% says about it. Run through `xpost -d null` by run-ps-test.sh: prints
+% SUCCESS iff every assertion holds.
+%
+% The clip is one value with several faces -- the resolved region the
+% painters intersect against, and the path shape a device that clips for
+% itself is handed. The faces have to agree, and neither of them may be
+% reachable for a program to write.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/assertnear { % val expected (name) . -
+    3 1 roll sub abs 0.01 lt exch assert
+} bind def
+
+% --- the region is handed out by value, not by reference ---------------
+% clippath replaces the current path with the clip region's boundary.
+% Appending to a path writes into its storage while there is room and
+% moves to fresh storage only when it runs out, so a path built on from
+% here reaches into the live clip -- or does not, according to how much
+% spare room the region's storage happened to have.
+
+initgraphics
+newpath 100 100 moveto 200 100 lineto 200 200 lineto 100 200 lineto
+closepath clip
+
+clippath pathbbox
+/by1 exch def /bx1 exch def /by0 exch def /bx0 exch def
+bx0 100 (clippath reports the clip's left edge) assertnear
+by0 100 (clippath reports the clip's bottom edge) assertnear
+bx1 200 (clippath reports the clip's right edge) assertnear
+by1 200 (clippath reports the clip's top edge) assertnear
+
+% build on the path clippath handed over
+500 500 lineto
+
+clippath pathbbox
+/ay1 exch def /ax1 exch def /ay0 exch def /ax0 exch def
+ax0 bx0 (the clip's left edge survives a path built on clippath) assertnear
+ay0 by0 (the clip's bottom edge survives a path built on clippath) assertnear
+ax1 bx1 (the clip's right edge survives a path built on clippath) assertnear
+ay1 by1 (the clip's top edge survives a path built on clippath) assertnear
+
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

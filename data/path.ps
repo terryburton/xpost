@@ -648,9 +648,17 @@ setglobal
     } if
 } //.xpostsys /.defop get exec
 
+% -  clippath  -
+% Replace the current path with the clip region's boundary. The region
+% is handed over as a copy: a segment appended to a path is written into
+% the storage the path already holds while there is room, and only a
+% path that has run out of room moves to fresh storage. Handing over the
+% region itself would therefore let a path built on from here reach into
+% the clip in force, or not, according to how much spare room the
+% region's storage happened to have.
 /clippath [ ] {
     graphicsdict /currgstate get
-        dup /clipregion get
+        dup /clipregion get .copypath
         /currpath exch put
 } //.xpostsys /.defop get exec
 
