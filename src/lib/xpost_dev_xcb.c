@@ -128,11 +128,17 @@ int _create(Xpost_Context *ctx,
             Xpost_Object height,
             Xpost_Object classdic)
 {
+    int ret;
+
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
     xpost_stack_push(ctx->lo, ctx->os, classdic);
-    xpost_dict_put(ctx, classdic, namewidth, width);
-    xpost_dict_put(ctx, classdic, nameheight, height);
+    ret = xpost_dict_put(ctx, classdic, namewidth, width);
+    if (ret)
+        return ret;
+    ret = xpost_dict_put(ctx, classdic, nameheight, height);
+    if (ret)
+        return ret;
 
     /* call device class's ps-level .copydict procedure,
        then call _create_cont, by continuation. */
@@ -163,6 +169,7 @@ int _create_cont(Xpost_Context *ctx,
     integer height = h.int_.val;
     int scrno;
     unsigned char depth;
+    int ret;
 
     /* create a string to contain device data structure */
     privatestr = xpost_string_cons(ctx, sizeof(PrivateData), NULL);
@@ -171,7 +178,9 @@ int _create_cont(Xpost_Context *ctx,
         XPOST_LOG_ERR("cannot allocat private data structure");
         return unregistered;
     }
-    xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    ret = xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    if (ret)
+        return ret;
 
     private.width = width;
     private.height = height;
@@ -227,11 +236,19 @@ int _create_cont(Xpost_Context *ctx,
             if (height < 1) height = 1;
             private.width = width;
             private.height = height;
-            xpost_dict_put(ctx, devdic, namewidth, xpost_int_cons(width));
-            xpost_dict_put(ctx, devdic, nameheight, xpost_int_cons(height));
-            xpost_dict_put(ctx, devdic,
-                           xpost_name_cons(ctx, "windowscale"),
-                           xpost_real_cons((real)s));
+            ret = xpost_dict_put(ctx, devdic, namewidth, xpost_int_cons(width));
+            if (!ret)
+                ret = xpost_dict_put(ctx, devdic, nameheight,
+                                     xpost_int_cons(height));
+            if (!ret)
+                ret = xpost_dict_put(ctx, devdic,
+                                     xpost_name_cons(ctx, "windowscale"),
+                                     xpost_real_cons((real)s));
+            if (ret)
+            {
+                xcb_disconnect(private.c);
+                return ret;
+            }
         }
     }
 
@@ -701,6 +718,8 @@ int loadxcbdevicecont(Xpost_Context *ctx,
                          namenativecolorspace,
                          //xpost_name_cons(ctx, "DeviceRGB")
                          nameDeviceRGB);
+    if (ret)
+        return ret;
 
     op = xpost_operator_cons(ctx, "xcbCreateCont", (Xpost_Op_Func)_create_cont, 1, 3,
                              integertype, integertype, dicttype);
@@ -717,7 +736,7 @@ int loadxcbdevicecont(Xpost_Context *ctx,
                              dicttype); /* devdic */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
     if (ret)
-        return 0;
+        return ret;
 
     /* Paint glyphs without blending their edges. The blend the text
        operators would otherwise use reads the pixel already there, which

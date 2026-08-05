@@ -2444,9 +2444,13 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     a.nseps = 0;
     a.sepcap = 0;
     priv = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(a), NULL));
+    if (xpost_object_get_type(priv) == invalidtype)
+    {
+        xpost_strbuf_free(&a.content);
+        return VMerror;
+    }
     _pdf_acc_put(ctx, priv, &a);
-    xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
-    return 0;
+    return xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
 }
 
 /* append a string's bytes to the accumulator (the marking methods' .put) */

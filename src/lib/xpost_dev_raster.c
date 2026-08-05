@@ -113,11 +113,17 @@ int _create(Xpost_Context *ctx,
             Xpost_Object height,
             Xpost_Object classdic)
 {
+    int ret;
+
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
     xpost_stack_push(ctx->lo, ctx->os, classdic);
-    xpost_dict_put(ctx, classdic, namewidth, width);
-    xpost_dict_put(ctx, classdic, nameheight, height);
+    ret = xpost_dict_put(ctx, classdic, namewidth, width);
+    if (ret)
+        return ret;
+    ret = xpost_dict_put(ctx, classdic, nameheight, height);
+    if (ret)
+        return ret;
 
     //printf("create\n");
     //fflush(0);
@@ -150,6 +156,7 @@ int _create_cont(Xpost_Context *ctx,
     integer width = w.int_.val;
     integer height = h.int_.val;
     Xpost_Object inbufstr;
+    int ret;
     //printf("create_cont\n");
 
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
@@ -186,7 +193,9 @@ int _create_cont(Xpost_Context *ctx,
         XPOST_LOG_ERR("cannot allocat private data structure");
         return unregistered;
     }
-    xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    ret = xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    if (ret)
+        return ret;
 
     private.width = width;
     private.height = height;
@@ -620,6 +629,8 @@ int loadrasterdevicecont(Xpost_Context *ctx,
     int ret;
 
     ret = xpost_dict_put(ctx, classdic, namenativecolorspace, nameDeviceRGB);
+    if (ret)
+        return ret;
 
     op = xpost_operator_cons(ctx, "rasterCreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
@@ -634,7 +645,7 @@ int loadrasterdevicecont(Xpost_Context *ctx,
                              dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
     if (ret)
-        return 0;
+        return ret;
 
     op = xpost_operator_cons(ctx, "rasterBlendPix", (Xpost_Op_Func)_blendpix, 0, 7,
                              numbertype, numbertype, numbertype, numbertype,

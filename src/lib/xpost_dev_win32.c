@@ -1070,7 +1070,7 @@ int loadwin32devicecont(Xpost_Context *ctx,
                              dicttype); /* devdic */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
     if (ret)
-        return 0;
+        return ret;
 
     /* Paint glyphs without blending their edges. The blend the text
        operators would otherwise use reads the pixel already there, which

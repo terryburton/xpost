@@ -69,6 +69,34 @@ for f in $fleet; do
     fi
 done
 
+# 5. A class dictionary that would not take a method leaves the device
+#    incomplete, so the refusal reaches the caller: the value of every
+#    xpost_dict_put is either returned or tested, and a test never
+#    answers success. Textual, so it holds for the sources this platform
+#    cannot compile as well as the ones it can.
+for f in $fleet xpost_dev_generic.c xpost_dev_win32.c; do
+    hits=$(awk '
+        /xpost_dict_put[ \t]*\(/ {
+            if ($0 !~ /=/ && $0 !~ /return/)
+                printf "%s:%d: the refusal is discarded\n", FILENAME, FNR
+            win = 8; sawif = 0; next
+        }
+        win > 0 {
+            win--
+            if ($0 ~ /^[ \t]*if \(ret\)/) { sawif = 1; next }
+            if (sawif && $0 ~ /^[ \t]*return 0;/)
+                printf "%s:%d: the refusal is answered with success\n", FILENAME, FNR
+            sawif = 0
+        }
+    ' "$libdir/$f")
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: registration refusal ignored in $f:" >&2
+        printf '%s\n' "$hits" >&2
+        echo "A device that could not register a method must not load." >&2
+        fail=1
+    fi
+done
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
