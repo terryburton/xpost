@@ -21,6 +21,11 @@
 #
 # tamper_dispatch_test.ps is the same invariant for a name held as data in
 # a dispatch dictionary; this is the invariant for a name in a procedure.
+# The two are paired, and the pairing is load-bearing: that sweep exempts
+# the promoted bodies outright, because its scan never reaches them, so
+# this script is the only thing standing behind that exemption. Narrowing
+# what is walked here silently widens what is unchecked there. Neither is
+# a local decision; change both or neither.
 #
 #   $1  path to the xpost binary
 #   $2  path to the source tree root

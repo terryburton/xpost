@@ -87,24 +87,25 @@ nbad 0 eq (no internal dispatch dictionary stores an executable name) assert
 %     a standard operator. The lockdown's .bindscope descends recursively, so
 %     these are frozen structurally; a regression to fixed-depth descent, or
 %     a new nested table added without a per-procedure bind, resurfaces here.
-%     Top-level machinery procedures are exempt, and so are the wrapped
-%     operators wherever they appear (they are named by the register in
-%     privatedict). The reason is not that they were procedures when
-%     binding ran -- the promotion pass finishes first and the finalizer
-%     asserts as much before it binds anything. It is that bind cannot
-%     reach them: of the 146 procedures in .xpostsys when the sweep runs,
-%     54 are already read-only, and a read-only procedure keeps whatever
-%     references it was built with.
 %
-%     Removing the exemption surfaces 13 such references -- = and == in
-%     the machinery's trace paths, with findresource and filter. They are
-%     not a live hole: redefining all four and then stroking, setting a
-%     font, measuring a string and painting a colour image reaches none of
-%     them. They would matter if those trace paths ran, which is why they
-%     are exempted rather than ignored. ---
+%     Two things are exempt. Top-level machinery procedures, because the
+%     sweep is asked for nested tables only. And the wrapped operators
+%     wherever they appear -- not because their bodies are known to be
+%     frozen, but because this sweep never reaches them: it scans
+%     .xpostsys, .internaldict, .gscratch and graphicsdict, while the
+%     promoted bodies live in the register in privatedict, which is not
+%     among its targets.
+%
+%     So the exemption asserts nothing about those bodies, and it is safe
+%     only because another guard owns that population outright:
+%     tests/check-wrapped-bind.sh walks every promoted body and holds each
+%     operator it reaches by name to tests/wrapped_bind.golden, a register
+%     that only shrinks. Widening the exemption here, or narrowing what
+%     that script walks, breaks the pairing -- either is a change to both
+%     files, and neither is a local decision. ---
 % The exemption list is the register of wrapped procedures. Finding it is
 % not optional: an empty list exempts nothing, so every exempt name is
-% reported instead and the run reads as thirteen procedures losing their
+% reported instead and the run reads as a crowd of procedures losing their
 % bindings. That is what a moved register looked like once already, so a
 % missing one is a failure here rather than a silently different test.
 /wrapped
