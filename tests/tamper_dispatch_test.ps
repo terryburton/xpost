@@ -262,4 +262,67 @@ FAMILY {
 } forall
 nsens 0 eq (nor any of the rest of the show family) assert
 
+% =========================== a helper reached from a body ==================
+% The sweeps above walk what a dictionary holds and what a promoted body
+% calls directly. Between the two sits a machinery helper: a procedure kept
+% in .xpostsys and baked into a body by an immediate reference, whose own
+% calls are frozen only if it was still unbound when the promotion's bind
+% swept through -- bind makes what it binds read-only and then ignores a
+% read-only array, so a helper bound at its definition keeps whichever
+% names were not yet operators there, and every operator reaching it
+% inherits them.
+%
+% shfill is where the last of those showed. A shading carrying no Function
+% takes one value per colour component out of its data stream, and the
+% component count is asked for with currentcolorspace -- so a program that
+% has defined that name changes how the vertices of somebody else's
+% shading are read, from inside shfill, with no shading of its own in
+% sight.
+%
+% Asked as a render, since a redefinition that answers plausibly changes
+% the picture without raising anything: paint a mesh shading, define the
+% name, paint it again, and require the same page and no fault. The device
+% is installed last, after the show probes above have had theirs.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+/SDEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+SDEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device SDEV put
+graphicsdict /currgstate get /device SDEV put
+
+/shsnap { % -  .  string   (the page, one byte per pixel)
+    initgraphics erasepage
+    << /ShadingType 4 /ColorSpace /DeviceGray
+       /DataSource [ 0 6 6 0.0  0 56 10 0.5  0 30 56 1.0 ] >> shfill
+    4096 string
+    0 1 63 { /sh.y exch def
+        0 1 63 { /sh.x exch def
+            dup sh.y 64 mul sh.x add
+            sh.x sh.y SDEV dup /GetPix get exec
+            put
+        } for
+    } for
+} bind def
+
+/shwant shsnap def
+/shgot null def
+% the probe must have something to see: a page of one flat colour would
+% match whatever the redefinition did to it
+/shflat true def
+0 1 4095 { shwant exch get shwant 0 get ne { /shflat false def } if } for
+shflat not (the mesh shading paints a page with more than one level in it) assert
+
+userdict /currentcolorspace { /DeviceCMYK } put
+{ /shgot shsnap store } stopped /shfailed exch def
+userdict /currentcolorspace undef
+
+shfailed not (shfill runs with a program's currentcolorspace defined) assert
+shfailed not { shgot shwant eq }{ false } ifelse
+    (shfill paints the same page with currentcolorspace defined) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

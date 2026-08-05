@@ -454,7 +454,14 @@ setglobal
 % -  .ncomponents  n
 % the number of colour components the current colour space takes: an
 % Indexed colour is one index, a Separation one tint, a DeviceN one
-% tint per named colorant
+% tint per named colorant.
+%
+% The body is left unbound at its definition and frozen by the lockdown's
+% sweep instead. currentcolorspace is written in PostScript and is still a
+% procedure while this file loads, so a bind here would substitute nothing
+% for it and would make the array read-only, which is what stops a later
+% sweep from finishing the job -- and the name would stay dynamic for the
+% rest of the run, inside every operator reaching this helper.
 currentglobal true setglobal
 .xpostsys /.spacecomps <<
     /DeviceGray 1
@@ -478,7 +485,7 @@ currentglobal true setglobal
     }{
         //.xpostsys /.spacecomps get exch get
     } ifelse
-} bind put
+} put
 
 % space  .csvalidate  -
 % walk a colour space down to the device space a colour in it is finally
