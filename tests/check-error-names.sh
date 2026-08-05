@@ -31,6 +31,8 @@
 set -u
 xpost=${1:?usage: check-error-names.sh <xpost> <srcroot>}
 src=${2:?usage: check-error-names.sh <xpost> <srcroot>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

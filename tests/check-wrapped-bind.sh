@@ -34,6 +34,8 @@ set -u
 xpost=${1:?usage: check-wrapped-bind.sh <xpost> <srcroot> <golden>}
 src=${2:?usage: check-wrapped-bind.sh <xpost> <srcroot> <golden>}
 golden=${3:?usage: check-wrapped-bind.sh <xpost> <srcroot> <golden>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

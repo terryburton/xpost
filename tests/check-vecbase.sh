@@ -10,6 +10,8 @@
 #   $1  path to the source tree root
 set -u
 src=${1:?usage: check-vecbase.sh <source root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 data=$src/data
 fail=0
 

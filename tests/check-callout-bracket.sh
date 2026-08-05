@@ -28,6 +28,8 @@
 #   $1  path to the source tree root
 set -u
 src=${1:?usage: check-callout-bracket.sh <srcroot>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 golden="$src/tests/graphicsdict_slots.golden"
 [ -s "$golden" ] || { echo "FAILURES: no usable register at $golden"; exit 1; }
 

@@ -10,6 +10,8 @@
 
 set -eu
 src=${1:?usage: check-dist-lists.sh <source tree root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
 lib_mk="$src/src/lib/Makefile.mk"
 data_mk="$src/data/Makefile.mk"

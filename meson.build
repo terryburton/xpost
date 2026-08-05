@@ -1479,6 +1479,14 @@ test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
   args: [ meson.current_source_dir() ])
 
+# The guards read data/ and tests/ under a source root they are given, and
+# the interpreter finds the working tree by other routes when that root is
+# wrong -- so a misdirected guard reports a true result about a tree nobody
+# asked about. Each one must refuse a path that is not a source root.
+test('guard-paths',
+  find_program('tests/check-guard-paths.sh'),
+  args: [ meson.current_source_dir() ])
+
 # The complement of dict-homes: that guards a registered member against
 # moving, this guards a reference against landing nowhere. Every bare
 # fetch from a private namespace must name something the namespace holds,

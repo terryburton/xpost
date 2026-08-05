@@ -18,6 +18,8 @@
 set -eu
 
 src=${1:?usage: check-must-check.sh <source tree root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 golden="$src/tests/must_check.golden"
 
 tmp=$(mktemp -d)

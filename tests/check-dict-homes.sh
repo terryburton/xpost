@@ -15,6 +15,8 @@
 #   $1  path to the source tree root
 set -u
 src=$1
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 golden="$src/tests/dict_homes.golden"
 # a missing or empty register would make every check below vacuous
 if [ ! -s "$golden" ]; then
