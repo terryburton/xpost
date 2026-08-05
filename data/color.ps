@@ -233,6 +233,20 @@ currentglobal true setglobal
 end
 setglobal
 
+% -  .sepalt  -
+% Enter the alternative space of the Separation or DeviceN colour being
+% set, if the tint transform left another space in force. The transform
+% is the program's procedure and may set a colour of its own; the
+% components it returned are in the alternative space, and that is the
+% space the setcolor which consumes them has to be running in.
+currentglobal true setglobal
+.xpostsys /.sepalt {
+    graphicsdict /.sepspace get 2 get
+    dup graphicsdict /currgstate get /setspace get eq
+        { pop }{ setcolorspace } ifelse
+} bind put
+setglobal
+
 /setcolorspace [ /anytype ] {
     dup //.xpostsys /.csvalidate get exec
     %[ currentcolor setcolordict currentcolorspace get counttomark 2 add -1 roll
@@ -412,7 +426,15 @@ setglobal
         % palette entry and set it in the base space. setcolor must not
         % change what currentcolorspace reports, so the space is
         % stashed and restored around the conversion -- in its own
-        % slot, since a Separation base stashes .sepspace within
+        % slot, since a Separation base stashes .sepspace within.
+        % The lookup is the program's procedure and may set an Indexed
+        % colour of its own, which stashes in the same slots, so what
+        % they held on the way in rides the operand stack beneath the
+        % conversion and is put back on the way out.
+        exch
+        graphicsdict /.idxstash 2 copy known { get }{ pop pop null } ifelse
+        graphicsdict /.idxspace 2 copy known { get }{ pop pop null } ifelse
+        4 2 roll exch
         dup graphicsdict exch /.idxspace exch put
         3 dict begin
         /cs exch def
@@ -432,11 +454,18 @@ setglobal
             } for
         }{
             ix exch exec
+            % the lookup ran the program's code, which may have entered a
+            % space of its own: the components it produced belong to the
+            % base space, so that is the space this setcolor runs in
+            cs 1 get dup graphicsdict /currgstate get /setspace get eq
+                { pop }{ setcolorspace } ifelse
         } ifelse
         end
         setcolor
         graphicsdict /currgstate get /setspace graphicsdict /.idxspace get put
         graphicsdict /currgstate get /tintcomps graphicsdict /.idxstash get put
+        graphicsdict exch /.idxspace exch put
+        graphicsdict exch /.idxstash exch put
     }{
     dup type /arraytype eq { dup 0 get dup /Separation eq exch /DeviceN eq or } { false } ifelse
     {
@@ -444,13 +473,24 @@ setglobal
         % switch to the alternative space and convert via the tint
         % transform. setcolor must not change what currentcolorspace
         % reports, so stash the space being painted in and restore it
-        % after the conversion (whose device-space setters overwrite it)
+        % after the conversion (whose device-space setters overwrite it).
+        % The transform is the program's procedure and may set a
+        % Separation colour of its own, which stashes in the same slots,
+        % so what they held on the way in rides the operand stack
+        % beneath the conversion and is put back on the way out.
+        graphicsdict /.tintstash 2 copy known { get }{ pop pop null } ifelse
+        exch
+        graphicsdict /.sepspace 2 copy known { get }{ pop pop null } ifelse
+        exch
         dup graphicsdict exch /.sepspace exch put
         % record the tints as given, for currentcolor: the component values
         % in the gstate hold the tint-transformed alternate colour. Stash
         % them aside for now -- the conversion below runs setcolorspace on
         % the alternative space, whose tail clears the gstate's tint record
         0 get /Separation eq { 1 }{ graphicsdict /.sepspace get 1 get length } ifelse
+        2 add 2 roll
+        graphicsdict /.sepspace get
+        dup 0 get /Separation eq { pop 1 }{ 1 get length } ifelse
         array astore
         dup graphicsdict exch /.tintstash exch put
         aload pop
@@ -461,7 +501,9 @@ setglobal
             % setters clear the gstate's separation record), then
             % register with the device and record its index and the
             % tint for the marking methods
-            2 copy dup 2 get setcolorspace 3 get exec setcolor
+            2 copy dup 2 get setcolorspace 3 get exec
+            //.xpostsys /.sepalt get exec
+            setcolor
             1 index exch                       % tint tint space
             DEVICE dup /.registersep get exec  % tint index true | tint false
             {
@@ -473,22 +515,34 @@ setglobal
         }{
             dup 2 get setcolorspace
             3 get exec
+            //.xpostsys /.sepalt get exec
             setcolor
         } ifelse
         graphicsdict /currgstate get /setspace graphicsdict /.sepspace get put
         graphicsdict /currgstate get /tintcomps graphicsdict /.tintstash get put
+        graphicsdict exch /.sepspace exch put
+        graphicsdict exch /.tintstash exch put
     } {
     dup type /arraytype eq { //.xpostsys /.ciefams get 1 index 0 get known }{ false } ifelse
     {
         % a CIE-based colour: run the family pipeline down to device
         % RGB and record it there. setcolor must not change what
         % currentcolorspace reports, so the space is stashed and
-        % restored around the conversion
+        % restored around the conversion. The decode procedures are the
+        % program's and may set a CIE colour of their own, which stashes
+        % in the same slots, so what they held on the way in rides the
+        % operand stack beneath the conversion and is put back after.
+        graphicsdict /.ciestash 2 copy known { get }{ pop pop null } ifelse
+        exch
+        graphicsdict /.ciespace 2 copy known { get }{ pop pop null } ifelse
+        exch
         dup graphicsdict exch /.ciespace exch put
         % record the components as given, for currentcolor: the gstate
         % holds the device colour they convert to, which is a different
         % count in every family but ABC
         pop //.xpostsys /.ncomponents get exec
+        2 add 2 roll
+        //.xpostsys /.ncomponents get exec
         array astore
         dup graphicsdict exch /.ciestash exch put
         aload pop graphicsdict /.ciespace get
@@ -497,6 +551,8 @@ setglobal
         setrgbcolor
         graphicsdict /currgstate get /setspace graphicsdict /.ciespace get put
         graphicsdict /currgstate get /tintcomps graphicsdict /.ciestash get put
+        graphicsdict exch /.ciespace exch put
+        graphicsdict exch /.ciestash exch put
     }{
         % a pattern space arrives as an array: dispatch on the family
         dup type /arraytype eq { 0 get } if

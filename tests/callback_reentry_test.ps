@@ -1,0 +1,119 @@
+% Every place the graphics machinery runs a procedure the program wrote,
+% held to the same contract, run through `xpost -q --no-sandbox -d null`
+% by run-ps-test.sh.
+%
+% A callback is the one moment the machinery is half way through its own
+% work and the program has the interpreter. Whatever the machinery was
+% mid-use of at that moment -- a scratch slot it will read back, the
+% dictionary it is running in, the graphics state it means to restore --
+% is exposed to whatever the callback does, including calling the very
+% operator that made the callback. The machinery that gets this right
+% and the machinery that does not look identical from outside until
+% something re-enters.
+%
+% So each callback is asked the same question: does the caller's state
+% survive a callback that re-enters the same operator? One family
+% answering yes says nothing about the next, because each stashes what
+% it is mid-use of in a slot of its own, and saving the outgoing value
+% is a separate decision every time.
+
+/bad 0 def
+/note { % (what)  .  -
+    (FAIL: ) print print (\n) print /bad bad 1 add store
+} bind def
+
+/join { % (a) (b)  .  (ab)
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 4 -1 roll length 4 -1 roll putinterval
+} bind def
+
+/same { % got want (what)  .  -
+    3 1 roll eq { pop }{ note } ifelse
+} bind def
+
+% componentwise, so a space reporting the right count of the wrong
+% numbers is not mistaken for a space that survived
+/samenums { % [got] [want] (what)  .  -
+    /nwhat exch def /nwant exch def /ngot exch def
+    ngot length nwant length ne { nwhat note }{
+        /nok true def
+        0 1 nwant length 1 sub {
+            dup ngot exch get exch nwant exch get sub abs
+            0.0001 gt { /nok false def } if
+        } for
+        nok not { nwhat note } if
+    } ifelse
+} bind def
+
+% --- the spaces ----------------------------------------------------
+% Each entry: a space, a colour in it, and a name for the report. The
+% conversion procedure of each re-enters setcolor on a space of the same
+% family before returning its result, so the machinery is asked to hold
+% its stash across a call that overwrites it.
+
+/wp [0.9505 1.0 1.089] def
+
+% the spaces the callbacks re-enter with -- distinct objects, so that a
+% space surviving the call can be told from one replaced by it
+/inSep [/Separation /Inner /DeviceGray { 1 exch sub }] def
+/inDevN [/DeviceN [/InnerA /InnerB] /DeviceGray { pop 1 exch sub }] def
+/inIdx [/Indexed /DeviceGray 3 { 4 div }] def
+/inCIEA [/CIEBasedA << /WhitePoint wp /DecodeA { 2 div } >>] def
+/inCIEABC [/CIEBasedABC << /WhitePoint wp
+    /DecodeABC [ { 2 div } { 2 div } { 2 div } ] >>] def
+
+/spaces [
+    [ [/Separation /Outer /DeviceGray { inSep setcolorspace 0.25 setcolor 0.5 mul }]
+      [0.4] (Separation) ]
+    [ [/DeviceN [/OuterA /OuterB] /DeviceGray
+        { inDevN setcolorspace 0.25 0.75 setcolor pop 0.5 mul }]
+      [0.4 0.6] (DeviceN) ]
+    [ [/Indexed /DeviceGray 3 { inIdx setcolorspace 1 setcolor 8 div }]
+      [2] (Indexed) ]
+    [ [/CIEBasedA << /WhitePoint wp
+        /DecodeA { inCIEA setcolorspace 0.25 setcolor 0.5 mul } >>]
+      [0.8] (CIEBasedA) ]
+    [ [/CIEBasedABC << /WhitePoint wp
+        /DecodeABC [ { inCIEABC setcolorspace 0.25 0.25 0.25 setcolor 0.5 mul }
+                     { 0.5 mul } { 0.5 mul } ] >>]
+      [0.8 0.6 0.4] (CIEBasedABC) ]
+] def
+
+% --- re-entry: the space and the colour as given survive the call ---
+% Each family is asked on its own, under stopped: a family that leaves
+% the operand stack in a state the next one cannot run from would
+% otherwise report the next family's failure instead of its own.
+/checkspace { % [ space comps name ]  .  -
+    aload pop /nm exch def /comps exch def /sp exch def
+    {
+        /DeviceGray setcolorspace
+        sp setcolorspace
+        comps aload pop setcolor
+        currentcolorspace sp
+            (space replaced by a re-entrant conversion: ) nm join same
+        [ currentcolor ] comps
+            (colour replaced by a re-entrant conversion: ) nm join samenums
+    } stopped { (a re-entrant conversion raised an error: ) nm join note } if
+    clear
+} bind def
+spaces { checkspace } forall
+
+% --- and across families: an Indexed palette whose lookup sets a
+% Separation colour, and a Separation whose transform sets an Indexed
+% one. A stash held per family survives this by accident; a stash held
+% as a stack survives it by construction.
+/xIdx [/Indexed /DeviceGray 3 { inSep setcolorspace 0.25 setcolor 8 div }] def
+xIdx setcolorspace
+2 setcolor
+currentcolorspace xIdx (Indexed space lost to a Separation set in its lookup) same
+[ currentcolor ] [2] (Indexed colour lost to a Separation set in its lookup) samenums
+
+/xSep [/Separation /Outer /DeviceGray { inIdx setcolorspace 1 setcolor 0.5 mul }] def
+xSep setcolorspace
+0.4 setcolor
+currentcolorspace xSep (Separation space lost to an Indexed set in its transform) same
+[ currentcolor ] [0.4] (Separation colour lost to an Indexed set in its transform) samenums
+
+
+bad 0 eq { (SUCCESS\n) print }{ (FAILURES: ) print bad == } ifelse
