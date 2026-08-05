@@ -2826,16 +2826,18 @@ refuse:
    procedure's marks. */
 
 static int
-_t3_key(Xpost_Context *ctx, Xpost_Object fontdict, Xpost_Object code,
-        Xpost_Object mat, unsigned long *k2, long m[4])
+_mask_key(Xpost_Context *ctx, Xpost_Object key,
+          Xpost_Object mat, unsigned long *k2, long m[4])
 {
-    Xpost_Object o;
     int i;
 
-    o = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, ".fontid"));
-    if (xpost_object_get_type(o) != integertype)
+    /* The caller says what the mask is of. A glyph combines its font's
+       serial with the character code; anything else combines whatever
+       distinguishes one of its masks from another. The cache neither
+       knows nor needs to know which. */
+    if (xpost_object_get_type(key) != integertype)
         return 0;
-    *k2 = ((unsigned long)o.int_.val << 8) | ((unsigned long)code.int_.val & 255);
+    *k2 = (unsigned long)key.int_.val;
     if (xpost_object_get_type(mat) != arraytype || mat.comp_.sz != 6)
         return 0;
     for (i = 0; i < 4; i++)
@@ -2850,20 +2852,24 @@ _t3_key(Xpost_Context *ctx, Xpost_Object fontdict, Xpost_Object code,
     return 1;
 }
 
-/* x y mat font code cliparr  .t3cachehit  advx advy true
-                                            false
-   paint the cached glyph at the device origin (x y) in the current
-   colour and report its character-space advances; a glyph whose
-   raster leaves the clip rectangle [x0 y0 x1 y1] answers false, and
-   the direct build renders it clipped */
+/* x y mat key cliparr  .maskcachehit  n0 n1 true
+                                       false
+   Paint a cached mask at the device origin (x y) in the current colour,
+   and answer the two numbers filed with it. A mask whose raster leaves
+   the clip rectangle [x0 y0 x1 y1] answers false, and the caller paints
+   it the long way, clipped.
+
+   The mask is coverage, painted in whatever colour is current: that is
+   what makes one cache serve a glyph and an uncoloured pattern cell
+   alike. What the two numbers mean is the caller's business -- a glyph
+   files its advances there. */
 static
-int _t3cachehit(Xpost_Context *ctx,
-                Xpost_Object x,
-                Xpost_Object y,
-                Xpost_Object mat,
-                Xpost_Object fontdict,
-                Xpost_Object code,
-                Xpost_Object cliparr)
+int _maskcachehit(Xpost_Context *ctx,
+                  Xpost_Object x,
+                  Xpost_Object y,
+                  Xpost_Object mat,
+                  Xpost_Object key,
+                  Xpost_Object cliparr)
 {
     Xpost_Object userdict, gd, gs, devdic, putpix, o;
     textstate ts;
@@ -2876,9 +2882,9 @@ int _t3cachehit(Xpost_Context *ctx,
     Xpost_Object comp[4];
     double dx, dy;
 
-    if (!_t3_key(ctx, fontdict, code, mat, &k2, m))
+    if (!_mask_key(ctx, key, mat, &k2, m))
         goto refuse;
-    if (!xpost_font_cache_lookup_bits(NULL, k2, m, 0,
+    if (!xpost_mask_cache_lookup(NULL, k2, m, 0,
                                       &bits, &rows, &width, &pitch,
                                       &left, &top, &ax, &ay))
         goto refuse;
@@ -2948,16 +2954,16 @@ refuse:
     return 0;
 }
 
-/* capdict  .t3cacheput  -
+/* capdict  .maskcacheput  -
    insert a captured glyph mask: buf holds width x height coverage
    bytes whose raster origin sits at device (bx0 by0), the glyph
    origin was at device (ox oy), advances are character-space, and
-   mat, font and code key the entry as .t3cachehit reads it */
+   mat and key identify the entry as .maskcachehit reads it */
 static
-int _t3cacheput(Xpost_Context *ctx,
+int _maskcacheput(Xpost_Context *ctx,
                 Xpost_Object dict)
 {
-    Xpost_Object o, buf, mat, fontdict, code;
+    Xpost_Object o, buf, mat, key;
     unsigned long k2;
     long m[4];
     int w, h, bx0, by0, left, top;
@@ -2968,8 +2974,7 @@ int _t3cacheput(Xpost_Context *ctx,
 #define DNUM(name, var) do {     o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, name));     if (xpost_object_get_type(o) == realtype) var = o.real_.val;     else if (xpost_object_get_type(o) == integertype) var = (double)o.int_.val;     else return typecheck; } while (0)
     DGET("buf", buf, stringtype);
     DGET("mat", mat, arraytype);
-    DGET("font", fontdict, dicttype);
-    DGET("code", code, integertype);
+    DGET("key", key, integertype);
     { double t; DNUM("w", t); w = (int)t; }
     { double t; DNUM("h", t); h = (int)t; }
     { double t; DNUM("bx0", t); bx0 = (int)t; }
@@ -2982,12 +2987,12 @@ int _t3cacheput(Xpost_Context *ctx,
 #undef DNUM
     if (w <= 0 || h <= 0 || (unsigned int)(w * h) > buf.comp_.sz)
         return rangecheck;
-    if (!_t3_key(ctx, fontdict, code, mat, &k2, m))
+    if (!_mask_key(ctx, key, mat, &k2, m))
         return 0;
     bytes = (unsigned char *)xpost_string_get_pointer(ctx, buf);
     left = bx0 - (int)floor(ox + 0.5);
     top = (int)floor(oy + 0.5) - by0;
-    (void)xpost_font_cache_insert_bits(NULL, k2, m, 0,
+    (void)xpost_mask_cache_insert(NULL, k2, m, 0,
                                        bytes, h, w, w, left, top,
                                        (long)(advx * 65536.0),
                                        (long)(advy * 65536.0));
@@ -3972,10 +3977,10 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".t3cachehit", (Xpost_Op_Func)_t3cachehit, 0, 6,
-        floattype, floattype, arraytype, dicttype, integertype, arraytype);
+    op = xpost_operator_cons(ctx, ".maskcachehit", (Xpost_Op_Func)_maskcachehit, 0, 5,
+        floattype, floattype, arraytype, integertype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".t3cacheput", (Xpost_Op_Func)_t3cacheput, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, ".maskcacheput", (Xpost_Op_Func)_maskcacheput, 0, 1, dicttype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".setcachelimit", (Xpost_Op_Func)_setcachelimit, 0, 1, integertype);
     INSTALL;

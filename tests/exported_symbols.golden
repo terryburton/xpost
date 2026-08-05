@@ -1,3 +1,4 @@
+
 a85enc_methods
 a85_methods
 _currentpoint
@@ -146,8 +147,6 @@ xpost_file_read_byte
 xpost_file_stdio_stream_get
 xpost_file_write
 xpost_file_write_byte
-xpost_font_cache_insert_bits
-xpost_font_cache_lookup_bits
 xpost_font_cache_setlimit
 xpost_font_cache_setparams
 xpost_font_cache_status
@@ -204,6 +203,8 @@ xpost_log_print_cb_stderr
 xpost_log_print_cb_stdout
 xpost_log_print_dump
 xpost_log_quit
+xpost_mask_cache_insert
+xpost_mask_cache_lookup
 xpost_matrix_identity
 xpost_matrix_mult
 xpost_matrix_rotate

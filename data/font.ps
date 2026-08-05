@@ -156,12 +156,20 @@ setglobal
     /yadvance 3 2 roll put
 } //.xpostsys /.defop get exec
 
-% wx wy llx lly urx ury  .t3capture  -
+% -  .glyphkey  int
+% What the mask cache is asked to remember a glyph by: the font's serial,
+% stamped by definefont, with the character code beside it. Any other
+% caller names its masks its own way; the cache does not interpret this.
+.xpostsys /.glyphkey {
+    font /.fontid get 256 mul code 255 and add
+} bind put
+
+% wx wy llx lly urx ury  .maskcapture  -
 % declare the glyph's metrics and turn the build's marks into a
 % coverage mask: painting swaps to a raster sized from the glyph box
 % under the transform in force, shifted onto it in device space
 currentglobal true setglobal
-.xpostsys /.t3capture {
+.xpostsys /.maskcapture {
     16 dict begin
     {ury urx lly llx wy wx}{exch def}forall
     wx wy setcharwidth
@@ -216,7 +224,7 @@ setglobal
     graphicsdict /.t3want 2 copy known { get }{ pop pop false } ifelse
     graphicsdict /.t3cap 2 copy known { get }{ pop pop null } ifelse
     null eq and {
-        //.xpostsys /.t3capture get exec
+        //.xpostsys /.maskcapture get exec
     }{
         pop pop pop pop
         setcharwidth
@@ -241,7 +249,7 @@ currentglobal true setglobal
         4 array astore /cliparr exch def true
     }{ false } ifelse def
     clipok
-    { devx devy devmat font code cliparr .t3cachehit }
+    { devx devy devmat //.xpostsys /.glyphkey get exec cliparr .maskcachehit }
     { false } ifelse
     {
         /ya exch def /xa exch def
@@ -285,15 +293,15 @@ currentglobal true setglobal
                 /ox cap /ox get /oy cap /oy get
                 /advx cap /advx get
                 /advy cap /advy get
-                /mat devmat /font font /code code
-            >> .t3cacheput
+                /mat devmat /key //.xpostsys /.glyphkey get exec
+            >> .maskcacheput
         } if
         graphicsdict /.t3want oldwant put
         graphicsdict /.t3cap oldcap put
         grestore
         cap null ne {
             clipok
-            { devx devy devmat font code cliparr .t3cachehit }
+            { devx devy devmat //.xpostsys /.glyphkey get exec cliparr .maskcachehit }
             { false } ifelse
             {
                 /ya exch def /xa exch def

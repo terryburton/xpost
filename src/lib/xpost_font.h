@@ -265,12 +265,16 @@ void xpost_font_cache_status(long *bsize, long *bmax, long *msize,
                              long *blimit);
 void xpost_font_cache_setlimit(long blimit);
 void xpost_font_cache_setparams(long bmax, long lower, long upper);
-int xpost_font_cache_lookup_bits(const void *k1, unsigned long k2,
+/* A cache of coverage masks, keyed by a caller's identity (k1, k2) and
+   the transform they were rendered under. It is not font machinery: a
+   glyph is one kind of mask and its face and character code are one way
+   of naming one. It lives here because fonts were its first caller. */
+int xpost_mask_cache_lookup(const void *k1, unsigned long k2,
                                  const long m[4], long size,
                                  unsigned char **bits, int *rows, int *width,
                                  int *pitch, int *left, int *top,
                                  long *advance_x, long *advance_y);
-int xpost_font_cache_insert_bits(const void *k1, unsigned long k2,
+int xpost_mask_cache_insert(const void *k1, unsigned long k2,
                                  const long m[4], long size,
                                  const unsigned char *bits, int rows,
                                  int width, int pitch, int left, int top,

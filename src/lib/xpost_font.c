@@ -303,7 +303,7 @@ xpost_font_cache_setparams(long bmax, long lower, long upper)
 }
 
 int
-xpost_font_cache_lookup_bits(const void *k1, unsigned long k2,
+xpost_mask_cache_lookup(const void *k1, unsigned long k2,
                              const long m[4], long size,
                              unsigned char **bits, int *rows, int *width,
                              int *pitch, int *left, int *top,
@@ -322,7 +322,7 @@ xpost_font_cache_lookup_bits(const void *k1, unsigned long k2,
 }
 
 int
-xpost_font_cache_insert_bits(const void *k1, unsigned long k2,
+xpost_mask_cache_insert(const void *k1, unsigned long k2,
                              const long m[4], long size,
                              const unsigned char *bits, int rows, int width,
                              int pitch, int left, int top,
