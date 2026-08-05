@@ -449,14 +449,16 @@ put
 } //.xpostsys /.defop get exec
 
 % clipsave/cliprestore (LL3): push and pop the clip region alone,
-% independent of the graphics state stack
+% independent of the graphics state stack. Neither takes an operand nor
+% returns a result, so the stack the pushing arithmetic is done on is
+% cleared down again before returning.
 /clipsave [ ] {
     graphicsdict /clipstack 2 copy known { get }{
         2 copy 32 array put get
     } ifelse
     graphicsdict /clipptr 2 copy known { get }{ 2 copy 0 put get } ifelse
     2 copy graphicsdict /currgstate get /clipregion get .copypath put
-    pop
+    pop pop
     graphicsdict /clipptr 2 copy get 1 add put
 } //.xpostsys /.defop get exec
 /cliprestore [ ] {

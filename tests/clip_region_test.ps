@@ -47,5 +47,21 @@ ay0 by0 (the clip's bottom edge survives a path built on clippath) assertnear
 ax1 bx1 (the clip's right edge survives a path built on clippath) assertnear
 ay1 by1 (the clip's top edge survives a path built on clippath) assertnear
 
+% --- the clip stack is pushed and popped, not published ---------------
+% clipsave and cliprestore each take no operands and return no results
+% (PLRM 8.2). An operator that leaves its own workings on the operand
+% stack costs its caller nothing until the caller reads one item too far,
+% and then the mistake is charged to whatever reads it.
+
+newpath
+clear clipsave
+count 0 eq (clipsave returns nothing) assert
+clear cliprestore
+count 0 eq (cliprestore returns nothing) assert
+clear clipsave clipsave cliprestore cliprestore
+count 0 eq (a run of clip stack operations returns nothing) assert
+clear
+
+count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit
