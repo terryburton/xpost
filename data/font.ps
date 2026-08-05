@@ -344,14 +344,6 @@ currentglobal true setglobal
         { pop } ifelse
 } put
 
-% /opname n  .needops  -
-% Operand availability is settled before the state the operator needs.
-.xpostsys /.needops {
-    count 2 sub exch lt
-        { cvx /stackunderflow signalerror }
-        { pop } ifelse
-} put
-
 % /opname  .needfont  -
 % The current font's initial value is an invalid font dictionary, so a
 % program shows nothing until it selects one.
@@ -363,7 +355,6 @@ currentglobal true setglobal
 setglobal
 
 /show [ /stringtype ] {
-    /show 1 //.xpostsys /.needops get exec
     /show //.xpostsys /.needfont get exec
     /show //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
@@ -427,7 +418,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /widthshow [ /numbertype /numbertype /integertype /stringtype ] {
-    /widthshow 4 //.xpostsys /.needops get exec
     /widthshow //.xpostsys /.needfont get exec
     /widthshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
@@ -479,7 +469,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /ashow [ /numbertype /numbertype /stringtype ] {
-    /ashow 3 //.xpostsys /.needops get exec
     /ashow //.xpostsys /.needfont get exec
     /ashow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
@@ -528,7 +517,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /awidthshow [ /numbertype /numbertype /integertype /numbertype /numbertype /stringtype ] {
-    /awidthshow 6 //.xpostsys /.needops get exec
     /awidthshow //.xpostsys /.needfont get exec
     /awidthshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
@@ -596,7 +584,6 @@ currentglobal true setglobal
 setglobal
 
 /kshow [ /proctype /stringtype ] {
-    /kshow 2 //.xpostsys /.needops get exec
     /kshow //.xpostsys /.needfont get exec
     /kshow //.xpostsys /.needpoint get exec
     % kshow steps the string one byte at a time, which a composite font
@@ -644,7 +631,6 @@ setglobal
 % assigns the name. Other font types resolve the name against the
 % font program.
 /glyphshow [ /nametype ] {
-    /glyphshow 1 //.xpostsys /.needops get exec
     /glyphshow //.xpostsys /.needfont get exec
     /glyphshow //.xpostsys /.needpoint get exec
     graphicsdict /currgstate get /currfont get
@@ -716,7 +702,6 @@ currentglobal true setglobal
 setglobal
 
 /xshow [ /stringtype /anytype ] {
-    /xshow 2 //.xpostsys /.needops get exec
     /xshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
     5 dict begin
@@ -735,7 +720,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /yshow [ /stringtype /anytype ] {
-    /yshow 2 //.xpostsys /.needops get exec
     /yshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
     5 dict begin
@@ -754,7 +738,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /xyshow [ /stringtype /anytype ] {
-    /xyshow 2 //.xpostsys /.needops get exec
     /xyshow //.xpostsys /.needfont get exec
     dup type /stringtype eq { .numstring2array } if
     5 dict begin
@@ -775,7 +758,6 @@ setglobal
 } //.xpostsys /.defop get exec
 
 /stringwidth [ /stringtype ] {
-    /stringwidth 1 //.xpostsys /.needops get exec
     /stringwidth //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get dup 3 eq exch 0 eq or not { pop //stringwidth }{
@@ -800,7 +782,6 @@ setglobal
 % to user space about the current point. Type 3 fonts only advance
 % the pen by the text's width.
 /charpath [ /stringtype /booleantype ] {
-    /charpath 2 //.xpostsys /.needops get exec
     /charpath //.xpostsys /.needfont get exec
     pop
     graphicsdict /currgstate get /currfont get
