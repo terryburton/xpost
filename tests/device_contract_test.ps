@@ -12,11 +12,18 @@
 
 /dev .privatedict /.graphicsdict get /currgstate get /device get def
 
+% The tag is put away before the procedure runs, and the stack is taken
+% back to the depth the procedure was handed: a procedure that fails may
+% leave anything at all behind, and a report reading its own operands
+% from there reports the leavings instead of the tag.
 /try { % proc (name)  .  -
-    exch stopped {
-        (FAIL: ) print print ( errored\n) print
+    /t.tag exch def
+    /t.depth count 2 sub def
+    stopped {
+        (FAIL: ) print t.tag print ( errored\n) print
         /contractfail true def
-    }{ pop } ifelse
+    } if
+    count t.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
 } def
 /assert { % bool (name)  .  -
     exch { pop }{
@@ -34,37 +41,51 @@
 /white { ncomp { 1 } repeat } def
 /black { ncomp { 0 } repeat } def
 
+% each marking method reached the one way, with the device supplied
+/fillrect { dev dup /FillRect get exec } def
+/putpix   { dev dup /PutPix   get exec } def
+/drawline { dev dup /DrawLine get exec } def
+/getpix   { dev dup /GetPix   get exec } def
+
 % a painted baseline so Emit has marks to write
 newpath 10 10 moveto 90 90 lineto stroke
 
 % --- FillRect boundary inputs (val x y w h DEVICE FillRect) ---
 % the raster classes take val as the device's native colour; probe the
 % method only when the device carries it
-dev /FillRect 2 copy known {
-    get /fr exch def
-    { val 5 5 0 0 dev fr exec }          (zero-size FillRect) try
-    { val 5 5 1 1 dev fr exec }          (unit FillRect) try
-    { val -20 -20 10 10 dev fr exec }    (negative-origin FillRect) try
-    { val 5000 5000 50 50 dev fr exec }  (out-of-range FillRect) try
-    { val 50.5 60.25 10.75 3.5 dev fr exec } (fractional FillRect) try
-    { val 80 80 -30 -30 dev fr exec }    (negative-extent FillRect) try
-}{ pop pop } ifelse
+dev /FillRect known {
+    { val 5 5 0 0 fillrect }          (zero-size FillRect) try
+    { val 5 5 1 1 fillrect }          (unit FillRect) try
+    { val -20 -20 10 10 fillrect }    (negative-origin FillRect) try
+    { val 5000 5000 50 50 fillrect }  (out-of-range FillRect) try
+    { val 50.5 60.25 10.75 3.5 fillrect } (fractional FillRect) try
+    { val 80 80 -30 -30 fillrect }    (negative-extent FillRect) try
+} if
 
 % --- PutPix boundary inputs (val x y DEVICE PutPix) ---
-dev /PutPix 2 copy known {
-    get /pp exch def
-    { val 0 0 dev pp exec }        (origin PutPix) try
-    { val -1 -1 dev pp exec }      (negative PutPix) try
-    { val 9999 9999 dev pp exec }  (out-of-range PutPix) try
-    { val 3.7 4.2 dev pp exec }    (fractional PutPix) try
-}{ pop pop } ifelse
+dev /PutPix known {
+    { val 0 0 putpix }        (origin PutPix) try
+    { val -1 -1 putpix }      (negative PutPix) try
+    { val 9999 9999 putpix }  (out-of-range PutPix) try
+    { val 3.7 4.2 putpix }    (fractional PutPix) try
+} if
 
 % --- DrawLine boundary inputs (val x1 y1 x2 y2 DEVICE DrawLine) ---
-dev /DrawLine 2 copy known {
-    get /dl exch def
-    { val 5 5 5 5 dev dl exec }            (degenerate DrawLine) try
-    { val -50 -50 5000 5000 dev dl exec }  (clipped DrawLine) try
-}{ pop pop } ifelse
+dev /DrawLine known {
+    { val 5 5 5 5 drawline }            (degenerate DrawLine) try
+    { val -50 -50 5000 5000 drawline }  (clipped DrawLine) try
+} if
+
+% --- GetPix boundary inputs (x y DEVICE GetPix -> c1..cN) ---
+% A method the class dictionary offers has to work. Every device copies
+% a class whose GetPix reads the base class's raster, so a device
+% keeping its raster elsewhere must bring its own or the name answers
+% undefined -- present, callable, and broken, which no probe with
+% `known` can tell from working.
+dev /GetPix known {
+    { 5 5 getpix ncomp { pop } repeat }      (GetPix answers) try
+    { 3.7 4.2 getpix ncomp { pop } repeat }  (fractional GetPix) try
+} if
 
 % the standard operators must equally survive boundary geometry
 { newpath -100 -100 moveto 10000 10000 lineto stroke } (off-page stroke) try
@@ -79,12 +100,6 @@ dev /DrawLine 2 copy known {
 % device whose GetPix answers the same both times (or answers nothing,
 % or errors) cannot witness anything below, and says so.
 
-/pix { % x y  .  c1..cN     one pixel, read back
-    dev dup /GetPix get exec
-} def
-/plot { % c1..cN x y  .  -
-    dev dup /PutPix get exec
-} def
 /samepix { % a1..aN b1..bN  .  bool
     ncomp array astore /sp.b exch def
     ncomp array astore /sp.a exch def
@@ -97,7 +112,7 @@ dev /DrawLine 2 copy known {
 /readable false def
 dev /GetPix known dev /PutPix known and {
     /rb.depth count def
-    { white 1 1 plot  1 1 pix  black 1 1 plot  1 1 pix
+    { white 1 1 putpix  1 1 getpix  black 1 1 putpix  1 1 getpix
       samepix not } stopped
     { % the probe could not finish -- a GetPix that errors or answers
       % nothing leaves the raster unreadable, and readable stays false
@@ -117,27 +132,27 @@ readable {
     % 0.31, so the ink comes out a different colour rather than the
     % nearest one. Stated without naming the device's own scale: the
     % out-of-range paint must read back as the in-range extreme does.
-    ncomp { 1 } repeat 3 3 plot  3 3 pix
-    ncomp { 1.7 } repeat 4 3 plot  4 3 pix
+    ncomp { 1 } repeat 3 3 putpix  3 3 getpix
+    ncomp { 1.7 } repeat 4 3 putpix  4 3 getpix
     samepix (PutPix clamps a component above the range) assert
 
-    ncomp { 0 } repeat 5 3 plot  5 3 pix
-    ncomp { -0.7 } repeat 6 3 plot  6 3 pix
+    ncomp { 0 } repeat 5 3 putpix  5 3 getpix
+    ncomp { -0.7 } repeat 6 3 putpix  6 3 getpix
     samepix (PutPix clamps a component below the range) assert
 
     dev /FillRect known {
-        ncomp { 1 } repeat 3 5 0 0 dev dup /FillRect get exec  3 5 pix
-        ncomp { 1.7 } repeat 4 5 0 0 dev dup /FillRect get exec  4 5 pix
+        ncomp { 1 } repeat 3 5 0 0 fillrect  3 5 getpix
+        ncomp { 1.7 } repeat 4 5 0 0 fillrect  4 5 getpix
         samepix (FillRect clamps a component above the range) assert
 
-        ncomp { 0 } repeat 5 5 0 0 dev dup /FillRect get exec  5 5 pix
-        ncomp { -0.7 } repeat 6 5 0 0 dev dup /FillRect get exec  6 5 pix
+        ncomp { 0 } repeat 5 5 0 0 fillrect  5 5 getpix
+        ncomp { -0.7 } repeat 6 5 0 0 fillrect  6 5 getpix
         samepix (FillRect clamps a component below the range) assert
     } if
 
     dev /DrawLine known {
-        ncomp { 1 } repeat 3 7 3 7 dev dup /DrawLine get exec  3 7 pix
-        ncomp { 1.7 } repeat 4 7 4 7 dev dup /DrawLine get exec  4 7 pix
+        ncomp { 1 } repeat 3 7 3 7 drawline  3 7 getpix
+        ncomp { 1.7 } repeat 4 7 4 7 drawline  4 7 getpix
         samepix (DrawLine clamps a component above the range) assert
     } if
 } if

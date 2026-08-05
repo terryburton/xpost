@@ -342,6 +342,45 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Read a pixel back in the device's stored channel scale, the same one
+   PutPix writes. The class this device copies reads the base class's
+   row array, which this device does not have, so the inherited method
+   would answer undefined; a slot the class dictionary offers has to
+   work. A pixel outside the raster reads as the ground. */
+static
+int _getpix(Xpost_Context *ctx,
+            Xpost_Object x,
+            Xpost_Object y,
+            Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int ix, iy;
+    Xpost_Png_Pixel pixel;
+
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
+    {
+        pixel.red = pixel.green = pixel.blue = 0;
+        pixel.alpha = 0;
+    }
+    else
+        pixel = private.buf->data[iy * private.width + ix];
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.blue));
+
+    return 0;
+}
+
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255. The text operators use this for glyph edge pixels when the
    device renders anti-aliased text. */
@@ -661,6 +700,12 @@ int _loaddevicecont_common(Xpost_Context *ctx,
             numbertype, numbertype,
             dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
+    if (ret)
+        return ret;
+
+    op = xpost_operator_cons(ctx, "pngGetPix", (Xpost_Op_Func)_getpix, 3, 3,
+            numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
     if (ret)
         return ret;
 

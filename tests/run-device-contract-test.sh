@@ -21,7 +21,7 @@ xpost=$1
 script=$2
 
 # devices whose GetPix reports back what a marking method wrote
-readback_min=4
+readback_min=8
 readback=0
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then

@@ -336,6 +336,74 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Read a pixel back in the device's stored channel scale, the same one
+   PutPix writes, whichever of the four pixel layouts the buffer was
+   created with. The class this device copies reads the base class's row
+   array, which this device does not have, so the inherited method would
+   answer undefined; a slot the class dictionary offers has to work. A
+   pixel outside the raster reads as the ground. */
+static
+int _getpix(Xpost_Context *ctx,
+            Xpost_Object x,
+            Xpost_Object y,
+            Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int ix, iy;
+    int r = 0, g = 0, b = 0;
+
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if (ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)
+    {
+        int i = iy * private.buf->width + ix;
+
+        switch (private.pixelformat)
+        {
+            case BGRA:
+            {
+                Xpost_Raster_BGRA_Pixel p =
+                    ((Xpost_Raster_BGRA_Pixel *)private.buf->data)[i];
+                r = p.red; g = p.green; b = p.blue;
+            }
+            break;
+            case BGR:
+            {
+                Xpost_Raster_BGR_Pixel p =
+                    ((Xpost_Raster_BGR_Pixel *)private.buf->data)[i];
+                r = p.red; g = p.green; b = p.blue;
+            }
+            break;
+            case ARGB:
+            {
+                Xpost_Raster_ARGB_Pixel p =
+                    ((Xpost_Raster_ARGB_Pixel *)private.buf->data)[i];
+                r = p.red; g = p.green; b = p.blue;
+            }
+            break;
+            case RGB:
+            {
+                Xpost_Raster_RGB_Pixel p =
+                    ((Xpost_Raster_RGB_Pixel *)private.buf->data)[i];
+                r = p.red; g = p.green; b = p.blue;
+            }
+            break;
+        }
+    }
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
+
+    return 0;
+}
+
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255. The text operators use this for the partly covered pixels
    at a glyph's edges, and a device without it inherits the base class's,
@@ -649,6 +717,12 @@ int loadrasterdevicecont(Xpost_Context *ctx,
                              numbertype, numbertype,
                              dicttype);
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
+    if (ret)
+        return ret;
+
+    op = xpost_operator_cons(ctx, "rasterGetPix", (Xpost_Op_Func)_getpix, 3, 3,
+                             numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
     if (ret)
         return ret;
 

@@ -389,6 +389,13 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* This device's raster is a pixmap on the display server, reached
+   through a colormap rather than held as channel values, so a pixel
+   read back would be a round trip returning an index this device cannot
+   turn into the components it was given. It answers the ground instead,
+   as the vector writers do: a method the class dictionary offers must
+   answer its declared results, and answering nothing leaves the caller
+   reading whatever was beneath. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -405,8 +412,9 @@ int _getpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* ?? I don't know ...
-       make a 1-pixel image and use copy_area?  ... */
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
     return 0;
 }
 
