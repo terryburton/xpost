@@ -94,13 +94,10 @@ graphicsdict /currgstate get /device DEV put
 % region.
 %
 % The third element says whether the region governs what the painter
-% marks. It is false for show alone: a glyph raster is plotted straight
-% through the device's pixel methods, so the marks a show makes reach the
-% page whatever region is in force, empty or not, and asking this suite
-% about its ink would be asking about that instead. What show does under a
-% region covering no pixels is still asserted -- it must return quietly --
-% and the ink of the same glyphs painted through the region is covered by
-% the pattern show below, which goes the charpath-and-fill way.
+% marks, which it does for every one of them. What a glyph raster meets
+% the region as, and that it meets the same pixels a fill of the same
+% shape would, is tests/show_clip_test.ps; here show is one painter among
+% the rest, held to marking nothing when the region covers nothing.
 /PAINTERS [
   [ (fill)          { 0 setgray 10 40 80 60 boxpath fill } true ]
   [ (eofill)        { 0 setgray 10 40 80 60 boxpath eofill } true ]
@@ -108,7 +105,7 @@ graphicsdict /currgstate get /device DEV put
                       newpath 10 50 moveto 80 50 lineto stroke } true ]
   [ (rectfill)      { 0 setgray 10 40 70 20 rectfill } true ]
   [ (show)          { 0 setgray /Times-Roman findfont 24 scalefont setfont
-                      10 42 moveto (Hg) show } false ]
+                      10 42 moveto (Hg) show } true ]
   [ (image)         { 0 setgray 10 40 translate 70 20 scale
                       2 2 8 [2 0 0 -2 0 2] <00204060> image } true ]
   [ (axial shfill)  { << /ShadingType 2 /ColorSpace /DeviceGray

@@ -352,11 +352,102 @@ currentglobal true setglobal
         { get /FontType known }{ pop pop false } ifelse
         { pop }{ cvx /invalidfont signalerror } ifelse
 } put
+
+% -  .showclip  -
+% Work out which device pixels the clip region in force covers and
+% leave the answer in the clip's own cache holder, where the glyph
+% raster route reads it.
+%
+% That route plots a rendered glyph straight through the device's pixel
+% methods rather than through the fill pipeline, so it meets the region
+% itself; PLRM 7.5.1 has it meet the same set of pixels a fill of the
+% same shape would, which is why the answer is worked out by the region
+% machinery here and not by a rule of the text route's own.
+%
+% /clipbox carries the region's device bounds when the region is a
+% rectangle -- what a page, a column or a text frame leaves -- since
+% then the bounds are the whole answer and no scan conversion is
+% needed. Otherwise /clipbox is null and /clipspans carries the region
+% resolved to pixel-band rectangles, the form .regionmeet reduces a
+% region to and every painter meets one in.
+%
+% The resolving is done a slice of rows at a time, and /clipspans is the
+% array of slices rather than one array of bands. A band costs five
+% array elements and an array's length is a bounded field, so a region
+% deep enough in rows outruns a single array long before it outruns the
+% page: the slices keep each array short and the region whole. A region
+% divided into more bands than even one slice's array holds has no such
+% form, and its bounds stand in for it -- which reaches every pixel it
+% covers, and some it does not.
+%
+% The answer belongs to the region and no other, so a graphics state
+% that shares the holder shares it, and a clip that installs a fresh
+% holder starts again. A holder of serial zero is the one every
+% graphics state is built with and shares until its first clip: nothing
+% may be kept there, so that one is worked out afresh each time.
+.xpostsys /.showclipslice 2048 put
+% how far past any device the slices reach across: a slice spans every
+% column there could be, and meeting it against the region leaves the
+% region's own columns
+.xpostsys /.showclipwide 1000000 put
+.xpostsys /.showclip {
+    16 dict begin
+    /h graphicsdict /currgstate get /clipcache get def
+    h /clipbox known h /serial get 0 ne and not {
+        .cliprect {
+            4 array astore
+            h exch /clipbox exch put
+        }{
+            /poly //.xpostsys /.clipregionpoly get exec def
+            % the rows and columns the region reaches, read off its own
+            % vertices: the slices are cut over the rows, and the bounds
+            % are what stands in for the region if the slices fail
+            /any false def
+            poly {
+                dup null eq { pop }{
+                    aload pop /py exch def /px exch def
+                    any {
+                        px xlo lt { /xlo px def } if
+                        px xhi gt { /xhi px def } if
+                        py ylo lt { /ylo py def } if
+                        py yhi gt { /yhi py def } if
+                    }{
+                        /xlo px def /xhi px def /ylo py def /yhi py def
+                        /any true def
+                    } ifelse
+                } ifelse
+            } forall
+            h /clipbox null put
+            any not {
+                % a region with no vertices covers no pixel
+                h /clipspans [ ] put
+            }{
+                /sl //.xpostsys /.showclipslice get def
+                /wd //.xpostsys /.showclipwide get def
+                count /n0 exch def
+                { [ ylo floor cvi sl yhi ceiling cvi {
+                      /yb exch def
+                      [ [ wd neg yb ] [ wd yb ]
+                        [ wd yb sl add ] [ wd neg yb sl add ] null ]
+                      //.xpostsys /.clipmeet get exec
+                    } for ]
+                } stopped {
+                    count n0 sub { pop } repeat
+                    h /clipbox [ xlo ylo xhi yhi ] put
+                }{
+                    h exch /clipspans exch put
+                } ifelse
+            } ifelse
+        } ifelse
+    } if
+    end
+} put
 setglobal
 
 /show [ /stringtype ] {
     /show //.xpostsys /.needfont get exec
     /show //.xpostsys /.needpoint get exec
+    //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         exch //.xpostsys /.showtype0 get exec
@@ -420,6 +511,7 @@ setglobal
 /widthshow [ /numbertype /numbertype /integertype /stringtype ] {
     /widthshow //.xpostsys /.needfont get exec
     /widthshow //.xpostsys /.needpoint get exec
+    //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font: add the delta after the character whose full
@@ -471,6 +563,7 @@ setglobal
 /ashow [ /numbertype /numbertype /stringtype ] {
     /ashow //.xpostsys /.needfont get exec
     /ashow //.xpostsys /.needpoint get exec
+    //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font decodes to descendant glyphs; walk it with the
@@ -519,6 +612,7 @@ setglobal
 /awidthshow [ /numbertype /numbertype /integertype /numbertype /numbertype /stringtype ] {
     /awidthshow //.xpostsys /.needfont get exec
     /awidthshow //.xpostsys /.needpoint get exec
+    //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 0 eq {
         % a composite font: the ashow delta after every character, plus the
@@ -633,6 +727,7 @@ setglobal
 /glyphshow [ /nametype ] {
     /glyphshow //.xpostsys /.needfont get exec
     /glyphshow //.xpostsys /.needpoint get exec
+    //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 3 ne {
         pop .glyphshow

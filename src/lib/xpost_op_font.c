@@ -61,6 +61,7 @@
 #include "xpost_operator.h"
 #include "xpost_op_font.h"
 #include "xpost_dev_generic.h" /* pdfwrite accumulator access for glyph outlines */
+#include "xpost_dev_driver.h" /* the device grid the clip region's bounds sit on */
 
 /*
  * FIXME: check if we can factorize show, ashow and kshow a bit.
@@ -72,6 +73,27 @@ typedef struct fontdata
     void *face;
     void *program;  /* malloc'd font program backing a memory face (Type 42) */
 } fontdata;
+
+/* One pixel-row band of the clip region: the columns [lo, hi) of row
+   band the region covers. This is the region as .regionmeet resolves
+   it, read back from the array the clip's cache holder keeps. */
+typedef struct clipband
+{
+    int band;
+    int lo, hi;
+} clipband;
+
+/* How the clip region in force meets device pixels. The glyph raster
+   route paints pixels straight through the device, so it meets the
+   region itself rather than through the fill pipeline; what it meets is
+   the same set of pixels, worked out by .showclip in data/font.ps and
+   left in the clip's own cache holder. */
+enum
+{
+    CLIP_ALL,    /* nothing worked out: the raster is not narrowed */
+    CLIP_BOX,    /* the region is a rectangle: the pixel bounds below */
+    CLIP_BANDS   /* the region resolved to the bands below */
+};
 
 /* per-text-operator rendering configuration, gathered once from the
    font dictionary, the device dictionary and the graphics state */
@@ -89,6 +111,10 @@ typedef struct textstate
     Xpost_Object fillrect;  /* the device's FillRect, for extent reporting */
     int sepindex;           /* separation registered with the device, or -1 */
     double septint;         /* the separation's tint */
+    int clipkind;           /* one of the CLIP_ constants above */
+    int cx0, cy0, cx1, cy1; /* the region's pixel bounds, half-open */
+    const clipband *bands;  /* the region's bands, ascending, when CLIP_BANDS */
+    int nbands;
 } textstate;
 
 /* the linear part of character space -> device space: the font
@@ -1135,6 +1161,219 @@ int _setfont(Xpost_Context *ctx,
     return 0;
 }
 
+/* The bands last read back, kept against the array they were read from
+   and the serial of the clip that array belongs to. Reading the array
+   costs five object fetches per band of the whole region, and every
+   text operator under one region would pay it again; narrowing a glyph
+   against the bands, which is what the reading is for, costs the rows
+   the glyph covers. The serial never repeats within a run, so an array
+   that has since been reused for something else cannot answer for it.
+   Nothing here holds a reference into VM: the entity number is
+   compared, never followed. */
+static struct
+{
+    int serial;
+    int ent;
+    unsigned int off, sz;
+    clipband *band;
+    int n;
+} _clip_memo;
+
+static int _band_comp(const void *a, const void *b)
+{
+    const clipband *p = a, *q = b;
+
+    if (p->band != q->band)
+        return p->band < q->band ? -1 : 1;
+    if (p->lo != q->lo)
+        return p->lo < q->lo ? -1 : 1;
+    return 0;
+}
+
+static int _clip_number(Xpost_Context *ctx, Xpost_Object arr, int i, double *v)
+{
+    Xpost_Object o = xpost_array_get(ctx, arr, i);
+
+    if (xpost_object_get_type(o) == realtype)
+        *v = o.real_.val;
+    else if (xpost_object_get_type(o) == integertype)
+        *v = (double)o.int_.val;
+    else
+        return 0;
+    return 1;
+}
+
+/* A device bound as the pixel index it names. The region's own bounds
+   are page-sized, but they are read from a path a program may have put
+   any number into, and a raster is indexed by int: a bound past the
+   range is taken to the end of it, which is outside every raster either
+   way and so narrows exactly as the true value would. */
+#define CLIP_COORD_MAX 16777216.0
+static
+int _clip_floor(double v)
+{
+    v = floor(v);
+    return v < -CLIP_COORD_MAX ? (int)-CLIP_COORD_MAX
+         : v > CLIP_COORD_MAX ? (int)CLIP_COORD_MAX : (int)v;
+}
+static
+int _clip_ceil(double v)
+{
+    v = ceil(v);
+    return v < -CLIP_COORD_MAX ? (int)-CLIP_COORD_MAX
+         : v > CLIP_COORD_MAX ? (int)CLIP_COORD_MAX : (int)v;
+}
+
+/* Read the region's resolved form into the band table above. The form
+   is an array of row slices, each a null-separated array of pixel-band
+   rectangles of five objects apiece, as .regionmeet returns one.
+   Answers the band count, or -1 when the array is not in that form. */
+static
+int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
+{
+    clipband *b;
+    int nslice = (int)spans.comp_.sz;
+    int n = 0;
+    int i, k, at;
+
+    if (_clip_memo.band
+     && _clip_memo.serial == serial
+     && _clip_memo.ent == xpost_object_get_ent(spans)
+     && _clip_memo.off == spans.comp_.off
+     && _clip_memo.sz == spans.comp_.sz)
+        return _clip_memo.n;
+
+    for (k = 0; k < nslice; k++)
+    {
+        Xpost_Object sl = xpost_array_get(ctx, spans, k);
+
+        if (xpost_object_get_type(sl) != arraytype || sl.comp_.sz % 5)
+            return -1;
+        n += (int)(sl.comp_.sz / 5);
+    }
+    /* an empty region resolves to no bands at all, and covers no pixel */
+    b = n ? malloc((size_t)n * sizeof *b) : NULL;
+    if (n && !b)
+        return -1;
+    at = 0;
+    for (k = 0; k < nslice; k++)
+    {
+        Xpost_Object sl = xpost_array_get(ctx, spans, k);
+        int m = (int)(sl.comp_.sz / 5);
+
+        for (i = 0; i < m; i++)
+        {
+            Xpost_Object p0 = xpost_array_get(ctx, sl, 5 * i);
+            Xpost_Object p1 = xpost_array_get(ctx, sl, 5 * i + 1);
+            double lo, hi, band;
+
+            if (xpost_object_get_type(p0) != arraytype || p0.comp_.sz != 2
+             || xpost_object_get_type(p1) != arraytype || p1.comp_.sz != 2
+             || !_clip_number(ctx, p0, 0, &lo)
+             || !_clip_number(ctx, p0, 1, &band)
+             || !_clip_number(ctx, p1, 0, &hi))
+            {
+                free(b);
+                return -1;
+            }
+            /* the rectangles sit on pixel boundaries: they are the
+               columns and the row a fill of the region covers */
+            b[at].band = _clip_floor(band + 0.5);
+            b[at].lo = _clip_floor(lo + 0.5);
+            b[at].hi = _clip_floor(hi + 0.5);
+            at++;
+        }
+    }
+    if (n > 1)
+        qsort(b, (size_t)n, sizeof *b, _band_comp);
+    free(_clip_memo.band);
+    _clip_memo.serial = serial;
+    _clip_memo.ent = xpost_object_get_ent(spans);
+    _clip_memo.off = spans.comp_.off;
+    _clip_memo.sz = spans.comp_.sz;
+    _clip_memo.band = b;
+    _clip_memo.n = n;
+    return n;
+}
+
+/* The pixels the clip region covers, as the glyph raster route meets
+   them. .showclip in data/font.ps leaves the region's description in
+   the clip's own cache holder before any text operator reaches here:
+   /clipbox when the region is a rectangle, its device bounds, and
+   /clipspans otherwise, the region resolved through the same span
+   intersection every fill meets a region by, a slice of rows per
+   element. A holder carrying neither describes no region and narrows
+   nothing. */
+static
+void _text_clip_get(Xpost_Context *ctx, Xpost_Object gs, textstate *ts)
+{
+    Xpost_Object cache, o;
+    int serial = 0;
+
+    ts->clipkind = CLIP_ALL;
+    ts->bands = NULL;
+    ts->nbands = 0;
+    cache = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "clipcache"));
+    if (xpost_object_get_type(cache) != dicttype)
+        return;
+    o = xpost_dict_get(ctx, cache, xpost_name_cons(ctx, "serial"));
+    if (xpost_object_get_type(o) == integertype)
+        serial = o.int_.val;
+
+    o = xpost_dict_get(ctx, cache, xpost_name_cons(ctx, "clipbox"));
+    if (xpost_object_get_type(o) == arraytype && o.comp_.sz == 4)
+    {
+        double c[4];
+        int i;
+
+        for (i = 0; i < 4; i++)
+            if (!_clip_number(ctx, o, i, &c[i]))
+                return;
+        /* the bounds meet the pixel grid under the any-part-of-pixel
+           rule of PLRM 7.5.1, on the quantized coordinates the scan
+           conversion reads a region's vertices as */
+        ts->cx0 = _clip_floor(xpost_dev_line_quantize(c[0]));
+        ts->cy0 = _clip_floor(xpost_dev_line_quantize(c[1]));
+        ts->cx1 = _clip_ceil(xpost_dev_line_quantize(c[2]));
+        ts->cy1 = _clip_ceil(xpost_dev_line_quantize(c[3]));
+        ts->clipkind = CLIP_BOX;
+        return;
+    }
+
+    o = xpost_dict_get(ctx, cache, xpost_name_cons(ctx, "clipspans"));
+    if (xpost_object_get_type(o) == arraytype)
+    {
+        int n = _clip_bands_get(ctx, o, serial);
+
+        if (n < 0)
+            return;
+        ts->bands = _clip_memo.band;
+        ts->nbands = n;
+        ts->cy0 = n ? _clip_memo.band[0].band : 0;
+        ts->cy1 = n ? _clip_memo.band[n - 1].band + 1 : 0;
+        ts->clipkind = CLIP_BANDS;
+    }
+}
+
+/* the index of the first band of row y, or the band count when the
+   region covers no part of that row */
+static
+int _clip_band_row(const textstate *ts, int y)
+{
+    int lo = 0, hi = ts->nbands;
+
+    while (lo < hi)
+    {
+        int mid = lo + (hi - lo) / 2;
+
+        if (ts->bands[mid].band < y)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
 static
 textstate _text_state_get(Xpost_Context *ctx,
                           Xpost_Object gs,
@@ -1180,6 +1419,7 @@ textstate _text_state_get(Xpost_Context *ctx,
         else if (xpost_object_get_type(tint) == integertype)
             ts.septint = (double)tint.int_.val;
     }
+    _text_clip_get(ctx, gs, &ts);
     return ts;
 }
 
@@ -1500,7 +1740,12 @@ int _device_color(Xpost_Context *ctx,
    scan conversion of the outline would produce -- unless the device
    anti-aliases text (ts->blend), in which case fully covered pixels go
    through PutPix and partially covered edge pixels through the
-   device's BlendPix with their coverage. */
+   device's BlendPix with their coverage.
+   The raster is narrowed to the pixels the clip region covers, as
+   PLRM 7.5.1 has every painting operation meet the region: the whole
+   raster is rejected or accepted against the region's bounds first, so
+   a glyph clear of the boundary costs the comparison and nothing more,
+   and only a glyph the boundary crosses is walked run by run. */
 static
 void _draw_bitmap(Xpost_Context *ctx,
                   Xpost_Object devdic,
@@ -1523,8 +1768,9 @@ void _draw_bitmap(Xpost_Context *ctx,
     const unsigned char *tmp;
     unsigned int pix;
     Xpost_Object exec_op;
+    int i0 = 0, i1 = rows;
+    int inside;
 
-    tmp = buffer;
     /* The operator itself, not its name: a name pushed for execution is
        resolved against the dictionary stack at that moment, so a program
        that has defined /exec would supply the body instead. Held in a local
@@ -1535,9 +1781,54 @@ void _draw_bitmap(Xpost_Context *ctx,
     XPOST_LOG_INFO("bitmap pitch = %d", pitch);
     XPOST_LOG_INFO("bitmap pixel_mode = %d", pixel_mode);
 
-    for (i = 0; i < rows; i++)
+    if (ts->clipkind != CLIP_ALL)
     {
-        for (j = 0; j < width; j++)
+        if (ts->cy0 - ypos > i0)
+            i0 = ts->cy0 - ypos;
+        if (ts->cy1 - ypos < i1)
+            i1 = ts->cy1 - ypos;
+    }
+    /* the raster lies wholly within the region: every run below is the
+       whole row, so the walk skips the run machinery altogether */
+    inside = ts->clipkind == CLIP_ALL
+          || (ts->clipkind == CLIP_BOX
+           && i0 == 0 && i1 == rows
+           && ts->cx0 <= xpos && ts->cx1 >= xpos + width);
+
+    for (i = i0; i < i1; i++)
+    {
+        int run = 0;      /* the band cursor, while walking runs */
+        int j0 = 0, j1 = width;
+
+        /* the pitch is signed: a raster whose rows run the other way
+           steps backwards through its buffer */
+        tmp = buffer + (ptrdiff_t)i * pitch;
+        if (!inside)
+        {
+            if (ts->clipkind == CLIP_BOX)
+            {
+                if (ts->cx0 - xpos > j0)
+                    j0 = ts->cx0 - xpos;
+                if (ts->cx1 - xpos < j1)
+                    j1 = ts->cx1 - xpos;
+            }
+            else if (ts->clipkind == CLIP_BANDS)
+                run = _clip_band_row(ts, ypos + i);
+        }
+      next_run:
+        if (!inside && ts->clipkind == CLIP_BANDS)
+        {
+            if (run >= ts->nbands || ts->bands[run].band != ypos + i)
+                continue;
+            j0 = ts->bands[run].lo - xpos;
+            j1 = ts->bands[run].hi - xpos;
+            run++;
+            if (j0 < 0)
+                j0 = 0;
+            if (j1 > width)
+                j1 = width;
+        }
+        for (j = j0; j < j1; j++)
         {
             int cov = -1;  /* -1 solid, 0 skip, else blend coverage */
 
@@ -1593,7 +1884,8 @@ void _draw_bitmap(Xpost_Context *ctx,
                 }
             }
         }
-        tmp += pitch;
+        if (!inside && ts->clipkind == CLIP_BANDS)
+            goto next_run;
     }
 }
 

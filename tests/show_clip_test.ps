@@ -1,0 +1,287 @@
+% What the text operators mark under a clipping region.
+% Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% PLRM 7.5.1 makes what any painting operation marks the intersection of
+% the pixels it would cover with the pixels of the clipping region, and
+% names no exemption for text. A glyph reaches the page by a route of its
+% own -- the face renders it to a coverage raster and the raster is
+% plotted straight through the device's pixel methods, never passing
+% through the fill pipeline where a region is met -- so the region has to
+% be met on that route, and met as the same set of pixels.
+%
+% That is what is asserted here, and it is asserted against the fill
+% route rather than against a rule of this file's own. A solid fill of
+% the whole page under a region marks exactly the region's pixels, so
+% three renders settle the question for any operator and any region:
+%
+%   A   the region, as a fill of the page under it
+%   B   the text with no region in force
+%   C   the same text under the region
+%
+% and C must be dark exactly where A and B are both dark. Nothing weaker
+% would do: "C marks nothing outside A" passes for an operator that marks
+% nothing at all, and "C marks less than B" passes for one that drops the
+% wrong pixels. The counts are checked as well, so a render that came out
+% blank cannot satisfy the comparison by vacancy.
+%
+% Type 3 glyphs and the glyph-mask cache take a different route -- a
+% glyph the region's edge crosses is built again and its marks painted
+% through the ordinary fill -- so their raster is the fill's, not the
+% mask's, and B is not the raster C is cut from. They are held to the
+% part that does carry over: nothing outside the region, and something
+% inside it.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/p.name () def
+/check { % bool (what)  .  -   (reported against the case named in p.name)
+    exch { pop }{
+        (FAIL: ) print p.name print ( ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/DEV 96 96 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 96 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% a copy of the page, one string per row, taken while the render that
+% made it is still on the device. The rows carry their own extent, so
+% every comparison below reads the page's size off the snapshot and none
+% of them has to be told what device is in force.
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/dark { 128 lt } bind def
+/inkof { 0 exch { { dark { 1 add } if } forall } forall } bind def
+/outside { % marks region  .  n   (marks darker than the region reaches)
+    2 dict begin
+    /r exch def /m exch def
+    0 0 1 m length 1 sub { /y exch def
+        0 1 m y get length 1 sub { /x exch def
+            m y get x get dark r y get x get dark not and { 1 add } if
+        } for
+    } for
+    end
+} bind def
+/agree { % region plain clipped  .  bool
+    3 dict begin
+    /c exch def /b exch def /a exch def
+    /ok true def
+    0 1 a length 1 sub { /y exch def
+        0 1 a y get length 1 sub { /x exch def
+            a y get x get dark  b y get x get dark  and
+            c y get x get dark  ne { /ok false def } if
+        } for
+    } for
+    ok
+    end
+} bind def
+
+/boxpath { % x0 y0 x1 y1  .  -
+    4 dict begin
+    /by1 exch def /bx1 exch def /by0 exch def /bx0 exch def
+    newpath bx0 by0 moveto bx1 by0 lineto bx1 by1 lineto bx0 by1 lineto closepath
+    end
+} bind def
+
+% the region as a fill of the page paints it
+/regionsnap { % clipproc  .  snap
+    2 dict begin
+    initgraphics erasepage exec
+    0 setgray
+    DEV /dimensions get aload pop /ph exch def /pw exch def
+    newpath -1 -1 moveto pw 1 add -1 lineto
+    pw 1 add ph 1 add lineto -1 ph 1 add lineto closepath
+    fill
+    end
+    snap
+} bind def
+/textsnap { % clipproc textproc  .  snap
+    exch initgraphics erasepage exec 0 setgray exec snap
+} bind def
+
+% Every region below but FRACT is placed against TXT, drawn from (10,55)
+% at 22 points, which reaches roughly x 10..75, y 40..62 in user space:
+% COVER holds all of it, AWAY none of it, and the rest cross it. FRACT
+% is placed against SLAB instead, whose stems are wide enough for a
+% boundary that runs inside a pixel to have ink on both sides of it.
+/COVER { 0 20 96 80 boxpath clip newpath } bind def
+/AWAY  { 0 5 96 20 boxpath clip newpath } bind def
+/CUT   { 20 40 76 62 boxpath clip newpath } bind def
+% a region with every edge inside a pixel rather than on one, cut across
+% a stem thick enough that the boundary pixels are ink: a region covers
+% every pixel its shape reaches into, however small the reach, and the
+% raster route has to take its bounds out the same way
+/FRACT { 10.3 25.7 62.4 70.2 boxpath clip newpath } bind def
+% a region no rectangle describes: the raster route cannot narrow to
+% bounds and has to meet the region band by band
+/TRI   { newpath 10 30 moveto 90 30 lineto 50 80 lineto closepath clip newpath } bind def
+% an even-odd region, whose resolved form is pixel bands with a hole
+/EO    { newpath 10 30 moveto 90 30 lineto 90 80 lineto 10 80 lineto closepath
+         40 45 moveto 62 45 lineto 62 70 lineto 40 70 lineto closepath
+         eoclip newpath } bind def
+% two regions intersected, the second not a rectangle
+/STACK { 10 30 90 80 boxpath clip newpath
+         newpath 20 40 moveto 80 40 lineto 50 75 lineto closepath clip newpath } bind def
+
+/TXT { /Times-Roman findfont 22 scalefont setfont 10 55 moveto (Hgxy) show } bind def
+/SLAB { /Times-Bold findfont 70 scalefont setfont 8 20 moveto (H) show } bind def
+
+% --- the region is met, and met as the fill route meets it -------------
+% Each region is asked with the same text. The text must mark under a
+% region that covers it, mark nothing under one that misses it, and mark
+% exactly the shared pixels under one that crosses it.
+
+/crossing { % (name) clipproc textproc  .  -
+    6 dict begin
+    /tp exch def /cp exch def
+    /p.name exch def
+    /A currentdict /cp get regionsnap def
+    /B { } currentdict /tp get textsnap def
+    /C currentdict /cp get currentdict /tp get textsnap def
+    A inkof 0 gt (the region covers pixels) check
+    B inkof 0 gt (marks the page with no region in force) check
+    C inkof 0 gt (marks the page inside the region) check
+    C inkof B inkof lt (the region takes some of the marks away) check
+    A B C agree (marks exactly the pixels the region and the text share) check
+    end
+} bind def
+
+(cut region:)   { CUT }   { TXT } crossing
+(fract region:) { FRACT } { SLAB } crossing
+(tri region:)   { TRI }   { TXT } crossing
+(eo region:)    { EO }    { TXT } crossing
+(stack region:) { STACK } { TXT } crossing
+
+% --- a region that covers the text takes nothing from it ---------------
+/plain { } { TXT } textsnap def
+/covered { COVER } { TXT } textsnap def
+/missed { AWAY } { TXT } textsnap def
+plain inkof 0 gt (the text marks with no region in force) assert
+covered inkof plain inkof eq
+    (a region that covers the text leaves every pixel of it) assert
+missed inkof 0 eq (a region that misses the text leaves none of it) assert
+
+% --- the whole showing family --------------------------------------
+% Every one of them reaches the same raster route, and the fill route is
+% the oracle for every one of them.
+
+/FAMILY [
+  [ (show )       { 10 55 moveto (Hgxy) show } ]
+  [ (ashow )      { 6 55 moveto 1 0 (Hgxy) ashow } ]
+  [ (widthshow )  { 6 55 moveto 2 0 (g) 0 get (Hgxy) widthshow } ]
+  [ (awidthshow ) { 6 55 moveto 2 0 (g) 0 get 1 0 (Hgxy) awidthshow } ]
+  [ (kshow )      { 6 55 moveto { pop pop 1 0 rmoveto } (Hgxy) kshow } ]
+  [ (xshow )      { 6 55 moveto (Hgxy) [ 14 14 12 12 ] xshow } ]
+  [ (yshow )      { 40 30 moveto (Hgxy) [ 14 14 12 12 ] yshow } ]
+  [ (xyshow )     { 6 55 moveto (Hgxy) [ 14 2 14 2 12 2 12 2 ] xyshow } ]
+  [ (glyphshow )  { 20 55 moveto /H glyphshow /g glyphshow } ]
+] def
+
+FAMILY {
+    aload pop
+    /f.proc exch def /f.name exch def
+    f.name { CUT } { /Times-Roman findfont 22 scalefont setfont f.proc } crossing
+} forall
+
+% and every one of them under a region no rectangle describes, where the
+% raster route has no bounds to narrow to and meets the region band by
+% band instead
+FAMILY {
+    aload pop
+    /f.proc exch def /f.name exch def
+    f.name { TRI } { /Times-Roman findfont 22 scalefont setfont f.proc } crossing
+} forall
+
+% --- the two arms of the raster walk --------------------------------
+% A device that anti-aliases text sends partly covered pixels through
+% BlendPix and fully covered ones through PutPix; one that does not
+% thresholds the coverage and sends every marked pixel through PutPix.
+% The region is met on both arms, so both are asked.
+
+/aabits DEV /TextAlphaBits get def
+DEV /TextAlphaBits 1 put
+(sharp cut:) { CUT } { TXT } crossing
+(sharp tri:) { TRI } { TXT } crossing
+DEV /TextAlphaBits 4 put
+(blended cut:) { CUT } { TXT } crossing
+(blended tri:) { TRI } { TXT } crossing
+DEV /TextAlphaBits aabits put
+
+% --- Type 3 glyphs -------------------------------------------------
+% These build through their own procedure and cache as masks. A glyph
+% the region's edge crosses is built again and painted through the
+% ordinary fill, so the raster is not the mask's and the comparison
+% above does not apply; what does apply is that nothing lands outside
+% the region and something lands inside it.
+
+/T3 8 dict def
+T3 begin
+  /FontType 3 def
+  /FontMatrix [ 0.05 0 0 0.05 0 0 ] def
+  /FontBBox [ 0 0 20 20 ] def
+  /Encoding 256 array def
+  0 1 255 { Encoding exch /.notdef put } for
+  Encoding (A) 0 get /boxglyph put
+  /BuildGlyph { exch pop
+      /boxglyph eq {
+          22 0 0 0 20 20 setcachedevice
+          newpath 1 1 moveto 19 1 lineto 19 19 lineto 1 19 lineto closepath fill
+      } if
+  } def
+end
+/T3font /T3 T3 definefont def
+/T3TXT { T3font 24 scalefont setfont 10 40 moveto (AAA) show } bind def
+
+/t3region { CUT } regionsnap def
+/t3plain { } { T3TXT } textsnap def
+/t3cut { CUT } { T3TXT } textsnap def
+t3plain inkof 0 gt (a Type 3 glyph marks with no region in force) assert
+t3cut inkof 0 gt (a Type 3 glyph marks inside a region that crosses it) assert
+t3cut inkof t3plain inkof lt
+    (a region that crosses a Type 3 glyph takes some of it away) assert
+t3cut t3region outside 0 eq
+    (a Type 3 glyph marks nothing outside the region) assert
+
+/t3tri { TRI } regionsnap def
+/t3tricut { TRI } { T3TXT } textsnap def
+t3tricut inkof 0 gt
+    (a Type 3 glyph marks inside a region no rectangle describes) assert
+t3tricut t3tri outside 0 eq
+    (a Type 3 glyph marks nothing outside such a region) assert
+
+% --- a region too deep for one array of bands ------------------------
+% A band costs five array elements and an array's length is a bounded
+% field, so a region reaching over enough rows has more bands than one
+% array carries. It is resolved a slice of rows at a time for that
+% reason, and only a page deeper than a slice exercises the seam between
+% slices: this one is several slices deep.
+
+/DEV 32 5000 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 5000 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/DEEP { newpath 0 0 moveto 32 0 lineto 16 4900 lineto closepath clip newpath } bind def
+(deep region:) { DEEP } { /Times-Roman findfont 22 scalefont setfont
+                          2 2400 moveto (Hgxy) show } crossing
+
+initclip newpath
+count 0 eq (the suite leaves the operand stack empty) assert
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit
