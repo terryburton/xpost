@@ -197,12 +197,14 @@ int _ident_matrix(Xpost_Context *ctx,
 static
 int _init_matrix(Xpost_Context *ctx)
 {
+    /* schedule the operators themselves: a name would resolve through the
+       dict stack and could be captured by a user definition */
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_object_cvx(xpost_name_cons(ctx, "setmatrix")));
+                     xpost_operator_cons(ctx, "setmatrix", NULL, 0, 0));
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_object_cvx(xpost_name_cons(ctx, "defaultmatrix")));
+                     xpost_operator_cons(ctx, "defaultmatrix", NULL, 0, 0));
     xpost_stack_push(ctx->lo, ctx->es,
-                     xpost_object_cvx(xpost_name_cons(ctx, "matrix")));
+                     xpost_operator_cons(ctx, "matrix", NULL, 0, 0));
     /*
     _matrix(ctx);
     _default_matrix(ctx, xpost_stack_pop(ctx->lo, ctx->os));
