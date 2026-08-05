@@ -73,3 +73,46 @@ guard_workdir() {
         exit 1
     fi
 }
+
+# Read C sources as C rather than as text: every named file is emitted as
+# "<path>:<line>:<code>" with comments and string literals removed, so a
+# guard scanning for a construct is not answered by a mention of it in a
+# comment or by a word inside a message. Preprocessor lines are kept --
+# a macro that aliases the thing being guarded is a way past the rule,
+# not a comment on it -- and a guard that does not want them drops them.
+#
+# Every guard that reads C goes through here, so that what counts as code
+# is stated once. Take the files by name; a build in the tree leaves
+# object files beside the sources whose debug information answers to the
+# same patterns.
+guard_c_source() {
+    awk '
+        FNR == 1 { inblock = 0; instr = 0 }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            out = ""
+            i = 1
+            n = length(line)
+            while (i <= n) {
+                c = substr(line, i, 1)
+                d = substr(line, i, 2)
+                if (inblock) {
+                    if (d == "*/") { inblock = 0; i += 2 } else i++
+                    continue
+                }
+                if (instr) {
+                    if (c == "\\") { i += 2; continue }
+                    if (c == q) instr = 0
+                    i++
+                    continue
+                }
+                if (d == "/*") { inblock = 1; i += 2; continue }
+                if (d == "//") break
+                if (c == "\"" || c == "'\''") { instr = 1; q = c; i++; continue }
+                out = out c
+                i++
+            }
+            print FILENAME ":" FNR ":" out
+        }' "$@"
+}

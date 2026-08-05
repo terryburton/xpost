@@ -43,46 +43,19 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 
 fail=0
 
-# The scanner. C comments, string literals and preprocessor lines are cut
-# out first -- the mark's own #define is a preprocessor line, and a mention
-# in a comment is talk about the mark, not the mark. What is left is split
-# into declarations, and a declaration carrying the mark anywhere in it
-# names its function immediately before its parameter list. Reading the
-# name as "the word after the mark" only worked while every mark was
-# written in front; a mark written after the parameter list, which is the
-# other placement the compiler accepts, made the scan run on into the next
-# declaration and record the wrong name.
+# The scanner. The source is read as C -- comments and string literals
+# out, by guard_c_source -- and preprocessor lines go too, since the
+# mark's own #define is one and is not an application of it. What is left
+# is split into declarations, and a declaration carrying the mark
+# anywhere in it names its function immediately before its parameter
+# list. Reading the name as "the word after the mark" only worked while
+# every mark was written in front; a mark written after the parameter
+# list, which is the other placement the compiler accepts, made the scan
+# run on into the next declaration and record the wrong name.
 scan() {
-    awk '
-        {
-            line = $0
-            sub(/\r$/, "", line)
-            out = ""
-            i = 1
-            n = length(line)
-            while (i <= n) {
-                c = substr(line, i, 1)
-                d = substr(line, i, 2)
-                if (inblock) {
-                    if (d == "*/") { inblock = 0; i += 2 } else i++
-                    continue
-                }
-                if (instr) {
-                    if (c == "\\") { i += 2; continue }
-                    if (c == q) instr = 0
-                    i++
-                    continue
-                }
-                if (d == "/*") { inblock = 1; i += 2; continue }
-                if (d == "//") break
-                if (c == "\"" || c == "'\''") { instr = 1; q = c; i++; continue }
-                out = out c
-                i++
-            }
-            if (inblock) { print out; next }
-            if (out ~ /^[ \t]*#/) next
-            print out
-        }' "$@" \
+    guard_c_source "$@" \
+    | sed 's/^[^:]*:[0-9]*://' \
+    | grep -vE '^[[:space:]]*#' \
     | tr '\n' ' ' | tr ';{}' '\n\n\n' \
     | awk '
         /XPOST_MUST_CHECK/ {

@@ -56,6 +56,14 @@
 #include <errno.h>
 
 #include "xpost.h"
+/* The sample writes a file, and a disk open belongs to the one opener
+   whatever opens it: file-access policy has one enforcement point, and a
+   program linking the library is not outside it. The file layer's header
+   states its declarations in terms of the memory and object headers, so
+   those come first. */
+#include "xpost_memory.h"
+#include "xpost_object.h"
+#include "xpost_file.h"
 
 
 #define XPOST_MAIN_IF_OPT(so, lo, opt)  \
@@ -376,10 +384,18 @@ int main(int argc, const char *argv[])
         typedef struct { unsigned char blue, green, red; } pixel;
         pixel *buffer;
         int x, y;
+        int ferr = 0;
         FILE *fp;
 
         buffer = buffer_type_object;
-        fp = fopen(filename, "w");
+        fp = xpost_diskfile_fopen(filename, "w", 0, &ferr);
+        if (!fp)
+        {
+            fprintf(stderr, "cannot open %s for writing\n", filename);
+            xpost_destroy(ctx);
+            xpost_quit();
+            return 1;
+        }
         fprintf(fp, "P3\n612 792\n255\n");
         for (x = 0; x < 792; x++)
         {

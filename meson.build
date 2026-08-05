@@ -1598,11 +1598,13 @@ test('error-format',
   find_program('tests/run-error-format-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-# Single-opener invariant: fopen() appears only inside xpost_diskfile_fopen(),
-# so every disk file passes one enforcement point.
+# Single-opener invariant: fopen is named only inside xpost_raw_fopen(),
+# which xpost_diskfile_fopen() reaches through, so every disk file the
+# project opens -- the library's and the programs' alike -- passes one
+# enforcement point.
 test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
-  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+  args: [ meson.current_source_dir() ])
 
 # Device-driver skeleton: the compiled-buffer device fleet reaches its
 # private struct, operand folding and FillRect extent arithmetic through
