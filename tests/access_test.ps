@@ -227,6 +227,27 @@ rgbdev /ImgData get 0 get (.blendpixrgb over a readonly row) intact
                                          /invalidaccess (.blitform over a readonly row) chk
 rgbdev /ImgData get 0 get (.blitform over a readonly row) intact
 
+% --- noaccess on a dictionary: the read-only rung is refused ---
+% A dictionary carries its access on the value, so noaccess reaches every
+% reference to that dictionary at once, the interpreter's included. The
+% language refuses exactly the step from read-only to no-access (PLRM);
+% a writable one may still be reduced, and one already at no-access may be
+% reduced again to no effect. An array or a string carries its access on
+% the object, so reducing one leaves other references alone and may be
+% reduced from any rung. ---
+
+{ 3 dict noaccess pop }          /ok            (noaccess a writable dictionary) chk
+{ 3 dict readonly noaccess pop } /invalidaccess (noaccess a read-only dictionary) chk
+{ 3 dict noaccess noaccess pop } /ok            (noaccess an already no-access dictionary) chk
+{ [1 2 3] readonly noaccess pop } /ok           (noaccess a read-only array) chk
+{ (s) readonly noaccess pop }    /ok            (noaccess a read-only string) chk
+
+% systemdict and internaldict are read-only, so a program cannot take
+% either to no-access and leave the interpreter reporting a false picture
+% of its own integrity to every job after it
+{ systemdict noaccess pop }             /invalidaccess (noaccess systemdict) chk
+{ 1183615869 internaldict noaccess pop } /invalidaccess (noaccess internaldict) chk
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse

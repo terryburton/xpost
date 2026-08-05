@@ -153,6 +153,19 @@ int Anoaccess(Xpost_Context *ctx,
     /* noaccess applies to composite objects and files */
     if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
         return typecheck;
+    /* A dictionary carries its access on the value rather than on the
+       object, so every reference to that dictionary loses access at once
+       -- including the interpreter's own. A read-only dictionary is
+       therefore not something a program may take the rest of the way to
+       no-access: the language refuses exactly that step (PLRM). A dictionary
+       that is still writable may be reduced, and one already at no-access
+       may be reduced again to no effect; it is the read-only rung that is
+       refused. An array, a string or a file carries the access on the
+       object, so reducing one leaves every other reference to the same
+       value alone, and needs no such refusal. */
+    if (xpost_object_get_type(o) == dicttype &&
+        xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_READ_ONLY)
+        return invalidaccess;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
