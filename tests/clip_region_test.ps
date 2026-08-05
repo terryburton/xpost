@@ -288,6 +288,21 @@ solidink pattink eq
     (a pattern fill covers the pixels a solid fill of the same path covers)
     assert
 
+% --- clipsave's depth limit is the exhaustion PLRM 8.2 names for it ---
+% The stack is a fixed depth. Running past it is the operator running out
+% of storage, not a bad index handed to it, and a program that catches the
+% one and not the other has to be told which.
+gsave
+    newpath 100 100 200 200 rectclip
+    { 32 { clipsave } repeat 32 { cliprestore } repeat } stopped not
+        (thirty-two nested clipsaves are accepted and pair off) assert
+    { 40 { clipsave } repeat } stopped
+        { $error /errorname get /limitcheck eq }{ false } ifelse
+        (running past the depth reports limitcheck) assert
+    clear
+grestore
+initclip
+
 count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit

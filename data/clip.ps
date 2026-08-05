@@ -547,6 +547,11 @@ put
         2 copy 32 array put get
     } ifelse
     graphicsdict /clipptr 2 copy known { get }{ 2 copy 0 put get } ifelse
+    % the stack is a fixed depth, and running out of it is the exhaustion
+    % PLRM 8.2 names for this operator; writing past the end would report
+    % the index as the fault instead
+    2 copy exch length ge
+        { /clipsave cvx /limitcheck signalerror } if
     2 copy
     [ graphicsdict /currgstate get /clipregion get .copypath
       graphicsdict /currgstate get /clipsource get ]
