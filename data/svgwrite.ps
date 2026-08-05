@@ -22,18 +22,7 @@
     /VectorGlyphs true   % text operators emit glyph outlines, not bitmaps
     /VectorSyntax /svg   % ... spelled as SVG path data
 
-    /.copydict {
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-        /OutputFileName where {
-            /OutputFileName exch 1 index get
-            3 copy put pop pop
-        } if
-    } bind
+    /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall
@@ -99,11 +88,20 @@
         (" width=") .put w .svgnum (" height=") .put h .svgnum ("/>\n) .put
     end }
 
+    % The operands name an inclusive pixel span and an SVG rect is
+    % half-open, so the rect that covers the pixels a raster device
+    % would paint is one unit wider and taller (the driver contract,
+    % src/lib/xpost_dev_driver.h). Emitting w and h unchanged left this
+    % device painting a rect a pixel short in each direction of every
+    % other device's.
     /FillRect { % r g b x y w h IMAGE  .  -
     begin {h w y x b g r}{exch def}forall
+        w 0 lt { /x x w add def /w w neg def } if
+        h 0 lt { /y y h add def /h h neg def } if
         (<rect fill=) .put r g b .svgrgb
         ( x=") .put x .svgnum (" y=") .put y .svgnum
-        (" width=") .put w .svgnum (" height=") .put h .svgnum ("/>\n) .put
+        (" width=") .put w 1 add .svgnum
+        (" height=") .put h 1 add .svgnum ("/>\n) .put
     end }
 
     % r g b polygon IMAGE . -  ; append one path element: the fill colour,
@@ -147,8 +145,7 @@
                 v 255 div
                 sidec c 2 mul 1 add get sidec c 2 mul get sub mul
                 sidec c 2 mul get add
-                255 mul round cvi
-                dup 0 lt { pop 0 } if dup 255 gt { pop 255 } if
+                //.xpostsys /.c255 get exec
                 put
             } for silt
         } for ] def

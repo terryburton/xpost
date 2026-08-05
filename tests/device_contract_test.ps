@@ -1,23 +1,35 @@
-% Device method contract, safety tier: every device must accept the
-% boundary inputs its methods can legally receive -- degenerate,
-% inverted and out-of-range rectangles, edge and out-of-bounds pixels,
-% real-valued coordinates -- without error, and still emit a page.
-% Run against a live device (-d <dev>) by run-device-contract-test.sh.
+% Device method contract: every device must accept the boundary inputs
+% its methods can legally receive -- degenerate, inverted and
+% out-of-range rectangles, edge and out-of-bounds pixels, real-valued
+% coordinates -- without error, and still emit a page. Run against a
+% live device (-d <dev>) by run-device-contract-test.sh.
 %
-% (The exact extent semantics of FillRect -- which pixels an inverted or
-% fractional rectangle paints -- are deliberately not asserted yet: the
-% devices disagree today, and unifying them is part of the device-layer
-% consolidation. This tier pins down only that no boundary input can
-% error or crash, so that consolidation can then tighten the assertions
-% rather than first re-establish safety.)
+% The safety tier below asks only that nothing errors. The behaviour
+% tier after it asks what was painted, and so runs only on a device
+% whose GetPix reports back what a marking method wrote; a device that
+% keeps its raster somewhere this test cannot see announces itself by
+% failing the readback probe and takes the safety tier alone.
 
 /dev .privatedict /.graphicsdict get /currgstate get /device get def
 
+% The tag is put away before the procedure runs, and the stack is taken
+% back to the depth the procedure was handed: a procedure that fails may
+% leave anything at all behind, and a report reading its own operands
+% from there reports the leavings instead of the tag.
 /try { % proc (name)  .  -
-    exch stopped {
-        (FAIL: ) print print ( errored\n) print
+    /t.tag exch def
+    /t.depth count 2 sub def
+    stopped {
+        (FAIL: ) print t.tag print ( errored\n) print
         /contractfail true def
-    }{ pop } ifelse
+    } if
+    count t.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+} def
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        /contractfail true def
+    } ifelse
 } def
 /contractfail false def
 
@@ -26,6 +38,26 @@
 /ncomp dev /nativecolorspace 2 copy known
     { get /DeviceRGB eq { 3 }{ 1 } ifelse }{ pop pop 1 } ifelse def
 /val { ncomp { 0 } repeat } def
+/white { ncomp { 1 } repeat } def
+/black { ncomp { 0 } repeat } def
+
+% each marking method reached the one way, with the device supplied
+/fillrect { dev dup /FillRect get exec } def
+/putpix   { dev dup /PutPix   get exec } def
+/drawline { dev dup /DrawLine get exec } def
+/getpix   { dev dup /GetPix   get exec } def
+
+% --- what the class copy put on the instance -------------------------
+% An instance is a copy of its class dictionary made by .copydict, which
+% also records the dimensions the device adopted and the output file
+% name in force. Every class needs the same copy: one that leaves the
+% file name off produces a device that writes wherever its Emit
+% defaults to, whatever the program asked for.
+dev /dimensions known (the instance records its dimensions) assert
+/OutputFileName where {
+    pop dev /OutputFileName known
+        (the instance carries the output file name) assert
+} if
 
 % a painted baseline so Emit has marks to write
 newpath 10 10 moveto 90 90 lineto stroke
@@ -33,31 +65,39 @@ newpath 10 10 moveto 90 90 lineto stroke
 % --- FillRect boundary inputs (val x y w h DEVICE FillRect) ---
 % the raster classes take val as the device's native colour; probe the
 % method only when the device carries it
-dev /FillRect 2 copy known {
-    get /fr exch def
-    { val 5 5 0 0 dev fr exec }          (zero-size FillRect) try
-    { val 5 5 1 1 dev fr exec }          (unit FillRect) try
-    { val -20 -20 10 10 dev fr exec }    (negative-origin FillRect) try
-    { val 5000 5000 50 50 dev fr exec }  (out-of-range FillRect) try
-    { val 50.5 60.25 10.75 3.5 dev fr exec } (fractional FillRect) try
-    { val 80 80 -30 -30 dev fr exec }    (negative-extent FillRect) try
-}{ pop pop } ifelse
+dev /FillRect known {
+    { val 5 5 0 0 fillrect }          (zero-size FillRect) try
+    { val 5 5 1 1 fillrect }          (unit FillRect) try
+    { val -20 -20 10 10 fillrect }    (negative-origin FillRect) try
+    { val 5000 5000 50 50 fillrect }  (out-of-range FillRect) try
+    { val 50.5 60.25 10.75 3.5 fillrect } (fractional FillRect) try
+    { val 80 80 -30 -30 fillrect }    (negative-extent FillRect) try
+} if
 
 % --- PutPix boundary inputs (val x y DEVICE PutPix) ---
-dev /PutPix 2 copy known {
-    get /pp exch def
-    { val 0 0 dev pp exec }        (origin PutPix) try
-    { val -1 -1 dev pp exec }      (negative PutPix) try
-    { val 9999 9999 dev pp exec }  (out-of-range PutPix) try
-    { val 3.7 4.2 dev pp exec }    (fractional PutPix) try
-}{ pop pop } ifelse
+dev /PutPix known {
+    { val 0 0 putpix }        (origin PutPix) try
+    { val -1 -1 putpix }      (negative PutPix) try
+    { val 9999 9999 putpix }  (out-of-range PutPix) try
+    { val 3.7 4.2 putpix }    (fractional PutPix) try
+} if
 
 % --- DrawLine boundary inputs (val x1 y1 x2 y2 DEVICE DrawLine) ---
-dev /DrawLine 2 copy known {
-    get /dl exch def
-    { val 5 5 5 5 dev dl exec }            (degenerate DrawLine) try
-    { val -50 -50 5000 5000 dev dl exec }  (clipped DrawLine) try
-}{ pop pop } ifelse
+dev /DrawLine known {
+    { val 5 5 5 5 drawline }            (degenerate DrawLine) try
+    { val -50 -50 5000 5000 drawline }  (clipped DrawLine) try
+} if
+
+% --- GetPix boundary inputs (x y DEVICE GetPix -> c1..cN) ---
+% A method the class dictionary offers has to work. Every device copies
+% a class whose GetPix reads the base class's raster, so a device
+% keeping its raster elsewhere must bring its own or the name answers
+% undefined -- present, callable, and broken, which no probe with
+% `known` can tell from working.
+dev /GetPix known {
+    { 5 5 getpix ncomp { pop } repeat }      (GetPix answers) try
+    { 3.7 4.2 getpix ncomp { pop } repeat }  (fractional GetPix) try
+} if
 
 % the standard operators must equally survive boundary geometry
 { newpath -100 -100 moveto 10000 10000 lineto stroke } (off-page stroke) try
@@ -65,6 +105,190 @@ dev /DrawLine 2 copy known {
 { 0 0 0 0 rectfill }                                   (zero rectfill) try
 { newpath 306 396 0 0 360 arc fill }                   (zero-radius arc fill) try
 
+% --- behaviour tier: what a marking method paints -------------------
+%
+% Reachable only where the device reports its own pixels back. The
+% probe writes white and black through PutPix and reads each back: a
+% device whose GetPix answers the same both times (or answers nothing,
+% or errors) cannot witness anything below, and says so.
+
+/samepix { % a1..aN b1..bN  .  bool
+    ncomp array astore /sp.b exch def
+    ncomp array astore /sp.a exch def
+    true 0 1 ncomp 1 sub {
+        /sp.i exch def
+        sp.a sp.i get sp.b sp.i get eq and
+    } for
+} def
+
+/readable false def
+dev /GetPix known dev /PutPix known and {
+    /rb.depth count def
+    { white 1 1 putpix  1 1 getpix  black 1 1 putpix  1 1 getpix
+      samepix not } stopped
+    { % the probe could not finish -- a GetPix that errors or answers
+      % nothing leaves the raster unreadable, and readable stays false
+    }{
+        /readable exch def
+    } ifelse
+    % a probe that stopped may have left anything behind; take the
+    % stack back to the depth it was handed
+    count rb.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+} if
+
+readable {
+    (READBACK\n) print
+
+    % A component outside [0,1] is clamped, not folded. Unclamped, the
+    % scale wraps the stored channel: 1.7 lands as 0.69 and -0.7 as
+    % 0.31, so the ink comes out a different colour rather than the
+    % nearest one. Stated without naming the device's own scale: the
+    % out-of-range paint must read back as the in-range extreme does.
+    ncomp { 1 } repeat 3 3 putpix  3 3 getpix
+    ncomp { 1.7 } repeat 4 3 putpix  4 3 getpix
+    samepix (PutPix clamps a component above the range) assert
+
+    ncomp { 0 } repeat 5 3 putpix  5 3 getpix
+    ncomp { -0.7 } repeat 6 3 putpix  6 3 getpix
+    samepix (PutPix clamps a component below the range) assert
+
+    dev /FillRect known {
+        ncomp { 1 } repeat 3 5 0 0 fillrect  3 5 getpix
+        ncomp { 1.7 } repeat 4 5 0 0 fillrect  4 5 getpix
+        samepix (FillRect clamps a component above the range) assert
+
+        ncomp { 0 } repeat 5 5 0 0 fillrect  5 5 getpix
+        ncomp { -0.7 } repeat 6 5 0 0 fillrect  6 5 getpix
+        samepix (FillRect clamps a component below the range) assert
+    } if
+
+    dev /DrawLine known {
+        ncomp { 1 } repeat 3 7 3 7 drawline  3 7 getpix
+        ncomp { 1.7 } repeat 4 7 4 7 drawline  4 7 getpix
+        samepix (DrawLine clamps a component above the range) assert
+    } if
+
+    % --- which pixels a marking method paints -----------------------
+    % One definition, so it can be stated here once and asked of every
+    % device. Each check clears its patch to black first and asks
+    % whether a given pixel came out white, so it reads as the picture.
+
+    /clear4 { % x y w h  .  -   paint the patch black
+        /c4h exch def /c4w exch def /c4y exch def /c4x exch def
+        black c4x c4y c4w c4h fillrect
+    } def
+    /white? { % x y  .  bool
+        getpix ncomp array astore /wp exch def
+        true 0 1 ncomp 1 sub { wp exch get 0 ne and } for
+    } def
+
+    dev /FillRect known {
+        % a rectangle's far corner is inclusive: w+1 columns, h+1 rows
+        20 20 6 6 clear4
+        white 21 21 2 1 fillrect
+        21 21 white? 22 21 white? and 23 21 white? and
+            (FillRect paints w+1 columns) assert
+        21 22 white? 22 22 white? and 23 22 white? and
+            (FillRect paints h+1 rows) assert
+        24 21 white? not (FillRect stops after the far column) assert
+        21 23 white? not (FillRect stops after the far row) assert
+
+        % a zero extent is one pixel, not none
+        30 30 4 4 clear4
+        white 31 31 0 0 fillrect
+        31 31 white? (a zero-extent FillRect paints one pixel) assert
+        32 31 white? not (a zero-extent FillRect paints only that one) assert
+
+        % a negative extent reflects the rectangle through its origin
+        40 40 8 8 clear4
+        white 45 45 -2 -2 fillrect
+        43 43 white? 45 45 white? and
+            (a negative extent spans x-|w|..x) assert
+        46 45 white? not (a negative extent stops at the origin) assert
+
+        % a real coordinate names the pixel containing it
+        50 50 6 6 clear4
+        white 51.5 51.25 1 1 fillrect
+        51 51 white? 52 52 white? and
+            (a fractional origin lands in its own pixel) assert
+    } if
+
+    dev /DrawLine known {
+        % the pixels whose centres the segment covers: a run from a to b
+        % covers a..b-1, so two segments meeting at b abut exactly
+        60 60 8 2 clear4
+        white 61 61 65 61 drawline
+        61 61 white? 64 61 white? and (DrawLine covers the near pixels) assert
+        65 61 white? not (DrawLine stops before the far endpoint) assert
+
+        % drawn the other way it covers the same pixels
+        60 63 8 2 clear4
+        white 65 64 61 64 drawline
+        61 64 white? 64 64 white? and
+            (a reversed DrawLine covers the same pixels) assert
+        65 64 white? not (a reversed DrawLine stops at the same place) assert
+
+        % and a degenerate segment still marks one pixel
+        70 70 4 4 clear4
+        white 71 71 71 71 drawline
+        71 71 white? (a degenerate DrawLine marks its pixel) assert
+    } if
+} if
+
 showpage
+
+% --- the device is reachable by the name it was selected with --------
+%
+% -d and setpagedevice are two spellings of one selection, so a device
+% the interpreter started with has to be one setpagedevice can make.
+% Where it is not, the failure is not confined to switching devices: a
+% request that names no device at all defaults to the running one, so
+% every setpagedevice call raises rangecheck, and the page cannot even
+% be resized. Runs last, because it retires the device the tier above
+% painted on.
+{ << /PageSize [200 200] >> setpagedevice }
+    (the running device accepts a page-device request) try
+
+% --- and it was completed the same way -------------------------------
+%
+% A freshly created device is finished off before it is installed: the
+% page's default matrix, the compiled rasterisers its raster shape can
+% take, the process colour model it was asked for. The device the
+% interpreter starts with and the device setpagedevice makes take that
+% same finishing, or the same device behaves differently according to
+% how it was selected. Compare the two, slot by slot.
+
+/newdev .privatedict /.graphicsdict get /currgstate get /device get def
+/slotsame { % /key (what)  .  -
+    /csw exch def /csk exch def
+    dev csk known newdev csk known eq
+    dev csk known newdev csk known and {
+        dev csk get type newdev csk get type eq and
+    } if
+    csw assert
+} def
+newdev dev ne {
+    /FillPoly (both devices complete FillPoly the same way) slotsame
+    /FillRect (both devices complete FillRect the same way) slotsame
+    /nativecolorspace
+        (both devices settle on the same native colour space) slotsame
+    /defaultmatrix (both devices carry a default matrix) slotsame
+    /BlendPix (both devices agree on the coverage blender) slotsame
+    % the default matrix is the page's, so its shape is fixed even
+    % though the page size just changed
+    dev /defaultmatrix known newdev /defaultmatrix known and {
+        dev /defaultmatrix get length newdev /defaultmatrix get length eq
+            (both default matrices have six entries) assert
+        dev /defaultmatrix get 1 get 0 eq
+        newdev /defaultmatrix get 1 get 0 eq and
+            (both default matrices are unskewed) assert
+        dev /defaultmatrix get 0 get 0 gt
+        newdev /defaultmatrix get 0 get 0 gt and
+            (both default matrices scale x forwards) assert
+        dev /defaultmatrix get 3 get 0 lt
+        newdev /defaultmatrix get 3 get 0 lt and
+            (both default matrices flip y) assert
+    } if
+} if
 
 contractfail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse

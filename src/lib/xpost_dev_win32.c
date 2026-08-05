@@ -57,12 +57,8 @@
 
 #include "xpost_operator.h"
 #include "xpost_op_dict.h"
+#include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_win32.h"
-
-#ifdef abs
-# undef abs
-#endif
-#define abs(a) ((a) < 0) ? -(a) : (a)
 
 typedef enum
 {
@@ -138,13 +134,8 @@ int _event_handler(Xpost_Context *ctx,
     PrivateData private;
     MSG msg;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
     while (PeekMessage(&msg, private.window, 0, 0, PM_REMOVE))
@@ -447,9 +438,7 @@ int _create_cont(Xpost_Context *ctx,
                                         devdic);
 
     /* save private data struct in string */
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
 
     /* return device instance dictionary to ps */
@@ -481,39 +470,22 @@ int _putpix(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     Render_Data *rd;
+    int r, g, b, ix, iy;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons((integer)(red.real_.val * 255.0));
-    else
-        red.int_.val *= 255;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons((integer)(green.real_.val * 255.0));
-    else
-        green.int_.val *= 255;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons((integer)(blue.real_.val * 255.0));
-    else
-        blue.int_.val *= 255;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons((integer)x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons((integer)y.real_.val);
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
     /* check bounds */
-    if ((x.int_.val < 0) ||
-        (x.int_.val >= private.width) ||
-        (y.int_.val < 0) ||
-        (y.int_.val >= private.height))
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
         return 0;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
@@ -526,20 +498,19 @@ int _putpix(Xpost_Context *ctx,
         {
             HDC cdc;
 
-            rd->backend.gdi.buf[y.int_.val * private.width + x.int_.val] =
-                red.int_.val << 16 | green.int_.val << 8 | blue.int_.val;
+            rd->backend.gdi.buf[iy * private.width + ix] =
+                r << 16 | g << 8 | b;
 
             cdc = CreateCompatibleDC(rd->dc);
             SelectObject(cdc, rd->backend.gdi.bitmap);
-            BitBlt(rd->dc, x.int_.val, y.int_.val, 1, 1,
-                   cdc, x.int_.val, y.int_.val, SRCCOPY);
+            BitBlt(rd->dc, ix, iy, 1, 1, cdc, ix, iy, SRCCOPY);
             DeleteDC(cdc);
             break;
         }
         case RENDER_BACKEND_GL:
             glBegin(GL_POINTS);
-            glColor4f(red.int_.val / 255.0f, green.int_.val / 255.0f, blue.int_.val / 255.0f, 1.0f);
-            glVertex2f((GLfloat)x.int_.val, (GLfloat)y.int_.val);
+            glColor4f(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+            glVertex2f((GLfloat)ix, (GLfloat)iy);
             glEnd();
             rd->backend.gl.changed = 1;
             break;
@@ -548,6 +519,10 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Read a pixel back in the device's stored channel scale, the same one
+   PutPix writes. A pixel outside the raster, or a backend that keeps no
+   buffer of its own, reads as the ground: the slot declares three
+   results and must answer three. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -557,33 +532,29 @@ int _getpix(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     Render_Data *rd;
+    int ix, iy, r = 0, g = 0, b = 0;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
-    if (!rd)
-        return 0;
-
-    switch (rd->backend_type)
+    if (rd && rd->backend_type == RENDER_BACKEND_GDI &&
+        ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)
     {
-        case RENDER_BACKEND_GDI:
-            xpost_stack_push(ctx->lo, ctx->os,
-                             xpost_int_cons( (rd->backend.gdi.buf[y.int_.val * private.width + x.int_.val] >> 16) & 0xFF));
-            xpost_stack_push(ctx->lo, ctx->os,
-                             xpost_int_cons( (rd->backend.gdi.buf[y.int_.val * private.width + x.int_.val] >> 8) & 0xFF));
-            xpost_stack_push(ctx->lo, ctx->os,
-                             xpost_int_cons(rd->backend.gdi.buf[y.int_.val * private.width + x.int_.val] & 0xFF));
-            break;
-        default:
-            break;
+        unsigned int pix = rd->backend.gdi.buf[iy * private.width + ix];
+
+        r = (pix >> 16) & 0xFF;
+        g = (pix >> 8) & 0xFF;
+        b = pix & 0xFF;
     }
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
 
     return 0;
 }
@@ -602,58 +573,18 @@ int _drawline(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     Render_Data *rd;
-    int _x1;
-    int _x2;
-    int _y1;
-    int _y2;
-    int deltax;
-    int deltay;
-    int x;
-    int y;
-    int s1;
-    int s2;
-    int interchange;
-    int err;
-    int i;
+    Xpost_Dev_Line line;
+    int r, g, b, px, py;
+    int bx0, by0, bx1, by1, any;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons((integer)(red.real_.val * 255.0));
-    else
-        red.int_.val *= 255;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons((integer)(green.real_.val * 255.0));
-    else
-        green.int_.val *= 255;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons((integer)(blue.real_.val * 255.0));
-    else
-        blue.int_.val *= 255;
-    if (xpost_object_get_type(x1) == realtype)
-        x1 = xpost_int_cons((integer)x1.real_.val);
-    if (xpost_object_get_type(y1) == realtype)
-        y1 = xpost_int_cons((integer)y1.real_.val);
-    if (xpost_object_get_type(x2) == realtype)
-        x2 = xpost_int_cons((integer)x2.real_.val);
-    if (xpost_object_get_type(y2) == realtype)
-        y2 = xpost_int_cons((integer)y2.real_.val);
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
-        return undefined;
-
-    _x1 = x1.int_.val;
-    _x2 = x2.int_.val;
-    _y1 = y1.int_.val;
-    _y2 = y2.int_.val;
-
-    XPOST_LOG_INFO("_drawline(%d, %d, %d, %d)",
-                   _x1, _y1, _x2, _y2);
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (!rd)
@@ -665,117 +596,54 @@ int _drawline(Xpost_Context *ctx,
         {
             HDC cdc;
 
-            if (_x1 == _x2)
+            /* the contract's line: the pixels whose centres the segment
+               covers, so this device paints the same wire as every
+               other. A Bresenham walk of its own painted a different
+               set, and dropped the pixel a segment too short to reach a
+               centre still owes. */
+            any = 0;
+            bx0 = by0 = bx1 = by1 = 0;
+            xpost_dev_line_init(&line,
+                                xpost_object_number(x1), xpost_object_number(y1),
+                                xpost_object_number(x2), xpost_object_number(y2));
+            while (xpost_dev_line_next(&line, &px, &py))
             {
-                if (_y1 > _y2)
+                if (px < 0 || px >= private.width ||
+                    py < 0 || py >= private.height)
+                    continue;
+                rd->backend.gdi.buf[py * private.width + px] =
+                    r << 16 | g << 8 | b;
+                if (!any)
                 {
-                    int tmp;
-
-                    tmp = _y1;
-                    _y1 = _y2;
-                    _y2 = tmp;
+                    bx0 = bx1 = px;
+                    by0 = by1 = py;
+                    any = 1;
                 }
-                for (y = _y1; y <= _y2; y++)
-                    rd->backend.gdi.buf[y * private.width + _x1] =
-                        red.int_.val << 16 | green.int_.val << 8 | blue.int_.val;
-
-                cdc = CreateCompatibleDC(rd->dc);
-                SelectObject(cdc, rd->backend.gdi.bitmap);
-                BitBlt(rd->dc, _x1, _y1, 1, _y2 - _y1 + 1,
-                       cdc, _x1, _y1, SRCCOPY);
-                DeleteDC(cdc);
-
-                return 0;
-            }
-
-            if (_y1 == _y2)
-            {
-                if (_x1 > _x2)
-                {
-                    int tmp;
-
-                    tmp = _x1;
-                    _x1 = _x2;
-                    _x2 = tmp;
-                }
-                for (x = _x1; x <= _x2; x++)
-                    rd->backend.gdi.buf[_y1 * private.width + x] =
-                        red.int_.val << 16 | green.int_.val << 8 | blue.int_.val;
-
-                cdc = CreateCompatibleDC(rd->dc);
-                SelectObject(cdc, rd->backend.gdi.bitmap);
-                BitBlt(rd->dc, _x1, _y1, _x2 - _x1 + 1, 1,
-                       cdc, _x1, _y1, SRCCOPY);
-                DeleteDC(cdc);
-
-                return 0;
-            }
-
-            x = _x1;
-            y = _y1;
-            deltax = abs(_x2 - _x1);
-            s1 = ((_x2 - _x1) < 0) ? - 1 : 1;
-            deltay = abs(_y2 - _y1);
-            s2 = ((_y2 - _y1) < 0) ? -1 : 1;
-            interchange = (deltay > deltax);
-            if (interchange)
-            {
-                int tmp;
-
-                tmp = deltax;
-                deltax = deltay;
-                deltay = tmp;
-            }
-            err = 2 * deltay - deltax;
-            for (i = 1; i <= deltax; ++i)
-            {
-                rd->backend.gdi.buf[y * private.width + x] =
-                    red.int_.val << 16 | green.int_.val << 8 | blue.int_.val;
-                while (err >= 0)
-                {
-                    if (interchange)
-                        x += s1;
-                    else
-                        y += s2;
-                    err -= 2 * deltax;
-                }
-                if (interchange)
-                    y += s2;
                 else
-                    x += s1;
-                err += 2 * deltay;
+                {
+                    if (px < bx0) bx0 = px;
+                    if (px > bx1) bx1 = px;
+                    if (py < by0) by0 = py;
+                    if (py > by1) by1 = py;
+                }
             }
-
-            if (_x1 > _x2)
-            {
-                int tmp;
-
-                tmp = _x1;
-                _x1 = _x2;
-                _x2 = tmp;
-            }
-
-            if (_y1 > _y2)
-            {
-                int tmp;
-
-                tmp = _y1;
-                _y1 = _y2;
-                _y2 = tmp;
-            }
+            if (!any)
+                return 0;
 
             cdc = CreateCompatibleDC(rd->dc);
             SelectObject(cdc, rd->backend.gdi.bitmap);
-            BitBlt(rd->dc, _x1, _y1, _x2 - _x1 + 1, _y2 - _y1 + 1,
-                   cdc, _x1, _y1, SRCCOPY);
+            BitBlt(rd->dc, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1,
+                   cdc, bx0, by0, SRCCOPY);
             DeleteDC(cdc);
             break;
         }
         case RENDER_BACKEND_GL:
             glBegin(GL_LINES);
-            glColor4f(red.int_.val / 255.0f, green.int_.val / 255.0f, blue.int_.val / 255.0f, 1.0f);
-            glVertex2f((GLfloat)_x1, (GLfloat)_y1);
-            glVertex2f((GLfloat)_x2, (GLfloat)_y2);
+            glColor4f(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+            glVertex2f((GLfloat)xpost_object_number(x1),
+                       (GLfloat)xpost_object_number(y1));
+            glVertex2f((GLfloat)xpost_object_number(x2),
+                       (GLfloat)xpost_object_number(y2));
             glEnd();
             rd->backend.gl.changed = 1;
             break;
@@ -798,58 +666,29 @@ int _fillrect(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     Render_Data *rd;
+    int r, g, b;
+    int x0, y0, x1, y1;
 
-    /* fold numbers to integertype */
-    if (xpost_object_get_type(red) == realtype)
-        red = xpost_int_cons((integer)(red.real_.val * 255.0));
-    else
-        red.int_.val *= 255;
-    if (xpost_object_get_type(green) == realtype)
-        green = xpost_int_cons((integer)(green.real_.val * 255.0));
-    else
-        green.int_.val *= 255;
-    if (xpost_object_get_type(blue) == realtype)
-        blue = xpost_int_cons((integer)(blue.real_.val * 255.0));
-    else
-        blue.int_.val *= 255;
-    if (xpost_object_get_type(x) == realtype)
-        x = xpost_int_cons((integer)x.real_.val);
-    if (xpost_object_get_type(y) == realtype)
-        y = xpost_int_cons((integer)y.real_.val);
-    if (xpost_object_get_type(width) == realtype)
-        width = xpost_int_cons((integer)width.real_.val);
-    if (xpost_object_get_type(height) == realtype)
-        height = xpost_int_cons((integer)height.real_.val);
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
 
-    /* adjust ranges */
-    if (width.int_.val < 0)
-    {
-        width.int_.val = abs(width.int_.val);
-        x.int_.val -= width.int_.val;
-    }
-    if (height.int_.val < 0)
-    {
-        height.int_.val = abs(height.int_.val);
-        y.int_.val -= height.int_.val;
-    }
-    if (x.int_.val < 0) x.int_.val = 0;
-    if (y.int_.val < 0) y.int_.val = 0;
-
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
-    if (x.int_.val >= private.width || y.int_.val >= private.height)
+    /* the contract's rectangle: inclusive span, clipped to the device.
+       Clamping the origin to zero without shrinking the extent, as this
+       device did, slides the rectangle back onto the page instead of
+       cutting off the part that hangs over the edge. */
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(width),
+                             xpost_object_number(height),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             private.width, private.height))
         return 0;
-    if (x.int_.val + width.int_.val > private.width)
-        width.int_.val = private.width - x.int_.val;
-    if (y.int_.val + height.int_.val > private.height)
-        height.int_.val = private.height - y.int_.val;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (!rd)
@@ -863,29 +702,31 @@ int _fillrect(Xpost_Context *ctx,
             int i;
             int j;
 
-            for (i = 0; i < height.int_.val; i++)
+            for (i = y0; i <= y1; i++)
             {
-                for (j = 0; j < width.int_.val; j++)
+                for (j = x0; j <= x1; j++)
                 {
-                    rd->backend.gdi.buf[(y.int_.val + i) * private.width + x.int_.val + j] =
-                        red.int_.val << 16 | green.int_.val << 8 | blue.int_.val;
+                    rd->backend.gdi.buf[i * private.width + j] =
+                        r << 16 | g << 8 | b;
                 }
             }
 
             cdc = CreateCompatibleDC(rd->dc);
             SelectObject(cdc, rd->backend.gdi.bitmap);
-            BitBlt(rd->dc, x.int_.val, y.int_.val, width.int_.val, height.int_.val,
-                   cdc, x.int_.val, y.int_.val, SRCCOPY);
+            BitBlt(rd->dc, x0, y0, x1 - x0 + 1, y1 - y0 + 1,
+                   cdc, x0, y0, SRCCOPY);
             DeleteDC(cdc);
             break;
         }
         case RENDER_BACKEND_GL:
+            /* the quad covers the pixels x0..x1 and y0..y1, so its far
+               corner is one past the last painted pixel */
             glBegin(GL_QUADS);
-            glColor4f(red.int_.val / 255.0f, green.int_.val / 255.0f, blue.int_.val / 255.0f, 1.0f);
-            glVertex2f((GLfloat)x.int_.val, (GLfloat)y.int_.val);
-            glVertex2f((GLfloat)(x.int_.val + width.int_.val), (GLfloat)(y.int_.val));
-            glVertex2f((GLfloat)(x.int_.val + width.int_.val), (GLfloat)(y.int_.val + height.int_.val));
-            glVertex2f((GLfloat)x.int_.val, (GLfloat)(y.int_.val + height.int_.val));
+            glColor4f(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+            glVertex2f((GLfloat)x0, (GLfloat)y0);
+            glVertex2f((GLfloat)(x1 + 1), (GLfloat)y0);
+            glVertex2f((GLfloat)(x1 + 1), (GLfloat)(y1 + 1));
+            glVertex2f((GLfloat)x0, (GLfloat)(y1 + 1));
             glEnd();
             rd->backend.gl.changed = 1;
             break;
@@ -902,13 +743,8 @@ int _flush(Xpost_Context *ctx,
     PrivateData private;
     Render_Data *rd;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
@@ -948,13 +784,8 @@ int _destroy(Xpost_Context *ctx,
     PrivateData private;
     Render_Data *rd;
 
-    /* load private data struct from string */
-    privatestr = xpost_dict_get(ctx, devdic, namePrivate);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return undefined;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof(private), &private))
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
         return undefined;
 
     xpost_context_install_event_handler(ctx, null, null);
@@ -1058,6 +889,20 @@ static
 int loadwin32devicecont(Xpost_Context *ctx,
                         Xpost_Object classdic)
 {
+    /* this device's method suite; the arities follow from its
+       declared colour space */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create", "win32Create", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "win32PutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "win32GetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "DrawLine", "win32DrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
+        { "FillRect", "win32FillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
+        { "Emit", "win32Emit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Flush", "win32Flush", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
+        { "Destroy", "win32Destroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
     int ret;
@@ -1068,18 +913,13 @@ int loadwin32devicecont(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "win32Create", (Xpost_Op_Func)_create, 1, 3, integertype, integertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Create"), op);
+
+    ret = xpost_dev_class_install(ctx, classdic, 3, 1,
+                                  methods, XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32PutPix", (Xpost_Op_Func)_putpix, 0, 6,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y coords */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
-    if (ret)
-        return ret;
+
 
     /* Paint glyphs without blending their edges. The blend the text
        operators would otherwise use reads the pixel already there, which
@@ -1093,44 +933,11 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32GetPix", (Xpost_Op_Func)_getpix, 3, 3,
-                             numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32DrawLine", (Xpost_Op_Func)_drawline, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x1 y1 */
-                             numbertype, numbertype, /* x2 y2 */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "DrawLine"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32FillRect", (Xpost_Op_Func)_fillrect, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y coords */
-                             numbertype, numbertype, /* width height */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillRect"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Emit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Flush", (Xpost_Op_Func)_flush, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Flush"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Destroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
-    if (ret)
-        return ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
 

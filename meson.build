@@ -1508,7 +1508,15 @@ test('fopen-funnel',
 # xpost_dev_driver.h -- the contract stays written in one place.
 test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
-  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+  args: [ meson.current_source_dir() ])
+
+# One device roster. -d and setpagedevice are two spellings of one
+# selection, so the option parser's list, the interpreter's maker table
+# and the .devicemakers dictionary name the same devices -- and the test
+# wrappers, which carry rosters of their own, run every one of them.
+test('check-device-roster',
+  find_program('tests/check-device-roster.sh'),
+  args: [ meson.current_source_dir() ])
 
 # A function that can refuse returns that fact and no caller may ignore
 # it. The compiler enforces that wherever XPOST_MUST_CHECK is applied;
@@ -1631,13 +1639,14 @@ test('resource-load',
 
 # The driver contract's rectangle definition: xpost_dev_rect_normalize()
 # is the one statement of which pixels FillRect paints (inclusive far
-# corner, negative extents reflected, clipped to the device), and the
-# folding helpers truncate. Every device routed through the driver
-# header inherits exactly these semantics.
+# corner, negative extents reflected, clipped by the source the caller
+# supplies), Xpost_Dev_Line the one statement of which pixels DrawLine
+# paints, and the folding helpers truncate and clamp. Every device
+# routed through the driver header inherits exactly these semantics.
 dev_rect_exe = executable('dev_rect_test',
   'tests/dev_rect_test.c',
   c_args: '-DHAVE_CONFIG_H',
-  dependencies: libxpost_dep,
+  dependencies: [ libxpost_dep, m_dep ],
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 test('dev-rect', dev_rect_exe)

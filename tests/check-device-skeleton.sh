@@ -4,29 +4,51 @@
 # reach the shared mechanics through xpost_dev_driver.h rather than
 # hand-writing them, so the contract stated there stays the only
 # statement of how a device folds operands, reaches its private struct,
-# and which rectangle FillRect paints.
+# and which rectangle FillRect paints. The PostScript device classes are
+# held to the same idea from their side: what every class does the same
+# way is written once and referred to.
 #
-# Exemptions: xpost_dev_win32.c cannot be compiled or exercised on the
-# platforms this suite runs on, so its migration cannot be gated here.
-# xpost_dev_generic.c is held to the private-struct rule only: its two
-# compiled base-class FillRects deliberately mirror the PostScript
-# classes' floor-space arithmetic (pinned by the golden render), not the
-# integer contract path.
+# No exemptions. The two files that used to have them were the two that
+# broke the contract: the Windows driver, which cannot be compiled here,
+# clamped a negative origin without shrinking the extent and treated the
+# far edge as exclusive; and the generic rasteriser, whose two compiled
+# base-class fills restated the extent arithmetic in floor space beside
+# a helper that truncated. Exempting a file from the rule it breaks
+# leaves the rule stated and unenforced, which is the failure this guard
+# exists to prevent -- so both are covered, the Windows driver textually,
+# since that holds whether or not this platform can build it.
 #
-# Usage: check-device-skeleton.sh <src/lib directory>
+# Sources are named rather than globbed out of a directory: a built tree
+# leaves object files beside them whose debug information matches every
+# pattern here, so a scan would read green where nothing was built and
+# red where something was.
+#
+# Usage: check-device-skeleton.sh <source root>
 
 set -eu
 
-libdir=${1:?usage: check-device-skeleton.sh <src/lib directory>}
+src=${1:?usage: check-device-skeleton.sh <source root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
+libdir="$src/src/lib"
+guard_require_dir "$libdir" "the library source directory"
+
+# the compiled devices, and the rasteriser holding the base classes'
+# compiled fills; the Windows driver is checked textually alongside
 fleet="xpost_dev_bgr.c xpost_dev_jpeg.c xpost_dev_png.c xpost_dev_raster.c xpost_dev_xcb.c"
+marking="$fleet xpost_dev_win32.c xpost_dev_generic.c"
+
+# every file that defines a device class
+classes="image.ps pgmimage.ps pbmimage.ps ppmimage.ps tiffimage.ps
+         nulldev.ps bboxdev.ps pdfwrite.ps svgwrite.ps dscwrite.ps"
 
 fail=0
 
 # 1. Private-struct access goes through xpost_dev_private_get/put: no raw
 #    memory accessor in any device source (the helpers in the driver
 #    header hold the only calls).
-for f in $fleet xpost_dev_generic.c; do
+for f in $marking; do
     hits=$(grep -nE '\bxpost_memory_(get|put)\(' "$libdir/$f" || true)
     if [ -n "$hits" ]; then
         echo "check-device-skeleton: raw memory accessor in $f:" >&2
@@ -38,8 +60,9 @@ done
 
 # 2. Operand folding goes through xpost_dev_num_to_*: hand-folding is
 #    recognisable by its realtype dispatch, which a migrated device no
-#    longer needs.
-for f in $fleet; do
+#    longer needs. The generic rasteriser is exempt from this one rule
+#    alone: it inspects operand types for reasons that are not folding.
+for f in $fleet xpost_dev_win32.c; do
     hits=$(grep -nE '\brealtype\b' "$libdir/$f" || true)
     if [ -n "$hits" ]; then
         echo "check-device-skeleton: hand-folded numeric operand in $f:" >&2
@@ -49,32 +72,58 @@ for f in $fleet; do
     fi
 done
 
-# 3. A device registering a FillRect operator paints the contract
-#    rectangle: its extent arithmetic must be xpost_dev_rect_normalize,
-#    not a private restatement.
-for f in $fleet; do
-    if grep -q '"FillRect"' "$libdir/$f" &&
+# 3. A file that fills a rectangle paints the contract rectangle: its
+#    extent arithmetic must be xpost_dev_rect_normalize, not a private
+#    restatement. And nothing outside the header may restate the two
+#    steps that arithmetic is made of -- reflecting a negative extent
+#    through its origin, and clamping a coordinate to the device -- since
+#    a restatement is how the four behaviours came about.
+for f in $marking; do
+    if grep -qE '"FillRect"|_fillrect' "$libdir/$f" &&
        ! grep -q 'xpost_dev_rect_normalize' "$libdir/$f"; then
-        echo "check-device-skeleton: $f registers FillRect without xpost_dev_rect_normalize()." >&2
+        echo "check-device-skeleton: $f fills a rectangle without xpost_dev_rect_normalize()." >&2
         echo "The painted rectangle is defined once, in xpost_dev_driver.h." >&2
+        fail=1
+    fi
+    hits=$(grep -nE '(w|h|width|height)[ \t]*(\.int_\.val)?[ \t]*<[ \t]*0|\bfloor[ \t]*\((dx|dy|x|y)\b' \
+           "$libdir/$f" || true)
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: $f restates the rectangle arithmetic:" >&2
+        printf '%s\n' "$hits" >&2
+        echo "Reflecting a negative extent and flooring a coordinate belong to" >&2
+        echo "xpost_dev_rect_normalize(); call it instead." >&2
         fail=1
     fi
 done
 
-# 4. The fleet includes the contract header it is being held to.
-for f in $fleet; do
+# 4. A file that draws a line walks the contract's line. The window
+#    devices each had a walk of their own -- one including both
+#    endpoints, one excluding the last -- so a wire drawn on one landed
+#    on different pixels than the same wire on the other, and neither
+#    matched the base class.
+for f in $marking; do
+    if grep -q '_drawline' "$libdir/$f" &&
+       ! grep -q 'xpost_dev_line_init' "$libdir/$f"; then
+        echo "check-device-skeleton: $f draws a line without xpost_dev_line_init()." >&2
+        echo "The painted line is defined once, in xpost_dev_driver.h." >&2
+        fail=1
+    fi
+done
+
+# 5. Every marking source includes the contract header it is held to.
+for f in $marking; do
     if ! grep -q 'xpost_dev_driver\.h' "$libdir/$f"; then
         echo "check-device-skeleton: $f does not include xpost_dev_driver.h." >&2
         fail=1
     fi
 done
 
-# 5. A class dictionary that would not take a method leaves the device
+# 6. A class dictionary that would not take a method leaves the device
 #    incomplete, so the refusal reaches the caller: the value of every
 #    xpost_dict_put is either returned or tested, and a test never
 #    answers success. Textual, so it holds for the sources this platform
 #    cannot compile as well as the ones it can.
-for f in $fleet xpost_dev_generic.c xpost_dev_win32.c; do
+for f in $marking; do
     hits=$(awk '
         /xpost_dict_put[ \t]*\(/ {
             if ($0 !~ /=/ && $0 !~ /return/)
@@ -97,8 +146,167 @@ for f in $fleet xpost_dev_generic.c xpost_dev_win32.c; do
     fi
 done
 
+# 7. The class-to-instance copy is one procedure. A class dictionary
+#    stores /.copydict, and Create (and every C driver, which fetches it
+#    from the class before specialising the copy) calls it. Each class
+#    used to carry its own body, and two of them carried a shorter one
+#    that left the output file name off the instance, so a device made
+#    from those classes wrote wherever its Emit defaulted to. A class
+#    may name .classcopydict; it may not restate it.
+copies=0
+for f in $classes; do
+    p="$src/data/$f"
+    [ -f "$p" ] || continue
+    if grep -qE '^[ \t]*/\.copydict[ \t]*\{' "$p"; then
+        echo "check-device-skeleton: $f writes a class copy of its own:" >&2
+        grep -nE '^[ \t]*/\.copydict[ \t]*\{' "$p" >&2
+        echo "The copy is .xpostsys /.classcopydict; store that, do not restate it." >&2
+        fail=1
+    fi
+    grep -qE '/\.copydict[ \t]+//\.xpostsys[ \t]+/\.classcopydict[ \t]+get' "$p" &&
+        copies=$((copies + 1))
+done
+if [ "$copies" -lt 5 ]; then
+    echo "check-device-skeleton: only $copies classes store the shared class copy;" >&2
+    echo "expected every class that defines /.copydict to name .classcopydict." >&2
+    fail=1
+fi
+if [ "$(grep -c '\.xpostsys /\.classcopydict {' "$src/data/device.ps")" != 1 ]; then
+    echo "check-device-skeleton: the shared class copy is not defined once in device.ps." >&2
+    fail=1
+fi
+
+# 8. A device is completed once, identically, on every path that
+#    creates one. The finishing a fresh device takes -- the page's
+#    default matrix, the compiled rasterisers its raster shape can
+#    take, the process colour model it was asked for -- is
+#    .completedevice, and only it installs them. It was written twice,
+#    for the device the interpreter starts with and the device
+#    setpagedevice makes, and the two were not the same: one adopted the
+#    process colour model and the other did not, so the same device
+#    behaved differently according to how it had been selected.
+#
+#    Two sites install a compiled rasteriser on a device that is not a
+#    page device and never becomes one -- the glyph cache in font.ps and
+#    the form cache in init.ps, each a scratch raster the machinery
+#    paints into and reads back. They are named here rather than left to
+#    slip through a looser pattern.
+scratch=0
+for f in device.ps font.ps init.ps image.ps pgmimage.ps pbmimage.ps \
+         ppmimage.ps tiffimage.ps nulldev.ps bboxdev.ps pdfwrite.ps \
+         svgwrite.ps dscwrite.ps paint.ps graphics.ps gstate.ps; do
+    p="$src/data/$f"
+    [ -f "$p" ] || continue
+    while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        case "$f:$hit" in
+            device.ps:*"dev /Fill"*)   continue ;;   # .completedevice itself
+            font.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
+            init.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
+        esac
+        echo "check-device-skeleton: a device is completed outside .completedevice:" >&2
+        echo "  $f:$hit" >&2
+        echo "A page device is finished by .completedevice (data/device.ps); the only" >&2
+        echo "sites that may install a rasteriser directly are the two scratch rasters," >&2
+        echo "font.ps's glyph cache and init.ps's form cache, both named mdev." >&2
+        fail=1
+    done <<EOF
+$(grep -nE '/(FillPoly|FillRect)([ \t]+//\.internaldict|$)' "$p" || true)
+EOF
+done
+if [ "$scratch" -ne 4 ]; then
+    echo "check-device-skeleton: $scratch scratch-raster completions, expected 4." >&2
+    echo "A new one is another place a device gets finished; give it" >&2
+    echo ".completedevice or add it here with its reason." >&2
+    fail=1
+fi
+if [ "$(grep -c '\.privatedict /\.completedevice {' "$src/data/device.ps")" != 1 ]; then
+    echo "check-device-skeleton: the device completion is not defined once in device.ps." >&2
+    fail=1
+fi
+callers=$(grep -c '/\.completedevice get exec' "$src/data/device.ps" "$src/data/init.ps" \
+          | cut -d: -f2 | paste -sd+ - | bc)
+if [ "$callers" -lt 2 ]; then
+    echo "check-device-skeleton: only $callers path completes a device;" >&2
+    echo "both the startup device and setpagedevice's must call .completedevice." >&2
+    fail=1
+fi
+
+# 9. A device's methods are registered from its method table, not one
+#    at a time. Written out by hand, each registration carried its own
+#    arity, its own operand types and its own put, and five of six
+#    devices answered success from a failed PutPix registration -- the
+#    device loaded with no PutPix and failed at its first paint. The
+#    table states the slot and the kind; xpost_dev_class_install derives
+#    the arity from the declared colour space, stops at the first
+#    refusal, and checks what it produced.
+for f in $fleet xpost_dev_win32.c; do
+    if ! grep -q 'Xpost_Dev_Method methods\[\]' "$libdir/$f"; then
+        echo "check-device-skeleton: $f has no method table." >&2
+        echo "Register a device's suite through xpost_dev_class_install()." >&2
+        fail=1
+    fi
+    if ! grep -q 'xpost_dev_class_install' "$libdir/$f"; then
+        echo "check-device-skeleton: $f does not install its class through the contract." >&2
+        fail=1
+    fi
+    # a method slot put into the class dictionary outside the table is a
+    # registration the completeness check never sees
+    hits=$(grep -nE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "(Create|PutPix|GetPix|DrawLine|DrawRect|FillRect|FillPoly|BlendPix|Emit|Flush|Destroy|Erase)"\)' \
+           "$libdir/$f" || true)
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: $f installs a method slot outside its table:" >&2
+        printf '%s\n' "$hits" >&2
+        fail=1
+    fi
+done
+
+# 10. The contract's list of slots that read the base class's raster is
+#     the classes' list. The completeness check refuses a device that
+#     keeps its own buffer and leaves one of them inherited; if a class
+#     grows another such method and the header does not hear about it,
+#     the check goes on passing while the hole reopens.
+#
+#     Only the names the pipeline looks up count. A dot-prefixed name is
+#     a parameter of the generated raster suite -- .rowsinit and
+#     .writepage read the row array too, but nothing reaches them except
+#     Create and Emit, which are on the list, so a device that overrides
+#     those never runs them.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+sed -n 's/^#define XPOST_DEV_RASTER_SLOTS { \(.*\) }$/\1/p' \
+    "$libdir/xpost_dev_driver.h" | tr -d '" ' | tr ',' '\n' \
+    | grep -v '^$' | sort > "$work/hdr"
+# the methods in the classes whose body reads ImgData
+awk '
+    /^[ \t]*\/[A-Za-z.][A-Za-z0-9._]*[ \t]*\{/ { m = $1; sub(/^\//, "", m) }
+    m != "" && /ImgData/ { print m; m = "" }
+' "$src"/data/image.ps "$src"/data/pgmimage.ps "$src"/data/ppmimage.ps \
+  "$src"/data/pbmimage.ps "$src"/data/tiffimage.ps \
+  | grep -v '^\.' | sort -u > "$work/cls"
+if [ ! -s "$work/hdr" ] || [ ! -s "$work/cls" ]; then
+    echo "FAILURES: the raster-slot lists could not be read; fix the guard" >&2
+    exit 1
+fi
+if ! cmp -s "$work/hdr" "$work/cls"; then
+    echo "check-device-skeleton: XPOST_DEV_RASTER_SLOTS and the class methods" >&2
+    echo "that read the row array disagree:" >&2
+    missing=$(comm -13 "$work/hdr" "$work/cls")
+    stale=$(comm -23 "$work/hdr" "$work/cls")
+    [ -n "$missing" ] && {
+        echo "  a class method reads the row array and the contract does not name it:" >&2
+        printf '%s\n' "$missing" | sed 's/^/      /' >&2
+        echo "  a device with its own buffer would inherit it and answer undefined." >&2
+    }
+    [ -n "$stale" ] && {
+        echo "  the contract names a slot no class method reads:" >&2
+        printf '%s\n' "$stale" | sed 's/^/      /' >&2
+    }
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion)"

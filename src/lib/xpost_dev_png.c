@@ -342,6 +342,45 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Read a pixel back in the device's stored channel scale, the same one
+   PutPix writes. The class this device copies reads the base class's
+   row array, which this device does not have, so the inherited method
+   would answer undefined; a slot the class dictionary offers has to
+   work. A pixel outside the raster reads as the ground. */
+static
+int _getpix(Xpost_Context *ctx,
+            Xpost_Object x,
+            Xpost_Object y,
+            Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int ix, iy;
+    Xpost_Png_Pixel pixel;
+
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
+    {
+        pixel.red = pixel.green = pixel.blue = 0;
+        pixel.alpha = 0;
+    }
+    else
+        pixel = private.buf->data[iy * private.width + ix];
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.blue));
+
+    return 0;
+}
+
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255. The text operators use this for glyph edge pixels when the
    device renders anti-aliased text. */
@@ -422,12 +461,11 @@ int _fillrect(Xpost_Context *ctx,
         return undefined;
 
     /* the contract's rectangle: inclusive span, clipped to the device */
-    if (!xpost_dev_rect_normalize(xpost_dev_num_to_int(x),
-                                  xpost_dev_num_to_int(y),
-                                  xpost_dev_num_to_int(w),
-                                  xpost_dev_num_to_int(h),
-                                  private.width, private.height,
-                                  &x0, &y0, &x1, &y1))
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             private.width, private.height))
         return 0;
 
     for (iy = y0; iy <= y1; iy++)
@@ -641,6 +679,24 @@ int _loaddevicecont_common(Xpost_Context *ctx,
                            Xpost_Object classdic,
                            int alpha)
 {
+    /* this device's method suite; the arities follow from DeviceRGB */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create",   "pngCreate",   (Xpost_Op_Func)_create,   XPOST_DEV_M_CREATE },
+        { "PutPix",   "pngPutPix",   (Xpost_Op_Func)_putpix,   XPOST_DEV_M_PUTPIX },
+        { "GetPix",   "pngGetPix",   (Xpost_Op_Func)_getpix,   XPOST_DEV_M_GETPIX },
+        { "FillRect", "pngFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT   },
+        { "BlendPix", "pngBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND  },
+        { "Emit",     "pngEmit",     (Xpost_Op_Func)_emit,     XPOST_DEV_M_PAGE   },
+        { "Destroy",  "pngDestroy",  (Xpost_Op_Func)_destroy,  XPOST_DEV_M_PAGE   }
+    };
+    /* the alpha device clears to transparent rather than to white, so
+       it answers erasepage itself */
+    static const Xpost_Dev_Method alphamethods[] =
+    {
+        { "Erase", "pngErase", (Xpost_Op_Func)_erase, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
     int ret;
@@ -651,42 +707,9 @@ int _loaddevicecont_common(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "pngCreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "pngCreate", (Xpost_Op_Func)_create, 1, 3, integertype, integertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Create"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "pngPutPix", (Xpost_Op_Func)_putpix, 0, 6,
-            numbertype, numbertype, numbertype,
-            numbertype, numbertype,
-            dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
-    if (ret)
-        return ret;
-
-    op = xpost_operator_cons(ctx, "pngFillRect", (Xpost_Op_Func)_fillrect, 0, 8,
-            numbertype, numbertype, numbertype,
-            numbertype, numbertype, numbertype, numbertype,
-            dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillRect"), op);
-    if (ret)
-        return ret;
-
-    op = xpost_operator_cons(ctx, "pngBlendPix", (Xpost_Op_Func)_blendpix, 0, 7,
-            numbertype, numbertype, numbertype,
-            numbertype, numbertype, numbertype,
-            dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BlendPix"), op);
-    if (ret)
-        return ret;
-
-    op = xpost_operator_cons(ctx, "pngEmit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
-    if (ret)
-        return ret;
-
-    op = xpost_operator_cons(ctx, "pngDestroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
+    ret = xpost_dev_class_install(ctx, classdic, 3, 1,
+                                  methods, XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
@@ -695,8 +718,8 @@ int _loaddevicecont_common(Xpost_Context *ctx,
         ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "AlphaChannel"), xpost_bool_cons(1));
         if (ret)
             return ret;
-        op = xpost_operator_cons(ctx, "pngErase", (Xpost_Op_Func)_erase, 0, 1, dicttype);
-        ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Erase"), op);
+        ret = xpost_dev_class_install(ctx, classdic, 3, 1, alphamethods,
+                                      XPOST_DEV_METHOD_COUNT(alphamethods));
         if (ret)
             return ret;
     }

@@ -37,14 +37,7 @@
     /dimensions [0 0]
     /NoOutput true % this device draws nothing: keep its no-op methods
 
-    /.copydict {
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-    }
+    /.copydict //.xpostsys /.classcopydict get
     /Create { % width height IMAGE  .  IMAGE'
         begin {/height /width}{exch def}forall
         currentdict end

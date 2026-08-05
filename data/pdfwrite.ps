@@ -45,18 +45,7 @@
     /NoOutput true  % keep this device's own vector FillPoly (no rasterizing)
     /VectorGlyphs true  % text operators emit glyph outlines, not bitmaps
 
-    /.copydict {
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-        /OutputFileName where {
-            /OutputFileName exch 1 index get
-            3 copy put pop pop
-        } if
-    } bind
+    /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall
@@ -361,8 +350,7 @@
             .si 255 div .sepspace 3 get exec
             .sepnout 1 sub -1 0 {
                 /.sj exch def
-                dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if
-                255 mul round cvi
+                //.xpostsys /.c255 get exec
                 .smp .si .sepnout mul .sj add 3 -1 roll put
             } for
         } for
@@ -440,11 +428,19 @@
         w .pdfnum ( ) .put h .pdfnum ( re\nS\n) .put
     end }
 
+    % The operands name an inclusive pixel span and a PDF rectangle is
+    % half-open, so the rectangle that covers the pixels a raster device
+    % would paint is one unit wider and taller (the driver contract,
+    % src/lib/xpost_dev_driver.h). Emitting w and h unchanged left this
+    % device painting a rectangle a pixel short in each direction of
+    % every other device's.
     /FillRect { % c1..cN x y w h IMAGE  .  -
     begin {h w y x}{exch def}forall
+        w 0 lt { /x x w add def /w w neg def } if
+        h 0 lt { /y y h add def /h h neg def } if
         .pdffillcolor
         x .pdfnum ( ) .put y .pdfnum ( ) .put
-        w .pdfnum ( ) .put h .pdfnum ( re\nf\n) .put
+        w 1 add .pdfnum ( ) .put h 1 add .pdfnum ( re\nf\n) .put
     end }
 
     % c1..cN polygon IMAGE . -  ; append the fill colour, the subpath

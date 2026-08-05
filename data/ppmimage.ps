@@ -36,9 +36,9 @@
 
     % scale each component in [0,1] to a byte and pack; unpack to bytes
     /.packpix {
-        255 mul cvi exch
-        255 mul cvi 8 bitshift or exch
-        255 mul cvi 16 bitshift or
+        .chan exch
+        .chan 8 bitshift or exch
+        .chan 16 bitshift or
     } bind
     /.unpackpix {
         dup -16 bitshift exch

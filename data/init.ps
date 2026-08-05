@@ -1378,6 +1378,17 @@ currentglobal true setglobal
     % the new device's defaults. The outgoing device is destroyed, the
     % new device is installed in the graphics state template, and the
     % page is reinitialised.
+    % The device roster. -d and setpagedevice are two spellings of one
+    % selection, so this names every device the interpreter can be
+    % started with (xpost_interpreter.c setlocalconfig, held to it by
+    % tests/check-device-roster.sh). A device selectable only by -d is
+    % worse than merely unreachable by name: a request naming no device
+    % defaults to the running one, so on such a device every
+    % setpagedevice raises rangecheck and the page cannot be resized.
+    %
+    % The makers written in PostScript live in privatedict; the ones a
+    % C driver registers are reached through its loader, so that the
+    % driver is brought in on first use rather than at startup.
     currentglobal true setglobal
     .xpostsys /.devicemakers <<
         /pgm { .privatedict /newPGMIMAGEdevice get exec }
@@ -1392,7 +1403,25 @@ currentglobal true setglobal
         /png { /newpngdevice where { pop }{ loadpngdevice } ifelse newpngdevice }
         /pngalpha { /newpngalphadevice where { pop }{ loadpngalphadevice } ifelse newpngalphadevice }
         /jpeg { /newjpegdevice where { pop }{ loadjpegdevice } ifelse newjpegdevice }
+        /bgr { /newbgrdevice where { pop }{ loadbgrdevice } ifelse newbgrdevice }
+        /raster { /newrasterdevice where { pop }{ loadrasterdevice } ifelse newrasterdevice }
+        /xcb { /newxcbdevice where { pop }{ loadxcbdevice } ifelse newxcbdevice }
+        /gdi { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
+        /gl { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
     >> put
+    % A driver the build left out registers no loader, so the maker
+    % above would answer undefined. Drop those entries instead, and an
+    % unbuilt device gets the same rangecheck as a name that was never
+    % a device at all.
+    <<
+        /png /loadpngdevice  /pngalpha /loadpngalphadevice
+        /jpeg /loadjpegdevice
+        /bgr /loadbgrdevice  /raster /loadrasterdevice
+        /xcb /loadxcbdevice
+        /gdi /loadwin32device  /gl /loadwin32device
+    >> {
+        where { pop pop }{ .xpostsys /.devicemakers get exch undef } ifelse
+    } forall
     setglobal
 
     % The language is read into systemdict, but this pair is defined here,
@@ -1464,29 +1493,9 @@ currentglobal true setglobal
         /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
         graphicsdict /.exactpagedims undef
 
-        % post-construction fixups, as the initial device receives.
-        % The flip translate must match the height the device adopted,
-        % or marks sit offset within a fractional page.
-        newdev /defaultmatrix
-            [ newdev /windowscale 2 copy known { get }{ pop pop 1 } ifelse
-              dup sx mul 0 0
-              4 -1 roll sy mul neg 0
-              newdev /height 2 copy known { get }{ pop pop ph } ifelse ] put
-        newdev /NoOutput known not {
-            newdev /FillPoly //.internaldict /.fillpoly get put
-            newdev /nativecolorspace get /DeviceGray eq {
-                newdev /FillRect //.internaldict /.fillrectgray get put
-            } if
-            newdev /nativecolorspace get /DeviceRGB eq {
-                newdev /ImgData known {
-                    newdev /FillRect get type /operatortype ne {
-                        newdev /FillRect //.internaldict /.fillrectrgb get put
-                    } if
-                } if
-            } if
-        } if
-
-        % remaining keys are device features
+        % remaining keys are device features, recorded before the device
+        % is finished: the process colour model arrives among them, and
+        % which marking methods fit the device depends on it
         merged { % key value
             1 index /OutputDevice eq
             2 index /PageSize eq or
@@ -1498,16 +1507,9 @@ currentglobal true setglobal
         merged /OutputDevice dev put
         userdict /.pagedevice merged put
 
-        % a device declaring support for the requested process colour
-        % model adopts it as its native space; the colour pipeline then
-        % delivers that model's components to the marking methods
-        newdev /ProcessColorModel 2 copy known {
-            get newdev /.colormodels 2 copy known {
-                get 1 index known {
-                    newdev /nativecolorspace 3 -1 roll put
-                }{ pop } ifelse
-            }{ pop pop pop } ifelse
-        }{ pop pop } ifelse
+        % post-construction fixups, the same ones the device the
+        % interpreter started with receives (data/device.ps)
+        newdev sx sy .privatedict /.completedevice get exec
 
         % the template and the live gstate carry the device; painting
         % and the defaultmatrix operator resolve it through them

@@ -25,18 +25,7 @@ currentglobal true setglobal
     % interior takes the solid PutPix path
     /TextAlphaBits 4
 
-    /.copydict { % dict1  .  dict2
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-        /OutputFileName where {
-            /OutputFileName exch 1 index get
-            3 copy put pop pop
-        } if
-    } bind
+    /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall
@@ -62,6 +51,23 @@ currentglobal true setglobal
 
     /.to-int { floor cvi } bind
 
+    % c  .chan  byte
+    % the one fold from a colour component to a stored 8-bit channel.
+    % The clamp is not decoration: setgray and its siblings substitute
+    % the nearest valid value (PLRM 8.2), but a Separation or DeviceN
+    % tint transform is the program's own procedure and returns whatever
+    % it computes, so a component outside [0,1] does reach here. Scaled
+    % without it, 1.7 stores as 0.69 of full scale and a packed pixel
+    % carries the overflow into the next component. Truncation, not
+    % rounding, is what the compiled fills do, so a page painted through
+    % either lands on the same byte.
+    /.unitclamp { % c  .  c'
+        dup 0 lt { pop 0 }{ dup 1 gt { pop 1 } if } ifelse
+    } bind
+    /.chan { % c  .  byte
+        .unitclamp 255 mul cvi
+    } bind
+
     /PutPix { % c1..cN x y IMAGE  .  -
     begin
         {
@@ -86,65 +92,18 @@ currentglobal true setglobal
         .unpackpix
     end } bind
 
+    % The pixels a segment covers are the driver contract's (.linepix,
+    % src/lib/xpost_dev_driver.h): the pixel centres the segment spans
+    % along its major axis, clipped to the device. This method walks
+    % them through PutPix; the window devices walk the same list through
+    % their own plot. Neither states the rule.
     /DrawLine { % c1..cN x1 y1 x2 y2 IMAGE  .  -
     begin {y2 x2 y1 x1}{exch def}forall .takecolor
-        % quantize to the fill pipeline's 1/256 device grid: an
-        % endpoint meant to lie on a pixel boundary arrives with
-        % accumulated float noise, and the plot floors it
-        /x1 x1 256 mul 0.5 add floor 256 div def
-        /y1 y1 256 mul 0.5 add floor 256 div def
-        /x2 x2 256 mul 0.5 add floor 256 div def
-        /y2 y2 256 mul 0.5 add floor 256 div def
-        x1 0 lt{ x1 y1 x2 y2 0 0 0 height .intersect
-			{ {y1 x1}{exch def}forall } if } if
-        x2 0 lt{ x1 y1 x2 y2 0 0 0 height .intersect
-			{ {y2 x2}{exch def}forall } if } if
-        y1 0 lt{ x1 y1 x2 y2 0 0 width 0 .intersect
-			{ {y1 x1}{exch def}forall } if } if
-        y2 0 lt{ x1 y1 x2 y2 0 0 width 0 .intersect
-			{ {y2 x2}{exch def}forall } if } if
-        x1 width ge { x1 y1 x2 y2 width 0 width height .intersect
-			{ {y1 x1}{exch def}forall } if } if
-        x2 width ge { x1 y1 x2 y2 width 0 width height .intersect
-			{ {y2 x2}{exch def}forall } if } if
-        y1 height ge { x1 y1 x2 y2 0 height width height .intersect
-			{ {y1 x1}{exch def}forall } if } if
-        y2 height ge { x1 y1 x2 y2 0 height width height .intersect
-			{ {y2 x2}{exch def}forall } if } if
-        % walk the major axis by pixel centres: each pixel whose
-        % centre the segment spans paints at the line's height there,
-        % so collinear segments continue each other exactly across
-        % their shared endpoint, wherever it falls within a pixel
-        /ddx x2 x1 sub def
-        /ddy y2 y1 sub def
-        ddx 0 eq ddy 0 eq and {
-            .pushcolor x1 y1 currentdict PutPix
-        }{
-        /painted false def
-        ddx abs ddy abs ge {
-            x1 floor cvi ddx 0 lt { -1 }{ 1 } ifelse x2 floor cvi {
-                /cc exch def
-                /t cc 0.5 add x1 sub ddx div def
-                t 0 ge t 1 le and {
-                    .pushcolor cc y1 ddy t mul add currentdict PutPix
-                    /painted true def
-                } if
-            } for
-        }{
-            y1 floor cvi ddy 0 lt { -1 }{ 1 } ifelse y2 floor cvi {
-                /rr exch def
-                /t rr 0.5 add y1 sub ddy div def
-                t 0 ge t 1 le and {
-                    .pushcolor x1 ddx t mul add rr currentdict PutPix
-                    /painted true def
-                } if
-            } for
-        } ifelse
-        % a segment too short to span any centre still marks a pixel
-        painted not {
-            .pushcolor x1 x2 add 2 div y1 y2 add 2 div currentdict PutPix
-        } if
-        } ifelse
+        /lp x1 y1 x2 y2 width height //.internaldict /.linepix get exec def
+        0 2 lp length 2 sub {
+            /li exch def
+            .pushcolor lp li get lp li 1 add get currentdict PutPix
+        } for
     end } bind
 
     %  -----|
@@ -167,29 +126,20 @@ currentglobal true setglobal
         } for
     end } bind
 
+    % The rectangle a fill covers is the driver contract's (.rectspan,
+    % src/lib/xpost_dev_driver.h): a negative extent reflects through
+    % the origin and the far corner is inclusive, so an integral w gives
+    % w+1 columns. This method walks the span through PutPix; the
+    % compiled fills that replace it on a selected device, and the C
+    % devices' own, take the same span from the same place. Nothing here
+    % restates it, and nothing here has to agree with it by accident.
     /FillRect { % c1..cN x y w h IMAGE  .  -
     begin {h w y x}{exch def}forall .takecolor
-        w 0 lt { /w w abs def /x x w sub def } if
-        h 0 lt { /h h abs def /y y h sub def } if
-
-        /h h y add def
-        /w w x add def
-
-        {
-            //.internaldict /USEDRAWLINE known {
-                //.internaldict /USEDRAWLINE get {
-                    y 1 h {
-                        .pushcolor .ncomp 1 add .ncomp roll
-                        x exch w 1 index
-                        currentdict DrawLine
-                    } for
-                    exit
-                } if
-            } if
-
+        x y w h width height //.internaldict /.rectspan get exec {
+            /ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
             .pushcolor
-            y 1 h { % c1..cN y
-                x 1 w { % c1..cN y x
+            ry0 1 ry1 { % c1..cN y
+                rx0 1 rx1 { % c1..cN y x
                     .ncomp 2 add copy exch % c1..cN y x c1..cN x y
                     currentdict PutPix % c1..cN y x
                     pop
@@ -197,9 +147,7 @@ currentglobal true setglobal
                 pop
             } for
             .ncomp { pop } repeat
-
-        exit } loop
-
+        } if
     end } bind
 
     % expand a running device-space box to include a point; FillPoly

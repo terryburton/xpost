@@ -34,7 +34,7 @@
     /.rowsinit { } bind
 
     % scale a grey in [0,1] to the stored byte; a read is the byte
-    /.packpix { 255 mul cvi } bind
+    /.packpix { .chan } bind
     /.unpackpix { } bind
 
     % raw (binary) format: each row string is already the raster bytes

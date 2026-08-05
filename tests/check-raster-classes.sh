@@ -52,8 +52,11 @@ for f in pbmimage.ps tiffimage.ps; do
     done
 done
 
-# the suite is defined once, in the prototype
-for m in $methods; do
+# the suite is defined once, in the prototype. The class copy is not in
+# it: every device class shares one copy (.classcopydict, data/device.ps),
+# so the prototype names it like the rest of them do and
+# check-device-skeleton.sh holds that.
+for m in $(echo "$methods" | sed 's/\.copydict//'); do
     n=$(grep -cE "/$m[[:space:]]*\{" "$data/image.ps" || true)
     if [ "$n" != 1 ]; then
         echo "check-raster-classes: /$m defined $n times in data/image.ps, expected exactly 1"
