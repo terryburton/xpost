@@ -32,15 +32,17 @@
 #ifndef XPOST_PRIVATE_H
 #define XPOST_PRIVATE_H
 
-/* Used to export symbols used in unit tests */
-#ifdef XPCHECKAPI
-# undef XPCHECKAPI
+/* Widens a symbol's visibility so the unit tests can reach it. This says
+   nothing about the function's contract -- for that, see
+   XPOST_MUST_CHECK below. */
+#ifdef XPOST_TEST_VISIBLE
+# undef XPOST_TEST_VISIBLE
 #endif
 
 #ifdef HAVE_CHECK
-# define XPCHECKAPI XPAPI
+# define XPOST_TEST_VISIBLE XPAPI
 #else
-# define XPCHECKAPI
+# define XPOST_TEST_VISIBLE
 #endif
 
 /* Marks a function whose return value carries a refusal the caller must

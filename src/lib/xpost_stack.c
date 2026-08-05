@@ -58,7 +58,7 @@ typedef struct
 */
 
 /* allocate memory for one stack segment */
-XPCHECKAPI int xpost_stack_init(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem,
                                 unsigned int *paddr)
 {
     unsigned int adr;
@@ -120,7 +120,7 @@ int xpost_stack_count(Xpost_Memory_File *mem,
     return ct + s->top;
 }
 
-XPCHECKAPI int xpost_stack_push(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
                                 unsigned int stackadr,
                                 Xpost_Object obj)
 {
@@ -336,7 +336,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
     return 1;
 }
 
-XPCHECKAPI Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
                                         unsigned int stackadr)
 {
     Xpost_Stack *root = (Xpost_Stack *)(mem->base + stackadr);

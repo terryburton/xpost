@@ -103,7 +103,7 @@ Xpost_Object xpost_bool_cons (int b)
     return xpost_object_cvlit(obj);
 }
 
-XPCHECKAPI Xpost_Object xpost_int_cons (integer i)
+XPOST_TEST_VISIBLE Xpost_Object xpost_int_cons (integer i)
 {
     Xpost_Object obj;
 

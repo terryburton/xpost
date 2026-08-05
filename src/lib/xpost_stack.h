@@ -102,7 +102,7 @@ xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
 /**
  * @brief Create a stack data structure, returns vm address in addr.
  */
-XPCHECKAPI int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
+XPOST_TEST_VISIBLE int xpost_stack_init(Xpost_Memory_File *mem, unsigned int *addr);
 
 /**
  * @brief Empty the stack.
@@ -122,7 +122,7 @@ int xpost_stack_count(Xpost_Memory_File *mem, unsigned int stackadr);
 /**
  * @brief Put an object on top of the stack.
  */
-XPCHECKAPI int xpost_stack_push(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
                                 unsigned int stackadr,
                                 Xpost_Object obj);
 
@@ -182,7 +182,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
 /**
  * @brief Pop the stack, remove and return top object.
  */
-XPCHECKAPI Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
+XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
                                         unsigned stackadr);
 
 /**
