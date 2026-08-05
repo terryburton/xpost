@@ -68,8 +68,11 @@ if command -v xvfb-run >/dev/null 2>&1; then
             if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
                 echo "OK   xcb"
             else
+                # the whole run, not its last lines: this device talks to
+                # a display server, and what it says on the way to the
+                # failure is the diagnosis
                 echo "FAIL xcb:"
-                printf '%s\n' "$out" | tail -3
+                printf '%s\n' "$out"
                 fail=1
             fi
             ;;

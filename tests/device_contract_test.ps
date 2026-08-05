@@ -20,7 +20,13 @@
     /t.tag exch def
     /t.depth count 2 sub def
     stopped {
-        (FAIL: ) print t.tag print ( errored\n) print
+        % the error's name goes in the report: a failure seen once, on a
+        % machine that is not to hand, is diagnosable only from what the
+        % report carried
+        (FAIL: ) print t.tag print ( errored: ) print
+        $error /errorname known { $error /errorname get } { /unknown } ifelse
+        dup type /nametype eq { 128 string cvs } { pop (unknown) } ifelse print
+        (\n) print
         /contractfail true def
     } if
     count t.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
