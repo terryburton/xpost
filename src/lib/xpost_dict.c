@@ -253,10 +253,24 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     unsigned int ent;
     unsigned int hashnull;
 
-    unsigned int reqsz = sz; /* nominal capacity, as maxlength reports it */
+    dword reqsz = sz; /* nominal capacity, as maxlength reports it */
+    dword tabsz;      /* internal size, over-allocated from the above */
 
     if (sz < 8) sz = 8;
-    sz = (unsigned int)ceil((double)sz * 1.25);
+    tabsz = (dword)ceil((double)sz * 1.25);
+
+    /* both sizes are held in header fields a word wide, and the
+       over-allocation above carries a capacity that fits one to a size
+       that does not. Hold the dictionary to what the fields describe: a
+       size stored wider than its field reads back as a far smaller
+       dictionary sitting in a far larger allocation, whose entries then
+       rehash themselves into a table smaller than the one they came
+       from. */
+    if (tabsz > XPOST_OBJECT_COMP_MAX_SZ)
+        tabsz = XPOST_OBJECT_COMP_MAX_SZ;
+    if (reqsz > XPOST_OBJECT_COMP_MAX_SZ)
+        reqsz = XPOST_OBJECT_COMP_MAX_SZ;
+    sz = (unsigned int)tabsz;
 
     assert(mem->base);
     d.tag = dicttype | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
@@ -276,7 +290,7 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     dp->tag = d.tag;
     dp->sz = sz;
     dp->nused = 0;
-    dp->pad = reqsz; /* remember the requested capacity for maxlength */
+    dp->pad = (word)reqsz; /* remember the requested capacity for maxlength */
 
     tp = xpost_dict_table_of(dp); /* clear table */
     hashnull = hash(null);
@@ -341,7 +355,7 @@ unsigned int xpost_dict_requested_length_memory (Xpost_Memory_File *mem,
 }
 
 /*
-   grow a dictionary to a larger size.
+   grow a dictionary to a larger size. Returns 0 or the error to raise.
 
    allocate a new dictionary,
    copy over all non-null key/value pairs,
@@ -358,6 +372,7 @@ int dicgrow(Xpost_Context *ctx,
     Xpost_Object n;
     unsigned int i;
     unsigned int dent;
+    int ret;
 
     xpost_stack_push(ctx->lo, ctx->hold, d);
     mem = xpost_context_select_memory(ctx, d);
@@ -368,7 +383,18 @@ int dicgrow(Xpost_Context *ctx,
     n = xpost_dict_cons_memory (mem, newsz = 2 * xpost_dict_max_length_memory (mem, d));
     if (xpost_object_get_type(n) == nulltype){
         XPOST_LOG_ERR("cannot grow dict");
-        return 0;
+        return VMerror;
+    }
+    /* a dictionary already at the widest size its header field carries
+       is answered by a dictionary of that same size: the entries would
+       rehash into a table no larger than the one they came from, and the
+       last of them would ask to grow again. That size is the largest
+       dictionary this build has. */
+    if (xpost_dict_max_length_memory(mem, n)
+            <= xpost_dict_max_length_memory(mem, d))
+    {
+        XPOST_LOG_ERR("cannot grow dict past the size the header carries");
+        return limitcheck;
     }
     if (mem == ctx->gl)
         n.tag |= XPOST_OBJECT_TAG_DATA_FLAG_BANK;
@@ -388,10 +414,11 @@ int dicgrow(Xpost_Context *ctx,
         {
             /* an entry that does not reach the larger dictionary is an
                entry the growth would drop */
-            if (xpost_dict_put_memory(ctx, mem, n, tp[i].key, tp[i].value))
+            ret = xpost_dict_put_memory(ctx, mem, n, tp[i].key, tp[i].value);
+            if (ret)
             {
                 XPOST_LOG_ERR("cannot rehash a dict entry into the larger dict");
-                return 0;
+                return ret;
             }
         }
     }
@@ -411,11 +438,11 @@ int dicgrow(Xpost_Context *ctx,
         if (xpost_free_memory_ent(mem, nent) < 0)
         {
             XPOST_LOG_ERR("cannot free old dict");
-            return 0;
+            return VMerror;
         }
 #endif
     }
-    return 1;
+    return 0;
 }
 
 /* is it full? (y/n) */
@@ -757,8 +784,8 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
     {
         /* dict overfull:  grow dict! */
         ret = dicgrow(ctx, d);
-        if (!ret)
-            return VMerror;
+        if (ret)
+            return ret;
 
         r = diclookup(ctx, mem, d, k);
         if (r == NULL)
@@ -775,8 +802,8 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
         {
             /* dict full:  grow dict! */
             ret = dicgrow(ctx, d);
-            if (!ret)
-                return VMerror;
+            if (ret)
+                return ret;
 
             r = diclookup(ctx, mem, d, k);
 

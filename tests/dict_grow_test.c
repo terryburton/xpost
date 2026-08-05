@@ -20,6 +20,7 @@
 #include "xpost_stack.h"
 #include "xpost_context.h"
 #include "xpost_dict.h"
+#include "xpost_error.h"
 
 static int failures = 0;
 
@@ -102,23 +103,40 @@ int main(void)
        put can grow -- and so move -- the file beneath it. A pointer into
        the source dictionary derived once and reused across those calls
        dangles, and the rehash then reads freed memory. Push well past a
-       single relocation and require the contents to survive intact. */
+       single relocation and require the contents to survive intact.
+
+       The count of entries a dictionary holds is a header field as wide
+       as the size, so the number of entries a build can grow one to is
+       bounded by what that field counts: the default build reaches that
+       bound within this loop and the large-object build does not. A
+       refusal there is the bound and is limitcheck; the entries taken
+       before it must all be present, and the dictionary must report
+       exactly as many as it took. */
     {
         Xpost_Object big = xpost_dict_cons(ctx, 1);
         int j;
+        int taken = 0;
         const int N = 70000;
 
         check(xpost_object_get_type(big) == dicttype, "a growable dict constructs");
         for (j = 0; j < N; j++)
-            if (xpost_dict_put(ctx, big, xpost_int_cons(j),
-                               xpost_int_cons(j + 1)) != 0)
+        {
+            int ret = xpost_dict_put(ctx, big, xpost_int_cons(j),
+                                     xpost_int_cons(j + 1));
+            if (ret != 0)
             {
-                printf("FAIL: a put into the relocating dict was refused\n");
-                failures++;
+                check(ret == limitcheck,
+                      "a dict that can grow no further refuses with limitcheck");
                 break;
             }
+            taken++;
+        }
 
-        for (j = 0; j < N; j++)
+        check(xpost_dict_length_memory(xpost_context_select_memory(ctx, big),
+                                       big) == (unsigned int)taken,
+              "the dict reports every entry it took");
+
+        for (j = 0; j < taken; j++)
         {
             Xpost_Object v = xpost_dict_get(ctx, big, xpost_int_cons(j));
             if (xpost_object_get_type(v) != integertype || v.int_.val != j + 1)
