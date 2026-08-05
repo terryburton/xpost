@@ -135,6 +135,10 @@ currentglobal true setglobal
     //.xpostsys /.polytopath get exec
     graphicsdict /currgstate get
     dup /currpath get /clipregion exch put
+    % the region is now pixel-band spans, which no single path describes:
+    % a device that clips for itself has no shape to be given, and the
+    % one the caller's own clip left behind is not this one
+    graphicsdict /currgstate get /clipsource null put
 } bind def
 
 /.patternfill {

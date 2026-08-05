@@ -62,6 +62,114 @@ clear clipsave clipsave cliprestore cliprestore
 count 0 eq (a run of clip stack operations returns nothing) assert
 clear
 
+% --- the shape a device is handed is the clip that is in force ---------
+% A device that clips for itself (ClipPath) is given the clip as a path
+% rather than having the fill cut to pixel-band spans first. What it is
+% given has to be the clip the painters are enforcing: a device told an
+% older shape writes that shape into its output, which no raster render
+% of the same page shows.
+%
+% The device below records nothing but the answer to that question. It
+% is asked on every call, so a shape handed over by any route is held to
+% it, and a counter says how many times the question was actually put --
+% a run in which no device was ever told anything would otherwise pass
+% by never being asked.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/DEV 300 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+    /clipcalls 0 def
+    /clipagreed true def
+
+    % path IMAGE  .  -   ; adopt a clip shape
+    /ClipPath {
+    begin
+        /clipcalls clipcalls 1 add def
+        % the path walker and pathbbox read the current path, so stand
+        % the shape in for the measurement and put the working path back
+        graphicsdict /currgstate get /currpath get
+        exch
+        graphicsdict /currgstate get exch /currpath exch put
+        pathbbox
+        /gy1 exch def /gx1 exch def /gy0 exch def /gx0 exch def
+        graphicsdict /currgstate get exch /currpath exch put
+        % the region the painters would enforce
+        gsave clippath pathbbox grestore
+        /ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
+        gx0 rx0 sub abs 0.01 lt
+        gy0 ry0 sub abs 0.01 lt and
+        gx1 rx1 sub abs 0.01 lt and
+        gy1 ry1 sub abs 0.01 lt and
+        not { /clipagreed false def } if
+    end } bind def
+
+    % gray IMAGE  .  -   ; take the whole path
+    /FillPath {
+    begin
+        /pathfills pathfills 1 add def
+    end
+        pop
+    } bind def
+    /pathfills 0 def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% a path reaching outside whatever region is in force, so the fill never
+% takes the trivial-clip route and the question is always put
+/wide { newpath -50 -50 moveto 350 -50 lineto 350 350 lineto -50 350 lineto
+        closepath } bind def
+/boxpath { % x0 y0 x1 y1  .  -
+    4 dict begin
+    /cy1 exch def /cx1 exch def /cy0 exch def /cx0 exch def
+    newpath
+    cx0 cy0 moveto cx1 cy0 lineto cx1 cy1 lineto cx0 cy1 lineto closepath
+    end
+} bind def
+
+% the control: a clip taken from the whole page is a single path, and a
+% fill under it hands the device that path
+initgraphics
+20 20 280 280 boxpath clip
+wide 0 setgray fill
+DEV /clipcalls get 0 gt (a fill under a path clip asks the device to clip) assert
+DEV /clipagreed get (the control clip is the region in force) assert
+
+% initclip: the region becomes the whole page and the shape must follow
+initgraphics
+20 20 280 280 boxpath clip
+initclip
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (initclip leaves no older shape behind) assert
+
+% eoclip: the region becomes the even-odd interior, which is resolved to
+% pixel-band spans and is no single path a nonzero clip could carry
+initgraphics
+20 20 280 280 boxpath clip
+100 100 150 150 boxpath eoclip
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (eoclip leaves no older shape behind) assert
+
+% cliprestore: the region goes back to what clipsave took down, and so
+% must the shape
+initgraphics
+clipsave
+20 20 280 280 boxpath clip
+cliprestore
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (cliprestore leaves no older shape behind) assert
+
 count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit

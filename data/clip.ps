@@ -24,6 +24,10 @@
     setmatrix
     graphicsdict /currgstate get
         dup dup /currpath get /clipregion exch put
+        % the region is the whole page, which constrains nothing a device
+        % has to be told about: there is no shape to hand over. Leaving
+        % the slot alone would leave it describing a clip that has gone.
+        dup /clipsource null put
         exch /currpath exch put
 } //.xpostsys /.defop get exec
 
@@ -445,6 +449,10 @@ put
     //.xpostsys /.polytopath get exec
     graphicsdict /currgstate get
     dup /currpath get /clipregion exch put
+    % the region is now the even-odd interior resolved to pixel-band
+    % spans, which no single path under the nonzero rule describes: a
+    % device that clips for itself has no shape to be given
+    graphicsdict /currgstate get /clipsource null put
     graphicsdict /currgstate get /currpath 3 -1 roll put
 } //.xpostsys /.defop get exec
 
@@ -452,21 +460,30 @@ put
 % independent of the graphics state stack. Neither takes an operand nor
 % returns a result, so the stack the pushing arithmetic is done on is
 % cleared down again before returning.
+%
+% What is pushed is the whole clip and not just the resolved region: the
+% shape a device that clips for itself is handed belongs to the same clip
+% and has to come back with it, or the restored clip would be enforced as
+% one shape and written out as another.
 /clipsave [ ] {
     graphicsdict /clipstack 2 copy known { get }{
         2 copy 32 array put get
     } ifelse
     graphicsdict /clipptr 2 copy known { get }{ 2 copy 0 put get } ifelse
-    2 copy graphicsdict /currgstate get /clipregion get .copypath put
+    2 copy
+    [ graphicsdict /currgstate get /clipregion get .copypath
+      graphicsdict /currgstate get /clipsource get ]
+    put
     pop pop
     graphicsdict /clipptr 2 copy get 1 add put
 } //.xpostsys /.defop get exec
 /cliprestore [ ] {
     graphicsdict /clipptr get 0 gt {
         graphicsdict /clipptr 2 copy get 1 sub put
-        graphicsdict /currgstate get /clipregion
         graphicsdict /clipstack get graphicsdict /clipptr get get
-        put
+        aload pop                                   % region source
+        graphicsdict /currgstate get exch /clipsource exch put
+        graphicsdict /currgstate get exch /clipregion exch put
     } if
 } //.xpostsys /.defop get exec
 
