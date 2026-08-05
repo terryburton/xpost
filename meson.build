@@ -1369,6 +1369,15 @@ test('filter-close-eod',
   find_program('tests/run-refusing-target-test.sh'),
   args: [ xpost_exe, files('tests/filter_close_eod_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# The partial unit an encoding filter carries between writes: the leftover
+# group, code or scanline is padded out at closefile so the matching decode
+# filter reads the original bytes back, and the counter measuring it stays
+# inside the width the padding shift, the digit array and the row buffer are
+# sized by -- including after a data target has refused a byte mid-unit.
+test('filter-encode-pad',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_encode_pad_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 # A filter releases the stream it was given to wrap: it drops the reference
 # it took, and closes and frees a stream the machinery made for it alone --
 # the in-memory file behind the string form, and the decompressor a

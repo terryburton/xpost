@@ -1,0 +1,164 @@
+% What an encoding filter holds between writes, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% Each of these codings gathers input into a unit wider than a byte -- a
+% group of four bytes for ASCII85, a variable-width code for LZW, a run
+% for RunLength, a scanline for CCITTFax -- and carries the part of one
+% it has not completed from write to write in a counter.
+%
+% Two things hold of that counter. The unit still in hand at closefile is
+% flushed and padded out to whole bytes, ahead of the end-of-data marker
+% PLRM 3.13.1 requires there, so the matching decode filter reads the
+% original bytes back whatever size the leftover was. And the counter
+% stays inside the width its coding is written for: the padding shift,
+% the group's digit array and the scanline buffer are all sized by it,
+% and a data target that refuses a byte leaves a unit unfinished while
+% the program is still free to write more and then close.
+%
+% Prints SUCCESS iff every coding satisfies both.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/nm (encpad.scratch) def
+/src 64 string def
+0 1 src length 1 sub { /i exch def src i i 37 mul 13 add 255 and put } for
+
+% ---- the leftover unit survives the round trip, at every size ----
+
+/roundtrip { % params-or-null /Encode /Decode n  .  bool
+    /rt.n exch def /rt.d exch def /rt.e exch def /rt.p exch def
+    /rt.want src 0 rt.n getinterval def
+    /rt.f nm (w) file def
+    /rt.enc rt.p null eq
+        { rt.f rt.e filter } { rt.f rt.p rt.e filter } ifelse def
+    rt.enc rt.want writestring
+    rt.enc closefile
+    rt.f closefile
+    /rt.g nm (r) file def
+    /rt.dec rt.p null eq
+        { rt.g rt.d filter } { rt.g rt.p rt.d filter } ifelse def
+    /rt.got rt.n 16 add string def
+    /rt.k rt.dec rt.got readstring pop length def
+    rt.dec closefile
+    rt.g closefile
+    rt.got 0 rt.k getinterval rt.want eq
+} bind def
+
+/roundtrips { % params-or-null /Encode /Decode last (what)  .  -
+    /rs.w exch def /rs.n exch def /rs.d exch def /rs.e exch def
+    /rs.p exch def
+    /rs.bad 0 def
+    1 1 rs.n {
+        rs.p rs.e rs.d 4 -1 roll roundtrip
+        not { /rs.bad rs.bad 1 add def } if
+    } for
+    rs.bad 0 eq rs.w assert
+} bind def
+
+% every code count from one to twenty-four covers every number of bits
+% the last byte of an LZW stream can be short of a whole one
+null /LZWEncode /LZWDecode 24 (LZW returns every leftover code count) roundtrips
+% one, two and three bytes are the partial ASCII85 groups
+null /ASCII85Encode /ASCII85Decode 12 (ASCII85 returns every partial group) roundtrips
+null /RunLengthEncode /RunLengthDecode 12 (RunLength returns every leftover run) roundtrips
+null /ASCIIHexEncode /ASCIIHexDecode 12 (ASCIIHex returns every leftover byte) roundtrips
+
+/flate.here false def
+mark { /flate.probe nm (w) file def
+       /flate.f flate.probe /FlateEncode filter def
+       flate.f closefile flate.probe closefile
+       /flate.here true def } stopped pop cleartomark
+flate.here {
+    null /FlateEncode /FlateDecode 12 (Flate returns every leftover byte) roundtrips
+} if
+
+% CCITTFax pads at the end of the data, and at the end of every row when
+% EncodedByteAlign asks for it; a column count that fills whole bytes is
+% what makes the decoded rows comparable to the rows written
+/faxcases [
+    << /Columns 8  /Rows 4 /K 0 >>                                      4
+    << /Columns 8  /Rows 4 /K -1 >>                                     4
+    << /Columns 8  /Rows 4 /K 4 /EndOfLine true >>                      4
+    << /Columns 8  /Rows 4 /K 0 /EncodedByteAlign true >>               4
+    << /Columns 8  /Rows 4 /K -1 /EncodedByteAlign true >>              4
+    << /Columns 8  /Rows 4 /K 4 /EndOfLine true /EncodedByteAlign true >> 4
+    << /Columns 16 /Rows 3 /K 0 >>                                      6
+    << /Columns 16 /Rows 3 /K -1 >>                                     6
+    << /Columns 16 /Rows 3 /K -1 /EncodedByteAlign true >>              6
+    << /Columns 24 /Rows 5 /K 2 /EndOfLine true >>                      15
+    << /Columns 24 /Rows 5 /K 0 /BlackIs1 true >>                       15
+    << /Columns 24 /Rows 5 /K -1 /EndOfBlock false >>                   15
+] def
+/faxbad 0 def
+0 2 faxcases length 2 sub {
+    /fi exch def
+    faxcases fi get /CCITTFaxEncode /CCITTFaxDecode faxcases fi 1 add get
+    roundtrip not { /faxbad faxbad 1 add def } if
+} for
+faxbad 0 eq (CCITTFax returns every padded form) assert
+
+nm deletefile
+
+% ---- the counter stays inside its width across a refusal ----
+
+% Enough bytes to overrun whatever the target buffers, so the refusal has
+% happened while a unit is still in progress rather than at the very end.
+/vary 2048 string def
+0 1 vary length 1 sub { /i exch def vary i i 251 mul 255 and put } for
+/same 2048 string def
+0 1 same length 1 sub { /i exch def same i 65 put } for
+
+/refuses false def
+mark {
+    /t0 (/dev/full) (w) file def
+    { 8 { t0 vary writestring } repeat t0 flushfile } stopped {
+        $error /errorname get /ioerror eq { /refuses true def } if
+    } if
+    { t0 closefile } stopped pop
+} stopped pop cleartomark
+
+/drive { % params-or-null /Encode blk (what)  .  -
+    /dr.w exch def /dr.b exch def /dr.e exch def /dr.p exch def
+    /dr.ok true def
+    mark
+    /dr.tgt (/dev/full) (w) file def
+    /dr.enc dr.p null eq
+        { dr.tgt dr.e filter } { dr.tgt dr.p dr.e filter } ifelse def
+    % go on writing past the point the target stopped taking bytes
+    10 { { dr.enc dr.b writestring } stopped
+         { $error /errorname get /ioerror ne { /dr.ok false def } if } if
+    } repeat
+    { dr.enc closefile } stopped
+    { $error /errorname get /ioerror ne { /dr.ok false def } if } if
+    { dr.tgt closefile } stopped pop
+    cleartomark
+    dr.ok dr.w assert
+} bind def
+
+refuses {
+    null /ASCIIHexEncode vary (ASCIIHex closes over a refusing target) drive
+    null /ASCII85Encode vary (ASCII85 closes over a refusing target) drive
+    null /RunLengthEncode same (RunLength closes over a refusing target) drive
+    null /RunLengthEncode vary (RunLength literals close over a refusing target) drive
+    null /LZWEncode vary (LZW closes over a refusing target) drive
+    null /LZWEncode same (LZW repeats close over a refusing target) drive
+    << /Columns 64 /Rows 200 /K -1 >> /CCITTFaxEncode vary
+        (CCITTFax closes over a refusing target) drive
+    << /Columns 64 /Rows 200 /K 0 /EncodedByteAlign true >> /CCITTFaxEncode vary
+        (CCITTFax byte-aligned closes over a refusing target) drive
+    flate.here {
+        null /FlateEncode vary (Flate closes over a refusing target) drive
+    } if
+
+    % and the codings still work afterwards
+    null /LZWEncode /LZWDecode 7 roundtrip
+    (LZW still encodes after a refused stream) assert
+    << /Columns 8 /Rows 4 /K -1 >> /CCITTFaxEncode /CCITTFaxDecode 4 roundtrip
+    (CCITTFax still encodes after a refused stream) assert
+    nm deletefile
+} if
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+flush

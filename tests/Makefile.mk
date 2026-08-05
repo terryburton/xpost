@@ -73,6 +73,7 @@ tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_lifetime_test.ps \
 tests/filter_close_eod_test.ps \
+tests/filter_encode_pad_test.ps \
 tests/filter_eod_test.ps \
 tests/filter_leak_test.ps \
 tests/filter_matrix_test.ps \
