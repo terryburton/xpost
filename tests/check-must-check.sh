@@ -22,7 +22,8 @@ src=${1:?usage: check-must-check.sh <source tree root>}
 guard_require_srcroot "$src"
 golden="$src/tests/must_check.golden"
 
-tmp=$(guard_workdir)
+guard_workdir
+tmp=$work
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 fail=0
