@@ -1,0 +1,107 @@
+# Standard operators that reach another standard operator by name.
+#
+# A name in a procedure body is resolved against the dictionary stack when
+# it runs, so each pair below is a place where a program redefining the
+# second name changes what the first one does. bind closes that, and the
+# interpreter binds every promoted body once the whole set is promoted --
+# the only moment at which a call between them can be frozen.
+#
+# What is left is what bind can no longer reach. bind makes what it binds
+# read-only and then ignores a read-only array, so a body bound at its
+# definition, before any of these names answered with an operator, keeps
+# the names it had for good; the same goes for a procedure nested inside a
+# body that some earlier sweep already bound. Dropping the bind from those
+# definitions, and letting the promotion do it once at the right moment,
+# is what empties this list.
+#
+# The list only shrinks. An entry that is frozen now is a failure too, so
+# it cannot go stale, and a body that starts reaching a new name fails at
+# once. Checked by tests/check-wrapped-bind.sh.
+ashow grestore
+ashow gsave
+awidthshow grestore
+awidthshow gsave
+charpath stringwidth
+composefont findresource
+currenthsbcolor currentrgbcolor
+eofill =
+eofill pstack
+erasepage grestore
+erasepage gsave
+erasepage setgray
+execform grestore
+execform gsave
+execform initclip
+fill =
+fill pstack
+findfont findfont
+glyphshow grestore
+glyphshow gsave
+image grestore
+image gsave
+image setcolorspace
+instroke grestore
+instroke gsave
+instroke infill
+instroke strokepath
+inueofill grestore
+inueofill gsave
+inueofill ineofill
+inueofill uappend
+inufill grestore
+inufill gsave
+inufill infill
+inufill uappend
+inustroke grestore
+inustroke gsave
+inustroke infill
+inustroke ustrokepath
+rootfont currentfont
+selectfont findfont
+selectfont makefont
+selectfont scalefont
+selectfont setfont
+setcachedevice setcharwidth
+setcolor currentcolorspace
+setcolor setcolor
+setcolor setcolorspace
+setcolor setrgbcolor
+sethsbcolor setrgbcolor
+setpagedevice initgraphics
+setpattern currentcolorspace
+setpattern setcolor
+setpattern setcolorspace
+setuserparams setvmthreshold
+shfill clip
+shfill currentcolorspace
+shfill fill
+shfill setcolor
+show =
+show charpath
+show grestore
+show gsave
+show pstack
+show setlinewidth
+show stringwidth
+show stroke
+stringwidth grestore
+stringwidth gsave
+stringwidth nulldevice
+stringwidth show
+stroke =
+stroke currentdash
+stroke currentlinecap
+stroke currentlinewidth
+stroke pstack
+stroke strokepath
+ustroke grestore
+ustroke gsave
+ustroke stroke
+ustroke uappend
+ustrokepath strokepath
+ustrokepath uappend
+widthshow grestore
+widthshow gsave
+xshow show
+xyshow show
+yshow show

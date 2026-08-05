@@ -966,6 +966,21 @@ test('check-op-signatures',
   find_program('tests/check-op-signatures.sh'),
   args: [ files('data/init.ps'), files('tests/op_signatures.allowed') ])
 
+# A standard operator written in PostScript holds the operators it calls,
+# not their names: a name is resolved when it runs, so one left in a body
+# is a program's redefinition waiting to be picked up. The declared list
+# is what an already-bound body put out of bind's reach, and only shrinks.
+test('check-wrapped-bind',
+  find_program('tests/check-wrapped-bind.sh'),
+  args: [ xpost_exe, meson.current_source_dir(), files('tests/wrapped_bind.golden') ])
+
+# The same invariant as a program sees it: redefine what a standard
+# operator calls, and watch whether the operator picks the redefinition up.
+test('wrapped-bind',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/wrapped_bind_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # initgraphics on its own: the fault it guards against is invisible in a
 # file that has already been drawing, since the earlier drawing can
 # empty the path by itself.

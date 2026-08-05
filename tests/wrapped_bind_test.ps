@@ -1,0 +1,60 @@
+% What a standard operator written in PostScript reaches when a program
+% redefines the operators it calls, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% An executable name inside a procedure is resolved against the dictionary
+% stack at the moment it runs, so a name left in a standard operator's
+% body is a program's redefinition waiting to be picked up: redefining
+% gsave would change what rectfill does, from inside rectfill. bind exists
+% to close that, by replacing every name that answers with an operator.
+%
+% The catch is when bind runs. These operators are promoted from
+% procedures to operators one at a time, and bind can only replace a name
+% that already answers with an operator, so a body bound before its
+% neighbours were promoted keeps their names -- and bind makes what it
+% binds read-only, so no later sweep can come back and finish the job.
+% Nothing about that is visible from outside: the operator works, and
+% reaches into the program's namespace only if the program happens to
+% redefine one of the names it kept.
+%
+% This is the program-facing half. check-wrapped-bind.sh is the structural
+% half, over every promoted body at once, and carries the list of bodies
+% that were bound before the promotion and so cannot be reached.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% Each stand-in still does the real thing, so the graphics state stays
+% balanced whichever way the test goes.
+/realgsave systemdict /gsave get def
+/realgrestore systemdict /grestore get def
+/realsetgray systemdict /setgray get def
+/hits 0 def
+
+/gsave { /hits hits 1 add store realgsave } def
+/grestore { /hits hits 1 add store realgrestore } def
+/setgray { /hits hits 1 add store realsetgray } def
+
+% rectfill brackets its work in gsave and grestore, and both were names in
+% its body until the promotion learnt to bind after promoting rather than
+% while promoting.
+0 0 10 10 rectfill
+
+userdict /gsave undef
+userdict /grestore undef
+userdict /setgray undef
+
+hits 0 eq (rectfill reaches no redefined operator) assert
+
+% and the redefinition was reachable, so a zero above means the body held
+% the operators rather than that the stand-ins were never installed
+/reached false def
+/realsetlinewidth systemdict /setlinewidth get def
+/setlinewidth { /reached true store realsetlinewidth } def
+2 setlinewidth
+userdict /setlinewidth undef
+reached (a redefinition installed this way is reached by the program) assert
+1 setlinewidth
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

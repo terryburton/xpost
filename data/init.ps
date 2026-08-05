@@ -1595,12 +1595,6 @@ currentglobal true setglobal
         dup where {
             exch 2 copy get
             dup type /arraytype eq 1 index xcheck and {
-                % bind the procedure before wrapping it: a wrapped operator's
-                % body is not reached by the later .bindscope pass, so freezing
-                % its operator references (the get and exec of an internal
-                % helper call, among the rest) has to happen here, or a program
-                % that shadows an operator name reaches into the machinery.
-                bind
                 .privatedict /.wrappedprocs get 2 index 2 index put
                 % an operator that states its operands is wrapped with
                 % the statement, so the dispatcher enforces it before
@@ -1612,6 +1606,19 @@ currentglobal true setglobal
             }{ pop pop pop } ifelse
         }{ pop } ifelse
     } forall
+    % Now, and not before, freeze each promoted body. bind replaces a name
+    % with an operator only where the name already answers with one, and it
+    % makes what it binds read-only, so it gets one chance at each body: a
+    % body bound while its neighbours were still procedures would keep
+    % their names for good, dynamic and reachable by a program redefining
+    % them, and the later .bindscope sweep could not come back for it. The
+    % pass above promoted every one of them, so every call between them
+    % freezes here. The operator holds the same array the register does,
+    % so binding it in place is binding what the operator runs; the bound
+    % (now read-only) reference goes back into the register, which is what
+    % tells the sweep below this body is finished.
+    [ .privatedict /.wrappedprocs get { pop } forall ]
+    { .privatedict /.wrappedprocs get exch 2 copy get bind put } forall
     % With the standard operators now operator-typed, freeze the
     % machinery's own references to them with the shared recursive
     % sweep: every procedure table it can reach through nested
