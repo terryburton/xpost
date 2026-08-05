@@ -1643,7 +1643,8 @@ test('dict-homes',
 # asked about. Each one must refuse a path that is not a source root.
 test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir(), xpost_exe, libxpost_lib.full_path() ],
+  timeout: 300)
 
 # An operator's operand statement is recorded where the operator is
 # defined, through the one mechanism that files it. Four operators once
