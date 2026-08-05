@@ -388,6 +388,22 @@ int _getpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* A blend coverage as the fraction of full ink it is: 0 leaves the
+   ground alone, 255 lays the colour down whole. The value is folded into
+   that range because the source-over blend below only stays between its
+   endpoints while the weight does: past 255 the composited opacity runs
+   past full and wraps in the byte it is stored in, so a fully covered
+   pixel comes out completely transparent. The generic rasteriser folds a
+   coverage the same way. */
+static int _coverage(Xpost_Object cov)
+{
+    int c = xpost_dev_num_to_int(cov);
+
+    if (c < 0) return 0;
+    if (c > 255) return 255;
+    return c;
+}
+
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255. The text operators use this for glyph edge pixels when the
    device renders anti-aliased text. */
@@ -408,7 +424,7 @@ int _blendpix(Xpost_Context *ctx,
     r = xpost_dev_num_to_byte(red);
     g = xpost_dev_num_to_byte(green);
     b = xpost_dev_num_to_byte(blue);
-    c = xpost_dev_num_to_int(cov);
+    c = _coverage(cov);
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
 

@@ -1,11 +1,28 @@
 //.internaldict /QUIET known { }{ (loading paint.ps...)print } ifelse
 
+% v  .cunit  v'
+% A colour component folded into the unit range, the nearest valid value
+% standing in for one outside it as setgray and its siblings substitute
+% (PLRM 8.2). This is the fold every component crosses on its way to a
+% device, and the last chance to make one: a raster device scales the
+% component to a channel and an unclamped one wraps the byte, while a
+% vector writer prints it, and prints whatever it was handed.
+.xpostsys /.cunit {
+    dup 0 lt { pop 0 }{ dup 1 gt { pop 1 } if } ifelse
+} put
+
 % mark c1..cn  .applytransfer  mark c1'..cn'
 % apply the transfer functions to the marked colour components: three
 % components pass through the red, green and blue transfers, four to
 % red, green, blue and grey in the CMYK order, anything else through
 % the grey transfer. The painting machinery refreshes the screening
 % cell here first, so a bilevel device screens against the current screen
+%
+% The components leave here for a device, and leave in range. A transfer
+% function is called with a number in [0,1] and must return one in the
+% same range (PLRM 7.3), but it is the program's own procedure and
+% returns whatever it computes; the same is true of a Separation or
+% DeviceN tint transform feeding the components in.
 .xpostsys /.applytransfer {
     //.xpostsys /.refreshscreencell get exec
     counttomark 3 eq {
@@ -24,6 +41,7 @@
     }{
         counttomark { currenttransfer exec counttomark 1 roll } repeat
     } ifelse } ifelse
+    counttomark { //.xpostsys /.cunit get exec counttomark 1 roll } repeat
 } put
 
 % Painting Operators
@@ -525,7 +543,9 @@
 } put
 
 % v  .c255  byte
-% clamp a 0..1 component and scale it to a byte
+% .cunit's fold scaled to a byte, rounded. The clamp is written out
+% rather than reached through .cunit because this runs once per
+% component per pixel of an image.
 .xpostsys /.c255 {
     dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if
     255 mul round cvi

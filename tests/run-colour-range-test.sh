@@ -1,0 +1,69 @@
+#!/bin/sh
+# Meson test wrapper: run the out-of-range value check
+# (colour_range_test.ps) against every headless-capable built device.
+#
+# Three tiers. The formatter tier and the component tier are the same on
+# every device and run everywhere. The coverage tier asks what BlendPix
+# painted, so it runs only on a device whose GetPix reports back what a
+# marking method wrote; a device that keeps its raster somewhere this
+# test cannot see announces itself by failing the readback probe and
+# takes the other two alone. The count below holds that tier to running
+# on the devices that can witness it, so a device that stops reporting
+# its pixels cannot quietly reduce what is asserted.
+#
+#   $1  path to the built xpost binary
+#   $2  path to colour_range_test.ps
+set -u
+xpost=$1
+script=$2
+
+# devices whose GetPix reports back what BlendPix wrote
+readback_min=5
+readback=0
+
+if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
+    ns='--no-sandbox'
+else
+    ns=''
+fi
+
+work=$(mktemp -d)
+devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+fail=0
+
+for dev in $devices; do
+    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    st=$?
+    case "$out" in
+        *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
+    esac
+    if [ "$st" -ne 0 ]; then
+        echo "FAIL $dev: the interpreter exited with status $st"
+        fail=1
+        continue
+    fi
+    if printf '%s\n' "$out" | grep -q '^READBACK$'; then
+        readback=$((readback + 1))
+    fi
+    if printf '%s\n' "$out" | grep -q '^SUCCESS$'; then
+        echo "OK   $dev"
+    else
+        echo "FAIL $dev:"
+        printf '%s\n' "$out" | tail -4
+        fail=1
+    fi
+done
+
+rm -rf "$work"
+if [ "$fail" -ne 0 ]; then
+    echo "FAILURES: a value outside its range was not folded to the nearest one"
+    exit 1
+fi
+if [ "$readback" -lt "$readback_min" ]; then
+    echo "FAILURES: the coverage tier ran on $readback devices, fewer than $readback_min"
+    echo "      a device that no longer reports its pixels back silently"
+    echo "      stops being asserted about; restore its GetPix"
+    exit 1
+fi
+echo "SUCCESS ($readback devices witnessed the coverage tier)"
+exit 0

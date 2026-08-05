@@ -1,0 +1,164 @@
+% What a device does with a value that arrives outside the range its
+% contract names. Run against a live device (-d <dev>) by
+% run-colour-range-test.sh: prints SUCCESS iff every assertion holds,
+% and READBACK on a device that witnessed the coverage tier.
+%
+% Out-of-range values do arrive. setgray and its siblings substitute the
+% nearest valid one (PLRM 8.2), but a transfer function is called with a
+% number in [0,1] and must return one in the same range (PLRM 7.3) while
+% being the program's own procedure, and a Separation or DeviceN tint
+% transform is the same. A glyph rasteriser's coverage is arithmetic of
+% its own. Folded to the nearest valid value the ink comes out the
+% nearest colour; wrapped, it comes out a different one.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+/ncomp dev /nativecolorspace 2 copy known
+    { get /DeviceRGB eq { 3 }{ 1 } ifelse }{ pop pop 1 } ifelse def
+/white { ncomp { 1 } repeat } def
+/black { ncomp { 0 } repeat } def
+/putpix { dev dup /PutPix get exec } def
+/getpix { dev dup /GetPix get exec } def
+/blend  { dev dup /BlendPix get exec } def
+/readpix { % x y  .  array   (the pixel as the device reports it)
+    getpix ncomp array astore
+} bind def
+/arreq { % a b  .  bool
+    /arreq.b exch def /arreq.a exch def
+    arreq.a length arreq.b length eq {
+        true
+        0 1 arreq.a length 1 sub {
+            /arreq.i exch def
+            arreq.a arreq.i get arreq.b arreq.i get eq and
+        } for
+    }{ false } ifelse
+} bind def
+
+% --- the vector writers' number formatter is total --------------------
+% Every byte of a PDF content stream or an SVG attribute that is meant to
+% be a number comes from this one formatter, colour levels included. A
+% double outside the integer type has no value in it, so folding one is
+% undefined and leaves the most negative value; a formatter that negates
+% that and takes remainders writes bytes below '0', and the stream stops
+% carrying numbers where a consumer reads them. Whatever it is handed,
+% what comes out has to be a number.
+
+/numstr 1183615869 internaldict /.pdfnumstr get def
+/isnumber { % string  .  bool
+    true exch {
+        dup 48 ge 1 index 57 le and     % a digit
+        exch dup 45 eq exch 46 eq or    % or a sign or a point
+        or and
+    } forall
+} bind def
+
+[ 0 1 -1 1.7 -0.4 0.0001 100 1e10 1e30 -1e30 1e300 -1e300 ] {
+    numstr
+    dup length 0 gt exch isnumber and
+    (the number formatter writes a number for every input) assert
+} forall
+
+% the formatter still says what it used to about ordinary numbers
+1.7 numstr (1.7) eq (an ordinary fraction formats unchanged) assert
+100 numstr (100) eq (an ordinary integer formats unchanged) assert
+-0.25 numstr (-0.25) eq (a negative fraction formats unchanged) assert
+
+% --- a coverage past the ends of its range ----------------------------
+% BlendPix weights the colour against the ground by cov/255. The blend is
+% an interpolation and only stays between its endpoints while the weight
+% does: past 255 a packed rgb pixel carries the overflow across into the
+% neighbouring channel, and an alpha device wraps a fully covered pixel
+% round to fully transparent -- ink asked for at more than full strength
+% coming out as none.
+
+/witness false def
+dev /BlendPix known dev /GetPix known and {
+    {
+        white 7 11 putpix
+        /ground 7 11 readpix def
+        black 255 7 11 blend
+        /full 7 11 readpix def
+    } stopped {
+        (SKIP: the device did not answer the readback probe\n) print
+    }{
+        ground full arreq {
+            (SKIP: the device does not report its own pixels back\n) print
+        }{
+            white 7 11 putpix
+            black 1000 7 11 blend
+            7 11 readpix full arreq
+                (a coverage past full paints what full coverage paints) assert
+
+            white 7 11 putpix
+            black -5 7 11 blend
+            7 11 readpix ground arreq
+                (a coverage below none leaves the ground alone) assert
+
+            /witness true def
+        } ifelse
+    } ifelse
+} if
+
+showpage
+
+% --- what a fill hands a device ---------------------------------------
+% The components a painting operator delivers are the last thing the
+% colour pipeline produces and the first thing a device sees. A raster
+% device scales each to a channel, where an unclamped one wraps the byte;
+% the three vector writers print it instead, and what they print reaches
+% the consumer as written -- a PDF content stream whose grey operand is
+% not a number, an SVG fill of 170%. So the range is the pipeline's to
+% hold, once, before the boundary, and this asks a device that records
+% what it was handed.
+%
+% The recorder replaces the device, so it comes after the page above.
+
+/DEVR 96 96 .privatedict /newPGMIMAGEdevice get exec def
+/handed null def
+DEVR begin
+    /defaultmatrix [ 1 0 0 -1 0 96 ] def
+    /FillPoly { pop pop /handed exch def } bind def
+end
+.privatedict /.gstatetemplate get exec /device DEVR put
+graphicsdict /currgstate get /device DEVR put
+
+/handedfor { % proc  .  component
+    initgraphics
+    /handed null def
+    settransfer
+    newpath 10 10 moveto 50 10 lineto 50 50 lineto 10 50 lineto closepath fill
+    handed
+} bind def
+
+{ pop 1e30 } handedfor
+dup null ne (a fill delivers its components to the device) assert
+dup null eq { pop 0 } if
+dup 0 ge exch 1 le and
+    (a component past white reaches the device inside the range) assert
+
+{ pop -1e30 } handedfor
+dup null eq { pop 0 } if
+dup 0 ge exch 1 le and
+    (a component past black reaches the device inside the range) assert
+
+{ pop 1.7 } handedfor
+dup null eq { pop 0 } if
+dup 0 ge exch 1 le and
+    (an ordinary out-of-range component is folded too) assert
+
+% and an in-range component still arrives as itself
+{ pop 0.25 } handedfor
+dup null eq { pop -1 } if
+0.25 sub abs 0.001 lt
+    (a component inside the range arrives unchanged) assert
+
+witness { (\nREADBACK\n) print } if
+faildict /n get 0 eq { (\nSUCCESS\n) print }{ (\nFAILURES\n) print } ifelse

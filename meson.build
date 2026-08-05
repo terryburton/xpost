@@ -1451,6 +1451,17 @@ test('device-contract',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Values outside the range their contract names: a colour component from a
+# transfer function or a tint transform, and a blend coverage from a glyph
+# rasteriser. Each must be folded to the nearest valid value on its way to a
+# device, not wrapped -- a wrapped channel is a different colour, a wrapped
+# coverage is transparent ink, and a vector writer prints what it is handed.
+test('colour-range',
+  find_program('tests/run-colour-range-test.sh'),
+  args: [ xpost_exe, files('tests/colour_range_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
 # and possibly by the program itself, so every device's Destroy must be
 # idempotent -- clear the stored resource handle, never free it twice -- and

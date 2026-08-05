@@ -1143,6 +1143,23 @@ int _fillrectgray(Xpost_Context *ctx,
     return 0;
 }
 
+/* A blend coverage as the fraction of full ink it is: 0 leaves the
+   ground alone, 255 lays the colour down whole. The value is folded into
+   that range because the blend below is an interpolation and only stays
+   between its endpoints while the weight does: past 255 the packed rgb
+   pixel carries the overflow across into the neighbouring channel, and
+   the alpha device wraps a fully covered pixel round to transparent. The
+   png device folds a coverage the same way. */
+static int _coverage(Xpost_Object cov)
+{
+    int c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val
+                                                   : cov.int_.val;
+
+    if (c < 0) return 0;
+    if (c > 255) return 255;
+    return c;
+}
+
 /* Blend a coverage-weighted pixel for grayscale array-of-strings devices:
    dst += (val - dst) * cov / 255. The text operators use this for glyph
    edge pixels when the device renders anti-aliased text. */
@@ -1164,7 +1181,7 @@ int _blendpixgray(Xpost_Context *ctx,
         return undefined;
     ix = xpost_dev_pixel(xpost_object_number(x));
     iy = xpost_dev_pixel(xpost_object_number(y));
-    c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
+    c = _coverage(cov);
     /* a device coordinate is signed and arrives from anywhere on the
        page, so the raster's extents are widened into the signed type to
        be compared against rather than the coordinate narrowed into
@@ -1210,7 +1227,7 @@ int _blendpixrgb(Xpost_Context *ctx,
         return undefined;
     ix = xpost_dev_pixel(xpost_object_number(x));
     iy = xpost_dev_pixel(xpost_object_number(y));
-    c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
+    c = _coverage(cov);
     /* a device coordinate is signed and arrives from anywhere on the
        page, so the raster's extents are widened into the signed type to
        be compared against rather than the coordinate narrowed into
@@ -2591,18 +2608,31 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
 #endif
 }
 
-/* write a decimal integer, returning its length */
+/* Write a decimal integer, returning its length. The digits come off the
+   negative side of zero: the most negative value of the type has no
+   negation in it, and a formatter that negates first takes the remainder
+   of that non-result and writes bytes below '0', which are not digits. */
 static int _pdf_fmt_long(char *o, long v)
 {
     char t[24];
     int n = 0, neg = 0, len = 0;
-    if (v < 0) { neg = 1; v = -v; }
+    if (v > 0) v = -v; else if (v < 0) neg = 1;
     if (v == 0) t[n++] = '0';
-    while (v) { t[n++] = (char)('0' + (v % 10)); v /= 10; }
+    while (v) { t[n++] = (char)('0' - (v % 10)); v /= 10; }
     if (neg) o[len++] = '-';
     while (n) o[len++] = t[--n];
     return len;
 }
+
+/* The range a number is brought into before it is folded to the integer
+   type below: a double outside the type has no value in it and the
+   conversion is undefined. The whole-number branch casts directly, so
+   1e9 is the bound every platform's long holds; the fractional branch
+   scales by 10000 first, so it carries 1e5. Either bound is a hundred
+   times any page a consumer will draw, and a coordinate or colour level
+   beyond one describes nothing. */
+#define PDF_NUM_MAX      1.0e9
+#define PDF_NUM_FRAC_MAX 1.0e5
 
 /* write a PDF number: an integer when integral, else up to four decimals
    with trailing zeros trimmed (never exponential). round(v*10000) avoids
@@ -2610,7 +2640,14 @@ static int _pdf_fmt_long(char *o, long v)
    consumer will draw on. */
 static int _pdf_fmt_num(char *o, double v)
 {
-    if (v == trunc(v))
+    if (v != v)
+        v = 0.0;
+    else if (v > PDF_NUM_MAX)
+        v = PDF_NUM_MAX;
+    else if (v < -PDF_NUM_MAX)
+        v = -PDF_NUM_MAX;
+
+    if (v == trunc(v) || v > PDF_NUM_FRAC_MAX || v < -PDF_NUM_FRAC_MAX)
         return _pdf_fmt_long(o, (long)v);
     else
     {
