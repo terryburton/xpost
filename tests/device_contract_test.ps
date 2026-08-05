@@ -1,15 +1,14 @@
-% Device method contract, safety tier: every device must accept the
-% boundary inputs its methods can legally receive -- degenerate,
-% inverted and out-of-range rectangles, edge and out-of-bounds pixels,
-% real-valued coordinates -- without error, and still emit a page.
-% Run against a live device (-d <dev>) by run-device-contract-test.sh.
+% Device method contract: every device must accept the boundary inputs
+% its methods can legally receive -- degenerate, inverted and
+% out-of-range rectangles, edge and out-of-bounds pixels, real-valued
+% coordinates -- without error, and still emit a page. Run against a
+% live device (-d <dev>) by run-device-contract-test.sh.
 %
-% (The exact extent semantics of FillRect -- which pixels an inverted or
-% fractional rectangle paints -- are deliberately not asserted yet: the
-% devices disagree today, and unifying them is part of the device-layer
-% consolidation. This tier pins down only that no boundary input can
-% error or crash, so that consolidation can then tighten the assertions
-% rather than first re-establish safety.)
+% The safety tier below asks only that nothing errors. The behaviour
+% tier after it asks what was painted, and so runs only on a device
+% whose GetPix reports back what a marking method wrote; a device that
+% keeps its raster somewhere this test cannot see announces itself by
+% failing the readback probe and takes the safety tier alone.
 
 /dev .privatedict /.graphicsdict get /currgstate get /device get def
 
@@ -19,6 +18,12 @@
         /contractfail true def
     }{ pop } ifelse
 } def
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        /contractfail true def
+    } ifelse
+} def
 /contractfail false def
 
 % the colour a method takes is the device's native colourspace, one
@@ -26,6 +31,8 @@
 /ncomp dev /nativecolorspace 2 copy known
     { get /DeviceRGB eq { 3 }{ 1 } ifelse }{ pop pop 1 } ifelse def
 /val { ncomp { 0 } repeat } def
+/white { ncomp { 1 } repeat } def
+/black { ncomp { 0 } repeat } def
 
 % a painted baseline so Emit has marks to write
 newpath 10 10 moveto 90 90 lineto stroke
@@ -64,6 +71,76 @@ dev /DrawLine 2 copy known {
 { -50 -50 20 20 rectfill }                             (off-page rectfill) try
 { 0 0 0 0 rectfill }                                   (zero rectfill) try
 { newpath 306 396 0 0 360 arc fill }                   (zero-radius arc fill) try
+
+% --- behaviour tier: what a marking method paints -------------------
+%
+% Reachable only where the device reports its own pixels back. The
+% probe writes white and black through PutPix and reads each back: a
+% device whose GetPix answers the same both times (or answers nothing,
+% or errors) cannot witness anything below, and says so.
+
+/pix { % x y  .  c1..cN     one pixel, read back
+    dev dup /GetPix get exec
+} def
+/plot { % c1..cN x y  .  -
+    dev dup /PutPix get exec
+} def
+/samepix { % a1..aN b1..bN  .  bool
+    ncomp array astore /sp.b exch def
+    ncomp array astore /sp.a exch def
+    true 0 1 ncomp 1 sub {
+        /sp.i exch def
+        sp.a sp.i get sp.b sp.i get eq and
+    } for
+} def
+
+/readable false def
+dev /GetPix known dev /PutPix known and {
+    /rb.depth count def
+    { white 1 1 plot  1 1 pix  black 1 1 plot  1 1 pix
+      samepix not } stopped
+    { % the probe could not finish -- a GetPix that errors or answers
+      % nothing leaves the raster unreadable, and readable stays false
+    }{
+        /readable exch def
+    } ifelse
+    % a probe that stopped may have left anything behind; take the
+    % stack back to the depth it was handed
+    count rb.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+} if
+
+readable {
+    (READBACK\n) print
+
+    % A component outside [0,1] is clamped, not folded. Unclamped, the
+    % scale wraps the stored channel: 1.7 lands as 0.69 and -0.7 as
+    % 0.31, so the ink comes out a different colour rather than the
+    % nearest one. Stated without naming the device's own scale: the
+    % out-of-range paint must read back as the in-range extreme does.
+    ncomp { 1 } repeat 3 3 plot  3 3 pix
+    ncomp { 1.7 } repeat 4 3 plot  4 3 pix
+    samepix (PutPix clamps a component above the range) assert
+
+    ncomp { 0 } repeat 5 3 plot  5 3 pix
+    ncomp { -0.7 } repeat 6 3 plot  6 3 pix
+    samepix (PutPix clamps a component below the range) assert
+
+    dev /FillRect known {
+        ncomp { 1 } repeat 3 5 0 0 dev dup /FillRect get exec  3 5 pix
+        ncomp { 1.7 } repeat 4 5 0 0 dev dup /FillRect get exec  4 5 pix
+        samepix (FillRect clamps a component above the range) assert
+
+        ncomp { 0 } repeat 5 5 0 0 dev dup /FillRect get exec  5 5 pix
+        ncomp { -0.7 } repeat 6 5 0 0 dev dup /FillRect get exec  6 5 pix
+        samepix (FillRect clamps a component below the range) assert
+    } if
+
+    dev /DrawLine known {
+        ncomp { 1 } repeat 3 7 3 7 dev dup /DrawLine get exec  3 7 pix
+        ncomp { 1.7 } repeat 4 7 4 7 dev dup /DrawLine get exec  4 7 pix
+        samepix (DrawLine clamps a component above the range) assert
+    } if
+} if
 
 showpage
 

@@ -83,12 +83,31 @@ xpost_dev_num_to_int(Xpost_Object obj)
     return (int)xpost_object_number(obj);
 }
 
+/* A colour component as a number in [0,1]. The component is clamped
+   here, once, because the colour pipeline can hand a device one outside
+   the range: setgray and its siblings substitute the nearest valid
+   value (PLRM 8.2), but a Separation or DeviceN tint transform is the
+   program's own procedure and its result is whatever it computes.
+   Unclamped, the scale below wraps the stored channel -- 1.7 lands as
+   0.69 of full scale, and on a packed pixel the overflow shifts across
+   into the neighbouring component -- so the ink comes out a different
+   colour rather than the nearest one. */
+static inline double
+xpost_dev_num_to_component(Xpost_Object obj)
+{
+    double d = xpost_object_number(obj);
+
+    if (d < 0.0) return 0.0;
+    if (d > 1.0) return 1.0;
+    return d;
+}
+
 /* fold a unit-range colour component to the device's integer scale
    (255 for 8-bit channels, 65535 for 16-bit), truncating toward zero */
 static inline int
 xpost_dev_num_to_scaled(Xpost_Object obj, double scale)
 {
-    return (int)(xpost_object_number(obj) * scale);
+    return (int)(xpost_dev_num_to_component(obj) * scale);
 }
 
 /* fold a unit-range colour component to an 8-bit channel value */

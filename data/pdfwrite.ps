@@ -361,8 +361,7 @@
             .si 255 div .sepspace 3 get exec
             .sepnout 1 sub -1 0 {
                 /.sj exch def
-                dup 0 lt { pop 0 } if dup 1 gt { pop 1 } if
-                255 mul round cvi
+                //.xpostsys /.c255 get exec
                 .smp .si .sepnout mul .sj add 3 -1 roll put
             } for
         } for

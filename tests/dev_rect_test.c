@@ -93,6 +93,18 @@ int main(void)
     check(xpost_dev_num_to_scaled(xpost_real_cons((real)1.0), 65535.0) == 65535,
           "unit colour scales to a 16-bit channel");
 
+    /* a component outside [0,1] is clamped, not folded: a tint
+       transform is the program's own procedure and returns whatever it
+       computes, and an unclamped scale wraps the stored channel */
+    check(xpost_dev_num_to_byte(xpost_real_cons((real)1.7)) == 255,
+          "a colour above the range clamps to full scale");
+    check(xpost_dev_num_to_byte(xpost_real_cons((real)-0.7)) == 0,
+          "a colour below the range clamps to zero");
+    check(xpost_dev_num_to_scaled(xpost_real_cons((real)1.7), 65535.0) == 65535,
+          "a colour above the range clamps on a 16-bit channel");
+    check(xpost_dev_num_to_component(xpost_real_cons((real)0.25)) == 0.25,
+          "a colour inside the range passes through");
+
     if (failures)
     {
         printf("FAILURES: %d\n", failures);

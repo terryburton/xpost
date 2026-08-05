@@ -147,8 +147,7 @@
                 v 255 div
                 sidec c 2 mul 1 add get sidec c 2 mul get sub mul
                 sidec c 2 mul get add
-                255 mul round cvi
-                dup 0 lt { pop 0 } if dup 255 gt { pop 255 } if
+                //.xpostsys /.c255 get exec
                 put
             } for silt
         } for ] def

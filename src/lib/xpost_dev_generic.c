@@ -1018,17 +1018,14 @@ int _eospanpoly(Xpost_Context *ctx,
     return code;
 }
 
-/* A colour component scaled to a 0..max channel value. The component is
-   clamped to [0,1] first: the colour pipeline can hand a device an
-   out-of-range component, and unclamped it would wrap the byte or shift
-   sign bits across the packed pixel. */
+/* A colour component scaled to a 0..max channel value, through the
+   driver contract's fold: the clamp that keeps an out-of-range
+   component from wrapping the channel is stated there, once, for every
+   device. */
 static double
 _channel(Xpost_Object v, double max)
 {
-    double d = xpost_object_number(v);
-    if (d < 0.0) d = 0.0;
-    if (d > 1.0) d = 1.0;
-    return d * max;
+    return xpost_dev_num_to_component(v) * max;
 }
 
 /* The device's halftone threshold cell, when paint screens through
@@ -1183,7 +1180,7 @@ int _blendpixgray(Xpost_Context *ctx,
     row = xpost_array_get(ctx, imgdata, iy);
     if (ix < 0 || ix >= row.comp_.sz)
         return 0;
-    src = (int)((xpost_object_number(val)) * 255.0);
+    src = (int)_channel(val, 255.0);
     {
         int wret = _row_writable(ctx, row);
 

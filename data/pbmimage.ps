@@ -30,13 +30,13 @@ begin
             .hth mod .htw mul               % v x y x (y%h)*w
             exch .htw mod add               % v x y idx
             .htcell exch get                % v x y thr
-            4 -1 roll 256 mul 0.5 add cvi exch ge % x y white?
+            4 -1 roll .unitclamp 256 mul 0.5 add cvi exch ge % x y white?
             { 255 }{ 0 } ifelse 3 1 roll    % v' x y
             ImgData exch get 3 1 roll exch
             put
         }{
             ImgData exch get 3 1 roll exch
-            255 mul cvi
+            .chan
             put
         } ifelse
     } stopped {
