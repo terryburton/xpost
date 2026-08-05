@@ -636,7 +636,7 @@ int _fillpoly(Xpost_Context *ctx,
             xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(3)); /* color components to move */
             break;
     }
-    xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "roll", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->os, XPOST_OP(ctx, oproll));
 
       /*at this point (in constructing the (color-space-generic) loop-body) we have the desired stack picture:
 
@@ -660,7 +660,7 @@ int _fillpoly(Xpost_Context *ctx,
 
         /*if drawline is a procedure, we also need to call exec */
         if (xpost_object_get_type(drawline) == arraytype)
-            xpost_stack_push(ctx->lo, ctx->os, xpost_operator_cons(ctx, "exec", NULL, 0, 0));
+            xpost_stack_push(ctx->lo, ctx->os, XPOST_OP(ctx, exec));
     }
 
     /*--the rest of the code here calls-back to postscript (by "continuation")
@@ -695,9 +695,9 @@ int _fillpoly(Xpost_Context *ctx,
       So the sequence in C is:
      */
 
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "repeat", NULL, 0, 0));
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "cvx", NULL, 0, 0));
-    xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "]", NULL, 0, 0));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, repeat));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, cvx));
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, rbracket));
 
     /*performance could be increased by factoring-out calls to xpost_name_cons()  ... DONE!
       or using opcode shortcuts for Rbracket & cvx (or just the arrtomark() function) and repeat.

@@ -133,6 +133,8 @@ enum { C_FREE, C_IDLE, C_RUN, C_WAIT, C_IOBLOCK, C_ZOMB };
     _(itransform,          "itransform") \
     _(moveto,              "moveto") \
     _(lineto,              "lineto") \
+    /* closes the array a device method call is assembled into */ \
+    _(rbracket,            "]") \
     /* the frame marker a wrapped operator leaves on the execution stack */ \
     _(wrapdone,            "wrap.done")
 

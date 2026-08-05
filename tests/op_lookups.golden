@@ -10,12 +10,6 @@
 # lookup that appears anywhere and is not listed here fails the build, and
 # a line here that no longer describes a lookup fails it too.
 #
-# What is left, and why: xpost_dev_generic.c assembles the argument list
-# and the loop for a device method call, and its five lookups all sit in
-# that one builder. Retiring them belongs with the work on the device
-# layer rather than beside it.
-xpost_dev_generic.c ]
-xpost_dev_generic.c cvx
-xpost_dev_generic.c exec
-xpost_dev_generic.c repeat
-xpost_dev_generic.c roll
+# Nothing is left. The register stays because the rule it carries is what
+# keeps that true: a lookup written anywhere fails the build unless it is
+# named here, and naming one is a deliberate act with a reason beside it.
