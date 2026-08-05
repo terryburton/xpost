@@ -329,7 +329,17 @@ setglobal
 % sampled across that range when it is set. The samples are taken for
 % their effect on the operand stack: a procedure that leaves anything
 % other than its one result is not a transfer function.
+% The procedure being sampled is the program's, and a procedure that
+% installs a transfer function of its own re-enters this one against the
+% same three slots. What they held on the way in rides the operand stack
+% beneath the sampling -- the depth check below counts from the bottom,
+% so entries beneath it shift the count uniformly -- and is put back
+% when the sampling is done.
 .xpostsys /.sampletransfer {
+    graphicsdict /.tsproc 2 copy known { get }{ pop pop null } ifelse
+    graphicsdict /.tsop 2 copy known { get }{ pop pop null } ifelse
+    graphicsdict /.tsd 2 copy known { get }{ pop pop null } ifelse
+    5 3 roll
     graphicsdict exch /.tsproc exch put
     graphicsdict exch /.tsop exch put
     0 1 255 {
@@ -342,6 +352,9 @@ setglobal
             { graphicsdict /.tsop get cvx /typecheck signalerror } if
         pop
     } for
+    graphicsdict exch /.tsd exch put
+    graphicsdict exch /.tsop exch put
+    graphicsdict exch /.tsproc exch put
 } put
 
 .xpostsys /.samplespot {
@@ -364,6 +377,12 @@ setglobal
     % a program and run them after the dict ends. Per sample the
     % program notes the operand depth in graphicsdict, pushes x y,
     % runs the procedure, and pops one value if the depth grew
+    % A spot procedure that installs a screen of its own re-enters this
+    % one against the same depth slot, so what the slot held on the way
+    % in is put back by the tail of the compiled program. The operand
+    % stack cannot carry it: the procedure is allowed to leave entries
+    % there, which would bury it.
+    /old graphicsdict /.ssd0 2 copy known { get }{ pop pop null } ifelse def
     /pexec /exec load def
     /pget /get load def
     /pput /put load def
@@ -373,7 +392,8 @@ setglobal
     /pcount /count load def
     /ppopproc [ /pop load ] cvx def
     /gd graphicsdict def
-    /allrows L 2 mul array def
+    % the rows, then a tail that puts the depth slot back as it was
+    /allrows L 2 mul 4 add array def
     0 1 L 1 sub { /y exch def
         /row L 19 mul array def
         /i 0 def
@@ -415,6 +435,11 @@ setglobal
         allrows y 2 mul currentdict /row get cvx put
         allrows y 2 mul 1 add currentdict /pexec get put
     } for
+    % tail: gd /.ssd0 old put
+    allrows L 2 mul currentdict /gd get put
+    allrows L 2 mul 1 add /.ssd0 put
+    allrows L 2 mul 2 add currentdict /old get put
+    allrows L 2 mul 3 add currentdict /pput get put
     currentdict /allrows get cvx
     end
     exec
