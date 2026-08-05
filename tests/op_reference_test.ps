@@ -78,6 +78,73 @@ hitdefaultmatrix 0 eq
 hitsetmatrix 0 eq
     (initmatrix reached a program's definition of setmatrix) want
 
+% ----------------------------------------------------------------------- arc
+%
+% arc appends an arc to the current path, reaching the arc's starting point
+% with a moveto when the path is empty and with a lineto when it is not
+% (PLRM 8.2). That choice was made by a procedure built in C which pushed
+% the names moveto, lineto and ifelse.
+
+/hitmoveto 0 def
+/hitlineto 0 def
+/hitifelse 0 def
+
+/nmoveto 0 def
+/nlineto 0 def
+/ncurveto 0 def
+/countpath {
+    /nmoveto 0 store /nlineto 0 store /ncurveto 0 store
+    { pop pop /nmoveto nmoveto 1 add store }
+    { pop pop /nlineto nlineto 1 add store }
+    { pop pop pop pop pop pop /ncurveto ncurveto 1 add store }
+    { }
+    pathforall
+} bind def
+
+/moveto
+    { /hitmoveto hitmoveto 1 add store
+      systemdict /moveto get exec } bind def
+/lineto
+    { /hitlineto hitlineto 1 add store
+      systemdict /lineto get exec } bind def
+/ifelse
+    { /hitifelse hitifelse 1 add store
+      systemdict /ifelse get exec } bind def
+
+gsave
+    newpath
+    200 200 50 0 90 arc
+    countpath
+    /emptymoveto nmoveto store
+    /emptylineto nlineto store
+    /emptycurveto ncurveto store
+
+    newpath
+    0 0 systemdict /moveto get exec
+    200 200 50 0 90 arc
+    countpath
+    /joinedmoveto nmoveto store
+    /joinedlineto nlineto store
+    /joinedcurveto ncurveto store
+    newpath
+grestore
+
+currentdict /moveto undef
+currentdict /lineto undef
+currentdict /ifelse undef
+
+emptymoveto 1 eq emptylineto 0 eq and emptycurveto 0 gt and
+    (arc on an empty path did not start with a moveto) want
+joinedmoveto 1 eq joinedlineto 1 eq and joinedcurveto 0 gt and
+    (arc on an open path did not reach its start with a lineto) want
+
+hitmoveto 0 eq
+    (arc reached a program's definition of moveto) want
+hitlineto 0 eq
+    (arc reached a program's definition of lineto) want
+hitifelse 0 eq
+    (arc reached a program's definition of ifelse) want
+
 % ------------------------------------------------------------------- verdict
 
 failures 0 eq { (SUCCESS) = } { (FAILURES) = } ifelse
