@@ -2823,7 +2823,14 @@ int _stencilaa(Xpost_Context *ctx,
              : xpost_object_get_type(o) == integertype ? (double)o.int_.val
              : 0.0;
     }
-    if (w <= 0 || h <= 0 || (w + 7) / 8 * h > buf.comp_.sz)
+    if (w <= 0 || h <= 0)
+        goto refuse;
+    rowbytes = (w + 7) / 8;
+    /* the mask has to fit its buffer, and the buffer's capacity counted
+       in rows answers that: the byte count the two dimensions multiply
+       to need not itself stay within the integer range, and a mask
+       whose product wraps must be refused rather than sampled */
+    if ((integer)(buf.comp_.sz / (dword)rowbytes) < h)
         goto refuse;
     /* coverage integrates separably only over an axis-aligned map */
     if (fabs(m[1]) > 1e-4 || fabs(m[2]) > 1e-4
@@ -2845,7 +2852,6 @@ int _stencilaa(Xpost_Context *ctx,
     if (!cov)
         goto refuse;
     bits = (unsigned char *)xpost_string_get_pointer(ctx, buf);
-    rowbytes = (w + 7) / 8;
     full = (1.0 / fabs(m[0])) * (1.0 / fabs(m[3]));
 
     for (py = 0; py < devh; py++)

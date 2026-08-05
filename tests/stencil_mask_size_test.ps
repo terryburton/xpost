@@ -1,0 +1,90 @@
+% The bounds the anti-aliased stencil painter puts on its mask, run
+% through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% .stencilaa takes a mask as a width, a height and a buffer of packed
+% bits, and box-filters it into device pixels. Every byte it reads is
+% addressed as row * ((width + 7) / 8) + column / 8, so the buffer has
+% to hold (width + 7) / 8 * height bytes before any of that is safe.
+% The painter answers false and leaves the caller to the bilevel path
+% whenever it cannot do the work, so a mask too big for its buffer must
+% come back false rather than be sampled.
+%
+% The byte count itself is the trap: it is a product of two dimensions
+% a program chooses freely, and the sizes it reaches are far wider than
+% the dimensions are. A mask declaring 16777216 by 4096 needs 2^33
+% bytes, which is 0 modulo 2^32 -- so a capacity test that forms the
+% product in a 32-bit integer sees a mask that fits anywhere, and the
+% sampling walk then reads gigabytes past a sixteen-byte string. The
+% overflowing case below is that one; the rest pin the boundary either
+% side of it so that a capacity test cannot be made safe by refusing
+% every mask.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { exch { pop } {
+    (FAIL: ) print print (\n) print
+    faildict /n 2 copy get 1 add put } ifelse } bind def
+
+% the painter is one of the interpreter's own operators, and lives in
+% internaldict rather than where a program would find it by name
+/.stencilaa 1183615869 internaldict /.stencilaa get def
+
+% the mask painter blends coverage into the device, so it needs a device
+% that blends: a gray raster device carries BlendPix and TextAlphaBits
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+DEV /BlendPix known DEV /TextAlphaBits known and
+    (the test device blends, so the painter can be reached at all) assert
+
+% width height buflen mat  paint  bool
+% The painter refuses anything but an axis-aligned map, and refuses a
+% device image bigger than a few thousand pixels a side, so each mask
+% is offered under a matrix that scales it into a device image of about
+% 168 by 41. That is what puts the buffer test in the way: reject the
+% scale and the size never gets asked about. The buffer is all zero
+% bits, so with ink 1 nothing is painted whatever the answer is.
+/paint {
+    /mm exch def /bl exch def /hh exch def /ww exch def
+    << /buf bl string /width ww /height hh /ink 1 /interp false
+       /mat mm >> .stencilaa
+} bind def
+
+/unit [ 1 0 0 1 0 0 ] def
+
+% 16 by 8 packs to two bytes a row, sixteen bytes in all
+16 8 16 unit paint
+    (a mask exactly filling its buffer is painted) assert
+16 8 64 unit paint
+    (a mask inside a larger buffer is painted) assert
+16 8 15 unit paint not
+    (a mask one byte past its buffer is refused) assert
+16 8 0 unit paint not
+    (a mask with an empty buffer is refused) assert
+
+% (16777216 + 7) / 8 * 4096 is 2^33, and 2^33 is 0 modulo 2^32: a byte
+% count that vanishes entirely when it is formed in 32 bits, offered to
+% a sixteen-byte buffer
+16777216 4096 16 [ 0.00001 0 0 0.01 0 0 ] paint not
+    (a mask whose byte count is a multiple of 2^32 is refused) assert
+
+% 2^32 exactly, reached with the other dimension carrying the size
+33554432 1024 16 [ 0.000005 0 0 0.04 0 0 ] paint not
+    (a mask whose byte count is 2^32 is refused) assert
+
+% one row short of the first: 8587837440, which taken as a 32-bit signed
+% count is negative rather than small, and a negative count compares the
+% other way round against an unsigned buffer size than against a signed
+% one -- so this is the mask the two build personalities disagree about
+% unless the count is formed where it fits
+16777216 4095 16 [ 0.00001 0 0 0.01 0 0 ] paint not
+    (a mask whose byte count is negative in 32 bits is refused) assert
+
+% and the painter still works afterwards: a refusal must not have left
+% the device or the graphics state disturbed
+16 8 16 unit paint
+    (a mask still paints after the refusals) assert
+
+faildict /n get 0 eq { (SUCCESS) = }
+    { (FAILURES: ) print faildict /n get 20 string cvs print (\n) print } ifelse

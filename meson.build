@@ -1476,6 +1476,17 @@ test('font-bigbuf',
   args: [ xpost_exe, files('tests/font_bigbuf_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The bounds the anti-aliased stencil painter puts on its mask. Every byte
+# the sampling walk reads is addressed from the declared width and height,
+# so a mask too big for its buffer has to be refused before the walk. The
+# dimensions are a program's to choose and the byte count they multiply to
+# is far wider than either, so the masks here include ones whose count
+# lands on a multiple of 2^32 and one whose count is negative in 32 bits.
+test('stencil-mask-size',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/stencil_mask_size_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools
