@@ -24,7 +24,7 @@ trap 'rm -rf "$work"' EXIT
 # The window devices need a display and the Windows ones another platform;
 # everything else renders headless. The raster device is named once per
 # pixel format, since each keeps its buffer differently.
-devices="null pgm ppm pbm tiff bbox png jpeg pdfwrite svgwrite dscwrite
+devices="null pgm ppm pbm tiff bbox png pngalpha jpeg pdfwrite svgwrite dscwrite
          bgr raster raster:rgb raster:argb raster:bgr raster:bgra"
 
 fail=0

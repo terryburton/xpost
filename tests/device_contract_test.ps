@@ -159,4 +159,16 @@ readable {
 
 showpage
 
+% --- the device is reachable by the name it was selected with --------
+%
+% -d and setpagedevice are two spellings of one selection, so a device
+% the interpreter started with has to be one setpagedevice can make.
+% Where it is not, the failure is not confined to switching devices: a
+% request that names no device at all defaults to the running one, so
+% every setpagedevice call raises rangecheck, and the page cannot even
+% be resized. Runs last, because it retires the device the tier above
+% painted on.
+{ << /PageSize [200 200] >> setpagedevice }
+    (the running device accepts a page-device request) try
+
 contractfail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse

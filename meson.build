@@ -1499,6 +1499,14 @@ test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
 
+# One device roster. -d and setpagedevice are two spellings of one
+# selection, so the option parser's list, the interpreter's maker table
+# and the .devicemakers dictionary name the same devices -- and the test
+# wrappers, which carry rosters of their own, run every one of them.
+test('check-device-roster',
+  find_program('tests/check-device-roster.sh'),
+  args: [ meson.current_source_dir() ])
+
 # A function that can refuse returns that fact and no caller may ignore
 # it. The compiler enforces that wherever XPOST_MUST_CHECK is applied;
 # this holds the set it is applied to, so the enforcement cannot be

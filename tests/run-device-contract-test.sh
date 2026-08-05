@@ -31,7 +31,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pdfwrite svgwrite dscwrite jpeg'
+devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
 fail=0
 
 for dev in $devices; do

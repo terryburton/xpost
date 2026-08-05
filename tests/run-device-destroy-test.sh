@@ -1,9 +1,12 @@
 #!/bin/sh
 # Meson test wrapper: run the device-teardown discipline check
-# (device_destroy_test.ps) against every headless-capable built device.
-# The test Destroys the live device twice and job-end teardown makes a
-# third call: each must be a no-op after the first, per the device
-# contract. Window devices (xcb, gdi) need a display and are not run.
+# (device_destroy_test.ps) against every built device. The test Destroys
+# the live device twice and job-end teardown makes a third call: each
+# must be a no-op after the first, per the device contract. The window
+# device holds a display connection, a window, a pixmap and a graphics
+# context, so it has the most to release twice; it runs under a virtual
+# display where the host provides one. The Windows window devices need
+# another platform and are not run.
 #
 #   $1  path to the built xpost binary
 #   $2  path to device_destroy_test.ps
@@ -18,7 +21,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pdfwrite svgwrite dscwrite jpeg'
+devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
 fail=0
 
 for dev in $devices; do
@@ -40,6 +43,24 @@ for dev in $devices; do
         fail=1
     fi
 done
+
+if command -v xvfb-run >/dev/null 2>&1; then
+    out=$(xvfb-run -a "$xpost" -q $ns -d xcb "$script" </dev/null 2>&1)
+    case "$out" in
+        *"wrong device"*) echo "SKIP xcb (not built in)" ;;
+        *)
+            if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+                echo "OK   xcb"
+            else
+                echo "FAIL xcb:"
+                printf '%s\n' "$out" | tail -3
+                fail=1
+            fi
+            ;;
+    esac
+else
+    echo "SKIP xcb (no xvfb-run)"
+fi
 
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then
