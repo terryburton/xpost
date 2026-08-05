@@ -179,12 +179,12 @@ Xpost_Object xpost_dict_cons_memory(/*@dependent@*/ Xpost_Memory_File *mem, unsi
    construct dictionary
    selected the memory table with ctx->vmmode
 */
-Xpost_Object xpost_dict_cons(Xpost_Context *ctx, unsigned sz);
+XPOST_TEST_VISIBLE Xpost_Object xpost_dict_cons(Xpost_Context *ctx, unsigned sz);
 
 /**
    investigate current number of entries in dictionary
  */
-unsigned xpost_dict_length_memory(/*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d);
+XPOST_TEST_VISIBLE unsigned xpost_dict_length_memory(/*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d);
 
 /**
    investigate current maximum size of dictionary
@@ -231,7 +231,7 @@ Xpost_Object xpost_dict_get_memory(Xpost_Context *ctx, /*@dependent@*/ Xpost_Mem
 /**
    lookup value using key in banked dictionary
 */
-Xpost_Object xpost_dict_get(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
+XPOST_TEST_VISIBLE Xpost_Object xpost_dict_get(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k);
 
 Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
                                  Xpost_Object d,
@@ -245,7 +245,7 @@ XPOST_MUST_CHECK int xpost_dict_put_memory(Xpost_Context *ctx, /*@dependent@*/ X
 /**
    store key and value in banked dictionary
 */
-XPOST_MUST_CHECK int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Object v);
+XPOST_MUST_CHECK XPOST_TEST_VISIBLE int xpost_dict_put(Xpost_Context *ctx, Xpost_Object d, Xpost_Object k, Xpost_Object v);
 
 /**
    undefine key in dictionary, re-slotting any later entry whose probe

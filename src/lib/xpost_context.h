@@ -321,7 +321,7 @@ void xpost_context_exit(Xpost_Context *ctx);
  *        the mfile relevant to an object
  */
 /*@dependent@*/
-Xpost_Memory_File *xpost_context_select_memory(Xpost_Context *ctx, Xpost_Object o);
+XPOST_TEST_VISIBLE Xpost_Memory_File *xpost_context_select_memory(Xpost_Context *ctx, Xpost_Object o);
 
 /**
  * @brief print a dump of the context structure data to stdout

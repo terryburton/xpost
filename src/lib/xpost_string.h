@@ -62,16 +62,16 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
 /**
  * @brief construct a string object in currectly selected memory
  */
-Xpost_Object xpost_string_cons(Xpost_Context *ctx,
-                               unsigned sz,
-                               /*@NULL@*/ const char *ini);
+XPOST_TEST_VISIBLE Xpost_Object xpost_string_cons(Xpost_Context *ctx,
+                                                  unsigned sz,
+                                                  /*@NULL@*/ const char *ini);
 
 /**
  * @brief yield a "C" pointer to the char array of the string contents
  */
 /*@dependent@*/
-char *xpost_string_get_pointer(Xpost_Context *ctx,
-                               Xpost_Object S);
+XPOST_TEST_VISIBLE char *xpost_string_get_pointer(Xpost_Context *ctx,
+                                                  Xpost_Object S);
 
 /**
  * @brief put a value into a string with specified memory

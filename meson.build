@@ -102,6 +102,22 @@ if get_option('buildtype') == 'release'
   add_project_link_arguments(lto_flags, language: 'c')
 endif
 
+# Link arguments for a test that reaches past the public API into the
+# library's internals. Only the API carries an import declaration, so on
+# Windows the linker resolves the rest with a 32-bit runtime relocation
+# that the C runtime applies before main(). That relocation reaches 2G,
+# and the 64-bit address layout scatters images across the whole address
+# space, so whether a test lands within reach of the library it calls is
+# chance: the same binary runs or aborts before main() from one start to
+# the next, and optimisation decides which references take the form at
+# all. Refusing the fallback makes the linker resolve the references
+# through the import table, and turns one it cannot resolve that way into
+# a link error naming the symbol rather than a start-up abort.
+internals_link_args = []
+if sys_windows
+  internals_link_args = cc.get_supported_link_arguments('-Wl,--disable-auto-import')
+endif
+
 splint = find_program('splint', required: false)
 
 if splint.found()
@@ -409,6 +425,7 @@ string_bounds_exe = executable('string_bounds_test',
   'tests/string_bounds_test.c',
   c_args: '-DHAVE_CONFIG_H',
   dependencies: libxpost_dep,
+  link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 test('string-bounds',
@@ -439,6 +456,7 @@ dict_grow_exe = executable('dict_grow_test',
   'tests/dict_grow_test.c',
   c_args: '-DHAVE_CONFIG_H',
   dependencies: libxpost_dep,
+  link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 # Growing a dictionary past its allotment: the wide build's dictionaries
@@ -1799,6 +1817,7 @@ dev_rect_exe = executable('dev_rect_test',
   'tests/dev_rect_test.c',
   c_args: '-DHAVE_CONFIG_H',
   dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 test('dev-rect', dev_rect_exe)

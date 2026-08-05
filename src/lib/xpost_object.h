@@ -460,7 +460,7 @@ XPOST_TEST_VISIBLE Xpost_Object xpost_int_cons(integer i);
  * sets the pad to 0, sets the value to @p r. It returns the object as
  * literal.
  */
-Xpost_Object xpost_real_cons(real r);
+XPOST_TEST_VISIBLE Xpost_Object xpost_real_cons(real r);
 
 
 /*
@@ -541,8 +541,8 @@ static inline int xpost_object_get_ent(Xpost_Object obj)
 /**
  * @brief set the ent number in the object.
  */
-Xpost_Object xpost_object_set_ent(Xpost_Object obj,
-                                  unsigned int ent);
+XPOST_TEST_VISIBLE Xpost_Object xpost_object_set_ent(Xpost_Object obj,
+                                                     unsigned int ent);
 
 /**
  * @brief adjust the size and offset fields in the object

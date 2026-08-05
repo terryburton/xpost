@@ -32,18 +32,21 @@
 #ifndef XPOST_PRIVATE_H
 #define XPOST_PRIVATE_H
 
-/* Widens a symbol's visibility so the unit tests can reach it. This says
-   nothing about the function's contract -- for that, see the
-   must-check mark defined below. */
+#include "xpost.h" /* XPAPI */
+
+/* Marks a symbol that the unit tests reach past the public API to use.
+   It carries the same linkage marks as the API, so a test links to it
+   the same way: on a platform whose shared libraries name what they
+   import, a reference the header did not mark is resolved by a runtime
+   relocation of limited reach instead, and whether it reaches is a
+   matter of where the two images happen to land. This says nothing
+   about the function's contract -- for that, see the must-check mark
+   defined below. */
 #ifdef XPOST_TEST_VISIBLE
 # undef XPOST_TEST_VISIBLE
 #endif
 
-#ifdef HAVE_CHECK
-# define XPOST_TEST_VISIBLE XPAPI
-#else
-# define XPOST_TEST_VISIBLE
-#endif
+#define XPOST_TEST_VISIBLE XPAPI
 
 /* Marks a function whose return value carries a refusal the caller must
    act on. Discarding it turns the refusal into a silent no-op. */
