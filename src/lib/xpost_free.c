@@ -134,7 +134,7 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     if (ent < mem->start)
         return 0;
 
-    if (ent >= mem->table.nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot free ent %u", ent);
         return -1;
@@ -316,13 +316,13 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                zero tag. On any inconsistency discard the lists and request
                a collection to rebuild them. */
             if (e > XPOST_OBJECT_COMP_MAX_ENT ||
-                e >= mem->table.nextent ||
+                !xpost_ent_valid(mem, e) ||
                 mem->table.tab[e].tag != 0)
             {
                 unsigned int zero = 0;
                 unsigned int bb;
                 XPOST_LOG_ERR("free list corrupt at ent %u (tag %u): discarding",
-                        e, e < mem->table.nextent ? mem->table.tab[e].tag : 0);
+                        e, xpost_ent_valid(mem, e) ? mem->table.tab[e].tag : 0);
                 for (bb = 0; bb < XPOST_FREE_NBUCKETS; bb++)
                     if (!xpost_memory_put(mem, 0, bb * sizeof(unsigned int),
                                           sizeof zero, &zero))
@@ -425,7 +425,7 @@ unsigned int xpost_free_realloc(Xpost_Memory_File *mem,
     }
     rent = ent;
     tab = &mem->table;
-    if (ent >= mem->table.nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;

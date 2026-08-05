@@ -715,7 +715,7 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
 
 
 #define CHECK_VALID_ENT(ent,mem,ret) \
-    if (ent >= mem->table.nextent) \
+    if (!xpost_ent_valid(mem, ent)) \
     { \
         XPOST_LOG_ERR("%d entity not found %u", VMerror, ent); \
         return ret; \
@@ -727,11 +727,7 @@ xpost_memory_table_get_addr(Xpost_Memory_File *mem,
                             unsigned int ent,
                             unsigned int *retaddr)
 {
-    if (ent >= mem->table.nextent)
-    {
-        XPOST_LOG_ERR("%d entity not found %u", VMerror, ent);
-        return 0;
-    }
+    CHECK_VALID_ENT(ent,mem,0)
     *retaddr = mem->table.tab[ent].adr;
     return 1;
 }

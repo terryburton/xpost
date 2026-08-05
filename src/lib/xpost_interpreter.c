@@ -552,7 +552,7 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
     do { \
         Xpost_Memory_File *amem_ = xpost_context_select_memory(ctx, a); \
         unsigned int aent_ = xpost_object_get_ent(a); \
-        if (aent_ < amem_->table.nextent && \
+        if (xpost_ent_valid(amem_, aent_) && \
             (a.comp_.off + (unsigned int)a.comp_.sz) * sizeof(Xpost_Object) \
                 <= amem_->table.tab[aent_].sz) \
             abase = (const Xpost_Object *)(amem_->base \

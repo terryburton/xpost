@@ -194,6 +194,75 @@ if [ -s "$work/derivations" ]; then
     fail=1
 fi
 
+# ---------------------------------------------------------------- rule 3
+#
+# Whether an entity number is usable is one question with one answer.
+# It had three: xpost_ent_valid, a macro private to the table
+# implementation, and fifteen sites that wrote the comparison out --
+# including xpost_memory_table_get_addr, which hand-inlined the check
+# rather than use the macro defined immediately above it, and a free-list
+# walk that writes the comparison twice in one statement.
+#
+# Two places may still name the bound. xpost_memory.h states the
+# predicate, and xpost_memory.c is the table's own implementation, where
+# nextent is a field being maintained rather than a question being asked.
+# Everywhere else, a comparison against it is a guard and belongs to the
+# predicate -- except as a for-loop's bound, where it is an iteration
+# limit and a call per step would reload it through the collector's
+# hottest loop to say what the loop already knows.
+for f in "$lib"/*.c "$lib"/*.h; do
+    [ -e "$f" ] || continue
+    case $(basename "$f") in
+        xpost_memory.h|xpost_memory.c) continue ;;
+    esac
+    awk '
+    {
+        line = $0; code = ""
+        while (length(line)) {
+            if (incomment) {
+                i = index(line, "*/")
+                if (i == 0) { line = ""; break }
+                line = substr(line, i + 2); incomment = 0; continue
+            }
+            i = index(line, "/*"); j = index(line, "//")
+            if (j > 0 && (i == 0 || j < i)) { code = code substr(line, 1, j - 1); break }
+            if (i == 0) { code = code line; break }
+            code = code substr(line, 1, i - 1)
+            line = substr(line, i + 2); incomment = 1
+        }
+        # the arrow of a member access carries a > that is not a
+        # comparison, and reading nextent into a variable is not asking a
+        # question about an entity; flatten the first and require a
+        # relational operator so neither is mistaken for a guard
+        flat = code
+        gsub(/->/, ".", flat)
+        if (flat !~ /nextent[ \t]*(==|!=|<=|>=|<|>)/ &&
+            flat !~ /(==|!=|<=|>=|<|>)[ \t]*[A-Za-z_.]*nextent/) next
+        # an iteration bound: a for whose header opens before the
+        # comparison. Anchoring this to the start of the line would
+        # exempt the four loops in the tree today and quietly fail to
+        # exempt the fifth, written one brace further in.
+        if (match(flat, /for[ \t]*\(/) && RSTART < index(flat, "nextent")) next
+        printf "%s %d\n", FILENAME, FNR
+    }' "$f"
+done | sed "s|^$lib/||" > "$work/bounds"
+
+if [ -s "$work/bounds" ]; then
+    echo "FAIL: an entity's validity is decided without the predicate:"
+    sed 's/ /:/; s/^/      /' "$work/bounds"
+    echo "      use xpost_ent_valid(mem, ent), or"
+    echo "      xpost_ent_in_collector_band(mem, ent) where the special"
+    echo "      entities below mem->start are meant to be excluded too"
+    fail=1
+fi
+
+if ! grep -q '^xpost_ent_in_collector_band(Xpost_Memory_File' "$header"; then
+    echo "FAILURES: xpost_ent_in_collector_band is not defined in"
+    echo "      xpost_memory.h; the band is no longer expressed in terms"
+    echo "      of validity and the two can drift apart"
+    exit 1
+fi
+
 # and the one spelling must still be there, or rule 2 passes because
 # nothing derives a VM pointer at all any more
 for want in xpost_vm_ptr xpost_ent_ptr; do

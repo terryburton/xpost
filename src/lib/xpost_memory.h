@@ -224,11 +224,37 @@ typedef struct Xpost_Memory_File
 
 /**
  * @brief true iff @p ent indexes an allocated slot of @p mem's table.
+ *
+ * The one statement of what makes an entity number usable. It was three:
+ * this, a macro private to the table implementation, and fifteen sites
+ * that wrote the comparison out -- one of which, in the free-list walk,
+ * writes it twice in the same statement to report the tag of an entity it
+ * has just decided is out of range.
  */
 static inline int
 xpost_ent_valid(Xpost_Memory_File *mem, unsigned int ent)
 {
     return ent < mem->table.nextent;
+}
+
+/**
+ * @brief true iff @p ent is an entity the collector owns in @p mem.
+ *
+ * The special entities at the foot of the table are roots rather than
+ * garbage, so the collector's domain begins at mem->start; the upper
+ * bound of the band is validity itself, and is said that way so the two
+ * cannot come apart.
+ *
+ * The sweeps walk this same band as a loop from start to nextent. There
+ * the bound is an iteration limit rather than a question asked about a
+ * particular entity, and it stays written that way: a call per iteration
+ * would reload the limit on every step of the collector's hottest loop to
+ * say something the loop already knows.
+ */
+static inline int
+xpost_ent_in_collector_band(Xpost_Memory_File *mem, unsigned int ent)
+{
+    return ent >= mem->start && xpost_ent_valid(mem, ent);
 }
 
 /**

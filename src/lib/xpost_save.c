@@ -163,7 +163,7 @@ unsigned xpost_save_ent_is_saved(Xpost_Memory_File *mem,
 
     sav = xpost_stack_topdown_fetch(mem, vs, 0);
     tab = &mem->table;
-    if (ent >= tab->nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
@@ -199,7 +199,7 @@ unsigned int _copy_ent(Xpost_Memory_File *mem,
     int ret;
 
     tab = &mem->table;
-    if (ent >= tab->nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
@@ -248,7 +248,7 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
     sav = xpost_stack_topdown_fetch(mem, adr, 0);
 
     tab = &mem->table;
-    if (ent >= tab->nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
@@ -311,12 +311,12 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
         sent = XPOST_SAVEREC_SRC(rec);
         cent = XPOST_SAVEREC_CPY(rec);
         XPOST_LOG_INFO("replacing ent %u with copy ent %u", sent, cent);
-        if (sent >= tab->nextent)
+        if (!xpost_ent_valid(mem, sent))
         {
             XPOST_LOG_ERR("cannot find table for ent %u", sent);
             return;
         }
-        if (cent >= tab->nextent)
+        if (!xpost_ent_valid(mem, cent))
         {
             XPOST_LOG_ERR("cannot find table for ent %u", cent);
             return;

@@ -92,7 +92,7 @@ int _xpost_garbage_mark_ent(Xpost_Memory_File *mem,
         return 1;
     }
 
-    if (ent >= mem->table.nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find ent %u", ent);
         return 0;
@@ -109,7 +109,7 @@ int _xpost_garbage_ent_is_marked(Xpost_Memory_File *mem,
 {
     if (!mem) return 0;
 
-    if (ent >= mem->table.nextent)
+    if (!xpost_ent_valid(mem, ent))
     {
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
@@ -239,7 +239,7 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
     {
         unsigned int fent = (unsigned int)o.mark_.padw;
         Xpost_Memory_File *fm = xpost_context_select_memory(ctx, o);
-        if (fm && fent >= fm->start && fent < fm->table.nextent)
+        if (fm && xpost_ent_in_collector_band(fm, fent))
             (void) _xpost_garbage_mark_ent(fm, fent);
         return 1;
     }
@@ -254,7 +254,7 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
             printf("markobject: ent %d, addr %u, %s (size %d)\n",
                    ent,
                    xpost_context_select_memory(ctx,o)==mem?
-                       (ent >= mem->table.nextent?
+                       (!xpost_ent_valid(mem, ent)?
                         (unsigned)-1: mem->table.tab[ent].adr) : 0,
                    xpost_object_type_names[type],
                    o.comp_.sz);
@@ -678,7 +678,7 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     if (!sdmem || sdmem != ctx->gl)
         return 1; /* systemdict already covered if it is not global */
     ent = xpost_object_get_ent(sd);
-    if (ent >= sdmem->table.nextent)
+    if (!xpost_ent_valid(sdmem, ent))
         return 1;
     adr = sdmem->table.tab[ent].adr;
     dp = xpost_dict_head_at(sdmem, adr);

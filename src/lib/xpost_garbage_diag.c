@@ -229,7 +229,7 @@ void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem)
                 if (!xpost_object_is_composite(o)) continue;
                 if (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK) continue; /* global ref: fine */
                 te = xpost_object_get_ent(o);
-                if (te >= mem->table.nextent) continue;
+                if (!xpost_ent_valid(mem, te)) continue;
                 if ((mem->table.tab[te].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
                     && mem->table.tab[te].sz != 0)
                 {
