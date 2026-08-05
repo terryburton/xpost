@@ -190,18 +190,32 @@ globaldict length 0 eq (globaldict starts empty) assert
 % PostScript body won: the wrapping pass found a procedure under it and
 % promoted it. An operator that was never wrapped means the C one won.
 
+% These two arrays are held equal to the register by
+% check-shadowed-operators.sh: a PostScript test cannot read the file, so
+% the choice is written twice and the two copies are checked against each
+% other rather than left to drift.
 /WON.PS [ /ashow /awidthshow /filter /findfont /setfont /show
           /stringwidth /widthshow ] def
-/WON.C  [ ] def   % no pair is arranged this way today
+/WON.C  [ /breakhere ] def
 
 WON.PS {
     dup .privatedict /.wrappedprocs get exch known
     exch (should be the PostScript implementation, and is not wrapped) named
 } forall
 
+% A C operator answers from wherever init left it: the debug aids are
+% moved out of systemdict into .internaldict, so `load` is not the way to
+% reach one.
+/CIMPL {                        % /name -> object
+    dup systemdict exch known
+        { systemdict exch get }
+        { 1183615869 internaldict exch get }
+    ifelse
+} def
+
 WON.C {
     dup .privatedict /.wrappedprocs get exch known not
-    1 index load type /operatortype eq and
+    1 index CIMPL type /operatortype eq and
     exch (should be the C operator, and is not) named
 } forall
 

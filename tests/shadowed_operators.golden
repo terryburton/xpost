@@ -16,15 +16,18 @@
 #               recorded it in the register of wrapped procedures.
 #
 #   c           the C operator is in force and the PostScript body is
-#               unreachable. No name is in this state today; the column
-#               exists because a pair can be arranged either way, and
-#               which way has to be said rather than discovered.
+#               unreachable. breakhere is the one such pair: the C
+#               operator is installed and then moved into .internaldict
+#               during init, while the PostScript body sits in the
+#               fallback block graphics.ps runs only when it is loaded
+#               standalone, which the normal flow never takes.
 #
 # A name implemented twice and not listed here fails the check: it is a
 # choice nobody made on purpose.
 
 ashow       postscript
 awidthshow  postscript
+breakhere   c
 filter      postscript
 findfont    postscript
 setfont     postscript
