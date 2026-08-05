@@ -36,4 +36,4 @@ xpost_string_put
 _pdf_acc_put
 
 # Sites consuming an answer because the refusal cannot arise there.
-refusal-impossible 11
+refusal-impossible 10

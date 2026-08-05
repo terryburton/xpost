@@ -102,6 +102,48 @@ xs (HelLO) eq (string contents survive restore, per the PLRM string exception) a
 % Locking the absent error in would freeze non-compliance, so it is
 % recorded here for the C-side save/restore work rather than tested.
 
+% --- a file reached only through a composite is not left dangling ---
+% Restore releases the files opened since the save it undoes, and decides
+% which those are by asking what still reaches them. A file named from
+% inside an array or a dictionary is named all the same: releasing one
+% hands its entity back, and the object that still holds the number then
+% names whatever the number is given out for next -- read as a stream and
+% dispatched through, which is a jump to an address the free list wrote.
+%
+% The situation is the deviation recorded just above, so whether the file
+% comes back open or closed is not asserted; what is asserted is that
+% nothing the surviving object does can reach a file opened afterwards.
+save [ (41>) /ASCIIHexDecode filter ] exch restore
+0 get /heldinarray exch def
+/freshfilter (42>) /ASCIIHexDecode filter def
+heldinarray closefile
+freshfilter status
+    (a filter opened after a restore is not closed through an array element) assert
+freshfilter 1 string readstring pop (B) eq
+    (a filter opened after a restore still reads its own bytes) assert
+freshfilter closefile
+
+save << /f (43>) /ASCIIHexDecode filter >> exch restore
+/f get /heldindict exch def
+/freshagain (44>) /ASCIIHexDecode filter def
+heldindict closefile
+freshagain status
+    (a filter opened after a restore is not closed through a dictionary value) assert
+freshagain 1 string readstring pop (D) eq
+    (a filter opened after a restore still reads its own bytes from a dict case) assert
+freshagain closefile
+
+% status is how a program walks into the situation: it reports on the
+% surviving object rather than dispatching through what it names, so
+% asking is safe whichever answer it gives
+heldinarray status pop
+heldindict status pop
+
+% and closed with nothing allocated in between, so that the entity is
+% still on the free list and its payload is the list's own link word
+save [ (45>) /ASCIIHexDecode filter ] exch restore
+0 get dup status pop closefile
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

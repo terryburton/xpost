@@ -43,7 +43,6 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_save.h"
-#include "xpost_free.h"
 #include "xpost_file.h"
 #include "xpost_context.h"
 #include "xpost_error.h"
@@ -109,12 +108,27 @@ int Vrestore(Xpost_Context *ctx,
 
     /* restore closes a file created since the corresponding save (PLRM
        3.8.2): sweep the local table for file entities born above the
-       restored depth and release them -- closing and freeing exactly as
-       the collector would, since nothing surviving the restore can
-       reach them. A file still referenced from a stack stays open: the
-       spec answers that situation with invalidrestore, which is not
-       implemented -- see the note in tests/save_restore_test.ps -- and
-       closing under a live reference would be worse. */
+       restored depth and close them. A file still referenced from a
+       stack stays open: the spec answers that situation with
+       invalidrestore, which is not implemented -- see the note in
+       tests/save_restore_test.ps -- and closing under a live reference
+       would be worse.
+
+       The close is all this does. It does not reclaim the entity, and
+       the scan below is why: it sees the objects lying on the stacks,
+       and a file named from inside an array or a dictionary is named
+       just as surely without appearing there. Reclaiming an entity on
+       that evidence hands its number back to the free list while an
+       object still holds it, and the object then names the list's own
+       link word, or the next file the program opens. The payload of a
+       file entity is a pointer this interpreter calls through, so the
+       first is a jump to an address the free list wrote and the second
+       is one file's operations landing on another.
+
+       Which entities nothing reaches is the collector's question, and
+       the collector descends into composites to answer it. A file
+       closed here is left for that sweep to reclaim: its stream is
+       gone, so what remains is one pointer's worth of table row. */
     if (ctx->lo->file_birth_max > (unsigned int)V.save_.lev + 1)
     {
         unsigned int ent, i, stamp;
@@ -158,11 +172,6 @@ int Vrestore(Xpost_Context *ctx,
                    the file object is going away with the save level
                    whatever the close had left to write (PLRM 3.7.2) */
                 (void)xpost_file_object_close(ctx->lo, o);
-                /* ent was found by walking this memory file's own
-                   table, so the free list can take it back */
-                if (xpost_file_get_file_pointer(ctx->lo, o) == NULL)
-                    XPOST_REFUSAL_IMPOSSIBLE(
-                        xpost_free_memory_ent(ctx->lo, ent));
             }
         keep:;
         }

@@ -1326,6 +1326,42 @@ _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
         fp->ent = ent;
 }
 
+/* Take a closed file out of the birth census, just after it closes.
+
+   The census is what tells restore whether there is any point walking
+   the local table at all: it holds a count per birth depth and the
+   deepest depth still occupied. A file that has closed is not a file any
+   restore can close, so it leaves the census then rather than when its
+   entity is finally reclaimed -- otherwise the deepest occupied depth
+   never falls again and every later restore walks the whole table to
+   find nothing left to do.
+
+   The stamp itself is cleared as the count is decremented, so a file
+   leaves the census exactly once and the sweep skips it from then on.
+   For a file entity that field carries only the birth depth: files take
+   no part in copy-on-write snapshots, which is what it records for
+   everything else. */
+static void
+_file_retire_stamp(Xpost_Memory_File *mem, unsigned int ent)
+{
+    unsigned int stamp;
+
+    if (!xpost_ent_valid(mem, ent))
+        return;
+    stamp = (mem->table.tab[ent].mark
+             & XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK)
+            >> XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET;
+    if (stamp == 0)
+        return;
+    mem->table.tab[ent].mark &=
+        ~(unsigned int)XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_MASK;
+    if (mem->file_births[stamp] > 0)
+        mem->file_births[stamp]--;
+    while (mem->file_birth_max > 0
+           && mem->file_births[mem->file_birth_max] == 0)
+        mem->file_birth_max--;
+}
+
 /* Clear the entity that points at this stream, just before the struct
    goes. Entity zero is the free list, never a file, so it stands for "no
    entity" on a stream that never had one.
@@ -4946,19 +4982,33 @@ int xpost_file_open(Xpost_Memory_File *mem,
 }
 
 /* adapter:
-           FILE* <- filetype object
-   yield the FILE* from a filetype object */
+           stream <- filetype object
+
+   The whole file layer reaches its streams through here, and every one of
+   those reads is followed by a call through the method table the stream
+   begins with. What comes back is therefore not data but a jump target,
+   and the only thing standing behind it is the entity the object names.
+
+   A file object can outlive that entity: restore releases the files
+   opened since the save it undoes, and the collector reclaims the ones
+   nothing reaches, either of which puts the number back on the free list
+   to be handed out again. The payload then holds the free list's own
+   link word, or whatever the next allocation stored there. Being in
+   range says only that some entity is there; the tag is what says it is
+   still a stream. Ask, and answer "no stream" when it is not, which is
+   the answer every caller already handles -- status reports the file
+   closed, closefile has nothing left to do, and a read or a write
+   reports an ioerror. */
 Xpost_File *xpost_file_get_file_pointer(Xpost_Memory_File *mem,
                                         Xpost_Object f)
 {
     Xpost_File *fp;
-    int ret;
+    unsigned int tag;
 
-    ret = xpost_memory_get(mem, f.mark_.padw, 0, sizeof fp, &fp);
-    if (!ret)
-    {
+    if (!xpost_memory_table_get_tag(mem, f.mark_.padw, &tag) || tag != filetype)
         return NULL;
-    }
+    if (!xpost_memory_get(mem, f.mark_.padw, 0, sizeof fp, &fp))
+        return NULL;
     return fp;
 }
 
@@ -5107,9 +5157,9 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
         fp->closed = 1;
         _release_underlying(mem, fp);
         /* the close method released the stream's own resources; the object's
-           only pointer to the backing struct is cleared next, and file
-           entities are never collected, so free the struct here or it leaks.
-           A filter still reading from (or writing to) this stream holds the
+           only pointer to the backing struct is cleared next, and nothing
+           else knows the struct is there, so free it here or it leaks. A
+           filter still reading from (or writing to) this stream holds the
            struct alive instead, and frees it when it closes. */
         if (fp->refs == 0)
             free(fp);
@@ -5127,6 +5177,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
             XPOST_LOG_ERR("cannot write NULL over FILE* in VM");
             return VMerror;
         }
+        _file_retire_stamp(mem, f.mark_.padw);
         if (lost)
             return ioerror;
     }
