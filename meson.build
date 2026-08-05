@@ -1428,6 +1428,15 @@ test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib' ])
 
+# A function that can refuse returns that fact and no caller may ignore
+# it. The compiler enforces that wherever XPOST_MUST_CHECK is applied;
+# this holds the set it is applied to, so the enforcement cannot be
+# undone by dropping a mark, and counts the sites that claim a refusal
+# cannot arise.
+test('must-check',
+  find_program('tests/check-must-check.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Machinery stays born in its final home: every registered private-namespace
 # member keeps its dictionary and every graphics-state template slot survives,
 # per the register in tests/dict_homes.golden.

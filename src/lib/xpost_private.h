@@ -33,8 +33,8 @@
 #define XPOST_PRIVATE_H
 
 /* Widens a symbol's visibility so the unit tests can reach it. This says
-   nothing about the function's contract -- for that, see
-   XPOST_MUST_CHECK below. */
+   nothing about the function's contract -- for that, see the
+   must-check mark defined below. */
 #ifdef XPOST_TEST_VISIBLE
 # undef XPOST_TEST_VISIBLE
 #endif
