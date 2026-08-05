@@ -1,0 +1,48 @@
+% A setpagedevice whose maker fails leaves the incumbent device painting.
+% Run against a live device (-d <dev>) by run-setpagedevice-failure-test.sh:
+% prints SUCCESS iff every step holds.
+%
+% setpagedevice replaces the device in the graphics state, and the outgoing
+% one is retired so its buffers are released. A maker can still fail at run
+% time after the request has been accepted as well formed -- no display to
+% open, an output path that will not take a file, dimensions that admit no
+% buffer -- and PostScript lets the program catch that error and carry on.
+% What it carries on with has to be the device it already had: retiring the
+% incumbent before the replacement exists leaves the graphics state naming a
+% device whose buffers are freed, and the next mark reads freed memory.
+%
+% The request below is well formed -- png is a device this interpreter can
+% select -- so it passes the roster check and reaches the maker, which then
+% fails because the output path names a directory that does not exist.
+
+/getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
+
+/before getdevice def
+
+% An operator that fails part way leaves its own working operands behind;
+% stopped reports the failure but does not rewind the stack, so the caught
+% branch clears what is left. Named definitions are untouched by clear.
+{ << /OutputDevice /png
+     /OutputFile (nosuchdir/nosuchfile.png) >> setpagedevice } stopped
+    { clear }
+    { (FAILURE: the maker was expected to fail and did not) = quit }
+ifelse
+
+% the incumbent is still the current device, the same object as before
+before getdevice eq not
+    { (FAILURE: the current device was replaced by a failed setpagedevice) = quit }
+if
+
+% and it still paints: on a retired device this is a read of freed memory
+newpath 0 setgray 10 10 100 100 rectfill
+20 20 moveto 80 80 lineto stroke
+showpage
+
+% a second page proves the device survived the page it just emitted
+0.5 setgray 30 30 60 60 rectfill
+showpage
+
+count 0 eq
+    { (SUCCESS) = }
+    { (FAILURE: operand stack unbalanced) = }
+ifelse

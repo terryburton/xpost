@@ -1477,6 +1477,21 @@ currentglobal true setglobal
             get userdict /OutputFileName 3 -1 roll put
         }{ pop pop } ifelse
 
+        graphicsdict /.exactpagedims [pwf phf] put
+        % the new device builds under its own local name -- DEVICE
+        % everywhere means the accessor reading the graphics state, and
+        % the machinery's frozen references to it must not see the
+        % half-configured newcomer.
+        % The incumbent is still whole here, and stays whole until this
+        % returns: a maker can fail at run time -- no display to open, an
+        % output path that will not take a file, dimensions that admit no
+        % buffer -- and a program that catches that error goes on painting
+        % on the device it already had. Retiring the incumbent first would
+        % leave the graphics state naming a device whose buffers are freed,
+        % so the next mark made after the caught error reads freed memory.
+        /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
+        graphicsdict /.exactpagedims undef
+
         % retire the outgoing device (Destroy frees its buffers; a
         % vector device's output was written by showpage's Emit)
         /DEVICE where { pop
@@ -1484,14 +1499,6 @@ currentglobal true setglobal
                 DEVICE dup /Destroy 2 copy known { get exec }{ pop pop pop } ifelse
             } if
         } if
-
-        graphicsdict /.exactpagedims [pwf phf] put
-        % the new device builds under its own local name -- DEVICE
-        % everywhere means the accessor reading the graphics state, and
-        % the machinery's frozen references to it must not see the
-        % half-configured newcomer
-        /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
-        graphicsdict /.exactpagedims undef
 
         % remaining keys are device features, recorded before the device
         % is finished: the process colour model arrives among them, and

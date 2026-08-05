@@ -1461,6 +1461,17 @@ test('device-destroy',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# A setpagedevice whose maker fails at run time must leave the incumbent device
+# in the graphics state, whole and painting: the program is entitled to catch
+# that error and carry on. Guards the ordering -- the replacement is built
+# before the incumbent is retired -- without which a caught failure leaves the
+# graphics state naming a device whose buffers are freed.
+test('setpagedevice-failure',
+  find_program('tests/run-setpagedevice-failure-test.sh'),
+  args: [ xpost_exe, files('tests/setpagedevice_failure_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Multi-page output: a save...showpage...restore job (the separation-plate
 # idiom, which rewinds local virtual memory between pages) must land each page
 # in its own file when the output name carries a %d, and keep only the last
