@@ -471,6 +471,17 @@ test('clip-region',
   args: [ xpost_exe, files('tests/clip_region_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What an operator leaves on the operand stack when it refuses. An error
+# raised in PostScript with signalerror ends in a stop and never reaches
+# the interpreter's handler, so the unwinding every other error gets has
+# to be asked for on that path -- without it an operator's body left its
+# working values behind, and for the machinery's own operators those are
+# structures a program then holds.
+test('error-unwind',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/error_unwind_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Graphics regression checks: operator wrapping and the wrapped-operator
 # error posture, asserted through the interpreter's private operators.
 test('graphics-regression',

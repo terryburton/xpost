@@ -36,6 +36,15 @@ end
     false setglobal
     //$error exch /errorname exch put
     //$error exch /command exch put
+    % An operator leaves nothing behind when it refuses. The stacks go
+    % back to their depths at the innermost live wrapped call, which for
+    % an operator written in PostScript drops what its body had pushed
+    % before it signalled -- values a program never made, and for the
+    % machinery's own operators structures it has no business holding.
+    % Taken before the snapshot below, so $error records the stacks a
+    % handler will actually find. Captured here rather than named,
+    % because the name moves off the dictionary stack later.
+    //.errorunwind
     //$error /newerror true put
     //$error /errorname get /VMerror ne
     //$error /recordstacks get and {

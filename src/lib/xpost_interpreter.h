@@ -79,6 +79,16 @@ int idleproc(Xpost_Context *ctx);
 
 extern int _xpost_interpreter_is_tracing;
 
+/**
+ * @brief Take the stacks back to their depths at the innermost live
+ *        wrapped-operator call.
+ *
+ * The interpreter does this itself for an error it raises. This is the
+ * same unwinding for an error a PostScript body raises with
+ * signalerror, whose stop never reaches the interpreter's handler.
+ */
+int xpost_op_errorunwind(Xpost_Context *ctx);
+
 int xpost_interpreter_init(Xpost_Interpreter *itp, const char *device);
 void xpost_interpreter_exit(Xpost_Interpreter *itp);
 

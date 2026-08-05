@@ -67,6 +67,7 @@ tests/dict_grow_test.c \
 tests/dict_homes.golden \
 tests/dsc_parse_test.c \
 tests/error_dict_test.ps \
+tests/error_unwind_test.ps \
 tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_lifetime_test.ps \

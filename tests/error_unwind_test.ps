@@ -1,0 +1,120 @@
+% An operator leaves nothing behind when it refuses.
+%
+% PLRM 3.11.1 gives the interpreter three steps at an error, the first
+% of which is "restores the operand stack to the state it was in when it
+% began executing the current object". For an operator that is one, the
+% stack a caught error leaves is the operands it was called with, and
+% nothing the body pushed on its way to failing.
+%
+% There are two ways an error is raised here: the interpreter raises its
+% own, and a body written in PostScript raises one with signalerror. The
+% second ends in a PostScript stop and does not pass through the
+% interpreter's handler, so the unwinding has to be asked for there --
+% and an operator whose body signalled used to leave its working values
+% behind. That matters beyond tidiness: the machinery's own operators
+% hold the machinery's own structures while they work, and a program
+% left holding one can read and write it.
+%
+% The operators built here are built rather than borrowed so the claim
+% is about the mechanism and not about whichever library operator
+% happens to fail this way today.
+
+/ID 1183615869 internaldict def
+/fail false def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print /fail true def } ifelse
+} def
+
+% depth left behind by a procedure that is expected to fail
+/leftby { % {proc}  .  int
+    count 1 sub /lb.d exch def
+    /lb.p exch def
+    /lb.p load stopped not { (FAIL: the probe did not fail\n) print /fail true def } if
+    count lb.d sub
+    dup 0 gt { dup { exch pop } repeat }{ } ifelse
+} def
+
+% --- an operator whose body signals with values on the stack ---------
+%
+% Three values pushed, then a refusal. The operator takes none, so a
+% conforming stack after the caught error is exactly as deep as before.
+
+/.sigleak
+    /.sigleak { 11 22 33 /.sigleak cvx /limitcheck signalerror } [ ]
+    ID /.wrapopsig get exec
+def
+{ .sigleak } leftby 0 eq
+    (an operator that signals leaves nothing it pushed) assert
+
+% and the error still reaches the program as its own
+{ .sigleak } stopped { $error /errorname get /limitcheck eq }{ false } ifelse
+    (the refusal is still reported) assert
+{ .sigleak } stopped { $error /command get dup length string cvs
+                       (.sigleak) eq }{ false } ifelse
+    (the refusal still names the operator) assert
+
+% --- how far back an operator that consumed its operands goes -------
+%
+% The frame records the depth at the call. Going back to it drops
+% whatever the body pushed beyond that depth -- but a body that consumed
+% its operands and then pushed as many again is already at that depth,
+% and what it is holding stays. So the guarantee here is that an
+% operator's refusal leaves the stack no deeper than the call found it,
+% which is not the whole of PLRM 3.11.1 step 1: restoring operands a
+% body has consumed would need them saved at entry, as the interpreter
+% saves a C operator's. Stated as it is rather than as the rule, so that
+% closing the gap is a test that changes rather than one that starts
+% passing silently.
+
+/.sigargs
+    /.sigargs { pop pop 44 55 /.sigargs cvx /rangecheck signalerror }
+    [ /anytype /anytype ] ID /.wrapopsig get exec
+def
+count /d0 exch def
+{ 1 2 .sigargs } stopped pop
+count d0 sub 2 eq
+    (a refusal leaves the stack no deeper than the call found it) assert
+count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+% --- nesting: only the calls the stop unwinds out of ------------------
+%
+% An operator that calls another which refuses. Both frames are live, so
+% the stack goes back to the outer call, not to the inner one.
+
+/.siginner
+    /.siginner { 66 77 /.siginner cvx /typecheck signalerror } [ ]
+    ID /.wrapopsig get exec
+def
+/.sigouter
+    /.sigouter { 88 99 .siginner } [ ]
+    ID /.wrapopsig get exec
+def
+{ .sigouter } leftby 0 eq
+    (a nested refusal unwinds every live call) assert
+
+% --- a refusal inside a procedure the program is running --------------
+%
+% A call whose frame sits below the caught context keeps running: what
+% the program itself pushed before calling is not the operator's to
+% take. Here the program pushes two values, then the operator refuses;
+% the two stay.
+
+count /d0 exch def
+{ 1 2 .sigleak } stopped pop
+count d0 sub 2 eq
+    (what the program pushed before the call is left alone) assert
+count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+% --- the interpreter's own errors were already unwound ----------------
+%
+% The other path, asserted alongside so that the two stay together: a C
+% operator's operands come back, which is the same clause of the same
+% rule.
+
+count /d0 exch def
+{ 1 0 div } stopped pop
+count d0 sub 2 eq
+    (the interpreter restores an operand it consumed) assert
+count d0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+fail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse

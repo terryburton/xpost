@@ -53,7 +53,7 @@
 #include "xpost_dict.h"
 #include "xpost_compat.h" /* glob_t: filenameforall state freed when unwound */
 
-//#include "xpost_interpreter.h"
+#include "xpost_interpreter.h" /* the unwinding an error raised in PostScript needs */
 #include "xpost_operator.h"
 #include "xpost_op_type.h"
 #include "xpost_op_control.h"
@@ -819,6 +819,9 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
                                            (Xpost_Op_Func)xpost_op_rundied,
                                            0, 0)))
         return VMerror;
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".errorunwind",
+                             (Xpost_Op_Func)xpost_op_errorunwind, 0, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
     INSTALL;
