@@ -48,7 +48,7 @@
         flushpage
     grestore
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % -  fill  -
 % fill current path with current color
@@ -132,7 +132,7 @@
     newpath
     } ifelse
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % -  eofill  -
 % fill using the even-odd rule
@@ -171,7 +171,7 @@
         newpath
     } ifelse
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % x y proc  .intest  bool
 % upath proc  .intest  bool
@@ -206,10 +206,10 @@
 % any of the aperture's region
 /infill [ [ /numbertype /numbertype ] [ /arraytype ] ]
     { { flattenpath .fillpolyargs } //.xpostsys /.intest get exec }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 /ineofill [ [ /numbertype /numbertype ] [ /arraytype ] ]
     { { closepath flattenpath .fillpolyargs .eospanpoly } //.xpostsys /.intest get exec }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 
 % the stroke and user-path forms wrap the two above: the subject
 % becomes the current path inside a gsave -- the stroke outline fills
@@ -219,19 +219,19 @@
 % stated; inustroke states the optional matrix that may follow.
 /instroke [ [ /numbertype /numbertype ] [ /arraytype ] ]
     { gsave strokepath infill grestore }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 /inufill [ [ /numbertype /numbertype /arraytype ] [ /arraytype /arraytype ] ]
     { gsave newpath uappend infill grestore }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 /inueofill [ [ /numbertype /numbertype /arraytype ] [ /arraytype /arraytype ] ]
     { gsave newpath uappend ineofill grestore }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 /inustroke [ [ /numbertype /numbertype /arraytype /arraytype ]
              [ /numbertype /numbertype /arraytype ]
              [ /arraytype /arraytype /arraytype ]
              [ /arraytype /arraytype ] ]
     { gsave ustrokepath infill grestore }
-    bind //.xpostsys /.defop get exec
+     //.xpostsys /.defop get exec
 
 % x1 y1 x2 y2 rect  .hairsegclip  x1' y1' x2' y2' true
 %                                 false
@@ -379,7 +379,7 @@
     newpath
     } ifelse
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % Row machinery: image data arrives from datasrc in arbitrary
 % chunks; .fill assembles exact raw rows and .rownorm unpacks a

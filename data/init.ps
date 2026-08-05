@@ -47,12 +47,25 @@ currentglobal true setglobal
 .xpostsys /.opsigs get /initclip [ ] put
 .xpostsys /.opsigs get /shfill [ /dicttype ] put
 
+% The operators whose bodies arrived already read-only. A body is bound
+% once the whole set has been promoted, which is the only moment at which
+% a call from one standard operator to another can be frozen; a body bound
+% at its definition is read-only by then, and bind ignores a read-only
+% array, so it keeps the names it was written with for the rest of the
+% run. Recording the name here rather than refusing on the spot is what
+% lets the whole set be reported at once, and what lets the check work in
+% the window before the error machinery is loaded. .finalize holds this
+% register to empty.
+.xpostsys /.boundatdef 32 dict put
+
 % /name [ specs ] { proc }  .defop  -
 % Define an operator and record the operands it takes, in one place.
 .xpostsys /.defop {
     3 dict begin
     /d.proc exch def /d.sig exch def /d.name exch def
     //.xpostsys /.opsigs get d.name d.sig put
+    /d.proc load wcheck not
+        { //.xpostsys /.boundatdef get d.name true put } if
     d.name /d.proc load
     end
     def
@@ -108,7 +121,7 @@ userdict /.internaldict 256 dict put
     1183615869 eq { //.internaldict }{
         /internaldict cvx /invalidaccess signalerror
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % Debug aids and the internal context-state markers are C operators, not part of
 % the language, and must not sit in a program's lookup path. The machinery
@@ -312,7 +325,7 @@ setglobal
 /= [ /anytype ] {
     //=print exec
     (\n) print
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 %dumpnames dumpvm
 %debugloadon
@@ -826,7 +839,7 @@ currentglobal true setglobal
     end
     $error /doclose false put
     stop
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 setglobal
 
 (/qsort.ps) //.xpostsys /.loadmodule get exec
@@ -1637,6 +1650,19 @@ currentglobal true setglobal
     n 0 eq
     end
     (every operator that states its operands must be one after the promotion)
+    //.xpostsys /.mustbe get exec
+
+    % The third post-condition, and the one that makes the binding below
+    % worth doing. A body bound at its own definition is read-only before
+    % any of the names it calls answers with an operator, and bind ignores
+    % a read-only array -- so no later pass can finish it and it keeps
+    % those names for the rest of the run, which is a program's
+    % redefinition waiting to be picked up from inside a standard
+    % operator. .defop records any body that arrives read-only; holding
+    % that register to empty is what stops a bind being put back at a
+    % definition, where it reads like caution and costs the opposite.
+    //.xpostsys /.boundatdef get length 0 eq
+    (no operator body may be bound before the promotion binds it)
     //.xpostsys /.mustbe get exec
 
     systemdict //.xpostsys /.bindscope get exec

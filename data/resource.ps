@@ -95,7 +95,7 @@ setglobal
     dup //.xpostsys /.instof get exec pop     % the category must exist either way
     currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse
     2 index 2 index put exch pop
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % key category  .loadresource  bool
 % On a findresource miss, try to load the named instance from the search
@@ -157,7 +157,7 @@ setglobal
     end
     exit
   } loop
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % key category  resourcestatus  status size true | false
 /resourcestatus [ /anytype /nametype ] {
@@ -189,7 +189,7 @@ setglobal
             { pop pop pop false }
             { get exch known { 0 0 true }{ false } ifelse } ifelse
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % key category  undefineresource  -
 /undefineresource [ /anytype /nametype ] {
@@ -202,7 +202,7 @@ setglobal
     }{
         pop pop pop //.xpostsys /.instof get exec exch undef
     } ifelse
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % string template  .wcmatch  bool
 % Match a name against a resourceforall template: ? matches any one
@@ -281,7 +281,7 @@ setglobal
         }{ pop } ifelse
     } forall
     end
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % In-RIP trapping (PLRM 6.3). The trapping operators are defined in the
 % Trapping procedure set; a program reaches them with

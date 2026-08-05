@@ -72,7 +72,7 @@ begin
         end exec .gscratch /.pfdict get begin
     } loop
 end
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % emit the held-back element, drawn to the endpoint on the stack;
 % reversal delays each element by one so that its command pairs with
@@ -147,7 +147,7 @@ begin
         } loop
     } if
 end
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % PLRM 3ed, 667:
 % The offset operand can be thought of as the "phase" of the dash pattern relative to
@@ -646,13 +646,13 @@ setglobal
         .gscratch /strokedict get /docaps get exec
         end
     } if
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 /clippath [ ] {
     graphicsdict /currgstate get
         dup /clipregion get
         /currpath exch put
-} bind //.xpostsys /.defop get exec
+} //.xpostsys /.defop get exec
 
 % pathbbox is implemented in xpost_op_path.c
 
