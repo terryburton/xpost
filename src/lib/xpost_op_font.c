@@ -1436,12 +1436,15 @@ void _draw_bitmap(Xpost_Context *ctx,
     int i, j;
     const unsigned char *tmp;
     unsigned int pix;
-    Xpost_Object exec_name;
+    Xpost_Object exec_op;
 
     tmp = buffer;
-    /* interned once: re-interning it for every set pixel dominates the
-       glyph loop when putpix is a procedure rather than an operator */
-    exec_name = xpost_name_cons(ctx, "exec");
+    /* The operator itself, not its name: a name pushed for execution is
+       resolved against the dictionary stack at that moment, so a program
+       that has defined /exec would supply the body instead. Resolved once
+       because doing so for every set pixel dominates the glyph loop when
+       putpix is a procedure rather than an operator. */
+    exec_op = xpost_operator_cons(ctx, "exec", NULL, 0, 0);
     XPOST_LOG_INFO("bitmap rows = %d, bitmap width = %d", rows, width);
     XPOST_LOG_INFO("bitmap pitch = %d", pitch);
     XPOST_LOG_INFO("bitmap pixel_mode = %d", pixel_mode);
@@ -1500,7 +1503,7 @@ void _draw_bitmap(Xpost_Context *ctx,
                 else
                 {
                     xpost_stack_push(ctx->lo, ctx->os, putpix);
-                    xpost_stack_push(ctx->lo, ctx->es, exec_name);
+                    xpost_stack_push(ctx->lo, ctx->es, exec_op);
                 }
             }
         }
@@ -1784,7 +1787,8 @@ int _show_glyph(Xpost_Context *ctx,
             else
             {
                 xpost_stack_push(ctx->lo, ctx->os, ts->fillrect);
-                xpost_stack_push(ctx->lo, ctx->es, xpost_name_cons(ctx, "exec"));
+                xpost_stack_push(ctx->lo, ctx->es,
+                                 xpost_operator_cons(ctx, "exec", NULL, 0, 0));
             }
         }
     }
@@ -1907,27 +1911,43 @@ int _get_current_point (Xpost_Context *ctx,
    run once its glyphs are painted: it restores the current point in
    user space and flushes the page. Elements 0 and 1 hold the position,
    rewritten by _show_finalize_pos with the point the operator ended
-   at. The array is this function's own, so only allocation failure can
-   stop it being filled. */
+   at.
+
+   The procedure runs after the show operator has returned, with the
+   program's own dictionaries on the dictionary stack, so it holds what
+   it means to call rather than the names of it: an executable name here
+   would be resolved then, and a program that had defined /moveto would
+   have its own procedure called to finish the show. itransform and
+   moveto are operators and go in as operator objects; flushpage is a
+   procedure, so its value is taken from systemdict and run by the exec
+   that follows it. */
 static
 int _show_finalize_cons(Xpost_Context *ctx,
                         real xpos,
                         real ypos,
                         Xpost_Object *out)
 {
-    Xpost_Object f = xpost_object_cvx(xpost_array_cons(ctx, 5));
+    Xpost_Object f = xpost_object_cvx(xpost_array_cons(ctx, 6));
+    Xpost_Object flushpage;
     int ret;
 
     if (xpost_object_get_type(f) == nulltype)
         return VMerror;
+    flushpage = xpost_dict_get(ctx,
+                               xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
+                               xpost_name_cons(ctx, "flushpage"));
+    if (xpost_object_get_type(flushpage) == invalidtype
+     || xpost_object_get_type(flushpage) == nulltype)
+        return undefined;
     if ((ret = xpost_array_put(ctx, f, 0, xpost_real_cons(xpos))) != 0
      || (ret = xpost_array_put(ctx, f, 1, xpost_real_cons(ypos))) != 0
      || (ret = xpost_array_put(ctx, f, 2,
-             xpost_object_cvx(xpost_name_cons(ctx, "itransform")))) != 0
+             xpost_operator_cons_opcode(ctx->opcode_shortcuts.itransform))) != 0
      || (ret = xpost_array_put(ctx, f, 3,
-             xpost_object_cvx(xpost_name_cons(ctx, "moveto")))) != 0
-     || (ret = xpost_array_put(ctx, f, 4,
-             xpost_object_cvx(xpost_name_cons(ctx, "flushpage")))) != 0)
+             xpost_operator_cons(ctx, "moveto", NULL, 0, 0))) != 0
+     || (ret = xpost_array_put(ctx, f, 4, flushpage)) != 0
+     || (ret = xpost_array_put(ctx, f, 5,
+             xpost_operator_cons(ctx, "exec", NULL, 0, 0))) != 0)
         return ret;
     *out = f;
     return 0;
