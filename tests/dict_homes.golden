@@ -29,6 +29,9 @@
 .xpostsys /.c255
 .xpostsys /.catinstances
 .xpostsys /.clipspans
+.xpostsys /.setclipregion
+.xpostsys /.clipregionpoly
+.xpostsys /.clipmeet
 .xpostsys /ColorConversion
 .xpostsys /cpath
 .xpostsys /crossdashbound
@@ -154,6 +157,7 @@ gstate /bluetransfer
 gstate /currpath
 gstate /clipregion
 gstate /clipsource
+gstate /clipcache
 gstate /flat
 gstate /linewidth
 gstate /linecap

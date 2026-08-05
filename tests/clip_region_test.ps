@@ -1,0 +1,293 @@
+% The clip region: what a program may do to it, and what the machinery
+% says about it. Run through `xpost -d null` by run-ps-test.sh: prints
+% SUCCESS iff every assertion holds.
+%
+% The clip is one value with several faces -- the resolved region the
+% painters intersect against, and the path shape a device that clips for
+% itself is handed. The faces have to agree, and neither of them may be
+% reachable for a program to write.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/assertnear { % val expected (name) . -
+    3 1 roll sub abs 0.01 lt exch assert
+} bind def
+
+% --- the region is handed out by value, not by reference ---------------
+% clippath replaces the current path with the clip region's boundary.
+% Appending to a path writes into its storage while there is room and
+% moves to fresh storage only when it runs out, so a path built on from
+% here reaches into the live clip -- or does not, according to how much
+% spare room the region's storage happened to have.
+
+initgraphics
+newpath 100 100 moveto 200 100 lineto 200 200 lineto 100 200 lineto
+closepath clip
+
+clippath pathbbox
+/by1 exch def /bx1 exch def /by0 exch def /bx0 exch def
+bx0 100 (clippath reports the clip's left edge) assertnear
+by0 100 (clippath reports the clip's bottom edge) assertnear
+bx1 200 (clippath reports the clip's right edge) assertnear
+by1 200 (clippath reports the clip's top edge) assertnear
+
+% build on the path clippath handed over
+500 500 lineto
+
+clippath pathbbox
+/ay1 exch def /ax1 exch def /ay0 exch def /ax0 exch def
+ax0 bx0 (the clip's left edge survives a path built on clippath) assertnear
+ay0 by0 (the clip's bottom edge survives a path built on clippath) assertnear
+ax1 bx1 (the clip's right edge survives a path built on clippath) assertnear
+ay1 by1 (the clip's top edge survives a path built on clippath) assertnear
+
+% --- the clip stack is pushed and popped, not published ---------------
+% clipsave and cliprestore each take no operands and return no results
+% (PLRM 8.2). An operator that leaves its own workings on the operand
+% stack costs its caller nothing until the caller reads one item too far,
+% and then the mistake is charged to whatever reads it.
+
+newpath
+clear clipsave
+count 0 eq (clipsave returns nothing) assert
+clear cliprestore
+count 0 eq (cliprestore returns nothing) assert
+clear clipsave clipsave cliprestore cliprestore
+count 0 eq (a run of clip stack operations returns nothing) assert
+clear
+
+% --- the shape a device is handed is the clip that is in force ---------
+% A device that clips for itself (ClipPath) is given the clip as a path
+% rather than having the fill cut to pixel-band spans first. What it is
+% given has to be the clip the painters are enforcing: a device told an
+% older shape writes that shape into its output, which no raster render
+% of the same page shows.
+%
+% The device below records nothing but the answer to that question. It
+% is asked on every call, so a shape handed over by any route is held to
+% it, and a counter says how many times the question was actually put --
+% a run in which no device was ever told anything would otherwise pass
+% by never being asked.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/DEV 300 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+    /clipcalls 0 def
+    /clipagreed true def
+
+    % path IMAGE  .  -   ; adopt a clip shape
+    /ClipPath {
+    begin
+        /clipcalls clipcalls 1 add def
+        % the path walker and pathbbox read the current path, so stand
+        % the shape in for the measurement and put the working path back
+        graphicsdict /currgstate get /currpath get
+        exch
+        graphicsdict /currgstate get exch /currpath exch put
+        pathbbox
+        /gy1 exch def /gx1 exch def /gy0 exch def /gx0 exch def
+        graphicsdict /currgstate get exch /currpath exch put
+        % the region the painters would enforce
+        gsave clippath pathbbox grestore
+        /ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
+        gx0 rx0 sub abs 0.01 lt
+        gy0 ry0 sub abs 0.01 lt and
+        gx1 rx1 sub abs 0.01 lt and
+        gy1 ry1 sub abs 0.01 lt and
+        not { /clipagreed false def } if
+    end } bind def
+
+    % gray IMAGE  .  -   ; take the whole path
+    /FillPath {
+    begin
+        /pathfills pathfills 1 add def
+    end
+        pop
+    } bind def
+    /pathfills 0 def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% a path reaching outside whatever region is in force, so the fill never
+% takes the trivial-clip route and the question is always put
+/wide { newpath -50 -50 moveto 350 -50 lineto 350 350 lineto -50 350 lineto
+        closepath } bind def
+/boxpath { % x0 y0 x1 y1  .  -
+    4 dict begin
+    /cy1 exch def /cx1 exch def /cy0 exch def /cx0 exch def
+    newpath
+    cx0 cy0 moveto cx1 cy0 lineto cx1 cy1 lineto cx0 cy1 lineto closepath
+    end
+} bind def
+
+% the control: a clip taken from the whole page is a single path, and a
+% fill under it hands the device that path
+initgraphics
+20 20 280 280 boxpath clip
+wide 0 setgray fill
+DEV /clipcalls get 0 gt (a fill under a path clip asks the device to clip) assert
+DEV /clipagreed get (the control clip is the region in force) assert
+
+% initclip: the region becomes the whole page and the shape must follow
+initgraphics
+20 20 280 280 boxpath clip
+initclip
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (initclip leaves no older shape behind) assert
+
+% eoclip: the region becomes the even-odd interior, which is resolved to
+% pixel-band spans and is no single path a nonzero clip could carry
+initgraphics
+20 20 280 280 boxpath clip
+100 100 150 150 boxpath eoclip
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (eoclip leaves no older shape behind) assert
+
+% cliprestore: the region goes back to what clipsave took down, and so
+% must the shape
+initgraphics
+clipsave
+20 20 280 280 boxpath clip
+cliprestore
+DEV /clipcalls 0 put
+DEV /clipagreed true put
+wide 0 setgray fill
+DEV /clipagreed get (cliprestore leaves no older shape behind) assert
+
+% --- what is cached about the clip belongs to the clip ----------------
+% The resolved form of the region is worked out once and kept, because
+% every mark painted under a clip is met against the same region. What
+% is kept therefore has to belong to the region and not to the moment: a
+% clip taken inside a gsave, or a graphics state set from one taken
+% earlier, has to leave the outer clip's answer where it was.
+%
+% A region resolved to pixel-band spans is used throughout, since that is
+% the route the resolved form is kept for; a rectangular region takes the
+% shape route instead and would leave the question unasked.
+
+/DEV2 300 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV2 begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV2 put
+graphicsdict /currgstate get /device DEV2 put
+initgraphics
+
+/inkat { % ux uy  .  bool
+    transform floor cvi exch floor cvi exch
+    DEV2 dup /GetPix get exec 128 lt
+} bind def
+
+% a clip inside a gsave, and the clip that comes back after it
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+gsave
+    120 120 140 140 boxpath eoclip
+    wide 0 setgray fill
+grestore
+erasepage
+wide 0 setgray fill
+105 105 inkat (a fill after grestore reaches the restored clip) assert
+250 250 inkat not (a fill after grestore stays inside the restored clip) assert
+
+% and the clip a graphics state carries, set again after another was taken
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+/gsouter gstate currentgstate def
+120 120 140 140 boxpath eoclip
+wide 0 setgray fill
+gsouter setgstate
+erasepage
+wide 0 setgray fill
+105 105 inkat (a fill after setgstate reaches that state's clip) assert
+250 250 inkat not (a fill after setgstate stays inside that state's clip) assert
+
+% and the clip inside the gsave is the one that was asked for
+initgraphics erasepage
+100 100 200 200 boxpath eoclip
+gsave
+    120 120 140 140 boxpath eoclip
+    wide 0 setgray fill
+    125 125 inkat (a fill inside the gsave reaches its own clip) assert
+    105 105 inkat not (a fill inside the gsave stays inside its own clip) assert
+grestore
+
+% --- a region painted in pieces covers what one fill covers -----------
+% The rule two device regions meet by is stated at .regionmeet, and this
+% is the case that settles a boundary question about it. A tiling pattern
+% paints its region as a clip and then meets every cell against it, so
+% the pixels it ends up marking are the region intersection's answer
+% several times over; a solid fill of the same path meets nothing and
+% marks the pixels PLRM 7.5.1 asks for directly. The two have to agree,
+% and the coordinates below are deliberately fractional, since a rule
+% that snapped where it should not would agree everywhere else.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/DEV3 96 96 .privatedict /newPGMIMAGEdevice get exec def
+DEV3 begin
+    /defaultmatrix [ 1 0 0 -1 0 96 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV3 put
+graphicsdict /currgstate get /device DEV3 put
+
+/snapshot { % -  .  string   (one byte per pixel, 1 where inked)
+    9216 string
+    0 1 95 { /sy exch def
+        0 1 95 { /sx exch def
+            dup sy 96 mul sx add
+            sx sy DEV3 dup /GetPix get exec 128 lt { 1 }{ 0 } ifelse
+            put
+        } for
+    } for
+} bind def
+/inkcount { % string  .  n
+    0 exch { add } forall
+} bind def
+
+/shapes {
+    newpath 10.3 12.7 moveto 70.4 12.7 lineto
+            70.4 60.2 lineto 10.3 60.2 lineto closepath fill
+    newpath 20 65 moveto 85.6 72.25 lineto 45.5 92.9 lineto closepath fill
+} bind def
+
+initgraphics erasepage
+0 setgray shapes
+/solidink snapshot def
+
+initgraphics erasepage
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 8 8] /XStep 8 /YStep 8
+   /PaintProc { begin 0 setgray 0 0 8 8 rectfill end } >>
+matrix makepattern
+/Pattern setcolorspace setcolor
+shapes
+/pattink snapshot def
+
+solidink inkcount 0 gt (the solid fill marked something) assert
+solidink pattink eq
+    (a pattern fill covers the pixels a solid fill of the same path covers)
+    assert
+
+count 0 eq (the suite leaves the operand stack empty) assert
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

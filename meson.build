@@ -426,6 +426,22 @@ test('semantics',
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The clip is one value wearing several faces, and one procedure writes
+# all of them. A site that sets one and not the rest leaves the others
+# describing a clip that has gone, which no rasterised render disagrees
+# with -- so the rule is held structurally rather than by a render.
+test('check-clip-writer',
+  find_program('tests/check-clip-writer.sh'),
+  args: [ meson.current_source_dir() ])
+
+# The clip region: what a program may do to it, and whether the faces of
+# the one clip value -- the resolved region and the path shape a device
+# that clips for itself is handed -- still describe the same clip.
+test('clip-region',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/clip_region_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Graphics regression checks: operator wrapping and the wrapped-operator
 # error posture, asserted through the interpreter's private operators.
 test('graphics-regression',

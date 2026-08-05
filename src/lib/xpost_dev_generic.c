@@ -756,33 +756,191 @@ int _rspans_to_poly(Xpost_Context *ctx,
     return 0;
 }
 
-/* subjectpoly clippoly  .clipfillpoly  spanpoly
-   Intersect two filled regions, each a null-separated polygon array in
-   the FillPoly argument format, under the nonzero winding rule, and
-   return the intersection as one such array of pixel-band rectangles.
-   This is the exact boolean the clip machinery needs for regions the
-   half-plane clipper cannot express -- many disjoint windows, concave
-   boundaries, counters -- resolved span-by-span at device resolution:
-   both operands scan-convert to winding-resolved band extents, and
-   each band contributes the pairwise overlaps of its extents. */
-static
-int _clipfillpoly(Xpost_Context *ctx,
-                  Xpost_Object subj,
-                  Xpost_Object clip)
+/* The resolved form of a device region, kept against the serial the
+   graphics state carries for the clip it belongs to.
+ *
+ * Resolving a region is the expensive half of meeting one: the whole
+ * region scan-converts however small the subject is. A tiling pattern
+ * meets every cell and every mark inside it against the same region, so
+ * without this the cost of one fill grows with the region rather than
+ * with what is being painted.
+ *
+ * Two are kept rather than one because the clip alternates: the pattern
+ * machinery clips to each cell inside a gsave and drops back to the
+ * region outside it between cells, so a single entry would be evicted by
+ * the cell and refilled from the whole region on the next one. The entry
+ * that has gone longest without a hit is the one replaced.
+ *
+ * The key is a serial from _newregionserial below, which never repeats
+ * within a run, so an entry can only ever answer for the region it was
+ * built from. The entity the clip array occupied is compared as well, so
+ * that even a serial reissued after the counter is restarted cannot
+ * match an entry built from something else. Nothing here holds a
+ * reference into VM: the entity number is compared, never followed. */
+#define REGION_MEMO 2
+static struct
 {
-    struct rspan *S = NULL, *C = NULL, *out = NULL;
+    int serial;
+    int ent;
+    unsigned int off, sz;
+    struct rspan *rsp;
+    int n;
+    unsigned long used;
+} _region_memo[REGION_MEMO];
+static unsigned long _region_memo_clock;
+static int _region_serial_next;
+
+static
+void _region_memo_flush(void)
+{
+    int i;
+
+    for (i = 0; i < REGION_MEMO; i++)
+    {
+        free(_region_memo[i].rsp);
+        _region_memo[i].rsp = NULL;
+        _region_memo[i].serial = 0;
+        _region_memo[i].n = 0;
+        _region_memo[i].used = 0;
+    }
+    _region_memo_clock = 0;
+    _region_serial_next = 1;
+}
+
+/* -  .newregionserial  int
+   The serial to name the next device region by. The counter only ever
+   moves forward, so no two regions of a run are named alike and a
+   resolved region cached against a serial cannot be taken for a later
+   region that happened to be given the same number. A counter kept in
+   the graphics state could not promise that: restore would wind it back
+   and the numbers after it would be handed out a second time. */
+static
+int _newregionserial(Xpost_Context *ctx)
+{
+    if (_region_serial_next <= 0)
+    {
+        /* the counter has run its range: nothing cached can be told
+           apart from what the reissued numbers will name, so start over
+           with nothing cached */
+        _region_memo_flush();
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(_region_serial_next));
+    return _region_serial_next++, 0;
+}
+
+static
+int _region_memo_find(int serial, Xpost_Object clip)
+{
+    int i;
+
+    for (i = 0; i < REGION_MEMO; i++)
+        if (_region_memo[i].rsp
+            && _region_memo[i].serial == serial
+            && _region_memo[i].ent == xpost_object_get_ent(clip)
+            && _region_memo[i].off == clip.comp_.off
+            && _region_memo[i].sz == clip.comp_.sz)
+        {
+            _region_memo[i].used = ++_region_memo_clock;
+            return i;
+        }
+    return -1;
+}
+
+/* take ownership of rsp in the entry longest unused */
+static
+void _region_memo_store(int serial, Xpost_Object clip,
+                        struct rspan *rsp, int n)
+{
+    int i, victim = 0;
+
+    for (i = 1; i < REGION_MEMO; i++)
+        if (_region_memo[i].used < _region_memo[victim].used)
+            victim = i;
+    free(_region_memo[victim].rsp);
+    _region_memo[victim].serial = serial;
+    _region_memo[victim].ent = xpost_object_get_ent(clip);
+    _region_memo[victim].off = clip.comp_.off;
+    _region_memo[victim].sz = clip.comp_.sz;
+    _region_memo[victim].rsp = rsp;
+    _region_memo[victim].n = n;
+    _region_memo[victim].used = ++_region_memo_clock;
+}
+
+/* subjectpoly clippoly serial  .regionmeet  spanpoly
+ *
+ * THE intersection of two device regions. Each operand is a
+ * null-separated polygon array in the FillPoly argument format; the
+ * result is one such array of pixel-band rectangles, which every
+ * consumer downstream treats by either insideness rule because the
+ * rectangles are winding-uniform.
+ *
+ * THE BOUNDARY CONVENTION, stated once. A device region is the set of
+ * pixel-row bands it reaches and, within each band, the real x extent it
+ * covers there. Both operands are scan-converted to that form under the
+ * nonzero winding rule and the any-part-of-pixel rule of PLRM 7.5.1
+ * ("a shape is scan-converted by painting any pixel whose square region
+ * intersects the shape, no matter how small the intersection is"). They
+ * then meet band by band, taking the later left edge and the earlier
+ * right edge of each pair of overlapping extents.
+ *
+ * So the result is snapped to whole pixel rows in y and left continuous
+ * in x. PLRM 7.5.1 states the rule for clipping in both axes at once --
+ * "the clipping region consists of the set of pixels that would be
+ * included by a fill operation. Subsequent painting operations affect a
+ * region that is the intersection of the set of pixels defined by the
+ * clipping region with the set of pixels for the region to be painted"
+ * -- and in y that is exactly what this computes, because expanding each
+ * operand to whole rows before meeting them is the same as meeting the
+ * row sets. In x it differs in one case only: two regions that reach the
+ * same pixel column without their real extents overlapping inside it are
+ * a meeting under the pixel-set rule and not under this one. The columns
+ * a surviving extent covers are otherwise the same either way, because
+ * floor and ceiling commute with the max and min taken here.
+ *
+ * A boundary question about this operation is settled by PLRM 7.5.1 and
+ * by self-consistency: a region painted in pieces -- a pattern's cells,
+ * a shading's strips -- must cover exactly the pixels one solid fill of
+ * the same path covers. The half-plane clipper in clip.ps answers a
+ * different question and is not a substitute; its comment says so. */
+static
+int _regionmeet(Xpost_Context *ctx,
+                Xpost_Object subj,
+                Xpost_Object clip,
+                Xpost_Object serial)
+{
+    struct rspan *S = NULL, *out = NULL;
+    struct rspan *C = NULL;
+    int Cowned = 1;
     int nS, nC, nout, outcap;
     int si, ci;
+    int sn;
     int code;
 
     code = _poly_resolved_spans(ctx, subj, &S, &nS, 0);
     if (code)
         return code;
-    code = _poly_resolved_spans(ctx, clip, &C, &nC, 0);
-    if (code)
+
+    sn = serial.int_.val;
+    si = sn > 0 ? _region_memo_find(sn, clip) : -1;
+    if (si >= 0)
     {
-        free(S);
-        return code;
+        C = _region_memo[si].rsp;
+        nC = _region_memo[si].n;
+        Cowned = 0;
+    }
+    else
+    {
+        code = _poly_resolved_spans(ctx, clip, &C, &nC, 0);
+        if (code)
+        {
+            free(S);
+            return code;
+        }
+        if (sn > 0)
+        {
+            _region_memo_store(sn, clip, C, nC);
+            Cowned = 0;
+        }
     }
 
     nout = 0;
@@ -812,7 +970,7 @@ int _clipfillpoly(Xpost_Context *ctx,
                     if (code)
                     {
                         free(S);
-                        free(C);
+                        if (Cowned) free(C);
                         free(out);
                         return code;
                     }
@@ -829,7 +987,8 @@ int _clipfillpoly(Xpost_Context *ctx,
         }
     }
     free(S);
-    free(C);
+    if (Cowned)
+        free(C);
 
     code = _rspans_to_poly(ctx, out, nout);
     free(out);
@@ -2844,7 +3003,10 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 0, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 0, 2, arraytype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".clipfillpoly", (Xpost_Op_Func)_clipfillpoly, 1, 2, arraytype, arraytype); INSTALL;
+    _region_memo_flush();
+    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 1, 3,
+                             arraytype, arraytype, integertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,

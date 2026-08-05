@@ -133,14 +133,17 @@ currentglobal true setglobal
 /.patternclip { % spanpoly-producing-preamble is the caller's
     newpath
     //.xpostsys /.polytopath get exec
-    graphicsdict /currgstate get
-    dup /currpath get /clipregion exch put
+    % the region is pixel-band spans, which no single path describes: a
+    % device that clips for itself has no shape to be given, and the one
+    % the caller's own clip left behind is not this one
+    graphicsdict /currgstate get /currpath get
+    null //.xpostsys /.setclipregion get exec
 } bind def
 
 /.patternfill {
     gsave
     flattenpath
-    .fillpolyargs //.xpostsys /.clippolyargs get exec .clipfillpoly
+    .fillpolyargs //.xpostsys /.clipmeet get exec
     //.patternclip exec
     //.patterntile exec
     grestore
@@ -151,7 +154,7 @@ currentglobal true setglobal
     gsave
     flattenpath
     .fillpolyargs .eospanpoly
-    //.xpostsys /.clippolyargs get exec .clipfillpoly
+    //.xpostsys /.clipmeet get exec
     //.patternclip exec
     //.patterntile exec
     grestore
