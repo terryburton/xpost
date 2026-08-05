@@ -2641,8 +2641,7 @@ run:
 
     if (ctx->job_snapshots)
         xpost_save_restore_snapshot(ctx->gl);
-    xpost_memory_table_get_addr(ctx->lo,
-                                XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
+    vs = xpost_memory_save_stack_adr(ctx->lo);
     if (xpost_object_get_type(lsav) == savetype)
     {
         for ( llev = xpost_stack_count(ctx->lo, vs);

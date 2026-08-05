@@ -88,8 +88,7 @@ int xpost_name_init(Xpost_Context *ctx)
     tab = &ctx->gl->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
-    xpost_memory_table_get_addr(ctx->gl,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &nstk);
+    nstk = xpost_memory_name_stack_adr(ctx->gl);
     xpost_stack_push(ctx->gl, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
     assert (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->gl, nstk, 0)) == XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME);
 
@@ -119,8 +118,7 @@ int xpost_name_init(Xpost_Context *ctx)
     tab = &ctx->lo->table; //recalc pointer
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr = t;
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
-    xpost_memory_table_get_addr(ctx->lo,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &nstk);
+    nstk = xpost_memory_name_stack_adr(ctx->lo);
     xpost_stack_push(ctx->lo, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
     //assert (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) == XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME);
     if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
@@ -201,8 +199,7 @@ int tstinsert(Xpost_Memory_File *mem,
             p = (void *)(mem->base + tadr); //recalc pointer
             p->eq = t;
         }else {
-            xpost_memory_table_get_addr(mem,
-                    XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &nstk);
+            nstk = xpost_memory_name_stack_adr(mem);
             p->eq = xpost_stack_count(mem, nstk); /* payload at the terminator */
         }
     } else {
@@ -228,8 +225,7 @@ unsigned int addname(Xpost_Context *ctx,
     unsigned int u;
     Xpost_Object str;
 
-    xpost_memory_table_get_addr(mem,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &names);
+    names = xpost_memory_name_stack_adr(mem);
     u = xpost_stack_count(mem, names);
 
     //xpost_memory_file_dump(ctx->gl);
@@ -266,16 +262,13 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
-    xpost_memory_table_get_addr(ctx->lo,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
+    tstk = xpost_memory_name_tree_adr(ctx->lo);
     u = tstsearch(ctx->lo, tstk, s, n);
     if (!u) {
-        xpost_memory_table_get_addr(ctx->gl,
-                XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
+        tstk = xpost_memory_name_tree_adr(ctx->gl);
         u = tstsearch(ctx->gl, tstk, s, n);
         if (!u) {
             Xpost_Memory_File *mem = ctx->vmmode==GLOBAL?ctx->gl:ctx->lo;
-            Xpost_Memory_Table *tab = &mem->table;
             char inline_copy[256];
             char *chars = inline_copy;
 
@@ -297,7 +290,7 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
             }
             memcpy(chars, s, n);
 
-            ret = tstinsert(mem, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, chars, n, &t);
+            ret = tstinsert(mem, xpost_memory_name_tree_adr(mem), chars, n, &t);
             if (ret)
             {
                 //this can only be a VMerror
@@ -305,8 +298,7 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
                     free(chars);
                 return invalid;
             }
-            tab = &mem->table; //recalc pointer
-            tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = t;
+            xpost_memory_set_name_tree_adr(mem, t);
             u = addname(ctx, chars, n); // obeys vmmode
             if (chars != inline_copy)
                 free(chars);
@@ -346,22 +338,19 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
     unsigned int tstk;
     int ret;
 
-    xpost_memory_table_get_addr(ctx->gl,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE, &tstk);
+    tstk = xpost_memory_name_tree_adr(ctx->gl);
     u = tstsearch(ctx->gl, tstk, s, (unsigned int)strlen(s));
     if (!u) {
         unsigned int vmmode = ctx->vmmode;
-        Xpost_Memory_Table *tab = &ctx->gl->table;
 
         ctx->vmmode = GLOBAL;
-        ret = tstinsert(ctx->gl, tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr, s, (unsigned int)strlen(s), &t);
+        ret = tstinsert(ctx->gl, xpost_memory_name_tree_adr(ctx->gl), s, (unsigned int)strlen(s), &t);
         if (ret)
         {
             ctx->vmmode = vmmode;
             return invalid;
         }
-        tab = &ctx->gl->table; //recalc pointer
-        tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = t;
+        xpost_memory_set_name_tree_adr(ctx->gl, t);
         u = addname(ctx, s, (unsigned int)strlen(s));
         ctx->vmmode = vmmode;
     }
@@ -379,8 +368,7 @@ Xpost_Object xpost_name_get_string(Xpost_Context *ctx,
     Xpost_Memory_File *mem = xpost_context_select_memory(ctx, n);
     unsigned int names;
     Xpost_Object str;
-    xpost_memory_table_get_addr(mem,
-            XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &names);
+    names = xpost_memory_name_stack_adr(mem);
     str = xpost_stack_bottomup_fetch(mem, names, n.mark_.padw);
     //str.tag |= XPOST_OBJECT_TAG_DATA_FLAG_BANK;
     return str;
@@ -430,26 +418,26 @@ int main(void)
 
     printf("pop ");
     xpost_object_dump(xpost_name_cons(ctx, "pop"));
-    printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
-    //xpost_stack_dump(ctx->gl, xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)); puts("");
+    printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
+    //xpost_stack_dump(ctx->gl, xpost_memory_name_stack_adr(ctx->gl)); puts("");
 
     printf("apple ");
     xpost_object_dump(xpost_name_cons(ctx, "apple"));
     xpost_object_dump(xpost_name_cons(ctx, "apple"));
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
-    //xpost_stack_dump(ctx->gl, xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)); puts("");
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
+    //xpost_stack_dump(ctx->gl, xpost_memory_name_stack_adr(ctx->gl)); puts("");
 
     printf("banana ");
     xpost_object_dump(xpost_name_cons(ctx, "banana"));
     xpost_object_dump(xpost_name_cons(ctx, "banana"));
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
-    //xpost_stack_dump(ctx->gl, xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)); puts("");
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
+    //xpost_stack_dump(ctx->gl, xpost_memory_name_stack_adr(ctx->gl)); puts("");
 
     printf("currant ");
     xpost_object_dump(xpost_name_cons(ctx, "currant"));
     xpost_object_dump(xpost_name_cons(ctx, "currant"));
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
-    //xpost_stack_dump(ctx->gl, xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)); puts("");
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
+    //xpost_stack_dump(ctx->gl, xpost_memory_name_stack_adr(ctx->gl)); puts("");
 
     printf("apple ");
     xpost_object_dump(xpost_name_cons(ctx, "apple"));
@@ -458,11 +446,11 @@ int main(void)
     printf("currant ");
     xpost_object_dump(xpost_name_cons(ctx, "currant"));
     printf("date ");
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
     xpost_object_dump(xpost_name_cons(ctx, "date"));
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
-    xpost_stack_dump(ctx->gl, xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)); puts("");
-    //printf("NAMES at %u\n", xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK));
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
+    xpost_stack_dump(ctx->gl, xpost_memory_name_stack_adr(ctx->gl)); puts("");
+    //printf("NAMES at %u\n", xpost_memory_name_stack_adr(ctx->gl));
     printf("elderberry ");
     xpost_object_dump(xpost_name_cons(ctx, "elderberry"));
 

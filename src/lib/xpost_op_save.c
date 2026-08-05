@@ -67,9 +67,8 @@ int Zsave(Xpost_Context *ctx)
        another level's bookkeeping */
     Xpost_Object v;
 
-    if (xpost_memory_table_get_addr(ctx->lo,
-            XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs)
-        && xpost_stack_count(ctx->lo, vs) >= 255)
+    vs = xpost_memory_save_stack_adr(ctx->lo);
+    if (xpost_stack_count(ctx->lo, vs) >= 255)
         return limitcheck;
     v = xpost_save_create_snapshot_object(ctx->lo);
     /* the snapshot answers null when it could not be recorded, and a
@@ -92,16 +91,9 @@ int Vrestore(Xpost_Context *ctx,
 {
     int z;
     unsigned int vs;
-    int ret;
     ++ctx->namebind_gen; /* restored dicts may change bindings */
 
-    ret = xpost_memory_table_get_addr(ctx->lo,
-                                      XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot retrieve address for save stack");
-        return VMerror;
-    }
+    vs = xpost_memory_save_stack_adr(ctx->lo);
     z = xpost_stack_count(ctx->lo, vs);
     while(z > V.save_.lev)
     {
@@ -266,8 +258,7 @@ int Zvmstatus(Xpost_Context *ctx)
 {
     unsigned int vs;
 
-    xpost_memory_table_get_addr(ctx->lo,
-                                XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
+    vs = xpost_memory_save_stack_adr(ctx->lo);
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xpost_stack_count(ctx->lo, vs)));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->used));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->max));
@@ -280,11 +271,8 @@ int xpost_oper_init_save_ops(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
 
     op = xpost_operator_cons(ctx, "save", (Xpost_Op_Func)Zsave, 1, 0);
     INSTALL;

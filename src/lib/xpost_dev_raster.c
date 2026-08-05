@@ -755,7 +755,6 @@ int loadrasterdevicecont(Xpost_Context *ctx,
 int xpost_oper_init_raster_device_ops (Xpost_Context *ctx,
                 Xpost_Object sd)
 {
-    unsigned int optadr;
     Xpost_Operator *optab;
     Xpost_Object n,op;
 
@@ -773,10 +772,7 @@ int xpost_oper_init_raster_device_ops (Xpost_Context *ctx,
     if (xpost_object_get_type((nameDeviceRGB = xpost_name_cons(ctx, "DeviceRGB"))) == invalidtype)
         return VMerror;
 
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
-                                &optadr);
-    optab = (Xpost_Operator *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     op = xpost_operator_cons(ctx, "loadrasterdevice", (Xpost_Op_Func)loadrasterdevice, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, "loadrasterdevicecont", (Xpost_Op_Func)loadrasterdevicecont, 1, 1, dicttype);
     _loadrasterdevicecont_opcode = op.mark_.padw;

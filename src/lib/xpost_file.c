@@ -1308,9 +1308,11 @@ _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
 {
     unsigned int vs, depth = 0, mk;
 
-    if (xpost_memory_table_get_addr(mem,
-            XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs))
+    if (xpost_memory_save_stack_ready(mem))
+    {
+        vs = xpost_memory_save_stack_adr(mem);
         depth = (unsigned int)xpost_stack_count(mem, vs);
+    }
     if (depth > 254)
         depth = 254;
     mk = mem->table.tab[ent].mark;

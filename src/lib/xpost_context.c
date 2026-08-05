@@ -82,11 +82,9 @@ int xpost_context_append_ctxlist(Xpost_Memory_File *mem,
                   unsigned int cid)
 {
     int i;
-    Xpost_Memory_Table *tab;
     unsigned int *ctxlist;
 
-    tab = &mem->table;
-    ctxlist = (void *)(mem->base + tab->tab[XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST].adr);
+    ctxlist = (void *)(mem->base + xpost_memory_context_list_adr(mem));
     // find first empty
     for (i=0; i < MAXCONTEXT; i++)
     {
@@ -186,7 +184,7 @@ int initglobal(Xpost_Context *ctx,
     }
 
             /* so OPTAB is not collected and not scanned. */
-    ctx->gl->start = XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE + 1;
+    ctx->gl->start = XPOST_MEMORY_COLLECT_START_GLOBAL;
 
     return 1;
 }
@@ -281,7 +279,7 @@ int initlocal(Xpost_Context *ctx,
     //ctx->lo->roots[1] = DS;
     //ctx->lo->start = HOLD + 1; /* so HOLD is not collected and not scanned. */
     //ctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST + 1;
-    ctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1;
+    ctx->lo->start = XPOST_MEMORY_COLLECT_START_LOCAL;
 
     return 1;
 }
@@ -493,7 +491,7 @@ unsigned int xpost_context_fork3(Xpost_Context *ctx,
         XPOST_LOG_ERR("cannot create the stacks for the new context");
         return 0;
     }
-    newctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1;
+    newctx->lo->start = XPOST_MEMORY_COLLECT_START_LOCAL;
 
     xpost_stack_push(newctx->lo, newctx->ds,
             xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)); // systemdict

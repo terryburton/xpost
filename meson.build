@@ -1383,6 +1383,14 @@ test('check-op-references',
   find_program('tests/check-op-references.sh'),
   args: [ meson.current_source_dir() ])
 
+# The address of a special entity is reached through the accessor named for
+# it, so the enumerators appear only in the header that defines them and in
+# the five constructors that build the entities. A lookup that cannot refuse
+# has no refusal to ignore.
+test('check-vm-address',
+  find_program('tests/check-vm-address.sh'),
+  args: [ meson.current_source_dir() ])
+
 # ... and every fused operator must actually have those cases: adding one
 # to the fast path without equivalence coverage fails here.
 test('check-fused-ops',

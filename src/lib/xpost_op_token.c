@@ -1472,11 +1472,8 @@ int xpost_oper_init_token_ops(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
 
     op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Ftoken, 2, 1, filetype);
     INSTALL;

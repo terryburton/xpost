@@ -3067,14 +3067,10 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
 int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                                        Xpost_Object sd)
 {
-    unsigned int optadr;
     Xpost_Operator *optab;
     Xpost_Object n,op;
 
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
-                                &optadr);
-    optab = (Xpost_Operator *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
 
     op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 0, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 0, 2, arraytype, dicttype); INSTALL;

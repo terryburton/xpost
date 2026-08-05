@@ -229,6 +229,21 @@ int xpost_operator_exec(Xpost_Context *ctx,
                         unsigned opcode);
 
 /**
+ * @brief the operator table of @p gl.
+ *
+ * The one derivation of the table's pointer. It lives in global memory as
+ * a special entity built once by xpost_operator_init_optab, so its address
+ * is total; the pointer, though, is only good until the next allocation in
+ * @p gl, which may move the memory file. Every use re-derives it rather
+ * than holding one across a call that can allocate.
+ */
+static inline Xpost_Operator *
+xpost_operator_table(Xpost_Memory_File *gl)
+{
+    return (Xpost_Operator *)(gl->base + xpost_memory_operator_table_adr(gl));
+}
+
+/**
  * @brief helper macro for installing an operator
  *
  * The INSTALL macro
@@ -247,21 +262,13 @@ int xpost_operator_exec(Xpost_Context *ctx,
  */
 #define INSTALL \
     do { \
-        if (!xpost_memory_table_get_addr(ctx->gl, \
-                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr)) \
-        { \
+        optab = xpost_operator_table(ctx->gl); \
+        n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK; \
+        n.mark_.pad0 = 0; \
+        n.mark_.padw = optab[op.mark_.padw].name; \
+        if (xpost_dict_put(ctx, sd, n, op)) \
             ctx->operator_install_refused = 1; \
-        } \
-        else \
-        { \
-            optab = (void *)(ctx->gl->base + optadr); \
-            n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK; \
-            n.mark_.pad0 = 0; \
-            n.mark_.padw = optab[op.mark_.padw].name; \
-            if (xpost_dict_put(ctx, sd, n, op)) \
-                ctx->operator_install_refused = 1; \
-            optab = (void *)(ctx->gl->base + optadr); /* recalc */ \
-        } \
+        optab = xpost_operator_table(ctx->gl); /* recalc */ \
     } while (0)
 
 /**

@@ -192,12 +192,7 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     }
     tab->tab[rent].tag = 0;
 
-    ret = xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE, &z);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("unable to load free list head");
-        return -1;
-    }
+    z = xpost_memory_free_lists_adr(mem);
     z += xpost_free_bucket_for_size(sz) * sizeof(unsigned int);
 
     /* push onto the bucket: link word lives in the ent's data area */
@@ -228,11 +223,7 @@ void xpost_free_dump(Xpost_Memory_File *mem)
     unsigned int z;
     int ret;
 
-    ret = xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE, &z);
-    if (!ret)
-    {
-        return;
-    }
+    z = xpost_memory_free_lists_adr(mem);
 
     printf("freelist: ");
     {
@@ -302,12 +293,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
 #endif
     }
 
-    ret = xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE, &z); /* free pointer */
-    if (!ret)
-    {
-        XPOST_LOG_ERR("unable to load free list head");
-        return 0;
-    }
+    z = xpost_memory_free_lists_adr(mem); /* free pointer */
 
     {
     unsigned int b;

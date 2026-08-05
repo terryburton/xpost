@@ -346,13 +346,11 @@ int Odumpnames(Xpost_Context *ctx)
 {
     unsigned int names;
     printf("\nGlobal Name stack: ");
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &names);
+    names = xpost_memory_name_stack_adr(ctx->gl);
     xpost_stack_dump(ctx->gl, names);
     (void)puts("");
     printf("\nLocal Name stack: ");
-    xpost_memory_table_get_addr(ctx->lo,
-                                XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &names);
+    names = xpost_memory_name_stack_adr(ctx->lo);
     xpost_stack_dump(ctx->lo, names);
     (void)puts("");
     return 0;
@@ -437,7 +435,6 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
 
     const char *productstr = "Xpost";
     const char *versionstr = "0.0";
@@ -445,8 +442,6 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     int serno = 0;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
 
     op = xpost_operator_cons(ctx, "bind", (Xpost_Op_Func)Pbind, 1, 1, proctype);
     INSTALL;

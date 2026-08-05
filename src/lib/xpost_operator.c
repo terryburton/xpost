@@ -359,12 +359,9 @@ void xpost_operator_dump(Xpost_Context *ctx,
     Xpost_Object str;
     char *s;
     Xpost_Signature *sig;
-    unsigned int adr;
     uintptr_t fp;
 
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &adr);
-    optab = (void *)(ctx->gl->base + adr);
+    optab = xpost_operator_table(ctx->gl);
     op = optab[opcode];
     o.mark_.tag = nametype | XPOST_OBJECT_TAG_DATA_FLAG_BANK;
     o.mark_.pad0 = 0;
@@ -421,20 +418,11 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
     Xpost_Signature *sp;
     Xpost_Operator *optab;
     Xpost_Operator  op;
-    unsigned int optadr;
-    int ret;
 
     //fprintf(stderr, "name: %s\n", name);
     assert(ctx->gl->base);
 
-    ret = xpost_memory_table_get_addr(ctx->gl,
-                                      XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load optab!");
-        return null;
-    }
-    optab = (void *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
 
     if (!(in < XPOST_STACK_SEGMENT_SIZE))
     {
@@ -454,7 +442,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
         return invalid;
     ctx->vmmode = vmmode;
 
-    optab = (void *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     for (opcode = 0; optab[opcode].name != nm.mark_.padw; opcode++)
     {
         if (opcode == _xpost_noops) break;
@@ -478,7 +466,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 XPOST_LOG_ERR("operator %s NOT installed", name);
                 return null;
             }
-            optab = (void *)(ctx->gl->base + optadr); // recalc
+            optab = xpost_operator_table(ctx->gl); // recalc
             op.name = nm.mark_.padw;
             op.n = 1;
             op.sigadr = adr;
@@ -499,7 +487,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 XPOST_LOG_ERR("operator %s NOT installed", name);
                 return null;
             }
-            optab = (void *)(ctx->gl->base + optadr); // recalc
+            optab = xpost_operator_table(ctx->gl); // recalc
             optab[opcode].sigadr = t;
 
             si = optab[opcode].n++; /* index of last sig */
@@ -514,7 +502,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 XPOST_LOG_ERR("operator %s NOT installed", name);
                 return null;
             }
-            optab = (void *)(ctx->gl->base + optadr); // recalc
+            optab = xpost_operator_table(ctx->gl); // recalc
             sp = (void *)(ctx->gl->base + optab[opcode].sigadr); // recalc
             sp[si].t = ad;
         }
@@ -593,10 +581,8 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
     Xpost_Object str;
     char buf[128];
     unsigned int len;
-    unsigned int optadr;
     unsigned vmmode;
     int opcode;
-    int ret;
 
     if (xpost_object_get_type(proc) != arraytype)
         return null;
@@ -609,14 +595,6 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
         len = sizeof buf - 1;
     memcpy(buf, xpost_string_get_pointer(ctx, str), len);
     buf[len] = '\0';
-
-    ret = xpost_memory_table_get_addr(ctx->gl,
-                                      XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load optab!");
-        return null;
-    }
 
     if (_xpost_noops == MAXOPS-1)
     {
@@ -638,7 +616,7 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
     /* always a fresh entry: the name may already denote a C operator,
        which lookups by name must keep finding */
     opcode = _xpost_noops;
-    optab = (void *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     op.name = nm.mark_.padw;
     op.n = 0;
     op.sigadr = 0;
@@ -693,7 +671,7 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
         /* the count goes in last: an allocation that failed part way
            leaves the operator stating nothing rather than stating a
            signature that was never filled in */
-        optab = (void *)(ctx->gl->base + optadr);
+        optab = xpost_operator_table(ctx->gl);
         optab[opcode].sigadr = sigadr;
         optab[opcode].n = nsig;
     }
@@ -809,13 +787,11 @@ int xpost_operator_exec(Xpost_Context *ctx,
     Xpost_Stack *os_root;
     Xpost_Stack *os_top;
     int ct;
-    unsigned int optadr;
     int ret;
 
     ctx->op_restore_n = 0;
 
-    optadr = ctx->gl->table.tab[XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE].adr;
-    optab = (void *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     op = optab[opcode];
     sp = (void *)(ctx->gl->base + op.sigadr);
 

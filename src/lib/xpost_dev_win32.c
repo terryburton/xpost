@@ -965,7 +965,6 @@ int loadwin32devicecont(Xpost_Context *ctx,
 int xpost_oper_init_win32_device_ops(Xpost_Context *ctx,
                                      Xpost_Object sd)
 {
-    unsigned int optadr;
     Xpost_Operator *optab;
     Xpost_Object n,op;
 
@@ -978,10 +977,7 @@ int xpost_oper_init_win32_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namedotcopydict = xpost_name_cons(ctx, ".copydict"))) == invalidtype)
         return VMerror;
 
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
-                                &optadr);
-    optab = (Xpost_Operator *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     op = xpost_operator_cons(ctx, "loadwin32device", (Xpost_Op_Func)loadwin32device, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, "loadwin32devicecont", (Xpost_Op_Func)loadwin32devicecont, 1, 1, dicttype);
     _loadwin32devicecont_opcode = op.mark_.padw;

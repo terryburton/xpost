@@ -1855,14 +1855,11 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op,pathempty_op;
-    unsigned int optadr;
     int ret;
 
     assert(ctx->gl->base);
 
     _gstate_cached = 0;
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
 
     if (xpost_object_get_type((namegraphicsdict = xpost_name_cons(ctx, ".graphicsdict"))) == invalidtype)
         return VMerror;

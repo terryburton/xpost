@@ -244,8 +244,7 @@ int xpost_op_any_load(Xpost_Context *ctx,
         xpost_memory_table_dump(ctx->lo);
         xpost_memory_file_dump(ctx->gl);
         xpost_memory_table_dump(ctx->gl);
-        xpost_memory_table_get_addr(ctx->gl,
-                                    XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &names);
+        names = xpost_memory_name_stack_adr(ctx->gl);
         xpost_stack_dump(ctx->gl, names);
         xpost_object_dump(K);
     }
@@ -630,12 +629,9 @@ int xpost_oper_init_dict_ops (Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
     int ret;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
     op = xpost_operator_cons(ctx, "dict", (Xpost_Op_Func)xpost_op_int_dict, 1, 1, integertype);
     INSTALL;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "<<"), mark);

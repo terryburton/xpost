@@ -579,7 +579,6 @@ int loadjpegdevicecont(Xpost_Context *ctx,
 int xpost_oper_init_jpeg_device_ops(Xpost_Context *ctx,
                                     Xpost_Object sd)
 {
-    unsigned int optadr;
     Xpost_Operator *optab;
     Xpost_Object n,op;
 
@@ -597,10 +596,7 @@ int xpost_oper_init_jpeg_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((nameDeviceRGB = xpost_name_cons(ctx, "DeviceRGB"))) == invalidtype)
         return VMerror;
 
-    xpost_memory_table_get_addr(ctx->gl,
-                                XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
-                                &optadr);
-    optab = (Xpost_Operator *)(ctx->gl->base + optadr);
+    optab = xpost_operator_table(ctx->gl);
     op = xpost_operator_cons(ctx, "loadjpegdevice", (Xpost_Op_Func)loadjpegdevice, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, "loadjpegdevicecont", (Xpost_Op_Func)loadjpegdevicecont, 1, 1, dicttype);
     _loadjpegdevicecont_opcode = op.mark_.padw;

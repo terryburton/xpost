@@ -528,7 +528,6 @@ int AScvs (Xpost_Context *ctx,
     char strue[] = "true";
     char sfalse[] = "false";
     int n;
-    int ret;
 
     if (!xpost_object_is_writeable(ctx, str))
         return invalidaccess;
@@ -592,18 +591,10 @@ int AScvs (Xpost_Context *ctx,
 
         case operatortype:
         {
-            unsigned int optadr;
             Xpost_Operator *optab;
             Xpost_Operator op;
             Xpost_Object_Mark nm;
-            ret = xpost_memory_table_get_addr(ctx->gl,
-                                              XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-            if (!ret)
-            {
-                XPOST_LOG_ERR("cannot load optab!");
-                return VMerror;
-            }
-            optab = (void *)(ctx->gl->base + optadr);
+            optab = xpost_operator_table(ctx->gl);
             op = optab[any.mark_.padw];
             nm.tag = nametype | XPOST_OBJECT_TAG_DATA_FLAG_BANK;
             nm.pad0 = 0;
@@ -631,7 +622,6 @@ int xpost_oper_init_type_ops(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
 
     assert(ctx->gl->base);
     //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);

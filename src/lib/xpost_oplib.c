@@ -107,7 +107,6 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     Xpost_Memory_Table *tab;
     unsigned ent;
     Xpost_Operator *optab;
-    unsigned int optadr;
 
     /* Mark every reference-table entry uncaptured before any module
        registers. Zero cannot serve as the marker: it is a valid opcode --
@@ -135,8 +134,6 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     tab = &ctx->gl->table;
     tab->tab[ent].sz = 0; // make systemdict immune to collection
 
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
 #ifdef DEBUGOP
     xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     puts("");

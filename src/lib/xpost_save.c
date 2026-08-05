@@ -96,12 +96,7 @@ void xpost_save_stamp_birth(Xpost_Memory_File *mem, unsigned int ent)
     unsigned int vs;
     unsigned int cnt;
 
-    if (!xpost_memory_table_get_addr(mem,
-                                     XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs))
-    {
-        XPOST_LOG_ERR("cannot load save stack");
-        return;
-    }
+    vs = xpost_memory_save_stack_adr(mem);
     cnt = xpost_stack_count(mem, vs);
     mem->table.tab[ent].mark =
           (cnt << XPOST_MEMORY_TABLE_MARK_DATA_LOWLEVEL_OFFSET)
@@ -114,16 +109,9 @@ Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
 {
     Xpost_Object v;
     unsigned int vs;
-    int ret;
 
     v.tag = savetype;
-    ret = xpost_memory_table_get_addr(mem,
-                                      XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load save stack");
-        return null;
-    }
+    vs = xpost_memory_save_stack_adr(mem);
     v.save_.lev = xpost_stack_count(mem, vs);
     if (mem->free_substack)
     {
@@ -166,16 +154,9 @@ unsigned xpost_save_ent_is_saved(Xpost_Memory_File *mem,
     unsigned int llev;
     unsigned int tlev;
     unsigned int vs;
-    int ret;
     Xpost_Object sav;
 
-    ret = xpost_memory_table_get_addr(mem,
-                                      XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &vs);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load save stack");
-        return 0;
-    }
+    vs = xpost_memory_save_stack_adr(mem);
 
     if (xpost_stack_count(mem, vs) == 0)
         return 1;
@@ -262,15 +243,8 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
     Xpost_Object sav;
     unsigned int adr;
     unsigned int cpy;
-    int ret;
 
-    ret = xpost_memory_table_get_addr(mem,
-            XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &adr);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load save stack");
-        return 0;
-    }
+    adr = xpost_memory_save_stack_adr(mem);
     sav = xpost_stack_topdown_fetch(mem, adr, 0);
 
     tab = &mem->table;
@@ -314,14 +288,8 @@ void xpost_save_restore_snapshot(Xpost_Memory_File *mem)
     Xpost_Memory_Table *tab = &mem->table;
     unsigned int cnt;
     unsigned int sent, cent;
-    int ret;
 
-    ret = xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &v); // save-stack address
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load save stack");
-        return;
-    }
+    v = xpost_memory_save_stack_adr(mem); // save-stack address
     sav = xpost_stack_pop(mem, v); // save-object (stack of saverec_'s)
     if (xpost_object_get_type(sav) == invalidtype)
         return;

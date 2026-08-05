@@ -158,8 +158,8 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
                 unsigned int address;
                 Xpost_Object str;
 
-                xpost_memory_table_get_addr( xpost_context_select_memory(ctx,tp[j].key),
-                    XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &address);
+                address = xpost_memory_name_stack_adr(
+                    xpost_context_select_memory(ctx, tp[j].key));
 
                 str = xpost_stack_bottomup_fetch(
                     xpost_context_select_memory(ctx,tp[j].key),
@@ -600,7 +600,6 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
     unsigned int z;
     unsigned int i;
     unsigned int sz = 0;
-    int ret;
 
     /* diagnostic quarantine: sweep nothing, so freed entities are never
        reused; distinguishes stale-holder-of-recycled-entity bugs (which
@@ -608,12 +607,7 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
     if (getenv("XPOST_GC_NO_REUSE"))
         return 0;
 
-    ret = xpost_memory_table_get_addr(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE, &z); /* address of the free list heads */
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load free list head");
-        return 0;
-    }
+    z = xpost_memory_free_lists_adr(mem); /* address of the free list heads */
 
     /* discard the lists; previously-freed entities are gathered again */
     for (i = 0; i < XPOST_FREE_NBUCKETS; i++)
@@ -721,7 +715,6 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     int isglobal;
     unsigned int sz = 0;
     unsigned int ad;
-    int ret;
 
     if (mem->interpreter_get_initializing()) /* do not collect while initializing */
         return 0;
@@ -730,13 +723,7 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 
     /* determine global/local */
     isglobal = 0;
-    ret = xpost_memory_table_get_addr(mem,
-                                      XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST, &ad);
-    if (!ret)
-    {
-        XPOST_LOG_ERR("cannot load context list");
-        return -1;
-    }
+    ad = xpost_memory_context_list_adr(mem);
     cid = (void *)(mem->base + ad);
     for (i = 0; i < MAXCONTEXT && cid[i]; i++)
     {
@@ -766,22 +753,10 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 
         _xpost_garbage_unmark(mem);
 
-        ret = xpost_memory_table_get_addr(mem,
-                                          XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &ad);
-        if (!ret)
-        {
-            XPOST_LOG_ERR("cannot load save stack for global memory");
-            return -1;
-        }
+        ad = xpost_memory_save_stack_adr(mem);
         if (!_xpost_garbage_mark_save(ctx, mem, ad))
             return -1;
-        ret = xpost_memory_table_get_addr(mem,
-                                          XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &ad);
-        if (!ret)
-        {
-            XPOST_LOG_ERR("cannot load name stack for global memory");
-            return -1;
-        }
+        ad = xpost_memory_name_stack_adr(mem);
         if (!_xpost_garbage_mark_names(ctx, mem, ad, markall))
             return -1;
 
@@ -808,22 +783,10 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
         if (markall)
             _xpost_garbage_unmark(ctx->gl);
 
-        ret = xpost_memory_table_get_addr(mem,
-                                          XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK, &ad);
-        if (!ret)
-        {
-            XPOST_LOG_ERR("cannot load save stack for local memory");
-            return -1;
-        }
+        ad = xpost_memory_save_stack_adr(mem);
         if (!_xpost_garbage_mark_save(ctx, mem, ad))
             return -1;
-        ret = xpost_memory_table_get_addr(mem,
-                                          XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK, &ad);
-        if (!ret)
-        {
-            XPOST_LOG_ERR("cannot load name stack for local memory");
-            return -1;
-        }
+        ad = xpost_memory_name_stack_adr(mem);
 #ifdef DEBUG_GC
         printf("marking name stack\n");
 #endif
@@ -992,7 +955,7 @@ int init_test_garbage(int (*xpost_interpreter_cid_init)(unsigned int *cid),
         return 0;
     }
     xpost_context_append_ctxlist(ctx->gl, ctx->id);
-    ctx->gl->start = XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE + 1;
+    ctx->gl->start = XPOST_MEMORY_COLLECT_START_GLOBAL;
 
     /* create local memory file */
     ctx->lo = xpost_interpreter_alloc_local_memory();
@@ -1044,7 +1007,7 @@ int init_test_garbage(int (*xpost_interpreter_cid_init)(unsigned int *cid),
         return 0;
     }
     xpost_context_append_ctxlist(ctx->lo, ctx->id);
-    ctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1;
+    ctx->lo->start = XPOST_MEMORY_COLLECT_START_LOCAL;
 
     /* create names in both mfiles */
     ret = xpost_name_init(ctx);

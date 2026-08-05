@@ -87,6 +87,10 @@ typedef enum
  * @typedef Xpost_Memory_Table_Special
  * @brief Special entities occupy the first few slots of the first
  * #Xpost_Memory_Table in the #Xpost_Memory_File.
+ *
+ * These enumerators are named here, in the constructor that builds each
+ * entity, and nowhere else. Everywhere else reaches one through the
+ * accessor named for it below, which is why those accessors can be total.
  */
 typedef enum
 {
@@ -98,6 +102,21 @@ typedef enum
     XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME,
     XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE
 } Xpost_Memory_Table_Special;
+
+/**
+ * @typedef Xpost_Memory_Collect_Start
+ * @brief The first entity the collector owns, per memory file.
+ *
+ * The special entities are roots, not garbage: the collector's domain
+ * begins one past the last of them. Global memory holds them all; local
+ * memory has no operator table, so its domain begins one slot earlier.
+ * Derived from the enumerators above so the two cannot drift.
+ */
+typedef enum
+{
+    XPOST_MEMORY_COLLECT_START_GLOBAL = XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE + 1,
+    XPOST_MEMORY_COLLECT_START_LOCAL = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1
+} Xpost_Memory_Collect_Start;
 
 
 /*
@@ -231,6 +250,116 @@ xpost_ent_ptr_checked(Xpost_Memory_File *mem, unsigned int ent)
     if (!xpost_ent_valid(mem, ent))
         return NULL;
     return xpost_ent_ptr(mem, ent);
+}
+
+/*
+ * The special entities.
+ *
+ * Each of the first few table slots holds one structure the interpreter
+ * always has: the free lists, the save stack, the context list, the two
+ * halves of the name table, the operator table. They are built once, by
+ * the constructor named in each accessor's comment, before any of this
+ * runs.
+ *
+ * Their addresses are therefore TOTAL. nextent starts at zero and is only
+ * ever incremented (xpost_memory.c, _xpost_memory_table_alloc_new); the
+ * table is allocated with room for a thousand rows before the first one is
+ * claimed. So once a special entity has been constructed its row exists
+ * for the life of the memory file and cannot stop existing.
+ *
+ * That matters because the fallible spelling of this lookup was ignored at
+ * two sites in three: the caller passed an uninitialised local for the
+ * address, dropped the refusal, and then used the local as an offset from
+ * mem->base. There was no failure to observe -- the refusal cannot happen
+ * -- but nothing in the shape of the code said so, and five files spelled
+ * the same lookup with four different messages for a branch none of them
+ * could take. An accessor that cannot refuse deletes the question.
+ *
+ * The one genuine use of the fallible form is asking whether a special
+ * entity has been built YET, during initialisation, which is what
+ * xpost_memory_save_stack_ready answers.
+ */
+
+/**
+ * @brief address of the free lists (xpost_free_init).
+ */
+static inline unsigned int
+xpost_memory_free_lists_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_FREE].adr;
+}
+
+/**
+ * @brief address of the save stack (xpost_save_init).
+ */
+static inline unsigned int
+xpost_memory_save_stack_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK].adr;
+}
+
+/**
+ * @brief true iff the save stack has been built.
+ *
+ * The only question about a special entity that is genuinely open, and
+ * only during initialisation: a file may be born before the save stack
+ * exists to stamp it with a save depth (xpost_file.c).
+ */
+static inline int
+xpost_memory_save_stack_ready(Xpost_Memory_File *mem)
+{
+    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK);
+}
+
+/**
+ * @brief address of the context list (xpost_context_init_ctxlist).
+ */
+static inline unsigned int
+xpost_memory_context_list_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST].adr;
+}
+
+/**
+ * @brief address of the name stack (xpost_name_init).
+ */
+static inline unsigned int
+xpost_memory_name_stack_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK].adr;
+}
+
+/**
+ * @brief address of the root of the name tree (xpost_name_init).
+ *
+ * Unlike its siblings this one moves: the ternary search tree is rebuilt
+ * upward as names are interned, so the root changes and is written back
+ * through xpost_memory_set_name_tree_adr.
+ */
+static inline unsigned int
+xpost_memory_name_tree_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr;
+}
+
+/**
+ * @brief record the new root of the name tree.
+ */
+static inline void
+xpost_memory_set_name_tree_adr(Xpost_Memory_File *mem, unsigned int adr)
+{
+    mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = adr;
+}
+
+/**
+ * @brief address of the operator table (xpost_operator_init_optab).
+ *
+ * Global memory only: local memory has no operator table.
+ */
+static inline unsigned int
+xpost_memory_operator_table_adr(Xpost_Memory_File *mem)
+{
+    return mem->table.tab[XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE].adr;
 }
 
 /**

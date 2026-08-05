@@ -409,11 +409,8 @@ int xpost_oper_init_math_ops (Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
-    unsigned int optadr;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = (void *)(ctx->gl->base + optadr);
     //RAD_PER_DEG = PI / 180.0;
 
     op = xpost_operator_cons(ctx, "add", (Xpost_Op_Func)Iadd, 1, 2, integertype, integertype);
