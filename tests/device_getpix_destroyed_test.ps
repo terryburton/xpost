@@ -1,0 +1,68 @@
+% GetPix on a destroyed device answers instead of following a freed handle.
+% Run against a live device (-d <dev>) by run-device-getpix-test.sh: prints
+% SUCCESS iff every step holds.
+%
+% Destroy releases a device's raster but leaves the instance dictionary,
+% and the device contract requires Destroy itself to be idempotent because
+% the program may call it. That leaves the program holding a dictionary
+% whose slots are all still callable, and GetPix is the one read slot it
+% calls for itself. A device that keeps its raster in a buffer of its own
+% has to test the handle before following it: the released buffer is a
+% cleared pointer, not a short raster, so no bounds check stands between
+% GetPix and the read.
+%
+% Two answers satisfy the contract. A device holding its raster as
+% PostScript objects loses the name those objects were reached by and
+% reports undefined, which is an answer the program can catch. A device
+% holding a buffer of its own reads the released raster as the ground,
+% which is what a pixel outside the raster already reads as. Following the
+% cleared handle is the third outcome and the one under test.
+
+/getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
+
+/dev getdevice def
+
+% A device without the slot has nothing to answer for. GetPix is optional
+% in the contract, and the vector devices carry no raster to read.
+dev /GetPix known not { (SUCCESS) = quit } if
+
+% establish the slot's arity on the live raster
+clear
+2 2 dev dup /GetPix get exec
+count /ncomp exch def
+ncomp 0 le { (FAILURE: GetPix returned no components) = quit } if
+clear
+
+% release the raster; the contract makes this callable by the program
+dev dup /Destroy 2 copy known { get exec }{ pop pop pop } ifelse
+
+% the same read on the released raster must answer, one way or the other
+clear
+{ 2 2 dev dup /GetPix get exec } stopped
+    { clear (SUCCESS) = quit }
+if
+
+count ncomp ne
+    { (FAILURE: GetPix answered a different arity on a released raster) = quit }
+if
+
+% every component reads as the ground
+/bad 0 def
+ncomp { 0 ne { /bad bad 1 add def } if } repeat
+bad 0 ne
+    { (FAILURE: a released raster did not read as the ground) = quit }
+if
+
+% reading twice more is the same no-op, as a repeated Destroy is
+clear
+2 2 dev dup /GetPix get exec
+2 2 dev dup /GetPix get exec
+count ncomp 2 mul ne
+    { (FAILURE: a repeated read on a released raster did not answer) = quit }
+if
+clear
+
+count 0 eq
+    { (SUCCESS) = }
+    { (FAILURE: operand stack unbalanced) = }
+ifelse

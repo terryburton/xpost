@@ -74,6 +74,14 @@
  * in the private struct and stores the struct back, making a repeated
  * Destroy a no-op rather than a double free.
  *
+ * Destroy releases the buffer but not the instance dictionary, so a
+ * destroyed instance stays reachable and its slots stay callable. GetPix
+ * is the plainest way in, being the one read slot a program calls for
+ * itself, and the dictionary it is called on may be one the program kept
+ * across a Destroy of its own. A slot therefore tests the handle it is
+ * about to follow instead of assuming Create left one: a released raster
+ * reads as the ground, the same answer a pixel outside the raster gets.
+ *
  * Instance state: C-level device state lives in a struct serialized into
  * a PostScript string stored under /Private in the instance dictionary.
  * The raw memory accessors record no save/restore backup, so the struct

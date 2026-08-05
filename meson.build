@@ -1461,6 +1461,17 @@ test('device-destroy',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# GetPix is callable on a device the program has already destroyed: Destroy
+# releases the raster but leaves the instance dictionary, and the contract makes
+# Destroy something a program may call for itself. A device carrying its own
+# buffer must test the handle rather than follow the cleared pointer, reading a
+# released raster as the ground.
+test('device-getpix-destroyed',
+  find_program('tests/run-device-getpix-test.sh'),
+  args: [ xpost_exe, files('tests/device_getpix_destroyed_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # A setpagedevice whose maker fails at run time must leave the incumbent device
 # in the graphics state, whole and painting: the program is entitled to catch
 # that error and carry on. Guards the ordering -- the replacement is built
