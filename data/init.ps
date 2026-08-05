@@ -1093,21 +1093,20 @@ currentglobal true setglobal
 } put
 
 % dict name proc  .wrapwithsig  -
-% dict name proc  .wrapwithsig  -
-% The operands each wrapped operator takes, in operand order. An
-% operator named here is wrapped with its statement and the dispatcher
-% enforces it; one not named is wrapped as before and checks itself.
-% The operator goes back into the dictionary its name was found in,
-% which is not always userdict: some of the standard operators written
-% in PostScript are defined straight into systemdict.
+% Install the procedure as an operator stating the operands it takes, in
+% operand order, so the dispatcher enforces the statement before the
+% procedure runs, exactly as for an operator written in C. The statement
+% is the one the definition recorded in .opsigs, and the promotion runs
+% over those statements, so there is always one to read. The operator
+% goes back into the dictionary its name was found in, which is not
+% always userdict: some of the standard operators written in PostScript
+% are defined straight into systemdict.
 .xpostsys /.wrapwithsig {
     3 dict begin
     /w.proc exch def /w.name exch def /w.dict exch def
     w.dict w.name
     w.name /w.proc load
-    //.xpostsys /.opsigs get w.name 2 copy known
-        { get .wrapopsig }
-        { pop pop .wrapop } ifelse
+    //.xpostsys /.opsigs get w.name get .wrapopsig
     put
     end
 } put
@@ -1551,47 +1550,22 @@ currentglobal true setglobal
     % rest of the interpreter's own machinery, and exists whether or not
     % graphics was loaded.
     .privatedict /.wrappedprocs 256 dict put
-    [
-        /fill /eofill /stroke /strokepath /rectfill /rectstroke
-        /ufill /ueofill /ustroke /ustrokepath /uappend /upath
-        /infill /ineofill /instroke /inufill /inueofill /inustroke
-        /clip /eoclip /initclip /rectclip /clippath
-        /reversepath
-        /setlinewidth /currentlinewidth /setlinecap /currentlinecap
-        /setlinejoin /currentlinejoin /setmiterlimit /currentmiterlimit
-        /setdash /currentdash /setflat /currentflat
-        /gstate /setgstate /currentgstate /currentfont
-        /setoverprint /currentoverprint /setsmoothness /currentsmoothness
-        /setstrokeadjust /currentstrokeadjust
-        /setblackgeneration /currentblackgeneration
-        /setundercolorremoval /currentundercolorremoval
-        /setcolorrendering /currentcolorrendering /findcolorrendering
-        /cachestatus /currentcacheparams /setcacheparams /setcachelimit
-        /setucacheparams /ucachestatus /ucache /rootfont /findencoding /eexec
-        /clipsave /cliprestore /pathforall /setbbox
-        /defineresource /findresource /undefineresource
-        /resourceforall /resourcestatus
-        /defineuserobject /execuserobject /undefineuserobject
-        /setuserparams /currentuserparams /setsystemparams /currentsystemparams
-        /setdevparams /currentdevparams /setvmthreshold
-        /= /== /stack /pstack /prompt /executive /run /startjob
-        /filter /internaldict /execform
-        /show /ashow /widthshow /awidthshow /kshow /cshow
-        /xshow /yshow /xyshow /glyphshow /stringwidth /charpath
-        /definefont /undefinefont /scalefont /makefont /setfont
-        /selectfont /findfont /composefont
-        /setcachedevice /setcachedevice2 /setcharwidth
-        /setscreen /currentscreen /setcolorscreen /currentcolorscreen
-        /sethalftone /currenthalftone
-        /settransfer /currenttransfer /setcolortransfer /currentcolortransfer
-        /setgray /setrgbcolor /sethsbcolor /setcmykcolor /setcolor /setcolorspace
-        /currentgray /currentrgbcolor /currenthsbcolor /currentcmykcolor
-        /currentcolor /currentcolorspace
-        /image /imagemask /colorimage
-        /shfill /makepattern /setpattern
-        /showpage /copypage /erasepage /setpagedevice /currentpagedevice
-        /nulldevice /gsave /grestore /grestoreall /initgraphics
-    ] {
+    % Which operators these are is not stated here. An operator written in
+    % PostScript states the operands it takes where it is defined, through
+    % .defop, and that statement going into .opsigs is what makes it one of
+    % these: the promotion runs over the statements. A list of names beside
+    % them would be the same fact written twice, and the two copies could
+    % disagree in either direction with nothing to notice -- a name wrapped
+    % without a statement takes whatever it is given, and a name stated
+    % without being wrapped states its operands to nobody. Neither is
+    % expressible now.
+    %
+    % The statements are a dictionary, so the promotion order is the
+    % dictionary's rather than an author's. That is what the second pass
+    % below is for: nothing is bound until every one of them is promoted,
+    % so no outcome depends on the order they came out in.
+    //.xpostsys /.opsigs get {
+        pop                                  % the statement; the key is the name
         dup where {
             exch 2 copy get
             dup type /arraytype eq 1 index xcheck and {
@@ -1644,6 +1618,28 @@ currentglobal true setglobal
     n 0 eq
     end
     (every promoted name must be an operator before references are frozen)
+    //.xpostsys /.mustbe get exec
+
+    % The other half of the same post-condition. The gate above says every
+    % name the promotion took is an operator; this says the promotion took
+    % every name it should have. An operator that states its operands is
+    % one by now, or is not defined in this run at all -- a --no-graphics
+    % run loads none of the graphics modules, and the statements they
+    % record when they do load are the same statements either way. A name
+    % still holding its procedure would be an operator the dispatcher had
+    % been told about and the promotion passed over.
+    1 dict begin
+    /n 0 def
+    //.xpostsys /.opsigs get {
+        pop                                  % the statement; the key is the name
+        dup where {
+            1 index get type /operatortype ne { /n n 1 add store } if
+        }{ } ifelse
+        pop
+    } forall
+    n 0 eq
+    end
+    (every operator that states its operands must be one after the promotion)
     //.xpostsys /.mustbe get exec
 
     systemdict //.xpostsys /.bindscope get exec

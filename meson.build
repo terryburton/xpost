@@ -960,12 +960,6 @@ test('check-shadowed-operators',
           meson.current_source_dir() / 'data',
           files('tests/shadowed_operators.golden') ])
 
-# Every wrapped operator states the operands it takes, or is named in
-# the shrinking list of those that do not yet.
-test('check-op-signatures',
-  find_program('tests/check-op-signatures.sh'),
-  args: [ files('data/init.ps'), files('tests/op_signatures.allowed') ])
-
 # A standard operator written in PostScript holds the operators it calls,
 # not their names: a name is resolved when it runs, so one left in a body
 # is a program's redefinition waiting to be picked up. The declared list
