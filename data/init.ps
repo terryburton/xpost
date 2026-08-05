@@ -1368,9 +1368,6 @@ currentglobal true setglobal
     systemdict begin
     % pagedevicedict  setpagedevice  -
     /setpagedevice {
-        dup type /dicttype ne {
-            /setpagedevice cvx /typecheck signalerror
-        } if
         16 dict begin
         /pd exch def
         % requests merge with the accumulated parameters, except that

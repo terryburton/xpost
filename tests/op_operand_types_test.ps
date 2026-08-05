@@ -345,6 +345,22 @@ tf.seen 256 eq (the samples run where the caller can see them) assert
 { /Helvetica findfont (x) scalefont } /typecheck (scalefont a string size) refuses
 { /Helvetica findfont 12 scalefont setfont } (setfont a font) works
 
+% ------------------------------------------- what the statement already says
+% An operator written in PostScript states the operands it takes and the
+% dispatcher enforces the statement before the body runs, so a body that
+% asks the same questions again is asking them of operands that have
+% already answered. These are the refusals the statements alone produce:
+% the count, and the type, for two operators whose bodies used to check
+% both for themselves.
+
+{ (a) cshow }        /stackunderflow (cshow given only a string) refuses
+{ { } cshow }        /stackunderflow (cshow given only a procedure) refuses
+{ (a) (b) cshow }    /typecheck (cshow a string where a procedure goes) refuses
+{ { } { } cshow }    /typecheck (cshow a procedure where a string goes) refuses
+{ setpagedevice }    /stackunderflow (setpagedevice given nothing) refuses
+{ 42 setpagedevice } /typecheck (setpagedevice a number) refuses
+{ [ ] setpagedevice } /typecheck (setpagedevice an array) refuses
+
 bad 0 eq (every operator refuses what it cannot use) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
