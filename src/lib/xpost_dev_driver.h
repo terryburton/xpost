@@ -83,8 +83,8 @@
  *
  * This header holds only static inline helpers; include it after the
  * standard device includes (xpost_object.h, xpost_memory.h,
- * xpost_context.h, xpost_stack.h, xpost_dict.h, xpost_string.h,
- * xpost_name.h and <string.h>).
+ * xpost_context.h, xpost_stack.h, xpost_error.h, xpost_dict.h,
+ * xpost_string.h, xpost_name.h, xpost_operator.h and <string.h>).
  */
 
 /* fold a numeric operand (integertype or realtype) to an int,
@@ -364,6 +364,196 @@ xpost_dev_line_next(Xpost_Dev_Line *l, int *px, int *py)
         else               { *px = xpost_dev_pixel(b); *py = xpost_dev_pixel(a); }
         return 1;
     }
+    return 0;
+}
+
+/*
+ * A device's method suite, as data.
+ *
+ * Every C device installs the same shapes into its class dictionary,
+ * and every one of them used to write out each installation by hand:
+ * the operator name, the function, the result count, the operand count
+ * and one type per operand, then a put whose refusal it had to remember
+ * to check. Five of six answered success from a failed PutPix
+ * registration, so a device loaded with no PutPix and failed at its
+ * first paint.
+ *
+ * A method's arity is not a free choice: it follows from what the slot
+ * is and from the device's declared colour space, since <colour> stands
+ * for one operand per component. So the table states the slot, the
+ * function and the kind, and the arity is derived. A device cannot
+ * declare an arity that disagrees with its colour space, because it
+ * does not declare one.
+ *
+ * xpost_dev_class_install() registers a table and then checks what it
+ * produced: every mandatory slot filled, and -- for a device whose
+ * raster is a buffer of its own rather than the base class's row array
+ * -- every slot that would reach for that row array overridden. A
+ * device that fails either does not load, rather than loading with a
+ * method that answers undefined the first time the pipeline reaches it.
+ */
+typedef enum
+{
+    XPOST_DEV_M_CREATE,   /*        width height CLASS  ->  IMAGE   */
+    XPOST_DEV_M_PUTPIX,   /*      <colour> x y IMAGE  ->  -         */
+    XPOST_DEV_M_GETPIX,   /*               x y IMAGE  ->  <colour>  */
+    XPOST_DEV_M_LINE,     /* <colour> x1 y1 x2 y2 IMAGE  ->  -      */
+    XPOST_DEV_M_RECT,     /*    <colour> x y w h IMAGE  ->  -       */
+    XPOST_DEV_M_BLEND,    /*  <colour> cov x y IMAGE  ->  -         */
+    XPOST_DEV_M_POLY,     /*     <colour> polygon IMAGE  ->  -      */
+    XPOST_DEV_M_PAGE      /*                     IMAGE  ->  -       */
+} Xpost_Dev_Method_Kind;
+
+typedef struct
+{
+    const char *slot;    /* the name the pipeline looks up */
+    const char *opname;  /* the operator's own name, for the register */
+    Xpost_Op_Func func;
+    Xpost_Dev_Method_Kind kind;
+} Xpost_Dev_Method;
+
+#define XPOST_DEV_METHOD_COUNT(t) ((int)(sizeof(t) / sizeof(*(t))))
+
+/* The slots whose base-class body reads the raster held as PostScript
+   row arrays. A device that brings its own buffer must override every
+   one of them: what it inherits instead reads a name its instance does
+   not carry and answers undefined -- present, callable and broken,
+   which no probe with `known` can tell from working. GetPix was
+   inherited unoverridden by five devices for exactly that reason.
+   tests/check-device-skeleton.sh holds this list to the classes. */
+#define XPOST_DEV_RASTER_SLOTS { "Create", "PutPix", "GetPix", "Emit" }
+
+/* Slots no device may be without, whatever it keeps its raster in. */
+#define XPOST_DEV_MANDATORY_SLOTS { "Create", "Emit", "Destroy", ".copydict" }
+
+/* Build a method's operator with the arity its kind and the device's
+   colour space give it. Returns an invalidtype object if the shape is
+   not one this contract knows. */
+static inline Xpost_Object
+xpost_dev_method_cons(Xpost_Context *ctx,
+                      const Xpost_Dev_Method *m,
+                      int ncomp)
+{
+    /* numeric operands before the device dictionary, and results */
+    int n = 0, out = 0, poly = 0;
+
+    switch (m->kind)
+    {
+        case XPOST_DEV_M_CREATE:
+            return xpost_operator_cons(ctx, m->opname, m->func, 1, 3,
+                                       integertype, integertype, dicttype);
+        case XPOST_DEV_M_PUTPIX: n = ncomp + 2; break;
+        case XPOST_DEV_M_GETPIX: n = 2; out = ncomp; break;
+        case XPOST_DEV_M_LINE:   n = ncomp + 4; break;
+        case XPOST_DEV_M_RECT:   n = ncomp + 4; break;
+        case XPOST_DEV_M_BLEND:  n = ncomp + 3; break;
+        case XPOST_DEV_M_POLY:   n = ncomp; poly = 1; break;
+        case XPOST_DEV_M_PAGE:   n = 0; break;
+    }
+
+    if (poly)
+    {
+        switch (n)
+        {
+            case 1: return xpost_operator_cons(ctx, m->opname, m->func, out, 3,
+                        numbertype, arraytype, dicttype);
+            case 3: return xpost_operator_cons(ctx, m->opname, m->func, out, 5,
+                        numbertype, numbertype, numbertype, arraytype, dicttype);
+            case 4: return xpost_operator_cons(ctx, m->opname, m->func, out, 6,
+                        numbertype, numbertype, numbertype, numbertype,
+                        arraytype, dicttype);
+        }
+        return invalid;
+    }
+
+    switch (n)
+    {
+        case 0: return xpost_operator_cons(ctx, m->opname, m->func, out, 1,
+                    dicttype);
+        case 2: return xpost_operator_cons(ctx, m->opname, m->func, out, 3,
+                    numbertype, numbertype, dicttype);
+        case 3: return xpost_operator_cons(ctx, m->opname, m->func, out, 4,
+                    numbertype, numbertype, numbertype, dicttype);
+        case 4: return xpost_operator_cons(ctx, m->opname, m->func, out, 5,
+                    numbertype, numbertype, numbertype, numbertype, dicttype);
+        case 5: return xpost_operator_cons(ctx, m->opname, m->func, out, 6,
+                    numbertype, numbertype, numbertype, numbertype,
+                    numbertype, dicttype);
+        case 6: return xpost_operator_cons(ctx, m->opname, m->func, out, 7,
+                    numbertype, numbertype, numbertype, numbertype,
+                    numbertype, numbertype, dicttype);
+        case 7: return xpost_operator_cons(ctx, m->opname, m->func, out, 8,
+                    numbertype, numbertype, numbertype, numbertype,
+                    numbertype, numbertype, numbertype, dicttype);
+        case 8: return xpost_operator_cons(ctx, m->opname, m->func, out, 9,
+                    numbertype, numbertype, numbertype, numbertype,
+                    numbertype, numbertype, numbertype, numbertype, dicttype);
+    }
+    return invalid;
+}
+
+/* Register a method table into a class dictionary and check the result.
+   ncomp is the component count of the device's declared colour space.
+   raster_is_compiled says the device keeps its pixels in a buffer of
+   its own, so the base class's row-array methods cannot serve it.
+   Returns 0, or the error that stopped it -- on the first failure, so a
+   device that could not be completed does not load. */
+static inline XPOST_MUST_CHECK int
+xpost_dev_class_install(Xpost_Context *ctx,
+                        Xpost_Object classdic,
+                        int ncomp,
+                        int raster_is_compiled,
+                        const Xpost_Dev_Method *methods,
+                        int nmethods)
+{
+    static const char *mandatory[] = XPOST_DEV_MANDATORY_SLOTS;
+    static const char *raster[] = XPOST_DEV_RASTER_SLOTS;
+    int i;
+
+    for (i = 0; i < nmethods; i++)
+    {
+        Xpost_Object op = xpost_dev_method_cons(ctx, &methods[i], ncomp);
+        int ret;
+
+        if (xpost_object_get_type(op) == invalidtype)
+        {
+            XPOST_LOG_ERR("device method %s has no shape in the driver contract",
+                          methods[i].slot);
+            return unregistered;
+        }
+        ret = xpost_dict_put(ctx, classdic,
+                             xpost_name_cons(ctx, methods[i].slot), op);
+        if (ret)
+            return ret;
+    }
+
+    for (i = 0; i < (int)(sizeof(mandatory) / sizeof(*mandatory)); i++)
+    {
+        Xpost_Object v = xpost_dict_get(ctx, classdic,
+                                        xpost_name_cons(ctx, mandatory[i]));
+
+        if (xpost_object_get_type(v) == invalidtype ||
+            xpost_object_get_type(v) == nulltype)
+        {
+            XPOST_LOG_ERR("device class has no %s", mandatory[i]);
+            return unregistered;
+        }
+    }
+
+    if (raster_is_compiled)
+        for (i = 0; i < (int)(sizeof(raster) / sizeof(*raster)); i++)
+        {
+            Xpost_Object v = xpost_dict_get(ctx, classdic,
+                                            xpost_name_cons(ctx, raster[i]));
+
+            if (xpost_object_get_type(v) != operatortype)
+            {
+                XPOST_LOG_ERR("device keeps its own raster but inherits %s,"
+                              " which reads the base class's", raster[i]);
+                return unregistered;
+            }
+        }
+
     return 0;
 }
 

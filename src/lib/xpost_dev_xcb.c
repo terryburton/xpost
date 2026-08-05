@@ -630,8 +630,7 @@ int _flush(Xpost_Context *ctx,
    But Flush is called (if available) by all raster operators
    for smoother previewing.
  */
-static
-int (*_emit)(Xpost_Context *ctx, Xpost_Object devdic) = _flush;
+#define _emit _flush
 
 static
 int _destroy(Xpost_Context *ctx,
@@ -721,6 +720,21 @@ static
 int loadxcbdevicecont(Xpost_Context *ctx,
                       Xpost_Object classdic)
 {
+    /* this device's method suite; the arities follow from its
+       declared colour space */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create", "xcbCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "xcbPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "xcbGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "DrawLine", "xcbDrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
+        { "FillRect", "xcbFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
+        { "FillPoly", "xcbFillPoly", (Xpost_Op_Func)_fillpoly, XPOST_DEV_M_POLY },
+        { "Emit", "xcbEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Flush", "xcbFlush", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
+        { "Destroy", "xcbDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
     int ret;
@@ -736,19 +750,13 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "xcbCreateCont", (Xpost_Op_Func)_create_cont, 1, 3,
                              integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "xcbCreate", (Xpost_Op_Func)_create, 1, 3,
-                             integertype, integertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Create"), op);
+
+    ret = xpost_dev_class_install(ctx, classdic, 3, 1,
+                                  methods, XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "xcbPutPix", (Xpost_Op_Func)_putpix, 0, 6,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y coords */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
-    if (ret)
-        return ret;
+
 
     /* Paint glyphs without blending their edges. The blend the text
        operators would otherwise use reads the pixel already there, which
@@ -762,50 +770,12 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "xcbGetPix", (Xpost_Op_Func)_getpix, 3, 3, numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbDrawLine", (Xpost_Op_Func)_drawline, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x1 y1 */
-                             numbertype, numbertype, /* x2 y2 */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "DrawLine"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbFillRect", (Xpost_Op_Func)_fillrect, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y */
-                             numbertype, numbertype, /* width height */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillRect"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbFillPoly", (Xpost_Op_Func)_fillpoly, 0, 5,
-                             numbertype, numbertype, numbertype,
-                             arraytype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillPoly"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbEmit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbFlush", (Xpost_Op_Func)_flush, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Flush"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "xcbDestroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
-    if (ret)
-        return ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
 

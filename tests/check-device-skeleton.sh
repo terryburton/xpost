@@ -232,6 +232,79 @@ if [ "$callers" -lt 2 ]; then
     fail=1
 fi
 
+# 9. A device's methods are registered from its method table, not one
+#    at a time. Written out by hand, each registration carried its own
+#    arity, its own operand types and its own put, and five of six
+#    devices answered success from a failed PutPix registration -- the
+#    device loaded with no PutPix and failed at its first paint. The
+#    table states the slot and the kind; xpost_dev_class_install derives
+#    the arity from the declared colour space, stops at the first
+#    refusal, and checks what it produced.
+for f in $fleet xpost_dev_win32.c; do
+    if ! grep -q 'Xpost_Dev_Method methods\[\]' "$libdir/$f"; then
+        echo "check-device-skeleton: $f has no method table." >&2
+        echo "Register a device's suite through xpost_dev_class_install()." >&2
+        fail=1
+    fi
+    if ! grep -q 'xpost_dev_class_install' "$libdir/$f"; then
+        echo "check-device-skeleton: $f does not install its class through the contract." >&2
+        fail=1
+    fi
+    # a method slot put into the class dictionary outside the table is a
+    # registration the completeness check never sees
+    hits=$(grep -nE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "(Create|PutPix|GetPix|DrawLine|DrawRect|FillRect|FillPoly|BlendPix|Emit|Flush|Destroy|Erase)"\)' \
+           "$libdir/$f" || true)
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: $f installs a method slot outside its table:" >&2
+        printf '%s\n' "$hits" >&2
+        fail=1
+    fi
+done
+
+# 10. The contract's list of slots that read the base class's raster is
+#     the classes' list. The completeness check refuses a device that
+#     keeps its own buffer and leaves one of them inherited; if a class
+#     grows another such method and the header does not hear about it,
+#     the check goes on passing while the hole reopens.
+#
+#     Only the names the pipeline looks up count. A dot-prefixed name is
+#     a parameter of the generated raster suite -- .rowsinit and
+#     .writepage read the row array too, but nothing reaches them except
+#     Create and Emit, which are on the list, so a device that overrides
+#     those never runs them.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+sed -n 's/^#define XPOST_DEV_RASTER_SLOTS { \(.*\) }$/\1/p' \
+    "$libdir/xpost_dev_driver.h" | tr -d '" ' | tr ',' '\n' \
+    | grep -v '^$' | sort > "$work/hdr"
+# the methods in the classes whose body reads ImgData
+awk '
+    /^[ \t]*\/[A-Za-z.][A-Za-z0-9._]*[ \t]*\{/ { m = $1; sub(/^\//, "", m) }
+    m != "" && /ImgData/ { print m; m = "" }
+' "$src"/data/image.ps "$src"/data/pgmimage.ps "$src"/data/ppmimage.ps \
+  "$src"/data/pbmimage.ps "$src"/data/tiffimage.ps \
+  | grep -v '^\.' | sort -u > "$work/cls"
+if [ ! -s "$work/hdr" ] || [ ! -s "$work/cls" ]; then
+    echo "FAILURES: the raster-slot lists could not be read; fix the guard" >&2
+    exit 1
+fi
+if ! cmp -s "$work/hdr" "$work/cls"; then
+    echo "check-device-skeleton: XPOST_DEV_RASTER_SLOTS and the class methods" >&2
+    echo "that read the row array disagree:" >&2
+    missing=$(comm -13 "$work/hdr" "$work/cls")
+    stale=$(comm -23 "$work/hdr" "$work/cls")
+    [ -n "$missing" ] && {
+        echo "  a class method reads the row array and the contract does not name it:" >&2
+        printf '%s\n' "$missing" | sed 's/^/      /' >&2
+        echo "  a device with its own buffer would inherit it and answer undefined." >&2
+    }
+    [ -n "$stale" ] && {
+        echo "  the contract names a slot no class method reads:" >&2
+        printf '%s\n' "$stale" | sed 's/^/      /' >&2
+    }
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi

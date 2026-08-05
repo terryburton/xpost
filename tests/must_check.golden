@@ -9,6 +9,7 @@
 
 xpost_array_put
 xpost_array_put_memory
+xpost_dev_class_install
 xpost_dev_pdf_append
 xpost_dev_private_put
 xpost_dict_put

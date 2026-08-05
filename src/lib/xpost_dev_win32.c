@@ -889,6 +889,20 @@ static
 int loadwin32devicecont(Xpost_Context *ctx,
                         Xpost_Object classdic)
 {
+    /* this device's method suite; the arities follow from its
+       declared colour space */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create", "win32Create", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "win32PutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "win32GetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "DrawLine", "win32DrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
+        { "FillRect", "win32FillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
+        { "Emit", "win32Emit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Flush", "win32Flush", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
+        { "Destroy", "win32Destroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
     int ret;
@@ -899,18 +913,13 @@ int loadwin32devicecont(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "win32Create", (Xpost_Op_Func)_create, 1, 3, integertype, integertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Create"), op);
+
+    ret = xpost_dev_class_install(ctx, classdic, 3, 1,
+                                  methods, XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32PutPix", (Xpost_Op_Func)_putpix, 0, 6,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y coords */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
-    if (ret)
-        return ret;
+
 
     /* Paint glyphs without blending their edges. The blend the text
        operators would otherwise use reads the pixel already there, which
@@ -924,44 +933,11 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32GetPix", (Xpost_Op_Func)_getpix, 3, 3,
-                             numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32DrawLine", (Xpost_Op_Func)_drawline, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x1 y1 */
-                             numbertype, numbertype, /* x2 y2 */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "DrawLine"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32FillRect", (Xpost_Op_Func)_fillrect, 0, 8,
-                             numbertype, numbertype, numbertype, /* r g b color values */
-                             numbertype, numbertype, /* x y coords */
-                             numbertype, numbertype, /* width height */
-                             dicttype); /* devdic */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "FillRect"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Emit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Flush", (Xpost_Op_Func)_flush, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Flush"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "win32Destroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
-    if (ret)
-        return ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
 

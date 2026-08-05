@@ -524,6 +524,18 @@ static
 int loadjpegdevicecont(Xpost_Context *ctx,
                       Xpost_Object classdic)
 {
+    /* this device's method suite; the arities follow from its
+       declared colour space */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create", "jpegCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "jpegPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "jpegGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "jpegBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
+        { "Emit", "jpegEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Destroy", "jpegDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
     int ret;
@@ -534,41 +546,17 @@ int loadjpegdevicecont(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, "jpegCreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
-    op = xpost_operator_cons(ctx, "jpegCreate", (Xpost_Op_Func)_create, 1, 3, integertype, integertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Create"), op);
+
+    ret = xpost_dev_class_install(ctx, classdic, 3, 1,
+                                  methods, XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "jpegPutPix", (Xpost_Op_Func)_putpix, 0, 6,
-            numbertype, numbertype, numbertype,
-            numbertype, numbertype,
-            dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "PutPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "jpegGetPix", (Xpost_Op_Func)_getpix, 3, 3,
-            numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "GetPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "jpegBlendPix", (Xpost_Op_Func)_blendpix, 0, 7,
-                             numbertype, numbertype, numbertype, numbertype,
-                             numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BlendPix"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "jpegEmit", (Xpost_Op_Func)_emit, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Emit"), op);
-    if (ret)
-        return ret;
 
-    op = xpost_operator_cons(ctx, "jpegDestroy", (Xpost_Op_Func)_destroy, 0, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "Destroy"), op);
-    if (ret)
-        return ret;
+
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
 
