@@ -1,0 +1,185 @@
+% Enumerating a composite whose extent is larger than the object's own
+% cursor field can count, run through `xpost -d null` by run-ps-test.sh:
+% prints SUCCESS iff every assertion holds.
+%
+% A dictionary's storage is a table of 2*sz+1 records, so the largest
+% table index is more than twice the size the sz field carries. In the
+% default build the composite fields are 16 bits wide, so a dictionary
+% those fields describe perfectly well has a table no field of the
+% object can index -- and an enumeration that keeps its cursor in one of
+% them never reaches the end of the table. It wraps back to the start
+% instead and enumerates the same entries again, without end.
+%
+% Arrays and strings sit on the near side of the same boundary: their
+% extent is the size field itself, so the largest of them is exactly
+% what a cursor of that width reaches. Both limits are exercised here,
+% because the one that holds is what makes the one that does not a bug
+% rather than an architectural limit.
+%
+% Most sections bound their own enumeration with an exit far above the
+% number of entries there are, so an enumeration that has begun to
+% repeat itself is reported rather than merely never returning. The
+% counts either side of that bound are asserted exactly, so the bound
+% cannot make a section pass. The last section cannot be bounded that
+% way -- it empties the dictionary it is enumerating -- and an
+% enumeration that repeats there does not return at all.
+%
+% The sizes below straddle the boundary in the default build and are
+% unremarkable in the large-object build, so the same assertions hold in
+% both.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop }
+    { (FAIL: ) print print (\n) print flush /failcount failcount 1 add store }
+    ifelse
+} def
+
+% The table of a dict asked for at this size spans 65537 records: one
+% more than the default build's composite fields can count. One less --
+% 26213 -- spans exactly 65535, which they can.
+/bigsz 26214 def
+/fitsz 26213 def
+
+% --- a dict on the near side of the boundary enumerates once through ---
+/N fitsz dict def
+N /probe 42 put
+/nseen 0 def
+N { pop pop /nseen nseen 1 add store nseen 4 gt { exit } if } forall
+nseen 1 eq (a dict whose table the size field counts enumerates once) assert
+
+% --- and so does one on the far side ---
+/D bigsz dict def
+D /probe 42 put
+/dseen 0 def
+D { pop pop /dseen dseen 1 add store dseen 4 gt { exit } if } forall
+dseen 1 eq (a dict whose table outgrows the size field enumerates once) assert
+
+% --- every entry of a populated oversized dict, exactly once ---
+/E bigsz dict def
+0 1 1999 { E exch dup put } for
+/etotal 0 def
+/ecount 0 def
+E { pop etotal add /etotal exch def /ecount ecount 1 add store
+    ecount 4000 gt { exit } if } forall
+ecount 2000 eq (an oversized dict yields as many pairs as it has entries) assert
+etotal 1999000 eq (and each of them exactly once) assert
+
+% --- a dict that reaches that size by growing enumerates the same way ---
+% growth over-allocates, so the table crosses the boundary well before
+% the entry count does: a dict grown past about fifteen thousand entries
+% is already on the far side
+/GD 4 dict def
+0 1 15500 { GD exch dup put } for
+/gcount 0 def
+/gtotal 0 def
+GD { pop gtotal add /gtotal exch def /gcount gcount 1 add store
+     gcount 20000 gt { exit } if } forall
+gcount 15501 eq (a grown dict yields as many pairs as it has entries) assert
+gtotal 120132750 eq (and each grown entry exactly once) assert
+
+% --- exit leaves the loop and the execution stack as it found it ---
+/d0 countexecstack def
+/xcount 0 def
+D { pop pop /xcount xcount 1 add store exit } forall
+xcount 1 eq (exit ends an enumeration of an oversized dict) assert
+countexecstack d0 eq (and takes the whole loop frame with it) assert
+
+% --- a nested enumeration of the same dict is a separate enumeration ---
+/F bigsz dict def
+F /a 1 put F /b 2 put F /c 3 put
+/inner 0 def
+/outer 0 def
+F { pop pop /outer outer 1 add store
+    F { pop pop /inner inner 1 add store inner 20 gt { exit } if } forall
+    outer 6 gt { exit } if } forall
+outer 3 eq (the outer enumeration sees every entry) assert
+inner 9 eq (and each pass of the inner one sees every entry too) assert
+
+% --- and exit from the inner one leaves the outer running ---
+/binner 0 def
+/bouter 0 def
+F { pop pop /bouter bouter 1 add store
+    F { pop pop /binner binner 1 add store exit } forall
+    bouter 6 gt { exit } if } forall
+bouter 3 eq (exit from a nested enumeration leaves the outer one running) assert
+binner 3 eq (and ends each inner pass at its first entry) assert
+
+% --- an error raised in the procedure unwinds the loop frame ---
+/e0 countexecstack def
+mark
+{ F { pop pop undefinedname } forall } stopped
+    (an error in the procedure reaches the enclosing stopped) assert
+$error /errorname get /undefined eq (and arrives under its own name) assert
+cleartomark
+countexecstack e0 eq (the loop frame unwinds with the error) assert
+
+% --- copy walks the same oversized table ---
+/C bigsz dict def
+E C copy pop
+C length 2000 eq (copy takes every entry out of an oversized table) assert
+C 1999 get 1999 eq (and puts them where they can be found) assert
+
+% --- the dict is not altered by having been enumerated ---
+E maxlength bigsz eq (enumeration leaves the dict's capacity alone) assert
+E length 2000 eq (and its entry count) assert
+E 0 get 0 eq (and its entries) assert
+
+% --- a collection in the middle of an enumeration keeps the cursor ---
+/H bigsz dict def
+0 1 49 { H exch dup put } for
+/hcount 0 def
+H { pop pop /hcount hcount 1 add store 1 vmreclaim
+    hcount 100 gt { exit } if } forall
+hcount 50 eq (an enumeration survives a collection between its steps) assert
+
+% --- an array at the size field's own limit enumerates once through ---
+/A 65535 array def
+A 0 (first) put
+A 65534 (last) put
+/acount 0 def
+/afirst false def
+/alast false def
+A { dup null ne { dup (first) eq { /afirst true store } if
+                  dup (last) eq { /alast true store } if } if
+    pop /acount acount 1 add store
+    acount 70000 gt { exit } if } forall
+acount 65535 eq (an array at the size field's limit yields every element once) assert
+afirst (including the first) assert
+alast (and the last) assert
+
+% --- and so does a string ---
+/S 65535 string def
+S 0 65 put
+S 65534 90 put
+/scount 0 def
+/stotal 0 def
+S { stotal add /stotal exch def /scount scount 1 add store
+    scount 70000 gt { exit } if } forall
+scount 65535 eq (a string at the size field's limit yields every byte once) assert
+stotal 155 eq (and each of them exactly once) assert
+
+% --- resourceforall enumerates over the same machinery ---
+% it snapshots the category's instance names with a dictionary
+% enumeration and then walks the snapshot with an array one
+/zzqa 3 dict /ProcSet defineresource pop
+/rcount 0 def
+/rfound false def
+(zzq*) { dup (zzqa) eq { /rfound true store } if
+         pop /rcount rcount 1 add store } 127 string /ProcSet resourceforall
+rfound (resourceforall finds a defined instance) assert
+rcount 1 eq (and enumerates it exactly once) assert
+
+% --- entries the procedure removes are not encountered later (PLRM) ---
+% the procedure empties the dictionary, so this is the one section an
+% enumeration that repeats itself does not return from at all
+/G bigsz dict def
+0 1 99 { G exch dup put } for
+/gseen 0 def
+G { pop pop /gseen gseen 1 add store 0 1 99 { G exch undef } for } forall
+gseen 1 eq (an entry removed by the procedure is not enumerated) assert
+G length 0 eq (and the removals took) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit

@@ -493,6 +493,19 @@ test('gc-large-dict-pressure',
   },
   timeout: 300)
 
+# Enumerating over that same table, and over the largest array and
+# string a build has. A dictionary's table is longer than a composite's
+# own fields count, so an enumeration whose cursor lives in one of them
+# wraps and repeats without end; an array or a string is exactly as long
+# as such a cursor reaches, which is what makes the dictionary's case a
+# bug rather than a limit. Both sides of the boundary run in both
+# personalities, which agree on every count.
+test('forall-large',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/forall_large_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),

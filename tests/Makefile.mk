@@ -83,6 +83,7 @@ tests/font_bigbuf_test.ps \
 tests/font_directory_test.ps \
 tests/font_type1_noaccess_test.ps \
 tests/font_type1_sparse_subrs_test.ps \
+tests/forall_large_test.ps \
 tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \
 tests/gc_diagnostics_test.ps \
