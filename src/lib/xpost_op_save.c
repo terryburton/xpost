@@ -155,7 +155,10 @@ int Vrestore(Xpost_Context *ctx,
                 o.mark_.tag = filetype;
                 o.mark_.pad0 = 0;
                 o.mark_.padw = ent;
-                xpost_file_object_close(ctx->lo, o);
+                /* restore is not a place a stream can refuse to close:
+                   the file object is going away with the save level
+                   whatever the close had left to write (PLRM 3.7.2) */
+                (void)xpost_file_object_close(ctx->lo, o);
                 if (xpost_file_get_file_pointer(ctx->lo, o) == NULL)
                     xpost_free_memory_ent(ctx->lo, ent);
             }

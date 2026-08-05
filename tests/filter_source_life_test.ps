@@ -64,7 +64,13 @@ inner closefile
 tgt closefile
 { enc (AB) writestring } /ioerror
     (writing through an encode filter whose target is closed is an ioerror) erris
-enc closefile
+% Closing the filter is one more write to that target -- the coding's
+% end-of-data marker -- so it is refused for the same reason, and the
+% stream it leaves behind has no terminator. The filter closes either
+% way; what it cannot do is report that it finished.
+{ enc closefile } /ioerror
+    (closing an encode filter whose target is closed is an ioerror) erris
+enc status not (the filter is closed even so) assert
 
 % --- closing the source twice around a live filter ---
 /src4 scr (r) file def

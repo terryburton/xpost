@@ -1206,6 +1206,14 @@ test('filter-eod',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# The write-side counterpart: closefile on an encoding filter writes the
+# coding's end-of-data marker, and a target that cannot accept it leaves a
+# stream that stops short of its own terminator. Needs a target that
+# refuses data, so it skips where the platform has none.
+test('filter-close-eod',
+  find_program('tests/run-refusing-target-test.sh'),
+  args: [ xpost_exe, files('tests/filter_close_eod_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 test('stream-exec',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stream_exec_test.ps') ],

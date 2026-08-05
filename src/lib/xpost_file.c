@@ -774,14 +774,24 @@ disk_readch(Xpost_File *file)
 #endif
 }
 
+/* A stream that has already failed a write takes no more: the byte the C
+   library accepts here would go into a buffer whose contents it has
+   dropped, so a caller told the byte arrived would be told wrong. Only
+   the flush a write happens to trigger reports the underlying failure,
+   which is why the answer has to be read off the stream and not off this
+   one call. */
 static int
 disk_writech(Xpost_File *file, int c)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
+    int ret;
 
     if (!df->file)
         return EOF;
-    return fputc(c, df->file);
+    ret = fputc(c, df->file);
+    if (ferror(df->file))
+        return EOF;
+    return ret;
 }
 
 static int
@@ -795,7 +805,11 @@ disk_close(Xpost_File *file)
         return 0;
     if (fp == stdin || fp == stdout || fp == stderr) /* do NOT close standard files */
         return 0;
-    ret = fclose(df->file);
+    /* what the stream lost earlier is still lost, whether or not the last
+       flush of it happens to succeed */
+    ret = ferror(fp) ? EOF : 0;
+    if (fclose(df->file) != 0)
+        ret = EOF;
     df->file = NULL;
 
     return ret;
@@ -1346,7 +1360,8 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
     if (!xpost_memory_table_alloc(mem, sizeof mf, filetype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
-        xpost_file_close(mf);
+        /* the stream is being abandoned before any program saw it */
+        (void)xpost_file_close(mf);
         free(mf);
         return invalid;
     }
@@ -1355,7 +1370,7 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
     if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
     {
         XPOST_LOG_ERR("cannot save file pointer in VM");
-        xpost_file_close(mf);
+        (void)xpost_file_close(mf);
         free(mf);
         return invalid;
     }
@@ -3006,7 +3021,15 @@ Xpost_Object xpost_file_cons_filter_ccitt(Xpost_Memory_File *mem,
 /* Encoding filters: write-side counterparts of the decode filters.
    Bytes pushed at the filter come out encoded on the target file;
    closing the filter writes the coding's end-of-data marker and
-   leaves the target open. */
+   leaves the target open.
+
+   A close method answers 0 for a coding that reached its target, and EOF
+   for one whose closing bytes -- the end of the encoded data, the marker
+   after it, or both -- the target would not take. That answer reaches
+   closefile, because a stream that stops short of its own terminator is
+   not one a program can be told it wrote (PLRM 3.13.1). The close still
+   runs to the end and releases whatever the coding holds, so the file is
+   closed either way. */
 
 typedef struct
 {
@@ -3064,6 +3087,8 @@ nullenc_writech(Xpost_File *f, int c)
     return c;
 }
 
+/* NullEncode has no end-of-data marker, so there is nothing left to
+   refuse it */
 static int
 nullenc_close(Xpost_File *f)
 {
@@ -3115,13 +3140,15 @@ static int
 hexenc_close(Xpost_File *f)
 {
     Xpost_HexEncFile *ff = (Xpost_HexEncFile *)f;
+    int ret = 0;
 
     if (!ff->closed)
     {
         ff->closed = 1;
-        xpost_file_putc(ff->target, '>');
+        if (xpost_file_putc(ff->target, '>') == EOF)
+            ret = EOF;
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods hexenc_methods =
@@ -3202,6 +3229,7 @@ static int
 a85enc_close(Xpost_File *f)
 {
     Xpost_A85EncFile *ff = (Xpost_A85EncFile *)f;
+    int ret = 0;
 
     if (!ff->closed)
     {
@@ -3209,12 +3237,15 @@ a85enc_close(Xpost_File *f)
         if (ff->n)
         {
             ff->tuple <<= 8 * (4 - ff->n);
-            a85enc_group(ff, ff->n);
+            if (a85enc_group(ff, ff->n) == EOF)
+                ret = EOF;
         }
-        xpost_file_putc(ff->target, '~');
-        xpost_file_putc(ff->target, '>');
+        if (xpost_file_putc(ff->target, '~') == EOF)
+            ret = EOF;
+        if (xpost_file_putc(ff->target, '>') == EOF)
+            ret = EOF;
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods a85enc_methods =
@@ -3328,23 +3359,29 @@ static int
 rleenc_close(Xpost_File *f)
 {
     Xpost_RleEncFile *ff = (Xpost_RleEncFile *)f;
+    int ret = 0;
 
     if (!ff->closed)
     {
         ff->closed = 1;
         if (ff->runcnt >= 3)
         {
-            rleenc_flushlit(ff);
-            rleenc_flushrun(ff);
+            if (rleenc_flushlit(ff) == EOF)
+                ret = EOF;
+            if (rleenc_flushrun(ff) == EOF)
+                ret = EOF;
         }
         else
         {
-            rleenc_flushrun(ff);
-            rleenc_flushlit(ff);
+            if (rleenc_flushrun(ff) == EOF)
+                ret = EOF;
+            if (rleenc_flushlit(ff) == EOF)
+                ret = EOF;
         }
-        xpost_file_putc(ff->target, 128);
+        if (xpost_file_putc(ff->target, 128) == EOF)
+            ret = EOF;
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods rleenc_methods =
@@ -3403,7 +3440,8 @@ static int
 flateenc_close(Xpost_File *f)
 {
     Xpost_FlateEncFile *ff = (Xpost_FlateEncFile *)f;
-    int ret;
+    int zret;
+    int ret = 0;
 
     if (!ff->closed)
     {
@@ -3411,13 +3449,18 @@ flateenc_close(Xpost_File *f)
         ff->strm.avail_in = 0;
         do
         {
-            ret = deflate(&ff->strm, Z_FINISH);
+            zret = deflate(&ff->strm, Z_FINISH);
             if (flateenc_drain(ff) == EOF)
+            {
+                ret = EOF;
                 break;
-        } while (ret == Z_OK);
+            }
+        } while (zret == Z_OK);
+        if (zret != Z_STREAM_END)
+            ret = EOF;
         deflateEnd(&ff->strm);
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods flateenc_methods =
@@ -3464,6 +3507,19 @@ dctenc_error_exit(j_common_ptr cinfo)
     longjmp(ff->jmp, 1);
 }
 
+/* The destination manager reports a target that would not take the
+   compressed bytes. It leaves the compressor the same way an error
+   inside it would, but the compressor never raised one, so it has no
+   message to format. */
+static void
+dctenc_target_refused(j_common_ptr cinfo)
+{
+    Xpost_DctEncFile *ff = (Xpost_DctEncFile *)cinfo->client_data;
+
+    XPOST_LOG_ERR("DCTEncode: the data target would not take the stream");
+    longjmp(ff->jmp, 1);
+}
+
 static void
 dctenc_output_message(j_common_ptr cinfo)
 {
@@ -3490,7 +3546,7 @@ dctenc_empty_output_buffer(j_compress_ptr cinfo)
 
     for (i = 0; i < sizeof(ff->out); i++)
         if (xpost_file_putc(ff->target, ff->out[i]) == EOF)
-            dctenc_error_exit((j_common_ptr)cinfo);
+            dctenc_target_refused((j_common_ptr)cinfo);
     ff->jdst.next_output_byte = ff->out;
     ff->jdst.free_in_buffer = sizeof(ff->out);
     return TRUE;
@@ -3504,7 +3560,7 @@ dctenc_term_destination(j_compress_ptr cinfo)
 
     for (i = 0; i < n; i++)
         if (xpost_file_putc(ff->target, ff->out[i]) == EOF)
-            dctenc_error_exit((j_common_ptr)cinfo);
+            dctenc_target_refused((j_common_ptr)cinfo);
 }
 
 static int
@@ -3543,11 +3599,16 @@ static int
 dctenc_close(Xpost_File *f)
 {
     Xpost_DctEncFile *ff = (Xpost_DctEncFile *)f;
+    volatile int ret = 0;
 
     if (!ff->closed)
     {
         ff->closed = 1;
-        if (!ff->failed && !setjmp(ff->jmp))
+        if (ff->failed)
+            ret = EOF;
+        else if (setjmp(ff->jmp))
+            ret = EOF;
+        else
         {
             if (!ff->started)
             {
@@ -3572,7 +3633,7 @@ dctenc_close(Xpost_File *f)
         free(ff->row);
         ff->row = NULL;
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods dctenc_methods =
@@ -3706,16 +3767,19 @@ static int
 lzwenc_close(Xpost_File *f)
 {
     Xpost_LzwEncFile *ff = (Xpost_LzwEncFile *)f;
+    int ret = 0;
 
     if (!ff->closed)
     {
         ff->closed = 1;
-        if (ff->prefix >= 0)
-            lzwenc_emit(ff, ff->prefix);
-        lzwenc_emit(ff, 257);
-        bitenc_pad((Xpost_BitEncBase *)ff);
+        if (ff->prefix >= 0 && lzwenc_emit(ff, ff->prefix) == EOF)
+            ret = EOF;
+        if (lzwenc_emit(ff, 257) == EOF)
+            ret = EOF;
+        if (bitenc_pad((Xpost_BitEncBase *)ff) == EOF)
+            ret = EOF;
     }
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods lzwenc_methods =
@@ -3947,6 +4011,7 @@ static int
 faxenc_close(Xpost_File *f)
 {
     Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)f;
+    int ret = 0;
 
     if (!ff->closed)
     {
@@ -3956,23 +4021,26 @@ faxenc_close(Xpost_File *f)
             int i, n = ff->k < 0 ? 2 : 6;
 
             /* the block marker starts a fresh byte when rows do */
-            if (ff->byteal)
-                bitenc_pad((Xpost_BitEncBase *)ff);
+            if (ff->byteal && bitenc_pad((Xpost_BitEncBase *)ff) == EOF)
+                ret = EOF;
             for (i = 0; i < n; i++)
             {
-                faxenc_eol(ff);
-                if (ff->k > 0)
-                    bitenc_put((Xpost_BitEncBase *)ff, 1, 1);
+                if (faxenc_eol(ff) == EOF)
+                    ret = EOF;
+                if (ff->k > 0 &&
+                    bitenc_put((Xpost_BitEncBase *)ff, 1, 1) == EOF)
+                    ret = EOF;
             }
         }
-        bitenc_pad((Xpost_BitEncBase *)ff);
+        if (bitenc_pad((Xpost_BitEncBase *)ff) == EOF)
+            ret = EOF;
     }
     free(ff->ref);
     free(ff->cur);
     free(ff->row);
     ff->ref = ff->cur = NULL;
     ff->row = NULL;
-    return 0;
+    return ret;
 }
 
 struct Xpost_File_Methods faxenc_methods =
@@ -4981,6 +5049,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
 {
     Xpost_File *fp;
     int ret;
+    int lost;
 
     fp = xpost_file_get_file_pointer(mem, f);
     if (fp)
@@ -4989,7 +5058,12 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
         printf("fclose");
 #endif
 
-        xpost_file_close(fp);
+        /* the stream may have had bytes still to place -- an encoding
+           filter's end-of-data marker, a buffer the system had not taken
+           yet. The teardown below runs either way, since the file is
+           closed whether or not those bytes arrived (PLRM 3.8), and the
+           loss is reported once it has. */
+        lost = xpost_file_close(fp) != 0;
         /* a reusable stream holds its source's bytes in a buffer of its
            own, which goes when the stream does */
         if (fp->methods == &rsd_methods)
@@ -5011,7 +5085,10 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
             {
                 if (_owned_memory_source(fp))
                 {
-                    xpost_file_close(under);
+                    /* an in-memory stream this module synthesised from a
+                       string: it holds no resource that can refuse to be
+                       given up */
+                    (void)xpost_file_close(under);
                     under->closed = 1;
                 }
                 if (under->refs > 0)
@@ -5034,6 +5111,8 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
             XPOST_LOG_ERR("cannot write NULL over FILE* in VM");
             return VMerror;
         }
+        if (lost)
+            return ioerror;
     }
     return 0;
 }
@@ -5048,7 +5127,7 @@ int xpost_file_object_close_at_eod(Xpost_Memory_File *mem,
     Xpost_File *fp = xpost_file_get_file_pointer(mem, f);
 
     if (fp && (fp->methods == &rsd_methods))
-        return xpost_file_close(fp);
+        return xpost_file_close(fp) ? ioerror : 0;
 
     return xpost_file_object_close(mem, f);
 }
