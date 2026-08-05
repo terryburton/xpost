@@ -289,7 +289,8 @@ typedef struct
     word ent; /**< entity. Absolute index into Xpost_Memory_Table */
     word off; /**< byte offset in string,
                     object offset in array,
-                    index in dict (only during `forall` operator) */
+                    zero in dict: a dictionary's hash table is longer
+                    than this field counts, so nothing indexes it here */
 } Xpost_Object_Comp;
 /* The widest entity number an object can carry: the ent field plus the
    tag's spare bits, clamped so a wide-word build -- whose ent field

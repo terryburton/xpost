@@ -423,44 +423,53 @@ int xpost_op_dict_copy(Xpost_Context *ctx,
     return 0;
 }
 
-/* find the next occupied slot from D's cursor, push the pair on the
-   operand stack and advance the cursor; shared by forall and its
-   iterate continuation. returns 1 while pairs remain. */
+/* find the next occupied slot at or after *cursor, push the pair on the
+   operand stack and leave the cursor one past it; shared by forall and
+   its iterate continuation. returns 1 while pairs remain.
+
+   The cursor indexes the table of 2*sz+1 records, which is longer than
+   the size a composite's own fields count, so it is carried beside the
+   dictionary rather than in it and counted in a type wide enough to
+   reach the end of the table. The table's length is taken afresh on
+   every step: the procedure may put entries and grow the dictionary
+   under the enumeration. */
 static
 int _dict_forall_step (Xpost_Context *ctx,
-                       Xpost_Object *D,
+                       Xpost_Object D,
+                       unsigned int *cursor,
                        int *reterr)
 {
-    Xpost_Memory_File *mem = xpost_context_select_memory(ctx, *D);
+    Xpost_Memory_File *mem = xpost_context_select_memory(ctx, D);
+    unsigned int n;
     unsigned ad;
     dicrec *tp;
     int ret;
 
     *reterr = 0;
-    D->comp_.sz = xpost_dict_max_length_memory (mem, *D); // cache size locally
-    if (D->comp_.off >= DICTABN(D->comp_.sz)) // cursor past the table
+    n = DICTABN(xpost_dict_max_length_memory (mem, D));
+    if (*cursor >= n) // cursor past the table
         return 0;
 
-    ret = xpost_memory_table_get_addr(mem, xpost_object_get_ent(*D), &ad);
+    ret = xpost_memory_table_get_addr(mem, xpost_object_get_ent(D), &ad);
     if (!ret)
     {
         XPOST_LOG_ERR("cannot retrieve address for dict ent %u",
-                      xpost_object_get_ent(*D));
+                      xpost_object_get_ent(D));
         *reterr = VMerror;
         return 0;
     }
     tp = xpost_dict_table_of(xpost_dict_head_at(mem, ad));
 
-    for ( ; D->comp_.off < DICTABN(D->comp_.sz); ++D->comp_.off) // find next pair
+    for ( ; *cursor < n; ++*cursor) // find next pair
     {
-        if (xpost_object_get_type(tp[D->comp_.off].key) != nulltype) // found
+        if (xpost_object_get_type(tp[*cursor].key) != nulltype) // found
         {
             Xpost_Object k,v;
 
-            k = tp[D->comp_.off].key;
+            k = tp[*cursor].key;
             if (xpost_object_get_type(k) == extendedtype)
                 k = xpost_dict_convert_extended_to_number(k);
-            v = tp[D->comp_.off].value;
+            v = tp[*cursor].value;
 
             if (!xpost_stack_push(ctx->lo, ctx->os, k))
             {
@@ -472,7 +481,7 @@ int _dict_forall_step (Xpost_Context *ctx,
                 *reterr = stackoverflow;
                 return 0;
             }
-            ++D->comp_.off;
+            ++*cursor;
             return 1;
         }
     }
@@ -486,13 +495,14 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
                                Xpost_Object D,
                                Xpost_Object P)
 {
+    unsigned int cursor = 0;
     int err;
 
     /* forall of an unreadable dict is invalidaccess, per the access rules */
     if (!xpost_object_is_readable(ctx, D))
         return invalidaccess;
 
-    if (!_dict_forall_step(ctx, &D, &err))
+    if (!_dict_forall_step(ctx, D, &cursor, &err))
         return err;
 
     /* loop frame: the sentinel forall operator (which exit searches
@@ -504,6 +514,8 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(D)))
         return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons((integer)cursor)))
+        return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           XPOST_OP(ctx, dictforallcont)))
         return execstackoverflow;
@@ -512,30 +524,35 @@ int xpost_op_dict_proc_forall (Xpost_Context *ctx,
     return 0;
 }
 
-/* continue a dict forall: es holds (from the top) the dict with its
-   slot cursor, the literal proc, and the sentinel */
+/* continue a dict forall: es holds (from the top) the slot cursor, the
+   dict, the literal proc, and the sentinel */
 static
 int xpost_op_dict_forall_iterate (Xpost_Context *ctx)
 {
-    Xpost_Object D, P;
+    Xpost_Object C, D, P;
+    unsigned int cursor;
     int err;
 
-    D = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0);
-    P = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 1);
-    if (xpost_object_get_type(D) == invalidtype)
+    C = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0);
+    D = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 1);
+    P = xpost_stack_topdown_fetch(ctx->lo, ctx->es, 2);
+    if (xpost_object_get_type(C) != integertype
+        || xpost_object_get_type(D) == invalidtype)
         return execstackunderflow;
+    cursor = (unsigned int)C.int_.val;
 
-    if (!_dict_forall_step(ctx, &D, &err))
+    if (!_dict_forall_step(ctx, D, &cursor, &err))
     {
         int k;
         if (err)
             return err;
-        for (k = 0; k < 3; k++)
+        for (k = 0; k < 4; k++)
             (void)xpost_stack_pop(ctx->lo, ctx->es);
         return 0;
     }
 
-    if (!xpost_stack_topdown_replace(ctx->lo, ctx->es, 0, xpost_object_cvlit(D)))
+    if (!xpost_stack_topdown_replace(ctx->lo, ctx->es, 0,
+                                     xpost_int_cons((integer)cursor)))
         return execstackunderflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           XPOST_OP(ctx, dictforallcont)))
