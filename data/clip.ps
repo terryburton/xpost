@@ -549,9 +549,13 @@ put
     graphicsdict /clipptr 2 copy known { get }{ 2 copy 0 put get } ifelse
     % the stack is a fixed depth, and running out of it is the exhaustion
     % PLRM 8.2 names for this operator; writing past the end would report
-    % the index as the fault instead
+    % the index as the fault instead. The stack and the pointer are dropped
+    % before signalling: an operator leaves nothing behind when it fails,
+    % and the stack is the machinery's own -- a program left holding it
+    % could read a saved clip and write into the slot a later cliprestore
+    % installs from.
     2 copy exch length ge
-        { /clipsave cvx /limitcheck signalerror } if
+        { pop pop /clipsave cvx /limitcheck signalerror } if
     2 copy
     [ graphicsdict /currgstate get /clipregion get .copypath
       graphicsdict /currgstate get /clipsource get ]

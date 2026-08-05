@@ -299,6 +299,10 @@ gsave
     { 40 { clipsave } repeat } stopped
         { $error /errorname get /limitcheck eq }{ false } ifelse
         (running past the depth reports limitcheck) assert
+    % an operator that fails leaves nothing behind, and what it was
+    % holding is the machinery's own clip stack: a program left with it
+    % could read a saved clip and write the slot a cliprestore installs
+    count 0 eq (the refused clipsave leaves the operand stack alone) assert
     clear
 grestore
 initclip
