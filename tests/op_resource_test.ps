@@ -36,4 +36,56 @@
 % a defined resource category is itself reachable through the Category category
 /Font /Category resourcestatus { pop pop true }{ false } ifelse (Font is a known category) assert
 
+% --- a category is two entries made together, and they agree ---
+% A category exists as an implementation dictionary, an instance of
+% /Category, and as a table of its own instances. Nothing a program can
+% see distinguishes the two, so a category made with only one of them
+% answers /Category resourcestatus and then raises undefinedresource the
+% moment anything asks it for an instance. Every category is checked, not
+% a chosen one, so a second way of registering them cannot make a
+% half-formed category somewhere off to the side.
+/badcat 0 def
+/ncat 0 def
+% resourceforall hands the key back in the scratch string, so each name is
+% made from it before use and the buffer is not held past the iteration
+/hasinstancetable { % name  .  bool
+    /h.n exch def
+    count /h.c exch def
+    { /NoSuchInstanceAnywhere h.n resourcestatus { pop pop } if } stopped
+    /h.r exch def
+    count h.c gt { count h.c sub { pop } repeat } if
+    h.r not
+} def
+% Generic is the exception, and PLRM 3.9.2 says why: "The Category
+% category contains an instance named Generic, whose value is a
+% dictionary containing a generic resource implementation." It is the
+% prototype a program copies to define a category of its own, held as an
+% instance of Category, and not a category anything defines instances in.
+(*)
+{
+    cvn
+    dup /Generic eq { pop }{
+    /ncat ncat 1 add store
+    % the implementation dictionary names the category it implements
+    dup dup /Category findresource /Category get ne
+        { (FAIL: category does not name itself: ) print dup ==
+          /badcat badcat 1 add store } if
+    % and the category answers about its own instances rather than raising
+    % undefinedresource for want of a table to look in
+    dup hasinstancetable not
+        { (FAIL: category has no instance table: ) print dup ==
+          /badcat badcat 1 add store } if
+    pop
+    } ifelse
+} 60 string /Category resourceforall
+ncat 10 gt (the categories are enumerable) assert
+badcat 0 eq (every category has both halves) assert
+
+% the composite font machinery states the categories it keeps instances in
+/missingcidcat 0 def
+[ /CIDFont /CMap /ProcSet ] {
+    /Category resourcestatus { pop pop }{ /missingcidcat missingcidcat 1 add store } ifelse
+} forall
+missingcidcat 0 eq (the CID machinery's categories are all there) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

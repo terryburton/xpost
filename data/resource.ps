@@ -20,15 +20,42 @@ true setglobal
 % own categories, so it need only exist and name itself
 //.xpostsys /.resources get /Category get /Generic << /Category /Generic >> put
 
+% A category is two things made together: a table of its own instances,
+% and an implementation dictionary registered as an instance of
+% /Category. A category with only one of them answers /Category
+% resourcestatus and then raises undefinedresource the moment anything
+% asks it for an instance, so neither half is written anywhere but here.
+
+% name  .catinstances  -
+% Give a category the table its instances live in, if it has not one
+% already. This is the half both routes into existence share: the
+% standard categories below, and a program defining an instance of
+% /Category, which is how PLRM 3.9.2 has a program register a category
+% of its own.
+.xpostsys /.catinstances {
+    //.xpostsys /.resources get exch 2 copy known
+        { pop pop }{ 32 dict put } ifelse
+} bind put
+
+% name  .defcategory  -
+% Bring a resource category into existence with an implementation
+% dictionary that need only name the category it implements. A category
+% that already exists is left alone, instances and all, which is what
+% lets a module state the categories it keeps instances in without
+% having to know whether another module has already asked for them.
+.xpostsys /.defcategory {
+    dup //.xpostsys /.resources get exch known { pop }{
+        dup //.xpostsys /.catinstances get exec
+        //.xpostsys /.resources get /Category get exch dup << /Category 3 -1 roll >> put
+    } ifelse
+} bind put
+
 % the standard regular categories exist from the start, empty until
 % instances are defined into them
 [ /Font /CIDFont /CMap /FontSet /Encoding /Form /Pattern /ProcSet
   /ColorSpace /Halftone /ColorRendering /IdiomSet /Filter
   /ColorSpaceFamily /Emulator /ControlLanguage /Localization /PDL ]
-{
-    dup //.xpostsys /.resources get exch 32 dict put
-    //.xpostsys /.resources get /Category get exch dup << /Category 3 -1 roll >> put
-} forall
+{ //.xpostsys /.defcategory get exec } forall
 
 % Directories searched, in order, when findresource misses in VM. Empty
 % by default; the host appends entries (xpost_add_resource_dir, -I).
@@ -60,9 +87,10 @@ setglobal
 % key instance category  defineresource  instance
 /defineresource [ /anytype /anytype /nametype ] {
     dup /Category eq {
-        % a new category comes into being with an empty instance table
-        2 index //.xpostsys /.resources get exch 2 copy known not
-            { 32 dict put }{ pop pop } ifelse
+        % defining an instance of /Category is defining a category, so it
+        % gets the table its instances will live in; the implementation
+        % dictionary is the instance being defined
+        2 index //.xpostsys /.catinstances get exec
     } if
     dup //.xpostsys /.instof get exec pop     % the category must exist either way
     currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse

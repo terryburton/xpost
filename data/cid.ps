@@ -11,17 +11,12 @@
 
 //.internaldict /QUIET known { }{ (loading cid.ps...)print } ifelse
 
-% resource categories for the composite font machinery
-[ /CIDFont /CMap /ProcSet ] {
-    /c exch def
-    c /Category resourcestatus { pop pop }{
-        /Generic /Category findresource
-        dup length 1 add dict copy
-        dup /Category c put
-        c exch /Category defineresource pop
-    } ifelse
-} forall
-currentdict /c undef
+% The resource categories the composite font machinery keeps its
+% instances in. Stated here because this is the code that needs them,
+% through the one operation that brings a category into existence; each
+% is already there, made with the rest of the standard categories when
+% resource.ps loaded, and .defcategory leaves an existing one alone.
+[ /CIDFont /CMap /ProcSet ] { //.xpostsys /.defcategory get exec } forall
 
 % The CIDInit procedure set: a program begins a dictionary, invokes
 % these operators to accumulate the code spaces and ranges into it,
