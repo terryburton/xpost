@@ -75,7 +75,10 @@ done
 # The members are generated from XPOST_OP_REFS and reached through XPOST_OP
 # and XPOST_OP_CODE. A file that names the structure directly has stepped
 # around the one statement of the set.
-strays=$(grep -rl 'opcode_shortcuts' "$lib" | grep -v '/xpost_context\.h$' || true)
+# only the sources: a build in the tree leaves object files beside them,
+# and a match in one of those is debug information, not a call site
+strays=$(grep -l 'opcode_shortcuts' "$lib"/*.c "$lib"/*.h 2>/dev/null \
+         | grep -v '/xpost_context\.h$' || true)
 if [ -n "$strays" ]; then
     echo "FAIL: the reference table is reached without its accessor by:"
     printf '%s\n' "$strays" | sed 's/^/      /'
@@ -103,7 +106,7 @@ fi
 #
 # The register lists each surviving by-string lookup as "file operator",
 # with the reason it is still there in a comment above it.
-grep -rn 'xpost_operator_cons *(ctx, *"[^"]*", *NULL' "$lib" \
+grep -n 'xpost_operator_cons *(ctx, *"[^"]*", *NULL' "$lib"/*.c "$lib"/*.h \
   | grep -vE ':[0-9]+: *(//|/\*|\*)' \
   | sed -E 's|^.*/([a-z0-9_]+\.c):[0-9]+:.*xpost_operator_cons *\(ctx, *"([^"]*)".*|\1 \2|' \
   | sort > "$work/current"
