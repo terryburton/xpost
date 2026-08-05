@@ -1635,8 +1635,9 @@ int xpost_op_lockdown (Xpost_Context *ctx)
 }
 
 /* The string forms of filter: a private copy of the string becomes a readable
-   file, and the file-source machinery runs over it. The wrapping filter owns
-   and releases that source when it is closed (xpost_file_object_close). */
+   file, and the file-source machinery runs over it. No program object names
+   that file, so it is handed to the filter built over it, which closes and
+   releases it along with itself. */
 static
 Xpost_Object _string_source(Xpost_Context *ctx, Xpost_Object S)
 {
@@ -1649,6 +1650,7 @@ Xpost_Object _string_source(Xpost_Context *ctx, Xpost_Object S)
         F.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         F.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ
                   << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        xpost_file_hand_over(ctx->lo, F);
     }
     return F;
 }

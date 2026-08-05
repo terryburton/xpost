@@ -889,6 +889,7 @@ xpost_diskfile_open(const FILE *fp)
         df->methods.methods = &disk_methods;
         df->methods.refs = 0;
         df->methods.closed = 0;
+        df->methods.owned = 0;
         df->file = (FILE*)fp;
         /* reads from a regular file never block, so only poll fds that
            can stall (pipes, terminals, sockets) */
@@ -1035,6 +1036,7 @@ xpost_memoryfile_open_read(unsigned char *ptr, size_t limit)
         mf->methods.methods = &memory_methods;
         mf->methods.refs = 0;
         mf->methods.closed = 0;
+        mf->methods.owned = 0;
         mf->contents = ptr;
         mf->is_read = 1;
         mf->is_malloc = 0;
@@ -2259,6 +2261,7 @@ Xpost_Object xpost_file_cons_filter_predictor(Xpost_Memory_File *mem,
 {
     Xpost_File *source = xpost_file_get_file_pointer(mem, src);
     Xpost_PredFile *ff;
+    Xpost_Object layered;
     int rowbits;
 
     if (!source)
@@ -2291,7 +2294,12 @@ Xpost_Object xpost_file_cons_filter_predictor(Xpost_Memory_File *mem,
         free(ff);
         return invalid;
     }
-    return _filter_object_cons(mem, &ff->methods);
+    layered = _filter_object_cons(mem, &ff->methods);
+    /* the stage stands in front of the decompressor, which the program
+       never sees and so can never close: it belongs to the stage now */
+    if (xpost_object_get_type(layered) == filetype)
+        xpost_file_hand_over(mem, src);
+    return layered;
 }
 
 /* LZWDecode filter: the variable-width LZW codes PostScript and PDF
@@ -4500,6 +4508,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff)
         return invalid;
     ff->refs = 0;
     ff->closed = 0;
+    ff->owned = 0;
     f.tag = filetype;
     if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
     {
@@ -5029,17 +5038,36 @@ static Xpost_File *_filter_underlying_stream(Xpost_File *f)
     return ((Xpost_FilterBase *)f)->source;
 }
 
-/* If f is a filter whose stream is an in-memory file this module synthesised
-   from a string (the string form of the filter operator), return that stream
-   so the closing filter can release it; otherwise NULL. */
-static Xpost_File *_owned_memory_source(Xpost_File *f)
+/* Mark a stream the machinery made for the filter about to wrap it. */
+void xpost_file_hand_over(Xpost_Memory_File *mem, Xpost_Object f)
 {
-    Xpost_File *src = _filter_underlying_stream(f);
+    Xpost_File *fp = xpost_file_get_file_pointer(mem, f);
 
-    if (src && src->methods == &memory_methods
-            && ((Xpost_MemoryFile *)src)->is_read)
-        return src;
-    return NULL;
+    if (fp)
+        fp->owned = 1;
+}
+
+/* Give up this filter's claim on the stream beneath it, and free that stream
+   once nothing holds it any longer. A stream the machinery made for this
+   filter alone has no other route to a close, so it is closed here -- and
+   since such a stream can itself be a filter over another, the release runs
+   on down the chain from it. */
+static void _release_underlying(Xpost_File *f)
+{
+    Xpost_File *under = _filter_underlying_stream(f);
+
+    if (!under)
+        return;
+    if (under->owned && !under->closed)
+    {
+        (void)xpost_file_close(under);
+        under->closed = 1;
+        _release_underlying(under);
+    }
+    if (under->refs > 0)
+        --under->refs;
+    if (under->closed && under->refs == 0)
+        free(under);
 }
 
 /* close the file,
@@ -5076,27 +5104,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
             rf->pos = 0;
         }
         fp->closed = 1;
-        /* give up this filter's claim on the stream beneath it; a source
-           synthesised from a string is owned outright, so close it too */
-        {
-            Xpost_File *under = _filter_underlying_stream(fp);
-
-            if (under)
-            {
-                if (_owned_memory_source(fp))
-                {
-                    /* an in-memory stream this module synthesised from a
-                       string: it holds no resource that can refuse to be
-                       given up */
-                    (void)xpost_file_close(under);
-                    under->closed = 1;
-                }
-                if (under->refs > 0)
-                    --under->refs;
-                if (under->closed && under->refs == 0)
-                    free(under);
-            }
-        }
+        _release_underlying(fp);
         /* the close method released the stream's own resources; the object's
            only pointer to the backing struct is cleared next, and file
            entities are never collected, so free the struct here or it leaks.

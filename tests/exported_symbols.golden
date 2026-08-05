@@ -139,6 +139,7 @@ xpost_file_cons_readstring
 xpost_file_get_bytes_available
 xpost_file_get_file_pointer
 xpost_file_get_status
+xpost_file_hand_over
 xpost_file_object_close
 xpost_file_object_close_at_eod
 xpost_file_open

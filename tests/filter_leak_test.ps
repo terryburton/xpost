@@ -1,0 +1,176 @@
+% Every filter releases what it was given to wrap, run through
+% `xpost -q --no-sandbox -d null` under a leak checker by
+% run-filter-leak-test.sh.
+%
+% A filter holds the stream beneath it as a plain pointer and takes a
+% reference on it; closing the filter gives that reference up. Some of
+% those streams the machinery made itself -- an in-memory file over a copy
+% of a string, and the decompressor that a predictor stage stands in front
+% of -- and no program object names them, so nothing but the filter above
+% can close them. Where it does not, the stream and everything it holds (a
+% zlib inflate state, a row buffer, the copy of the string) stays
+% allocated and unreachable for the rest of the run.
+%
+% No PostScript program can see that, which is why the assertions here are
+% about the bytes and the leak checker outside makes the rest of the
+% statement. Every coding is built, driven and closed, over both kinds of
+% stream; the checker requires the process to end holding none of it.
+%
+% Prints SUCCESS iff every coding carried its bytes.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/scratchfile (filter-leak-scratch.dat) def
+/buf 512 string def
+
+/catstr { % a b  .  ab
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 4 -1 roll length 4 -1 roll putinterval
+} bind def
+
+/slurp { % file  .  string    everything it produces, and it is closed
+    /s.f exch def
+    /s.o () def
+    { s.f buf readstring
+      exch /s.o s.o 3 -1 roll catstr def
+      not { exit } if } loop
+    s.f closefile
+    s.o
+} bind def
+
+% the sample: long enough to drive a coding through several of its
+% internal blocks, and not so uniform that every coding shrinks it away
+/blk 4096 string def
+/seed 1 def
+0 1 4095 {
+    /seed seed 75 mul 74 add 65537 mod def
+    blk exch seed 255 and put
+} for
+
+/encodes { % /FilterName  .  bool    is this coding in this build?
+    /a.n exch def
+    mark
+    { /a.p scratchfile (w) file def
+      a.p a.n filter closefile
+      a.p closefile } stopped not
+    /a.v exch def
+    cleartomark
+    a.v
+} bind def
+
+/decodes { % /FilterName  .  bool    is this coding in this build?
+    /b.n exch def
+    mark
+    { () b.n filter closefile } stopped not
+    /b.v exch def
+    cleartomark
+    b.v
+} bind def
+
+/encoded { % /FilterName  .  string    the sample through the coding
+    /e.n exch def
+    /e.t scratchfile (w) file def
+    /e.f e.t e.n filter def
+    e.f blk writestring
+    e.f closefile
+    e.t closefile
+    scratchfile (r) file slurp
+} bind def
+
+% ---- each coding, out through its encoder and back through its decoder ----
+% The decoder is given a string, so its source is a file the machinery
+% makes and hands to it; the encoder writes a file the program opened and
+% closes itself.
+/roundtrip { % /EncodeName /DecodeName  .  -
+    /r.d exch def
+    /r.e exch def
+    r.e encodes r.d decodes and {
+        r.e encoded r.d filter slurp blk eq
+        r.e 24 string cvs ( round-trips) catstr assert
+    } if
+} bind def
+
+/ASCIIHexEncode  /ASCIIHexDecode  roundtrip
+/ASCII85Encode   /ASCII85Decode   roundtrip
+/RunLengthEncode /RunLengthDecode roundtrip
+/LZWEncode       /LZWDecode       roundtrip
+/FlateEncode     /FlateDecode     roundtrip
+
+% NullEncode passes bytes through untouched, so the file is the sample
+/NullEncode encodes {
+    /NullEncode encoded blk eq (NullEncode passes the bytes through) assert
+} if
+
+% a reusable stream serves its buffer from beginning to end
+blk /ReusableStreamDecode filter slurp blk eq
+    (ReusableStreamDecode reads its source) assert
+
+% a bounded subfile stops where it was told to
+blk 16 () /SubFileDecode filter slurp blk 0 16 getinterval eq
+    (SubFileDecode stops at its count) assert
+
+% ---- the stage in front of a decompressor ----
+% Flate streams of the same 36 known bytes: one undifferenced, one
+% differenced horizontally and one through a PNG row filter, each
+% compressed afterwards. The stage stands in front of the decompressor,
+% which the program never sees: only the stage can release it.
+/want <0a141e28323c46505a646e780c16202a343e48525c66707a0f19232d37414b555f69737d> def
+
+/FlateDecode decodes {
+    <789ce31291d330b2710b884ac9abe01153d032b1f3088a492ba8e29754d63577f40e8dcf2cae05009bbe0979>
+        << >> /FlateDecode filter slurp
+        want eq (FlateDecode reads an undifferenced stream) assert
+
+    <789ce3129183031e3105389b5f5219ce0600470d03f4>
+        << /Colors 3 /BitsPerComponent 8 /Columns 4 /Predictor 2 >>
+        /FlateDecode filter slurp
+        want eq (a predictor stage undoes horizontal differencing) assert
+
+    <789c63e112918303162624c0c28c04002d670193>
+        << /Colors 3 /BitsPerComponent 8 /Columns 4 /Predictor 12 >>
+        /FlateDecode filter slurp
+        want eq (a predictor stage undoes a PNG row filter) assert
+} if
+
+% ---- the codings with no exact statement to make here ----
+% CCITTFax is bilevel and DCT is lossy, so what they carry is not the
+% sample; they are built, driven and closed for the checker's sake.
+/CCITTFaxEncode encodes {
+    mark
+    { /c.t scratchfile (w) file def
+      /c.f c.t << /Columns 64 /Rows 512 >> /CCITTFaxEncode filter def
+      c.f blk writestring
+      c.f closefile
+      c.t closefile
+      scratchfile (r) file slurp
+      << /Columns 64 /Rows 512 >> /CCITTFaxDecode filter slurp
+      length 0 gt (CCITTFax carries something) assert } stopped
+    { (FAIL: CCITTFax raised an error\n) print
+      /failcount failcount 1 add store } if
+    cleartomark
+} if
+
+% DCT takes its extent from a parameter dictionary rather than a bare
+% name, so whether the build has it is asked by trying it
+/dctbuilt false def
+mark
+{ /d.t scratchfile (w) file def
+  /d.f d.t << /Columns 64 /Rows 64 /Colors 1 >> /DCTEncode filter def
+  /dctbuilt true store
+  d.f blk writestring
+  d.f closefile
+  d.t closefile
+  scratchfile (r) file slurp
+  /DCTDecode filter slurp
+  length 0 gt (DCT carries something) assert } stopped
+{ dctbuilt { (FAIL: DCT raised an error\n) print
+             /failcount failcount 1 add store } if } if
+cleartomark
+
+mark { scratchfile deletefile } stopped pop cleartomark
+
+failcount 0 eq { (SUCCESS\n) print } if
+flush

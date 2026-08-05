@@ -78,12 +78,17 @@ typedef struct Xpost_File_Methods
    refs counts the filters holding this stream; closed records that its
    own file object has been closed. A closed stream whose refs have not
    all been released stays allocated -- its methods then report end of
-   data and refuse writes -- and the last filter to release it frees it. */
+   data and refuse writes -- and the last filter to release it frees it.
+
+   owned marks a stream the file machinery made for one filter's use and
+   which no program object names: the filter above it is the only thing
+   that can close it, so it does, along with itself. */
 struct Xpost_File
 {
     Xpost_File_Methods *methods;
     int refs;
     int closed;
+    int owned;
 };
 
 typedef struct Xpost_DiskFile
@@ -174,6 +179,18 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp);
  * pointer and size.
  */
 Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem, const unsigned char *ptr, unsigned int len);
+
+/**
+ * @brief Hand a synthesised stream to the filter that will wrap it.
+ *
+ * The file machinery makes a stream for one filter's use -- an in-memory
+ * file over a copy of a string, a decoding filter that a predictor stage
+ * is layered over -- and no program object names it. Marking it here is
+ * what makes the wrapping filter close and free it when it closes;
+ * without that the stream, and everything it holds, is unreachable and
+ * unreleasable.
+ */
+void xpost_file_hand_over(Xpost_Memory_File *mem, Xpost_Object f);
 
 /**
  * @brief Construct an ASCII85Decode filter file over a source file object.

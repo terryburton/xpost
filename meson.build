@@ -1249,6 +1249,17 @@ test('filter-close-eod',
   find_program('tests/run-refusing-target-test.sh'),
   args: [ xpost_exe, files('tests/filter_close_eod_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+# A filter releases the stream it was given to wrap: it drops the reference
+# it took, and closes and frees a stream the machinery made for it alone --
+# the in-memory file behind the string form, and the decompressor a
+# predictor stage stands in front of. Nothing in PostScript can observe
+# that, so the run happens under a leak checker, and skips without one.
+test('filter-leak',
+  find_program('tests/run-filter-leak-test.sh'),
+  args: [ xpost_exe, files('tests/filter_leak_test.ps'),
+          files('glibc.supp') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
 test('stream-exec',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
