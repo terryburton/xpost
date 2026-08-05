@@ -1523,6 +1523,11 @@ currentglobal true setglobal
         .privatedict /.gstatetemplate get exec /device newdev put
         graphicsdict /currgstate get /device newdev put
         initgraphics
+        % the page a device is installed on starts clear: initgraphics
+        % resets the graphics state and not raster memory, so without
+        % this the job paints onto whatever the buffer was created
+        % holding, and emits it
+        erasepage
         off aload pop translate
         end
     } //.xpostsys /.defop get exec

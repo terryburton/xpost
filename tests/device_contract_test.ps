@@ -291,4 +291,37 @@ newdev dev ne {
     } if
 } if
 
+% --- the page that device came with ----------------------------------
+%
+% Nothing has painted on this instance, so what its pixels hold is what
+% its Create left there. A device that hands out its buffer unwritten
+% starts the job on whatever the allocator last held, and every pixel
+% the job never covers is emitted as that. The device the interpreter
+% started with is erased before the job runs and so cannot witness
+% this; an instance setpagedevice made is never erased, and can.
+%
+% Stated against a pixel painted white on the same instance, so the
+% device's own scale is never named. (40,20) and (41,20) are inside the
+% new page and nothing above has painted on it.
+
+newdev dev ne readable and {
+    /newgetpix { newdev dup /GetPix get exec } def
+    /newputpix { newdev dup /PutPix get exec } def
+    newdev /GetPix known newdev /PutPix known and {
+        /bp.depth count def
+        { 40 20 newgetpix ncomp array astore
+          white 41 20 newputpix
+          41 20 newgetpix ncomp array astore } stopped
+        { % this instance cannot answer; nothing to compare
+          count bp.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+        }{
+            /bp.white exch def
+            /bp.untouched exch def
+            bp.untouched aload pop
+            bp.white aload pop
+            samepix (an unpainted page is blank) assert
+        } ifelse
+    } if
+} if
+
 contractfail { (FAILURES\n) print }{ (SUCCESS\n) print } ifelse
