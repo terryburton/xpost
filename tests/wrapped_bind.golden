@@ -63,9 +63,6 @@ selectfont scalefont
 selectfont setfont
 setcachedevice setcharwidth
 setcolor currentcolorspace
-setcolor setcolor
-setcolor setcolorspace
-setcolor setrgbcolor
 sethsbcolor setrgbcolor
 setpagedevice initgraphics
 setpattern currentcolorspace
