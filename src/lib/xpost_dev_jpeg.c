@@ -223,6 +223,17 @@ int _create_cont(Xpost_Context *ctx,
         goto close_file;
     }
 
+    /* the page starts white; this format carries no transparency, so a
+       pixel the job never marks is written out as it stands here */
+    {
+        int i;
+        Xpost_Jpeg_Pixel init;
+
+        init.red = init.green = init.blue = 255;
+        for (i = 0; i < width * height; i++)
+            private.buf->data[i] = init;
+    }
+
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
