@@ -72,6 +72,7 @@ tests/error_unwind_test.ps \
 tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_lifetime_test.ps \
+tests/filenameforall_large_test.ps \
 tests/filter_close_eod_test.ps \
 tests/filter_encode_pad_test.ps \
 tests/filter_eod_test.ps \
@@ -185,6 +186,7 @@ tests/run-error-binary-test.sh \
 tests/run-error-format-test.sh \
 tests/run-file-lifetime-test.sh \
 tests/run-file-limit-test.sh \
+tests/run-filenameforall-large-test.sh \
 tests/run-filter-leak-test.sh \
 tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \

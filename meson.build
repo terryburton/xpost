@@ -1212,6 +1212,24 @@ test('file-lifetime',
   args: [ xpost_exe, files('tests/file_lifetime_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Enumerating a directory holding more names than a composite object's own
+# fields count. How many names there are is a property of the directory, not
+# of the build, so both personalities enumerate the same two directories --
+# one of 65535 names and one of 65536 -- and agree on every count. The
+# wrapper makes the directory and skips with its reason where the file
+# system will not take that many names in one place.
+#
+# Making and unmaking that directory is more file-system work than the
+# rest of the suite put together, and run alongside the others it slows
+# them enough to push one off its own timeout. It therefore runs on its
+# own, where what it costs is its own to pay.
+test('filenameforall-large',
+  find_program('tests/run-filenameforall-large-test.sh'),
+  args: [ xpost_exe, files('tests/filenameforall_large_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  is_parallel: false,
+  timeout: 120)
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

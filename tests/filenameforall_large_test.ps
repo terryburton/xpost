@@ -1,0 +1,109 @@
+% filenameforall over a directory holding more names than an object's own
+% cursor field counts, run through `xpost -q --no-sandbox -d null` by
+% run-filenameforall-large-test.sh from the scratch directory it fills:
+% prints SUCCESS iff every assertion holds.
+%
+% The enumeration's cursor indexes the array of matched paths, and that
+% array is as long as the directory has matching names -- a length the
+% file system bounds and the object does not. In the default build a
+% composite's own fields are sixteen bits wide, so a cursor kept in one of
+% them counts to 65535 and no further: at the 65536th name it advances to
+% zero and the path read from it lies one before the start of the array.
+%
+% The directory this runs in holds 65535 names beginning with f and one
+% beginning with g, so (f*) is the largest enumeration such a cursor
+% reaches and (*) is exactly one name past it. Both sides are asserted
+% exactly, because the side that holds is what makes the other a defect
+% rather than a limit of the build.
+%
+% Each enumeration bounds itself with an exit set far above the number of
+% names there are, so one that has begun to repeat itself is reported
+% rather than merely never returning; the counts are asserted exactly, so
+% the bound cannot make a section pass.
+%
+% The counts are the same in both build personalities, which is the point:
+% the number of files in a directory is not a property of the build.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop }
+    { (FAIL: ) print print (\n) print flush /failcount failcount 1 add store }
+    ifelse
+} def
+/erris { % { proc } /name (tag)  -> asserts proc raises error /name
+    3 dict begin
+    /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse
+    tag assert clear
+    end } def
+
+/near 65535 def          % names the sixteen-bit cursor reaches
+/far 65536 def           % one more than it reaches
+/bound 200000 def        % far above either, so a repeat is reported
+
+% --- the largest enumeration a sixteen-bit cursor reaches ---
+/ncount 0 def
+/nfirst false def
+/nlast false def
+(f*) {
+    dup (f0) eq { /nfirst true store } if
+    (f65534) eq { /nlast true store } if
+    /ncount ncount 1 add store
+    ncount bound gt { exit } if
+} 64 string filenameforall
+ncount near eq (a directory of 65535 names is enumerated once through) assert
+nfirst (including the first name) assert
+nlast (and the last) assert
+
+% --- and one name more than it reaches ---
+/fcount 0 def
+/fextra false def
+(*) {
+    (g0) eq { /fextra true store } if
+    /fcount fcount 1 add store
+    fcount bound gt { exit } if
+} 64 string filenameforall
+fcount far eq (a directory of one name more is enumerated once through too) assert
+fextra (and the name past the cursor's reach reaches the procedure) assert
+
+% --- a template matching nothing enumerates nothing (PLRM) ---
+/zcount 0 def
+{ (zznothingmatchesthis*) { pop /zcount zcount 1 add store } 64 string
+  filenameforall } stopped
+not (a template matching nothing is not an error) assert
+zcount 0 eq (a template matching nothing runs the procedure zero times) assert
+
+% --- exit ends the enumeration and takes the whole loop frame ---
+/x0 countexecstack def
+/xcount 0 def
+(*) { pop /xcount xcount 1 add store exit } 64 string filenameforall
+xcount 1 eq (exit ends the enumeration at the current name) assert
+countexecstack x0 eq (and takes the whole loop frame with it) assert
+
+% --- an error in the procedure reaches an enclosing stopped ---
+/e0 countexecstack def
+mark
+{ (*) { pop undefinedname } 64 string filenameforall } stopped
+    (an error in the procedure reaches the enclosing stopped) assert
+$error /errorname get /undefined eq (and arrives under its own name) assert
+cleartomark
+countexecstack e0 eq (the loop frame unwinds with the error) assert
+
+% --- the procedure is handed a substring of the scratch string it was given ---
+/scratch 64 string def
+/gotlen -1 def
+(g*) { length /gotlen exch store } scratch filenameforall
+gotlen (g0) length eq (the name reaches the procedure at its own length) assert
+
+/scribble 64 string def
+(g*) { 0 88 put } scribble filenameforall
+scribble 0 get 88 eq
+    (and reaches it as a substring of the scratch operand itself) assert
+
+% --- a scratch string shorter than a matching name is a rangecheck (PLRM) ---
+{ (f*) { pop } 1 string filenameforall } /rangecheck
+    (a scratch string shorter than a matching name is a rangecheck) erris
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit
