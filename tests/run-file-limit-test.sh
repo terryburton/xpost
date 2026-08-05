@@ -15,7 +15,10 @@ script=$2
 
 # the run happens in a scratch directory, so both paths must survive the
 # change of directory
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
+# an absolute path may begin with a drive letter as well as a slash;
+# prepending the working directory to one of those makes every
+# invocation a path that does not exist
+case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 case $script in /*) ;; *) script=$PWD/$script ;; esac
 
 allowance=64

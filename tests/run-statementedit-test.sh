@@ -14,7 +14,10 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
+# an absolute path may begin with a drive letter as well as a slash;
+# prepending the working directory to one of those makes every
+# invocation a path that does not exist
+case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

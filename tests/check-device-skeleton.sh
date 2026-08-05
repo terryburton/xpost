@@ -226,8 +226,12 @@ if [ "$(grep -c '\.privatedict /\.completedevice {' "$src/data/device.ps")" != 1
 fi
 # summed with awk rather than bc: bc is not present in every environment
 # this runs in, and a guard that cannot run is a guard that is not checking
-callers=$(grep -c '/\.completedevice get exec' "$src/data/device.ps" "$src/data/init.ps" \
-          | cut -d: -f2 | awk '{ n += $1 } END { print n + 0 }')
+# counted over the concatenation rather than per file: grep -c prefixes
+# each count with the path, and a windows path carries a drive-letter
+# colon, so splitting on the colon takes the path for the count and the
+# check reads zero on the platform it most needs to run on
+callers=$(cat "$src/data/device.ps" "$src/data/init.ps" \
+          | grep -c '/\.completedevice get exec')
 if [ "$callers" -lt 2 ]; then
     echo "check-device-skeleton: only $callers path completes a device;" >&2
     echo "both the startup device and setpagedevice's must call .completedevice." >&2
