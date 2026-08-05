@@ -341,11 +341,13 @@ typedef struct
  *
  * The globtype object is not available as a (Postscript) user type.
  * It has no use outside the filenameforall looping construct.
+ * It carries the matched paths and nothing else: how many there are is a
+ * property of the directory, so the enumeration's cursor rides the
+ * execution stack beside it as an integer rather than in a field here.
  */
 typedef struct
 {
     word tag; /**< globtype */
-    word off; /**< index into the filename array */
     void *ptr; /**< ptr to the glob_t struct */
 } Xpost_Object_Glob;
 

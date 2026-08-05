@@ -1083,36 +1083,49 @@ int xpost_op_string_renamefile (Xpost_Context *ctx,
 
 //#ifndef _WIN32
 
-/* internal continuation operator for filenameforall */
+/* internal continuation operator for filenameforall.
+
+   The cursor into the matched paths rides the execution stack beside the
+   glob as an integer of its own, in the shape the loop-continuation
+   operators already use for their state. How many paths there are is a
+   property of the directory, not of the build, so no field of the object
+   is wide enough to index them and the count is carried in a type that
+   reaches the whole array. */
 static
 int xpost_op_contfilenameforall (Xpost_Context *ctx,
                                  Xpost_Object oglob,
+                                 Xpost_Object ocursor,
                                  Xpost_Object Proc,
                                  Xpost_Object Scr)
 {
     glob_t *globbuf;
+    size_t cursor;
     char *str;
     char *src;
     int len;
     Xpost_Object interval;
 
     globbuf = oglob.glob_.ptr;
+    cursor = (size_t)ocursor.int_.val;
     /* skip entries the engaged sandbox would not let the program open, so
        a listing cannot disclose names outside the permitted set */
-    while (oglob.glob_.off < globbuf->gl_pathc
-           && !xpost_diskfile_readable(globbuf->gl_pathv[oglob.glob_.off]))
-        ++oglob.glob_.off;
-    if (oglob.glob_.off < globbuf->gl_pathc)
+    while (cursor < globbuf->gl_pathc
+           && !xpost_diskfile_readable(globbuf->gl_pathv[cursor]))
+        ++cursor;
+    if (cursor < globbuf->gl_pathc)
     {
+        src = globbuf->gl_pathv[cursor];
+        ++cursor;
         xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, contfilenameforall));
         xpost_stack_push(ctx->lo, ctx->es, Scr);
         xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, cvx));
         xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvlit(Proc));
-        ++oglob.glob_.off;
+        xpost_stack_push(ctx->lo, ctx->es, xpost_int_cons((integer)cursor));
         xpost_stack_push(ctx->lo, ctx->es, oglob);
 
+        /* after the pushes: a push may grow the memory file and move its
+           base, and the scratch string lives in it */
         str = xpost_string_get_pointer(ctx, Scr);
-        src = globbuf->gl_pathv[ oglob.glob_.off-1 ];
         len = strlen(src);
         /* the name's length is compared against the scratch string's own
            in the wider signed type, so a length is short of the string
@@ -1129,9 +1142,10 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
     }
     else
     {
-        /* iteration is complete and the reference has already been popped:
-           drop the sentinel the loop frame keeps beneath the continuation,
-           then release the matched paths and their container */
+        /* iteration is complete and the reference and its cursor have
+           already been popped: drop the sentinel the loop frame keeps
+           beneath the continuation, then release the matched paths and
+           their container */
         (void)xpost_stack_pop(ctx->lo, ctx->es);
         xpost_glob_free(globbuf);
         free(globbuf);
@@ -1174,7 +1188,6 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     }
 
     oglob.glob_.tag = globtype;
-    oglob.glob_.off = 0;
     oglob.glob_.ptr = globbuf;
 
     /* loop frame: the sentinel loop operator (which exit searches for)
@@ -1189,7 +1202,8 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
         return execstackoverflow;
     }
 
-    ret = xpost_op_contfilenameforall(ctx, oglob, Proc, xpost_object_cvlit(Scr));
+    ret = xpost_op_contfilenameforall(ctx, oglob, xpost_int_cons(0),
+                                      Proc, xpost_object_cvlit(Scr));
     free(tmpbuf);
     return ret;
 }
@@ -1851,7 +1865,7 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "renamefile", (Xpost_Op_Func)xpost_op_string_renamefile, 0, 2, stringtype, stringtype);
     INSTALL;
 //#ifndef _WIN32
-    op = xpost_operator_cons(ctx, "contfilenameforall", (Xpost_Op_Func)xpost_op_contfilenameforall, 0, 3, globtype, proctype, stringtype);
+    op = xpost_operator_cons(ctx, "contfilenameforall", (Xpost_Op_Func)xpost_op_contfilenameforall, 0, 4, globtype, integertype, proctype, stringtype);
     op = xpost_operator_cons(ctx, "filenameforall", (Xpost_Op_Func)xpost_op_filenameforall, 0, 3, stringtype, proctype, stringtype);
     INSTALL;
 //#endif
