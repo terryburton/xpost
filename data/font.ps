@@ -654,7 +654,14 @@ setglobal
             fnt /yadvance 0 put
             gsave
                 fnt /BuildGlyph 2 copy known {
-                    get fnt gname 3 -1 roll //.xpostsys /.runbuild get exec
+                    % the build runs outside this scope, the way a
+                    % BuildChar does: its defs are its own, and the
+                    % names this operator works under are not its to
+                    % inherit. The locals ride the operand stack
+                    get fnt gname 3 -1 roll
+                    currentdict end 4 1 roll
+                    //.xpostsys /.runbuild get exec
+                    begin
                 }{
                     pop pop
                     /code null def

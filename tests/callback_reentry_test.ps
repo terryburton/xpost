@@ -11,11 +11,13 @@
 % and the machinery that does not look identical from outside until
 % something re-enters.
 %
-% So each callback is asked the same question: does the caller's state
-% survive a callback that re-enters the same operator? One site
-% answering yes says nothing about the next, because each stashes what
-% it is mid-use of in a slot of its own, and saving the outgoing value
-% is a separate decision every time.
+% So every callback is asked the same questions. Does the caller's state
+% survive a callback that re-enters the same operator? And does the
+% callback run in the caller's dictionary scope rather than the
+% machinery's own? One site answering yes says nothing about the next,
+% because each stashes what it is mid-use of in a slot of its own and
+% escapes its own scope in a spelling of its own, so both are a separate
+% decision every time.
 
 /bad 0 def
 /note { % (what)  .  -
@@ -135,5 +137,75 @@ count /depth exch def
     { (a spot function that installs a screen raised an error) note } if
 count depth (a spot function that installs a screen cost the caller operands) same
 clear
+
+% --- the dictionary scope a callback runs in -----------------------
+% The machinery reaches its own locals through a dictionary of its own.
+% A callback that runs with that dictionary still on the stack has the
+% machinery's names shadowing its own and its definitions landing
+% somewhere they will be thrown away, so every site drops its scope
+% before it calls out. Each callback below records the dictionary it
+% found itself in; the caller's is userdict.
+/seen null def
+/inscope { /seen currentdict store } bind def
+
+/scoped { % (what)  .  -
+    seen userdict eq { pop }{ ( ran in the machinery's own scope) join note } ifelse
+    /seen null store
+} bind def
+
+% a Type 3 font, shown one glyph at a time through BuildChar and by
+% name through BuildGlyph
+/T3 8 dict def
+T3 begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildGlyph { pop pop inscope 750 0 setcharwidth } def
+end
+T3 /CallbackFont exch definefont pop
+/CallbackFont findfont 12 scalefont setfont
+gsave 0 0 moveto /box glyphshow grestore
+(a BuildGlyph procedure) scoped
+
+/T3c 8 dict def
+T3c begin
+    /FontType 3 def
+    /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+    /FontBBox [ 0 0 1000 1000 ] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    /BuildChar { pop pop inscope 750 0 setcharwidth } def
+end
+T3c /CallbackCharFont exch definefont pop
+/CallbackCharFont findfont 12 scalefont setfont
+gsave 0 0 moveto (A) show grestore
+(a BuildChar procedure) scoped
+
+% a tiling pattern's paint procedure
+/pat <<
+    /PatternType 1 /PaintType 1 /TilingType 1
+    /BBox [0 0 8 8] /XStep 8 /YStep 8
+    /PaintProc { pop inscope }
+>> def
+gsave
+    pat matrix makepattern setpattern
+    newpath 0 0 moveto 12 0 lineto 12 12 lineto closepath fill
+grestore
+(a pattern's paint procedure) scoped
+
+% an image's data source procedure
+/rows 0 def
+gsave
+    newpath 0 0 moveto 8 0 lineto 8 8 lineto closepath clip
+    8 8 8 [8 0 0 -8 0 8]
+    { inscope /rows rows 1 add store <FF00FF00FF00FF00> }
+    image
+grestore
+rows 0 eq { (the image never called its data source) note } if
+(an image's data source) scoped
 
 bad 0 eq { (SUCCESS\n) print }{ (FAILURES: ) print bad == } ifelse
