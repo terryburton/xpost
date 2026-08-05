@@ -384,76 +384,19 @@ int xpost_context_install_event_handler(Xpost_Context *ctx,
 }
 
 /*
-   fork new process with private global and private local vm
-   (spawn jobserver)
-   */
-unsigned int xpost_context_fork1(Xpost_Context *ctx,
-                                 int (*xpost_interpreter_cid_init)(unsigned int *cid),
-                                 Xpost_Context *(*xpost_interpreter_cid_get_context)(unsigned int cid),
-                                 int (*xpost_interpreter_get_initializing)(void),
-                                 void (*xpost_interpreter_set_initializing)(int),
-                                 Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void),
-                                 Xpost_Memory_File *(*xpost_interpreter_alloc_global_memory)(void),
-                                 int (*garbage_collect_function)(Xpost_Memory_File *mem, int dosweep, int markall))
-{
-    unsigned int newcid;
-    Xpost_Context *newctx;
-    int ret;
-
-    (void)ctx;
-    ret = xpost_interpreter_cid_init(&newcid);
-    if (!ret) return 0;
-    newctx = xpost_interpreter_cid_get_context(newcid);
-    *newctx = *ctx; // struct copy for defaults
-    newctx->id = newcid;
-    newctx->state = C_IDLE;
-    initlocal(newctx, xpost_interpreter_cid_get_context, 
-            xpost_interpreter_get_initializing, xpost_interpreter_set_initializing, 
-            xpost_interpreter_alloc_local_memory, garbage_collect_function);
-    initglobal(newctx, xpost_interpreter_cid_get_context, 
-            xpost_interpreter_get_initializing, xpost_interpreter_set_initializing, 
-            xpost_interpreter_alloc_global_memory, garbage_collect_function);
-    newctx->vmmode = LOCAL;
-    return newcid;
-}
-
-/*
-   fork new process with shared global vm and private local vm
-   (new "application"?)
-   */
-unsigned int xpost_context_fork2(Xpost_Context *ctx,
-                                 int (*xpost_interpreter_cid_init)(unsigned int *cid),
-                                 Xpost_Context *(*xpost_interpreter_cid_get_context)(unsigned int cid),
-                                 int (*xpost_interpreter_get_initializing)(void),
-                                 void (*xpost_interpreter_set_initializing)(int),
-                                 Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void),
-                                 Xpost_Memory_File *(*xpost_interpreter_alloc_global_memory)(void),
-                                 int (*garbage_collect_function)(Xpost_Memory_File *mem, int dosweep, int markall))
-{
-    unsigned int newcid;
-    Xpost_Context *newctx;
-    int ret;
-
-    (void)xpost_interpreter_alloc_global_memory;
-    ret = xpost_interpreter_cid_init(&newcid);
-    if (!ret) return 0;
-    newctx = xpost_interpreter_cid_get_context(newcid);
-    *newctx = *ctx; // struct copy for defaults
-    newctx->id = newcid;
-    newctx->state = C_IDLE;
-    initlocal(ctx, xpost_interpreter_cid_get_context, 
-            xpost_interpreter_get_initializing, xpost_interpreter_set_initializing, 
-            xpost_interpreter_alloc_local_memory, garbage_collect_function);
-    newctx->gl = ctx->gl;
-    xpost_context_append_ctxlist(newctx->gl, newcid);
-    xpost_stack_push(newctx->lo, newctx->ds,
-            xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0)); // systemdict
-    return newcid;
-}
-
-/*
    fork new process with shared global and shared local vm
    (lightweight process)
+
+   The only fork, and it shares both memory files because a fork here can
+   do nothing else. Fresh memory files would come up with their
+   collection floor above the special entities -- the name stacks and
+   trees, the operator table -- and this module builds none of those:
+   they are built a layer up, along with systemdict and the dictionaries
+   on the dict stack, by the interpreter that owns both. A context whose
+   floor says those entities exist and whose table has never held them
+   dispatches its first operator through an uninitialised row. Sharing
+   the memory files of a context that is already finished is what leaves
+   nothing to claim.
    */
 unsigned int xpost_context_fork3(Xpost_Context *ctx,
                                  int (*xpost_interpreter_cid_init)(unsigned int *cid),

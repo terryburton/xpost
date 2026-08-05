@@ -68,8 +68,6 @@ xpost_compat_quit
 xpost_context_append_ctxlist
 xpost_context_dump
 xpost_context_exit
-xpost_context_fork1
-xpost_context_fork2
 xpost_context_fork3
 xpost_context_init
 xpost_context_init_ctxlist
