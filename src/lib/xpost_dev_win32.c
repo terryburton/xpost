@@ -263,7 +263,7 @@ int _create_cont(Xpost_Context *ctx,
     if(!RegisterClassEx(&wc))
     {
         XPOST_LOG_ERR("RegisterClass() failed");
-        goto free_library;
+        return unregistered;
     }
 
     rect.left = 0;
@@ -452,9 +452,9 @@ int _create_cont(Xpost_Context *ctx,
   destroy_window:
     DestroyWindow(private.window);
   unregister_class:
+    /* the module handle came from GetModuleHandle, which takes no
+       reference, so there is none to give back */
     UnregisterClass(TEXT("XPOST_DEV_WIN32"), private.instance);
-  free_library:
-    FreeLibrary(private.instance);
     return unregistered;
 }
 
@@ -781,33 +781,51 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* the window handle is this device's resource handle: cleared below
+       once the window is gone, so a repeated Destroy is a no-op rather
+       than a teardown of state that has already been released */
+    if (!private.window)
+        return 0;
+
     xpost_context_install_event_handler(ctx, null, null);
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
-    if (!rd)
-        return 0;
-
-    switch (rd->backend_type)
+    if (rd)
     {
-        case RENDER_BACKEND_GDI:
-            DeleteObject(rd->backend.gdi.bitmap);
-            free(rd->backend.gdi.bitmap_info);
-            break;
-        case RENDER_BACKEND_GL:
-            wglMakeCurrent(NULL, NULL);
-            wglDeleteContext(rd->backend.gl.glrc);
-            break;
+        /* the window stops naming the render data before the render
+           data goes, so the window procedure cannot reach it while the
+           window is being torn down */
+        SetWindowLongPtr(private.window, GWLP_USERDATA, (LONG_PTR)0);
+
+        switch (rd->backend_type)
+        {
+            case RENDER_BACKEND_GDI:
+                /* the framebuffer belongs to the bitmap the device
+                   created, and goes with it */
+                DeleteObject(rd->backend.gdi.bitmap);
+                free(rd->backend.gdi.bitmap_info);
+                break;
+            case RENDER_BACKEND_GL:
+                wglMakeCurrent(NULL, NULL);
+                wglDeleteContext(rd->backend.gl.glrc);
+                break;
+        }
+
+        ReleaseDC(private.window, rd->dc);
+        free(rd);
     }
 
-    ReleaseDC(private.window, rd->dc);
-    free(rd);
     DestroyWindow(private.window);
+    private.window = NULL;
 
     if (!UnregisterClass(TEXT("XPOST_DEV_WIN32"), private.instance))
         XPOST_LOG_INFO("UnregisterClass() failed");
+    private.instance = NULL;
 
-    if (!FreeLibrary(private.instance))
-        XPOST_LOG_INFO("FreeLibrary() failed");
+    /* store the cleared handles back, so the second and third Destroy
+       the interpreter makes find nothing left to release */
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }

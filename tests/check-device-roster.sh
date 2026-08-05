@@ -101,8 +101,9 @@ cmp -s "$work/pagedevice" "$work/maker" ||
 # device cannot be added and left unexercised.
 #
 # Excluded, with reasons rather than by omission:
-#   gdi, gl  the Windows window devices: no platform this suite runs on
-#            can open one, and the wrappers would have nothing to run.
+#   gdi, gl  the Windows window devices: only the teardown wrapper runs
+#            them, and only where the platform can open a window, so the
+#            other two wrappers have nothing to run.
 exclude='gdi gl'
 
 for w in run-device-contract-test.sh run-device-destroy-test.sh \
