@@ -75,12 +75,21 @@
  * Destroy a no-op rather than a double free.
  *
  * Destroy releases the buffer but not the instance dictionary, so a
- * destroyed instance stays reachable and its slots stay callable. GetPix
- * is the plainest way in, being the one read slot a program calls for
- * itself, and the dictionary it is called on may be one the program kept
- * across a Destroy of its own. A slot therefore tests the handle it is
- * about to follow instead of assuming Create left one: a released raster
- * reads as the ground, the same answer a pixel outside the raster gets.
+ * destroyed instance stays reachable and its slots stay callable. A
+ * program reaches one by calling Destroy itself, and the interpreter
+ * reaches one without being asked: setpagedevice retires the outgoing
+ * device, and PLRM 6.1 makes the device an element of the graphics state
+ * rather than a global fixture, so a saved graphics state still names the
+ * retired one and a restore or grestore back past the change makes it
+ * current again.
+ *
+ * Every slot therefore tests the handle it is about to follow instead of
+ * assuming Create left one. The recorded width and height are no stand-in
+ * for that test: they live in the private struct and outlive the buffer,
+ * so an in-range pixel on a released instance passes the bounds check and
+ * arrives at the read. A released raster reads as the ground, the same
+ * answer a pixel outside the raster gets; it takes no marks; and it emits
+ * nothing, its output having been finalised when it was released.
  *
  * Instance state: C-level device state lives in a struct serialized into
  * a PostScript string stored under /Private in the instance dictionary.

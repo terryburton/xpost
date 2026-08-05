@@ -277,6 +277,11 @@ int _putpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks: the recorded dimensions outlive
+       the buffer, so the bounds check below does not stand in for this */
+    if (!private.buf)
+        return 0;
+
     /* check bounds */
     if (ix < 0 || ix >= xpost_dict_get(ctx, devdic, namewidth).int_.val)
         return 0;
@@ -437,6 +442,10 @@ int _blendpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
+
     if (ix < 0 || ix >= xpost_dict_get(ctx, devdic, namewidth).int_.val)
         return 0;
     if (iy < 0 || iy >= xpost_dict_get(ctx, devdic, nameheight).int_.val)
@@ -530,6 +539,10 @@ int _fillrect(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
+
     /* the contract's rectangle: inclusive span, clipped to the buffer */
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(w), xpost_object_number(h),
@@ -600,6 +613,10 @@ int _emit(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released raster has nothing left to emit */
+    if (!private.buf)
+        return 0;
 
     /* pass data back to client application; the buffer then belongs to
        the client (the API documents the handed-out buffer as the

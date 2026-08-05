@@ -1461,6 +1461,17 @@ test('device-destroy',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# A restore back past a setpagedevice makes the retired device current again --
+# PLRM 6.1 keeps the device in the graphics state, so a saved state still names
+# it -- and the interpreter then paints on an instance whose buffer was released
+# when it was retired. The recorded dimensions outlive the buffer, so the bounds
+# checks pass and nothing else stands between the mark and the freed memory.
+test('device-restore-retired',
+  find_program('tests/run-device-restore-test.sh'),
+  args: [ xpost_exe, files('tests/device_restore_retired_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # GetPix is callable on a device the program has already destroyed: Destroy
 # releases the raster but leaves the instance dictionary, and the contract makes
 # Destroy something a program may call for itself. A device carrying its own

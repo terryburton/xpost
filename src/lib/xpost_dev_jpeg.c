@@ -268,6 +268,11 @@ int _blendpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks: the recorded dimensions outlive
+       the buffer, so the bounds check below does not stand in for this */
+    if (!private.buf)
+        return 0;
+
     if ((ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
         return 0;
@@ -314,6 +319,10 @@ int _putpix(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
 
     /* check bounds */
     if ((ix < 0) || (ix >= private.width) ||
@@ -389,6 +398,12 @@ int _emit(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released instance has neither the raster to compress nor the
+       stream to compress it into, and libjpeg would be handed both; its
+       output was finalised when it was released */
+    if (!private.buf || !private.f)
+        return 0;
 
     ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     quality_o = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "jpeg_quality"));

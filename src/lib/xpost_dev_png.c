@@ -322,6 +322,11 @@ int _putpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks: the recorded dimensions outlive
+       the buffer, so the bounds check below does not stand in for this */
+    if (!private.buf)
+        return 0;
+
     /* check bounds */
     if ((ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
@@ -411,6 +416,10 @@ int _blendpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
+
     if ((ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
         return 0;
@@ -462,6 +471,10 @@ int _fillrect(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
+
     /* the contract's rectangle: inclusive span, clipped to the device */
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(w), xpost_object_number(h),
@@ -495,6 +508,12 @@ int _emit(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released instance has neither the raster to write nor the writer
+       to write it with, and png_jmpbuf would be the first to follow a
+       cleared handle; its output was finalised when it was released */
+    if (!private.buf || !private.png_ptr)
+        return 0;
 
     /* libpng reports errors by longjmp: aim it at this call, not at
        the long-gone frame that created the device */
@@ -540,6 +559,10 @@ int _erase(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released raster has no page to clear */
+    if (!private.buf)
+        return 0;
 
     init.red = init.green = init.blue = 255;
     init.alpha = 0;

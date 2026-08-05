@@ -1,0 +1,52 @@
+% A restore back past a setpagedevice makes the retired device current
+% again, and painting on it must not follow its released buffer. Run
+% against a live device (-d <dev>) by run-device-restore-test.sh: prints
+% SUCCESS iff every step holds.
+%
+% setpagedevice retires the outgoing device, which releases whatever raster
+% it was holding. PLRM 6.1 makes the device an element of the graphics
+% state rather than a global fixture: a graphics state saved before the
+% change still names the retired device, and restoring it makes that device
+% current again. The interpreter then paints on an instance whose buffer is
+% gone, without the program having done anything unusual -- the four lines
+% below are an ordinary page-size change bracketed by save and restore.
+%
+% The device's recorded width and height survive in its private struct, so
+% the bounds checks in its marking methods still pass and nothing between
+% the mark and the released buffer stops the write. A released raster has
+% to take no marks instead.
+
+/pagesize { currentpagedevice /PageSize get } def
+
+save
+
+<< /PageSize [400 400] >> setpagedevice
+
+% the resize took effect while the saved state is outstanding
+pagesize 0 get 400 ne
+    { (FAILURE: setpagedevice did not resize the page) = quit }
+if
+
+restore
+
+% painting after the restore is the step that reached a released buffer
+newpath 0 setgray 10 10 50 50 rectfill
+20 20 moveto 60 60 lineto stroke
+showpage
+
+% a second page proves the device survived the page it just emitted
+0.5 setgray 15 15 30 30 rectfill
+showpage
+
+% and the device machinery is still usable afterwards
+<< /PageSize [300 300] >> setpagedevice
+pagesize 0 get 300 ne
+    { (FAILURE: setpagedevice stopped working after the restore) = quit }
+if
+0 setgray 10 10 40 40 rectfill
+showpage
+
+count 0 eq
+    { (SUCCESS) = }
+    { (FAILURE: operand stack unbalanced) = }
+ifelse
