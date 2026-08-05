@@ -25,18 +25,7 @@ currentglobal true setglobal
     % interior takes the solid PutPix path
     /TextAlphaBits 4
 
-    /.copydict { % dict1  .  dict2
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-        /OutputFileName where {
-            /OutputFileName exch 1 index get
-            3 copy put pop pop
-        } if
-    } bind
+    /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall

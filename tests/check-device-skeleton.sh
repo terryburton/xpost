@@ -4,7 +4,9 @@
 # reach the shared mechanics through xpost_dev_driver.h rather than
 # hand-writing them, so the contract stated there stays the only
 # statement of how a device folds operands, reaches its private struct,
-# and which rectangle FillRect paints.
+# and which rectangle FillRect paints. The PostScript device classes are
+# held to the same idea from their side: what every class does the same
+# way is written once and referred to.
 #
 # Exemptions: xpost_dev_win32.c cannot be compiled or exercised on the
 # platforms this suite runs on, so its migration cannot be gated here.
@@ -13,13 +15,27 @@
 # classes' floor-space arithmetic (pinned by the golden render), not the
 # integer contract path.
 #
-# Usage: check-device-skeleton.sh <src/lib directory>
+# Sources are named rather than globbed out of a directory: a built tree
+# leaves object files beside them whose debug information matches every
+# pattern here, so a scan would read green where nothing was built and
+# red where something was.
+#
+# Usage: check-device-skeleton.sh <source root>
 
 set -eu
 
-libdir=${1:?usage: check-device-skeleton.sh <src/lib directory>}
+src=${1:?usage: check-device-skeleton.sh <source root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
+
+libdir="$src/src/lib"
+guard_require_dir "$libdir" "the library source directory"
 
 fleet="xpost_dev_bgr.c xpost_dev_jpeg.c xpost_dev_png.c xpost_dev_raster.c xpost_dev_xcb.c"
+
+# every file that defines a device class
+classes="image.ps pgmimage.ps pbmimage.ps ppmimage.ps tiffimage.ps
+         nulldev.ps bboxdev.ps pdfwrite.ps svgwrite.ps dscwrite.ps"
 
 fail=0
 
@@ -97,8 +113,38 @@ for f in $fleet xpost_dev_generic.c xpost_dev_win32.c; do
     fi
 done
 
+# 6. The class-to-instance copy is one procedure. A class dictionary
+#    stores /.copydict, and Create (and every C driver, which fetches it
+#    from the class before specialising the copy) calls it. Each class
+#    used to carry its own body, and two of them carried a shorter one
+#    that left the output file name off the instance, so a device made
+#    from those classes wrote wherever its Emit defaulted to. A class
+#    may name .classcopydict; it may not restate it.
+copies=0
+for f in $classes; do
+    p="$src/data/$f"
+    [ -f "$p" ] || continue
+    if grep -qE '^[ \t]*/\.copydict[ \t]*\{' "$p"; then
+        echo "check-device-skeleton: $f writes a class copy of its own:" >&2
+        grep -nE '^[ \t]*/\.copydict[ \t]*\{' "$p" >&2
+        echo "The copy is .xpostsys /.classcopydict; store that, do not restate it." >&2
+        fail=1
+    fi
+    grep -qE '/\.copydict[ \t]+//\.xpostsys[ \t]+/\.classcopydict[ \t]+get' "$p" &&
+        copies=$((copies + 1))
+done
+if [ "$copies" -lt 5 ]; then
+    echo "check-device-skeleton: only $copies classes store the shared class copy;" >&2
+    echo "expected every class that defines /.copydict to name .classcopydict." >&2
+    fail=1
+fi
+if [ "$(grep -c '\.xpostsys /\.classcopydict {' "$src/data/device.ps")" != 1 ]; then
+    echo "check-device-skeleton: the shared class copy is not defined once in device.ps." >&2
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy)"

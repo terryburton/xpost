@@ -42,6 +42,33 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% dict1  .classcopydict  dict2
+% The one class-to-instance copy, stored under /.copydict by every
+% device class and called by Create (and by the C drivers, which fetch
+% it from the class dictionary before specialising the copy).
+%
+% An instance is a copy of its class with the state the instance
+% accumulates: the dimensions it adopted, and the output file name in
+% force when it was made. The file name matters to any class whose Emit
+% writes a file, and a class carrying a copy without it produced a
+% device that wrote wherever Emit defaulted to whatever the program had
+% asked for -- which is why this is one procedure rather than a shape
+% each class repeats.
+currentglobal true setglobal
+.xpostsys /.classcopydict { % dict1  .  dict2
+    dup length dict copy
+    dup /width known {
+        dup begin
+            /dimensions [width height] def
+        end
+    } if
+    /OutputFileName where {
+        /OutputFileName exch 1 index get
+        3 copy put pop pop
+    } if
+} bind put
+setglobal
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device

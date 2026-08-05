@@ -1497,7 +1497,7 @@ test('fopen-funnel',
 # xpost_dev_driver.h -- the contract stays written in one place.
 test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
-  args: [ meson.current_source_dir() / 'src' / 'lib' ])
+  args: [ meson.current_source_dir() ])
 
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table

@@ -22,18 +22,7 @@
     /VectorGlyphs true   % text operators emit glyph outlines, not bitmaps
     /VectorSyntax /svg   % ... spelled as SVG path data
 
-    /.copydict {
-        dup length dict copy
-        dup /width known {
-            dup begin
-                /dimensions [width height] def
-            end
-        } if
-        /OutputFileName where {
-            /OutputFileName exch 1 index get
-            3 copy put pop pop
-        } if
-    } bind
+    /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
     begin {/height /width}{exch def}forall

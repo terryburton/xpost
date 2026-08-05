@@ -47,6 +47,18 @@
 /drawline { dev dup /DrawLine get exec } def
 /getpix   { dev dup /GetPix   get exec } def
 
+% --- what the class copy put on the instance -------------------------
+% An instance is a copy of its class dictionary made by .copydict, which
+% also records the dimensions the device adopted and the output file
+% name in force. Every class needs the same copy: one that leaves the
+% file name off produces a device that writes wherever its Emit
+% defaults to, whatever the program asked for.
+dev /dimensions known (the instance records its dimensions) assert
+/OutputFileName where {
+    pop dev /OutputFileName known
+        (the instance carries the output file name) assert
+} if
+
 % a painted baseline so Emit has marks to write
 newpath 10 10 moveto 90 90 lineto stroke
 
