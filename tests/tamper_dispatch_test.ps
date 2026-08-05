@@ -165,4 +165,100 @@ found null ne {
 } if
 nunbound 0 eq (no nested dispatch table carries an unbound operator reference) assert
 
+% =============================== the C side holds values too ===============
+% Everything above walks dictionaries, so it sees only what PostScript
+% stores. The interpreter's own C code also pushes objects for the
+% interpreter to run, and a standard operator's NAME pushed there is
+% resolved against the dictionary stack at the moment it runs -- the same
+% defect as an executable name in a dispatch table, and out of reach of
+% any dictionary walk.
+%
+% The show operators are where the C side does most of this. They paint
+% each glyph through the device's pixel or rectangle method, and they
+% leave a procedure behind to restore the current point in user space and
+% flush the page -- a procedure that runs after the operator has returned,
+% with the program's own dictionaries in force.
+%
+% So this half is behavioural: take a standard operator away, paint a
+% glyph, and require the show both to succeed and to leave the operand
+% stack as it found it. Succeeding on its own proves little. A name
+% pushed once per set pixel leaves the glyph on the page and a hundred-odd
+% strings behind it, which is a corrupted stack for the program that comes
+% next rather than a fault it can catch.
+%
+% The font and the current point are set before the theft, so the probe
+% names nothing that is being taken, and the tally is anchored to a mark
+% rather than to a stack depth, so that debris of any size is still
+% counted rather than swallowing the bookkeeping.
+
+/TAKEN [ /exec /moveto /lineto /itransform /transform /flushpage /currentpoint
+         /setmatrix /defaultmatrix /matrix /concatmatrix /rotate /translate /scale
+         /get /put /exch /dup /known /length /forall /type /index /copy /eq
+         /if /ifelse /roll /pop /add /sub /mul /div /repeat /for /loop /exit
+         /gsave /grestore /setgray /setrgbcolor /currentfont /cvx /load /def
+         /token /maxlength /getinterval /stop /newpath /closepath /fill /stroke ] def
+
+% The probe is handed its procedure on the operand stack, under a mark the
+% caller pushes, and never through a name: a name holding a procedure runs
+% it on lookup rather than pushing it, and recovering it instead with
+% `load` would put one of the operators being taken inside the probe.
+/nsens 0 def
+/probeunder { % mark {proc}  .  -   (p.lbl, p.nm set by the caller)
+    gsave /Times-Roman findfont 12 scalefont setfont 5 5 moveto
+    /p.sv save def
+    userdict p.nm { (stolen) } put
+    stopped
+    p.sv restore
+    grestore
+    % judged out here: the operators answer for themselves again, and the
+    % flag and the mark are simple objects the restore left alone
+    /p.failed exch def
+    counttomark /p.debris exch def
+    cleartomark
+    p.failed
+      { (  FAILED: ) print p.lbl print ( under ) print
+        p.nm 30 string cvs print (\n) print /nsens nsens 1 add store }
+      { p.debris p.expect ne
+          { (  DEBRIS ) print p.debris 6 string cvs print ( want ) print
+            p.expect 6 string cvs print ( from ) print p.lbl print
+            ( under ) print p.nm 30 string cvs print (\n) print
+            /nsens nsens 1 add store } if } ifelse
+} def
+
+% the probe must catch a show that disturbs the stack before its zero means
+% anything: this one paints correctly and leaves one object behind
+/nsens 0 def
+/p.lbl (selftest) def /p.nm /exec def /p.expect 0 def
+mark { (X) show 42 } probeunder
+nsens 1 eq (the probe flags a show that leaves the stack disturbed) assert
+
+% --- every standard operator, against show ---
+/nsens 0 def
+TAKEN {
+    /p.nm exch def /p.lbl (show) def /p.expect 0 def
+    mark { (X) show } probeunder
+} forall
+nsens 0 eq (no standard operator taken from a program reaches show) assert
+
+% --- the rest of the family, against the operators reached from C ---
+% kshow and cshow are left out: they run a procedure the program supplies,
+% so a redefinition reaching them is the operator working as specified.
+%
+% The third element is what the probe leaves on the stack when nothing has
+% gone wrong. stringwidth returns a width, and the probe cannot discard it,
+% because every operator that would discard it is on the list being taken.
+/FAMILY [ [ (ashow)       { 1 0 (X) ashow }        0 ]
+          [ (widthshow)   { 1 0 88 (X) widthshow } 0 ]
+          [ (awidthshow)  { 1 0 88 1 0 (X) awidthshow } 0 ]
+          [ (stringwidth) { (X) stringwidth }      2 ] ] def
+/nsens 0 def
+FAMILY {
+    dup 0 get /p.lbl exch def
+    dup 2 get /p.expect exch def
+    1 get                          % the procedure stays here on the stack
+    TAKEN { /p.nm exch def mark 1 index probeunder } forall
+    pop
+} forall
+nsens 0 eq (nor any of the rest of the show family) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
