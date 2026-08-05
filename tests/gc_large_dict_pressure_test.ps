@@ -1,0 +1,52 @@
+% A collection the interpreter starts for itself, over a dictionary whose
+% hash table is larger than a composite's size field can count. Run
+% through `xpost -d null` by run-ps-test.sh with the collector's
+% threshold turned down so that ordinary allocation crosses it: prints
+% SUCCESS iff every assertion holds.
+%
+% gc_large_dict_test covers the collections an operator asks for. This
+% covers the one nothing asks for. It is a separate run because the
+% threshold has to come from the environment -- at the ordinary one a
+% test would have to allocate a gigabyte to provoke a collection, so a
+% section that allocated a little and then asserted would be asserting
+% over a collection that never happened.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+
+% the table of a dict asked for at this size spans 65537 records: one
+% more than the default build's size field can count
+/bigsz 26214 def
+
+/churn { 0 1 200 { pop 64 string pop } for } def
+
+% --- an oversized dict survives the collections the churn provokes ---
+/D bigsz dict def
+D /probe 42 put
+churn
+D /probe get 42 eq (a collection nothing asked for walks an oversized dict table) assert
+D length 1 eq (the dict survives it intact) assert
+
+% --- and so does one reached by growing rather than by asking ---
+/GD 4 dict def
+0 1 15500 { GD exch dup put } for
+churn
+GD length 15501 eq (a grown dict keeps every entry across such a collection) assert
+GD 15500 get 15500 eq (the last key survives it) assert
+
+% --- and so does one built and dropped inside a save ---
+save
+/SD bigsz dict def
+SD /probe 9 put
+churn
+SD /probe get 9 eq (a collection under save walks the table) assert
+restore
+D /probe get 42 eq (the pre-save dict is intact after restore) assert
+churn
+D /probe get 42 eq (and after the collections that follow the restore) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit

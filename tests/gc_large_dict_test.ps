@@ -1,0 +1,87 @@
+% Collecting over a dictionary whose hash table is larger than a
+% composite's size field can count, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% A dictionary's storage is a table of 2*sz+1 records, so the largest
+% table index is more than twice the size the sz field carries. In the
+% default build that field is 16 bits wide, so a dictionary the field
+% describes perfectly well has a table the field cannot index -- and
+% anything that walks the table with a counter of that width never
+% reaches the end of it. The collector walks every reachable dictionary.
+%
+% The sizes below are chosen to straddle that boundary in the default
+% build and to be unremarkable in the large-object build, so the same
+% assertions hold in both. A dictionary reaches the far side of it two
+% ways -- asked for at that size, or grown into it -- and both are here.
+% The collections asked for by operator are here: local VM, local and
+% global, and one with a save outstanding. A collection the interpreter
+% starts for itself takes the same walk, and gc_large_dict_pressure_test
+% provokes one -- the ordinary threshold is far too high to reach from a
+% test, so a section here that merely allocated would assert nothing.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+
+% The table of a dict asked for at this size spans 65537 records: one
+% more than the default build's size field can count.
+/bigsz 26214 def
+
+% --- an explicit collection of local VM walks the whole table ---
+/D bigsz dict def
+D /probe 42 put
+1 vmreclaim
+D /probe get 42 eq (a local collection walks an oversized dict table) assert
+D length 1 eq (the dict survives the collection intact) assert
+
+% --- and so does a collection of local and global VM ---
+2 vmreclaim
+D /probe get 42 eq (a global collection walks an oversized dict table) assert
+
+% --- a dict that reaches that size by growing is the same dict ---
+% growth over-allocates, so the table crosses the boundary well before
+% the entry count does
+/GD 4 dict def
+0 1 15500 { GD exch dup put } for
+1 vmreclaim
+GD length 15501 eq (a grown dict keeps every entry across a collection) assert
+GD 0 get 0 eq (the first key survives the collection) assert
+GD 15500 get 15500 eq (the last key survives the collection) assert
+
+% --- and one with a save outstanding walks it too ---
+save
+/SD bigsz dict def
+SD /probe 9 put
+1 vmreclaim
+SD /probe get 9 eq (a collection under save walks the table) assert
+restore
+D /probe get 42 eq (the pre-save dict is intact after restore) assert
+
+% --- a dict asked for at the size field's limit is that size, and
+%     counts every entry it takes ---
+% The table is over-allocated by a quarter, so the over-allocated size
+% of the largest dict the size field can describe does not itself fit in
+% that field; the count of entries in use is held in a field of the same
+% width again. A dict that reports one capacity and then grows itself at
+% another has truncated the over-allocation, and one that keeps taking
+% entries past what the count field holds reads back as a nearly empty
+% dict holding tens of thousands of retrievable keys. A build whose
+% fields cannot reach that far must refuse the entry instead.
+/CD 65535 dict def
+CD maxlength 65535 eq (a dict at the size field's limit reports its capacity) assert
+/naccept 0 def
+mark
+{ 0 1 65600 { CD exch dup put /naccept naccept 1 add store } for } stopped
+{ $error /errorname get /limitcheck eq
+    (a dict that can take no more entries raises limitcheck) assert } if
+cleartomark
+CD maxlength 65535 eq (a dict at the size field's limit does not grow early) assert
+CD length naccept eq (a dict reports every entry it took) assert
+1 vmreclaim
+CD 0 get 0 eq (the first entry survives a collection) assert
+CD 20000 get 20000 eq (and so does one from the middle) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit

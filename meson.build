@@ -449,6 +449,32 @@ test('dict-grow',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# Collecting over a dictionary whose hash table is longer than a
+# composite's size field can count. Growing such a dictionary is covered
+# above, but growth alone never walks the table the way the collector
+# does, so the size at which the walk stops converging went unseen. The
+# threshold is a property of the default build's narrower fields; the
+# same sizes are unremarkable in the wide one, so both run the test.
+test('gc-large-dict',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_large_dict_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
+# The same walk, in a collection nothing asked for. The ordinary
+# threshold is a gigabyte of allocation, so the run that provokes one
+# from a test has to bring the threshold down, and that is an
+# environment setting rather than something the program can reach --
+# hence a run of its own rather than a section of the above.
+test('gc-large-dict-pressure',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_large_dict_pressure_test.ps') ],
+  env: {
+    'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+    'XPOST_GC_THRESHOLD': '4000',
+  },
+  timeout: 300)
+
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),

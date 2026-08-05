@@ -85,6 +85,8 @@ tests/font_type1_sparse_subrs_test.ps \
 tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \
 tests/gc_diagnostics_test.ps \
+tests/gc_large_dict_pressure_test.ps \
+tests/gc_large_dict_test.ps \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
