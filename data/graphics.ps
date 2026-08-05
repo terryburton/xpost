@@ -232,13 +232,24 @@ false setglobal
 % middle of user programs, whose dictionaries are then on the dict
 % stack: an unbound operator name in these procedures can be captured
 % by an unrelated definition in a user dictionary (a variable named
-% /type or /copy, for example). Bind every procedure - including the
-% methods of device class dictionaries, tables nested inside tables,
-% and the procedures the boot files left in systemdict - with the
-% shared recursive sweep, so operator references are resolved now.
-% Names that resolve to procedures are left dynamic, so wrappers still
-% dispatch through the dict stack.
-[ currentdict systemdict ] { //.xpostsys /.bindscope get exec } forall
+% /type or /copy, for example). Every procedure has to be bound --
+% including the methods of device class dictionaries, tables nested
+% inside tables, and the procedures the boot files left in systemdict.
+%
+% That sweep is not run here. Half the standard operators are written in
+% PostScript and are still procedures at this point; they become
+% operators only when .finalize promotes them. A sweep run now would
+% leave every reference to one of them a name, which is the outcome it
+% is meant to prevent -- and it would seal the procedures it walked,
+% because bind makes what it binds read-only and then will not descend
+% into a read-only array. The later, correctly timed sweep could not
+% come back for them, and the reference would stay dynamic for the rest
+% of the run.
+%
+% .finalize sweeps these same dictionaries once the promotion is done,
+% which is the first moment at which a call from one standard operator
+% to another can be frozen. It runs immediately after this file is
+% loaded, so nothing executes in between.
 
 end %systemdict
 
