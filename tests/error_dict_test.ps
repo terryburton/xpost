@@ -70,4 +70,49 @@ $error /ostack get null eq (no snapshot is taken when recordstacks is false) ass
 $error /recordstacks true put
 $error /newerror false put
 
+% ------------------------------------------------- a handler for every error
+% PLRM 3.11: every error name is a key in errordict, and 3.11.2: the
+% errordict present in the initial state of VM provides standard handlers
+% for all errors. The interpreter reaches a handler by looking its name up
+% there, so a name with no entry is an error a program can neither observe
+% through $error nor take over -- the idiom of fetching the standard
+% handler, wrapping it and putting it back cannot even be written.
+%
+% execstackunderflow is one the interpreter raises: the control operators
+% that resume a loop from its execution-stack frame report it when the
+% frame is not there.
+
+errordict /execstackunderflow known
+    (errordict carries a handler for execstackunderflow) assert
+
+% the rest of this section reads the entry, so it runs only when there is
+% one to read: without the guard a missing entry ends the job on an
+% undefined error and the failure above never reaches the report
+errordict /execstackunderflow known {
+
+    % it is the standard handler: it records the error's name and what was
+    % executing into $error, and stops, so an enclosing stopped context
+    % sees it
+    { /aloop errordict /execstackunderflow get exec } stopped
+        (the execstackunderflow handler stops) assert
+    $error /errorname get /execstackunderflow eq
+        (it records the error's name) assert
+    $error /command get /aloop eq
+        (it records what was executing) assert
+    $error /newerror get (it raises newerror) assert
+    $error /newerror false put
+
+    % and a program replaces it selectively, the entry being there to
+    % fetch, wrap and put back
+    /standard errordict /execstackunderflow get def
+    /substituted false def
+    errordict /execstackunderflow { /substituted true store } put
+    errordict /execstackunderflow get exec
+    substituted (a program's own handler replaces the standard one) assert
+    errordict /execstackunderflow /standard load put
+    errordict /execstackunderflow get /standard load eq
+        (the standard handler goes back) assert
+
+} if
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
