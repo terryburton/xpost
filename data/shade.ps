@@ -201,11 +201,13 @@ currentglobal true setglobal
 
 % x y  .clipbig  r
 % a radius from the given point that covers the whole clip region:
-% the farthest corner of the region's box, plus a margin
+% the farthest corner of the region's box, plus a margin. A region
+% covering no pixels bounds nothing and is covered by a radius of zero
 /.clipbig {
     6 dict begin
     /py exch def /px exch def
-    gsave clippath flattenpath pathbbox grestore
+    gsave clippath flattenpath .pathempty { grestore 0 }{
+    pathbbox grestore
     /y1 exch def /x1 exch def /y0 exch def /x0 exch def
     x0 px sub dup mul y0 py sub dup mul add sqrt
     x0 px sub dup mul y1 py sub dup mul add sqrt
@@ -215,6 +217,7 @@ currentglobal true setglobal
     x1 px sub dup mul y1 py sub dup mul add sqrt
     2 copy lt { exch } if pop
     1 add
+    } ifelse
     end
 } def
 

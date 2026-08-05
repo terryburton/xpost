@@ -65,8 +65,10 @@ currentglobal true setglobal
     xs 0 ne ys 0 ne and {
         % the region's bounds, carried to pattern space: clip box
         % corners through the CTM to the device, then back through
-        % the pattern space
-        gsave clippath flattenpath pathbbox grestore
+        % the pattern space. A region covering no pixels bounds
+        % nothing, and there is no cell of it for a cell to meet
+        gsave clippath flattenpath .pathempty { grestore }{
+        pathbbox grestore
         /uy1 exch def /ux1 exch def /uy0 exch def /ux0 exch def
         /im pm matrix invertmatrix def
         /px0 9e99 def /px1 -9e99 def /py0 9e99 def /py1 -9e99 def
@@ -117,6 +119,7 @@ currentglobal true setglobal
                 } for
             } for
         } if
+        } ifelse
     } if
     } ifelse
     } if

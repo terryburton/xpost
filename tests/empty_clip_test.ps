@@ -1,0 +1,217 @@
+% What the painting operators do when the clip region covers no pixels.
+% Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% A clipping region can end up covering nothing: two clips that do not
+% overlap, or a tiling pattern whose fill lies outside the clip already in
+% force -- the pattern cuts the region down to what its fill meets and
+% then steps its cells over the result. PLRM 7.5.1 states what a painting
+% operation marks as the intersection of two sets of pixels, so when one
+% of them is empty the answer is the empty set: every painter paints
+% nothing, and none of them has anything to report.
+%
+% The region is then a path with no elements, and clippath hands that over
+% as it stands -- PLRM 8.2 gives clippath no errors, and this is not one.
+% Asking such a path for its bounding box is a nocurrentpoint, which is
+% what PLRM 8.2 specifies for pathbbox over an empty path. So the question
+% is the machinery's to avoid rather than pathbbox's to answer otherwise,
+% and both halves of that are asserted at the end.
+%
+% Each painter is asked twice. Once under a region that covers what it
+% paints, where it has to mark something -- otherwise "marked nothing"
+% below would be the operator doing nothing at all, and the run would pass
+% while asserting nothing. Then under a region covering no pixels, where
+% it has to return quietly and leave the page as it found it.
+
+/faildict 2 dict def
+faildict /n 0 put
+/p.name () def
+/check { % bool (what)  .  -   (reported against the painter named in p.name)
+    exch { pop }{
+        (FAIL: ) print p.name print ( ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/DEV 96 96 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 96 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/inkcount { % -  .  n   (pixels darker than the erased page)
+    0
+    0 1 95 { /ic.y exch def
+        0 1 95 { /ic.x exch def
+            ic.x ic.y DEV dup /GetPix get exec 128 lt { 1 add } if
+        } for
+    } for
+} bind def
+
+/boxpath { % x0 y0 x1 y1  .  -
+    4 dict begin
+    /by1 exch def /bx1 exch def /by0 exch def /bx0 exch def
+    newpath bx0 by0 moveto bx1 by0 lineto bx1 by1 lineto bx0 by1 lineto closepath
+    end
+} bind def
+
+% the clip everything below is painted under, and the same clip cut down
+% by a band that does not touch it -- the second leaves a region covering
+% no pixels at all
+/liveclip  { initgraphics erasepage 0 30 96 70 boxpath clip newpath } bind def
+/emptyclip { liveclip 0 5 96 15 boxpath clip newpath } bind def
+
+/setpat {
+    << /PatternType 1 /PaintType 1 /TilingType 1
+       /BBox [0 0 8 8] /XStep 8 /YStep 8
+       /PaintProc { begin 0 setgray 0 0 8 8 rectfill end } >>
+    matrix makepattern /Pattern setcolorspace setcolor
+} bind def
+/setshpat {
+    << /PatternType 2
+       /Shading << /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 30 0 70]
+                   /Extend [true true]
+                   /Function << /FunctionType 2 /Domain [0 1]
+                                /C0 [0] /C1 [0] /N 1 >> >> >>
+    matrix makepattern /Pattern setcolorspace setcolor
+} bind def
+
+% every painter, each marking the band the clips above are cut around. The
+% shadings extend at both ends, so they reach for a radius covering the
+% whole region -- the measurement that has no answer when there is no
+% region.
+%
+% The third element says whether the region governs what the painter
+% marks. It is false for show alone: a glyph raster is plotted straight
+% through the device's pixel methods, so the marks a show makes reach the
+% page whatever region is in force, empty or not, and asking this suite
+% about its ink would be asking about that instead. What show does under a
+% region covering no pixels is still asserted -- it must return quietly --
+% and the ink of the same glyphs painted through the region is covered by
+% the pattern show below, which goes the charpath-and-fill way.
+/PAINTERS [
+  [ (fill)          { 0 setgray 10 40 80 60 boxpath fill } true ]
+  [ (eofill)        { 0 setgray 10 40 80 60 boxpath eofill } true ]
+  [ (stroke)        { 0 setgray 6 setlinewidth
+                      newpath 10 50 moveto 80 50 lineto stroke } true ]
+  [ (rectfill)      { 0 setgray 10 40 70 20 rectfill } true ]
+  [ (show)          { 0 setgray /Times-Roman findfont 24 scalefont setfont
+                      10 42 moveto (Hg) show } false ]
+  [ (image)         { 0 setgray 10 40 translate 70 20 scale
+                      2 2 8 [2 0 0 -2 0 2] <00204060> image } true ]
+  [ (axial shfill)  { << /ShadingType 2 /ColorSpace /DeviceGray
+                         /Coords [10 40 80 60] /Extend [true true]
+                         /Function << /FunctionType 2 /Domain [0 1]
+                                      /C0 [0] /C1 [0] /N 1 >> >> shfill } true ]
+  [ (radial shfill) { << /ShadingType 3 /ColorSpace /DeviceGray
+                         /Coords [48 50 2 48 50 30] /Extend [true true]
+                         /Function << /FunctionType 2 /Domain [0 1]
+                                      /C0 [0] /C1 [0] /N 1 >> >> shfill } true ]
+  [ (mesh shfill)   { << /ShadingType 4 /ColorSpace /DeviceGray
+                         /DataSource [ 0 12 40 0.0  0 84 42 0.0  0 48 62 0.0 ]
+                      >> shfill } true ]
+  [ (pattern fill)   { setpat 10 40 80 60 boxpath fill } true ]
+  [ (pattern eofill) { setpat 10 40 80 60 boxpath eofill } true ]
+  [ (pattern stroke) { setpat 6 setlinewidth
+                       newpath 10 50 moveto 80 50 lineto stroke } true ]
+  [ (pattern show)   { setpat /Times-Roman findfont 24 scalefont setfont
+                       10 42 moveto (Hg) show } true ]
+  [ (pattern image)  { setpat 10 40 translate 70 20 scale
+                       2 2 8 [2 0 0 -2 0 2] <00204060> image } true ]
+  [ (shading-pattern fill) { setshpat 10 40 80 60 boxpath fill } true ]
+] def
+
+% --- under a region that covers them, the painters mark the page --------
+PAINTERS {
+    aload pop /p.gov exch def /p.proc exch def /p.name exch def
+    liveclip
+    { p.proc } stopped
+        { (FAIL: ) print p.name print ( raised ) print
+          $error /errorname get 40 string cvs print (\n) print
+          faildict /n 2 copy get 1 add put }
+        { inkcount 0 gt (marks the page under a region that covers it) check }
+    ifelse
+} forall
+
+% --- under a region covering no pixels, they raise nothing and mark none -
+PAINTERS {
+    aload pop /p.gov exch def /p.proc exch def /p.name exch def
+    emptyclip
+    { p.proc } stopped
+        { (FAIL: ) print p.name print ( raised ) print
+          $error /errorname get 40 string cvs print
+          ( under a region covering no pixels\n) print
+          faildict /n 2 copy get 1 add put }
+        { p.gov
+          { inkcount 0 eq (marks nothing under a region covering no pixels) check }
+          if }
+    ifelse
+} forall
+
+% --- a pattern fill outside the clip already in force -------------------
+% The reported shape of the fault, and the one that needs no second clip:
+% the tiling cuts the region down to what its own fill meets, so a bar
+% that misses the clip leaves the cells nothing to be stepped over.
+
+/p.name (a pattern fill outside the clip) def
+initgraphics erasepage
+0 60 96 90 boxpath clip newpath
+setpat
+{ newpath 0 40.1 96 0.3 rectfill } stopped
+    { (FAIL: ) print p.name print ( raised ) print
+      $error /errorname get 40 string cvs print (\n) print
+      faildict /n 2 copy get 1 add put }
+    { inkcount 0 eq (marks nothing) check }
+ifelse
+
+% and the same bar inside the clip does mark, so the miss above is the
+% clip's doing and not the bar's
+initgraphics erasepage
+0 60 96 90 boxpath clip newpath
+setpat
+newpath 0 70.1 96 4.3 rectfill
+inkcount 0 gt (a pattern fill inside the clip marks the page) assert
+
+% --- what the region itself answers -------------------------------------
+% clippath hands the region over as a path. A region covering no pixels is
+% a path with no elements, and that is what comes back; PLRM 8.2 gives
+% clippath no errors and an empty region is not one.
+
+emptyclip
+{ clippath } stopped not (clippath over an empty region returns quietly) assert
+/nelem 0 def
+clippath
+    { pop pop /nelem nelem 1 add def }
+    { pop pop /nelem nelem 1 add def }
+    { pop pop pop pop pop pop /nelem nelem 1 add def }
+    { /nelem nelem 1 add def }
+pathforall
+nelem 0 eq (clippath over an empty region gives a path with no elements) assert
+
+% and pathbbox over that path is a nocurrentpoint, as PLRM 8.2 states for
+% an empty path. That is the operator behaving, not misbehaving, so the
+% machinery is what must not put the question -- which is exactly what the
+% sweep above holds it to.
+emptyclip
+clippath
+{ pathbbox } stopped
+    { $error /errorname get /nocurrentpoint eq }{ false } ifelse
+    (pathbbox over the empty region's path is a nocurrentpoint) assert
+clear
+
+initclip newpath
+count 0 eq (the suite leaves the operand stack empty) assert
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

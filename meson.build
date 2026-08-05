@@ -471,6 +471,17 @@ test('clip-region',
   args: [ xpost_exe, files('tests/clip_region_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A clip region can end up covering no pixels at all. PLRM 7.5.1 makes
+# what a painting operation marks the intersection of two sets of pixels,
+# so an empty one is an answer and not a fault: every painter paints
+# nothing and none of them reports anything. Each is asked twice, once
+# under a region that covers it, so "marked nothing" is the region's doing
+# and not the operator declining to work.
+test('empty-clip',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/empty_clip_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What an operator leaves on the operand stack when it refuses. An error
 # raised in PostScript with signalerror ends in a stop and never reaches
 # the interpreter's handler, so the unwinding every other error gets has
