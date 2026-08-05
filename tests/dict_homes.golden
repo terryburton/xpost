@@ -3,16 +3,23 @@
 # member may gain company but may not move home or vanish. A feature
 # that adds a member appends it here in the same commit, so the file
 # is the running register of where interpreter machinery lives.
+#
+# A name here is the whole name. Five entries were once prefixes of a
+# longer name and were satisfied by it -- /DATA by DATA_DIR, /GRAPHICS by
+# GRAPHICS_LOADED, /initial by initial_ipos, /hodgman by
+# hodgman-sutherland, /.xpost by the nine device class dictionaries --
+# so they registered members that do not exist while the ones that do
+# went unheld.
 .gscratch /.pfdict
 .gscratch /strokedict
 .internaldict /.fillpoly
 .internaldict /.fillrectgray
-.internaldict /GRAPHICS
+.internaldict /GRAPHICS_LOADED
 .internaldict /QUIET
 .internaldict /.=stringproc
 .internaldict /.sysdictrelock
 .internaldict /USEDRAWLINE
-.privatedict /DATA
+.privatedict /DATA_DIR
 .privatedict /.error
 .privatedict /.graphicsdict
 .privatedict /.gstatetemplate
@@ -21,7 +28,16 @@
 .privatedict /.imginterp
 .privatedict /newnulldevice
 .gscratch /.stencilcache
-.privatedict /.xpost
+# the device class dictionaries, one per PostScript-implemented device
+.privatedict /.xpost_BBOX
+.privatedict /.xpost_NULLDEV
+.privatedict /.xpost_PGMIMAGE
+.privatedict /.xpost_PPMIMAGE
+.privatedict /.xpost_PBMIMAGE
+.privatedict /.xpost_TIFFIMAGE
+.privatedict /.xpost_PDFWRITE
+.privatedict /.xpost_DSCWRITE
+.privatedict /.xpost_SVGWRITE
 .xpostsys /.bindone
 .xpostsys /.bindscope
 .xpostsys /.bindscoped
@@ -58,14 +74,14 @@
 .xpostsys /.hairext
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror
-.xpostsys /hodgman
+.xpostsys /hodgman-sutherland
 .xpostsys /.identdecode
 .xpostsys /.imagepaint
 .xpostsys /.imagepaintm
 .xpostsys /.imagetype3
 .xpostsys /.imagetype4
 .xpostsys /.imgsource
-.xpostsys /initial
+.xpostsys /initial_ipos
 .xpostsys /.instof
 .xpostsys /.intest
 .xpostsys /.it1row
@@ -140,13 +156,19 @@
 .xpostsys /.ssreckeys
 .xpostsys /.installscreen
 .xpostsys /.installscreenbody
-# Graphics-state template slots (data/gstate.ps); each theme appends
-# the slots it adds, and none may be dropped or renamed.
+# Graphics-state template slots (data/gstate.ps). The list is the whole
+# of the template: a slot the template declares and this list does not
+# fails the check, so a new slot is declared here in the commit that adds
+# it, and none may be dropped or renamed.
+gstate /setspace
 gstate /colorspace
 gstate /colorcomp1
 gstate /colorcomp2
 gstate /colorcomp3
 gstate /colorcomp4
+gstate /sepindex
+gstate /septint
+gstate /tintcomps
 gstate /blackgen
 gstate /ucr
 gstate /colorrendering
