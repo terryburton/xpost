@@ -3310,16 +3310,19 @@ static int
 a85enc_encode(Xpost_EncBase *base, int c)
 {
     Xpost_A85EncFile *ff = (Xpost_A85EncFile *)base;
+    int ret = c;
 
     ff->tuple = ff->tuple << 8 | (unsigned int)c;
+    /* the group ends with the fourth byte whether or not the target took
+       it, so what is left over is always a partial one */
     if (++ff->n == 4)
     {
         if (a85enc_group(ff, 4) == EOF)
-            return EOF;
+            ret = EOF;
         ff->tuple = 0;
         ff->n = 0;
     }
-    return c;
+    return ret;
 }
 
 static int
@@ -3360,47 +3363,48 @@ typedef struct
     int reccnt;
 } Xpost_RleEncFile;
 
+/* Each of these gives up what it has gathered before it writes it: the
+   block leaves the encoder whether or not the target takes it, so what
+   stays behind is always less than a full one. */
 static int
 rleenc_flushlit(Xpost_RleEncFile *ff)
 {
-    int i;
+    int i, n = ff->n;
 
-    if (ff->n == 0)
+    if (n == 0)
         return 0;
-    if (xpost_file_putc(ff->base.target, ff->n - 1) == EOF)
+    ff->n = 0;
+    if (xpost_file_putc(ff->base.target, n - 1) == EOF)
         return EOF;
-    for (i = 0; i < ff->n; i++)
+    for (i = 0; i < n; i++)
         if (xpost_file_putc(ff->base.target, ff->buf[i]) == EOF)
             return EOF;
-    ff->n = 0;
     return 0;
 }
 
 static int
 rleenc_flushrun(Xpost_RleEncFile *ff)
 {
-    if (ff->runcnt == 0)
+    int cnt = ff->runcnt;
+
+    if (cnt == 0)
         return 0;
-    if (ff->runcnt >= 3)
+    ff->runcnt = 0;
+    if (cnt >= 3)
     {
-        if (xpost_file_putc(ff->base.target, 257 - ff->runcnt) == EOF)
+        if (xpost_file_putc(ff->base.target, 257 - cnt) == EOF)
             return EOF;
         if (xpost_file_putc(ff->base.target, ff->runch) == EOF)
             return EOF;
-    }
-    else
-    {
-        while (ff->runcnt)
-        {
-            if (ff->n == 128 && rleenc_flushlit(ff) == EOF)
-                return EOF;
-            ff->buf[ff->n++] = (unsigned char)ff->runch;
-            ff->runcnt--;
-        }
-        ff->runcnt = 0;
         return 0;
     }
-    ff->runcnt = 0;
+    while (cnt)
+    {
+        if (ff->n == 128 && rleenc_flushlit(ff) == EOF)
+            return EOF;
+        ff->buf[ff->n++] = (unsigned char)ff->runch;
+        cnt--;
+    }
     return 0;
 }
 
@@ -3728,11 +3732,11 @@ typedef struct
     int bitcnt;
 } Xpost_BitEncBase;
 
+/* the whole bytes the buffer holds, high byte first; a target that
+   refuses one leaves the rest with the buffer */
 static int
-bitenc_put(Xpost_BitEncBase *ff, unsigned int code, int len)
+bitenc_bytes(Xpost_BitEncBase *ff)
 {
-    ff->bitbuf = ff->bitbuf << len | code;
-    ff->bitcnt += len;
     while (ff->bitcnt >= 8)
     {
         ff->bitcnt -= 8;
@@ -3744,8 +3748,20 @@ bitenc_put(Xpost_BitEncBase *ff, unsigned int code, int len)
 }
 
 static int
+bitenc_put(Xpost_BitEncBase *ff, unsigned int code, int len)
+{
+    ff->bitbuf = ff->bitbuf << len | code;
+    ff->bitcnt += len;
+    return bitenc_bytes(ff);
+}
+
+/* out to a byte boundary: the whole bytes still buffered, then the bits
+   short of one, at the top of a final byte and zero-filled below */
+static int
 bitenc_pad(Xpost_BitEncBase *ff)
 {
+    if (bitenc_bytes(ff) == EOF)
+        return EOF;
     if (ff->bitcnt &&
         xpost_file_putc(ff->base.target,
                         (int)(ff->bitbuf << (8 - ff->bitcnt)) & 0xff) == EOF)
@@ -4047,7 +4063,6 @@ faxenc_row(Xpost_FaxEncFile *ff)
     tmp = ff->ref; ff->ref = ff->cur; ff->cur = tmp;
     ff->refcnt = ff->curcnt;
     ff->rowsdone++;
-    ff->rowpos = 0;
     return 0;
 }
 
@@ -4055,11 +4070,18 @@ static int
 faxenc_encode(Xpost_EncBase *base, int c)
 {
     Xpost_FaxEncFile *ff = (Xpost_FaxEncFile *)base;
+    int ret = c;
 
     ff->row[ff->rowpos++] = (unsigned char)c;
-    if (ff->rowpos == ff->rowbytes && faxenc_row(ff) == EOF)
-        return EOF;
-    return c;
+    /* the row buffer holds one row: the byte that completes it starts the
+       next, whatever became of the one just filled */
+    if (ff->rowpos == ff->rowbytes)
+    {
+        if (faxenc_row(ff) == EOF)
+            ret = EOF;
+        ff->rowpos = 0;
+    }
+    return ret;
 }
 
 static int
