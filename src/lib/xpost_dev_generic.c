@@ -280,7 +280,10 @@ int _poly_resolved_spans(Xpost_Context *ctx,
     points = malloc(poly.comp_.sz * sizeof *points);
     if (!points)
         return VMerror;
-    for (i = 0; i < poly.comp_.sz; i++)
+    /* the vertex count is widened into the signed type the walk indexes
+       with, so the subpath cursor below stays signed throughout: it is
+       differenced against a subpath's first index to count vertices */
+    for (i = 0; i < (integer)poly.comp_.sz; i++)
     {
         Xpost_Object pair, x, y;
 
@@ -327,12 +330,12 @@ int _poly_resolved_spans(Xpost_Context *ctx,
         int dirn, ib, code;
         real lo, hi, submin, submax;
 
-        while (i < poly.comp_.sz && points[i].x == SUBPATH_BREAK)
+        while (i < (integer)poly.comp_.sz && points[i].x == SUBPATH_BREAK)
             i++;
-        if (i == poly.comp_.sz)
+        if (i == (integer)poly.comp_.sz)
             break;
         s0 = i;
-        while (i < poly.comp_.sz && points[i].x != SUBPATH_BREAK)
+        while (i < (integer)poly.comp_.sz && points[i].x != SUBPATH_BREAK)
             i++;
         nv = i - s0;
 
@@ -1162,10 +1165,14 @@ int _blendpixgray(Xpost_Context *ctx,
     ix = xpost_dev_pixel(xpost_object_number(x));
     iy = xpost_dev_pixel(xpost_object_number(y));
     c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
-    if (iy < 0 || iy >= imgdata.comp_.sz)
+    /* a device coordinate is signed and arrives from anywhere on the
+       page, so the raster's extents are widened into the signed type to
+       be compared against rather than the coordinate narrowed into
+       theirs: off the top and off the bottom both have to miss */
+    if (iy < 0 || iy >= (integer)imgdata.comp_.sz)
         return 0;
     row = xpost_array_get(ctx, imgdata, iy);
-    if (ix < 0 || ix >= row.comp_.sz)
+    if (ix < 0 || ix >= (integer)row.comp_.sz)
         return 0;
     src = (int)_channel(val, 255.0);
     {
@@ -1204,12 +1211,16 @@ int _blendpixrgb(Xpost_Context *ctx,
     ix = xpost_dev_pixel(xpost_object_number(x));
     iy = xpost_dev_pixel(xpost_object_number(y));
     c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
-    if (iy < 0 || iy >= imgdata.comp_.sz)
+    /* a device coordinate is signed and arrives from anywhere on the
+       page, so the raster's extents are widened into the signed type to
+       be compared against rather than the coordinate narrowed into
+       theirs: off the top and off the bottom both have to miss */
+    if (iy < 0 || iy >= (integer)imgdata.comp_.sz)
         return 0;
     row = xpost_array_get(ctx, imgdata, iy);
     if (xpost_object_get_type(row) != arraytype)
         return undefined;
-    if (ix < 0 || ix >= row.comp_.sz)
+    if (ix < 0 || ix >= (integer)row.comp_.sz)
         return 0;
     pix = xpost_array_get(ctx, row, ix);
     packed = xpost_object_get_type(pix) == integertype ? pix.int_.val : 0;
@@ -1614,7 +1625,8 @@ int _blitform(Xpost_Context *ctx,
 static
 int _zerorows(Xpost_Context *ctx, Xpost_Object imgdata)
 {
-    int iy, ix, ret;
+    word iy, ix;
+    int ret;
 
     for (iy = 0; iy < imgdata.comp_.sz; iy++)
     {
@@ -1689,7 +1701,7 @@ int _writepbmrows(Xpost_Context *ctx,
 
         row = xpost_array_get(ctx, imgdata, iy);
         if (xpost_object_get_type(row) != stringtype
-            || row.comp_.sz != width)
+            || (integer)row.comp_.sz != width)
         {
             free(buf);
             return typecheck;
@@ -1731,7 +1743,7 @@ int _write_rgb_raster(Xpost_Context *ctx,
     {
         row = xpost_array_get(ctx, imgdata, iy);
         if (xpost_object_get_type(row) != arraytype
-            || row.comp_.sz != width)
+            || (integer)row.comp_.sz != width)
         {
             free(buf);
             return typecheck;

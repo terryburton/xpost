@@ -108,7 +108,7 @@ Xpost_Object bind(Xpost_Context *ctx,
     }
     seen->ents[seen->n++] = ent;
 
-    for (i = 0; i < p.comp_.sz; i++)
+    for (i = 0; i < (integer)p.comp_.sz; i++)
     {
         t = xpost_array_get(ctx, p, i);
         switch(xpost_object_get_type(t))

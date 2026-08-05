@@ -238,7 +238,7 @@ int Ssearch(Xpost_Context *ctx,
             Xpost_Object str,
             Xpost_Object seek)
 {
-    int i;
+    word i;
     char *s, *k;
     Xpost_Object interval;
 

@@ -2644,8 +2644,11 @@ run:
     vs = xpost_memory_save_stack_adr(ctx->lo);
     if (xpost_object_get_type(lsav) == savetype)
     {
+        /* the depth is counted, the level recorded: comparing them in
+           the wider signed type keeps a depth that came back short of
+           the level below it rather than above it */
         for ( llev = xpost_stack_count(ctx->lo, vs);
-                llev > lsav.save_.lev;
+                llev > (integer)lsav.save_.lev;
                 llev-- )
         {
             xpost_save_restore_snapshot(ctx->lo);

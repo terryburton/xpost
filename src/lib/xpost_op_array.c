@@ -109,7 +109,7 @@ int xpost_op_int_array (Xpost_Context *ctx,
    end array construction */
 int xpost_op_array_to_mark (Xpost_Context *ctx)
 {
-    int i;
+    integer i; /* the counted length, in the width the count arrives in */
     Xpost_Object a, v;
     Xpost_Object t;
 
@@ -238,7 +238,7 @@ static
 int xpost_op_array_aload (Xpost_Context *ctx,
                           Xpost_Object A)
 {
-    int i;
+    word i;
 
     if (!xpost_object_is_readable(ctx, A))
         return invalidaccess;

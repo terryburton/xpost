@@ -1042,7 +1042,7 @@ int _loadfont42(Xpost_Context *ctx,
     struct fontdata data;
     unsigned char *buf;
     size_t total;
-    int i;
+    word i;
     int ret;
 
     sfnts = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "sfnts"));
@@ -2290,7 +2290,8 @@ _cid_emit_entry(Xpost_Context *ctx, Xpost_String_Buffer *b,
                 Xpost_Object d, const char *key)
 {
     Xpost_Object v = xpost_dict_get(ctx, d, xpost_name_cons(ctx, key));
-    int i, ret;
+    word i;
+    int ret;
 
     if (xpost_object_get_type(v) == invalidtype)
         return 0;
@@ -2350,7 +2351,10 @@ int _loadcidfont0(Xpost_Context *ctx,
     else if (xpost_object_get_type(gdata) == arraytype)
     {
         glen = 0;
-        for (i = 0; i < gdata.comp_.sz; i++)
+        /* the emitted program names this index in its own text, so the
+           walk counts in the signed type the emitter takes and each
+           array's element count is widened into it to be compared */
+        for (i = 0; i < (integer)gdata.comp_.sz; i++)
         {
             Xpost_Object s = xpost_array_get(ctx, gdata, i);
             if (xpost_object_get_type(s) != stringtype)
@@ -2388,7 +2392,7 @@ int _loadcidfont0(Xpost_Context *ctx,
     if (_cid_emit_entry(ctx, &buf, fontdict, "CIDMapOffset")) goto fail;
     if (xpost_strbuf_appendf(&buf, "/FDArray %d array\n", fdarray.comp_.sz))
         goto fail;
-    for (i = 0; i < fdarray.comp_.sz; i++)
+    for (i = 0; i < (integer)fdarray.comp_.sz; i++)
     {
         Xpost_Object fd = xpost_array_get(ctx, fdarray, i);
         Xpost_Object priv;
@@ -2456,7 +2460,7 @@ int _loadcidfont0(Xpost_Context *ctx,
     }
     else
     {
-        for (i = 0; i < gdata.comp_.sz; i++)
+        for (i = 0; i < (integer)gdata.comp_.sz; i++)
         {
             Xpost_Object s = xpost_array_get(ctx, gdata, i);
             memcpy(whole + gpos, xpost_string_get_pointer(ctx, s), s.comp_.sz);
@@ -2610,7 +2614,7 @@ int _loadfont1(Xpost_Context *ctx,
     {
         if (xpost_strbuf_appendf(&sec, "/Subrs %d array\n", subrs.comp_.sz))
             goto fails;
-        for (i = 0; i < subrs.comp_.sz; i++)
+        for (i = 0; i < (integer)subrs.comp_.sz; i++)
         {
             Xpost_Object s = xpost_array_get(ctx, subrs, i);
 
@@ -2649,7 +2653,7 @@ int _loadfont1(Xpost_Context *ctx,
     if (xpost_strbuf_appendf(&sec, "end put\n"
         "dup /CharStrings %d dict dup begin\n", csflat.comp_.sz / 2 + 1))
         goto fails;
-    for (i = 0; i + 1 < csflat.comp_.sz; i += 2)
+    for (i = 0; i + 1 < (integer)csflat.comp_.sz; i += 2)
     {
         Xpost_Object nm = xpost_array_get(ctx, csflat, i);
         Xpost_Object s = xpost_array_get(ctx, csflat, i + 1);
@@ -3167,7 +3171,9 @@ int _loadcidfont2(Xpost_Context *ctx,
     if (xpost_object_get_type(sfnts) != arraytype)
         return invalidfont;
     total = 0;
-    for (i = 0; i < sfnts.comp_.sz; i++)
+    /* the walk counts in the signed type the table indexing below uses,
+       so the array's element count is widened into it to be compared */
+    for (i = 0; i < (integer)sfnts.comp_.sz; i++)
     {
         Xpost_Object s = xpost_array_get(ctx, sfnts, i);
         if (xpost_object_get_type(s) != stringtype)
@@ -3180,7 +3186,7 @@ int _loadcidfont2(Xpost_Context *ctx,
     if (!buf)
         return VMerror;
     total = 0;
-    for (i = 0; i < sfnts.comp_.sz; i++)
+    for (i = 0; i < (integer)sfnts.comp_.sz; i++)
     {
         Xpost_Object s = xpost_array_get(ctx, sfnts, i);
         memcpy(buf + total, xpost_string_get_pointer(ctx, s), s.comp_.sz);

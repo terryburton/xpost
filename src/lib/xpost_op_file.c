@@ -374,7 +374,8 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
         if (qf <= 0.0)
             return rangecheck;
         v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "HSamples"));
-        if (xpost_object_get_type(v) == arraytype && v.comp_.sz >= colors)
+        if (xpost_object_get_type(v) == arraytype
+            && (integer)v.comp_.sz >= colors)
             for (i = 0; i < colors; i++)
             {
                 Xpost_Object e = xpost_array_get(ctx, v, i);
@@ -384,7 +385,8 @@ int xpost_op_file_filter_dict (Xpost_Context *ctx,
                     hs[i] = e.int_.val;
             }
         v = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "VSamples"));
-        if (xpost_object_get_type(v) == arraytype && v.comp_.sz >= colors)
+        if (xpost_object_get_type(v) == arraytype
+            && (integer)v.comp_.sz >= colors)
             for (i = 0; i < colors; i++)
             {
                 Xpost_Object e = xpost_array_get(ctx, v, i);
@@ -700,7 +702,7 @@ int xpost_op_file_readhexstring (Xpost_Context *ctx,
                                  Xpost_Object F,
                                  Xpost_Object S)
 {
-    int n;
+    word n;
     int c[2];
     int eof = 0;
     Xpost_File *f;
@@ -742,7 +744,7 @@ int xpost_op_file_writehexstring (Xpost_Context *ctx,
                                   Xpost_Object F,
                                   Xpost_Object S)
 {
-    int n;
+    word n;
     Xpost_File *f;
     char *s;
     if (!xpost_file_get_status(ctx->lo, F))
@@ -799,7 +801,9 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);
     n = xpost_file_read(s, 1, S.comp_.sz, f);
-    if (n == S.comp_.sz)
+    /* the count read is compared against the string's own length in the
+       wider signed type: a read that answered short answers short */
+    if (n == (integer)S.comp_.sz)
     {
         xpost_stack_push(ctx->lo, ctx->os, S);
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
@@ -833,7 +837,9 @@ int xpost_op_file_writestring (Xpost_Context *ctx,
         if (d < 0) return ioerror;
         if (d) return 0;
     }
-    if (xpost_file_write(s, 1, S.comp_.sz, f) != S.comp_.sz)
+    /* the count written is compared against the string's own length in
+       the wider signed type: a write that answered short answers short */
+    if (xpost_file_write(s, 1, S.comp_.sz, f) != (integer)S.comp_.sz)
         return ioerror;
     return 0;
 }
@@ -848,7 +854,8 @@ int xpost_op_file_readline (Xpost_Context *ctx,
 {
     Xpost_File *f;
     char *s;
-    int n, c = ' ';
+    word n;
+    int c = ' ';
     if (!xpost_file_get_status(ctx->lo, F))
     {
         /* a closed file reads as end-of-data rather than erroring */
@@ -1107,7 +1114,10 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
         str = xpost_string_get_pointer(ctx, Scr);
         src = globbuf->gl_pathv[ oglob.glob_.off-1 ];
         len = strlen(src);
-        if (len > Scr.comp_.sz)
+        /* the name's length is compared against the scratch string's own
+           in the wider signed type, so a length is short of the string
+           only by being short of it */
+        if (len > (integer)Scr.comp_.sz)
             return rangecheck;
         memcpy(str, src, len);
         interval = xpost_object_get_interval(Scr, 0, len);

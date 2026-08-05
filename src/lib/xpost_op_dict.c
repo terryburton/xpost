@@ -85,7 +85,7 @@ int xpost_op_int_dict(Xpost_Context *ctx,
 static
 int xpost_op_dict_to_mark(Xpost_Context *ctx)
 {
-    int i;
+    integer i; /* the counted length, in the width the count arrives in */
     Xpost_Object d, k, v;
     Xpost_Object t;
     int ret;

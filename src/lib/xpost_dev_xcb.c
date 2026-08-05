@@ -569,7 +569,7 @@ int _fillpoly(Xpost_Context *ctx,
 
     {
         xcb_point_t *points;
-        int i;
+        word i;
         xcb_alloc_color_reply_t *rep;
         unsigned int value;
 

@@ -136,7 +136,7 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
     {
         dichead *dp = xpost_dict_head_at(mem, adr);
         dicrec *tp = xpost_dict_table_of(dp);
-        int j;
+        word j;
 #ifdef DEBUG_GC
         Xpost_Object_Type type;
         printf("markdict: nused=%d\n", dp->nused);
@@ -668,7 +668,7 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     unsigned int adr, ent;
     dichead *dp;
     dicrec *tp;
-    int j;
+    word j;
 
     /* systemdict is the permanent bottom entry of the dictionary stack */
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);

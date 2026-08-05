@@ -95,7 +95,10 @@ int Vrestore(Xpost_Context *ctx,
 
     vs = xpost_memory_save_stack_adr(ctx->lo);
     z = xpost_stack_count(ctx->lo, vs);
-    while(z > V.save_.lev)
+    /* the depth is counted, the level recorded: comparing them in the
+       wider signed type keeps a depth that came back short of the level
+       below it rather than above it */
+    while(z > (integer)V.save_.lev)
     {
         xpost_save_restore_snapshot(ctx->lo);
         z--;

@@ -441,7 +441,10 @@ int NRScvrs(Xpost_Context *ctx,
     n = conv_rad(num.int_.val, r, xpost_string_get_pointer(ctx, str), str.comp_.sz);
     if (n == -1)
         return rangecheck;
-    if (n < str.comp_.sz)
+    /* the written length is compared against the string's own in the
+       wider signed type: a length the writer declined to produce is
+       shorter than any string, not longer than every one */
+    if (n < (integer)str.comp_.sz)
         str.comp_.sz = n;
     xpost_stack_push(ctx->lo, ctx->os, str);
     return 0;
@@ -572,21 +575,21 @@ int AScvs (Xpost_Context *ctx,
             u = neg ? -(dword)any.int_.val : (dword)any.int_.val;
             do { t[len++] = (char)(0x30 + u % 10); u /= 10; } while (u);
             n = neg + len;
-            if (n > (int)str.comp_.sz)
+            if (n > (integer)str.comp_.sz)
                 return rangecheck;
             {
                 int i = 0;
                 if (neg) s[i++] = 0x2d;
                 while (len) s[i++] = t[--len];
             }
-            if (n < str.comp_.sz) str.comp_.sz = n;
+            if (n < (integer)str.comp_.sz) str.comp_.sz = n;
             break;
         }
         case realtype:
             n = conv_real(any.real_.val, xpost_string_get_pointer(ctx, str), str.comp_.sz);
             if (n == -1)
                 return rangecheck;
-            if (n < str.comp_.sz) str.comp_.sz = n;
+            if (n < (integer)str.comp_.sz) str.comp_.sz = n;
             break;
 
         case operatortype:
