@@ -41,6 +41,7 @@
 #include "xpost_log.h"
 #include "xpost_memory.h" /* Xpost_Memory_File */
 #include "xpost_object.h" /* Xpost_Object */
+#include "xpost_file.h" /* Xpost_File: what a file entity holds */
 #include "xpost_free.h"
 
 /*
@@ -146,7 +147,7 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
 
     if (tab->tab[rent].tag == filetype)
     {
-        FILE *fp;
+        Xpost_File *fp;
 
         /* retire this file from its birth-stamp bucket */
         {
@@ -162,32 +163,29 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
                     mem->file_birth_max--;
             }
         }
-        ret = xpost_memory_get(mem, ent, 0, sizeof(FILE *), &fp);
+        /* A file entity holds an Xpost_File *, the stream abstraction --
+           not the stdio FILE * it once held. Reading it back as the type
+           it is means the two cannot be confused; a stream is closed
+           through its own method table, never by fclose on a pointer that
+           merely happens to be the same width.
+
+           Reaching here with a live stream would be a caller's mistake,
+           not a case to handle: the entity is only offered for reclaim
+           once its stream has been closed and its pointer cleared, which
+           is why the one caller that can present a file entity tests for
+           NULL before asking. Say so and decline, rather than guess at a
+           close for a stream something else still believes it owns. */
+        ret = xpost_memory_get(mem, ent, 0, sizeof fp, &fp);
         if (!ret)
         {
-            XPOST_LOG_ERR("cannot load FILE* from VM");
+            XPOST_LOG_ERR("cannot load the stream of file ent %u", ent);
             return -1;
         }
-        if (fp &&
-            fp != stdin &&
-            fp != stdout &&
-            fp != stderr)
+        if (fp)
         {
-            tab->tab[rent].tag = 0;
-#ifdef DEBUG_FILE
-            printf("gc:xpost_free_memory_ent closing FILE* %p\n", fp);
-            fflush(stdout);
-            /* if (fp < 0x1000) return 0; */
-            printf("fclose");
-#endif
-            fclose(fp);
-            fp = NULL;
-            ret = xpost_memory_put(mem, ent, 0, sizeof(FILE *), &fp);
-            if (!ret)
-            {
-                XPOST_LOG_ERR("cannot write NULL over FILE* in VM");
-                return -1;
-            }
+            XPOST_LOG_ERR("refusing to reclaim file ent %u: its stream is "
+                          "still open", ent);
+            return -1;
         }
     }
     tab->tab[rent].tag = 0;
