@@ -1,0 +1,164 @@
+% Where a pattern's tiles land, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% A tiling pattern is anchored in pattern space, not in the path being
+% painted. The pattern matrix given to makepattern, combined with the
+% transformation in force at that moment, fixes where every tile falls;
+% the path only decides which of them are visible. Two fills side by side
+% therefore continue one tiling rather than each starting a fresh one, and
+% a fill whose corner is not a tile corner shows a cut tile rather than a
+% whole one.
+%
+% This is the part an implementation gets wrong when it starts caching the
+% painted tile, because the cheap thing to cache is a bitmap and the cheap
+% place to put it is wherever the fill begins. Every assertion here holds
+% for the straightforward implementation that re-runs the paint procedure
+% at each tile position; they are written down so a faster one has to
+% agree with it.
+%
+% The cell is deliberately asymmetric -- ink in the lower-left quarter of
+% an 8-unit square -- so that a tile landing half a period out is visible
+% rather than self-similar. With the default pattern matrix and no
+% transformation, ink is at (x,y) exactly when x mod 8 < 4 and y mod 8 < 4.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { exch { pop } {
+    (FAIL: ) print print (\n) print
+    faildict /n 2 copy get 1 add put } ifelse } bind def
+
+% the rasterisers are the interpreter's own operators, and live in
+% internaldict rather than where a program would find them by name
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/inkat { % ux uy . bool
+    transform floor cvi exch floor cvi exch
+    DEV dup /GetPix get exec 128 lt
+} bind def
+/clearpage { gsave 1 setgray 0 0 64 64 rectfill grestore } bind def
+
+% the cell: ink in [0,4) x [0,4) of an 8-unit square
+/cell { << /PatternType 1 /PaintType 1 /TilingType 1
+           /BBox [0 0 8 8] /XStep 8 /YStep 8
+           /PaintProc { pop 0 setgray 0 0 4 4 rectfill } >> } bind def
+
+% ------------------------------------------------ the phase with no transform
+% The baseline every later case is measured against.
+
+clearpage
+gsave cell matrix makepattern setpattern 0 0 64 64 rectfill grestore
+ 1  1 inkat (the first cell inks its own quarter) assert
+ 5  5 inkat not (the first cell leaves the rest of its square) assert
+ 9  9 inkat (the next cell along the diagonal inks) assert
+13 13 inkat not (and leaves its own remainder) assert
+33 33 inkat (the tiling still holds four cells out) assert
+
+% ------------------------------------------- a pattern matrix that translates
+% The matrix shifts pattern space, so the whole tiling moves with it. A
+% cache keyed without the matrix would paint the untranslated phase.
+
+clearpage
+gsave cell [ 1 0 0 1 4 0 ] makepattern setpattern 0 0 64 64 rectfill grestore
+ 1  1 inkat not (a translated pattern leaves the untranslated cell empty) assert
+ 5  1 inkat (and inks four units along) assert
+13  1 inkat (the translation carries into the next tile) assert
+ 9  1 inkat not (which is empty where the untranslated one inked) assert
+
+% ------------------------------------------------ a pattern matrix that scales
+% Scaling pattern space scales the cell: the period doubles and so does
+% the inked quarter.
+
+clearpage
+gsave cell [ 2 0 0 2 0 0 ] makepattern setpattern 0 0 64 64 rectfill grestore
+ 1  1 inkat (a doubled cell inks its own quarter) assert
+ 7  7 inkat (the inked quarter has doubled with it) assert
+ 9  9 inkat not (and the empty part has doubled too) assert
+17 17 inkat (the period is sixteen, not eight) assert
+
+% --------------------------------------------------------- a fractional step
+% A step that is not a whole number of device pixels puts consecutive
+% tiles at different sub-pixel offsets. Nothing may snap them to a whole
+% number: the tenth tile begins at 65, not at 60 or 70.
+
+clearpage
+gsave << /PatternType 1 /PaintType 1 /TilingType 1
+         /BBox [0 0 6.5 6.5] /XStep 6.5 /YStep 6.5
+         /PaintProc { pop 0 setgray 0 0 3 3 rectfill } >>
+      matrix makepattern setpattern 0 0 64 64 rectfill grestore
+ 1  1 inkat (a fractional cell inks its own corner) assert
+ 5  1 inkat not (and stops short of the step) assert
+ 8  1 inkat (the second tile begins at six and a half) assert
+11  1 inkat not (and stops three units later) assert
+% these two separate a step of six and a half from one rounded to seven:
+% the third tile runs from 13, not from 14, and the fourth from 19.5, not
+% from 21. A step snapped to whole pixels answers the other way on both.
+16  1 inkat not (the third tile has ended by sixteen) assert
+20  1 inkat (and the fourth has begun by twenty) assert
+
+% ------------------------------------- a fill that does not start on a corner
+% The pattern is anchored in pattern space, so moving the path does not
+% move the tiling. The fill from (3,3) shows a cut tile, not a whole one
+% starting where the path does.
+
+clearpage
+gsave cell matrix makepattern setpattern 3 3 58 58 rectfill grestore
+ 5  5 inkat not (the fill's corner is not the cell's corner) assert
+ 9  9 inkat (the tiling keeps the phase it had) assert
+11 11 inkat (and the cut tile's neighbour is whole) assert
+13 13 inkat not (with its own empty part where it belongs) assert
+
+% ------------------------------------------ two fills continue one tiling
+% This is the property a cache anchored to the path would lose: each fill
+% would start its own tiling and the seam would show.
+
+clearpage
+gsave cell matrix makepattern setpattern
+    0 0 16 64 rectfill        % left band
+    16 0 16 64 rectfill       % right band, painted separately
+grestore
+17  1 inkat (across the seam the tiling continues) assert
+21  1 inkat not (and the cell's empty part continues with it) assert
+25  1 inkat (as does the cell after that) assert
+
+% --------------------------------------------- a pattern under a scaled CTM
+% makepattern combines its matrix with the transformation in force when
+% it runs, so the tiling scales with the space the pattern was made in.
+
+clearpage
+gsave
+    2 2 scale
+    cell matrix makepattern setpattern
+    0 0 32 32 rectfill
+grestore
+ 1  1 inkat (a pattern made under a scaled CTM inks) assert
+ 9  9 inkat not (its cell is twice the size, so this falls in the gap) assert
+17 17 inkat (and its period is twice as long) assert
+
+% ----------------------------------------------- an uncoloured pattern's phase
+% PaintType 2 takes the colour from the graphics state rather than the
+% paint procedure, and must land on the same phase as PaintType 1.
+
+clearpage
+gsave
+    /DeviceGray setcolorspace 0
+    << /PatternType 1 /PaintType 2 /TilingType 1
+       /BBox [0 0 8 8] /XStep 8 /YStep 8
+       /PaintProc { pop 0 0 4 4 rectfill } >>
+    matrix makepattern setpattern 0 0 64 64 rectfill
+grestore
+ 1  1 inkat (an uncoloured cell inks its own quarter) assert
+ 5  5 inkat not (and leaves the rest of its square) assert
+ 9  9 inkat (on the same phase as a coloured one) assert
+
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse

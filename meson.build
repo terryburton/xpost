@@ -923,6 +923,13 @@ test('font-directory',
   args: [ xpost_exe, files('tests/font_directory_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Where a pattern's tiles land: the tiling is anchored in pattern space,
+# so the path being filled moves neither its phase nor its period.
+test('pattern-phase',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/pattern_phase_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Where every group of names ends up: which dictionary, which VM, and
 # what a program is allowed to do to it.
 test('startup-surface',
