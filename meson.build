@@ -1548,6 +1548,14 @@ test('vecbase',
   find_program('tests/check-vecbase.sh'),
   args: [ meson.current_source_dir() ])
 
+# The filter base: what every filter shares is declared once, every filter
+# struct begins with one of the two bases, and what a filter is a filter
+# over is stated in the one call it is constructed through rather than
+# looked up in a hand-maintained list of the method tables.
+test('filter-base',
+  find_program('tests/check-filter-base.sh'),
+  args: [ meson.current_source_dir() ])
+
 # One growable byte buffer for the whole tree: the builders that assemble
 # a byte stream of unknown final size grow it through xpost_strbuf.h, none
 # of them carries a grow loop or a pointer/length/capacity triple of its

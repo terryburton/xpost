@@ -61,6 +61,21 @@
 
 typedef struct Xpost_File Xpost_File;
 
+/* What a file is a filter over. A decode filter is a file over the source
+   it reads; an encode filter is a file over the target it writes; a file
+   that is a stream in its own right is over nothing. Which of the three
+   is not a question about the coding, so it is not asked of the coding:
+   the constructor a filter is born through states it, in the same call
+   that names the filter's methods and hands it the stream, and the
+   machinery that takes and gives up the claim on that stream reads the
+   answer off the file. */
+typedef enum
+{
+    XPOST_FILE_WRAPS_NOTHING = 0,
+    XPOST_FILE_WRAPS_SOURCE,
+    XPOST_FILE_WRAPS_TARGET
+} Xpost_File_Wraps;
+
 typedef struct Xpost_File_Methods
 {
     int (*readch)(Xpost_File*);
@@ -82,13 +97,17 @@ typedef struct Xpost_File_Methods
 
    owned marks a stream the file machinery made for one filter's use and
    which no program object names: the filter above it is the only thing
-   that can close it, so it does, along with itself. */
+   that can close it, so it does, along with itself.
+
+   wraps says which stream, if any, this file holds beneath it, and so
+   which of the two filter bases it begins with. */
 struct Xpost_File
 {
     Xpost_File_Methods *methods;
     int refs;
     int closed;
     int owned;
+    Xpost_File_Wraps wraps;
 };
 
 typedef struct Xpost_DiskFile

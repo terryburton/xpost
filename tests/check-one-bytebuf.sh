@@ -13,6 +13,8 @@
 #   $1  path to the source tree root
 set -u
 src=${1:?usage: check-one-bytebuf.sh <source root>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 lib=$src/src/lib
 fail=0
 

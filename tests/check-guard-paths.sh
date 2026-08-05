@@ -36,7 +36,7 @@ for g in "$src"/tests/check-*.sh; do
     base=$(basename "$g")
     [ "$base" = "check-guard-paths.sh" ] && continue
     # only the guards that derive a path from a source-root argument
-    grep -qE '\$\{?src\}?/(data|tests)' "$g" || continue
+    grep -qE '\$\{?src\}?/(data|tests|src)' "$g" || continue
     checked=$((checked + 1))
 
     if ! grep -q 'guard_require_srcroot' "$g"; then
