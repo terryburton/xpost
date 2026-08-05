@@ -6,6 +6,13 @@
 # the caller cannot tell from anything else -- an out-parameter left
 # untouched, a store that did not land. It does not belong here merely
 # for returning a status nobody happens to want.
+#
+# The count below the list is the size of the list. It is here so that
+# retiring a name is two edits rather than one, and so that a set which
+# shrank says so with a number that went down -- a diff dropping a name
+# and its mark together otherwise reads as a tidy-up.
+
+entries 20
 
 xpost_array_put
 xpost_array_put_memory

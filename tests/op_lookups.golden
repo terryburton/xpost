@@ -10,6 +10,8 @@
 # lookup that appears anywhere and is not listed here fails the build, and
 # a line here that no longer describes a lookup fails it too.
 #
-# Nothing is left. The register stays because the rule it carries is what
-# keeps that true: a lookup written anywhere fails the build unless it is
-# named here, and naming one is a deliberate act with a reason beside it.
+# Nothing is left, and empty is the one size at which "only shrinks" can
+# be held to anything: while there was room here, a new lookup passed the
+# moment it was written down. So the register is required to stay empty.
+# A line added below fails the check, and the way past it is not a line
+# but XPOST_OP(ctx, <entry>).

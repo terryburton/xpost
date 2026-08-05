@@ -129,6 +129,19 @@ if [ -n "$removed" ]; then
     fail=1
 fi
 
+# "Only shrinks" is a promise about the future, and one nothing could hold
+# to while the register had room in it: a new lookup passed as soon as it
+# was written down. The register reached empty, which is the one size at
+# which the promise is checkable, so it is checked. Adding a line here
+# fails, and the way past it is XPOST_OP(ctx, <entry>).
+if [ -s "$work/recorded" ]; then
+    echo "FAIL: the register of run-time lookups only shrinks, and it is empty:"
+    sed 's/^/      /' "$work/recorded"
+    echo "      reach the operator through XPOST_OP(ctx, <entry>) instead,"
+    echo "      adding the entry to XPOST_OP_REFS in xpost_context.h"
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: C reaches an operator by name where it should hold it"
     exit 1
