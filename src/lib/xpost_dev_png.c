@@ -461,12 +461,11 @@ int _fillrect(Xpost_Context *ctx,
         return undefined;
 
     /* the contract's rectangle: inclusive span, clipped to the device */
-    if (!xpost_dev_rect_normalize(xpost_dev_num_to_int(x),
-                                  xpost_dev_num_to_int(y),
-                                  xpost_dev_num_to_int(w),
-                                  xpost_dev_num_to_int(h),
-                                  private.width, private.height,
-                                  &x0, &y0, &x1, &y1))
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             private.width, private.height))
         return 0;
 
     for (iy = y0; iy <= y1; iy++)

@@ -167,6 +167,72 @@ readable {
         ncomp { 1.7 } repeat 4 7 4 7 drawline  4 7 getpix
         samepix (DrawLine clamps a component above the range) assert
     } if
+
+    % --- which pixels a marking method paints -----------------------
+    % One definition, so it can be stated here once and asked of every
+    % device. Each check clears its patch to black first and asks
+    % whether a given pixel came out white, so it reads as the picture.
+
+    /clear4 { % x y w h  .  -   paint the patch black
+        /c4h exch def /c4w exch def /c4y exch def /c4x exch def
+        black c4x c4y c4w c4h fillrect
+    } def
+    /white? { % x y  .  bool
+        getpix ncomp array astore /wp exch def
+        true 0 1 ncomp 1 sub { wp exch get 0 ne and } for
+    } def
+
+    dev /FillRect known {
+        % a rectangle's far corner is inclusive: w+1 columns, h+1 rows
+        20 20 6 6 clear4
+        white 21 21 2 1 fillrect
+        21 21 white? 22 21 white? and 23 21 white? and
+            (FillRect paints w+1 columns) assert
+        21 22 white? 22 22 white? and 23 22 white? and
+            (FillRect paints h+1 rows) assert
+        24 21 white? not (FillRect stops after the far column) assert
+        21 23 white? not (FillRect stops after the far row) assert
+
+        % a zero extent is one pixel, not none
+        30 30 4 4 clear4
+        white 31 31 0 0 fillrect
+        31 31 white? (a zero-extent FillRect paints one pixel) assert
+        32 31 white? not (a zero-extent FillRect paints only that one) assert
+
+        % a negative extent reflects the rectangle through its origin
+        40 40 8 8 clear4
+        white 45 45 -2 -2 fillrect
+        43 43 white? 45 45 white? and
+            (a negative extent spans x-|w|..x) assert
+        46 45 white? not (a negative extent stops at the origin) assert
+
+        % a real coordinate names the pixel containing it
+        50 50 6 6 clear4
+        white 51.5 51.25 1 1 fillrect
+        51 51 white? 52 52 white? and
+            (a fractional origin lands in its own pixel) assert
+    } if
+
+    dev /DrawLine known {
+        % the pixels whose centres the segment covers: a run from a to b
+        % covers a..b-1, so two segments meeting at b abut exactly
+        60 60 8 2 clear4
+        white 61 61 65 61 drawline
+        61 61 white? 64 61 white? and (DrawLine covers the near pixels) assert
+        65 61 white? not (DrawLine stops before the far endpoint) assert
+
+        % drawn the other way it covers the same pixels
+        60 63 8 2 clear4
+        white 65 64 61 64 drawline
+        61 64 white? 64 64 white? and
+            (a reversed DrawLine covers the same pixels) assert
+        65 64 white? not (a reversed DrawLine stops at the same place) assert
+
+        % and a degenerate segment still marks one pixel
+        70 70 4 4 clear4
+        white 71 71 71 71 drawline
+        71 71 white? (a degenerate DrawLine marks its pixel) assert
+    } if
 } if
 
 showpage

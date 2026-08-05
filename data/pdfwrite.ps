@@ -428,11 +428,19 @@
         w .pdfnum ( ) .put h .pdfnum ( re\nS\n) .put
     end }
 
+    % The operands name an inclusive pixel span and a PDF rectangle is
+    % half-open, so the rectangle that covers the pixels a raster device
+    % would paint is one unit wider and taller (the driver contract,
+    % src/lib/xpost_dev_driver.h). Emitting w and h unchanged left this
+    % device painting a rectangle a pixel short in each direction of
+    % every other device's.
     /FillRect { % c1..cN x y w h IMAGE  .  -
     begin {h w y x}{exch def}forall
+        w 0 lt { /x x w add def /w w neg def } if
+        h 0 lt { /y y h add def /h h neg def } if
         .pdffillcolor
         x .pdfnum ( ) .put y .pdfnum ( ) .put
-        w .pdfnum ( ) .put h .pdfnum ( re\nf\n) .put
+        w 1 add .pdfnum ( ) .put h 1 add .pdfnum ( re\nf\n) .put
     end }
 
     % c1..cN polygon IMAGE . -  ; append the fill colour, the subpath

@@ -431,19 +431,13 @@ int _drawline(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, ix1, iy1, ix2, iy2;
+    int r, g, b, px, py;
+    Xpost_Dev_Line line;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
     r = xpost_dev_num_to_scaled(red, 65535.0);
     g = xpost_dev_num_to_scaled(green, 65535.0);
     b = xpost_dev_num_to_scaled(blue, 65535.0);
-    ix1 = xpost_dev_num_to_int(x1);
-    iy1 = xpost_dev_num_to_int(y1);
-    ix2 = xpost_dev_num_to_int(x2);
-    iy2 = xpost_dev_num_to_int(y2);
-
-    XPOST_LOG_INFO("_drawline(%d, %d, %d, %d)",
-                   ix1, iy1, ix2, iy2);
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -465,15 +459,22 @@ int _drawline(Xpost_Context *ctx,
         xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
     }
 
+    /* the contract's line, plotted pixel by pixel: the server would
+       draw a segment of its own between the endpoints, and its idea of
+       which pixels that covers is not the one every other device paints */
+    xpost_dev_line_init(&line,
+                        xpost_object_number(x1), xpost_object_number(y1),
+                        xpost_object_number(x2), xpost_object_number(y2));
+    while (xpost_dev_line_next(&line, &px, &py))
     {
-        xcb_point_t points[2];
+        xcb_point_t p;
 
-        points[0].x = ix1;
-        points[0].y = iy1;
-        points[1].x = ix2;
-        points[1].y = iy2;
-        xcb_poly_line(private.c, XCB_COORD_MODE_ORIGIN,
-                      private.img, private.gc, 2, points);
+        if (px < 0 || px >= private.width || py < 0 || py >= private.height)
+            continue;
+        p.x = px;
+        p.y = py;
+        xcb_poly_point(private.c, XCB_COORD_MODE_ORIGIN,
+                       private.img, private.gc, 1, &p);
     }
 
     return 0;
@@ -506,12 +507,12 @@ int _fillrect(Xpost_Context *ctx,
         return undefined;
 
     /* the contract's rectangle: inclusive span, clipped to the device */
-    if (!xpost_dev_rect_normalize(xpost_dev_num_to_int(x),
-                                  xpost_dev_num_to_int(y),
-                                  xpost_dev_num_to_int(width),
-                                  xpost_dev_num_to_int(height),
-                                  private.width, private.height,
-                                  &x0, &y0, &x1, &y1))
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(width),
+                             xpost_object_number(height),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             private.width, private.height))
         return 0;
 
     {

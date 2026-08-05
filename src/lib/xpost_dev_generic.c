@@ -297,11 +297,12 @@ int _poly_resolved_spans(Xpost_Context *ctx,
             x = xpost_real_cons((real)x.int_.val);
         if (xpost_object_get_type(y) == integertype)
             y = xpost_real_cons((real)y.int_.val);
-        /* quantize to a 1/256 pixel device grid: geometry meant to lie
-           on a pixel boundary arrives with accumulated float noise, and
-           unsnapped it would classify to the wrong side of the boundary */
-        points[i].x = (real)(floor(x.real_.val * 256.0 + 0.5) / 256.0);
-        points[i].y = (real)(floor(y.real_.val * 256.0 + 0.5) / 256.0);
+        /* quantize to the 1/256 pixel device grid, the same one the
+           contract's line walk uses: geometry meant to lie on a pixel
+           boundary arrives with accumulated float noise, and unsnapped
+           it would classify to the wrong side of the boundary */
+        points[i].x = (real)xpost_dev_line_quantize(x.real_.val);
+        points[i].y = (real)xpost_dev_line_quantize(y.real_.val);
     }
 
     /* Scan-convert under the any-part-of-pixel rule (PLRM 7.5): a
@@ -552,10 +553,12 @@ int _fillpoly(Xpost_Context *ctx,
 
     /* Paint columns [floor(lo), ceil(hi)): every pixel whose interior
        the span reaches, and exactly the geometry when the span lies on
-       pixel boundaries. FillRect fills the inclusive box [x, x+w] on
-       row y (a fill span is height 0); DrawLine plots from its first
-       point (included) toward its second (excluded); both therefore
-       cover [xlo, xhi-1]. */
+       pixel boundaries. Either method covers [xlo, xhi-1] under the
+       driver contract -- FillRect fills the inclusive box [x, x+w] on
+       row y, so a fill span is w = xhi-xlo-1 and h = 0; DrawLine paints
+       the pixel centres the segment covers, which for a run from xlo to
+       xhi is the same columns. The contract is what makes the two
+       interchangeable here; this loop does not assume it. */
     numlines = 0;
     for (i = 0; i < nrsp; i++)
     {
@@ -1068,10 +1071,9 @@ _row_writable(Xpost_Context *ctx, Xpost_Object row)
    PGMIMAGE. Writes the ImgData row strings directly rather than looping over
    PutPix in PostScript; erasepage clears the whole page through FillRect, so
    the per-pixel interpreter overhead otherwise dominates page emission.
-   Mirrors PGMIMAGE's FillRect/PutPix handling exactly: value scaled by 255 and
-   truncated to a byte, coordinates floored, negative extents normalised,
-   inclusive end coordinates, and bounds clipping (rows via ImgData length,
-   columns via each row string's length). */
+   The painted rectangle is the driver contract's, reached through
+   xpost_dev_rect_normalize; the clip source is this device's own -- rows
+   from the ImgData length, columns from each row string's own length. */
 static
 int _fillrectgray(Xpost_Context *ctx,
                   Xpost_Object val,
@@ -1082,7 +1084,6 @@ int _fillrectgray(Xpost_Context *ctx,
                   Xpost_Object devdic)
 {
     Xpost_Object imgdata, row;
-    double dx, dy, dw, dh;
     int height, iy, iy0, iy1, ix0, ix1;
     unsigned char b;
     int bht;
@@ -1103,31 +1104,17 @@ int _fillrectgray(Xpost_Context *ctx,
        solid */
     bht = (int)(_channel(val, 256.0) + 0.5);
 
-    dx = xpost_object_number(x);
-    dy = xpost_object_number(y);
-    dw = xpost_object_number(w);
-    dh = xpost_object_number(h);
-
-    /* normalise negative extents, then form inclusive end coords */
-    if (dw < 0) { dw = -dw; dx -= dw; }
-    if (dh < 0) { dh = -dh; dy -= dh; }
-    ix0 = (int)floor(dx);
-    iy0 = (int)floor(dy);
-    ix1 = (int)floor(dx + dw);
-    iy1 = (int)floor(dy + dh);
-
-    /* clip rows to the device */
-    if (iy0 < 0) iy0 = 0;
-    if (iy1 > height - 1) iy1 = height - 1;
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &ix0, &iy0, &ix1, &iy1);
+    if (!xpost_dev_span_clip(&iy0, &iy1, height))
+        return 0;
 
     for (iy = iy0; iy <= iy1; iy++)
     {
-        int width, cx0, cx1;
+        int cx0 = ix0, cx1 = ix1;
         row = xpost_array_get(ctx, imgdata, iy);
-        width = row.comp_.sz;
-        cx0 = ix0 < 0 ? 0 : ix0;
-        cx1 = ix1 > width - 1 ? width - 1 : ix1;
-        if (cx0 <= cx1)
+        if (xpost_dev_span_clip(&cx0, &cx1, row.comp_.sz))
         {
             unsigned char *p;
             int wret = _row_writable(ctx, row);
@@ -1172,8 +1159,8 @@ int _blendpixgray(Xpost_Context *ctx,
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
         return undefined;
-    ix = xpost_object_get_type(x) == realtype ? (int)floor(x.real_.val) : x.int_.val;
-    iy = xpost_object_get_type(y) == realtype ? (int)floor(y.real_.val) : y.int_.val;
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
     c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
     if (iy < 0 || iy >= imgdata.comp_.sz)
         return 0;
@@ -1214,8 +1201,8 @@ int _blendpixrgb(Xpost_Context *ctx,
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
         return undefined;
-    ix = xpost_object_get_type(x) == realtype ? (int)floor(x.real_.val) : x.int_.val;
-    iy = xpost_object_get_type(y) == realtype ? (int)floor(y.real_.val) : y.int_.val;
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
     c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val : cov.int_.val;
     if (iy < 0 || iy >= imgdata.comp_.sz)
         return 0;
@@ -1239,10 +1226,11 @@ int _blendpixrgb(Xpost_Context *ctx,
 }
 
 /* Fill a rectangle of a packed-integer rgb device (each row an array
-   of r<<16|g<<8|b). Mirrors PPMIMAGE PutPix handling: each channel
-   scaled by 255 and truncated, coordinates floored, negative extents
-   normalised, inclusive end coordinates, and bounds clipping. The rgb
-   devices render continuous tone, so no halftone cell applies. */
+   of r<<16|g<<8|b). The painted rectangle is the driver contract's,
+   reached through xpost_dev_rect_normalize; the clip source is this
+   device's own -- rows from the ImgData length, columns from each row
+   array's own length. The rgb devices render continuous tone, so no
+   halftone cell applies. */
 static
 int _fillrectrgb(Xpost_Context *ctx,
                  Xpost_Object r,
@@ -1255,7 +1243,6 @@ int _fillrectrgb(Xpost_Context *ctx,
                  Xpost_Object devdic)
 {
     Xpost_Object imgdata, row;
-    double dx, dy, dw, dh;
     int height, iy, ix, iy0, iy1, ix0, ix1;
     int packed;
     int ret;
@@ -1269,32 +1256,20 @@ int _fillrectrgb(Xpost_Context *ctx,
            | ((int)_channel(g, 255.0) << 8)
            |  (int)_channel(b, 255.0);
 
-    dx = xpost_object_number(x);
-    dy = xpost_object_number(y);
-    dw = xpost_object_number(w);
-    dh = xpost_object_number(h);
-
-    /* normalise negative extents, then form inclusive end coords */
-    if (dw < 0) { dw = -dw; dx -= dw; }
-    if (dh < 0) { dh = -dh; dy -= dh; }
-    ix0 = (int)floor(dx);
-    iy0 = (int)floor(dy);
-    ix1 = (int)floor(dx + dw);
-    iy1 = (int)floor(dy + dh);
-
-    /* clip rows to the device */
-    if (iy0 < 0) iy0 = 0;
-    if (iy1 > height - 1) iy1 = height - 1;
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &ix0, &iy0, &ix1, &iy1);
+    if (!xpost_dev_span_clip(&iy0, &iy1, height))
+        return 0;
 
     for (iy = iy0; iy <= iy1; iy++)
     {
-        int width, cx0, cx1;
+        int cx0 = ix0, cx1 = ix1;
         row = xpost_array_get(ctx, imgdata, iy);
         if (xpost_object_get_type(row) != arraytype)
             return undefined;
-        width = row.comp_.sz;
-        cx0 = ix0 < 0 ? 0 : ix0;
-        cx1 = ix1 > width - 1 ? width - 1 : ix1;
+        if (!xpost_dev_span_clip(&cx0, &cx1, row.comp_.sz))
+            continue;
         for (ix = cx0; ix <= cx1; ix++)
         {
             ret = xpost_array_put(ctx, row, ix, xpost_int_cons(packed));
@@ -1303,6 +1278,109 @@ int _fillrectrgb(Xpost_Context *ctx,
         }
     }
 
+    return 0;
+}
+
+/* x y w h width height  .rectspan  x0 y0 x1 y1 true
+                                    false
+   The rectangle FillRect paints, for the PostScript base class: the
+   driver contract's normaliser and clip, so the interpreted method and
+   the compiled fills beside it paint one pixel set rather than two that
+   happen to agree on the cases anyone tried. False when the rectangle
+   lies wholly off the device. */
+static
+int _rectspan(Xpost_Context *ctx,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object w,
+              Xpost_Object h,
+              Xpost_Object width,
+              Xpost_Object height)
+{
+    int x0, y0, x1, y1;
+
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             xpost_dev_num_to_int(width),
+                             xpost_dev_num_to_int(height)))
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(y0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(y1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+}
+
+/* x1 y1 x2 y2 width height  .linepix  [x y x y ...]
+   The pixels DrawLine paints, for the PostScript base class: the driver
+   contract's walk, clipped to the device, as a flat array of coordinate
+   pairs. The walk is stated once, in C, so the interpreted method and
+   the window devices' compiled ones cover the same pixels -- which is
+   what lets the scanline filler treat a fill span and a line as the
+   same thing. */
+static
+int _linepix(Xpost_Context *ctx,
+             Xpost_Object x1,
+             Xpost_Object y1,
+             Xpost_Object x2,
+             Xpost_Object y2,
+             Xpost_Object width,
+             Xpost_Object height)
+{
+    Xpost_Dev_Line line;
+    Xpost_Object out;
+    int w = xpost_dev_num_to_int(width);
+    int h = xpost_dev_num_to_int(height);
+    int px, py, n = 0;
+    int cap;
+
+    /* the walk visits at most one pixel per step of the major axis,
+       and the major axis spans no more than the device does once the
+       segment is clipped -- but the segment is not clipped, so count
+       first and fill second rather than guess */
+    xpost_dev_line_init(&line, xpost_object_number(x1),
+                        xpost_object_number(y1),
+                        xpost_object_number(x2),
+                        xpost_object_number(y2));
+    while (xpost_dev_line_next(&line, &px, &py))
+        if (px >= 0 && px < w && py >= 0 && py < h)
+            n++;
+
+    cap = 2 * n;
+    if (cap > 65535)
+        return limitcheck;
+    out = xpost_array_cons(ctx, cap);
+    if (xpost_object_get_type(out) == nulltype)
+        return VMerror;
+
+    xpost_dev_line_init(&line, xpost_object_number(x1),
+                        xpost_object_number(y1),
+                        xpost_object_number(x2),
+                        xpost_object_number(y2));
+    n = 0;
+    while (xpost_dev_line_next(&line, &px, &py))
+    {
+        int ret;
+
+        if (px < 0 || px >= w || py < 0 || py >= h)
+            continue;
+        ret = xpost_array_put(ctx, out, n++, xpost_int_cons(px));
+        if (ret)
+            return ret;
+        ret = xpost_array_put(ctx, out, n++, xpost_int_cons(py));
+        if (ret)
+            return ret;
+    }
+
+    /* literal: the caller indexes it, and an executable array reached
+       by name would run its contents onto the operand stack instead */
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(out));
     return 0;
 }
 
@@ -3006,6 +3084,12 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 1, 6,
+            numbertype, numbertype, numbertype, numbertype,
+            numbertype, numbertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".linepix", (Xpost_Op_Func)_linepix, 1, 6,
+            numbertype, numbertype, numbertype, numbertype,
+            numbertype, numbertype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".blendpixgray", (Xpost_Op_Func)_blendpixgray, 0, 5,
