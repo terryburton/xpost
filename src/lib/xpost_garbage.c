@@ -136,13 +136,17 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
     {
         dichead *dp = xpost_dict_head_at(mem, adr);
         dicrec *tp = xpost_dict_table_of(dp);
-        word j;
+        /* the table is more than twice as long as the size it is derived
+           from, so it is counted in a type wide enough for that product
+           rather than in the type the size itself is stored in */
+        unsigned int n = DICTABN(dp->sz);
+        unsigned int j;
 #ifdef DEBUG_GC
         Xpost_Object_Type type;
         printf("markdict: nused=%d\n", dp->nused);
 #endif
 
-        for (j = 0; j < DICTABN(dp->sz); j++)
+        for (j = 0; j < n; j++)
         {
             if (xpost_object_get_type(tp[j].key) != nulltype){
                 if (!_xpost_garbage_mark_object(ctx,
@@ -668,7 +672,8 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     unsigned int adr, ent;
     dichead *dp;
     dicrec *tp;
-    word j;
+    unsigned int n;
+    unsigned int j;
 
     /* systemdict is the permanent bottom entry of the dictionary stack */
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
@@ -683,7 +688,11 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
     adr = sdmem->table.tab[ent].adr;
     dp = xpost_dict_head_at(sdmem, adr);
     tp = xpost_dict_table_of(dp);
-    for (j = 0; j < DICTABN(dp->sz); j++)
+    /* the table is more than twice as long as the size it is derived
+       from, so it is counted in a type wide enough for that product
+       rather than in the type the size itself is stored in */
+    n = DICTABN(dp->sz);
+    for (j = 0; j < n; j++)
     {
         Xpost_Object v = tp[j].value;
         if (xpost_object_get_type(tp[j].key) == nulltype)

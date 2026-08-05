@@ -130,8 +130,12 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
         {
             dichead *dp = xpost_dict_head_at(m, adr);
             dicrec *tp = xpost_dict_table_of(dp);
-            word j;
-            for (j = 0; j < DICTABN(dp->sz); j++)
+            /* the table is more than twice as long as the size it is
+               derived from, so it is counted in a type wide enough for
+               that product rather than in the type the size is stored in */
+            unsigned int n = DICTABN(dp->sz);
+            unsigned int j;
+            for (j = 0; j < n; j++)
             {
                 if (xpost_object_get_type(tp[j].key) != nulltype)
                 {
