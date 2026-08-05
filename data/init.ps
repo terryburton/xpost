@@ -42,8 +42,6 @@ currentglobal true setglobal
 % Four operators are defined in a form .defop cannot take -- inside a
 % dictionary being built, or put into userdict directly -- so their
 % statements are recorded here beside the mechanism instead.
-.xpostsys /.opsigs get /setpagedevice [ /dicttype ] put
-.xpostsys /.opsigs get /currentpagedevice [ ] put
 .xpostsys /.opsigs get /initclip [ ] put
 
 % The operators whose bodies arrived already read-only. A body is bound
@@ -67,6 +65,22 @@ currentglobal true setglobal
 .xpostsys /.defopin {
     4 dict begin
     /d.proc exch def /d.sig exch def /d.name exch def /d.dict exch def
+    % The statements are filed in a global dictionary, so a statement must
+    % be global itself or the file is refused. Most are: a module is read
+    % with global allocation in force. One written where the allocation is
+    % local -- the page device operators are defined while the graphics
+    % load runs, which is local throughout -- would otherwise have to know
+    % that and say so, which is the sort of thing every caller gets wrong
+    % once. Copy it instead, and only when it needs copying. The copy is
+    % one level deep, which covers a statement naming its operand types
+    % directly. A multi-shape statement written where allocation is local
+    % would keep local arrays inside the copy and still be refused; none
+    % is written that way, and the refusal says so if one ever is.
+    d.sig gcheck not {
+        currentglobal true setglobal
+        d.sig dup length array copy /d.sig exch def
+        setglobal
+    } if
     //.xpostsys /.opsigs get d.name d.sig put
     /d.proc load wcheck not
         { //.xpostsys /.boundatdef get d.name true put } if
@@ -1391,7 +1405,7 @@ currentglobal true setglobal
     % operators they belong beside rather than in the program's namespace.
     systemdict begin
     % pagedevicedict  setpagedevice  -
-    /setpagedevice {
+    /setpagedevice [ /dicttype ] {
         16 dict begin
         /pd exch def
         % requests merge with the accumulated parameters, except that
@@ -1506,16 +1520,16 @@ currentglobal true setglobal
         initgraphics
         off aload pop translate
         end
-    } def
+    } //.xpostsys /.defop get exec
 
     % -  currentpagedevice  dict
-    /currentpagedevice {
+    /currentpagedevice [ ] {
         /.pagedevice where { pop
             .pagedevice dup length 1 add dict copy
         }{
             << /PageSize [ DEVICE /dimensions get aload pop ] >>
         } ifelse
-    } def
+    } //.xpostsys /.defop get exec
     end % systemdict
 
     } ifelse
