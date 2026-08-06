@@ -237,9 +237,10 @@ xpost_glob(const char *pattern, glob_t *pglob)
             if ((file == strpbrk(file, "?*")) && (fd.cFileName[0] == '.'))
                 continue;
 
-            len = strlen(fd.cFileName);
-            if (file)
-                len += (file - pattern);
+            /* the name part of the pattern, which is the pattern itself
+               when it names no directory: the length the directory part
+               adds is then zero */
+            len = strlen(fd.cFileName) + (file - pattern);
 
             new_size = current_len + len + 1;
             if (new_size > size)
@@ -420,7 +421,7 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
         if (GetModuleFileName((HMODULE)mbi.AllocationBase,
                               (LPTSTR)&tpath, XPOST_UNICODE_PATH_MAX))
         {
-            char *path;
+            char *path = NULL;
             char *pos;
 
 # ifdef UNICODE
@@ -428,21 +429,25 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 
             asize = WideCharToMultiByte(CP_ACP, 0, tpath, -1,
                                         NULL, 0, NULL, NULL);
-            if (asize != 0)
-            {
-                path = malloc(asize * sizeof(char));
-                asize = WideCharToMultiByte(CP_ACP, 0, tpath, -1,
-                                            path, asize, NULL, NULL);
-                if (!asize){ /* we should never get there */
-		    free(path);
-                    return 0;
-		}
+            if (asize == 0)
+                return 0;
+            path = malloc(asize * sizeof(char));
+            if (!path)
+                return 0;
+            asize = WideCharToMultiByte(CP_ACP, 0, tpath, -1,
+                                        path, asize, NULL, NULL);
+            if (!asize)
+            { /* we should never get there */
+                free(path);
+                return 0;
             }
 # else
             path = tpath;
 # endif
 # undef XPOST_UNICODE_PATH_MAX
 
+            /* the conversion wrote the whole path and terminated it */
+            /* cppcheck-suppress uninitdata */
             pos = strrchr(path, '\\');
             if (pos)
             {
@@ -454,11 +459,14 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
                 {
                     memcpy(buf, path, length);
 # ifdef UNICODE
-		    free(path);
+                    free(path);
 # endif
                     return 1;
                 }
             }
+# ifdef UNICODE
+            free(path);
+# endif
         }
     }
 #else
