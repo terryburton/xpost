@@ -47,6 +47,7 @@ tests/check-test-quality.sh \
 tests/check-vecbase.sh \
 tests/check-vm-address.sh \
 tests/check-wrapped-bind.sh \
+tests/cid_show_test.ps \
 tests/clip_region_test.ps \
 tests/colorspace_matrix_test.ps \
 tests/colour_range_test.ps \

@@ -589,6 +589,16 @@ test('outline-font',
   args: [ xpost_exe, files('tests/outline_font_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A composite font walked by a CMap reaches its glyphs by index, a route
+# to the page of its own, and it makes the same choices the operators of
+# a simple font make: text the glyph raster cannot carry leaves that
+# route for its outlines. The oracle is the same glyphs of the same font
+# program reached through a simple font beside it.
+test('cid-show',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/cid_show_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What an operator leaves on the operand stack when it refuses. An error
 # raised in PostScript with signalerror ends in a stop and never reaches
 # the interpreter's handler, so the unwinding every other error gets has

@@ -425,7 +425,7 @@ currentglobal true setglobal
                 } if
             } ifelse
         } if
-        gid .glyphshowidx
+        gid null { .glyphshowidx } //.xpostsys /.showroute get exec
         /fc 0 def
         0 1 w 1 sub { str p 3 -1 roll add get fc 256 mul add /fc exch def } for
         fc .showhook

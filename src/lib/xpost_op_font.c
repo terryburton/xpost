@@ -4343,16 +4343,17 @@ int _stringoutline(Xpost_Context *ctx,
     return 0;
 }
 
-/* name  .glyphoutline  array advx advy
-   The named glyph's outline, in the form .stringoutline gives a
-   string's, and the advance it moves the pen by, in the same y-up
-   glyph space the outline's points are in. glyphshow selects a glyph
-   by name rather than by code, so the outline is taken by name here as
-   well; the advance comes with it because a string's comes from
-   stringwidth, which has no form that names a glyph. */
+/* One glyph's outline, in the form .stringoutline gives a string's,
+   and the advance it moves the pen by, in the same y-up glyph space
+   the outline's points are in. The glyph is selected the way the
+   caller selects one, by name or by index, and the advance comes with
+   it either way because a string's comes from stringwidth, which has
+   no form that names a glyph or numbers one. */
 static
-int _glyphoutline(Xpost_Context *ctx,
-                  Xpost_Object gname)
+int _glyphoutline_common(Xpost_Context *ctx,
+                         Xpost_Object gname,
+                         int byname,
+                         unsigned int gid)
 {
     Xpost_Object userdict;
     Xpost_Object gd;
@@ -4402,7 +4403,9 @@ int _glyphoutline(Xpost_Context *ctx,
         Xpost_Font_Outline_Sink sink;
         unsigned int glyph_index;
 
-        glyph_index = _glyph_index_for_name(ctx, ts.charstrings, data.face, gname);
+        glyph_index = byname
+            ? _glyph_index_for_name(ctx, ts.charstrings, data.face, gname)
+            : gid;
         sink.moveto = _oc_moveto;
         sink.lineto = _oc_lineto;
         sink.curveto = _oc_curveto;
@@ -4423,7 +4426,7 @@ int _glyphoutline(Xpost_Context *ctx,
 #endif
     /* a /Metrics entry for this glyph overrides the face's advance,
        as it does on the raster route */
-    _metrics_advance(ctx, &ts, gname, &advance_x, &advance_y);
+    _metrics_advance(ctx, &ts, byname ? gname : invalid, &advance_x, &advance_y);
 
     ret = _oc_array(ctx, &oc, &arr);
     if (ret)
@@ -4432,6 +4435,32 @@ int _glyphoutline(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(advance_x / 65536.0)));
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(advance_y / 65536.0)));
     return 0;
+}
+
+/* name  .glyphoutline  array advx advy
+   The named glyph's outline and advance. glyphshow selects a glyph by
+   name rather than by code, so the outline is taken by name here as
+   well. */
+static
+int _glyphoutline(Xpost_Context *ctx,
+                  Xpost_Object gname)
+{
+    return _glyphoutline_common(ctx, gname, 1, 0);
+}
+
+/* index  .glyphoutlineidx  array advx advy
+   The outline and advance of the glyph at the given index in the
+   current font's face. The composite font machinery reaches glyphs by
+   index once a CMap has resolved the character code, and reaches
+   their outlines the same way. */
+static
+int _glyphoutlineidx(Xpost_Context *ctx,
+                     Xpost_Object gidx)
+{
+    if (gidx.int_.val < 0)
+        return rangecheck;
+    return _glyphoutline_common(ctx, null, 0,
+                                (unsigned int)gidx.int_.val);
 }
 
 /* -  .cachestatus  bsize bmax msize mmax csize cmax blimit
@@ -4530,6 +4559,8 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".glyphoutline", (Xpost_Op_Func)_glyphoutline, 3, 1, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".glyphoutlineidx", (Xpost_Op_Func)_glyphoutlineidx, 3, 1, integertype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
     INSTALL;

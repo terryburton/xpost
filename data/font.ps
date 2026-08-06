@@ -492,11 +492,12 @@ currentglobal true setglobal
 % pattern paint and the line machinery are, so the pixels the text
 % marks are the pixels the same path painted the same way marks.
 %
-% The subject is the string to paint, or the name of a single glyph as
-% glyphshow selects one. The hook runs after each character with its
-% code on the stack and carries whatever the operator moves the pen by
-% between characters; a null hook means the operator moves it by
-% nothing, and then the whole string is one charpath.
+% The subject is the string to paint, or a single glyph the caller
+% selects by name as glyphshow does or by index as a CMap walk does.
+% The hook runs after each character with its code on the stack and
+% carries whatever the operator moves the pen by between characters; a
+% null hook means the operator moves it by nothing, and then the whole
+% string is one charpath.
 %
 % Stroked says the font's glyphs are its outlines stroked with
 % StrokeWidth, a character space distance carried to user space through
@@ -522,7 +523,7 @@ currentglobal true setglobal
             dup mul exch dup mul add sqrt setlinewidth
         } if
         currentpoint newpath moveto
-        psubj type /nametype eq {
+        psubj type /stringtype ne {
             psubj //.xpostsys /.glyphcharpath get exec
         }{
         currentdict /phook known {
@@ -553,12 +554,13 @@ currentglobal true setglobal
 % procedure, which consumes it -- an operator whose binding takes more
 % than the text carries the rest itself.
 %
-% Every text operator of a simple font comes through here, so the
-% choice is made once and every one of them shares whatever is decided
-% here. Making it in each operator instead is what left four of them
+% Every text operator of a simple font comes through here, and so does
+% the composite walk that selects a glyph through a CMap, so the choice
+% is made once and every route to the page shares whatever is decided
+% here. Making it in each of them instead is what left four operators
 % painting a pattern in whatever single colour the raster route read
-% out of the graphics state, and all but one of them painting an
-% outline font's glyphs solid.
+% out of the graphics state, all but one of them painting an outline
+% font's glyphs solid, and the CMap walk doing both.
 %
 % Both questions are answered from one read of the graphics state,
 % since this runs once per call of every text operator: the font's
@@ -1012,14 +1014,15 @@ currentglobal true setglobal
     end
 } put
 
-% name  .glyphcharpath  -
-% Append the named glyph's outline to the current path and advance the
-% pen by the glyph, as charpath does for a string. A glyph named rather
-% than encoded has no stringwidth, so its advance comes back from
-% .glyphoutline in the glyph space the outline's points are in.
+% name|index  .glyphcharpath  -
+% Append one glyph's outline to the current path and advance the pen by
+% the glyph, as charpath does for a string. A glyph the caller names, as
+% glyphshow selects one, or numbers, as a CMap walk resolves one, has no
+% stringwidth, so its advance comes back from the outline operator in
+% the glyph space the outline's points are in.
 .xpostsys /.glyphcharpath {
     2 dict begin
-    .glyphoutline
+    dup type /nametype eq { .glyphoutline }{ .glyphoutlineidx } ifelse
     /gay exch def /gax exch def
     //.xpostsys /.outlinepath get exec
     gax gay neg idtransform rmoveto

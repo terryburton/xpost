@@ -1,0 +1,231 @@
+% What a composite font walked by a CMap marks.
+% Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% A CMap decodes each character code to a CID, the CID maps through the
+% descendant's CIDMap to a glyph index, and the glyph paints by index.
+% That is a route to the page of its own, alongside the text operators
+% of a simple font, and it has to make the same choices they make: text
+% the glyph raster cannot carry -- a pattern colour, which is a
+% procedure tiled over the page rather than a colour a pixel can be set
+% to, and an outline font, whose glyphs are strokes rather than filled
+% coverage -- leaves the raster route for its outlines.
+%
+% The oracle is the same glyphs reached the other way. The descendant
+% here carries the same font program as a simple font defined beside
+% it, and the CIDMap sends CID 1 and CID 2 to the glyphs that font's
+% CharStrings reaches under the codes A and B, so the composite text
+% and the simple text paint the same two glyphs at the same places.
+% The simple font's glyphs go round by charpath and are painted by hand
+% -- a glyph a call, as the walk paints them -- and the two renders must
+% agree pixel for pixel.
+
+/faildict 2 dict def
+faildict /n 0 put
+/p.name () def
+/check { % bool (what)  .  -
+    exch { pop }{
+        (FAIL: ) print p.name print ( ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/DEV 200 70 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 70 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/dark { 128 lt } bind def
+/inkof { 0 exch { { dark { 1 add } if } forall } forall } bind def
+/differs { % a b  .  n
+    3 dict begin
+    /b exch def /a exch def /n 0 def
+    0 1 a length 1 sub { /y exch def
+        0 1 a y get length 1 sub { /x exch def
+            a y get x get dark  b y get x get dark  ne { /n n 1 add def } if
+        } for
+    } for
+    n
+    end
+} bind def
+
+% The embedded 660-byte subset TrueType program holds .notdef, a filled
+% square (glyph 1) and a filled triangle (glyph 2), both 600 units wide
+% on an advance of 800. It serves the simple font that is the oracle and
+% the CID descendant that is the subject.
+12 dict begin
+    /FontType 42 def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontBBox [0 -200 800 800] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /sq put
+    Encoding 66 /tri put
+    /CharStrings << /.notdef 0 /sq 1 /tri 2 >> def
+    /sfnts [
+<
+00010000000A0080000300204F532F3240F642000000012800000060636D6170000C0046
+000001940000002C676C79665D14F5C4000001C800000034686561642F39E06E000000AC
+0000003668686561064202BF000000E400000024686D747805780064000001880000000A
+6C6F6361000D001A000001C0000000086D6178700005000600000108000000206E616D65
+FBB25C27000001FC00000078706F73740003000000000274000000200001000000010000
+FBF3ACAF5F0F3CF5000303E800000000E681CE9B00000000E681CE9B0064000002BC0258
+000000030002000000000000000100000320FF38000003200064006402BC000100000000
+000000000000000000000002000100000003000400010000000000020000000000000000
+0000000000000000000302BC019000050004000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000003F3F3F3F0000
+000000000000000000000000000000000000000000000000000000000020000001F40000
+032000640064000000000002000000030000001400030001000000140004001800000002
+000200000000FFFF0000FFFF0001000000000000000D001A00010064000002BC02580003
+0000331121116402580258FDA80000010064000002BC02580002000033010164012C012C
+0258FDA80000000400360001000000000001000F000000010000000000020007000F0003
+000104090001001E00160003000104090002000E003458706F7374543432466978747572
+65526567756C617200580070006F00730074005400340032004600690078007400750072
+00650052006500670075006C006100720003000000000000000000000000000000000000
+000000000000000000000000
+>
+    ] def
+currentdict end
+/CIDOracleFont exch definefont pop
+
+% the descendant, and a second one whose glyphs are outlines
+/CIDInit /ProcSet findresource begin
+10 dict begin
+    /CIDFontType 2 def
+    /CIDFontName /CIDShowTest def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontType 42 def
+    /CIDCount 3 def
+    /GDBytes 1 def
+    /CIDMap <000102> def
+    /GlyphDirectory 0 dict def
+    /sfnts FontDirectory /CIDOracleFont get /sfnts get def
+CIDFontName currentdict end /CIDFont defineresource pop
+10 dict begin
+    /CIDFontType 2 def
+    /CIDFontName /CIDShowTestOutline def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    /FontMatrix [1 0 0 1 0 0] def
+    /FontType 42 def
+    /PaintType 2 def
+    /StrokeWidth 0.04 def
+    /CIDCount 3 def
+    /GDBytes 1 def
+    /CIDMap <000102> def
+    /GlyphDirectory 0 dict def
+    /sfnts FontDirectory /CIDOracleFont get /sfnts get def
+CIDFontName currentdict end /CIDFont defineresource pop
+10 dict begin
+    begincmap
+    /CMapName /CIDShowTestCMap def
+    /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
+    1 begincodespacerange
+    <0000> <FFFF>
+    endcodespacerange
+    1 begincidrange
+    <0000> <FFFF> 0
+    endcidrange
+    endcmap
+    CMapName currentdict end /CMap defineresource pop
+end
+/CIDShowT0 /CIDShowTestCMap [/CIDShowTest] composefont pop
+/CIDShowT0Outline /CIDShowTestCMap [/CIDShowTestOutline] composefont pop
+
+/SW 0.04 def
+/CODES <00010002> def
+
+/cidfnt { /CIDShowT0 findfont 20 scalefont setfont } bind def
+/cidoutfnt { /CIDShowT0Outline findfont 20 scalefont setfont } bind def
+/oraclefnt { /CIDOracleFont findfont 20 scalefont setfont } bind def
+
+/cell { << /PatternType 1 /PaintType 1 /TilingType 1
+           /BBox [0 0 6 6] /XStep 6 /YStep 6
+           /PaintProc { pop 0 setgray 0 0 3 3 rectfill } >> } bind def
+/setpat { cell matrix currentmatrix makepattern setpattern } bind def
+/patsnap { % proc  .  snap
+    initgraphics erasepage setpat exec snap
+} bind def
+/greysnap { % proc  .  snap
+    initgraphics erasepage 0 setgray exec snap
+} bind def
+/pen { % proc  .  x y
+    initgraphics erasepage exec currentpoint
+} bind def
+/near { sub abs 0.001 lt } bind def
+
+% StrokeWidth reaches user space through the font matrix, which the
+% composite carries to the descendant and the simple font carries alone
+/setlw {
+    SW 0 currentfont /FontMatrix get dtransform
+    dup mul exch dup mul add sqrt setlinewidth
+} bind def
+% one glyph of the oracle font, painted where it stands and the pen
+% advanced past it: the walk paints a glyph a call
+/onefill { % (c)  .  -
+    dup gsave currentpoint newpath moveto true charpath fill grestore
+    stringwidth rmoveto
+} bind def
+/onestroke { % (c)  .  -
+    dup gsave currentpoint newpath moveto setlw true charpath stroke grestore
+    stringwidth rmoveto
+} bind def
+
+% --- the oracle paints the same glyphs -------------------------------
+% Both routes reach the same two glyphs of the same program, so in a
+% solid colour, where both take the raster route, they mark the same
+% pixels. Everything below rests on that.
+/p.name (same glyphs:) def
+/S { cidfnt 10 20 moveto CODES show } greysnap def
+/O { oraclefnt 10 20 moveto (AB) show } greysnap def
+S inkof 0 gt (the composite text marks the page) check
+S O differs 0 eq (the composite marks what the simple font marks) check
+
+% --- a pattern colour ------------------------------------------------
+/p.name (pattern:) def
+/S { cidfnt 10 20 moveto CODES show } patsnap def
+/O { oraclefnt 10 20 moveto (A) onefill (B) onefill } patsnap def
+O inkof 0 gt (the pattern fill of the outlines marks the page) check
+S inkof 0 gt (the composite text marks the page) check
+S O differs 0 eq (the composite marks exactly what that fill marks) check
+{ cidfnt 0 setgray 10 20 moveto CODES show } pen
+{ cidfnt setpat 10 20 moveto CODES show } pen
+3 -1 roll near exch 3 -1 roll near and
+(the pattern leaves the pen where a solid colour does) check
+
+% the walk's own pen movements come through as well: ashow adds its
+% delta after every character of the composite
+/p.name (pattern through ashow:) def
+/S { cidfnt 10 20 moveto 3 0 CODES ashow } patsnap def
+/O { oraclefnt 10 20 moveto (A) onefill 3 0 rmoveto (B) onefill } patsnap def
+S inkof 0 gt (the composite text marks the page) check
+S O differs 0 eq (the composite marks exactly what that fill marks) check
+
+% --- an outline descendant -------------------------------------------
+% The route asks the font in force how its glyphs are painted, and the
+% walk installs the descendant as the font in force, so a descendant
+% whose glyphs are outlines strokes them here as a simple font would.
+/p.name (outline descendant:) def
+/S { cidoutfnt 10 20 moveto CODES show } greysnap def
+/O { oraclefnt 10 20 moveto (A) onestroke (B) onestroke } greysnap def
+O inkof 0 gt (the stroke of the outlines marks the page) check
+S inkof 0 gt (the composite text marks the page) check
+S O differs 0 eq (the composite marks exactly what that stroke marks) check
+/F { oraclefnt 10 20 moveto (A) onefill (B) onefill } greysnap def
+S F differs 0 gt (the composite text is not the solid glyph) check
+
+/p.name (outline descendant in a pattern:) def
+/S { cidoutfnt 10 20 moveto CODES show } patsnap def
+/O { oraclefnt 10 20 moveto (A) onestroke (B) onestroke } patsnap def
+O inkof 0 gt (the pattern stroke of the outlines marks the page) check
+S inkof 0 gt (the composite text marks the page) check
+S O differs 0 eq (the composite marks exactly what that stroke marks) check
+
+count 0 eq (the suite leaves the operand stack empty) check
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit
