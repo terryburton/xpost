@@ -312,6 +312,73 @@ graphicsdict /currgstate get /device DEV put
 (comb region:) { COMB } { /Times-Roman findfont 22 scalefont setfont
                           10 150 moveto (Hgxy) show } crossing
 
+% and the comb region's own pixels, so that what is asked above is a
+% region of fifteen thousand bands and not a comb that came out coarser
+% than it reads
+{ COMB } regionsnap inkof 30000 eq
+    (the comb region covers the thirty thousand pixels of its teeth) assert
+
+% --- a region no single polygon describes ----------------------------
+% The comb above is the region's own shape, and one array states its
+% vertices easily. A region cut FROM it is the fifteen thousand
+% pixel-band rectangles the cut leaves, which cost seventy-five thousand
+% array elements where the field runs out around sixty-five: such a
+% region is held as a path, where no such bound applies, and no single
+% array states its vertices at all.
+%
+% The raster route reads the region for its bounds -- the tiles it
+% resolves the region into are cut out of them -- so where no array
+% states the vertices it takes the bounds from the path the region is
+% held as. Without that the route has no bounds to cut tiles out of and
+% refuses, and text under a region every other painter enforces exactly
+% does not reach the page at all.
+
+/WHOLE { newpath -1 -1 moveto 201 -1 lineto
+         201 301 lineto -1 301 lineto closepath } bind def
+/CUTCOMB { COMB WHOLE clip newpath } bind def
+
+(cut comb region:) { CUTCOMB } { /Times-Roman findfont 22 scalefont setfont
+                                 10 150 moveto (Hgxy) show } crossing
+
+% and every other operator of the family under one as well. What no
+% single array can state is a matter of how many bands the region holds,
+% and building one is the expensive part, so the sweep is run over a
+% comb of half as many teeth -- seven thousand five hundred bands, still
+% half as many again as one array's thirteen thousand elements state --
+% and against a region render taken once for all of them.
+
+/HALFCOMB { newpath
+    0 1 24 {
+        4 mul /cx exch def
+        cx 0 moveto cx 2 add 0 lineto cx 2 add 300 lineto cx 300 lineto closepath
+    } for
+    clip newpath } bind def
+/CUTHALF { HALFCOMB WHOLE clip newpath } bind def
+
+/CUTHALFINK { CUTHALF } regionsnap def
+CUTHALFINK inkof 15000 eq
+    (the region cut from the half comb covers the half comb's pixels) assert
+
+/undercomb { % (name) textproc  .  -
+    4 dict begin
+    /tp exch def
+    /p.name exch def
+    /B { } currentdict /tp get textsnap def
+    /C { CUTHALF } currentdict /tp get textsnap def
+    B inkof 0 gt (marks the page with no region in force) check
+    C inkof 0 gt (marks the page inside the region) check
+    C inkof B inkof lt (the region takes some of the marks away) check
+    CUTHALFINK B C agree
+        (marks exactly the pixels the region and the text share) check
+    end
+} bind def
+
+FAMILY {
+    aload pop
+    /f.proc exch def /f.name exch def
+    f.name { /Times-Roman findfont 22 scalefont setfont f.proc } undercomb
+} forall
+
 initclip newpath
 count 0 eq (the suite leaves the operand stack empty) assert
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse

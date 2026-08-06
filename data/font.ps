@@ -394,18 +394,50 @@ currentglobal true setglobal
 % graphics state is built with and shares until its first clip: nothing
 % may be kept there, so that one is worked out afresh each time.
 .xpostsys /.showclip {
-    16 dict begin
+    20 dict begin
     /h graphicsdict /currgstate get /clipcache get def
     h /clipbox known h /serial get 0 ne and not {
         .cliprect {
             4 array astore
             h exch /clipbox exch put
         }{
-            /poly //.xpostsys /.clipregionpoly get exec def
-            % the rows and columns the region reaches, read off its own
-            % vertices: the tiles are cut out of them, and the bounds
-            % are what stands in for the region if the tiles fail
+            % the region's vertices, where a single array states them.
+            % .clipregionpoly refuses where none does, rather than
+            % answer with a box a consumer that wanted the vertices
+            % would take for them; it stands the region in for the
+            % current path while it reads, so a refusal leaves the
+            % region standing there and the caller's path is put back
+            /oldpath graphicsdict /currgstate get /currpath get def
+            count /n1 exch def
+            { //.xpostsys /.clipregionpoly get exec } stopped {
+                count n1 sub { pop } repeat
+                graphicsdict /currgstate get /currpath oldpath put
+                null
+            } if
+            /poly exch def
+            % the rows and columns the region reaches: the tiles are
+            % cut out of them, and the bounds are what stands in for
+            % the region if the tiles fail. Only the bounds are wanted
+            % here, so where no array states the vertices they come off
+            % the path the region is held as instead -- a path's box is
+            % over its own points, which are those vertices
             /any false def
+            poly null eq {
+                % the region is held in device coordinates and pathbbox
+                % reports through the CTM, so the identity stands over
+                % the measurement
+                matrix currentmatrix
+                //.xpostsys /.clipregionpath get exec
+                matrix setmatrix
+                .pathempty not {
+                    pathbbox
+                    /yhi exch def /xhi exch def
+                    /ylo exch def /xlo exch def
+                    /any true def
+                } if
+                setmatrix
+                graphicsdict /currgstate get /currpath oldpath put
+            }{
             poly {
                 dup null eq { pop }{
                     aload pop /py exch def /px exch def
@@ -420,6 +452,7 @@ currentglobal true setglobal
                     } ifelse
                 } ifelse
             } forall
+            } ifelse
             h /clipbox null put
             any not {
                 % a region with no vertices covers no pixel
