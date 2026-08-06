@@ -418,6 +418,19 @@ test('page-semantics',
   page_semantics_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: the interpreter is one instance holding a table of
+# execution contexts, so a second xpost_create while an instance is live is
+# refused and the live one carries on.
+single_instance_exe = executable('single_instance_test',
+  'tests/single_instance_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('single-instance',
+  single_instance_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: a process may create, use and destroy contexts for as
 # long as it lives, so no per-context table or allocation may carry over.
 context_reuse_exe = executable('context_reuse_test',

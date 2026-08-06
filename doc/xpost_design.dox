@@ -6,6 +6,12 @@
  * encapsulation), speed (choosing appropriate algorithms),
  * extensibility (growing stacks. support for multiple contexts).
  *
+ * Those multiple contexts are execution contexts within one
+ * interpreter, held in that interpreter's context table; they are not
+ * multiple interpreters. A process holds one interpreter instance,
+ * which is what xpost_create() returns a context of and
+ * xpost_destroy() ends.
+ *
  * @section xpost_modules Modules
  *
  * @subsection xpost_modules_toc Modules TOC

@@ -2327,6 +2327,19 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     char **bufferout = NULL;
     int quiet;
 
+    /* One interpreter instance at a time. itpdata is the whole dynamic
+       state -- the context table, both memory-file tables and the
+       identity of the running context -- so a second instance would take
+       the place of the live one, leaving every handle already handed out
+       pointing into memory the interpreter no longer reaches. The
+       multiple contexts the interpreter is built around live in this one
+       instance's context table; they are not had by creating another. */
+    if (itpdata)
+    {
+        XPOST_LOG_ERR("an interpreter instance is already live");
+        return NULL;
+    }
+
     switch (output_msg)
     {
         case XPOST_OUTPUT_MESSAGE_QUIET:
@@ -2818,13 +2831,23 @@ XPAPI void xpost_stderr_handler_set(Xpost_Context *ctx,
 }
 
 /*
-   destroy the given context and associated memory files (if not in use by a shared context)
-   exit interpreter if all contexts are destroyed.
+   destroy the interpreter's context and associated memory files,
+   and with them the interpreter instance holding them.
  */
 XPAPI void xpost_destroy(Xpost_Context *ctx)
 {
     if (!ctx)
         return;
+
+    /* The instance hands out one context, so this is the only handle
+       that ends it. Anything else names a context this cannot account
+       for, and taking a memory file apart under a live instance is
+       worse than declining. */
+    if (!itpdata || (ctx != &itpdata->ctab[0]))
+    {
+        XPOST_LOG_ERR("not the interpreter's context");
+        return;
+    }
 
     if (!ctx->quiet)
     {
@@ -2834,11 +2857,7 @@ XPAPI void xpost_destroy(Xpost_Context *ctx)
 
     xpost_context_exit(ctx);
 
-    /* the interpreter holds this one context, so it ends with it */
-    if (itpdata && (ctx == &itpdata->ctab[0]))
-    {
-        free(itpdata);
-        itpdata = NULL;
-        xpost_ctx = NULL;
-    }
+    free(itpdata);
+    itpdata = NULL;
+    xpost_ctx = NULL;
 }

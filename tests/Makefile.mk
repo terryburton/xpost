@@ -235,6 +235,7 @@ tests/show_clip_routes.golden \
 tests/show_clip_test.ps \
 tests/show_pattern_test.ps \
 tests/showop_matrix_test.ps \
+tests/single_instance_test.c \
 tests/startup_surface_api_test.c \
 tests/startup_surface_test.ps \
 tests/stencil_mask_size_test.ps \

@@ -244,8 +244,18 @@ typedef enum
  * @param width The height of the context page.
  * @param height The height of the context page.
  *
- * This function creates a #Xpost_Context with the given
- * parameters. FIXME: give a more detailed explanation...
+ * @return The interpreter's context, or @c NULL on failure.
+ *
+ * This function creates a #Xpost_Context with the given parameters,
+ * bringing up the one interpreter instance the process may hold and
+ * returning the context that instance runs.
+ *
+ * The instance is single: an interpreter's multiple execution contexts
+ * live in its own context table, so a second call to this function while
+ * an instance is live returns @c NULL rather than replacing the live
+ * instance under a context the caller still holds. Sequential use is
+ * unrestricted -- once xpost_destroy() has ended an instance, this
+ * function creates another.
  *
  * When not needed the context must be freed with xpost_destroy().
  *
@@ -461,9 +471,13 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx,
  *
  * @param ctx The context to destroy.
  *
- * This function destroy the context @p ctx which has been created
- * with xpost_create(). No test is done on @p ctx, so it must be non
- * @c NULL.
+ * This function destroys the context @p ctx which has been created with
+ * xpost_create(), and with it the interpreter instance holding it.
+ * Nothing of the instance outlives the call, so xpost_create() may be
+ * called again afterwards to obtain another.
+ *
+ * A @c NULL @p ctx, or a pointer that is not the context xpost_create()
+ * returned for the live instance, is declined and nothing is destroyed.
  *
  * @see xpost_create()
  */

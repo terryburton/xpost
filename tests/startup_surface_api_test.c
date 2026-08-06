@@ -159,7 +159,12 @@ int main(void)
 
     /* The context has been running fragments, so userdict holds what they
        defined; what matters is that nothing of the interpreter's was
-       there to begin with. A fresh context answers that. */
+       there to begin with. A context that has run nothing answers that,
+       and the interpreter holds one instance at a time, so this one goes
+       first. */
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+
     {
         Xpost_Context *fresh;
         fresh = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
@@ -173,15 +178,15 @@ int main(void)
                   "a fresh context starts with an empty userdict");
             check(answers_yes(fresh, "globaldict length 0 eq"),
                   "a fresh context starts with an empty globaldict");
+            xpost_stdout_handler_set(fresh, NULL, NULL);
             xpost_destroy(fresh);
         }
         else
         {
-            check(0, "a second context can be created");
+            check(0, "a context is created once the previous one is destroyed");
         }
     }
 
-    xpost_destroy(ctx);
     xpost_quit();
 
     if (failures == 0)
