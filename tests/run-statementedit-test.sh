@@ -22,23 +22,26 @@ case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# The statement is written out as its own bytes, so the comparison below
-# needs no escaping on either side.
-cat > "$work/read.ps" <<PSEOF
+# The programs name their output by a relative path and the interpreter
+# is run from the directory holding it. A shell and a program built for
+# another environment need not read the same absolute path -- a POSIX
+# shell driving a native Windows binary is the case here -- and a name
+# the shell composed then reached nothing the interpreter could open.
+cat > "$work/read.ps" <<'PSEOF'
 /f (%statementedit) (r) file def
 /s 400 string def
 f s readstring pop
-/o ($work/got.txt) (w) file def
+/o (got.txt) (w) file def
 o exch writestring
 o closefile
 quit
 PSEOF
 
-cat > "$work/readline.ps" <<PSEOF
+cat > "$work/readline.ps" <<'PSEOF'
 /f (%lineedit) (r) file def
 /s 400 string def
 f s readstring pop
-/o ($work/got.txt) (w) file def
+/o (got.txt) (w) file def
 o exch writestring
 o closefile
 quit
@@ -48,7 +51,8 @@ fail=0
 run_check() { # program  description  input  expected
     prog=$1; shift
     rm -f "$work/got.txt"
-    printf '%b' "$2" | "$xpost" -q --no-sandbox -d null "$prog" >/dev/null 2>&1
+    printf '%b' "$2" | ( cd "$work" && "$xpost" -q --no-sandbox -d null "$prog" ) \
+        >/dev/null 2>&1
     status=$?
     if [ "$status" -ne 0 ]; then
         echo "FAIL: $1"
@@ -65,11 +69,12 @@ run_check() { # program  description  input  expected
     fi
 }
 
-lcheck() { run_check "$work/readline.ps" "$@"; }
+lcheck() { run_check readline.ps "$@"; }
 
 check() { # description  input  expected
     rm -f "$work/got.txt"
-    printf '%b' "$2" | "$xpost" -q --no-sandbox -d null "$work/read.ps" >/dev/null 2>&1
+    printf '%b' "$2" | ( cd "$work" && "$xpost" -q --no-sandbox -d null read.ps ) \
+        >/dev/null 2>&1
     status=$?
     if [ "$status" -ne 0 ]; then
         echo "FAIL: $1"
