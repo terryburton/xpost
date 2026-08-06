@@ -144,7 +144,7 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
         unsigned int j;
 #ifdef DEBUG_GC
         Xpost_Object_Type type;
-        printf("markdict: nused=%d\n", dp->nused);
+        printf("markdict: nused=%u\n", (unsigned int)dp->nused);
 #endif
 
         for (j = 0; j < n; j++)
@@ -271,13 +271,13 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
     type = xpost_object_get_type(o);
 
 #ifdef DEBUG_GC
-            printf("markobject: ent %d, addr %u, %s (size %d)\n",
+            printf("markobject: ent %u, addr %u, %s (size %u)\n",
                    ent,
                    xpost_context_select_memory(ctx,o)==mem?
                        (!xpost_ent_valid(mem, ent)?
                         (unsigned)-1: mem->table.tab[ent].adr) : 0,
                    xpost_object_type_names[type],
-                   o.comp_.sz);
+                   (unsigned int)o.comp_.sz);
 #endif
 
     switch(type)
@@ -417,7 +417,7 @@ int _xpost_garbage_mark_names(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %d\n", xpost_stack_count(mem, stackadr));
 #endif
 
     for (s = xpost_stack_at(mem, stackadr); s;
@@ -446,7 +446,7 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking stack of size %d\n", xpost_stack_count(mem, stackadr));
 #endif
 
     for (s = xpost_stack_at(mem, stackadr); s;
@@ -481,7 +481,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
         (void)ctx;
 
 #ifdef DEBUG_GC
-        printf("marking saverec stack of size %u\n", xpost_stack_count(mem, stackadr));
+        printf("marking saverec stack of size %d\n", xpost_stack_count(mem, stackadr));
 #endif
 
     for (s = xpost_stack_at(mem, stackadr); s;
@@ -570,7 +570,7 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
     if (!mem) return 0;
 
 #ifdef DEBUG_GC
-    printf("marking save stack of size %u\n", xpost_stack_count(mem, stackadr));
+    printf("marking save stack of size %d\n", xpost_stack_count(mem, stackadr));
 #endif
 
     for (s = xpost_stack_at(mem, stackadr); s;
@@ -752,7 +752,7 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
         return -1;
     }
 #ifdef DEBUG_GC
-    printf("using cid=%d\n", ctx->id);
+    printf("using cid=%u\n", ctx->id);
 #endif
 
     if (isglobal)
@@ -880,7 +880,7 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             for (i = 0; i < MAXCONTEXT && cid[i]; i++)
             {
 #ifdef DEBUG_GC
-                printf("sweep context(%d)->gl\n", cid[i]);
+                printf("sweep context(%u)->gl\n", cid[i]);
 #endif
                 ctx = mem->interpreter_cid_get_context(cid[i]);
                 sz += _xpost_garbage_sweep(ctx->lo);

@@ -244,7 +244,8 @@ void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem)
                                 ? "MARKED" : "unmarked",
                             slot,
                             (gtag == dicttype) ? (i ? "value" : "key") : "element",
-                            te, xpost_object_get_type(o), o.comp_.sz);
+                            te, (unsigned int)xpost_object_get_type(o),
+                            (unsigned int)o.comp_.sz);
                     if (xpost_object_get_type(o) == stringtype && o.comp_.sz < 200)
                     {
                         unsigned int k;
