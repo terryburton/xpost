@@ -85,26 +85,30 @@ xpost_strbuf_init(Xpost_String_Buffer *b, size_t initial)
    The largest buffer is the largest object. The bytes are one allocation
    and every read and write of them is pointer arithmetic within it, and a
    distance inside an object wider than PTRDIFF_MAX is not a value that
-   arithmetic has. So a request past that bound is answered here rather
-   than put to the allocator, and the capacity the doubling settles on
-   never passes it. */
+   arithmetic has, so a length past that bound is answered here rather
+   than put to the allocator. What a growing buffer is given is the
+   smallest doubling of sixteen that covers the length it must reach, or
+   that length itself where a further doubling would carry past the bound.
+   The doubling starts from sixteen rather than from the capacity the
+   structure arrives holding, so a capacity is a distance the buffer's own
+   pointers express whatever the structure held before. */
 static inline int
 xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 {
     size_t need, cap;
     char *ns;
 
-    if (extra > (size_t)PTRDIFF_MAX - b->len)
+    if (extra > (size_t)PTRDIFF_MAX || b->len > (size_t)PTRDIFF_MAX - extra)
         return VMerror;
     need = b->len + extra;
     if (b->s && need <= b->cap)
         return 0;
-    cap = b->cap ? b->cap : 16;
+    cap = 16;
     while (cap < need)
     {
         if (cap > (size_t)PTRDIFF_MAX / 2)
         {
-            cap = need;   /* the last doubling would pass the bound */
+            cap = need;
             break;
         }
         cap *= 2;
