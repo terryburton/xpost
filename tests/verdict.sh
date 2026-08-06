@@ -33,7 +33,14 @@
 
 # What a run prints to report a failure. Every spelling the suite uses
 # starts with one of these: FAIL, FAILURE, FAILURES, MISMATCH.
-VERDICT_FAILURE_RE='(^|[^A-Za-z])(FAIL|MISMATCH)'
+#
+# The line boundary is spelt as two whole branches rather than as (^|...)
+# inside one. A caret anchors only at the start of an expression; what it
+# means anywhere else is left undefined, and a matcher that reads it as
+# neither an anchor nor a literal matches no line at all. What that costs
+# here is not a wrong answer but no answer: a rule that never fires, and
+# a suite that comes back clean because nothing was asked.
+VERDICT_FAILURE_RE='^(FAIL|MISMATCH)|[^A-Za-z](FAIL|MISMATCH)'
 
 # Judge one run's output.
 #   $1  the output, as captured
@@ -46,7 +53,7 @@ VERDICT_FAILURE_RE='(^|[^A-Za-z])(FAIL|MISMATCH)'
 verdict_ok() {
     _verdict_out=$1
     _verdict_who=${2:-the run}
-    _verdict_re=${3:-'(^|[^A-Za-z])SUCCESS[[:space:]]*$'}
+    _verdict_re=${3:-'^SUCCESS[[:space:]]*$|[^A-Za-z]SUCCESS[[:space:]]*$'}
 
     if printf '%s\n' "$_verdict_out" | grep -qE "$VERDICT_FAILURE_RE"; then
         echo "FAILURES: $_verdict_who printed a failure:"

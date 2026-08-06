@@ -141,6 +141,44 @@ for f in "$dir"/run-*.sh; do
     fi
 done
 
+# and the rule itself has to hold, under the pattern matcher this host has
+#
+# A rule kept in one place fails in one place, and a rule made of
+# patterns fails by matching nothing rather than by matching wrongly --
+# which reads as a suite in good order. Nothing in the text of a pattern
+# says whether the matcher here agrees with it. So put the cases to it.
+verdict_expect() {          # <want: ok|no> <what> <output>
+    if verdict_ok "$3" "the self-check" >/dev/null 2>&1; then
+        got=ok
+    else
+        got=no
+    fi
+    if [ "$got" != "$1" ]; then
+        echo "FAIL: verdict.sh answered $got where $1 is owed, for $2;"
+        echo "      the rule every wrapper reads its verdict by does not hold"
+        fail=1
+    fi
+}
+guard_workdir
+trap 'rm -rf "$work"' EXIT
+guard_mirror verdict "$dir/verdict.sh"
+. "$mirror/verdict.sh"
+verdict_expect ok "a run that reported success" "SUCCESS"
+verdict_expect ok "a verdict on the end of the page banner" \
+    "----showpage----SUCCESS"
+verdict_expect no "a run that printed nothing" ""
+verdict_expect no "a run that did not report" "ok: something"
+verdict_expect no "a failure before the verdict" \
+    "$(printf 'FAILURE: something\nSUCCESS')"
+verdict_expect no "a failure after the verdict" \
+    "$(printf 'SUCCESS\nFAIL: something')"
+verdict_expect no "a failure on the end of the page banner" \
+    "$(printf -- '----showpage----FAIL: something\nSUCCESS')"
+verdict_expect no "a mismatch before the verdict" \
+    "$(printf 'MISMATCH results: 1 2\nSUCCESS')"
+verdict_expect no "two verdicts from one run" "$(printf 'SUCCESS\nSUCCESS')"
+verdict_expect no "a word the verdict is only the tail of" "NOTSUCCESS"
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a test cannot reliably fail"
     exit 1
