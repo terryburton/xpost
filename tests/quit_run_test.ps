@@ -1,0 +1,29 @@
+% quit ends the run it is executed in, whatever device that run is on.
+% Run against a live device (-d <dev>) by run-device-quit-test.sh: prints
+% SUCCESS iff nothing after the quit runs.
+%
+% PLRM 8.2 gives quit one job, to terminate operation of the interpreter.
+% Nothing after it in the file it was read from runs, and neither does
+% anything the frames beneath it had left to do.
+%
+% The device is what made this vary. Ending a run tears the device down,
+% and a device whose Destroy is a PostScript procedure is torn down by
+% re-entering the interpreter to run it. A re-entry with no stop of its
+% own carries on past the procedure into the frames the abandoned program
+% left behind, and runs the rest of the file. A device whose Destroy is
+% an operator is called directly, re-enters nothing, and so never showed
+% it.
+%
+% The verdict is printed before the quit because there is no after: a
+% line printed here at all is the failure, and the wrapper judges a run
+% that printed one as failed however it ended.
+
+/ender {
+    (SUCCESS) =
+    quit
+    (FAILURE: the procedure continued past quit) =
+} def
+
+ender
+
+(FAILURE: the run continued past quit) =

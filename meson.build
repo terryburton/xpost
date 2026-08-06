@@ -1847,6 +1847,16 @@ test('device-getpix-destroyed',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# quit ends the run (PLRM 8.2), and what happens next is the device's
+# teardown. A device whose Destroy is a PostScript procedure is torn down
+# by re-entering the interpreter, which is where the abandoned program is
+# within reach; every device is held to stopping where it was told to.
+test('device-quit',
+  find_program('tests/run-device-quit-test.sh'),
+  args: [ xpost_exe, files('tests/quit_run_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # A setpagedevice whose maker fails at run time must leave the incumbent device
 # in the graphics state, whole and painting: the program is entitled to catch
 # that error and carry on. Guards the ordering -- the replacement is built

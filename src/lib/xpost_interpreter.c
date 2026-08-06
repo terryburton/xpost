@@ -2776,6 +2776,11 @@ run:
 	{
 	    XPOST_LOG_INFO("running Destroy proc");
 	    xpost_stack_push(ctx->lo, ctx->os, device);
+	    /* the run this is tearing down stopped at its quit with the
+	       frames it had yet to return through still on the exec
+	       stack; a stop of this interval's own is what keeps the
+	       teardown from carrying on down into them */
+	    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
 	    xpost_stack_push(ctx->lo, ctx->es, Destroy);
 
 	    ctx->quit = 0;

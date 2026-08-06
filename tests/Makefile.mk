@@ -181,6 +181,7 @@ tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
+tests/quit_run_test.ps \
 tests/raster_class_test.ps \
 tests/reloc_stress_test.ps \
 tests/render_classes_test.ps \
@@ -197,6 +198,7 @@ tests/run-device-contract-test.sh \
 tests/run-device-destroy-test.sh \
 tests/run-device-features-test.sh \
 tests/run-device-getpix-test.sh \
+tests/run-device-quit-test.sh \
 tests/run-device-restore-test.sh \
 tests/run-devices-test.sh \
 tests/run-error-binary-test.sh \
