@@ -271,6 +271,30 @@ _xpost_geometry_parse(const char *geometry, int *width, int *height, int *xoffse
     return 1;
 }
 
+/* Add one copy of str to a list that grows by one each time. The list and
+   its count travel together, and a list that has taken nothing yet is the
+   null pointer with a count of zero. Answers zero if the copy or the room
+   for it could not be had, leaving the list exactly as it was. */
+static int
+_xpost_main_list_add(char ***list, int *count, const char *str)
+{
+    char **grown;
+    char *copy;
+
+    copy = strdup(str);
+    if (!copy)
+        return 0;
+    grown = realloc(*list, (*count + 1) * sizeof *grown);
+    if (!grown)
+    {
+        free(copy);
+        return 0;
+    }
+    *list = grown;
+    (*list)[(*count)++] = copy;
+    return 1;
+}
+
 static void
 _xpost_main_interrupt(int sig)
 {
@@ -413,15 +437,10 @@ int main(int argc, char *argv[])
                     }
 
                 }
+                if (!_xpost_main_list_add(&defs, &num_defs, define))
                 {
-                    char **tmp = realloc(defs, (num_defs + 1) * sizeof *defs);
-                    if (!tmp)
-                    {
-                        XPOST_LOG_ERR("out of memory");
-                        goto quit_xpost;
-                    }
-                    defs = tmp;
-                    defs[num_defs++] = strdup(define);
+                    XPOST_LOG_ERR("out of memory");
+                    goto quit_xpost;
                 }
             }
             else if ((!strncmp(argv[i], "-I", 2)) ||
@@ -442,15 +461,10 @@ int main(int argc, char *argv[])
                     _xpost_main_usage(filename);
                     goto quit_xpost;
                 }
+                if (!_xpost_main_list_add(&incs, &num_incs, inc))
                 {
-                    char **tmp = realloc(incs, (num_incs + 1) * sizeof *incs);
-                    if (!tmp)
-                    {
-                        XPOST_LOG_ERR("out of memory");
-                        goto quit_xpost;
-                    }
-                    incs = tmp;
-                    incs[num_incs++] = strdup(inc);
+                    XPOST_LOG_ERR("out of memory");
+                    goto quit_xpost;
                 }
             }
             else if (!strcmp(argv[i], "--no-sandbox"))
@@ -523,6 +537,11 @@ int main(int argc, char *argv[])
     {
         char *devstr = strdup(device);
         char *subdevice;
+        if (!devstr)
+        {
+            XPOST_LOG_ERR("out of memory");
+            goto quit_xpost;
+        }
         if ((subdevice=strchr(devstr,':')))
             *subdevice++='\0';
         /* check devices */
