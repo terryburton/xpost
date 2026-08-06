@@ -99,8 +99,19 @@ add_project_arguments(cc.get_supported_arguments(comparison_errors), language: '
 # -Wformat-security is taken rather than the whole of -Wformat=2,
 # because -Wformat-nonliteral would fire on the device table's own
 # templates, which are the interpreter's strings and not a program's.
+#
+# -Wcast-align is deliberately absent, and the reason is that the two
+# compilers do not mean the same thing by it. gcc raises it only where a
+# misaligned read faults, so on the usual targets it says nothing at all
+# and promoting it buys nothing; clang raises it wherever the pointed-to
+# type wants more alignment than the source type, which is every read of
+# a record out of the memory file's own byte storage. That storage is
+# aligned by the allocator that hands it out, and the cast is where that
+# contract is spent rather than where it is stated -- so the diagnostic
+# is answered by an invariant it cannot see, in three files, and turning
+# it on would mean writing the invariant as a cast through void * at
+# every site rather than stating it once.
 kept_clean = [
-  '-Werror=cast-align',
   '-Werror=missing-declarations',
   '-Werror=null-dereference',
   '-Werror=vla',
