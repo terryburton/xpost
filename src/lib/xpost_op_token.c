@@ -293,6 +293,9 @@ int grok(Xpost_Context *ctx,
            narrowed, and not promoted to a real the way an over-range decimal
            integer is). Where long is wider than int the value parsed above but
            may still be too wide; ERANGE has already caught it where it did not. */
+        /* the shift is reached only where an integer is the narrower of
+           the two, so it always names a bit inside an unsigned long */
+        /* cppcheck-suppress shiftTooManyBits */
         if (sizeof(integer) < sizeof(long)
                 && num > (((unsigned long)1 << (8 * sizeof(integer))) - 1))
         {
