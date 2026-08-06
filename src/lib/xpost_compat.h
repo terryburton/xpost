@@ -141,11 +141,13 @@ int xpost_mkstemp(char *template, int *fd);
 
 #ifdef _WIN32
 
+/* the counts carry the widths POSIX gives them, so a caller reads one
+   glob_t whichever platform supplied it */
 typedef struct
 {
-    int gl_pathc;
+    size_t gl_pathc;
     char **gl_pathv;
-    int gl_offs;
+    size_t gl_offs;
 } glob_t;
 
 #else

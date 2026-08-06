@@ -304,7 +304,7 @@ xpost_glob(const char *pattern, glob_t *pglob)
                 }
 
                 *begin = NULL;
-                pglob->gl_pathc = (int)matches;
+                pglob->gl_pathc = matches;
                 pglob->gl_pathv = (char**)new_buffer;
             }
         }
@@ -315,7 +315,7 @@ xpost_glob(const char *pattern, glob_t *pglob)
 
     if (result == 0)
     {
-        if ((size_t)pglob->gl_pathc == max_matches)
+        if (pglob->gl_pathc == max_matches)
             result = -1;
     }
 
