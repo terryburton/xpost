@@ -239,6 +239,8 @@ int _create_cont(Xpost_Context *ctx,
                                      sizeof(Xpost_Raster_BGR_Pixel) * width * height);
                 break;
         }
+        if (!private.buf)
+            return VMerror;
         private.buf->height = height;
         private.buf->width = width;
         private.bufowned = 1;
