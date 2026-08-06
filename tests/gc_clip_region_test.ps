@@ -1,0 +1,118 @@
+% Building one clipping region after another, where each region is
+% divided finely enough to cost tens of thousands of entities. Run
+% through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% A region cut from another is one pixel-band rectangle per band it
+% covers, and every rectangle a painter is handed is four coordinate
+% pairs, each pair its own entity. A comb of fifty teeth over three
+% hundred rows is fifteen thousand bands, so one such region costs the
+% memory table something over sixty thousand entity slots -- and the
+% ordinary build's object field carries an entity number in nineteen
+% bits, so the table it indexes runs out a little past half a million.
+%
+% Nothing names a region once the next clip replaces it, so those slots
+% are the collector's to hand back and a job may build as many regions
+% as it likes. What settles whether it can is how often the collector is
+% asked, and a table asked too rarely goes on growing: in the ordinary
+% build until the numbers run out and allocation fails, in the wide one
+% without any limit at all.
+%
+% So the count is what this asserts, and not merely that the run
+% finished -- the count is the one reading that sees both of those. The
+% regions are built in two equal rounds and the table is read after
+% each: a job whose garbage is handed back reaches its working set in
+% the first round and the second costs it nothing, while one asked too
+% rarely climbs through both. The second round is held to one region's
+% growth, which is the room the first region of the round may need
+% before the collector is next asked.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/entcount { 1183615869 internaldict /.vmentcount get exec pop } bind def
+
+% a device large enough for the comb to divide, and cheap to paint
+/DEV 200 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% a comb of vertical bars two columns wide every four columns: fifty
+% teeth over three hundred rows
+/combpath {
+    2 dict begin
+    newpath
+    0 4 196 {
+        /cx exch def
+        cx 0 moveto cx 2 add 0 lineto
+        cx 2 add 300 lineto cx 300 lineto closepath
+    } for
+    end
+} bind def
+
+/wholepage { newpath -1 -1 moveto 201 -1 lineto
+             201 301 lineto -1 301 lineto closepath } bind def
+
+% one region: the comb becomes the clip and a fill of the whole page is
+% met against it, which is what resolves the region to its bands
+/region {
+    initgraphics
+    combpath clip newpath
+    0 setgray wholepage fill
+} bind def
+
+% one region's cost, measured rather than assumed: the first is built
+% against an empty table and nothing has been reclaimed yet
+/e0 entcount def
+region
+/e1 entcount def
+/cost e1 e0 sub def
+cost 10000 gt (a finely divided region costs the table its tens of thousands) assert
+
+% thirty more, which is enough to carry the table well past the size at
+% which its own growth is reason to collect
+30 { region } repeat
+/eround1 entcount def
+
+% and thirty more again, the last of them onto a cleared page so that
+% what it painted can be read off it
+29 { region } repeat
+initgraphics erasepage
+region
+/eround2 entcount def
+
+eround2 eround1 sub cost le
+    (a second round of regions costs the table no more than one region) assert
+
+% the region still paints what it describes, so what was reclaimed was
+% garbage and not the answer: the teeth are two columns in four over
+% three hundred rows
+/marked 0 def
+/strayed 0 def
+DEV /ImgData get {
+    /row exch def
+    0 1 row length 1 sub {
+        /tx exch def
+        row tx get 128 lt {
+            /marked marked 1 add def
+            tx 4 mod 2 ge { /strayed strayed 1 add def } if
+        } if
+    } for
+} forall
+strayed 0 eq (the last region's fill stays inside the teeth) assert
+marked 30000 eq (the last region's fill marks every pixel of them) assert
+
+count 0 eq (the suite leaves the operand stack empty) assert
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

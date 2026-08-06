@@ -512,6 +512,21 @@ test('gc-large-dict-pressure',
   },
   timeout: 300)
 
+# A collection nothing asked for, provoked by the entity table rather
+# than by the bytes behind it. A finely divided clipping region costs
+# tens of thousands of entity slots and the next clip leaves every one
+# of them to the collector, so a job that builds region after region
+# says whether the collector is asked often enough to keep handing them
+# back. The count is asserted, not merely the absence of an error: the
+# ordinary build reports too few collections as an exhausted table, the
+# wide one as a table that grows without limit, and only the count sees
+# both.
+test('gc-clip-region',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_clip_region_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Enumerating over that same table, and over the largest array and
 # string a build has. A dictionary's table is longer than a composite's
 # own fields count, so an enumeration whose cursor lives in one of them

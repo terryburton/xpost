@@ -761,16 +761,32 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
 
     if (mem->free_list_alloc_is_installed)
     {
-        /* entity numbers are a fixed budget independent of the byte
-           threshold: collect well before the table saturates, or
-           allocation fails outright once it does */
+        /* Entity slots are a budget of their own, independent of the
+           byte threshold: a table grown this large is worth a collection
+           whatever the bytes behind it come to, and where the object
+           field spans no more than the table, allocation fails outright
+           once the numbers run out.
+
+           What paces the requests is a count of allocations, spent on
+           every one of them -- from the free list as well as on a fresh
+           slot -- so that a job whose garbage is reclaimed is asked at
+           the same rate as one whose is not, and its table stops
+           growing. A pace read off the next-slot cursor instead would
+           not: that cursor only ever rises, so each request would set
+           the next one further out and a job allocating steadily would
+           be offered a fixed number of collections however much each
+           one reclaimed. */
         if (mem->garbage_collect_is_installed &&
             !mem->interpreter_get_initializing() &&
-            mem->table.nextent > XPOST_OBJECT_COMP_MAX_ENT / 2 &&
-            mem->table.nextent >= mem->gc_trigger_nextent)
+            mem->table.nextent > XPOST_MEMORY_TABLE_PRESSURE)
         {
-            mem->garbage_collect_pending = 1;
-            mem->gc_trigger_nextent = mem->table.nextent + 65536;
+            if (mem->gc_ent_budget == 0)
+            {
+                mem->garbage_collect_pending = 1;
+                mem->gc_ent_budget = XPOST_MEMORY_TABLE_GC_BUDGET;
+            }
+            else
+                --mem->gc_ent_budget;
         }
 
         ret = mem->free_list_alloc(mem, sz, tag, entity);

@@ -118,6 +118,30 @@ typedef enum
     XPOST_MEMORY_COLLECT_START_LOCAL = XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME + 1
 } Xpost_Memory_Collect_Start;
 
+/**
+ * @typedef Xpost_Memory_Table_Pressure
+ * @brief When a table's size is reason enough to collect, and how often.
+ *
+ * XPOST_MEMORY_TABLE_PRESSURE is the number of entity slots a table may
+ * reach before its size alone makes a collection worthwhile, whatever
+ * the bytes behind those slots come to. It is half the entity numbers
+ * the ordinary build's object field can carry, so a job heading for the
+ * end of that range is offered collections across the whole second half
+ * of it; in a build whose field spans more than the table, it is simply
+ * a table large enough to be worth sweeping.
+ *
+ * XPOST_MEMORY_TABLE_GC_BUDGET is how many entity allocations pass
+ * between one request and the next while the table stays that large.
+ * It is wide enough that a single operator building one large answer
+ * does not spend it several times over before the interpreter reaches
+ * the safe point where a collection can run.
+ */
+typedef enum
+{
+    XPOST_MEMORY_TABLE_PRESSURE = 262144,
+    XPOST_MEMORY_TABLE_GC_BUDGET = 65536
+} Xpost_Memory_Table_Pressure;
+
 
 /*
  *
@@ -183,12 +207,14 @@ typedef struct Xpost_Memory_File
                            unsigned int *entity);
 
     int garbage_collect_is_installed;
-    unsigned int gc_trigger_nextent; /**< entity-pressure trigger: re-arms
-                                           only after the table grows past
-                                           this point (the count is
-                                           monotonic, so a level trigger
-                                           would re-request on every
-                                           allocation) */
+    unsigned int gc_ent_budget; /**< entity allocations left before the
+                                      next collection is requested while
+                                      the table is under size pressure.
+                                      Spent on every allocation, from the
+                                      free list as well as on a fresh
+                                      slot, so the rate of requests does
+                                      not depend on how much the table
+                                      happens to have grown */
     unsigned int file_births[256]; /**< live file entities by birth stamp
                                          (save depth + 1): restore's close
                                          sweep runs only when a file was born

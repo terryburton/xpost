@@ -102,6 +102,24 @@ int vmstatus (Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .vmentcount  local global
+   The number of entity slots each memory table has handed out. Entity
+   numbers are a budget of their own, separate from the byte counts
+   vmstatus reports: an entity freed goes on a free list and is handed
+   out again, so this number rises only where nothing reclaims what a
+   job has stopped using. */
+static
+int vmentcount (Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->lo->table.nextent)))
+        return stackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->gl->table.nextent)))
+        return stackoverflow;
+    return 0;
+}
+
 static
 int globalvmstatus (Xpost_Context *ctx)
 {
@@ -136,6 +154,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)vmstatus, 3, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "globalvmstatus", (Xpost_Op_Func)globalvmstatus, 3, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmentcount", (Xpost_Op_Func)vmentcount, 2, 0);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
