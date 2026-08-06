@@ -41,6 +41,8 @@
 #ifndef XPOST_F_H
 #define XPOST_F_H
 
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
+
 /*
    a filetype object uses .mark_.padw to store the ent
    for the Xpost_File *
@@ -331,7 +333,7 @@ FILE *xpost_diskfile_fopen_beneath(const char *root, const char *rel, int *err);
 /**
  * @brief Open and construct a file object given filename and mode.
  */
-int xpost_file_open(Xpost_Memory_File *mem, char *fn, char *mode, Xpost_Object *retval);
+XPOST_TEST_VISIBLE int xpost_file_open(Xpost_Memory_File *mem, char *fn, char *mode, Xpost_Object *retval);
 
 /**
  * @brief Return the FILE* from the file object.
