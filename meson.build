@@ -1129,6 +1129,15 @@ test('halftone-matrix',
   args: [ xpost_exe, files('tests/halftone_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Every setter of a transfer function or a spot function, asked whether
+# it calls the procedure it is given. Setting one is what calls it, and
+# programs lean on the calls, so a setter that only recorded would be
+# indistinguishable from a working one until something counted.
+test('colour-sampling',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/colour_sampling_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The ordered comparisons take two numbers or two strings, and refusing
 # anything else is what separates them from eq and ne.
 test('op-compare',

@@ -1,0 +1,330 @@
+% The transfer functions and spot functions the graphics state records
+% are sampled when they are set, run through `xpost -q --no-sandbox -d
+% null` by run-ps-test.sh.
+%
+% A transfer function and a spot function are procedures the program
+% writes and the machinery calls. Setting one calls it: a transfer
+% function across [0,1], a spot function across its halftone cell.
+% Programs lean on that -- the classic pattern-cell idiom builds its
+% cell inside the spot function -- so the calls are part of what setting
+% one means, and a setter that only recorded the procedure would be a
+% setter that never ran it.
+%
+% There are six setters and they divide into two families. One sets a
+% single function: settransfer, setblackgeneration, setundercolorremoval
+% and setscreen. The other sets one per colour component:
+% setcolortransfer and setcolorscreen. Every one of them samples, and
+% the counts below say so with a counter rather than with the absence of
+% an error, because a procedure that is never reached raises nothing.
+
+/fail false def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print /fail true def } ifelse
+} def
+/refuses { % {proc} /errorname (name)  .  -
+    /rf.w exch def /rf.e exch def
+    count 1 sub /rf.d exch def
+    stopped not { (FAIL: ) print rf.w print ( did not fail\n) print
+                  /fail true def } if
+    count rf.d sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    $error /errorname get rf.e eq
+        { }{ (FAIL: ) print rf.w print ( raised ) print
+             $error /errorname get 40 string cvs print (\n) print
+             /fail true def } ifelse
+    $error /newerror false put
+} def
+
+% every counter the sampled procedures write through
+/seq 0 def
+/rn 0 def /gn 0 def /bn 0 def /kn 0 def
+/rs -1 def /gs -1 def /bs -1 def /ks -1 def
+/rfirst null def /rlast null def
+/kfirst null def /klast null def
+/zero { /seq 0 store /rn 0 store /gn 0 store /bn 0 store /kn 0 store
+        /rs -1 store /gs -1 store /bs -1 store /ks -1 store } def
+
+/rp { rn 0 eq { /rs seq store /seq seq 1 add store dup /rfirst exch store } if
+      dup /rlast exch store /rn rn 1 add store } def
+/gp { gn 0 eq { /gs seq store /seq seq 1 add store } if
+      /gn gn 1 add store } def
+/bp { bn 0 eq { /bs seq store /seq seq 1 add store } if
+      /bn bn 1 add store } def
+/kp { kn 0 eq { /ks seq store /seq seq 1 add store dup /kfirst exch store } if
+      dup /klast exch store /kn kn 1 add store } def
+
+% --- one transfer function, sampled across [0,1] ----------------------
+%
+% The single-channel setters are the shape the four-channel ones are
+% measured against, so what they do is stated here rather than assumed.
+
+zero
+/rp load settransfer
+rn 256 eq (settransfer samples the procedure) assert
+rfirst 0 eq (the first sample is the bottom of the range) assert
+rlast 1 eq (and the last is the top) assert
+count 0 eq (settransfer leaves the operand stack as it found it) assert
+
+zero
+/rp load setblackgeneration
+rn 256 eq (setblackgeneration samples the procedure) assert
+
+zero
+/rp load setundercolorremoval
+rn 256 eq (setundercolorremoval samples the procedure) assert
+
+{ } settransfer
+{ pop 0 } setblackgeneration
+{ pop 0 } setundercolorremoval
+
+% --- four transfer functions, each sampled the same way ---------------
+
+zero
+/rp load /gp load /bp load /kp load setcolortransfer
+rn 256 eq (setcolortransfer samples the red procedure) assert
+gn 256 eq (and the green one) assert
+bn 256 eq (and the blue one) assert
+kn 256 eq (and the grey one) assert
+count 0 eq (setcolortransfer leaves the operand stack as it found it) assert
+
+rfirst 0 eq (a colour channel is sampled from the bottom of the range) assert
+rlast 1 eq (to the top of it) assert
+kfirst 0 eq (and so is the grey channel) assert
+klast 1 eq (across the same range) assert
+
+% the grey channel is the transfer function the other three qualify, and
+% it goes first
+ks 0 eq (the grey channel is sampled first) assert
+rs 1 eq (then the red) assert
+gs 2 eq (then the green) assert
+bs 3 eq (then the blue) assert
+
+% --- a colour channel given the grey channel's own procedure ----------
+%
+% Setting all four to one procedure is what settransfer does, so it
+% samples what settransfer samples: once. The rule that gives it is that
+% a colour channel holding the grey channel's own procedure is that same
+% function and is not sampled again -- object for object, so two
+% procedures that merely read alike are two functions.
+
+zero
+/rp load dup dup dup setcolortransfer
+rn 256 eq (four slots of one procedure sample it once) assert
+
+zero
+/rp load /gp load /bp load /rp load setcolortransfer
+rn 256 eq (a colour channel holding the grey procedure is not sampled again) assert
+gn 256 eq (while a channel of its own still is) assert
+bn 256 eq (and so is the next) assert
+ks -1 eq (the grey channel's counter is the red one here) assert
+
+zero
+/rp load /rp load /bp load /kp load setcolortransfer
+rn 512 eq (two colour channels sharing a procedure are each sampled) assert
+kn 256 eq (alongside the grey channel's own) assert
+
+/tw.a { pop 0.5 } def
+/tw.b { pop 0.5 } def
+zero
+/rp load /gp load /tw.a load /tw.b load setcolortransfer
+rn 256 eq (a procedure that only reads like the grey one is its own function) assert
+
+{ } settransfer
+
+% --- what the four-channel setter then reports ------------------------
+
+/rp load /gp load /bp load /kp load setcolortransfer
+currentcolortransfer
+/kp load eq (currentcolortransfer reports the grey procedure) assert
+/bp load eq (and the blue) assert
+/gp load eq (and the green) assert
+/rp load eq (and the red) assert
+currenttransfer /kp load eq
+    (currenttransfer reports the grey channel of setcolortransfer) assert
+
+% and the single-channel setter spreads to all four
+/rp load settransfer
+currentcolortransfer
+/rp load eq exch /rp load eq and exch /rp load eq and exch /rp load eq and
+    (settransfer sets every channel of currentcolortransfer) assert
+{ } settransfer
+
+% --- a transfer procedure is held to its shape in every channel -------
+%
+% The samples are taken for their effect on the operand stack: a
+% procedure that leaves anything other than its one number is not a
+% transfer function, whichever channel it was given for.
+
+{ { 1 } { } { } { } setcolortransfer } /typecheck
+    (a red transfer that pushes without popping) refuses
+{ { } { 1 } { } { } setcolortransfer } /typecheck
+    (a green transfer that pushes without popping) refuses
+{ { } { } { 1 } { } setcolortransfer } /typecheck
+    (a blue transfer that pushes without popping) refuses
+{ { } { } { } { 1 } setcolortransfer } /typecheck
+    (a grey transfer that pushes without popping) refuses
+{ { pop } { } { } { } setcolortransfer } /typecheck
+    (a red transfer that leaves no result) refuses
+{ { } { } { } { pop } setcolortransfer } /typecheck
+    (a grey transfer that leaves no result) refuses
+{ { pop (x) } { } { } { } setcolortransfer } /typecheck
+    (a red transfer whose result is a string) refuses
+{ { } { } { } { pop (x) } setcolortransfer } /typecheck
+    (a grey transfer whose result is a string) refuses
+% one that takes more than its argument reaches past the sample into the
+% caller's own stack, and refuses where it runs out of it. That is also
+% what says the setter is holding nothing there: three procedures and a
+% name within reach would be what got popped instead
+count 0 eq (the stack is clear before the underflow probe) assert
+{ { pop pop 0.5 } { } { } { } setcolortransfer } /stackunderflow
+    (a red transfer that pops too much) refuses
+{ { } { } { } { pop pop 0.5 } setcolortransfer } /stackunderflow
+    (a grey transfer that pops too much) refuses
+{ } settransfer
+
+% and the same of the spot functions: twelve operands within reach would
+% be twelve things to pop before the stack ran out
+count 0 eq (the stack is clear before the spot underflow probe) assert
+{ 60 45 { pop pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
+  60 45 { pop pop 0.5 } setcolorscreen } /stackunderflow
+    (a red spot that pops past its arguments) refuses
+{ 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
+  60 45 { pop pop pop 0.5 } setcolorscreen } /stackunderflow
+    (a grey spot that pops past its arguments) refuses
+60 45 { pop pop 0.5 } setscreen
+
+% --- the samples run where the caller can see them --------------------
+
+4 dict begin
+    /callerscope 0 def
+    { pop /callerscope callerscope 1 add store 0.5 }
+    { pop /callerscope callerscope 1 add store 0.5 }
+    { pop /callerscope callerscope 1 add store 0.5 }
+    { pop /callerscope callerscope 1 add store 0.5 }
+        setcolortransfer
+    callerscope 1024 eq
+        (every channel's samples run in the caller's dictionary scope) assert
+end
+{ } settransfer
+
+% --- four spot functions, each sampled across its own cell ------------
+%
+% A screen's cell is its frequency and angle, so each channel's spot
+% function is sampled across a cell of its own -- including a channel
+% that was handed the very procedure another channel has, which is the
+% same function over a different cell and is sampled again.
+
+/sn 0 def /sm 0 def
+/sp { /sn sn 1 add store pop pop 0.5 } def
+/sq { /sm sm 1 add store pop pop 0.5 } def
+
+/sn 0 def
+60 45 /sp load setscreen
+/cell4560 sn def
+cell4560 0 gt (setscreen samples the spot function across its cell) assert
+
+/sn 0 def
+60 75 /sp load setscreen
+/cell7560 sn def
+
+/sn 0 def /sm 0 def
+60 45 /sp load 60 45 /sp load 60 45 /sp load 60 45 /sp load setcolorscreen
+sn cell4560 4 mul eq
+    (setcolorscreen samples every channel, one cell each) assert
+count 0 eq (setcolorscreen leaves the operand stack as it found it) assert
+
+zero
+/rq { /rn rn 1 add store rn 1 eq { /rs seq store /seq seq 1 add store } if
+      pop pop 0.5 } def
+/gq { /gn gn 1 add store gn 1 eq { /gs seq store /seq seq 1 add store } if
+      pop pop 0.5 } def
+/bq { /bn bn 1 add store bn 1 eq { /bs seq store /seq seq 1 add store } if
+      pop pop 0.5 } def
+/kq { /kn kn 1 add store kn 1 eq { /ks seq store /seq seq 1 add store } if
+      pop pop 0.5 } def
+60 75 /rq load 60 45 /gq load 60 45 /bq load 60 45 /kq load setcolorscreen
+rn cell7560 eq (a channel is sampled across the cell its own frequency and angle give) assert
+gn cell4560 eq (and each other channel across its own) assert
+ks 0 eq (the grey channel is sampled first) assert
+rs 1 eq (then the red) assert
+gs 2 eq (then the green) assert
+bs 3 eq (then the blue) assert
+
+% a channel with no cell to sample has no samples taken
+/sn 0 def
+0 45 /sp load 60 45 /sp load 60 45 /sp load 60 45 /sp load setcolorscreen
+sn cell4560 3 mul eq
+    (a channel of no frequency is recorded without being sampled) assert
+/sn 0 def
+60 45 /sp 60 45 /sp load 60 45 /sp load 60 45 /sp load setcolorscreen
+sn cell4560 3 mul eq
+    (a spot given as a literal name is recorded without being sampled) assert
+
+% --- what the four-channel screen setter then reports ------------------
+
+1 2 /sp load 3 4 /sq load 5 6 /sp load 7 8 /sq load setcolorscreen
+currentcolorscreen 12 array astore
+dup 0 get 1 eq (currentcolorscreen reports the red frequency) assert
+dup 2 get /sp load eq (and the red procedure) assert
+dup 4 get 4 eq (and the green angle) assert
+dup 9 get 7 eq (and the grey frequency) assert
+dup 11 get /sq load eq (and the grey procedure) assert
+pop
+currentscreen
+/sq load eq (currentscreen reports the grey procedure of setcolorscreen) assert
+8 eq (and the grey angle) assert
+7 eq (and the grey frequency) assert
+% and the single-channel setter spreads to all four
+60 45 /sp load setscreen
+currentcolorscreen 12 array astore
+dup 0 get 60 eq 1 index 3 get 60 eq and 1 index 6 get 60 eq and
+    1 index 9 get 60 eq and
+    (setscreen sets every channel's frequency) assert
+pop
+
+% --- setting one from inside the sampling of another ------------------
+%
+% The procedure being sampled is the program's, and it may set a
+% transfer function or a screen of its own. That re-enters the sampling
+% against the same slots, so what the outer setter is mid-use of has to
+% survive: it is the outer call's procedures that are recorded when it
+% finishes, not the inner call's.
+
+/inner.t { pop 0.75 } def
+/nested 0 def
+{ pop nested 0 eq
+    { /nested 1 store /inner.t load dup dup dup setcolortransfer } if 0.5 }
+  dup dup dup setcolortransfer
+nested 1 eq (the nested setcolortransfer was reached) assert
+currentcolortransfer
+/inner.t load ne exch /inner.t load ne and exch /inner.t load ne and
+    exch /inner.t load ne and
+    (a setcolortransfer inside the sampling does not win) assert
+{ } settransfer
+
+/inner.s { pop pop 0.25 } def
+/nesteds 0 def
+/outer.s { pop pop nesteds 0 eq
+    { /nesteds 1 store
+      30 0 /inner.s load 30 0 /inner.s load 30 0 /inner.s load
+      30 0 /inner.s load setcolorscreen } if
+    0.25 } def
+60 45 /outer.s load 60 45 /outer.s load 60 45 /outer.s load
+    60 45 /outer.s load setcolorscreen
+nesteds 1 eq (the nested setcolorscreen was reached) assert
+currentcolorscreen 12 array astore
+dup 11 get /outer.s load eq (a setcolorscreen inside the sampling does not win) assert
+dup 9 get 60 eq (and the outer frequency stands) assert
+pop
+60 45 { pop pop 0.5 } setscreen
+
+% --- the operands come back when the setter refuses on them -----------
+
+{ { } { } { } (notaproc) setcolortransfer } /typecheck
+    (setcolortransfer refuses a grey operand that is not a procedure) refuses
+{ 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 } 60 45 { pop pop 0.5 }
+  60 (notanangle) { pop pop 0.5 } setcolorscreen } /typecheck
+    (setcolorscreen refuses a grey angle that is not a number) refuses
+
+count 0 eq (the checks left nothing on the operand stack) assert
+
+fail { (FAILED\n) print }{ (SUCCESS\n) print } ifelse

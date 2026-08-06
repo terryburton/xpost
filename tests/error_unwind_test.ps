@@ -435,6 +435,112 @@ count d0 sub 3 eq
     (setscreen refusing on an operand gives its operands back) assert
 { 60 45 { pop pop 0.5 } setscreen } stopped pop
 
+% The four-channel setters sample a procedure per colour component and
+% stand behind the same boundary, whichever component's procedure fails.
+% The counter beside each is what says the procedure was reached: a
+% setter that recorded without ever calling would leave the same depth
+% behind for the opposite reason, and read as a pass.
+
+/xc.hit 0 def
+/xc.ok    { pop 0.5 } def
+/xc.stop  { /xc.hit xc.hit 1 add store pop stop } def
+/xc.err   { /xc.hit xc.hit 1 add store pop zzundefinedname } def
+/xc.inner { /xc.hit xc.hit 1 add store pop /zzz /zzz findresource } def
+/xc.oks    { pop pop 0.5 } def
+/xc.sstop  { /xc.hit xc.hit 1 add store pop pop stop } def
+/xc.sinner { /xc.hit xc.hit 1 add store pop pop /zzz /zzz findresource } def
+
+/xc.hit 0 def
+count /d0 exch def
+/xc.sentinel
+{ /xc.stop load /xc.ok load /xc.ok load /xc.ok load setcolortransfer }
+    stopped pop
+count d0 sub 1 eq
+    { /xc.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a colour transfer restores nothing of setcolortransfer's) assert
+xc.hit 0 gt (and the procedure that stopped was reached) assert
+
+/xc.hit 0 def
+count /d0 exch def
+/xc.sentinel
+{ /xc.ok load /xc.ok load /xc.ok load /xc.stop load setcolortransfer }
+    stopped pop
+count d0 sub 1 eq
+    { /xc.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor does one in the grey channel of it) assert
+xc.hit 0 gt (and that procedure was reached too) assert
+
+/xc.hit 0 def
+count /d0 exch def
+/xc.sentinel
+{ /xc.err load /xc.ok load /xc.ok load /xc.ok load setcolortransfer }
+    stopped pop
+count d0 sub 1 eq
+    { /xc.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor an error in one restore anything of the setter's) assert
+xc.hit 0 gt (and the procedure that raised it was reached) assert
+
+/xc.hit 0 def
+count /d0 exch def
+{ /xc.inner load /xc.ok load /xc.ok load /xc.ok load setcolortransfer }
+    stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside a colour transfer gives its own back) assert
+xc.hit 0 gt (and the procedure it was called from was reached) assert
+
+% the sampling refusing on what a channel's procedure returned is the
+% setter's own refusal, so all four procedures come back
+count /d0 exch def
+{ /xc.ok load /xc.ok load /xc.ok load { pop (notanumber) } setcolortransfer }
+    stopped pop
+count d0 sub 4 eq
+    { length 2 eq exch /xc.ok load eq and exch /xc.ok load eq and
+      exch /xc.ok load eq and }{ d0 wrongdepth } ifelse
+    (setcolortransfer refusing on a result gives its operands back) assert
+{ { } settransfer } stopped pop
+
+/xc.hit 0 def
+count /d0 exch def
+/xc.sentinel
+{ 60 45 /xc.sstop load 60 45 /xc.oks load 60 45 /xc.oks load
+  60 45 /xc.oks load setcolorscreen } stopped pop
+count d0 sub 1 eq
+    { /xc.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a colour spot restores nothing of setcolorscreen's) assert
+xc.hit 0 gt (and the spot function that stopped was reached) assert
+
+/xc.hit 0 def
+count /d0 exch def
+/xc.sentinel
+{ 60 45 /xc.oks load 60 45 /xc.oks load 60 45 /xc.oks load
+  60 45 /xc.sstop load setcolorscreen } stopped pop
+count d0 sub 1 eq
+    { /xc.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor does one in the grey channel of it) assert
+xc.hit 0 gt (and that spot function was reached too) assert
+
+/xc.hit 0 def
+count /d0 exch def
+{ 60 45 /xc.sinner load 60 45 /xc.oks load 60 45 /xc.oks load
+  60 45 /xc.oks load setcolorscreen } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside a colour spot gives its own back) assert
+xc.hit 0 gt (and the spot function it was called from was reached) assert
+
+count /d0 exch def
+{ 60 45 /xc.oks load 60 45 /xc.oks load 60 45 /xc.oks load
+  60 (notanangle) /xc.oks load setcolorscreen } stopped pop
+count d0 sub 12 eq
+    { /xc.oks load eq exch (notanangle) eq and exch 60 eq and
+      exch /xc.oks load eq and exch 45 eq and exch 60 eq and
+      exch /xc.oks load eq and exch 45 eq and exch 60 eq and
+      exch /xc.oks load eq and exch 45 eq and exch 60 eq and }
+    { d0 wrongdepth } ifelse
+    (setcolorscreen refusing on an operand gives its operands back) assert
+{ 60 45 { pop pop 0.5 } setscreen } stopped pop
+
 /cs.go false def
 /cs.sep [ /Separation /Spot /DeviceGray { pop stop } ] def
 /cs.dn  [ /DeviceN [ /Ca /Cb /Cc ] /DeviceGray

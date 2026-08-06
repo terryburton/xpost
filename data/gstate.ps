@@ -338,9 +338,14 @@ currentglobal true setglobal
 setglobal
 
 % redproc greenproc blueproc grayproc  setcolortransfer  -
-% record one transfer procedure per component; the grey channel
-% shares its slot with settransfer, and is the one painting applies
+% sample and record one transfer procedure per component; the grey
+% channel shares its slot with settransfer, and is the one painting
+% applies. Each procedure is called with a number in [0,1] and returns
+% one in the same range (PLRM 8.2), and setting it is what calls it.
 /setcolortransfer [ /proctype /proctype /proctype /proctype ] {
+    4 array astore /setcolortransfer exch
+    //.xpostsys /.samplecolortransfer get exec
+    aload pop
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get exch /bluetransfer exch put
     graphicsdict /currgstate get exch /greentransfer exch put
@@ -425,6 +430,50 @@ setglobal
     graphicsdict /.tsproc get
 } put
 
+% /opname [redproc greenproc blueproc grayproc]
+%     .samplecolortransfer  [redproc greenproc blueproc grayproc]
+% The four transfer functions of setcolortransfer, sampled one at a time
+% by the sampling above, each across [0,1] and each held to the same
+% shape. The grey channel goes first: it is the transfer function the
+% other three qualify, and the one currenttransfer reports.
+% Nothing of the four may stand on the operand stack while any one of
+% them runs, so they are parked in an array the bracket holds and read
+% out one at a time. A procedure that sets a transfer function of its
+% own re-enters this against the same two slots, so the sampling runs
+% inside the bracket.
+% Setting all four to one procedure is what settransfer does, and it
+% samples what settransfer samples: once. So a colour channel holding
+% the grey channel's own procedure is that same function and is not
+% sampled again -- object for object, two procedures that merely read
+% alike being two functions.
+.xpostsys /.ctkeys [ /.ctrec /.ctop ] put
+.xpostsys /.samplecolortransfer {
+    //.xpostsys /.samplecolortransferbody get
+    //.xpostsys /.ctkeys get 0
+    //.xpostsys /.callout get exec
+} put
+.xpostsys /.samplecolortransferbody {
+    graphicsdict exch /.ctrec exch put
+    graphicsdict exch /.ctop exch put
+    graphicsdict /.ctop get graphicsdict /.ctrec get 3 get
+        //.xpostsys /.sampletransfer get exec pop
+    0 //.xpostsys /.ctchannel get exec
+    1 //.xpostsys /.ctchannel get exec
+    2 //.xpostsys /.ctchannel get exec
+    graphicsdict /.ctrec get
+} put
+
+% i  .ctchannel  -
+% sample the colour channel at i of the record, unless it holds the grey
+% channel's procedure, which has been sampled already
+.xpostsys /.ctchannel {
+    graphicsdict /.ctrec get exch get
+    dup graphicsdict /.ctrec get 3 get eq
+        { pop }
+        { graphicsdict /.ctop get exch
+          //.xpostsys /.sampletransfer get exec pop } ifelse
+} put
+
 % freq ang proc  .installscreen  -
 % Sample the spot function and leave this call's screen recorded. The
 % record is what setscreen is mid-use of across the sampling: the spot
@@ -447,6 +496,69 @@ setglobal
     graphicsdict /currgstate get exch /screenangle exch put
     graphicsdict /currgstate get exch /screenfreq exch put
     //.xpostsys /.spreadgrayscreen get exec
+} put
+
+% rf ra rp gf ga gp bf ba bp kf ka kp  .installcolorscreen  -
+% The same for the four screens of setcolorscreen, one per component and
+% each with a cell of its own. A channel's spot function is sampled
+% across that channel's cell, so a procedure standing in two channels is
+% two cells and is sampled for each; the grey channel goes first, being
+% the one currentscreen reports.
+% The twelve are what setcolorscreen is mid-use of across the sampling,
+% for the same reason setscreen's three are, and none of them may stand
+% on the operand stack while a spot function runs. So they are parked in
+% a record the bracket holds, written to the graphics state before the
+% sampling so a spot function reads the screen being installed, and
+% written again after it so this call's screen is the one that stands.
+.xpostsys /.csreckeys [ /.csrec ] put
+.xpostsys /.installcolorscreen {
+    //.xpostsys /.installcolorscreenbody get
+    //.xpostsys /.csreckeys get 0
+    //.xpostsys /.callout get exec
+} put
+.xpostsys /.installcolorscreenbody {
+    12 array astore
+    graphicsdict exch /.csrec exch put
+    //.xpostsys /.recordcolorscreen get exec
+    9 //.xpostsys /.csspot get exec
+    0 //.xpostsys /.csspot get exec
+    3 //.xpostsys /.csspot get exec
+    6 //.xpostsys /.csspot get exec
+    //.xpostsys /.recordcolorscreen get exec
+} put
+
+% i  .csspot  -
+% sample the spot function of the channel whose frequency, angle and
+% procedure lie at i, i+1 and i+2 of the record. A channel with no cell
+% to sample -- no frequency to give one, or a spot object that is not
+% something to execute -- is recorded without being sampled
+.xpostsys /.csspot {
+    dup graphicsdict /.csrec get exch get
+    exch dup 1 add graphicsdict /.csrec get exch get
+    exch 2 add graphicsdict /.csrec get exch get
+    dup xcheck 3 index 0 gt and
+        { //.xpostsys /.samplespot get exec }
+        { pop pop pop } ifelse
+} put
+
+% -  .recordcolorscreen  -
+% write the record's twelve values into the graphics state, each
+% component's screen into its own slots
+.xpostsys /.recordcolorscreen {
+    graphicsdict /.csrec get aload pop
+    graphicsdict /currgstate get exch /screenproc exch put
+    graphicsdict /currgstate get exch /screenangle exch put
+    graphicsdict /currgstate get exch /screenfreq exch put
+    graphicsdict /currgstate get exch /bluescreenproc exch put
+    graphicsdict /currgstate get exch /bluescreenangle exch put
+    graphicsdict /currgstate get exch /bluescreenfreq exch put
+    graphicsdict /currgstate get exch /greenscreenproc exch put
+    graphicsdict /currgstate get exch /greenscreenangle exch put
+    graphicsdict /currgstate get exch /greenscreenfreq exch put
+    graphicsdict /currgstate get exch /redscreenproc exch put
+    graphicsdict /currgstate get exch /redscreenangle exch put
+    graphicsdict /currgstate get exch /redscreenfreq exch put
+    graphicsdict /currgstate get /halftone null put
 } put
 
 % The spot function is the program's, and a screen installed from inside
@@ -786,27 +898,16 @@ setglobal
 } //.xpostsys /.defop get exec
 
 % rf ra rp gf ga gp bf ba bp kf ka kp  setcolorscreen  -
-% record one screen per component; the grey channel shares its slots
-% with setscreen
+% record one screen per component and evaluate each component's spot
+% function across its own cell; the grey channel shares its slots with
+% setscreen
 % Each spot function may be named rather than given, as setscreen's
 % may, so the frequencies and angles are what the shape can pin down.
 /setcolorscreen [ /numbertype /numbertype /anytype
                   /numbertype /numbertype /anytype
                   /numbertype /numbertype /anytype
                   /numbertype /numbertype /anytype ] {
-    graphicsdict /currgstate get exch /screenproc exch put
-    graphicsdict /currgstate get exch /screenangle exch put
-    graphicsdict /currgstate get exch /screenfreq exch put
-    graphicsdict /currgstate get exch /bluescreenproc exch put
-    graphicsdict /currgstate get exch /bluescreenangle exch put
-    graphicsdict /currgstate get exch /bluescreenfreq exch put
-    graphicsdict /currgstate get exch /greenscreenproc exch put
-    graphicsdict /currgstate get exch /greenscreenangle exch put
-    graphicsdict /currgstate get exch /greenscreenfreq exch put
-    graphicsdict /currgstate get exch /redscreenproc exch put
-    graphicsdict /currgstate get exch /redscreenangle exch put
-    graphicsdict /currgstate get exch /redscreenfreq exch put
-    graphicsdict /currgstate get /halftone null put
+    //.xpostsys /.installcolorscreen get exec
 } //.xpostsys /.defop get exec
 
 % ht  .ht5component  ht'
