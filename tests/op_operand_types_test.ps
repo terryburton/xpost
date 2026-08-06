@@ -261,7 +261,9 @@ count 0 eq (sampling leaves the operand stack as it found it) assert
 { { 1 } settransfer } /typecheck (a transfer that pushes without popping) refuses
 { { pop } settransfer } /typecheck (a transfer that leaves no result) refuses
 { { pop (x) } settransfer } /typecheck (a transfer whose result is a string) refuses
-{ { pop pop 0.5 } settransfer } /typecheck (a transfer that pops too much) refuses
+% one that takes more than its argument reaches past the sample into the
+% caller's own stack, and refuses where it runs out of it
+{ { pop pop 0.5 } settransfer } /stackunderflow (a transfer that pops too much) refuses
 { { 1 } setblackgeneration } /typecheck (a black generation that pushes) refuses
 { { 1 } setundercolorremoval } /typecheck (an undercolour removal that pushes) refuses
 

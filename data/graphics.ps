@@ -228,9 +228,8 @@ currentglobal true setglobal
 % {proc} keys ndict  .pcallout  -
 %
 % The same bracket for a procedure of the program's, which is what the
-% caller reaches for when it hands control back to the job: a Type 3
-% glyph's build procedure, a pattern's paint procedure, an image's data
-% source, a colour space's conversion.
+% caller reaches for when it hands control back to the job: a pattern's
+% paint procedure, an image's data source, a colour space's decoding.
 %
 % What fails inside such a procedure is the program's own object
 % failing, so the operand stack goes back to what the procedure found
@@ -244,6 +243,25 @@ currentglobal true setglobal
 % fails in there is the caller's own failure, and the caller's operands
 % come back as they would from anywhere else in its body.
 /.pcallout { { //.callout exec } //.coexec } bind def
+
+% obj  .pexec  -
+%
+% The boundary alone, for a caller that hands control to the program
+% part-way through a body of its own: a Type 3 glyph's build procedure,
+% a transfer function being sampled, a spot function being sampled, a
+% colour space's conversion. The bracket around such a body is the
+% caller's, and what it does about the graphics state and the dictionary
+% stack is the caller's business; only this much of it belongs to the
+% program.
+%
+% So the boundary stands where the program's object runs and nowhere
+% else. What the caller does before and after -- reading what the
+% procedure returned, and refusing on it -- is the caller refusing, and
+% its operands come back.
+%
+% The object runs exactly as exec would run it, and nothing of this sits
+% on the operand stack while it does.
+/.pexec { { exec } //.coexec } bind def
 
 end
 setglobal

@@ -303,6 +303,183 @@ count d0 sub 2 eq
     { length 3 eq exch (ab) eq and }{ d0 wrongdepth } ifelse
     (kshow gives back the operands it was called with) assert
 
+% --- the other operators that hand control back -----------------------
+%
+% image is not the only one. A Type 3 font's build procedure, a transfer
+% function, a spot function and a colour space's tint transform are all
+% the program's, run from inside the operator that installs or uses
+% them, and each stands behind the same boundary: a failure in one of
+% them is the program's own object failing, so the operator that called
+% it keeps what it consumed, and the boundary is one-sided, so an
+% operator the procedure itself calls still hands its own operands back.
+%
+% The sentinel below each call is what says the operands did not come
+% back: it is still itself, and still the only thing there.
+
+/t3.font { % {glyphbody}  .  fontdict
+    /t3.b exch def
+    10 dict begin
+        /FontType 3 def
+        /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+        /FontBBox [ 0 0 1000 1000 ] def
+        /Encoding 256 array def
+        0 1 255 { Encoding exch /.notdef put } for
+        Encoding 65 /t3.A put
+        /BuildGlyph /t3.b load def
+    currentdict end
+} def
+/t3.head { pop pop 1000 0 0 0 800 800 setcachedevice } def
+/t3.stopf  { t3.head stop } t3.font def
+/t3.errf   { t3.head zzundefinedname } t3.font def
+/t3.innerf { t3.head /zzz /zzz findresource } t3.font def
+/t3.okf    { t3.head 0 0 800 800 rectfill } t3.font def
+/t3.stop  t3.stopf  definefont pop
+/t3.err   t3.errf   definefont pop
+/t3.inner t3.innerf definefont pop
+/t3.ok    t3.okf    definefont pop
+/t3.use { findfont 12 scalefont setfont 72 72 moveto } def
+
+initgraphics /t3.stop t3.use
+count /d0 exch def
+/t3.sentinel
+{ 1.5 2.5 (A) ashow } stopped pop
+count d0 sub 1 eq
+    { /t3.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a build procedure restores nothing of the shower's) assert
+
+initgraphics /t3.err t3.use
+count /d0 exch def
+/t3.sentinel
+{ 1.5 2.5 (A) ashow } stopped pop
+count d0 sub 1 eq
+    { /t3.sentinel eq }{ d0 wrongdepth } ifelse
+    (an error in a build procedure restores nothing of the shower's) assert
+
+initgraphics /t3.stop t3.use
+count /d0 exch def
+/t3.sentinel
+{ (A) stringwidth } stopped pop
+count d0 sub 1 eq
+    { /t3.sentinel eq }{ d0 wrongdepth } ifelse
+    (and the same for a shower that measures rather than paints) assert
+
+initgraphics /t3.inner t3.use
+count /d0 exch def
+{ 1.5 2.5 (A) ashow } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside a build procedure gives its own back) assert
+
+initgraphics /t3.ok t3.use
+count /d0 exch def
+{ 1.5 2.5 (A) 0 get ashow } stopped pop
+count d0 sub 3 eq
+    { 65 eq exch 2.5 eq and exch 1.5 eq and }{ d0 wrongdepth } ifelse
+    (a shower refusing on an operand gives its operands back) assert
+
+/xf.stop  { pop stop } def
+/xf.err   { pop zzundefinedname } def
+/xf.inner { pop /zzz /zzz findresource } def
+/xf.bad   { pop (notanumber) } def
+
+count /d0 exch def
+/xf.sentinel
+{ /xf.stop load settransfer } stopped pop
+count d0 sub 1 eq
+    { /xf.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a transfer procedure restores nothing of settransfer's) assert
+
+count /d0 exch def
+/xf.sentinel
+{ /xf.err load setblackgeneration } stopped pop
+count d0 sub 1 eq
+    { /xf.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor an error in one restore anything of the setter's) assert
+
+count /d0 exch def
+{ /xf.inner load settransfer } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside one gives its own back) assert
+
+% and the sampling refusing on what the procedure returned is the
+% setter's own refusal, so the procedure comes back
+count /d0 exch def
+{ /xf.bad load settransfer } stopped pop
+count d0 sub 1 eq
+    { /xf.bad load eq }{ d0 wrongdepth } ifelse
+    (settransfer refusing on what the procedure left gives it back) assert
+{ { } settransfer } stopped pop
+
+/sp.stop  { pop pop stop } def
+/sp.inner { pop pop /zzz /zzz findresource } def
+
+count /d0 exch def
+/sp.sentinel
+{ 60 45 /sp.stop load setscreen } stopped pop
+count d0 sub 1 eq
+    { /sp.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a spot function restores nothing of setscreen's) assert
+
+count /d0 exch def
+{ 60 45 /sp.inner load setscreen } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside a spot function gives its own back) assert
+
+count /d0 exch def
+{ 60 (notanangle) { pop pop 0.5 } setscreen } stopped pop
+count d0 sub 3 eq
+    { length 3 eq exch (notanangle) eq and exch 60 eq and }
+    { d0 wrongdepth } ifelse
+    (setscreen refusing on an operand gives its operands back) assert
+{ 60 45 { pop pop 0.5 } setscreen } stopped pop
+
+/cs.go false def
+/cs.sep [ /Separation /Spot /DeviceGray { pop stop } ] def
+/cs.dn  [ /DeviceN [ /Ca /Cb /Cc ] /DeviceGray
+          { cs.go { pop pop pop stop } if pop pop pop 0.5 } ] def
+/cs.dni [ /DeviceN [ /Ca /Cb /Cc ] /DeviceGray
+          { cs.go { pop pop pop /zzz /zzz findresource } if
+            pop pop pop 0.5 } ] def
+
+count /d0 exch def
+/cs.sentinel
+{ cs.sep setcolorspace } stopped pop
+count d0 sub 1 eq
+    { /cs.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a tint transform restores nothing of setcolorspace's) assert
+initgraphics
+
+{ cs.dn setcolorspace } stopped pop
+/cs.go true def
+count /d0 exch def
+/cs.sentinel
+{ 0.1 0.2 0.3 setcolor } stopped pop
+count d0 sub 1 eq
+    { /cs.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor does one restore anything of setcolor's) assert
+/cs.go false def
+initgraphics
+
+{ cs.dni setcolorspace } stopped pop
+/cs.go true def
+count /d0 exch def
+{ 0.1 0.2 0.3 setcolor } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside a tint transform gives its own back) assert
+/cs.go false def
+initgraphics
+
+count /d0 exch def
+{ 0.1 0.2 (notanumber) setcolor } stopped pop
+count d0 sub 3 eq
+    { (notanumber) eq exch 0.2 eq and exch 0.1 eq and }
+    { d0 wrongdepth } ifelse
+    (setcolor refusing on an operand gives its operands back) assert
+initgraphics
+
 % --- a procedure is not an operator -----------------------------------
 %
 % Nothing is handed back for a procedure. A stop or an error inside one

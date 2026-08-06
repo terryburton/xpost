@@ -35,10 +35,15 @@ currentglobal true setglobal
 % text, so a bare flag would clear on the inner build and read false while
 % the outer build is still running. setcachedevice/setcharwidth are valid
 % while it is nonzero.
+% The build itself runs beneath the boundary: a failure in there is the
+% program's own object failing, so the operand stack goes back to what
+% the build found (PLRM 3.11.1) and the showing operator keeps the
+% operands it consumed getting here. The counting either side of it is
+% the machinery's, and a failure in that is the operator's own.
 .xpostsys /.runbuildbody {
     graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse 1 add
     graphicsdict exch /.inglyph exch put
-    exec
+    //.xpostsys /.pexec get exec
 } put
 setglobal
 

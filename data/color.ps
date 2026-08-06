@@ -360,6 +360,14 @@ currentglobal true setglobal
 } bind put
 
 % the alternative-space colour a Separation or DeviceN tint transforms to
+%
+% The tint transform is the program's, so it runs beneath the boundary:
+% what fails in there is the program's own object failing, the operand
+% stack goes back to what the transform found (PLRM 3.11.1), and the
+% operator that carried the colour in keeps the components it consumed.
+% Everything around it here is the machinery's, and a refusal in that --
+% on the components the space was handed, or on what the transform
+% returned -- is that operator's own refusal.
 .xpostsys /.sepconv {
     graphicsdict /.csstash get aload pop
     graphicsdict /.csspace get
@@ -369,7 +377,8 @@ currentglobal true setglobal
         % setters clear the gstate's separation record), then
         % register with the device and record its index and the
         % tint for the marking methods
-        2 copy dup 2 get setcolorspace 3 get exec
+        2 copy dup 2 get setcolorspace
+        3 get //.xpostsys /.pexec get exec
         graphicsdict /.csspace get 2 get //.xpostsys /.csalt get exec
         setcolor
         1 index exch                       % tint tint space
@@ -382,7 +391,7 @@ currentglobal true setglobal
         } ifelse
     }{
         dup 2 get setcolorspace
-        3 get exec
+        3 get //.xpostsys /.pexec get exec
         graphicsdict /.csspace get 2 get //.xpostsys /.csalt get exec
         setcolor
     } ifelse

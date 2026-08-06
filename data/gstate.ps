@@ -288,7 +288,7 @@ end
 % proc  settransfer  -
 % install the transfer procedure for every component
 /settransfer [ /proctype ] {
-    dup /settransfer exch //.xpostsys /.sampletransfer get exec
+    /settransfer exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /transfer exch put
     graphicsdict /currgstate get
     dup dup /transfer get /redtransfer exch put
@@ -306,14 +306,14 @@ end
 % converts by the additive-complement formulae), and the colour
 % rendering dictionary (recorded only)
 /setblackgeneration [ /proctype ] {
-    dup /setblackgeneration exch //.xpostsys /.sampletransfer get exec
+    /setblackgeneration exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /blackgen exch put
 } //.xpostsys /.defop get exec
 /currentblackgeneration [ ] {
     graphicsdict /currgstate get /blackgen get
 } //.xpostsys /.defop get exec
 /setundercolorremoval [ /proctype ] {
-    dup /setundercolorremoval exch //.xpostsys /.sampletransfer get exec
+    /setundercolorremoval exch //.xpostsys /.sampletransfer get exec
     graphicsdict /currgstate get exch /ucr exch put
 } //.xpostsys /.defop get exec
 /currentundercolorremoval [ ] {
@@ -382,7 +382,7 @@ setglobal
 % so the number of calls and the arguments match what paint later
 % sees, rather than collapsing to one sample where the cell spans a
 % single device pixel.
-% /opname {proc}  .sampletransfer  -
+% /opname {proc}  .sampletransfer  {proc}
 % A transfer function maps one number in [0,1] to one number, and is
 % sampled across that range when it is set. The samples are taken for
 % their effect on the operand stack: a procedure that leaves anything
@@ -392,6 +392,17 @@ setglobal
 % same three slots, so the sampling runs inside the bracket. Nothing of
 % the bracket's own sits on the operand stack while the procedure runs,
 % which the depth check below depends on.
+% Each sample runs beneath the boundary: what fails in the procedure is
+% the program's own object failing, so the operand stack goes back to
+% what the procedure found (PLRM 3.11.1) and the operator that set the
+% function keeps the operand it consumed. The checks below are the
+% sampling reading what the procedure returned, and a refusal there is
+% the operator's own -- it comes after the boundary is gone.
+% The procedure comes back at the end for the caller to record, out of
+% the slot it was parked in rather than off a copy the caller left on
+% the operand stack: a copy left there would be the caller's working
+% value sitting under the program's procedure, in reach of it, and would
+% still be there for the caller's caller if the procedure failed.
 .xpostsys /.tskeys [ /.tsproc /.tsop /.tsd ] put
 .xpostsys /.sampletransfer {
     //.xpostsys /.sampletransferbody get
@@ -404,13 +415,14 @@ setglobal
     0 1 255 {
         255 div
         graphicsdict /.tsd count 2 sub put
-        graphicsdict /.tsproc get exec
+        graphicsdict /.tsproc get //.xpostsys /.pexec get exec
         count graphicsdict /.tsd get ne
             { graphicsdict /.tsop get cvx /typecheck signalerror } if
         dup type dup /integertype ne exch /realtype ne and
             { graphicsdict /.tsop get cvx /typecheck signalerror } if
         pop
     } for
+    graphicsdict /.tsproc get
 } put
 
 % freq ang proc  .installscreen  -
@@ -468,7 +480,12 @@ setglobal
     % operand stack while they run: compile each row of samples into
     % a program and run them after the dict ends. Per sample the
     % program notes the operand depth in graphicsdict, pushes x y,
-    % runs the procedure, and pops one value if the depth grew
+    % runs the procedure, and pops one value if the depth grew.
+    % The procedure runs beneath the boundary, so a failure in it is the
+    % program's own object failing and setscreen keeps the operands it
+    % consumed getting here; the depth bookkeeping either side is the
+    % sampling's own.
+    /ppexec //.xpostsys /.pexec get def
     /pexec /exec load def
     /pget /get load def
     /pput /put load def
@@ -480,7 +497,7 @@ setglobal
     /gd graphicsdict def
     /allrows L 2 mul array def
     0 1 L 1 sub { /y exch def
-        /row L 19 mul array def
+        /row L 20 mul array def
         /i 0 def
         0 1 L 1 sub { /x exch def
             /xs x 0.5071 add def
@@ -494,7 +511,7 @@ setglobal
             a ys yc sub mul b xs xc sub mul sub q div 2 mul
             dup 1 ge { 2 sub } if dup -1 lt { 2 add } if .clamparg
             quad { exch neg } repeat
-            % row: gd /.ssd0 count 2 sub put  x y proc exec
+            % row: gd /.ssd0 count 2 sub put  x y proc .pexec exec
             %      count gd /.ssd0 get sub 0 gt {pop} if
             row i 7 add 3 -1 roll put
             row i 6 add 3 -1 roll put
@@ -505,17 +522,18 @@ setglobal
             row i 4 add currentdict /psub get put
             row i 5 add currentdict /pput get put
             row i 8 add currentdict /proc get put
-            row i 9 add currentdict /pexec get put
-            row i 10 add currentdict /pcount get put
-            row i 11 add currentdict /gd get put
-            row i 12 add /.ssd0 put
-            row i 13 add currentdict /pget get put
-            row i 14 add currentdict /psub get put
-            row i 15 add 0 put
-            row i 16 add currentdict /pgt get put
-            row i 17 add currentdict /ppopproc get put
-            row i 18 add currentdict /pif get put
-            /i i 19 add def
+            row i 9 add currentdict /ppexec get put
+            row i 10 add currentdict /pexec get put
+            row i 11 add currentdict /pcount get put
+            row i 12 add currentdict /gd get put
+            row i 13 add /.ssd0 put
+            row i 14 add currentdict /pget get put
+            row i 15 add currentdict /psub get put
+            row i 16 add 0 put
+            row i 17 add currentdict /pgt get put
+            row i 18 add currentdict /ppopproc get put
+            row i 19 add currentdict /pif get put
+            /i i 20 add def
         } for
         allrows y 2 mul currentdict /row get cvx put
         allrows y 2 mul 1 add currentdict /pexec get put
