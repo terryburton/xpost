@@ -124,10 +124,21 @@ kept_clean = [
   '-Werror=missing-include-dirs',
   '-Werror=redundant-decls',
   '-Werror=undef',
-  '-Werror=format-security',
   '-Wstrict-overflow=2',
 ]
 add_project_arguments(cc.get_supported_arguments(kept_clean), language: 'c')
+
+# -Werror=format-security is asked for beside -Wformat rather than alone.
+# The warning it promotes is one -Wformat raises, and a compiler that is
+# handed the promotion without the warning may refuse the pair outright:
+# one of the compilers this builds with makes that an error, so a probe
+# offering the flag by itself is answered no and the promotion is
+# silently dropped on that platform. The real build has -Wformat from
+# warning_level, so only the probe needs the two together.
+format_security = [ '-Wformat', '-Werror=format-security' ]
+if cc.has_multi_arguments(format_security)
+  add_project_arguments(format_security, language: 'c')
+endif
 
 # Release builds enable link-time optimization by default: it inlines the hot
 # cross-translation-unit interpreter accessors and is the single largest
