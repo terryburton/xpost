@@ -20,6 +20,7 @@
 # include "config.h"
 #endif
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,13 +119,19 @@ int main(void)
 
     /* the failure path: a request no allocator can satisfy answers the
        error, leaves the buffer as it was, and does not wrap the capacity
-       computation around into a spin */
+       computation around into a spin. The bound is the largest object
+       rather than the largest size_t, so a length one byte past it is
+       refused with the same answer and the same buffer left behind. */
     presave = b.s;
     precap = b.cap;
     check(xpost_strbuf_reserve(&b, (size_t)-1 - b.len - 8) == VMerror,
           "an unsatisfiable reserve answers VMerror");
     check(b.s == presave && b.len == modellen && b.cap == precap,
           "a failed reserve leaves the buffer as it was");
+    check(xpost_strbuf_reserve(&b, (size_t)PTRDIFF_MAX + 1 - b.len) == VMerror,
+          "a reserve one byte past the largest object answers VMerror");
+    check(b.s == presave && b.len == modellen && b.cap == precap,
+          "a reserve refused at the bound leaves the buffer as it was");
     check(xpost_strbuf_append(&b, "tail", 4) == 0,
           "the buffer still takes bytes after a failed reserve");
     check(b.len == modellen + 4 && memcmp(b.s + modellen, "tail", 4) == 0,

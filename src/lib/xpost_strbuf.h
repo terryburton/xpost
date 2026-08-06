@@ -33,6 +33,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,14 +80,21 @@ xpost_strbuf_init(Xpost_String_Buffer *b, size_t initial)
    holds bytes, so whatever reads or writes them past this call needs no
    further test. The room already being there is the only way out that
    does not allocate, and it is a way out only for a buffer that has
-   allocated once. */
+   allocated once.
+
+   The largest buffer is the largest object. The bytes are one allocation
+   and every read and write of them is pointer arithmetic within it, and a
+   distance inside an object wider than PTRDIFF_MAX is not a value that
+   arithmetic has. So a request past that bound is answered here rather
+   than put to the allocator, and the capacity the doubling settles on
+   never passes it. */
 static inline int
 xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 {
     size_t need, cap;
     char *ns;
 
-    if (extra > (size_t)-1 - b->len)
+    if (extra > (size_t)PTRDIFF_MAX - b->len)
         return VMerror;
     need = b->len + extra;
     if (b->s && need <= b->cap)
@@ -94,9 +102,9 @@ xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
     cap = b->cap ? b->cap : 16;
     while (cap < need)
     {
-        if (cap > ((size_t)-1) / 2)
+        if (cap > (size_t)PTRDIFF_MAX / 2)
         {
-            cap = need;   /* the last doubling would wrap */
+            cap = need;   /* the last doubling would pass the bound */
             break;
         }
         cap *= 2;
