@@ -71,7 +71,6 @@
 typedef struct fontdata
 {
     void *face;
-    void *program;  /* malloc'd font program backing a memory face (Type 42) */
 } fontdata;
 
 /* One pixel-row band of the clip region: the columns [lo, hi) of row
@@ -759,7 +758,6 @@ int _findfont(Xpost_Context *ctx,
         static int face_cache_n = 0;
         int fi, slot = -1;
         data.face = NULL;
-        data.program = NULL;
         for (fi = 0; fi < face_cache_n; fi++)
         {
             if (strcmp(face_cache[fi].name, fname) == 0)
@@ -1096,7 +1094,6 @@ int _loadfont42(Xpost_Context *ctx,
     }
 
     data.face = xpost_font_face_new_from_memory(buf, total);
-    data.program = buf;
     if (data.face == NULL)
     {
         free(buf);
@@ -2777,7 +2774,6 @@ int _loadcidfont0(Xpost_Context *ctx,
     }
 
     data.face = xpost_font_face_new_from_memory(whole, wlen);
-    data.program = whole;
     if (data.face == NULL)
     {
         free(whole);
@@ -3010,7 +3006,6 @@ int _loadfont1(Xpost_Context *ctx,
     xpost_strbuf_free(&sec);
 
     data.face = xpost_font_face_new_from_memory(whole, wlen);
-    data.program = whole;
     if (data.face == NULL)
     {
         free(whole);
@@ -3666,16 +3661,12 @@ int _loadcidfont2(Xpost_Context *ctx,
            an uninitialised struct is worse than leaking the old face */
         if (xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
                              xpost_object_get_ent(privatestr), 0,
-                             sizeof data, &data))
-        {
-            if (data.face)
-                xpost_font_face_free(data.face);
-            free(data.program);
-        }
+                             sizeof data, &data)
+         && data.face)
+            xpost_font_face_free(data.face);
     }
 
     data.face = xpost_font_face_new_from_memory(out, outtotal);
-    data.program = out;
     if (data.face == NULL)
     {
         free(out);

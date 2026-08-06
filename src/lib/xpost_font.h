@@ -106,10 +106,13 @@ void *xpost_font_face_new_from_name(const char *name);
  * @param[in] len The number of bytes.
  * @return The font face, or @c NULL on error.
  *
- * The buffer must remain valid for the lifetime of the face; the
- * caller retains ownership.
+ * The face reads the buffer where it lies rather than copying it, and
+ * takes ownership of it: the buffer is freed with the face, or when the
+ * font machinery goes down still holding it. The caller keeps ownership
+ * only when this returns @c NULL.
  *
  * @see xpost_font_face_new_from_name()
+ * @see xpost_font_face_free()
  */
 void *xpost_font_face_new_from_memory(const unsigned char *data, size_t len);
 

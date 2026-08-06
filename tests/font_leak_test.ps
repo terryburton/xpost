@@ -1,0 +1,127 @@
+%!PS
+% A font program a face reads through is given up with the face. Run
+% through `xpost -q --no-sandbox -d null` under a leak checker by
+% run-leak-test.sh.
+%
+% Loading an embedded Type 1 font builds the font program the face will
+% read from: the dictionary's charstrings are re-emitted as a program in
+% memory, and the face is opened over those bytes. The face reads them
+% where they lie rather than taking a copy, so they have to stay put for
+% as long as the face might build another glyph -- which is to say, for as
+% long as the font is defined, and past the last show.
+%
+% That makes the program the face's to hold and the face's to give up, and
+% neither end of it shows in PostScript. A program can only arrange the
+% situations: a font loaded and used, a font loaded and never shown, a
+% name defined a second time so that the first face is replaced, and fonts
+% still defined when the interpreter goes down. The checker outside says
+% whether the bytes went away.
+%
+% Prints SUCCESS iff every font loaded and every show measured.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/catstr { % a b  .  ab
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 4 -1 roll length 4 -1 roll putinterval
+} bind def
+
+% An embedded Type 1 font. Every call builds a fresh dictionary, and every
+% definefont over one re-emits the program the face is opened on, so each
+% load below is a program of its own however alike their bytes.
+/mkfont { % -  .  fontdict
+    10 dict dup begin
+        /FontType 1 def
+        /FontMatrix [0.001 0 0 0.001 0 0] def
+        /FontBBox [0 0 700 700] def
+        /Encoding 256 array def
+        0 1 255 { Encoding exch /.notdef put } for
+        Encoding 65 /A put
+        /CharStrings 3 dict def
+        CharStrings /.notdef <10bf317079bb21e4> put
+        CharStrings /A <10bf317079bb21e4> put
+        /Private 4 dict def
+        Private /lenIV 4 put
+        Private /Subrs 6 array put
+        Private /Subrs get 0 <10bf3170f9> put
+    end
+} bind def
+
+/named { % prefix index  .  name
+    24 string cvs catstr cvn
+} bind def
+
+% ---- loaded, shown, and then left behind ----
+% Each of these is a face and a program, defined under a name of its own
+% and never replaced. Nothing here releases them; teardown does.
+1 1 12 {
+    /i exch def
+    mark
+    { mkfont (LeakFontA) i named exch definefont
+      24 scalefont setfont
+      100 100 moveto
+      (A) stringwidth pop pop } stopped
+    { (FAIL: a font would not load and show\n) print
+      /failcount failcount 1 add store } if
+    cleartomark
+} for
+
+% ---- loaded and never shown ----
+% The face is opened at definefont, so the program exists whether or not a
+% glyph is ever built from it.
+1 1 12 {
+    /i exch def
+    mark
+    { mkfont (LeakFontB) i named exch definefont pop } stopped
+    { (FAIL: a font would not load\n) print
+      /failcount failcount 1 add store } if
+    cleartomark
+} for
+
+% ---- one name defined over and over ----
+% Each definefont past the first replaces the face under that name, and the
+% face it replaces takes its program with it. Only the last of these is
+% still held at the end; the rest go as they are replaced, or a program
+% that redefines a font grows without bound.
+1 1 24 {
+    pop
+    mark
+    { mkfont /LeakFontC exch definefont
+      24 scalefont setfont
+      100 100 moveto
+      (A) stringwidth pop pop } stopped
+    { (FAIL: a font would not redefine\n) print
+      /failcount failcount 1 add store } if
+    cleartomark
+} for
+
+% the last definition is the live one, and it still builds a glyph: the
+% replacements above released faces, and this says they released none that
+% was still being read through
+mark
+{ /LeakFontC findfont 24 scalefont setfont
+  100 100 moveto
+  (A) show } stopped
+{ (FAIL: the surviving font would not show\n) print
+  /failcount failcount 1 add store } if
+cleartomark
+
+% a font from the first group is shown again at the end, after all the
+% redefinition above: its face and program were never the ones replaced,
+% and it still reads glyphs out of the program it was loaded with
+mark
+{ (LeakFontA) 1 named findfont 18 scalefont setfont
+  100 100 moveto
+  (A) show } stopped
+{ (FAIL: an untouched font would not show\n) print
+  /failcount failcount 1 add store } if
+cleartomark
+
+% a font is still set when the interpreter goes down
+mark { /LeakFontC findfont 12 scalefont setfont } stopped pop cleartomark
+
+failcount 0 eq { (SUCCESS\n) print } if
+flush

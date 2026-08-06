@@ -1580,6 +1580,18 @@ test('filter-abandon',
   suite: ['xpost', 'memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
+# A face built over a font program in memory reads the program where it
+# lies for as long as it might build another glyph, so the program is the
+# face's to hold and to give up -- on a replacement, and at teardown for a
+# font still defined. Neither end shows in PostScript, so this runs under
+# a leak checker too.
+test('font-leak',
+  find_program('tests/run-leak-test.sh'),
+  args: [ xpost_exe, files('tests/font_leak_test.ps'),
+          files('glibc.supp') ],
+  suite: ['xpost', 'memacct'],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
 test('stream-exec',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stream_exec_test.ps') ],

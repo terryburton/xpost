@@ -340,6 +340,76 @@ gcache_clear(void)
         gcache_drop(gcache_tail);
 }
 
+#ifdef HAVE_FREETYPE2
+/* A face built over a font program in memory reads the program where it
+   lies, keeping the pointer it was given rather than a copy of the bytes,
+   so the program has to outlive every glyph built from it. It is the
+   face's to hold for exactly that long: this is where the two are kept
+   together, so that releasing a face releases its program, and a program
+   still held when the library goes down goes with it. */
+typedef struct _Xpost_Font_Program
+{
+    struct _Xpost_Font_Program *next;
+    void *face;
+    unsigned char *bytes;
+} Xpost_Font_Program;
+
+static Xpost_Font_Program *program_head = NULL;
+
+static int
+program_keep(void *face, unsigned char *bytes)
+{
+    Xpost_Font_Program *p = malloc(sizeof *p);
+
+    if (!p)
+        return 0;
+    p->face = face;
+    p->bytes = bytes;
+    p->next = program_head;
+    program_head = p;
+    return 1;
+}
+
+/* Unlink the program held for a face and hand it back, so that the caller
+   can close the face before freeing what it was reading. */
+static unsigned char *
+program_take(void *face)
+{
+    Xpost_Font_Program **pp = &program_head;
+    unsigned char *bytes = NULL;
+
+    while (*pp)
+    {
+        Xpost_Font_Program *p = *pp;
+
+        if (p->face != face)
+        {
+            pp = &p->next;
+            continue;
+        }
+        *pp = p->next;
+        if (bytes)
+            free(bytes);
+        bytes = p->bytes;
+        free(p);
+    }
+    return bytes;
+}
+
+static void
+program_clear(void)
+{
+    while (program_head)
+    {
+        Xpost_Font_Program *p = program_head;
+
+        program_head = p->next;
+        free(p->bytes);
+        free(p);
+    }
+}
+#endif
+
 int
 xpost_font_init(void)
 {
@@ -384,6 +454,9 @@ xpost_font_quit(void)
 #ifdef HAVE_FREETYPE2
     gcache_clear();
     FT_Done_FreeType(_xpost_font_ft_library);
+    /* the library takes the faces still open with it; their programs are
+       this module's to give up, and nothing reads them once it has gone */
+    program_clear();
 #endif
 }
 
@@ -609,6 +682,15 @@ xpost_font_face_new_from_memory(const unsigned char *data, size_t len)
         return NULL;
     }
 
+    /* the face reads the program where it lies, so the program becomes
+       the face's from here. A face that cannot be given its program is
+       refused rather than left reading bytes nothing will free. */
+    if (!program_keep(face, (unsigned char *)data))
+    {
+        FT_Done_Face(face);
+        return NULL;
+    }
+
     return face;
 #else
     (void)data;
@@ -698,6 +780,7 @@ xpost_font_face_free(void *face)
 {
 #ifdef HAVE_FREETYPE2
     Xpost_Glyph_Entry *e, *next;
+    unsigned char *bytes;
     int i;
 
     if (!face)
@@ -714,7 +797,12 @@ xpost_font_face_free(void *face)
         if (gcache_state[i].face == face)
             gcache_state[i].face = NULL;
 
+    /* the face reads its program until it is closed, so the program is
+       taken off the list while the face is still a face, and given up
+       once the face has gone */
+    bytes = program_take(face);
     FT_Done_Face(face);
+    free(bytes);
 #else
     (void)face;
 #endif
