@@ -55,6 +55,7 @@
 #include "xpost_dict.h"
 #include "xpost_save.h"
 #include "xpost_name.h"
+#include "xpost_file.h"
 
 //#include "xpost_interpreter.h"
 #include "xpost_garbage.h"
@@ -243,8 +244,20 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
     {
         unsigned int fent = (unsigned int)o.mark_.padw;
         Xpost_Memory_File *fm = xpost_context_select_memory(ctx, o);
-        if (fm && xpost_ent_in_collector_band(fm, fent))
-            (void) _xpost_garbage_mark_ent(fm, fent);
+        /* a filter reads through the stream beneath it, which has an
+           entity of its own that no object names -- the string forms of
+           filter build one and hand it over. Follow the chain down from
+           the filter, or the sweep takes a source out from under a filter
+           still reading it. The walk stops at a stream already marked,
+           which is also what ends it if a chain ever reaches itself. */
+        while (fm && xpost_ent_in_collector_band(fm, fent)
+               && !(fm->table.tab[fent].mark
+                    & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK))
+        {
+            if (!_xpost_garbage_mark_ent(fm, fent))
+                break;
+            fent = xpost_file_underlying_entity(fm, fent);
+        }
         return 1;
     }
 
@@ -626,6 +639,12 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
         {
             unsigned int bz;
             unsigned int b;
+            /* a file is an entity in here and a struct outside, and this
+               is the last reach anything has to either: give the struct
+               up before the entity that points at it joins the free
+               list, since the release writes through that same word. */
+            if (mem->table.tab[i].tag == filetype)
+                xpost_file_release_entity(mem, i);
             mem->table.tab[i].tag = 0;
             b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;

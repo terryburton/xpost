@@ -1,6 +1,6 @@
 % Every filter releases what it was given to wrap, run through
 % `xpost -q --no-sandbox -d null` under a leak checker by
-% run-filter-leak-test.sh.
+% run-leak-test.sh.
 %
 % A filter holds the stream beneath it as a plain pointer and takes a
 % reference on it; closing the filter gives that reference up. Some of

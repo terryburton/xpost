@@ -1563,8 +1563,19 @@ test('filter-encode-pad',
 # predictor stage stands in front of. Nothing in PostScript can observe
 # that, so the run happens under a leak checker, and skips without one.
 test('filter-leak',
-  find_program('tests/run-filter-leak-test.sh'),
+  find_program('tests/run-leak-test.sh'),
   args: [ xpost_exe, files('tests/filter_leak_test.ps'),
+          files('glibc.supp') ],
+  suite: ['xpost', 'memacct'],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+# A stream nothing names any longer is reached by collection, and a stream
+# still named at the end is reached by teardown. Both have to take the
+# struct outside virtual memory with the entity inside it, which no
+# PostScript program can observe, so this too runs under a leak checker.
+test('filter-abandon',
+  find_program('tests/run-leak-test.sh'),
+  args: [ xpost_exe, files('tests/filter_abandon_test.ps'),
           files('glibc.supp') ],
   suite: ['xpost', 'memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },

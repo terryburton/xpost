@@ -1,12 +1,12 @@
 #!/bin/sh
-# Meson test wrapper: run the filter suite under a leak checker and
-# require the process to end holding nothing it allocated for a filter.
+# Meson test wrapper: run a PostScript program under a leak checker and
+# require the process to end holding nothing it allocated on its behalf.
 #
-# What a filter does with the stream beneath it -- take a reference on it,
-# give that reference up when it closes, and close and free the stream
-# outright when the machinery made it for this filter alone -- has no
+# Some of what the interpreter holds for a program lives outside virtual
+# memory: the stream and coding state behind a file or a filter, the font
+# program a face reads its glyphs out of. What becomes of those has no
 # expression in PostScript at all. The program's own assertions say the
-# bytes came through; only the checker can say the streams went away.
+# bytes came through; only the checker can say the memory went away.
 #
 # Where there is no checker the question cannot be asked and the test
 # skips, rather than passing without having tested anything.
@@ -72,7 +72,8 @@ if ! printf '%s\n' "$out" | grep -q '^SUCCESS$'; then
 fi
 
 # what the checker found: anything lost outright, or lost through
-# something that was, is a stream or a coding state nobody gave up
+# something that was, is memory the run held for the program and never
+# gave up
 lost=$(sed -n 's/^==[0-9]*==  *\(definitely\|indirectly\) lost: \([0-9,]*\) bytes.*/\2/p' \
        "$log" | tr -d ',')
 if [ -z "$lost" ]; then
@@ -82,7 +83,7 @@ if [ -z "$lost" ]; then
 fi
 for n in $lost; do
     if [ "$n" -ne 0 ]; then
-        echo "FAILURES: the run ended holding memory it allocated for a filter"
+        echo "FAILURES: the run ended holding memory it allocated for the program"
         cat "$log"
         exit 1
     fi

@@ -349,6 +349,16 @@ int xpost_file_get_bytes_available(Xpost_Memory_File *mem, Xpost_Object f, int *
 int xpost_file_object_close(Xpost_Memory_File *mem, Xpost_Object f);
 int xpost_file_object_close_at_eod(Xpost_Memory_File *mem, Xpost_Object f);
 
+/**
+ * @brief Return the entity of the stream a file wraps, or zero for none.
+ */
+unsigned int xpost_file_underlying_entity(Xpost_Memory_File *mem, unsigned int ent);
+
+/**
+ * @brief Release the stream an entity holds, naming it by entity alone.
+ */
+void xpost_file_release_entity(Xpost_Memory_File *mem, unsigned int ent);
+
 int xpost_file_read(char *buf, int size, int count, Xpost_File *fp);
 int xpost_file_write(const char *buf, int size, int count, Xpost_File *fp);
 FILE *xpost_file_stdio_stream_get(Xpost_File *fp);

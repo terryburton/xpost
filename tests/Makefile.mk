@@ -81,6 +81,7 @@ tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_lifetime_test.ps \
 tests/filenameforall_large_test.ps \
+tests/filter_abandon_test.ps \
 tests/filter_close_eod_test.ps \
 tests/filter_encode_pad_test.ps \
 tests/filter_eod_test.ps \
@@ -199,10 +200,10 @@ tests/run-error-format-test.sh \
 tests/run-file-lifetime-test.sh \
 tests/run-file-limit-test.sh \
 tests/run-filenameforall-large-test.sh \
-tests/run-filter-leak-test.sh \
 tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
+tests/run-leak-test.sh \
 tests/run-interrupt-test.sh \
 tests/run-multipage-test.sh \
 tests/run-nographics-test.sh \

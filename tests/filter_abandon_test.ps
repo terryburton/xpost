@@ -1,0 +1,153 @@
+% A stream nothing names any longer, and a stream still named at the end,
+% both give up what they hold. Run through `xpost -q --no-sandbox -d null`
+% under a leak checker by run-leak-test.sh.
+%
+% A file or filter is two things at once: an entity in virtual memory, and
+% a struct outside it holding the stream, the coding state and whatever
+% buffers the coding wanted. Closing one releases both. A program need
+% never close one, though, and there are two ways it can end without
+% having done so.
+%
+% The first is to drop it: a filter built, used or not, and then left with
+% nothing naming it. Collection is what reaches those, and it has to take
+% the struct with the entity -- reclaiming the entity alone strands the
+% struct beyond any further reach, so a program that opens filters in a
+% loop grows without bound however often it collects.
+%
+% The second is to hold it to the end. Whatever is still named when the
+% interpreter goes down is released as it goes, which is the same
+% reclamation collection performs, run once more with nothing reachable.
+%
+% Neither has any expression in PostScript: the program can say the bytes
+% came through, and the checker outside says the streams went away. The
+% assertions here are therefore mostly about arranging the situation
+% rather than observing it.
+%
+% Prints SUCCESS iff every coding carried its bytes.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+/scratchfile (filter-abandon-scratch.dat) def
+/buf 512 string def
+
+/catstr { % a b  .  ab
+    2 copy length exch length add string
+    dup 0 4 index putinterval
+    dup 4 -1 roll length 4 -1 roll putinterval
+} bind def
+
+% the sample: long enough to drive a coding through several of its
+% internal blocks, and not so uniform that every coding shrinks it away
+/blk 4096 string def
+/seed 1 def
+0 1 4095 {
+    /seed seed 75 mul 74 add 65537 mod def
+    blk exch seed 255 and put
+} for
+
+/decodes { % /FilterName  .  bool    is this coding in this build?
+    /b.n exch def
+    mark
+    { () b.n filter closefile } stopped not
+    /b.v exch def
+    cleartomark
+    b.v
+} bind def
+
+% ---- dropped without ever being read ----
+% The string form builds the filter a source of its own, so each of these
+% is two structs and two entities, and the program names neither once the
+% loop moves on. Collection during the run is the only thing that reaches
+% them: the count is large enough that stranding a struct per turn would
+% show as growth a checker reports at the end.
+/dropped { % /FilterName  .  -
+    /d.n exch def
+    d.n decodes {
+        1 1 64 {
+            pop
+            mark { blk d.n filter pop } stopped { cleartomark } { cleartomark } ifelse
+        } for
+    } if
+} bind def
+
+/ASCIIHexDecode  dropped
+/ASCII85Decode   dropped
+/RunLengthDecode dropped
+/LZWDecode       dropped
+/FlateDecode     dropped
+/SubFileDecode   decodes {
+    1 1 64 { pop mark { blk 0 () /SubFileDecode filter pop } stopped
+             { cleartomark } { cleartomark } ifelse } for
+} if
+/ReusableStreamDecode decodes {
+    1 1 64 { pop mark { blk /ReusableStreamDecode filter pop } stopped
+             { cleartomark } { cleartomark } ifelse } for
+} if
+
+% a coding part-way through its work when it is dropped holds more than one
+% freshly built does -- an inflate state with a window in it, row buffers,
+% the copy of the source it was reading
+/partread { % /FilterName  .  -
+    /p.n exch def
+    p.n decodes {
+        1 1 16 {
+            pop
+            mark { blk p.n filter 16 string readstring pop pop } stopped
+            { cleartomark } { cleartomark } ifelse
+        } for
+    } if
+} bind def
+
+/ASCIIHexDecode  partread
+/ASCII85Decode   partread
+/RunLengthDecode partread
+
+% a file the program opened and dropped without closing
+1 1 16 {
+    pop
+    mark { scratchfile (w) file dup blk writestring pop } stopped
+    { cleartomark } { cleartomark } ifelse
+} for
+
+% collection is what reaches everything above; ask for it explicitly so the
+% run does not depend on having allocated enough to provoke one
+mark { 0 vmreclaim 2 vmreclaim } stopped pop cleartomark
+
+% ---- still named when the interpreter goes down ----
+% None of these is closed, and each is named from a place the collector
+% follows, so all of them are alive at the end: a filter over a stream the
+% machinery made, a filter over a file the program opened, a stack of
+% filters over one another, and a plain file. Releasing them is teardown's
+% to do.
+/live.a blk /ASCIIHexDecode decodes { /ASCIIHexDecode filter } { pop () } ifelse def
+/live.b blk /FlateDecode decodes
+    { /live.tmp scratchfile (w) file def
+      live.tmp blk writestring
+      live.tmp closefile
+      scratchfile (r) file } { () } ifelse def
+/live.c [ blk 0 () /SubFileDecode filter ] def
+/live.d << /f scratchfile (r) file >> def
+
+% a stack of filters, the whole chain live at the end
+/live.e /ASCII85Decode decodes /ASCIIHexDecode decodes and {
+    blk /ASCIIHexDecode filter 0 () /SubFileDecode filter
+} { () } ifelse def
+
+% reading a few bytes through the live chain leaves each coding part-way
+% through its work rather than newly built
+mark { live.e 16 string readstring pop pop } stopped pop cleartomark
+mark { live.c 0 get 16 string readstring pop pop } stopped pop cleartomark
+
+live.a type /filetype eq /ASCIIHexDecode decodes not or
+    (a filter held to the end is still a file) assert
+live.c 0 get type /filetype eq
+    (a filter held in an array is still a file) assert
+
+% the scratch file is deleted while a file object still reads it: the name
+% goes now, the stream goes when the interpreter does
+mark { scratchfile deletefile } stopped pop cleartomark
+
+failcount 0 eq { (SUCCESS\n) print } if
+flush

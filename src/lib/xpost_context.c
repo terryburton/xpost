@@ -55,6 +55,7 @@
 #include "xpost_save.h"  // initializes save/restore stacks
 
 #include "xpost_context.h"
+#include "xpost_file.h"
 
 /* initialize the context list
    special entity in the mfile */
@@ -337,6 +338,29 @@ int xpost_context_init(Xpost_Context *ctx,
     return 1;
 }
 
+/* Release every stream the table still holds.
+
+   A file is an entity in virtual memory and a struct outside it, and the
+   memory file goes as a whole: the entities go with it and the structs,
+   with the streams and coding state they hold, would be left behind. What
+   a job closed for itself is already gone, and what collection reached is
+   too; this is the rest, the files and filters a job was still holding
+   when it ended.
+
+   Standard input and output are among them. Their streams belong to the
+   process rather than to this context and the close knows not to touch
+   them, so what goes here is only the struct built around them. */
+static void _release_files(Xpost_Memory_File *mem)
+{
+    unsigned int ent;
+
+    if (!mem || !mem->base)
+        return;
+    for (ent = mem->start; ent < mem->table.nextent; ent++)
+        if (mem->table.tab[ent].tag == filetype)
+            xpost_file_release_entity(mem, ent);
+}
+
 /* destroy context
 FIXME: delete cid from CTXLIST, destroy memory file when empty
  */
@@ -344,6 +368,9 @@ void xpost_context_exit(Xpost_Context *ctx)
 {
     if (!ctx)
         return;
+
+    _release_files(ctx->lo);
+    _release_files(ctx->gl);
 
     free(ctx->namecache_gen);
     free(ctx->namecache_val);

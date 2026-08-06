@@ -5273,6 +5273,66 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
     return 0;
 }
 
+/* Build the file object naming an entity. Two callers below reach a stream
+   by the number of the entity holding it rather than through an object the
+   program named, and everything they call takes the object. */
+static Xpost_Object
+_file_object_of_entity(unsigned int ent)
+{
+    Xpost_Object o;
+
+    o.mark_.tag = filetype;
+    o.mark_.pad0 = 0;
+    o.mark_.padw = ent;
+    return o;
+}
+
+/* The entity of the stream this one wraps, or zero where it wraps nothing
+   or the stream beneath it never had an entity of its own.
+
+   A filter holds the stream beneath it as a plain pointer, and that stream
+   is named by no object the collector can reach -- the string forms of
+   filter build one and hand it straight to the filter above. This is the
+   route to it, so that marking a filter can go on to mark what it reads
+   through. */
+unsigned int xpost_file_underlying_entity(Xpost_Memory_File *mem,
+                                          unsigned int ent)
+{
+    Xpost_File *fp = xpost_file_get_file_pointer(mem, _file_object_of_entity(ent));
+    Xpost_File *under;
+
+    if (!fp)
+        return 0;
+    under = _filter_underlying_stream(fp);
+    if (!under)
+        return 0;
+    return under->ent;
+}
+
+/* Give up the stream an entity holds, as closing a file object does.
+
+   Two callers arrive here with an entity and no object naming it: the
+   collector, once nothing reaches the entity any longer, and the
+   interpreter's teardown, for whatever a job was still holding when it
+   ended. A file is an entity inside virtual memory and a struct outside
+   it, and reclaiming the entity alone strands the struct -- with the
+   stream, the coding state and the buffers it holds -- beyond any further
+   reach, so both callers release the struct here first.
+
+   A stream another still reads through survives this: the close leaves the
+   struct to the filter above, which holds a reference on it and frees it
+   with its own teardown. Releasing an entity twice is therefore harmless
+   as well, since the first pass clears the pointer the entity held and a
+   stream that is not there is nothing to give up. */
+void xpost_file_release_entity(Xpost_Memory_File *mem, unsigned int ent)
+{
+    Xpost_Object o = _file_object_of_entity(ent);
+
+    if (!xpost_file_get_file_pointer(mem, o))
+        return;
+    (void)xpost_file_object_close(mem, o);
+}
+
 /* the interpreter has read a stream it was executing to its end. A
    reusable stream stays open there and merely rewinds (PLRM 3.13), so a
    program run off one can be positioned and run again; every other
