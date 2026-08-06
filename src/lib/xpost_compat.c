@@ -340,6 +340,59 @@ xpost_glob_free(glob_t *pglob)
 #endif
 }
 
+char *
+xpost_getenv(const char *name)
+{
+#ifdef _WIN32
+    char *buf;
+    DWORD len;
+
+    SetLastError(0);
+    len = GetEnvironmentVariableA(name, NULL, 0);
+    /* a variable that is not set and one holding nothing both measure
+       nothing; what tells them apart is whether the read failed */
+    if (len == 0 && GetLastError() != 0)
+        return NULL;
+    if (len == 0)
+        len = 1;
+    buf = malloc(len);
+    if (!buf)
+        return NULL;
+    buf[0] = '\0';
+    SetLastError(0);
+    if (GetEnvironmentVariableA(name, buf, len) == 0 && GetLastError() != 0)
+    {
+        free(buf);
+        return NULL;
+    }
+    return buf;
+#else
+    const char *v;
+
+    v = getenv(name);
+    if (!v)
+        return NULL;
+    {
+        size_t n = strlen(v) + 1;
+        char *buf = malloc(n);
+
+        if (buf)
+            memcpy(buf, v, n);
+        return buf;
+    }
+#endif
+}
+
+int
+xpost_putenv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    return SetEnvironmentVariableA(name, value) ? 0 : -1;
+#else
+    return setenv(name, value, 1);
+#endif
+}
+
 unsigned char
 xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 {

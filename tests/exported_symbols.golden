@@ -188,6 +188,7 @@ xpost_free_realloc
 xpost_garbage_collect
 xpost_get_realtime_ms
 xpost_get_usertime_ms
+xpost_getenv
 xpost_glob
 xpost_glob_free
 xpost_init
@@ -308,6 +309,7 @@ xpost_path_control_is_engaged
 xpost_path_permit_read
 xpost_path_permit_write
 xpost_path_safe_leaf
+xpost_putenv
 xpost_quit
 xpost_real_cons
 xpost_realpath

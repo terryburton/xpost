@@ -157,6 +157,23 @@ typedef struct
 int xpost_glob(const char *pattern, glob_t *pglob);
 void xpost_glob_free(glob_t *pglob);
 
+/*
+ * Read a variable from the process environment. Returns a copy the
+ * caller releases, or NULL when the variable is not set.
+ *
+ * An empty value is a value: the variable is set and what it holds is
+ * nothing. The C runtime cannot say that on Windows, where a name given
+ * an empty value is removed from its copy of the environment instead, so
+ * the environment the operating system keeps is read there.
+ */
+char *xpost_getenv(const char *name);
+
+/*
+ * Set @p name to @p value in the process environment, replacing any
+ * value it had. Returns 0 on success.
+ */
+int xpost_putenv(const char *name, const char *value);
+
 unsigned char xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size);
 
 char *xpost_realpath(const char *path);
