@@ -241,6 +241,41 @@ count d0 sub 5 eq
       exch 8 eq and exch 8 eq and }{ d0 wrongdepth } ifelse
     (image refusing on what the procedure left gives them back) assert
 
+% What comes back is the stack the call was made on, not enough values
+% to make its depth right. A data source has moved the stack by the time
+% image discovers it cannot go on -- it may have left a value of its
+% own, or taken one from beneath the call -- and none of that survives:
+% the caller is handed the stack image began with, every slot of it.
+%
+% This is the whole of PLRM 3.11.1 step 1 and it is asserted in values
+% because the depth alone cannot tell it apart from putting back only as
+% many entries as the depth is short. COMPLIANCE records it as a
+% deviation, so the values below are the choice and not an accident.
+
+count /d0 exch def
+{ 8 8 8 im.m { 42 } image } stopped pop
+count d0 sub 5 eq
+    { length 1 eq exch im.m eq and exch 8 eq and
+      exch 8 eq and exch 8 eq and }{ d0 wrongdepth } ifelse
+    (nothing the procedure left survives the operands coming back) assert
+
+count /d0 exch def
+/uw.s1
+{ 8 8 8 im.m { pop 42 } image } stopped pop
+count d0 sub 6 eq
+    { length 2 eq exch im.m eq and exch 8 eq and exch 8 eq and
+      exch 8 eq and exch /uw.s1 eq and }{ d0 wrongdepth } ifelse
+    (and one it took from beneath the call is back where it was) assert
+
+count /d0 exch def
+/uw.s1 /uw.s2
+{ 8 8 8 im.m { pop pop 42 } image } stopped pop
+count d0 sub 7 eq
+    { length 3 eq exch im.m eq and exch 8 eq and exch 8 eq and
+      exch 8 eq and exch /uw.s2 eq and exch /uw.s1 eq and }
+    { d0 wrongdepth } ifelse
+    (however far beneath the call the procedure reached) assert
+
 % More of the first half, in operators of the language: an operator that
 % refuses on the operands it was handed hands them back, whichever
 % language it is written in and however many it takes.

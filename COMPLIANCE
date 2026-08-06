@@ -411,6 +411,13 @@ Known behavioural deviations
  [X] >>  a construction closed over more pairs than a dictionary can hold is
      limitcheck, where some interpreters return a dictionary shorter than the
      pairs they were given.
+ [X] error recovery  an operator that refuses hands its caller the operand
+     stack as it stood when the operator was called (PLRM 3.11.1) -- the values
+     it held, not merely the depth it stood at. Where the operator had run a
+     procedure of the program's, and that procedure left values of its own or
+     took values from beneath the call, none of that shows through; some
+     interpreters put the depth back and leave the procedure's leavings, and
+     the slots it emptied, on show underneath.
 
  Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
  carry about seven significant figures and large values print in exponent form
