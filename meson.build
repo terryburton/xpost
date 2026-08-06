@@ -471,6 +471,21 @@ test('string-bounds',
   string_bounds_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The editing streams open a temporary file before the text they are asked
+# for is known to be acceptable, so a refusal is the only thing that can
+# close it: a request refused for nesting depth must leave no descriptor
+# behind.
+edit_stream_close_exe = executable('edit_stream_close_test',
+  'tests/edit_stream_close_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('edit-stream-close',
+  edit_stream_close_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The one growable byte buffer every byte-stream builder in the tree grows
 # through: its return convention (0 for no error, the error code to raise
 # otherwise), a zero-filled buffer being a valid empty one, content survival

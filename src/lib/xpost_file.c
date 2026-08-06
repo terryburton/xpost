@@ -4835,13 +4835,18 @@ Xpost_Object xpost_file_cons_filter_a85(Xpost_Memory_File *mem,
     return _dec_cons(mem, &ff->base, &a85_methods, source);
 }
 
-/* pinch-off a tmpfile containing one line from file. */
+/* pinch-off a tmpfile containing one line from file.
+
+   The temporary file is opened before the text is known to be acceptable,
+   so a refusal has one open and is the only thing that can close it: the
+   caller is handed a stream or an error code, never both. */
 /*@null@*/
 static
 int lineedit(FILE *in, FILE **out)
 {
     FILE *fp;
     int c;
+    int ret;
 
     c = fgetc(in);
     if (c == EOF)
@@ -4859,7 +4864,11 @@ int lineedit(FILE *in, FILE **out)
     }
     while (c != EOF && c != '\n')
     {
-        if (fputc(c, fp) == EOF) return ioerror;
+        if (fputc(c, fp) == EOF)
+        {
+            ret = ioerror;
+            goto give_up;
+        }
         c = fgetc(in);
     }
     fseek(fp, 0, SEEK_SET);
@@ -4867,17 +4876,26 @@ int lineedit(FILE *in, FILE **out)
     *out = fp;
 
     return 0;
+
+give_up:
+    fclose(fp);
+    return ret;
 }
 
 enum { MAXNEST = 20 };
 
-/* pinch-off a tmpfile containing one "statement" from file. */
+/* pinch-off a tmpfile containing one "statement" from file.
+
+   The temporary file is opened before the text is known to be acceptable,
+   so a refusal has one open and is the only thing that can close it: the
+   caller is handed a stream or an error code, never both. */
 /*@null@*/
 static
 int statementedit(FILE *in, FILE **out)
 {
     FILE *fp;
     int c;
+    int ret;
     char nest[MAXNEST + 1] = {0}; /* any of {(< waiting for matching >)};
                                      one past MAXNEST holds the level that
                                      tips over the limit until it is rejected */
@@ -4904,7 +4922,8 @@ int statementedit(FILE *in, FILE **out)
         {
             if (defer >= MAXNEST)
             {
-                return syntaxerror;
+                ret = syntaxerror;
+                goto give_up;
             }
             switch(nest[defer])
             { /* what's the innermost nest? */
@@ -4922,7 +4941,11 @@ int statementedit(FILE *in, FILE **out)
                     {
                         case ')': --defer; break;
                         case '(': nest[++defer] = c; break;
-                        case '\\': if (fputc(c, fp) == EOF) return ioerror;
+                        case '\\': if (fputc(c, fp) == EOF)
+                            {
+                                ret = ioerror;
+                                goto give_up;
+                            }
                             c = fgetc(in);
                             if (c == EOF) goto done;
                             goto next;
@@ -4939,7 +4962,11 @@ int statementedit(FILE *in, FILE **out)
                 case '{':
                 case '(':
                 case '<': nest[++defer] = c; break;
-                case '\\': if (fputc(c, fp) == EOF) return ioerror;
+                case '\\': if (fputc(c, fp) == EOF)
+                    {
+                        ret = ioerror;
+                        goto give_up;
+                    }
                     c = fgetc(in); break;
             }
         if (c == '\n')
@@ -4954,7 +4981,11 @@ int statementedit(FILE *in, FILE **out)
             }
         }
 next:
-        if (fputc(c, fp) == EOF) return ioerror;
+        if (fputc(c, fp) == EOF)
+        {
+            ret = ioerror;
+            goto give_up;
+        }
         c = fgetc(in);
     } while(c != EOF);
 done:
@@ -4962,11 +4993,20 @@ done:
     //return fp;
     *out = fp;
     return 0;
+
+give_up:
+    fclose(fp);
+    return ret;
 }
 
 /* Open a file object,
    check for "special" filenames,
-   fallback to fopen. */
+   fallback to fopen.
+
+   A stream this function opened has nothing else naming it until the
+   object exists, so a constructor that cannot make the object leaves the
+   stream to be closed here. The three standard streams belong to the
+   process and are never this function's to close. */
 int xpost_file_open(Xpost_Memory_File *mem,
                     char *fn,
                     char *mode,

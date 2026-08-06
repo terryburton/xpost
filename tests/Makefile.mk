@@ -73,6 +73,7 @@ tests/dict_grow_test.c \
 tests/dict_hash_spread_test.c \
 tests/dict_homes.golden \
 tests/dsc_parse_test.c \
+tests/edit_stream_close_test.c \
 tests/empty_clip_test.ps \
 tests/encoder_units.golden \
 tests/error_dict_test.ps \
