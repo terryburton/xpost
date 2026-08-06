@@ -265,6 +265,90 @@ indsp setcolorspace -0.4 setcolor
 /DeviceRGB setcolorspace 3 -1 0.5 setcolor
 [1.0 0.0 0.5] (each DeviceRGB component is folded on its own) is
 
+% ------------------------------------- the colour a space is entered holding
+% setcolorspace sets the current colour as well as the space (PLRM 8.2),
+% and to what is the space's own business: black in a device space,
+% which in DeviceCMYK is three zeros and a one; a tint of 1.0 in a
+% Separation and in every component of a DeviceN (PLRM 4.8.4); index
+% zero in an Indexed space; and zero in each component of a CIE-based
+% space, moved to the nearest value its Range declares valid where zero
+% is not one (PLRM 4.8.3). A Pattern space is entered holding a null
+% object, which paints nothing (PLRM 4.9).
+%
+% The count is part of the answer here as it is above. A space that
+% leaves its initial colour unresolved answers out of the space it
+% reduces to instead, which is one component where a Separation wants
+% one but three where a CIEBasedA does, and four where a DeviceN of four
+% colorants does -- so the reduced answer is not merely a different
+% number, it is a different number of numbers.
+
+/DeviceGray setcolorspace
+[0.0] (DeviceGray is entered holding black) is
+/DeviceRGB setcolorspace
+[0.0 0.0 0.0] (DeviceRGB is entered holding black) is
+/DeviceCMYK setcolorspace
+[0.0 0.0 0.0 1.0] (DeviceCMYK is entered holding black, which is its fourth component) is
+
+sepsp setcolorspace
+[1.0] (a Separation is entered holding a full tint) is
+devnsp setcolorspace
+[1.0 1.0] (every tint of a DeviceN starts full) is
+/devn4 [ /DeviceN [/S1 /S2 /S3 /S4] /DeviceGray { pop pop pop pop 0.5 } ] def
+devn4 setcolorspace
+[1.0 1.0 1.0 1.0] (a DeviceN of four colorants answers with four full tints) is
+
+cieaA setcolorspace
+[0.0] (a CIEBasedA whose range holds zero is entered at zero) is
+cieaC setcolorspace
+[0.25] (a CIEBasedA whose range starts above zero is entered at its lower bound) is
+cieaD setcolorspace
+[0.0] (a CIEBasedA with no RangeA is entered at zero) is
+cieabc setcolorspace
+[0.0 0.0 0.25] (each CIEBasedABC component is entered inside its own range) is
+ciedef setcolorspace
+[0.0 0.0 0.0] (a CIEBasedDEF is entered at zero in each component) is
+ciedefg setcolorspace
+[0.0 0.0 0.0 0.0] (a CIEBasedDEFG is entered at zero in each component) is
+
+indsp setcolorspace
+[0] (an Indexed space is entered holding index zero) is
+
+% and the space is entered holding it again, over whatever was set in it
+sepsp setcolorspace 0.5 setcolor
+sepsp setcolorspace
+[1.0] (selecting a space again puts its initial colour back) is
+
+% the conversion the space carries runs when the space is selected, not
+% when the first colour is set: what the initial colour resolves to is
+% what an operator painting before any setcolor puts on the page
+/rec2 1 dict def
+/recsep2 [ /Separation /Spot /DeviceGray { //rec2 /tin 2 index put pop 0.25 } ] def
+recsep2 setcolorspace
+rec2 /tin known
+    (the tint transform is called when the space is selected) assert
+rec2 /tin known { rec2 /tin get }{ -1 } ifelse 1.0 sub abs 0.001 lt
+    (the tint transform is called with the initial tint) assert
+currentgray 0.25 sub abs 0.001 lt
+    (a Separation selected and not set paints what its transform answers) assert
+
+/idsep [ /Separation /Spot /DeviceGray { } ] def
+idsep setcolorspace
+currentgray 1.0 sub abs 0.001 lt
+    (a Separation over an identity transform is entered painting white) assert
+
+/indrgb [ /Indexed /DeviceRGB 3 <FF0000 00FF00 0000FF FFFFFF> ] def
+indrgb setcolorspace
+currentrgbcolor 3 array astore aload pop
+0.0 sub abs 0.001 lt exch 0.0 sub abs 0.001 lt and exch 1.0 sub abs 0.001 lt and
+    (an Indexed space selected and not set paints its first palette entry) assert
+
+% a Pattern space is entered holding no pattern, and currentcolor says so
+/Pattern setcolorspace
+currentcolor null eq (a Pattern space is entered holding a null pattern) assert
+[ /Pattern /DeviceRGB ] setcolorspace
+currentcolor null eq
+    (a Pattern space over a base space is entered holding one too) assert
+
 0 setgray
 
 % ------------------------------------------------- the spaces that are not

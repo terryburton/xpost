@@ -53,6 +53,7 @@
 .xpostsys /.cliptilerows
 .xpostsys /.fillparts
 .xpostsys /ColorConversion
+.xpostsys /.csinitcolor
 .xpostsys /cpath
 .xpostsys /crossdashbound
 .xpostsys /currentcolordict

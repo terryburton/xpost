@@ -440,6 +440,9 @@ setglobal
     graphicsdict /currgstate get /colorcomp4 0.0 put
     graphicsdict /currgstate get /sepindex null put
     graphicsdict /currgstate get /tintcomps null put
+    % and the colour the space is entered holding, which the space
+    % itself decides
+    //.xpostsys /.csinitcolor get exec
     %exec pop
 } //.xpostsys /.defop get exec
 
@@ -472,7 +475,14 @@ setglobal
             }{ //.xpostsys /.spacecomps get bs get } ifelse def
             n array astore
             graphicsdict /currgstate get exch /patcomps exch put
-        } if
+            % what currentcolor answers with: the components beneath an
+            % uncoloured pattern, and the pattern itself
+            [ graphicsdict /currgstate get /patcomps get aload pop pat ]
+        }{
+            graphicsdict /currgstate get /patcomps null put
+            [ pat ]
+        } ifelse
+        graphicsdict /currgstate get exch /tintcomps exch put
         end
     }
 >> put
@@ -621,6 +631,60 @@ setglobal
     } ifelse
     } ifelse
 } //.xpostsys /.defop get exec
+
+% -  .csinitcolor  -
+% Set the colour the current colour space is entered holding. Every
+% space has one and setcolorspace installs it (PLRM 8.2): black in a
+% device space, which in DeviceCMYK is three zeros and a one; a tint of
+% 1.0 in a Separation and in every component of a DeviceN (PLRM 4.8.4);
+% index zero in an Indexed space; and zero in each component of a
+% CIE-based space, moved to the nearest value the space's own Range
+% declares valid where zero is not one (PLRM 4.8.3). A Pattern space is
+% entered holding a null object, which paints nothing (PLRM 4.9).
+%
+% The colour is resolved here rather than left for the first setcolor.
+% What a space carries a colour through -- a tint transform, a palette
+% lookup, a CIE pipeline -- decides both what the page is painted in and
+% what currentcolor answers, and a space entered and painted in without
+% a setcolor has to paint the colour it was entered holding.
+% The space and its family ride the operand stack rather than a
+% dictionary of this procedure's own: the colour goes through the
+% program's tint transform, palette procedure or decoding procedure on
+% its way in, and a procedure of the program's runs against the
+% program's dictionaries and defines into them.
+.xpostsys /.csinitcolor {
+    currentcolorspace
+    dup 0 get
+    dup /Pattern eq {
+        pop pop
+        graphicsdict /currgstate get /patdict null put
+        graphicsdict /currgstate get /patcomps null put
+        % one component, the null pattern, which is what currentcolor
+        % answers with until a pattern is set
+        graphicsdict /currgstate get /tintcomps 1 array put
+    }{
+    dup /Indexed eq {
+        pop pop 0 //setcolor exec
+    }{
+    dup /Separation eq {
+        pop pop 1.0 //setcolor exec
+    }{
+    dup /DeviceN eq {
+        pop 1 get length { 1.0 } repeat //setcolor exec
+    }{
+    //.xpostsys /.ciecomps get 1 index known {
+        pop
+        [ //.xpostsys /.ncomponents get exec { 0.0 } repeat ]
+        //.xpostsys /.cieclampcomps get exec
+        aload pop //setcolor exec
+    }{
+        exch pop
+        dup /DeviceCMYK eq { pop 0.0 0.0 0.0 1.0 }{
+        /DeviceRGB eq { 0.0 0.0 0.0 }{
+        0.0 } ifelse } ifelse
+        //setcolor exec
+    } ifelse } ifelse } ifelse } ifelse } ifelse
+} put
 
 .xpostsys /currentcolordict <<
     /DeviceGray /currentgray cvx
