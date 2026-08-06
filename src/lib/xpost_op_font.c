@@ -4218,6 +4218,38 @@ int _oc_closepath(void *user)
     return _oc_push(oc, oc->nh);
 }
 
+/* The collected segments as the array the outline operators answer
+   with. The collector is given up either way. */
+static
+int _oc_array(Xpost_Context *ctx, outlinecollect *oc, Xpost_Object *arr)
+{
+    size_t i;
+
+    if (oc->len > 65535)
+    {
+        free(oc->objs);
+        return limitcheck;
+    }
+    *arr = xpost_object_cvlit(xpost_array_cons(ctx, (unsigned int)oc->len));
+    if (xpost_object_get_type(*arr) == nulltype)
+    {
+        free(oc->objs);
+        return VMerror;
+    }
+    for (i = 0; i < oc->len; i++)
+    {
+        int ret = xpost_array_put(ctx, *arr, (integer)i, oc->objs[i]);
+
+        if (ret)
+        {
+            free(oc->objs);
+            return ret;
+        }
+    }
+    free(oc->objs);
+    return 0;
+}
+
 static
 int _stringoutline(Xpost_Context *ctx,
                    Xpost_Object str)
@@ -4234,7 +4266,7 @@ int _stringoutline(Xpost_Context *ctx,
     char *ch;
     outlinecollect oc;
     Xpost_Object arr;
-    size_t i;
+    int ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     if (xpost_object_get_type(userdict) != dicttype)
@@ -4304,29 +4336,101 @@ int _stringoutline(Xpost_Context *ctx,
     }
     free(cstr);
 
-    if (oc.len > 65535)
-    {
-        free(oc.objs);
-        return limitcheck;
-    }
-    arr = xpost_object_cvlit(xpost_array_cons(ctx, (unsigned int)oc.len));
-    if (xpost_object_get_type(arr) == nulltype)
-    {
-        free(oc.objs);
-        return VMerror;
-    }
-    for (i = 0; i < oc.len; i++)
-    {
-        int aret = xpost_array_put(ctx, arr, (integer)i, oc.objs[i]);
+    ret = _oc_array(ctx, &oc, &arr);
+    if (ret)
+        return ret;
+    xpost_stack_push(ctx->lo, ctx->os, arr);
+    return 0;
+}
 
-        if (aret)
+/* name  .glyphoutline  array advx advy
+   The named glyph's outline, in the form .stringoutline gives a
+   string's, and the advance it moves the pen by, in the same y-up
+   glyph space the outline's points are in. glyphshow selects a glyph
+   by name rather than by code, so the outline is taken by name here as
+   well; the advance comes with it because a string's comes from
+   stringwidth, which has no form that names a glyph. */
+static
+int _glyphoutline(Xpost_Context *ctx,
+                  Xpost_Object gname)
+{
+    Xpost_Object userdict;
+    Xpost_Object gd;
+    Xpost_Object gs;
+    Xpost_Object fontdict;
+    Xpost_Object devdic;
+    Xpost_Object privatestr;
+    struct fontdata data;
+    textstate ts;
+    outlinecollect oc;
+    Xpost_Object arr;
+    long advance_x = 0, advance_y = 0;
+    int ret;
+
+    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+    if (xpost_object_get_type(userdict) != dicttype)
+        return dictstackunderflow;
+    gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
+    gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
+    fontdict = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currfont"));
+    if (xpost_object_get_type(fontdict) == invalidtype)
+        return invalidfont;
+    devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
+    ts = _text_state_get(ctx, gs, fontdict, devdic);
+
+    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
+    if (xpost_object_get_type(privatestr) == invalidtype)
+        return invalidfont;
+    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
+                          xpost_object_get_ent(privatestr), 0, sizeof data,
+                          &data)
+     || data.face == NULL)
+    {
+        XPOST_LOG_ERR("face is NULL");
+        return invalidfont;
+    }
+    _face_setup(ctx, gs, fontdict, data.face);
+
+    memset(&oc, 0, sizeof oc);
+    oc.ctx = ctx;
+    oc.nm = xpost_object_cvlit(xpost_name_cons(ctx, "m"));
+    oc.nl = xpost_object_cvlit(xpost_name_cons(ctx, "l"));
+    oc.nc = xpost_object_cvlit(xpost_name_cons(ctx, "c"));
+    oc.nh = xpost_object_cvlit(xpost_name_cons(ctx, "h"));
+#ifdef HAVE_FREETYPE2
+    {
+        Xpost_Font_Outline_Sink sink;
+        unsigned int glyph_index;
+
+        glyph_index = _glyph_index_for_name(ctx, ts.charstrings, data.face, gname);
+        sink.moveto = _oc_moveto;
+        sink.lineto = _oc_lineto;
+        sink.curveto = _oc_curveto;
+        sink.closepath = _oc_closepath;
+        sink.user = &oc;
+        if (!xpost_font_face_glyph_outline(data.face, glyph_index, &sink,
+                                           &advance_x, &advance_y))
         {
             free(oc.objs);
-            return aret;
+            return invalidfont;
+        }
+        if (oc.err)
+        {
+            free(oc.objs);
+            return oc.err;
         }
     }
-    free(oc.objs);
+#endif
+    /* a /Metrics entry for this glyph overrides the face's advance,
+       as it does on the raster route */
+    _metrics_advance(ctx, &ts, gname, &advance_x, &advance_y);
+
+    ret = _oc_array(ctx, &oc, &arr);
+    if (ret)
+        return ret;
     xpost_stack_push(ctx->lo, ctx->os, arr);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(advance_x / 65536.0)));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)(advance_y / 65536.0)));
     return 0;
 }
 
@@ -4424,6 +4528,8 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "stringwidth", (Xpost_Op_Func)_stringwidth, 2, 1, stringtype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, 1, stringtype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".glyphoutline", (Xpost_Op_Func)_glyphoutline, 3, 1, nametype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
     INSTALL;

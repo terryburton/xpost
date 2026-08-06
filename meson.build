@@ -549,6 +549,17 @@ test('show-clip',
   args: [ xpost_exe, files('tests/show_clip_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A pattern colour is not a colour a pixel can be set to, so text painted
+# in one leaves the raster route for its outlines and the ordinary fill.
+# Every operator of the family is held to the project's rule for
+# patterns: a pattern fill covers exactly the pixels a solid fill of the
+# same path covers, which makes the oracle the same glyphs sent round by
+# charpath and filled with the same pattern.
+test('show-pattern',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/show_pattern_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What an operator leaves on the operand stack when it refuses. An error
 # raised in PostScript with signalerror ends in a stop and never reaches
 # the interpreter's handler, so the unwinding every other error gets has

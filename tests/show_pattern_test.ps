@@ -1,0 +1,174 @@
+% What the text operators mark when the current colour is a pattern.
+% Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% A pattern colour is a procedure tiled over the page, not a colour a
+% pixel can be set to. The glyph raster route plots a glyph's coverage
+% straight through the device's pixel methods in one colour, so text has
+% to leave that route and go by its outlines and the ordinary fill,
+% where the pattern paint is.
+%
+% The rule this suite holds every operator to is the project's rule for
+% patterns: a pattern fill covers exactly the pixels a solid fill of the
+% same path covers. Applied to text that makes the oracle the same
+% glyphs sent round by charpath and filled with the same pattern -- so
+% each operator is asked twice, once by itself and once by an outline
+% built with the same pen movements, and the two renders must agree
+% pixel for pixel.
+%
+% The pen is asked as well. Which colour is in force may not change
+% where an operator leaves the current point, so each operator's pen
+% under the pattern is compared with its pen under a solid grey.
+%
+% show, ashow, widthshow, awidthshow and glyphshow are the five that
+% reach the raster route; kshow, xshow, yshow, xyshow and the composite
+% walkers reach it through those.
+
+/faildict 2 dict def
+faildict /n 0 put
+/p.name () def
+/check { % bool (what)  .  -
+    exch { pop }{
+        (FAIL: ) print p.name print ( ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/DEV 200 70 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 70 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/dark { 128 lt } bind def
+/inkof { 0 exch { { dark { 1 add } if } forall } forall } bind def
+/differs { % a b  .  n
+    3 dict begin
+    /b exch def /a exch def /n 0 def
+    0 1 a length 1 sub { /y exch def
+        0 1 a y get length 1 sub { /x exch def
+            a y get x get dark  b y get x get dark  ne { /n n 1 add def } if
+        } for
+    } for
+    n
+    end
+} bind def
+
+% the cell is asymmetric within its square, so a tiling half a period
+% out of place shows rather than repeating itself
+/cell { << /PatternType 1 /PaintType 1 /TilingType 1
+           /BBox [0 0 6 6] /XStep 6 /YStep 6
+           /PaintProc { pop 0 setgray 0 0 3 3 rectfill } >> } bind def
+/setpat { cell matrix currentmatrix makepattern setpattern } bind def
+/setfnt { /Times-Roman findfont 26 scalefont setfont } bind def
+
+/patsnap { % proc  .  snap
+    initgraphics erasepage setfnt setpat exec snap
+} bind def
+/patpen { % proc  .  x y
+    initgraphics erasepage setfnt setpat exec currentpoint
+} bind def
+/greypen { % proc  .  x y
+    initgraphics erasepage setfnt 0 setgray exec currentpoint
+} bind def
+/near { % a b  .  bool
+    sub abs 0.001 lt
+} bind def
+
+% one character's outline, filled where it stands, and the pen advanced
+% past it: the walkers below paint a glyph per call, and a fill of three
+% glyph outlines at once is not the same scan conversion as three fills
+% of one -- each glyph's own pen position rounds on its own.
+/one { % (c)  .  -
+    dup gsave currentpoint newpath moveto true charpath fill grestore
+    stringwidth rmoveto
+} bind def
+
+% Each case is the operator, and an outline built with the same pen
+% movements and filled the same number of times. The outline is what a
+% program would write to paint the same text through the fill route by
+% hand.
+/CASES [
+  [ (show      )
+    { 6 24 moveto (Hxy) show }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (Hxy) true charpath fill grestore } ]
+  [ (ashow     )
+    { 6 24 moveto 3 0 (Hxy) ashow }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto
+      (y) true charpath 3 0 rmoveto fill grestore } ]
+  [ (widthshow )
+    { 6 24 moveto 5 0 (x) 0 get (Hxy) widthshow }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath
+      (x) true charpath 5 0 rmoveto
+      (y) true charpath fill grestore } ]
+  [ (awidthshow)
+    { 6 24 moveto 5 0 (x) 0 get 3 0 (Hxy) awidthshow }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto 5 0 rmoveto
+      (y) true charpath 3 0 rmoveto fill grestore } ]
+  % glyphshow selects by name rather than by code, and takes the
+  % outline by name too; it paints one glyph a call
+  [ (glyphshow )
+    { 6 24 moveto /H glyphshow /x glyphshow /y glyphshow }
+    { 6 24 moveto (H) one (x) one (y) one } ]
+  % and the walkers that reach the raster through show, a glyph a call
+  [ (xshow     )
+    { 6 24 moveto (Hxy) [ 20 14 12 ] xshow }
+    { 6 24 moveto (H) one 26 24 moveto (x) one 40 24 moveto (y) one } ]
+  [ (kshow     )
+    { 6 24 moveto { pop pop 3 0 rmoveto } (Hxy) kshow }
+    { 6 24 moveto (H) one 3 0 rmoveto (x) one 3 0 rmoveto (y) one } ]
+] def
+
+CASES {
+    aload pop
+    /c.oracle exch def /c.subject exch def /p.name exch def
+    /S currentdict /c.subject get patsnap def
+    /O currentdict /c.oracle get patsnap def
+    O inkof 0 gt (the pattern fill of the outline marks the page) check
+    S inkof 0 gt (the text marks the page) check
+    S O differs 0 eq (the text marks exactly what that fill marks) check
+    currentdict /c.subject get greypen
+    currentdict /c.subject get patpen
+    3 -1 roll near exch 3 -1 roll near and
+    (the pattern leaves the pen where a solid colour does) check
+} forall
+
+% --- a solid colour still goes the raster route ----------------------
+% The outline route is for patterns; anything else keeps the route the
+% face renders. Text in grey must therefore still differ from its own
+% filled outline, which is scan-converted rather than rendered.
+/greysnap { initgraphics erasepage setfnt 0 setgray exec snap } bind def
+/p.name (solid grey:) def
+/G { 6 24 moveto (Hxy) show } greysnap def
+G inkof 0 gt (grey text marks the page) check
+
+% --- an uncoloured pattern -------------------------------------------
+% A PaintType 2 pattern takes its colour from setpattern's operands, and
+% the same rule holds of it.
+/ucell { << /PatternType 1 /PaintType 2 /TilingType 1
+            /BBox [0 0 6 6] /XStep 6 /YStep 6
+            /PaintProc { pop 0 0 3 3 rectfill } >> } bind def
+/setpat { 0 ucell matrix currentmatrix makepattern setpattern } bind def
+/p.name (uncoloured pattern:) def
+/S { 6 24 moveto 3 0 (Hxy) ashow } patsnap def
+/O { 6 24 moveto gsave currentpoint newpath moveto
+     (H) true charpath 3 0 rmoveto
+     (x) true charpath 3 0 rmoveto
+     (y) true charpath 3 0 rmoveto fill grestore } patsnap def
+O inkof 0 gt (the pattern fill of the outline marks the page) check
+S inkof 0 gt (the text marks the page) check
+S O differs 0 eq (the text marks exactly what that fill marks) check
+
+count 0 eq (the suite leaves the operand stack empty) check
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

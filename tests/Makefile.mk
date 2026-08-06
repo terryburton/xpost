@@ -222,6 +222,7 @@ tests/semantics_test.ps \
 tests/setpagedevice_failure_test.ps \
 tests/shadowed_operators.golden \
 tests/show_clip_test.ps \
+tests/show_pattern_test.ps \
 tests/showop_matrix_test.ps \
 tests/startup_surface_api_test.c \
 tests/startup_surface_test.ps \

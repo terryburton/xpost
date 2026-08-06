@@ -481,6 +481,74 @@ currentglobal true setglobal
     } if
     end
 } put
+
+% subject hook  .showpattern  -
+% Paint the text by filling its glyph outlines, which is how a pattern
+% colour reaches the page: the raster route plots a glyph's coverage
+% straight through the device's pixel methods in one colour, and a
+% pattern is not one colour but a procedure tiled over the page. The
+% outlines go through the ordinary fill, where the pattern paint is,
+% so the pixels a pattern marks are the pixels a solid fill of the same
+% path marks.
+%
+% The subject is the string to paint, or the name of a single glyph as
+% glyphshow selects one. The hook runs after each character with its
+% code on the stack and carries whatever the operator moves the pen by
+% between characters; a null hook means the operator moves it by
+% nothing, and then the whole string is one charpath.
+%
+% The pen ends where the walk left it: the outlines are built inside a
+% gsave, since charpath takes over the current path, and the point the
+% last of them ended at is carried back out.
+.xpostsys /.showpattern {
+    3 dict begin
+    % a hook is a procedure, and a name holding one runs when it is
+    % read: it is defined only when there is one, and asked after by
+    % the dictionary rather than by reading it
+    dup null eq { pop }{ /phook exch def } ifelse
+    /psubj exch def
+    gsave
+        currentpoint newpath moveto
+        psubj type /nametype eq {
+            psubj //.xpostsys /.glyphcharpath get exec
+        }{
+        currentdict /phook known {
+            0 1 psubj length 1 sub {
+                /pi exch def
+                psubj pi 1 getinterval true charpath
+                psubj pi get phook
+            } for
+        }{
+            psubj true charpath
+        } ifelse
+        } ifelse
+        currentpoint
+        //fill exec
+    grestore
+    moveto
+    end
+} put
+
+% subject hook plain  .showroute  -
+% Which route text of a simple font takes to the page. A pattern colour
+% goes by the outlines and the fill route; every other colour goes by
+% the raster route, which the plain procedure drives through the
+% operator's own binding with the operands that binding wants. The
+% subject is left for the plain procedure, which consumes it -- an
+% operator whose binding takes more than the text carries the rest
+% itself.
+%
+% Every text operator of a simple font comes through here, so the
+% choice is made once. Making it in each operator instead is what left
+% four of them painting a pattern in whatever single colour the raster
+% route read out of the graphics state.
+.xpostsys /.showroute {
+    //.xpostsys /.patternactive get exec {
+        pop //.xpostsys /.showpattern get exec
+    }{
+        exch pop exec
+    } ifelse
+} put
 setglobal
 
 /show [ /stringtype ] {
@@ -509,20 +577,7 @@ setglobal
             stringwidth rmoveto
         }{
             pop
-            //.xpostsys /.patternactive get exec {
-                % a pattern colour tiles through the glyph outlines:
-                % the string's outline fills through the ordinary
-                % pattern paint
-                gsave
-                dup
-                currentpoint newpath moveto
-                true charpath
-                //fill exec
-                grestore
-                stringwidth rmoveto
-            }{
-                //show
-            } ifelse
+            null { //show } //.xpostsys /.showroute get exec
         } ifelse
     }{
     gsave
@@ -563,9 +618,12 @@ setglobal
     }{
     dup /FontType get 3 ne {
         pop
-        4 2 roll dtransform
-        4 2 roll
-        //widthshow
+        4 dict begin
+        /wstr exch def /wchar exch def /wcy exch def /wcx exch def
+        wstr { wchar eq { wcx wcy rmoveto } if }
+        { pop wcx wcy dtransform wchar wstr //widthshow }
+        //.xpostsys /.showroute get exec
+        end
     }{
     5 2 roll
     3 dict begin
@@ -615,9 +673,12 @@ setglobal
     }{
     dup /FontType get 3 ne {
         pop
-        3 1 roll dtransform
-        3 2 roll
-        //ashow
+        3 dict begin
+        /astr exch def /aady exch def /aadx exch def
+        astr { pop aadx aady rmoveto }
+        { pop aadx aady dtransform astr //ashow }
+        //.xpostsys /.showroute get exec
+        end
     }{
     4 2 roll
     2 dict begin
@@ -665,13 +726,16 @@ setglobal
     }{
     dup /FontType get 3 ne {
         pop
-        % the binding takes both deltas in device space: send the string
-        % below them, transform each pair in turn, and restore the order
-        % cx cy char ax ay string
-        6 1 roll dtransform
-        5 -2 roll dtransform
-        6 2 roll 4 -1 roll
-        //awidthshow
+        % the binding takes both deltas in device space; the outline
+        % route moves the pen in user space, which is where the
+        % operands arrive
+        6 dict begin
+        /vstr exch def /vady exch def /vadx exch def
+        /vchar exch def /vcy exch def /vcx exch def
+        vstr { vadx vady rmoveto vchar eq { vcx vcy rmoveto } if }
+        { pop vcx vcy dtransform vchar vadx vady dtransform vstr //awidthshow }
+        //.xpostsys /.showroute get exec
+        end
     }{
     % bring the operands (cx cy char ax ay string font) into the order the
     % binding expects: string font ax ay cx cy char, top-down char cy cx ay ax
@@ -769,7 +833,8 @@ setglobal
     //.xpostsys /.showclip get exec
     graphicsdict /currgstate get /currfont get
     dup /FontType get 3 ne {
-        pop .glyphshow
+        pop
+        null { .glyphshow } //.xpostsys /.showroute get exec
     }{
         3 dict begin
         /fnt exch def
@@ -908,13 +973,56 @@ setglobal
     } ifelse
 } //.xpostsys /.defop get exec
 
+currentglobal true setglobal
+% outline  .outlinepath  -
+% Append an outline to the current path. The segments arrive from
+% .stringoutline or .glyphoutline in the face's y-up glyph space
+% relative to the pen (device-magnitude pixels, oriented by the face
+% transform), so each point is flipped to a device offset and mapped to
+% user space about the current point. The pen is left wherever the last
+% segment ended; what it should advance by is the caller's to say.
+.xpostsys /.outlinepath {
+    12 dict begin
+    currentpoint /cy exch def /cx exch def
+    % a glyph-space point on the stack becomes a user-space point
+    /cpt { % x y . X Y
+        neg idtransform exch cx add exch cy add
+    } def
+    {
+        dup type /nametype eq {
+            dup /h eq { pop closepath }{
+            /cpcmd exch def
+            cpcmd /c eq {
+                {cpy3 cpx3 cpy2 cpx2 cpy1 cpx1}{exch def}forall
+                cpx1 cpy1 cpt cpx2 cpy2 cpt cpx3 cpy3 cpt curveto
+            }{
+                cpt
+                cpcmd /m eq { moveto }{ lineto } ifelse
+            } ifelse } ifelse
+        } if
+    } forall
+    cx cy moveto
+    end
+} put
+
+% name  .glyphcharpath  -
+% Append the named glyph's outline to the current path and advance the
+% pen by the glyph, as charpath does for a string. A glyph named rather
+% than encoded has no stringwidth, so its advance comes back from
+% .glyphoutline in the glyph space the outline's points are in.
+.xpostsys /.glyphcharpath {
+    2 dict begin
+    .glyphoutline
+    /gay exch def /gax exch def
+    //.xpostsys /.outlinepath get exec
+    gax gay neg idtransform rmoveto
+    end
+} put
+setglobal
+
 %   str bool  charpath  -
-% Append the text's glyph outlines to the current path. The segments
-% arrive from .stringoutline in the face's y-up glyph space relative
-% to the pen (device-magnitude pixels, oriented by the face
-% transform), so each point is flipped to a device offset and mapped
-% to user space about the current point. Type 3 fonts only advance
-% the pen by the text's width.
+% Append the text's glyph outlines to the current path and advance the
+% pen by the text's width. Type 3 fonts only advance the pen.
 /charpath [ /stringtype /booleantype ] {
     /charpath //.xpostsys /.needfont get exec
     pop
@@ -922,27 +1030,9 @@ setglobal
     dup /FontType known { /FontType get dup 3 eq exch 0 eq or }{ pop false } ifelse {
         stringwidth rmoveto
     }{
-        12 dict begin
+        1 dict begin
         /cpstr exch def
-        currentpoint /cy exch def /cx exch def
-        % a glyph-space point on the stack becomes a user-space point
-        /cpt { % x y . X Y
-            neg idtransform exch cx add exch cy add
-        } def
-        cpstr .stringoutline {
-            dup type /nametype eq {
-                dup /h eq { pop closepath }{
-                /cpcmd exch def
-                cpcmd /c eq {
-                    {cpy3 cpx3 cpy2 cpx2 cpy1 cpx1}{exch def}forall
-                    cpx1 cpy1 cpt cpx2 cpy2 cpt cpx3 cpy3 cpt curveto
-                }{
-                    cpt
-                    cpcmd /m eq { moveto }{ lineto } ifelse
-                } ifelse } ifelse
-            } if
-        } forall
-        cx cy moveto
+        cpstr .stringoutline //.xpostsys /.outlinepath get exec
         cpstr stringwidth rmoveto
         end
     } ifelse
