@@ -86,6 +86,7 @@ xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
 xpost_dev_png_options_set
 xpost_device_get_filename
+xpost_device_retire_restored
 xpost_dict_capacity_memory
 xpost_dict_compare_objects
 xpost_dict_cons

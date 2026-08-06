@@ -86,6 +86,18 @@ XPOST_MUST_CHECK int xpost_dev_pdf_append(Xpost_Context *ctx, Xpost_Object devdi
 int xpost_dev_pdf_fmt_num(char *o, double v);
 
 /**
+ * @brief retire the page device a restore to the given save level displaces
+ *
+ * PLRM 6.1 keeps the page device in the graphics state, so a restore
+ * back past the setpagedevice that installed one reactivates the device
+ * the saved state names and deactivates the replacement. The replacement
+ * holds its raster or its content accumulator outside virtual memory,
+ * which the collector neither reaches nor owns, so it is released here.
+ * A restore that leaves the install standing retires nothing.
+ */
+void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
+
+/**
  * @}
  */
 

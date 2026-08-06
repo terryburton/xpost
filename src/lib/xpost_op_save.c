@@ -49,6 +49,7 @@
 #include "xpost_name.h"
 #include "xpost_string.h"
 #include "xpost_dict.h"
+#include "xpost_dev_generic.h"
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
@@ -105,6 +106,14 @@ int Vrestore(Xpost_Context *ctx,
     /* the packing mode is save/restore-subject: revert it to this level */
     if (V.save_.lev < sizeof ctx->packing_hist)
         ctx->packing = ctx->packing_hist[V.save_.lev];
+
+    /* restore reverts the page device (PLRM 6.1): the snapshots above
+       have just put the device the saved graphics state named back into
+       it, and the device that was installed over it is displaced. Retire
+       that one here, while it can still be reached -- what it holds is
+       outside virtual memory, so nothing later in the run will, and the
+       collector is free to take its dictionary from this point on. */
+    xpost_device_retire_restored(ctx, (unsigned int)V.save_.lev);
 
     /* restore closes a file created since the corresponding save (PLRM
        3.8.2): sweep the local table for file entities born above the

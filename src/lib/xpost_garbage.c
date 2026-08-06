@@ -835,6 +835,14 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->window_device, markall))
                 return -1;
 
+            /* the page device the graphics state template names: rooted
+               so its entity cannot be recycled while the interpreter
+               still holds it to retire, the memory it holds outside
+               virtual memory being reachable through that entity and
+               nothing else */
+            if (!_xpost_garbage_mark_object(ctx, mem, ctx->pagedevice, markall))
+                return -1;
+
             /* privatedict holds the local machinery off the dict stack; root it
                here so its contents survive collection without a userdict anchor */
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->privatedict, markall))

@@ -88,6 +88,7 @@ static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
+static Xpost_Object nameDestroy;
 
 char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
 {
@@ -3285,6 +3286,125 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
     return 0;
 }
 
+/* Release the memory a device holds outside virtual memory, without
+   executing any PostScript.
+
+   Destroy is the method that does this, and for the devices written in C
+   it is an operator, so it is called the way the interpreter's own
+   shutdown calls it: the instance goes on the operand stack and the
+   operator runs from here. That operator is the one the device carried
+   when it was installed, taken then and passed in here, rather than read
+   out of the instance now -- see _devinstalled below.
+
+   For the devices written in PostScript, Destroy is a procedure, and the
+   callers of this are places no procedure can run: restore is one
+   operator, not an interpreter loop. What those classes hold outside
+   virtual memory is the vector writers' content accumulator, reached
+   here directly. The rest keep their raster as PostScript objects the
+   collector already owns and have nothing to answer: the accumulator
+   fetch finds no /Private and returns.
+
+   Destroy is idempotent (xpost_dev_driver.h), so a device this releases
+   after something else already has is a no-op rather than a double
+   free. */
+static void _device_release(Xpost_Context *ctx,
+                            Xpost_Object devdic,
+                            Xpost_Object destroy)
+{
+    if (xpost_object_get_type(devdic) != dicttype)
+        return;
+    if (xpost_object_get_type(destroy) == operatortype)
+    {
+        int res;
+
+        if (!xpost_stack_push(ctx->lo, ctx->os, devdic))
+            return;
+        res = xpost_operator_exec(ctx, destroy.mark_.padw);
+        if (res)
+            XPOST_LOG_ERR("%s retiring a page device", errorname[res]);
+        return;
+    }
+    (void)_pdffree(ctx, devdic);
+}
+
+/* devdic  .devinstalled  -
+   record the device setpagedevice has just installed in the graphics
+   state, with the save depth it was installed at and the method that
+   will release it */
+static int _devinstalled(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    unsigned int depth = 0;
+    Xpost_Object destroy;
+
+    if (xpost_memory_save_stack_ready(ctx->lo))
+        depth = (unsigned int)xpost_stack_count(ctx->lo,
+                    xpost_memory_save_stack_adr(ctx->lo));
+    /* the depth is recorded as depth + 1 so that zero means nothing is
+       recorded; a save stack cannot exceed 255 levels (xpost_op_save.c),
+       and the ceiling here keeps the arithmetic in step with that */
+    if (depth > 254)
+        depth = 254;
+
+    /* The release method is taken here, from an instance the device's own
+       Create has just returned, and not later from the instance
+       dictionary -- which the program can reach and write to, and which
+       therefore cannot be asked at release time which of two release
+       paths a device wants.
+
+       The two are not interchangeable. Every device stores its C state
+       in a string under /Private, and what that string holds is the
+       struct its own class put there; the accumulator path reads one as
+       an accumulator, whose first member is a pointer it frees. Deciding
+       between them on a slot a program can rewrite would let a device
+       carrying a raster be released as though it carried an accumulator,
+       and the pointer freed would be whatever lay at that offset of the
+       raster device's private struct. Anything the instance still holds
+       here is what its class gave it. */
+    destroy = xpost_dict_get(ctx, devdic, nameDestroy);
+    if (xpost_object_get_type(destroy) != operatortype)
+        destroy = null;
+
+    ctx->pagedevice = devdic;
+    ctx->pagedevice_destroy = destroy;
+    ctx->pagedevice_depth = depth + 1;
+    return 0;
+}
+
+void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level)
+{
+    Xpost_Object devdic;
+    Xpost_Object destroy;
+
+    /* The install is a write to the graphics state template, so a
+       restore reverts it exactly when it was made at a depth greater
+       than the one being restored to -- which is the test below, the
+       recorded depth being one more than the depth of the write. A
+       restore that leaves the install standing displaces nothing and
+       must retire nothing: a program that saves and restores around a
+       page it has already set up goes on painting on that page. */
+    if (ctx->pagedevice_depth == 0 || ctx->pagedevice_depth <= level + 1)
+        return;
+
+    /* The device is released here rather than left to the collector
+       because the collector cannot release it: what it holds is a raster
+       or a content accumulator outside virtual memory, reached only
+       through the private string in the instance dictionary. Leaving it
+       to be swept would be worse than leaving it alone -- the sweep
+       hands the dictionary's entity back to the free list, and a release
+       run afterwards reads whatever took the entity's place as the
+       device's private state and frees a pointer out of it.
+
+       The record is cleared before the release rather than after, so a
+       release that fails partway leaves nothing naming a device that has
+       begun to give up its memory. */
+    devdic = ctx->pagedevice;
+    destroy = ctx->pagedevice_destroy;
+    ctx->pagedevice = null;
+    ctx->pagedevice_destroy = null;
+    ctx->pagedevice_depth = 0;
+    _device_release(ctx, devdic, destroy);
+}
+
 int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                                        Xpost_Object sd)
 {
@@ -3341,6 +3461,7 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".pdfput", (Xpost_Op_Func)_pdfput, 0, 2, stringtype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdfchunks", (Xpost_Op_Func)_pdfchunks, 1, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdffree", (Xpost_Op_Func)_pdffree, 0, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".devinstalled", (Xpost_Op_Func)_devinstalled, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdfreset", (Xpost_Op_Func)_pdfreset, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".pdfnumstr", (Xpost_Op_Func)_pdfnumstr, 1, 1,
             numbertype); INSTALL;
@@ -3356,6 +3477,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namepdfPrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((nameDestroy = xpost_name_cons(ctx, "Destroy"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

@@ -1823,6 +1823,19 @@ test('device-restore-retired',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# The other half of that: the device the restore displaces is retired there,
+# because nothing else can retire it. Its raster or its content accumulator is
+# not virtual memory, so the collector neither reaches it nor owns it, and the
+# graphics state has stopped naming it. A restore that leaves the install
+# standing must retire nothing, and which of two releases a device gets is
+# fixed when it is installed rather than read back from a slot the program can
+# write to.
+test('device-retire-restored',
+  find_program('tests/run-device-restore-test.sh'),
+  args: [ xpost_exe, files('tests/device_retire_restored_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # GetPix is callable on a device the program has already destroyed: Destroy
 # releases the raster but leaves the instance dictionary, and the contract makes
 # Destroy something a program may call for itself. A device carrying its own

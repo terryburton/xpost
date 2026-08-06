@@ -1522,6 +1522,14 @@ currentglobal true setglobal
         % and the defaultmatrix operator resolve it through them
         .privatedict /.gstatetemplate get exec /device newdev put
         graphicsdict /currgstate get /device newdev put
+        % Record the installed device against the save depth it was
+        % installed at. A restore back past this point puts the previous
+        % device into the template again and leaves this one holding a
+        % raster or a content accumulator that is not virtual memory, so
+        % the collector will neither reach it nor free it; the record is
+        % what lets restore retire it there. After the two puts above,
+        % because it names the device the template now carries.
+        newdev //.internaldict /.devinstalled get exec
         % installing a device reinitialises the whole graphics state
         % barring the font parameter, which is more than initgraphics
         % resets: the device-dependent parameters go back to defaults

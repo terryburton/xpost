@@ -1,0 +1,128 @@
+% A restore that displaces the device setpagedevice installed retires it.
+% Run against a live device (-d <dev>) by run-device-restore-test.sh:
+% prints SUCCESS iff every step holds.
+%
+% PLRM 6.1 makes the page device an element of the graphics state, so a
+% restore back past a setpagedevice deactivates the device the request
+% installed and reactivates the one the saved state names. What the
+% displaced device holds is a raster or a content accumulator outside
+% virtual memory: the collector owns none of it and will never look, so
+% it is released at the restore or not at all.
+%
+% The raster is the part of that a program can see. A released one reads
+% as the ground, where a page the device was installed on reads as the
+% colour it was erased to, so the same read before and after the restore
+% tells the two apart. The reading on the erased page is taken first:
+% without it a device that never had a raster to read would answer the
+% ground both times and agree for the wrong reason.
+%
+% A device whose Destroy is a PostScript procedure is out of the
+% restore's reach, restore executing no PostScript. Those classes keep
+% their raster as PostScript objects the collector already owns, so they
+% have nothing to release and nothing to answer here.
+%
+% Every exit from the body below states its own verdict, so an error the
+% body did not expect leaves the one standing here and is reported rather
+% than caught and passed over.
+
+/getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
+
+/verdict (FAILURE: the run raised an error) def
+/bail { /verdict exch def stop } def
+
+{
+    getdevice /Destroy get type /operatortype ne { (SUCCESS) bail } if
+    getdevice /GetPix known not { (SUCCESS) bail } if
+
+    % the arity of the read slot, established on the live device
+    clear
+    2 2 getdevice dup /GetPix get exec
+    count /ncomp exch def
+    ncomp 0 le { (FAILURE: GetPix returned no components) bail } if
+    clear
+
+    save
+
+    << /PageSize [400 400] >> setpagedevice
+
+    % the page the replacement was installed on is erased, so it reads as
+    % the page colour rather than as the ground
+    2 2 getdevice dup /GetPix get exec
+    /live 0 def
+    ncomp { 0 ne { /live live 1 add def } if } repeat
+    live 0 eq
+        { (FAILURE: the installed page did not read as an erased page) bail }
+    if
+
+    % hold the replacement under the save object, so the program still
+    % names it once the restore has taken it out of the graphics state
+    getdevice exch
+
+    restore
+
+    % the read that says whether the restore retired it
+    2 2 3 -1 roll dup /GetPix get exec
+    /bad 0 def
+    ncomp { 0 ne { /bad bad 1 add def } if } repeat
+    bad 0 ne
+        { (FAILURE: a device displaced by restore kept its raster) bail }
+    if
+
+    % painting on the reinstated device, which the setpagedevice above
+    % retired and whose raster is gone: it takes no marks and follows
+    % nothing (device_restore_retired_test.ps)
+    0 setgray 10 10 50 50 rectfill
+
+    % The same again with the installed device's Destroy overwritten. Each
+    % class keeps its C state in a string under /Private and each puts a
+    % different struct there, so which release a device gets is not the
+    % program's to choose: read a raster device's private state as a
+    % vector writer's and the release frees a pointer taken from the
+    % middle of it. The release the restore performs is the one the device
+    % was installed carrying.
+    save
+
+    << /PageSize [400 400] >> setpagedevice
+    getdevice /Destroy { } put
+    getdevice /Destroy get type /arraytype ne
+        { (FAILURE: the device's Destroy did not take the overwrite) bail }
+    if
+    getdevice exch
+
+    restore
+
+    2 2 3 -1 roll dup /GetPix get exec
+    /bad 0 def
+    ncomp { 0 ne { /bad bad 1 add def } if } repeat
+    bad 0 ne
+        { (FAILURE: an overwritten Destroy chose the release) bail }
+    if
+
+    % A restore that leaves the install standing displaces nothing and so
+    % retires nothing: the device below is installed under the outer save
+    % and the inner restore goes back only as far as the inner save. A
+    % program that brackets a page in save and restore having already set
+    % the page up goes on painting on that page.
+    save
+    << /PageSize [400 400] >> setpagedevice
+    save
+    restore
+    2 2 getdevice dup /GetPix get exec
+    /kept 0 def
+    ncomp { 0 ne { /kept kept 1 add def } if } repeat
+    kept 0 eq
+        { (FAILURE: a restore that displaced nothing retired the device) bail }
+    if
+    restore
+
+    << /PageSize [300 300] >> setpagedevice
+    currentpagedevice /PageSize get 0 get 300 ne
+        { (FAILURE: setpagedevice stopped working after the restore) bail }
+    if
+
+    count 0 ne { (FAILURE: operand stack unbalanced) bail } if
+    (SUCCESS) bail
+} stopped pop
+
+clear
+verdict =

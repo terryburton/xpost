@@ -224,6 +224,23 @@ struct _Xpost_Context {
 
     Xpost_Object event_handler;
     Xpost_Object window_device;
+
+    /** The page device the graphics state template names, recorded by
+        setpagedevice as it installs one, with the save depth it was
+        installed at (depth + 1; zero when nothing is recorded) and the
+        Destroy operator the instance carried then (null for a device
+        whose Destroy is a PostScript procedure). A device holds its
+        raster or its content accumulator outside virtual memory, so the
+        collector has no claim on that memory and no reason to look:
+        whoever takes the device out of the graphics state has to release
+        it. setpagedevice does so for the device it replaces, and restore
+        does so here, for the one it displaces (PLRM 6.1). The device is
+        rooted in the collector, so the entity cannot be recycled while
+        this names it. */
+    Xpost_Object pagedevice;
+    Xpost_Object pagedevice_destroy;
+    unsigned int pagedevice_depth;
+
     /**< privatedict -- a LOCAL dictionary that holds the interpreter's local
          machinery (the device class dictionaries, the wrapped-operator anchor
          procedures, the graphics scratch and template). Rooted here so the
