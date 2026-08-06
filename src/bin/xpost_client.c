@@ -177,7 +177,7 @@ _xpost_client_usage(const char *filename)
 int main(int argc, const char *argv[])
 {
     Xpost_Context *ctx;
-    void *buffer_type_object;
+    void *buffer_type_object = NULL;
     const char *filename;
     const char *device;
     const void *ptr;
@@ -388,6 +388,13 @@ int main(int argc, const char *argv[])
         FILE *fp;
 
         buffer = buffer_type_object;
+        if (!buffer)
+        {
+            fprintf(stderr, "the program returned no page buffer\n");
+            xpost_destroy(ctx);
+            xpost_quit();
+            return 1;
+        }
         fp = xpost_diskfile_fopen(filename, "w", 0, &ferr);
         if (!fp)
         {

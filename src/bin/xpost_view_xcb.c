@@ -96,6 +96,12 @@ xpost_view_win_new(int xorig, int yorig, int width, int height)
         }
     }
 
+    if (!win->scr)
+    {
+        fprintf(stderr, "Fail to find the screen the display named\n");
+        goto disconnect_c;
+    }
+
     /* get the depth of the screen */
     geom = xcb_get_geometry_reply(win->c,
                                   xcb_get_geometry(win->c, win->scr->root), 0);
