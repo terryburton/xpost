@@ -197,8 +197,15 @@ xpost_glob(const char *pattern, glob_t *pglob)
     }
     else
     {
-        memcpy(path, pattern, file - pattern);
-        path[file - pattern] = '\0';
+        /* the directory part keeps the separator that ended it, so that
+           what it contributes to a name's length is what it copies into
+           the name */
+        size_t dirlen = (size_t)(file - pattern) + 1;
+
+        if (dirlen >= sizeof(path))
+            return -1;
+        memcpy(path, pattern, dirlen);
+        path[dirlen] = '\0';
         file++;
     }
 
