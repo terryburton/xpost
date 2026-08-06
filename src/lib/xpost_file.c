@@ -3756,17 +3756,22 @@ bitenc_put(Xpost_BitEncBase *ff, unsigned int code, int len)
 }
 
 /* out to a byte boundary: the whole bytes still buffered, then the bits
-   short of one, at the top of a final byte and zero-filled below */
+   short of one, at the top of a final byte and zero-filled below. The
+   buffer is emptied before the last byte is offered, so what stays
+   behind is short of a byte whatever the target does with it. */
 static int
 bitenc_pad(Xpost_BitEncBase *ff)
 {
+    int cnt;
+
     if (bitenc_bytes(ff) == EOF)
         return EOF;
-    if (ff->bitcnt &&
-        xpost_file_putc(ff->base.target,
-                        (int)(ff->bitbuf << (8 - ff->bitcnt)) & 0xff) == EOF)
-        return EOF;
+    cnt = ff->bitcnt;
     ff->bitcnt = 0;
+    if (cnt &&
+        xpost_file_putc(ff->base.target,
+                        (int)(ff->bitbuf << (8 - cnt)) & 0xff) == EOF)
+        return EOF;
     return 0;
 }
 

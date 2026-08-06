@@ -1,0 +1,49 @@
+# The encoder counters the code around them reads as a width, and which
+# tests/check-encoder-units.sh therefore holds to being returned to the
+# start of a unit before the unit is offered to the target rather than
+# after the target has taken it.
+#
+# A counter is here when something takes it for a quantity of a known
+# size: a shift count, a subscript, or a number taken away from a
+# constant. Those are the reads that go wrong once a refused byte has
+# left the counter running past the unit it counts. A counter read for
+# neither -- one that only counts to a line break, or marks a record
+# boundary -- is not here, and naming it would bury the ones that are.
+#
+# Which counters those are is derived from the source. This register is
+# what makes the population visible: one that acquires such a read joins
+# it as a line to write, and one that loses it -- because the
+# arithmetic that read it as a width moved off the field and onto a
+# local -- leaves as a line and a count that went down, rather than as
+# this check quietly holding one thing fewer.
+#
+#   bitcnt     Xpost_BitEncBase: bits gathered short of a byte. The
+#              drain shifts the buffer down by it and the padding
+#              shifts up by eight less it.
+#   codewidth  Xpost_LzwEncFile: the current code width, compared
+#              against one shifted left by it.
+#   n          Xpost_A85EncFile: bytes of the group of four, the tail
+#              shifted by eight times four less it.
+#              Xpost_RleEncFile: bytes gathered into the literal block,
+#              indexing that block.
+#   nextcode   Xpost_LzwEncFile: the next string table entry, indexing
+#              the suffix, sibling and child tables.
+#   prefix     Xpost_LzwEncFile: the string built so far, indexing the
+#              child table.
+#   rowi       Xpost_DctEncFile: bytes of the current scanline,
+#              indexing the row buffer.
+#   rowpos     Xpost_FaxEncFile: bytes of the current scanline,
+#              indexing a buffer holding exactly one row.
+#
+# The count below is the size of the list, so that retiring an entry is
+# two edits and a population that shrank says so with a number.
+
+entries 7
+
+bitcnt
+codewidth
+n
+nextcode
+prefix
+rowi
+rowpos

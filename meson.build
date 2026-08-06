@@ -1816,6 +1816,13 @@ test('narrow-cursors',
   find_program('tests/check-narrow-cursors.sh'),
   args: [ meson.current_source_dir() ])
 
+# An encoder gives up a part-finished unit before offering it to the
+# target, so a refused byte cannot leave the unit open and its counter
+# running past the width the shifts and subscripts around it read it as.
+test('encoder-units',
+  find_program('tests/check-encoder-units.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.
