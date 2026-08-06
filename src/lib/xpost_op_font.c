@@ -116,6 +116,18 @@ typedef struct textstate
     int nbands;
 } textstate;
 
+/* The linear part of a six-element matrix object: the four numbers that
+   map a direction, ahead of the translation the last two describe. Every
+   element is written before any is read. */
+static
+void _matrix_linear_part(Xpost_Context *ctx, Xpost_Object psmat, real m[4])
+{
+    m[0] = xpost_object_number(xpost_array_get(ctx, psmat, 0));
+    m[1] = xpost_object_number(xpost_array_get(ctx, psmat, 1));
+    m[2] = xpost_object_number(xpost_array_get(ctx, psmat, 2));
+    m[3] = xpost_object_number(xpost_array_get(ctx, psmat, 3));
+}
+
 /* the linear part of character space -> device space: the font
    dictionary's FontMatrix composed with the CTM (row convention:
    x' = e0 x + e2 y, y' = e1 x + e3 y). Returns 0 when either matrix
@@ -146,11 +158,7 @@ int _char_device_matrix(Xpost_Context *ctx,
     psmat = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
     if (xpost_object_get_type(psmat) != arraytype || psmat.comp_.sz != 6)
         return 0;
-    for (i = 0; i < 4; i++)
-    {
-        Xpost_Object el = xpost_array_get(ctx, psmat, i);
-        cm[i] = xpost_object_number(el);
-    }
+    _matrix_linear_part(ctx, psmat, cm);
     e[0] = fm[0] * cm[0] + fm[1] * cm[2];
     e[1] = fm[0] * cm[1] + fm[1] * cm[3];
     e[2] = fm[2] * cm[0] + fm[3] * cm[2];
@@ -1260,7 +1268,9 @@ int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
         Xpost_Object sl = xpost_array_get(ctx, spans, k);
         int m = (int)(sl.comp_.sz / 5);
 
-        for (i = 0; i < m; i++)
+        /* the table was sized by a first pass over the same array, and
+           the write stays inside what that pass counted */
+        for (i = 0; i < m && at < n; i++)
         {
             Xpost_Object p0 = xpost_array_get(ctx, sl, 5 * i);
             Xpost_Object p1 = xpost_array_get(ctx, sl, 5 * i + 1);
@@ -1323,11 +1333,12 @@ void _text_clip_get(Xpost_Context *ctx, Xpost_Object gs, textstate *ts)
     if (xpost_object_get_type(o) == arraytype && o.comp_.sz == 4)
     {
         double c[4];
-        int i;
 
-        for (i = 0; i < 4; i++)
-            if (!_clip_number(ctx, o, i, &c[i]))
-                return;
+        if (!_clip_number(ctx, o, 0, &c[0])
+         || !_clip_number(ctx, o, 1, &c[1])
+         || !_clip_number(ctx, o, 2, &c[2])
+         || !_clip_number(ctx, o, 3, &c[3]))
+            return;
         /* the bounds meet the pixel grid under the any-part-of-pixel
            rule of PLRM 7.5.1, on the quantized coordinates the scan
            conversion reads a region's vertices as */
@@ -4111,12 +4122,8 @@ int _stringwidth(Xpost_Context *ctx,
         if (xpost_object_get_type(psmat) == arraytype && psmat.comp_.sz == 6)
         {
             real m[4], det;
-            int i;
-            for (i = 0; i < 4; i++)
-            {
-                Xpost_Object el = xpost_array_get(ctx, psmat, i);
-                m[i] = xpost_object_number(el);
-            }
+
+            _matrix_linear_part(ctx, psmat, m);
             det = m[0] * m[3] - m[1] * m[2];
             if (det != 0)
             {
