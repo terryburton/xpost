@@ -161,7 +161,12 @@ showpage
 % hold, once, before the boundary, and this asks a device that records
 % what it was handed.
 %
-% The recorder replaces the device, so it comes after the page above.
+% The recorder replaces the device, so it comes after the page above. The
+% swap is a bracket: the device installed here is put back at the end, so
+% the job ends on the device it was started with and that device is the
+% one the interpreter tears down. A device left out of the graphics state
+% is a device nothing retires, and the classes that keep their raster or
+% their content accumulator in memory of their own hold it until they are.
 
 /DEVR 96 96 .privatedict /newPGMIMAGEdevice get exec def
 /handed null def
@@ -201,6 +206,10 @@ dup 0 ge exch 1 le and
 dup null eq { pop -1 } if
 0.25 sub abs 0.001 lt
     (a component inside the range arrives unchanged) assert
+
+% put the job's own device back, closing the bracket the recorder opened
+.privatedict /.gstatetemplate get exec /device dev put
+graphicsdict /currgstate get /device dev put
 
 witness { (\nREADBACK\n) print } if
 faildict /n get 0 eq { (\nSUCCESS\n) print }{ (\nFAILURES\n) print } ifelse
