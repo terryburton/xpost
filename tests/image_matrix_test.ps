@@ -77,9 +77,12 @@
 
 { /f (imatrix.scratch) (w) file def f bytes writestring f closefile
   place 4 4 8 [4 0 0 -4 0 4]
+  /f (imatrix.scratch) (r) file def
   << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
      /Decode [0 1] /ImageMatrix [4 0 0 -4 0 4]
-     /DataSource (imatrix.scratch) (r) file >> image grestore
+     /DataSource f >> image grestore
+  % the file is deleted at the end and an open one need not go
+  f closefile
   pop pop pop pop } (a file) (source) works
 
 % a procedure that hands over the data a piece at a time, which is the

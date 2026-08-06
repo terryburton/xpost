@@ -82,6 +82,9 @@ cases {
     % and the one it has to refuse
     { /o (fmatrix.scratch) (w) file def /e o fn cvn filter def
       e read pop pop }                          (reading an output filter) fn refuses
+    % the refusal unwound past the closes, so the pair it opened is still
+    % open; the file is deleted at the end and an open one need not go
+    e closefile o closefile
 } forall
 
 % ------------------------------------------- the parameters a filter needs
