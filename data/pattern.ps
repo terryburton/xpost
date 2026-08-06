@@ -134,20 +134,25 @@ currentglobal true setglobal
 % the region resolves to its spans unconditionally: the shading and
 % cell fills intersect against the resolved form, where a raw path
 % stored by the trivial branch of clip would not combine
-/.patternclip { % spanpoly-producing-preamble is the caller's
-    newpath
-    //.xpostsys /.polytopath get exec
-    % the region is pixel-band spans, which no single path describes: a
-    % device that clips for itself has no shape to be given, and the one
-    % the caller's own clip left behind is not this one
+/.patternclip { % [ spans ... ] is the caller's
+    //.xpostsys /.clipstoreparts get exec
+    % the region is pixel-band spans, which no single path under the
+    % nonzero rule describes: a device that clips for itself has no
+    % shape to be given, and the one the caller's own clip left behind
+    % is not this one
     graphicsdict /currgstate get /currpath get
     null //.xpostsys /.setclipregion get exec
+    % and the region is not left standing in as the current path: a
+    % segment appended to a path is written into the storage the path
+    % already holds while there is room, so the cells about to be walked
+    % would otherwise build on the very region they are being cut from
+    newpath
 } bind def
 
 /.patternfill {
     gsave
     flattenpath
-    .fillpolyargs //.xpostsys /.clipmeet get exec
+    .fillpolyargs //.xpostsys /.clipmeetparts get exec
     //.patternclip exec
     //.patterntile exec
     grestore
@@ -157,8 +162,8 @@ currentglobal true setglobal
 /.patterneofill {
     gsave
     flattenpath
-    .fillpolyargs .eospanpoly
-    //.xpostsys /.clipmeet get exec
+    .fillpolyargs //.xpostsys /.eospanparts get exec
+    //.xpostsys /.clippartsmeet get exec
     //.patternclip exec
     //.patterntile exec
     grestore

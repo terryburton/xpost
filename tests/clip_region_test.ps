@@ -617,6 +617,86 @@ initgraphics erasepage 2 4 combclip
 30000 eq (an eofill of the comb under the comb marks every pixel of them)
     assert
 
+% --- a region no single polygon describes -----------------------------
+% The comb above is a region whose own path a single array states
+% easily. A region cut FROM it is the fifteen thousand pixel-band
+% rectangles the cut leaves, and no single array holds those: they cost
+% seventy-five thousand elements where the field runs out around
+% sixty-five.
+%
+% A stored region is therefore not a polygon a painter reads out of an
+% array. It is a path, and the machinery resolves it to bands for
+% itself, so how finely a region is divided settles what the resolving
+% costs and not whether the region can be held. Three operators store a
+% region cut that way -- clip and eoclip resolve their operand against
+% the region in force, and a pattern fill makes the region it tiles over
+% into the clip its cells are cut from -- and each is asked the comb.
+
+% clip: the region cut from the comb is stored, and a fill under it
+% marks the comb's own pixels. The bands are counted as before: a
+% region that had fallen back on its bounding box would send far more
+initgraphics erasepage 2 4 combclip
+wholepage clip
+DEV5 /bands 0 put
+0 setgray wholepage fill
+2 4 tally
+0 eq (a fill under a clip taken from the comb stays inside the teeth) assert
+30000 eq (a fill under a clip taken from the comb marks every pixel of them)
+    assert
+DEV5 /bands get 15000 eq
+    (the fill under the stored region sends its fifteen thousand bands, once each)
+    assert
+
+% and the region's boundary still answers for it: clippath hands back
+% what the painters are enforcing, teeth and all
+clippath pathbbox
+/ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
+rx0 0 (clippath over the stored region reports its left edge) assertnear
+ry0 0 (clippath over the stored region reports its bottom edge) assertnear
+rx1 198 (clippath over the stored region reports its right edge) assertnear
+ry1 300 (clippath over the stored region reports its top edge) assertnear
+
+% eoclip: the even-odd interior of the comb, resolved with nothing
+% cutting it, is those same fifteen thousand rectangles
+initgraphics erasepage
+2 4 combpath eoclip
+0 setgray wholepage fill
+2 4 tally
+0 eq (a fill under an eoclip of the comb stays inside the teeth) assert
+30000 eq (a fill under an eoclip of the comb marks every pixel of them) assert
+
+% a pattern fill: the region it tiles over becomes the clip, and every
+% cell is cut from it again inside the tiling -- so the region is stored
+% and then met, cell after cell, in the one operation
+initgraphics erasepage 2 4 combclip
+<< /PatternType 1 /PaintType 1 /TilingType 1
+   /BBox [0 0 8 8] /XStep 8 /YStep 8
+   /PaintProc { begin 0 setgray 0 0 8 8 rectfill end } >>
+matrix makepattern
+/Pattern setcolorspace setcolor
+wholepage fill
+2 4 tally
+0 eq (a pattern fill under the comb stays inside the teeth) assert
+30000 eq (a pattern fill under the comb marks every pixel of them) assert
+
+% the control for all of it: a region a single array holds is stored and
+% met exactly as before, and clippath still answers for a region that
+% covers no pixels with the one point at the page centre that bounds
+% nothing
+initgraphics erasepage
+newpath 40 50 moveto 160 50 lineto 160 250 lineto 40 250 lineto closepath clip
+newpath 300 300 moveto 310 300 lineto 310 310 lineto 300 310 lineto
+closepath clip
+0 setgray wholepage fill
+200 200 tally pop
+0 eq (a fill under a region covering no pixels marks nothing) assert
+clippath pathbbox
+/ey1 exch def /ex1 exch def /ey0 exch def /ex0 exch def
+ex0 100 (clippath over an empty region reports the page centre) assertnear
+ey0 150 (clippath over an empty region reports the page centre in y) assertnear
+ex1 ex0 (clippath over an empty region bounds no width) assertnear
+ey1 ey0 (clippath over an empty region bounds no height) assertnear
+
 % --- clipsave's depth limit is the exhaustion PLRM 8.2 names for it ---
 % The stack is a fixed depth. Running past it is the operator running out
 % of storage, not a bad index handed to it, and a program that catches the

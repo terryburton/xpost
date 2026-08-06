@@ -59,6 +59,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
+#include "xpost_op_path.h" /* read a path's fill vertices */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_generic.h" /* check prototypes */
 #include "xpost_strbuf.h" /* the growable byte buffer the content accumulates in */
@@ -69,7 +70,7 @@ struct point
 };
 
 /* marks a subpath separator in a point list */
-#define SUBPATH_BREAK ((real)-0x7ffffff)
+#define SUBPATH_BREAK XPOST_PATH_BREAK
 
 /* FIXME: re-entrancy */
 static Xpost_Context *localctx;
@@ -251,62 +252,30 @@ int _rspan_push(struct rspan **rsp, int *cap, int *n,
     return 0;
 }
 
-/* Scan-convert a null-separated polygon array to winding-resolved
-   band spans (the shared middle of the fill pipeline: vertices in,
-   sorted boundary passages accumulated to filled extents out).
+/* Scan-convert a run of vertices to winding-resolved band spans (the
+   shared middle of the fill pipeline: vertices in, sorted boundary
+   passages accumulated to filled extents out). A break entry ends one
+   subpath and begins the next.
    evenodd selects the insideness rule: 0 accumulates winding numbers
    to zero (nonzero rule), 1 counts boundary passages by parity
-   (even-odd rule). The caller owns the returned buffer.
-   0 on success. */
+   (even-odd rule). The vertices are consumed -- the buffer is freed
+   here whichever way the walk leaves -- and the caller owns the
+   returned spans. 0 on success. */
 static
-int _poly_resolved_spans(Xpost_Context *ctx,
-                         Xpost_Object poly,
-                         struct rspan **out,
-                         int *nout,
-                         int evenodd)
+int _points_resolved_spans(struct point *points,
+                           integer npoints,
+                           struct rspan **out,
+                           int *nout,
+                           int evenodd)
 {
-    struct point *points;
     struct band_span *spans;
     int nspans, spancap;
     struct rspan *rsp;
     int nrsp, rspcap;
-    int i;
+    integer i;
 
     *out = NULL;
     *nout = 0;
-
-    /* extract polygon vertices from ps array;
-       null elements separate subpaths */
-    points = malloc(poly.comp_.sz * sizeof *points);
-    if (!points)
-        return VMerror;
-    /* the vertex count is widened into the signed type the walk indexes
-       with, so the subpath cursor below stays signed throughout: it is
-       differenced against a subpath's first index to count vertices */
-    for (i = 0; i < (integer)poly.comp_.sz; i++)
-    {
-        Xpost_Object pair, x, y;
-
-        pair = xpost_array_get(ctx, poly, i);
-        if (xpost_object_get_type(pair) != arraytype)
-        {
-            points[i].x = SUBPATH_BREAK;
-            points[i].y = SUBPATH_BREAK;
-            continue;
-        }
-        x = xpost_array_get(ctx, pair, 0);
-        y = xpost_array_get(ctx, pair, 1);
-        if (xpost_object_get_type(x) == integertype)
-            x = xpost_real_cons((real)x.int_.val);
-        if (xpost_object_get_type(y) == integertype)
-            y = xpost_real_cons((real)y.int_.val);
-        /* quantize to the 1/256 pixel device grid, the same one the
-           contract's line walk uses: geometry meant to lie on a pixel
-           boundary arrives with accumulated float noise, and unsnapped
-           it would classify to the wrong side of the boundary */
-        points[i].x = (real)xpost_dev_line_quantize(x.real_.val);
-        points[i].y = (real)xpost_dev_line_quantize(y.real_.val);
-    }
 
     /* Scan-convert under the any-part-of-pixel rule (PLRM 7.5): a
        pixel is painted when the filled region meets its interior.
@@ -326,16 +295,16 @@ int _poly_resolved_spans(Xpost_Context *ctx,
     i = 0;
     for (;;)
     {
-        int s0, nv, base, k;
+        integer s0, nv, base, k;
         int dirn, ib, code;
         real lo, hi, submin, submax;
 
-        while (i < (integer)poly.comp_.sz && points[i].x == SUBPATH_BREAK)
+        while (i < npoints && points[i].x == SUBPATH_BREAK)
             i++;
-        if (i == (integer)poly.comp_.sz)
+        if (i == npoints)
             break;
         s0 = i;
-        while (i < (integer)poly.comp_.sz && points[i].x != SUBPATH_BREAK)
+        while (i < npoints && points[i].x != SUBPATH_BREAK)
             i++;
         nv = i - s0;
 
@@ -496,6 +465,107 @@ int _poly_resolved_spans(Xpost_Context *ctx,
     *out = rsp;
     *nout = nrsp;
     return 0;
+}
+
+/* Scan-convert a null-separated polygon array to winding-resolved band
+   spans: the array form of the vertices, where a null element separates
+   one subpath from the next. The caller owns the returned buffer.
+   0 on success. */
+static
+int _poly_resolved_spans(Xpost_Context *ctx,
+                         Xpost_Object poly,
+                         struct rspan **out,
+                         int *nout,
+                         int evenodd)
+{
+    struct point *points;
+    integer i;
+
+    *out = NULL;
+    *nout = 0;
+
+    points = malloc(poly.comp_.sz * sizeof *points);
+    if (!points)
+        return VMerror;
+    /* the vertex count is widened into the signed type the walk indexes
+       with, so the subpath cursor below stays signed throughout: it is
+       differenced against a subpath's first index to count vertices */
+    for (i = 0; i < (integer)poly.comp_.sz; i++)
+    {
+        Xpost_Object pair, x, y;
+
+        pair = xpost_array_get(ctx, poly, i);
+        if (xpost_object_get_type(pair) != arraytype)
+        {
+            points[i].x = SUBPATH_BREAK;
+            points[i].y = SUBPATH_BREAK;
+            continue;
+        }
+        x = xpost_array_get(ctx, pair, 0);
+        y = xpost_array_get(ctx, pair, 1);
+        if (xpost_object_get_type(x) == integertype)
+            x = xpost_real_cons((real)x.int_.val);
+        if (xpost_object_get_type(y) == integertype)
+            y = xpost_real_cons((real)y.int_.val);
+        /* quantize to the 1/256 pixel device grid, the same one the
+           contract's line walk uses: geometry meant to lie on a pixel
+           boundary arrives with accumulated float noise, and unsnapped
+           it would classify to the wrong side of the boundary */
+        points[i].x = (real)xpost_dev_line_quantize(x.real_.val);
+        points[i].y = (real)xpost_dev_line_quantize(y.real_.val);
+    }
+
+    return _points_resolved_spans(points, (integer)poly.comp_.sz,
+                                  out, nout, evenodd);
+}
+
+/* Scan-convert a path to winding-resolved band spans, reading its
+   vertices straight out of the packed path rather than through an
+   array of them. This is how a clipping region is resolved: a region
+   cut from another is one pixel-band rectangle per band it covers, and
+   a page divided finely across the rows has more of those than any
+   single array describes -- but a path holds its extent in a header
+   field of its own and has no such bound. The caller owns the returned
+   buffer. 0 on success. */
+static
+int _path_resolved_spans(Xpost_Context *ctx,
+                         Xpost_Object path,
+                         struct rspan **out,
+                         int *nout,
+                         int evenodd)
+{
+    struct point *points;
+    real *co;
+    int npts, i, code;
+
+    *out = NULL;
+    *nout = 0;
+
+    code = xpost_path_fill_points(ctx, path, &co, &npts);
+    if (code)
+        return code;
+    if (npts == 0)
+        return 0;
+    points = malloc((size_t)npts * sizeof *points);
+    if (!points)
+    {
+        free(co);
+        return VMerror;
+    }
+    for (i = 0; i < npts; i++)
+    {
+        if (co[2 * i] == SUBPATH_BREAK)
+        {
+            points[i].x = SUBPATH_BREAK;
+            points[i].y = SUBPATH_BREAK;
+            continue;
+        }
+        points[i].x = (real)xpost_dev_line_quantize(co[2 * i]);
+        points[i].y = (real)xpost_dev_line_quantize(co[2 * i + 1]);
+    }
+    free(co);
+
+    return _points_resolved_spans(points, (integer)npts, out, nout, evenodd);
 }
 
 static
@@ -914,12 +984,16 @@ static int _rspans_to_columns(struct rspan *r, int n)
 }
 
 /* subjectpoly clippoly serial  .regionmeet  spanpoly
+ * subjectpoly clippath serial  .regionmeet  spanpoly
  *
- * THE intersection of two device regions. Each operand is a
- * null-separated polygon array in the FillPoly argument format; the
- * result is one such array of pixel-band rectangles, which every
- * consumer downstream treats by either insideness rule because the
- * rectangles are winding-uniform.
+ * THE intersection of two device regions. The subject is a
+ * null-separated polygon array in the FillPoly argument format, and the
+ * region is either such an array or the path a graphics state stores
+ * its clip in -- the same vertices, held where an array's bounded
+ * length does not reach them, which is what lets a region divided
+ * finely across the rows be met at all. The result is one polygon array
+ * of pixel-band rectangles, which every consumer downstream treats by
+ * either insideness rule because the rectangles are winding-uniform.
  *
  * THE BOUNDARY CONVENTION, stated once. A device region is a set of
  * pixels. Each operand is scan-converted to pixel-row bands under the
@@ -980,7 +1054,12 @@ int _regionmeet(Xpost_Context *ctx,
     }
     else
     {
-        code = _poly_resolved_spans(ctx, clip, &C, &nC, 0);
+        /* the region operand arrives either as a polygon array or as
+           the path a graphics state stores its clip in; a region no
+           single array describes has only the second form */
+        code = xpost_object_get_type(clip) == stringtype
+             ? _path_resolved_spans(ctx, clip, &C, &nC, 0)
+             : _poly_resolved_spans(ctx, clip, &C, &nC, 0);
         if (code)
         {
             free(S);
@@ -3219,6 +3298,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     _region_memo_flush();
     op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 1, 3,
                              arraytype, arraytype, integertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 1, 3,
+                             arraytype, stringtype, integertype); INSTALL;
     op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly_rows, 1, 3,

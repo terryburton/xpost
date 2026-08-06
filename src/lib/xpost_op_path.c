@@ -37,6 +37,7 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "xpost.h"
@@ -803,6 +804,116 @@ _rawarray_cons(Xpost_Context *ctx, unsigned int sz, Xpost_Object **payload)
     return o;
 }
 
+/* A path's fill vertices as a run of coordinates: two reals per point,
+   a subpath's own first point repeated where it closes, and a break --
+   XPOST_PATH_BREAK in both coordinates -- after each subpath. Subpaths
+   of fewer than three points cannot enclose area and are dropped.
+ *
+ * These are the vertices .fillpolyargs below states as a PostScript
+ * array, in the same order and by the same subpath rule, and the two
+ * are read by the same scan conversion. What differs is what holds
+ * them: an array's length is a bounded field, so a path of enough
+ * points has no array form, and a run of coordinates has no such
+ * bound. The clipping region is read this way, since a region cut from
+ * another is one pixel-band rectangle per band it covers and a page
+ * divided finely across the rows has more of those than one array
+ * describes.
+ *
+ * The caller owns the returned buffer, and is given none when the path
+ * has no points. 0 on success. */
+int xpost_path_fill_points(Xpost_Context *ctx, Xpost_Object path,
+                           real **out, int *nout)
+{
+    char *p;
+    unsigned int used, o;
+    unsigned int npts = 0, nsp = 0;
+    unsigned int n, spn;
+    real *buf;
+    int cmd, nc, k;
+    real co[6];
+
+    *out = NULL;
+    *nout = 0;
+    /* the region lives in a program-reachable dictionary and can be
+       replaced with a forged string, so the packed layout is checked
+       before it is walked */
+    if (!_path_ok(ctx, path))
+        return unregistered;
+    p = xpost_string_get_pointer(ctx, path);
+    used = _path_get_u32(p, 0);
+
+    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    {
+        cmd = p[o];
+        if (cmd == PATH_CMD_MOVE)
+            nsp++;
+        if (cmd == PATH_CMD_CLOSE)
+            npts += npts ? 1 : 0;
+        else
+            npts += cmd == PATH_CMD_CURVE ? 3 : 1;
+    }
+    if (npts == 0)
+        return 0;
+
+    buf = malloc((size_t)(npts + nsp) * 2 * sizeof *buf);
+    if (!buf)
+        return VMerror;
+
+    /* n counts points and breaks written; spn is where the subpath in
+       hand began, so n - spn is how many points it has so far and an
+       area-less one rolls back to it */
+    n = spn = 0;
+    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    {
+        cmd = p[o];
+        if (cmd == PATH_CMD_MOVE && n > spn)
+        {
+            if (n - spn >= 3)
+            {
+                buf[2 * n] = XPOST_PATH_BREAK;
+                buf[2 * n + 1] = XPOST_PATH_BREAK;
+                n++;
+            }
+            else
+                n = spn;
+            spn = n;
+        }
+        if (cmd == PATH_CMD_CLOSE)
+        {
+            if (n > spn)
+            {
+                buf[2 * n] = buf[2 * spn];
+                buf[2 * n + 1] = buf[2 * spn + 1];
+                n++;
+            }
+            continue;
+        }
+        nc = cmd == PATH_CMD_CURVE ? 6 : 2;
+        _path_get_coords(p, o, co, nc);
+        for (k = 0; k + 1 < nc; k += 2)
+        {
+            buf[2 * n] = co[k];
+            buf[2 * n + 1] = co[k + 1];
+            n++;
+        }
+    }
+    if (n > spn)
+    {
+        if (n - spn >= 3)
+        {
+            buf[2 * n] = XPOST_PATH_BREAK;
+            buf[2 * n + 1] = XPOST_PATH_BREAK;
+            n++;
+        }
+        else
+            n = spn;
+    }
+
+    *out = buf;
+    *nout = (int)n;
+    return 0;
+}
+
 /* build the polygon argument for the device FillPoly procedure: a flat
    array of [x y] point pairs with subpaths separated (and terminated)
    by null. All pairs are two-object views into one backing array, so
@@ -847,9 +958,12 @@ int _fillpolyargs(Xpost_Context *ctx)
         xpost_stack_push(ctx->lo, ctx->os, result);
         return 0;
     }
+    /* the length one array is allowed to reach: a deliberate bound
+       rather than the size field's own ceiling, which differs between
+       the ordinary and the large-object build. A path outrunning it is
+       still readable through xpost_path_fill_points above, which holds
+       its vertices outside VM */
     if (2 * npts > 65535)
-        /* too large for a single backing array (the object size field
-           is 16 bits) */
         return limitcheck;
 
     backing = _rawarray_cons(ctx, 2 * npts, &bk);

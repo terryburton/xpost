@@ -36,15 +36,18 @@
 } bind put
 
 % -  .clipregionpoly  poly
-% The clip region in the device FillPoly argument format, which is the
-% form the region intersection takes. .fillpolyargs reads the current
-% path, so the region stands in for it briefly.
+% The clip region in the device FillPoly argument format, for a consumer
+% that wants the region's vertices in an array. .fillpolyargs reads the
+% current path, so the region stands in for it briefly.
 %
-% Kept in the clip's own holder once worked out. Scan-converting the
-% region is the expensive half of meeting anything against it, and it
-% does not depend on what is being painted: a tiling pattern meets every
-% cell, and every mark the cell's paint procedure makes, against the one
-% region.
+% An array's length is a bounded field, so a region of enough vertices
+% has no such form and this refuses. The region intersection does not
+% come this way -- it reads the region's path itself, where no such
+% bound applies -- so what refuses here is a consumer's own question and
+% not a painter's.
+%
+% Kept in the clip's own holder once worked out, since building it is
+% the same work every time and the region does not change under it.
 %
 % A holder of serial zero is the one every graphics state is built with
 % and shares until its first clip, so nothing is kept there.
@@ -67,9 +70,19 @@
 % What the clip in force leaves of a region about to be painted. The one
 % way a painter asks that question; the rule it is answered by is stated
 % at .regionmeet.
+%
+% The region goes over as the path the graphics state holds it in, and
+% not as a polygon read out of an array. A region cut from another is
+% one pixel-band rectangle per band it covers, and a page divided finely
+% across the rows has more of those than any single array describes;
+% a path carries its extent in a header field of its own and has no
+% such bound. What the answer costs is another matter, and the answer
+% is an array: an intersection too finely divided for one refuses here,
+% and .clipmeetparts below is what asks again in parts.
 .xpostsys /.clipmeet {
-    //.xpostsys /.clipregionpoly get exec
-    graphicsdict /currgstate get /clipcache get /serial get
+    graphicsdict /currgstate get
+    dup /clipregion get
+    exch /clipcache get /serial get
     .regionmeet
 } bind put
 
@@ -178,6 +191,19 @@
     [ exch { //.xpostsys /.clipmeetparts get exec aload pop } forall ]
 } bind put
 
+% [ spans ... ]  .clipstoreparts  -
+% Make the parts the clip region: they become one path, which is what a
+% graphics state holds a region in and what the region intersection
+% reads. A region of more bands than one array describes is still one
+% path, since a path carries its extent in a header field of its own.
+%
+% The caller is left with the region as its current path, which is where
+% the clip writers each want it.
+.xpostsys /.clipstoreparts {
+    newpath
+    { //.xpostsys /.polytopath get exec } forall
+} bind put
+
 % -  initclip  -
 % Replace the clip region with the whole page (PLRM 8.2). The device
 % reports its dimensions in device pixels, so the rectangle is built with
@@ -254,10 +280,11 @@
     }{
         % otherwise intersect span by span, as eoclip does: the
         % resulting pixel-band rectangles are winding-uniform, so
-        % stacked regions of any shape combine exactly
-        .fillpolyargs //.xpostsys /.clipmeet get exec
-        newpath
-        //.xpostsys /.polytopath get exec
+        % stacked regions of any shape combine exactly. The answer
+        % arrives in parts where no single array states it, and the
+        % parts become the one path the region is held in
+        .fillpolyargs //.xpostsys /.clipmeetparts get exec
+        //.xpostsys /.clipstoreparts get exec
     } ifelse
     } ifelse
     % each branch above left the new region as the current path: put the
@@ -624,12 +651,11 @@ put
 /eoclip [ ] {
     graphicsdict /currgstate get /currpath get .copypath
     flattenpath
-    .fillpolyargs .eospanpoly
+    .fillpolyargs //.xpostsys /.eospanparts get exec
     .cliptrivial not {
-        //.xpostsys /.clipmeet get exec
+        //.xpostsys /.clippartsmeet get exec
     } if
-    newpath
-    //.xpostsys /.polytopath get exec
+    //.xpostsys /.clipstoreparts get exec
     % the region is the even-odd interior resolved to pixel-band spans,
     % which no single path under the nonzero rule describes: a device
     % that clips for itself has no shape to be given
