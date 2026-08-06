@@ -186,6 +186,8 @@ gstate /linecap
 gstate /linejoin
 gstate /miterlimit
 gstate /overprint
+gstate /strokeadjust
+gstate /smoothness
 gstate /dasharray
 gstate /dashoffset
 gstate /currfont

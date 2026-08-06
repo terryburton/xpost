@@ -93,6 +93,10 @@ userdict begin
     /linejoin 0
     /miterlimit 10.0
     /overprint false
+    % stroke adjustment and smoothness are the device's own defaults, so
+    % they sit here with the rest of the state a new device starts from
+    /strokeadjust false
+    /smoothness 0.02
     /dasharray []
     /dashoffset 0.0
     /currfont 1 dict
@@ -195,17 +199,17 @@ end
 } //.xpostsys /.defop get exec
 
 % -  initgraphics  -
-% reset graphics state parameters
-% -  initgraphics  -
-% the graphics state back to its defaults, and nothing else: the
-% specification gives the equivalent code, and it neither touches raster
-% memory nor reports what it did
+% Reset the eleven graphics state parameters PLRM 8.2 names -- the CTM,
+% the current point, the path, the clipping path, the colour space, the
+% colour, the line width, the line cap, the line join, the miter limit
+% and the dash pattern -- and leave every other one standing. The output
+% device, the font, stroke adjustment, the clipping path stack and every
+% device-dependent parameter are among those left alone. It touches the
+% graphics state only, not raster memory, and reports nothing.
 %
-% The defaults come from the template directly. gstate is a copy of the
-% current state, so setting the state from one would reinstate what is
-% already in force.
+% The body is the equivalent code the specification gives, so the eleven
+% are reset by the operators that own them and nothing reaches the rest.
 /initgraphics [ ] {
-    .privatedict /.gstatetemplate get exec dup length dict copy setgstate
     initmatrix
     newpath
     initclip
@@ -216,6 +220,35 @@ end
     10 setmiterlimit
     [ ] 0 setdash
 } //.xpostsys /.defop get exec
+
+% -  .initdevicegstate  -
+% The graphics state a newly installed device starts from (PLRM 8.2
+% setpagedevice). The defaults come from the template, because the live
+% state holds the outgoing device's values; the template's device slot
+% has already been pointed at the incoming one.
+%
+% This is a wider reset than initgraphics: the halftone screen, the
+% transfer functions, stroke adjustment and overprint go back to their
+% defaults, because they describe how a device renders and the device
+% has just changed.
+%
+% Four parameters carry across, named here rather than derived, because
+% they describe the job and not the device: the font, flatness, black
+% generation and undercolour removal.
+.xpostsys /.initdevicegstate {
+    4 dict begin
+    /d.held 4 dict def
+    [ /currfont /flat /blackgen /ucr ] {
+        /d.k exch def
+        graphicsdict /currgstate get d.k 2 copy known
+            { get d.held d.k 3 -1 roll put }
+            { pop pop } ifelse
+    } forall
+    .privatedict /.gstatetemplate get exec dup length dict copy setgstate
+    d.held { graphicsdict /currgstate get 3 1 roll put } forall
+    end
+    initgraphics
+} put
 
 % -  gstate  gstate
 % A copy of the current graphics state, as a new gstate object (PLRM

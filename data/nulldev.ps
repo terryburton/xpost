@@ -1,8 +1,15 @@
 //.internaldict /QUIET known { }{ (loading nulldev.ps...)print } ifelse
 
+% -  nulldevice  -
+% Install the null device (PLRM 8.2). Its default transformation matrix
+% is the identity: the device corresponds to no physical page, so there
+% is no resolution to scale by and no page height to measure a flip
+% from. The matrix is given here rather than by the shared device
+% completion, which derives one from a real page's size.
 /nulldevice [ ] {
     graphicsdict /currgstate get /device
     612 792 .privatedict /newnulldevice get exec
+    dup /defaultmatrix [ 1.0 0.0 0.0 1.0 0.0 0.0 ] put
     put
 } //.xpostsys /.defop get exec
 .privatedict /newnulldevice { % width height

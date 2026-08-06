@@ -63,4 +63,118 @@ currentdash exch pop 0 eq (the dash offset is reset) assert
 currentgray 0.0 eq (the colour is reset) assert
 currentcolorspace 0 get /DeviceGray eq (the colour space is reset) assert
 
+% array1 array2  aeq  bool -- the numbers in them agree
+/aeq { /q.b exch def /q.a exch def
+    q.a length q.b length eq {
+        true 0 1 q.a length 1 sub
+            { dup q.a exch get exch q.b exch get eq and } for
+    }{ false } ifelse } def
+
+% the matrix is reset, which the two remaining resets of the eleven
+% cannot be told from unless the reset value is first made to differ
+initgraphics matrix currentmatrix /m.default exch def
+2 3 scale 10 20 translate
+initgraphics
+matrix currentmatrix m.default aeq (the matrix is reset) assert
+
+% and so is the clipping path
+initgraphics clippath pathbbox 4 array astore /c.default exch def
+newpath 100 100 moveto 200 100 lineto 200 200 lineto 100 200 lineto closepath
+clip
+clippath pathbbox 4 array astore c.default aeq not (the clip narrowed) assert
+initgraphics
+clippath pathbbox 4 array astore c.default aeq (the clipping path is reset) assert
+
+% ------------------------------------------ and everything else stands
+% The specification names eleven parameters and says the rest are left
+% unchanged, the font among them. Every probe value below differs from
+% the default the parameter would take if it were reset, so a parameter
+% that was reset cannot pass by holding a default that happens to match.
+
+% a font of the test's own, so this does not rest on a font file
+/T3 8 dict def
+T3 begin
+    /FontType 3 def
+    /FontMatrix [0.001 0 0 0.001 0 0] def
+    /FontBBox [0 0 1000 1000] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /Abox put
+    /BuildGlyph { exch pop pop
+        1000 0 setcharwidth 0 0 800 800 rectfill } bind def
+end
+/T3Probe T3 definefont pop
+
+/setprobes {
+    /T3Probe findfont 12 scalefont setfont
+    true setstrokeadjust
+    true setoverprint
+    0.7 setflat
+    0.5 setsmoothness
+    { 0.5 mul } settransfer
+    { 0.25 add } setblackgeneration
+    { 0.75 mul } setundercolorremoval
+    55 33 { pop 0.5 } setscreen
+    << /Marker 42 >> setcolorrendering
+} def
+
+setprobes
+initgraphics
+currentfont /FontType known { currentfont /FontType get 3 eq }{ false } ifelse
+    (the font stands) assert
+currentstrokeadjust (stroke adjustment stands) assert
+currentoverprint (overprint stands) assert
+currentflat 0.7 eq (flatness stands) assert
+currentsmoothness 0.5 eq (smoothness stands) assert
+currenttransfer 0.5 exch exec 0.25 eq (the transfer function stands) assert
+currentblackgeneration 0.5 exch exec 0.75 eq (black generation stands) assert
+currentundercolorremoval 0.5 exch exec 0.375 eq (undercolour removal stands) assert
+currentscreen pop 33 eq exch 55 eq and (the halftone screen stands) assert
+currentcolorrendering /Marker 2 copy known { get 42 eq }{ pop pop false } ifelse
+    (the colour rendering stands) assert
+
+% the output device stands too: the null device reports the identity as
+% its default matrix, so a reset that put the page device back would
+% leave a different matrix in force
+gsave
+    nulldevice
+    initgraphics
+    matrix currentmatrix [1.0 0.0 0.0 1.0 0.0 0.0] aeq
+grestore
+(the output device stands) assert
+
+% ------------------------------------ what a device change resets instead
+% Installing a page device reinitialises more than the eleven: the
+% parameters that describe how the outgoing device rendered go back to
+% their defaults, because the device has changed. Four are not among
+% them, because they describe the job rather than the device -- the
+% font, flatness, black generation and undercolour removal.
+
+setprobes
+<< /PageSize [612 792] >> setpagedevice
+currentfont /FontType known { currentfont /FontType get 3 eq }{ false } ifelse
+    (the font survives a device change) assert
+currentflat 0.7 eq (flatness survives a device change) assert
+currentblackgeneration 0.5 exch exec 0.75 eq
+    (black generation survives a device change) assert
+currentundercolorremoval 0.5 exch exec 0.375 eq
+    (undercolour removal survives a device change) assert
+currentstrokeadjust not (stroke adjustment is reset by a device change) assert
+currentoverprint not (overprint is reset by a device change) assert
+currentsmoothness 0.02 eq (smoothness is reset by a device change) assert
+currenttransfer 0.5 exch exec 0.5 eq
+    (the transfer function is reset by a device change) assert
+currentscreen pop 45 eq exch 60 eq and
+    (the halftone screen is reset by a device change) assert
+currentcolorrendering /Marker known not
+    (the colour rendering is reset by a device change) assert
+currentlinewidth 1.0 eq (a device change resets the eleven as well) assert
+
+% and the way a program meets this: a font selected before the page is
+% set up still shows afterwards
+/T3Probe findfont 12 scalefont setfont
+<< /PageSize [612 792] >> setpagedevice
+newpath 100 100 moveto
+{ (A) show } stopped not (a font selected before a device change shows) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

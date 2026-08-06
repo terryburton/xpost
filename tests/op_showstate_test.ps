@@ -13,6 +13,13 @@
 /note { (FAIL: ) print print ( ) print print (\n) print
     /bad bad 1 add store } def
 
+% The current font starts as an invalid font dictionary, and no operator
+% puts one of those back: setfont refuses a dictionary that is not a
+% font, and resetting the graphics state leaves the font parameter
+% standing. So the state is taken here, before anything selects a font,
+% and set again for each of the checks that wants none selected.
+/nofontstate gstate def
+
 /withfont { initgraphics newpath /Helvetica findfont 12 scalefont setfont } def
 
 /needspoint { % {proc} (what)
@@ -77,7 +84,7 @@ w.y eq exch w.x eq and (a width does not depend on the current point) assert
 % The current font starts as an invalid font dictionary, so nothing
 % shows or measures until a program selects one.
 
-/nofont { initgraphics newpath 10 10 moveto } def
+/nofont { nofontstate setgstate newpath 10 10 moveto } def
 /needsfont { % {proc} (what)
     /f.w exch def /f.p exch def
     clear nofont

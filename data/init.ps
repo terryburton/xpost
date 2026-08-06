@@ -1522,11 +1522,15 @@ currentglobal true setglobal
         % and the defaultmatrix operator resolve it through them
         .privatedict /.gstatetemplate get exec /device newdev put
         graphicsdict /currgstate get /device newdev put
-        initgraphics
-        % the page a device is installed on starts clear: initgraphics
-        % resets the graphics state and not raster memory, so without
-        % this the job paints onto whatever the buffer was created
-        % holding, and emits it
+        % installing a device reinitialises the whole graphics state
+        % barring the font parameter, which is more than initgraphics
+        % resets: the device-dependent parameters go back to defaults
+        % too, since they described the device being retired
+        //.xpostsys /.initdevicegstate get exec
+        % the page a device is installed on starts clear: resetting the
+        % graphics state does not touch raster memory, so without this
+        % the job paints onto whatever the buffer was created holding,
+        % and emits it
         erasepage
         off aload pop translate
         end
@@ -1819,14 +1823,16 @@ currentglobal true setglobal
     userdict /.gstatetemplate known { userdict /.gstatetemplate undef } if
     setglobal
 
-        % initgraphics needs a device, so it runs only when graphics has loaded;
-        % locking down without graphics leaves no graphics state to initialise
+        % the reset needs a device, so it runs only when graphics has loaded;
+        % locking down without graphics leaves no graphics state to initialise.
+        % The state the interpreter's own device starts from is the one any
+        % other device would start from, so it is built the same way
         /graphicsdict where {
             pop
-            //.internaldict /QUIET known { }{ (graphics loaded, calling initgraphics\n)print } ifelse
-            initgraphics
+            //.internaldict /QUIET known { }{ (graphics loaded, initialising graphics state\n)print } ifelse
+            //.xpostsys /.initdevicegstate get exec
             % the first page starts clear. Every later one is cleared by
-            % showpage; initgraphics does not clear any of them, since it
+            % showpage; the reset clears none of them, since it
             % resets the graphics state and not raster memory
             erasepage
         } if
