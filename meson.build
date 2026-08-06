@@ -415,8 +415,12 @@ context_reuse_exe = executable('context_reuse_test',
   dependencies: libxpost_dep,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
+# In the memacct suite: it weighs the process, so it cannot answer under
+# an allocator that keeps freed memory in quarantine and carries shadow
+# maps of its own.
 test('context-reuse',
   context_reuse_exe,
+  suite: ['xpost', 'memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The same embedding runs with the collector set to collect constantly. What
@@ -425,6 +429,7 @@ test('context-reuse',
 test('gc-pressure',
   find_program('tests/run-gc-pressure-test.sh'),
   args: [ run_status_exe, context_reuse_exe ],
+  suite: ['xpost', 'memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: a run closes the file it wrapped around the program
@@ -1561,6 +1566,7 @@ test('filter-leak',
   find_program('tests/run-filter-leak-test.sh'),
   args: [ xpost_exe, files('tests/filter_leak_test.ps'),
           files('glibc.supp') ],
+  suite: ['xpost', 'memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 test('stream-exec',

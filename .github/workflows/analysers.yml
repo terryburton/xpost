@@ -1,0 +1,199 @@
+name: analysers
+
+# The compiler's own diagnostics are errors in every build (meson.build).
+# These are the checks that cost too much to run on every compile: two
+# static analysers that walk paths rather than statements, and two
+# dynamic ones that run the suite and watch what it touches.
+#
+# Each job reports rather than blocks, for now: the analysers have
+# findings on the tree today, and a job that fails from the first run is
+# a job that gets disabled. The counts are the ratchet -- when a class
+# reaches zero, promote it by dropping its `|| true`.
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+
+  sanitizers:
+    name: address, leak and undefined behaviour
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build llvm
+    # The suite is the workload: it already drives every device, every
+    # filter and the collector. A sanitizer over it is the cheapest
+    # coverage available, and it is how a heap overflow in the fax
+    # encoder and two undefined shifts would have been found by the
+    # build rather than by hand.
+    - name: setup
+      run: |
+        meson setup builddir \
+          -Db_sanitize=address,undefined \
+          -Db_lundef=false
+    - name: build
+      run: ninja -C builddir
+    - name: test
+      env:
+        # Leak detection is off here and reported by the job below: what
+        # blocks is a memory-safety error or undefined behaviour, which
+        # the tree is clean of, so this job is green from its first run
+        # and a regression is what turns it red.
+        ASAN_OPTIONS: detect_leaks=0:abort_on_error=0
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+      # memacct weighs the process, which a sanitizer's shadow maps and
+      # quarantine necessarily perturb, and one of its tests runs a leak
+      # checker of its own.
+      run: |
+        meson test -C builddir --print-errorlogs \
+          --no-suite memacct --timeout-multiplier 5
+
+  leaks:
+    name: leak report (informational)
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build llvm
+    - name: setup and build
+      run: |
+        meson setup builddir -Db_sanitize=address -Db_lundef=false
+        ninja -C builddir
+    # Twenty tests report leaks today, concentrated in the file and
+    # filter layer. Counted rather than blocked until that reaches zero.
+    - name: test and count
+      env:
+        ASAN_OPTIONS: detect_leaks=1:abort_on_error=0
+      run: |
+        meson test -C builddir --no-suite memacct \
+          --timeout-multiplier 5 || true
+        echo '--- tests reporting a leak ---'
+        grep -c 'LeakSanitizer: detected' \
+          builddir/meson-logs/testlog.txt || echo 0
+        echo '--- allocation sites ---'
+        grep -A4 'Direct leak' builddir/meson-logs/testlog.txt \
+          | grep -oE 'src/lib/[a-z_0-9]+\.c' | sort | uniq -c | sort -rn
+    - uses: actions/upload-artifact@v4
+      with:
+        name: leak-log
+        path: builddir/meson-logs/testlog.txt
+        retention-days: 30
+      if: always()
+
+  valgrind:
+    name: valgrind memcheck
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build valgrind
+    - name: setup and build
+      run: |
+        meson setup builddir
+        ninja -C builddir
+    # meson's own wrapper, so every test runs under it rather than a
+    # hand-picked few.
+    - name: test under memcheck
+      run: |
+        meson test -C builddir --print-errorlogs \
+          --wrapper='valgrind --error-exitcode=9 --leak-check=full \
+                     --errors-for-leak-kinds=definite --track-origins=yes' \
+          --timeout-multiplier 20
+
+  gcc-analyzer:
+    name: gcc -fanalyzer
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build
+    - name: setup
+      run: meson setup builddir -Dc_args=-fanalyzer
+    - name: build and summarise
+      run: |
+        ninja -C builddir 2>&1 | tee analyzer.log || true
+        echo '--- findings by class ---'
+        grep -oE '\[-Wanalyzer-[a-z-]+\]' analyzer.log \
+          | sort | uniq -c | sort -rn | tee analyzer.counts
+        echo '--- total ---'
+        grep -c 'warning:' analyzer.log || true
+    - uses: actions/upload-artifact@v4
+      with:
+        name: gcc-analyzer
+        path: |
+          analyzer.log
+          analyzer.counts
+        retention-days: 30
+      if: always()
+
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y cppcheck
+    # --check-level=exhaustive costs time and finds the paths a normal
+    # run gives up on. missingInclude is suppressed because the system
+    # headers are not what is being checked.
+    - name: run
+      run: |
+        cppcheck --enable=all --force --inline-suppr \
+          --check-level=exhaustive \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --template='{file}:{line}: {severity}: {id}: {message}' \
+          -I src/lib src/lib src/bin 2>cppcheck.log || true
+        echo '--- findings by severity and id ---'
+        sed -E 's/^[^ ]+ //; s/:.*$//' cppcheck.log | sort | uniq -c | sort -rn | head -30
+        echo '--- errors only ---'
+        grep -E ': error: ' cppcheck.log || echo 'none'
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cppcheck
+        path: cppcheck.log
+        retention-days: 30
+      if: always()
+
+  scan-build:
+    name: clang static analyser
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build \
+          clang clang-tools
+    - name: run
+      run: |
+        scan-build -o plist --status-bugs \
+          sh -c 'meson setup builddir && ninja -C builddir' || true
+        echo '--- reports ---'
+        find plist -name '*.html' | wc -l
+    - uses: actions/upload-artifact@v4
+      with:
+        name: scan-build
+        path: plist/**/*.html
+        retention-days: 30
+      if: always()
