@@ -114,7 +114,7 @@ currentglobal true setglobal
                     % the paint procedure runs on the caller's stacks:
                     % its defs are its own, out of this dict's names
                     pat dup /PaintProc get
-                    null 1 //.xpostsys /.callout get exec
+                    null 1 //.xpostsys /.pcallout get exec
                     grestore
                 } for
             } for

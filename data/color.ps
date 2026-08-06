@@ -19,7 +19,7 @@ currentglobal true setglobal
 % reduction works under are not theirs to inherit, and what they define
 % belongs where the program's other definitions go.
 /.decode {
-    null 1 //.xpostsys /.callout get exec
+    null 1 //.xpostsys /.pcallout get exec
 } bind def
 /.cieclamp {
     3 dict begin
@@ -299,7 +299,7 @@ currentglobal true setglobal
             lk exch n ix mul add get 255 div
         } for
     }{
-        ix exch null 1 //.xpostsys /.callout get exec
+        ix exch null 1 //.xpostsys /.pcallout get exec
         cs 1 get //.xpostsys /.csalt get exec
     } ifelse
     end

@@ -135,8 +135,13 @@ enum { C_FREE, C_IDLE, C_RUN, C_WAIT, C_IOBLOCK, C_ZOMB };
     _(lineto,              "lineto") \
     /* closes the array a device method call is assembled into */ \
     _(rbracket,            "]") \
-    /* the frame marker a wrapped operator leaves on the execution stack */ \
-    _(wrapdone,            "wrap.done")
+    /* the frame marker a wrapped operator leaves on the execution stack, \
+       and the same marker on a call a failure passed a boundary to leave */ \
+    _(wrapdone,            "wrap.done") \
+    _(wrapsealed,          "wrap.sealed") \
+    /* the boundary an operator calling back into a procedure of the \
+       program's leaves on the execution stack */ \
+    _(calloutdone,         "callout.done")
 
 /**
  * @def XPOST_OP_CODE

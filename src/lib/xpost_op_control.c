@@ -476,7 +476,8 @@ int xpost_op_exit (Xpost_Context *ctx)
             continue;
         }
         if (xpost_object_get_type(x) == operatortype &&
-            x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+            (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||
+             x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed)))
         {
             /* a wrapped call going with the loop: its finish marker will
                never run, so the operands saved for it are let go here */
@@ -563,11 +564,14 @@ int xpost_op_stop(Xpost_Context *ctx)
        part-way through, so it leaves nothing behind and its caller has
        its operands back (PLRM 3.11.1 step 1). This is where every way
        of abandoning one arrives: an error the interpreter raised, an
-       error a body raised with signalerror, and an error caught and
-       raised again with a bare stop, which is how the machinery
-       re-raises what it unwound its own brackets for. The raise sites
-       that unwind before recording $error do it again here, over the
-       same frames, to the same end. */
+       error a body raised with signalerror, and a failure a body caught
+       in a stopped context of its own and raised again with a bare
+       stop, which passes no error hook at all and so is reached here
+       only. The raise sites that unwind before recording $error do it
+       again here, over the same frames, to the same end. A call the
+       failure happened in a procedure of, rather than in the operator
+       itself, is left alone: the boundary beneath that procedure ends
+       the walk. */
     (void)xpost_op_errorunwind(ctx);
     /* Unwind the exec stack to the nearest enclosing stopped context --
        the false that `stopped` pushed. Pop straight to it: counting the
@@ -589,7 +593,8 @@ int xpost_op_stop(Xpost_Context *ctx)
             continue;
         }
         if (xpost_object_get_type(x) == operatortype &&
-            x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+            (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||
+             x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed)))
         {
             /* a wrapped call going with the stopped context: its finish
                marker will never run, so the operands saved for it are
@@ -616,11 +621,14 @@ int xpost_op_stop(Xpost_Context *ctx)
 }
 
 /* -  wrap.done  -
+   -  wrap.sealed  -
    the finish marker of a wrapped-operator call: the recorded
    procedure ran to completion, so the frame beneath the marker --
    the saved operands, the dict and operand depths at the call and the
    operator itself -- leaves the exec stack with it. The call ended the
-   way it meant to, so the copies taken against its failing go too. */
+   way it meant to, so the copies taken against its failing go too.
+   The sealed spelling marks a call a failure left through a boundary,
+   and reads the same to everything that discards a frame. */
 static
 int xpost_op_wrapdone(Xpost_Context *ctx)
 {
@@ -628,6 +636,40 @@ int xpost_op_wrapdone(Xpost_Context *ctx)
     (void)xpost_stack_pop(ctx->lo, ctx->es);
     (void)xpost_stack_pop(ctx->lo, ctx->es);
     (void)xpost_stack_pop(ctx->lo, ctx->es);
+    return 0;
+}
+
+/* -  callout.done  -
+   the boundary of a call back into a procedure of the program's: it
+   marks how far up the execution stack the failure of that procedure
+   belongs. Above it the object being executed is the program's own
+   procedure, so an error restores the operand stack to what that
+   procedure found (PLRM 3.11.1); the operator that called back sits
+   below, its operands consumed by work it did before calling. It
+   carries nothing, so reaching it in the ordinary way ends it. */
+static
+int xpost_op_calloutdone(Xpost_Context *ctx)
+{
+    (void)ctx;
+    return 0;
+}
+
+/* proc  .coexec  -
+   run proc with that boundary beneath it. The boundary leaves the
+   execution stack with proc, whether proc returns or is abandoned. */
+static
+int xpost_op_proc_coexec(Xpost_Context *ctx,
+                         Xpost_Object P)
+{
+    if (!xpost_op_exec_access_ok(ctx, P))
+        return invalidaccess;
+    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, calloutdone)))
+        return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es, P))
+    {
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
+        return execstackoverflow;
+    }
     return 0;
 }
 
@@ -836,6 +878,9 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "loop", (Xpost_Op_Func)xpost_op_proc_loop, 0, 1, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
+    op = xpost_operator_cons(ctx, "wrap.sealed", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
+    op = xpost_operator_cons(ctx, "callout.done",
+                             (Xpost_Op_Func)xpost_op_calloutdone, 0, 0);
     /* internal loop-continuation operators, referenced by opcode only */
     op = xpost_operator_cons(ctx, "for.iterate", (Xpost_Op_Func)xpost_op_for_iterate, 0, 0);
     op = xpost_operator_cons(ctx, "repeat.iterate", (Xpost_Op_Func)xpost_op_repeat_iterate, 0, 0);
@@ -853,6 +898,9 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, ".errorunwind",
                              (Xpost_Op_Func)xpost_op_errorunwind, 0, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".coexec", (Xpost_Op_Func)xpost_op_proc_coexec,
+                             0, 1, proctype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
     INSTALL;

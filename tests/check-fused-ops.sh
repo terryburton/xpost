@@ -31,10 +31,11 @@ guard_require_file "$libdir/xpost_interpreter.c" "the interpreter"
 # The operators the interpreter inlines: reference-table entries reached by
 # XPOST_OP_CODE, which yields an opcode to recognise the current element by.
 # The entries the interpreter schedules instead of recognising are reached by
-# XPOST_OP, which yields the operator object, and are not fused bodies. Two
+# XPOST_OP, which yields the operator object, and are not fused bodies. Four
 # opcodes are used for other purposes still (re-entering the scanner,
-# unwinding a wrapped-operator frame) and are listed here as exempt.
-exempt='token wrapdone'
+# unwinding a wrapped-operator frame sealed or not, and finding the boundary
+# of a call back into a program's procedure) and are listed here as exempt.
+exempt='token wrapdone wrapsealed calloutdone'
 
 fused=$(grep -oE 'XPOST_OP_CODE\(ctx, *[a-z]+\)' "$libdir/xpost_interpreter.c" \
         | sed -E 's/^.*, *//; s/\)$//' | sort -u)

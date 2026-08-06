@@ -16,18 +16,24 @@
 % There are three ways an error reaches a caller here. The interpreter
 % raises its own; a body written in PostScript raises one with
 % signalerror, which ends in a PostScript stop and never passes through
-% the interpreter's handler; and the graphics machinery catches an error
-% raised inside a program's procedure, unwinds the bracket it had open,
-% and raises it again with a bare stop. All three end in that stop,
-% which is where the unwinding is done, so a path added later inherits
-% it. That matters beyond tidiness: the machinery's own operators hold
-% the machinery's own structures while they work, and a program left
-% holding one can read and write it.
+% the interpreter's handler; and a body that caught a failure in a
+% stopped context of its own raises it again with a bare stop. All three
+% end in a stop, so the unwinding is done there as well as where each
+% error is raised, and a path added later inherits it. That matters
+% beyond tidiness: the machinery's own operators hold the machinery's
+% own structures while they work, and a program left holding one can
+% read and write it.
+%
+% The rule reaches only as far as the operator. Where an operator calls
+% back into a procedure of the program's, the object being executed when
+% the failure comes is that procedure, and the stack goes back to what
+% the procedure found -- not to what the operator was called with. The
+% operator's operands stay consumed.
 %
 % The operators built here are built rather than borrowed so the claims
 % are about the mechanism and not about whichever library operator
-% happens to fail this way today. Two library operators are asserted
-% alongside them, so that the mechanism is known to reach real ones.
+% happens to fail this way today. Library operators are asserted
+% alongside them, so that both halves are known to reach real ones.
 
 /ID 1183615869 internaldict def
 /fail false def
@@ -167,11 +173,12 @@ count d0 sub 2 eq
 % --- library operators ------------------------------------------------
 %
 % Two operators of the language itself, written in PostScript, whose
-% bodies consume their operands well before they discover they cannot
-% go on. findresource signals; image fails inside a procedure the
-% machinery runs for it, which is caught, unwound and raised again.
-% They are here so that the mechanism is known to reach operators
-% nobody wrote for this test.
+% bodies consume their operands well before they discover they cannot go
+% on. They stand here for both halves of the rule, as operators nobody
+% wrote for this test.
+%
+% findresource refuses on the operands it was handed, and hands them
+% back.
 
 count /d0 exch def
 { /zzz /zzz findresource } stopped pop
@@ -179,14 +186,138 @@ count d0 sub 2 eq
     { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
     (findresource gives back the operands it was called with) assert
 
-/im.m [ 1 0 0 1 0 0 ] def
-/im.p { } def
+% image runs a procedure of the program's. What fails in there is not
+% image refusing: the object being executed is the program's own
+% procedure, so the stack goes back no further than that procedure found
+% it, and the five operands image consumed stay consumed. The value the
+% program left below the call says nothing was put back over it: it is
+% still itself, and still the only thing there.
+%
+% Both ways out of that procedure leave the same stack, because both
+% leave by the same route.
+
+/im.m [ 8 0 0 -8 0 8 ] def
 count /d0 exch def
-{ 300 300 8 im.m /im.p load image } stopped pop
+/im.sentinel
+{ 8 8 8 im.m { stop } image } stopped pop
+count d0 sub 1 eq
+    { /im.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in the procedure image runs restores nothing of image's) assert
+
+count /d0 exch def
+/im.sentinel
+{ 8 8 8 im.m { zzundefinedname } image } stopped pop
+count d0 sub 1 eq
+    { /im.sentinel eq }{ d0 wrongdepth } ifelse
+    (an error in the procedure image runs restores nothing of image's) assert
+
+% The boundary the procedure stands behind is one-sided. An operator the
+% procedure itself calls is refusing on its own operands and hands them
+% back where it failed; only the calls beneath the procedure are left
+% alone.
+
+count /d0 exch def
+{ 8 8 8 im.m { /zzz /zzz findresource } image } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside that procedure gives its own back) assert
+
+% And it reaches only as far as the procedure. image failing on its own
+% account -- on an operand it was handed, or on what the procedure left
+% it once the procedure had returned -- is image refusing, and its five
+% operands come back as any other operator's do.
+
+count /d0 exch def
+{ 8 8 8 (notamatrix) { (\377) } image } stopped pop
 count d0 sub 5 eq
-    { /im.p load eq exch im.m eq and exch 8 eq and
-      exch 300 eq and exch 300 eq and }{ d0 wrongdepth } ifelse
-    (image gives back the operands it was called with) assert
+    { length 1 eq exch (notamatrix) eq and exch 8 eq and
+      exch 8 eq and exch 8 eq and }{ d0 wrongdepth } ifelse
+    (image refusing on an operand gives its operands back) assert
+
+count /d0 exch def
+{ 8 8 8 im.m { } image } stopped pop
+count d0 sub 5 eq
+    { length 0 eq exch im.m eq and exch 8 eq and
+      exch 8 eq and exch 8 eq and }{ d0 wrongdepth } ifelse
+    (image refusing on what the procedure left gives them back) assert
+
+% More of the first half, in operators of the language: an operator that
+% refuses on the operands it was handed hands them back, whichever
+% language it is written in and however many it takes.
+
+count /d0 exch def
+{ /zzz /zzz 1 defineresource } stopped pop
+count d0 sub 3 eq
+    { 1 eq exch /zzz eq and exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (defineresource gives back the operands it was called with) assert
+
+count /d0 exch def
+{ 1 2 3 4 5 6 7 99 roll } stopped pop
+count d0 sub 8 eq
+    { 99 eq exch 7 eq and exch 6 eq and exch 5 eq and exch 4 eq and
+      exch 3 eq and exch 2 eq and exch 1 eq and }{ d0 wrongdepth } ifelse
+    (roll gives back everything it was called with) assert
+
+% kshow refuses before it reaches the procedure it was handed, so this
+% is the first half of the rule and not the second: both operands come
+% back, the procedure among them.
+
+count /d0 exch def
+{ (ab) { pop pop stop } kshow } stopped pop
+count d0 sub 2 eq
+    { length 3 eq exch (ab) eq and }{ d0 wrongdepth } ifelse
+    (kshow gives back the operands it was called with) assert
+
+% --- a procedure is not an operator -----------------------------------
+%
+% Nothing is handed back for a procedure. A stop or an error inside one
+% leaves the operand stack as the failure found it: what the procedure
+% pushed stays, and what it consumed stays consumed. That holds whether
+% the procedure stands where it runs, is reached through a name, or is
+% fetched from a dictionary, and it holds for a procedure a control
+% operator is running.
+
+count /d0 exch def
+{ 1 2 3 stop } stopped pop
+count d0 sub 3 eq
+    { 3 eq exch 2 eq and exch 1 eq and }{ d0 wrongdepth } ifelse
+    (a stop in a procedure leaves what the procedure pushed) assert
+
+count /d0 exch def
+{ [1 2] 0 zzundefinedname } stopped pop
+count d0 sub 2 eq
+    { 0 eq exch dup length 2 eq exch 1 get 2 eq and and }
+    { d0 wrongdepth } ifelse
+    (an error in a procedure leaves what the procedure pushed) assert
+
+/pr.stop { 44 55 stop } def
+count /d0 exch def
+{ 11 22 pr.stop } stopped pop
+count d0 sub 4 eq
+    { 55 eq exch 44 eq and exch 22 eq and exch 11 eq and }
+    { d0 wrongdepth } ifelse
+    (a procedure a name resolves to is still a procedure) assert
+
+/pr.err { 44 55 zzundefinedname } def
+count /d0 exch def
+{ 11 22 pr.err } stopped pop
+count d0 sub 4 eq
+    { 55 eq exch 44 eq and exch 22 eq and exch 11 eq and }
+    { d0 wrongdepth } ifelse
+    (and so is one that fails rather than stops) assert
+
+count /d0 exch def
+{ 5 dict dup /zzk { stop } put dup /zzk get exec } stopped pop
+count d0 sub 1 eq
+    { type /dicttype eq }{ d0 wrongdepth } ifelse
+    (a procedure fetched from a dictionary is still a procedure) assert
+
+count /d0 exch def
+/fa.sentinel
+{ [10 20 30] { pop stop } forall } stopped pop
+count d0 sub 1 eq
+    { /fa.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a forall procedure restores nothing of forall's) assert
 
 % --- what a successful call leaves ------------------------------------
 %

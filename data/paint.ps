@@ -420,7 +420,7 @@
             % run the source on the caller's stacks: its defs are the
             % program's own business, and the machinery's scratch names
             % stay out of its reach
-            currentdict /datasrc get null 1 //.xpostsys /.callout get exec
+            currentdict /datasrc get null 1 //.xpostsys /.pcallout get exec
             /pend exch def
         } if
         pend length 0 eq {
@@ -1237,7 +1237,7 @@ setglobal
         { % collect the sample data
             bp buf length ge {exit} if
             % the source runs on the caller's stacks (see .fill)
-            currentdict /datasrc get null 1 //.xpostsys /.callout get exec
+            currentdict /datasrc get null 1 //.xpostsys /.pcallout get exec
             dup length 0 eq {pop exit} if
             dup length bp add buf length gt {
                 0 buf length bp sub getinterval

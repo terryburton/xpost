@@ -177,6 +177,10 @@ currentglobal true setglobal
 %
 % An error inside the procedure unwinds all of that and is then raised
 % again, so the caller's own error handling sees the original error.
+% The operand stack is the caller's own affair: what fails in here is
+% the caller failing, and its operands come back as they would from any
+% other part of its body. A procedure of the program's goes through
+% .pcallout below, which says otherwise.
 %
 % keys may be null and ndict 0. The procedure's operands are whatever is
 % already on the operand stack, and what it leaves there is left there.
@@ -220,6 +224,26 @@ currentglobal true setglobal
     7 { exch pop } repeat
     exec
 } bind def
+
+% {proc} keys ndict  .pcallout  -
+%
+% The same bracket for a procedure of the program's, which is what the
+% caller reaches for when it hands control back to the job: a Type 3
+% glyph's build procedure, a pattern's paint procedure, an image's data
+% source, a colour space's conversion.
+%
+% What fails inside such a procedure is the program's own object
+% failing, so the operand stack goes back to what the procedure found
+% (PLRM 3.11.1) and no further: the caller keeps the operands it
+% consumed reaching this point, and so does every caller beneath it.
+% Running the bracket beneath a boundary says so, and the saying holds
+% for the whole of the failure -- the re-raise at this bracket's tail,
+% and the re-raise of any bracket that catches it further out.
+%
+% A procedure the machinery wrote goes through .callout instead: what
+% fails in there is the caller's own failure, and the caller's operands
+% come back as they would from anywhere else in its body.
+/.pcallout { { //.callout exec } //.coexec } bind def
 
 end
 setglobal

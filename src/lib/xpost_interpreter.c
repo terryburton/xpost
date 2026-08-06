@@ -1416,6 +1416,24 @@ int eval(Xpost_Context *ctx)
    context is left alone: its procedure keeps running and its stacks
    are its own business.
 
+   The walk ends at a callout boundary for the same reason. An operator
+   that calls back into a procedure of the program's puts one on the
+   exec stack beneath the procedure, and a failure above it is the
+   procedure's: the object being executed is the program's own, so the
+   stack goes back to what the procedure found and no further. The
+   operator underneath consumed its operands doing the work that led to
+   the call, and they stay consumed. The boundary is one-sided -- a call
+   made from inside the procedure has its frame above it, and refuses on
+   its own operands as any other call does.
+
+   A failure leaves through the boundary in more than one step: the
+   bracket around the procedure catches it, unwinds what it had open and
+   raises it again, and so may a bracket further out, each re-raise
+   arriving after the boundary has gone with the stopped context it sat
+   under. So the walk marks the call beneath the boundary as it passes,
+   and every later step reads the mark and leaves that call, and
+   everything under it, alone.
+
    Two things stand between the stacks as they are and the state the
    outermost call found (PLRM 3.11.1 step 1): values the calls pushed
    and did not consume, dropped by going back to the shallowest depth
@@ -1447,15 +1465,17 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
        segments -- O(depth), not the O(depth^2) that repeated
        topdown_fetch would cost. A deep stack at error time (a
        runaway or a cascading error handler) would otherwise make
-       error handling itself the bottleneck. Stop at the nearest
-       stopped context (a bool false); above it, each wrapped
-       call's finish marker is followed, deeper, by its saved
-       operands and its ds, os and opcode integers. */
+       error handling itself the bottleneck. Stop at the nearer of
+       the stopped context (a bool false) and the callout boundary;
+       above it, each wrapped call's finish marker is followed,
+       deeper, by its saved operands and its ds, os and opcode
+       integers. */
     Xpost_Stack *esroot = xpost_stack_at(ctx->lo, ctx->es);
     Xpost_Stack *seg = esroot->prevseg
         ? xpost_stack_at(ctx->lo, esroot->prevseg) : esroot;
     int p = (int)seg->top - 1;
     int pending = 0; /* frame slots to read: 4->operands 3->ds 2->os 1->opcode */
+    int sealing = 0; /* past a boundary, looking for the call under it */
     int fds = 0, fos = 0;
     Xpost_Object frun = null;
 
@@ -1472,6 +1492,28 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
         }
         x = seg->data[p];
         p--;
+        if (sealing)
+        {
+            /* Past the boundary. The call under it is the one that
+               handed control to the program, and it keeps what it
+               consumed getting there -- not just for this walk but for
+               every later step of the same failure, which arrives after
+               the boundary itself has gone with the stopped context it
+               sat under. Its marker is changed in place to say so, and
+               the walk ends there: what is under it is under the
+               program's procedure too. */
+            if (xpost_object_get_type(x) == operatortype)
+            {
+                if (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed))
+                    break; /* said already */
+                if (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+                {
+                    seg->data[p + 1] = XPOST_OP(ctx, wrapsealed);
+                    break;
+                }
+            }
+            continue;
+        }
         if (pending)
         {
             if (pending == 4)
@@ -1510,9 +1552,18 @@ _unwind_wrapped_calls(Xpost_Context *ctx)
         }
         if (xpost_dict_compare_objects(ctx, fmark, x) == 0)
             break; /* the coming stop unwinds to here */
-        if (xpost_object_get_type(x) == operatortype &&
-            x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
-            pending = 4;
+        if (xpost_object_get_type(x) == operatortype)
+        {
+            if (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed))
+                break; /* a call already known to be under a procedure */
+            if (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, calloutdone))
+            {
+                sealing = 1; /* the failure is the program's procedure's */
+                continue;
+            }
+            if (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+                pending = 4;
+        }
     }
     if (found)
     {
@@ -2662,7 +2713,8 @@ run:
             Xpost_Object x = xpost_stack_pop(ctx->lo, ctx->es);
 
             if (xpost_object_get_type(x) == operatortype &&
-                x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone))
+                (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||
+                 x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapsealed)))
                 xpost_operator_wrapped_release(ctx,
                         xpost_stack_pop(ctx->lo, ctx->es));
         }

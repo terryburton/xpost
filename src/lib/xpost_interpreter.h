@@ -88,9 +88,14 @@ extern int _xpost_interpreter_is_tracing;
  * records the command in $error. The PostScript error hook asks for it
  * on behalf of an error a body raised with signalerror, whose stop
  * never reaches the interpreter's handler, and stop asks for it for
- * the calls it abandons, which covers a re-raise that passes no hook
- * at all. Reading the frames does not spend them, so the paths that
- * ask early and the stop that ends them all reach the same state.
+ * the calls it abandons, which covers a body that caught a failure in
+ * a stopped context of its own and raised it again with a bare stop,
+ * passing no hook at all. Reading the frames does not spend them, so
+ * the paths that ask early and the stop that ends them all reach the
+ * same state. The walk ends at the boundary an operator leaves under a
+ * procedure of the program's that it calls back into: a failure in
+ * there is that procedure's, and the calls beneath it keep what they
+ * consumed.
  */
 int xpost_op_errorunwind(Xpost_Context *ctx);
 
