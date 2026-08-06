@@ -56,8 +56,14 @@ graphicsdict /currgstate get /device DEV put
     end
 } bind def
 
-% the same face twice, painted as outlines and as solid glyphs
-/SW 30 def
+% the same face twice, painted as outlines and as solid glyphs.
+% StrokeWidth is a character space distance, and character space is a
+% thousand units to the em where the face behind the name makes a Type 1
+% dictionary and one unit to the em where it makes a Type 42. The width
+% is therefore said as the text space distance it is to come to and
+% carried into character space through the face's own matrix, so that
+% the same line is drawn whichever convention the face brings.
+/SW 30 0.001 /Times-Roman findfont /FontMatrix get 0 get div mul def
 /Times-Roman findfont dup length dict copy begin
     /PaintType 2 def
     /StrokeWidth SW def
