@@ -73,7 +73,13 @@ xpost_strbuf_init(Xpost_String_Buffer *b, size_t initial)
     return b->s ? 0 : VMerror;
 }
 
-/* make room for extra more bytes past the current length */
+/* Make room for extra more bytes past the current length.
+
+   A capacity is only ever a capacity of something: a buffer answering 0
+   holds bytes, so whatever reads or writes them past this call needs no
+   further test. The room already being there is the only way out that
+   does not allocate, and it is a way out only for a buffer that has
+   allocated once. */
 static inline int
 xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
 {
@@ -83,7 +89,7 @@ xpost_strbuf_reserve(Xpost_String_Buffer *b, size_t extra)
     if (extra > (size_t)-1 - b->len)
         return VMerror;
     need = b->len + extra;
-    if (need <= b->cap)
+    if (b->s && need <= b->cap)
         return 0;
     cap = b->cap ? b->cap : 16;
     while (cap < need)
