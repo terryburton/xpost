@@ -70,8 +70,10 @@ jobs:
       run: |
         meson setup builddir -Db_sanitize=address -Db_lundef=false
         ninja -C builddir
-    # Twenty tests report leaks today, concentrated in the file and
-    # filter layer. Counted rather than blocked until that reaches zero.
+    # One test reports a leak today: a second xpost_create replaces the
+    # interpreter instance without freeing the first, so the API test that
+    # builds a second context ends holding one. Counted rather than
+    # blocked until that reaches zero.
     - name: test and count
       env:
         ASAN_OPTIONS: detect_leaks=1:abort_on_error=0
