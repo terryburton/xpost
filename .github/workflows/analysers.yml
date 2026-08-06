@@ -77,43 +77,66 @@ jobs:
       run: |
         meson setup builddir -Db_sanitize=address -Db_lundef=false
         ninja -C builddir
-    # No test reports a leak, so the count is held to zero and this job
-    # blocks on it. The suppressions name what the tree links but does
-    # not own, so what is counted is the tree's own.
+    # Each process that leaks writes its report to a file of its own,
+    # and the count is the number of those files. It is not read out of
+    # the run's log, because most of the suite's wrappers run the
+    # interpreter with its output captured -- out=$(... 2>&1) -- and a
+    # report written to stderr is consumed by the wrapper that captured
+    # it, leaving meson only the wrapper's verdict. A count taken from
+    # the log therefore counts the tests that print straight through and
+    # no others; a count of files counts every process that ran.
     #
-    # What the count reaches is a sanitizer report that arrives in a
-    # test's output. A wrapper that runs the interpreter and reads what
-    # it printed consumes the report along with it, and meson records
-    # only the wrapper's verdict; leaks reached that way are outside the
-    # count and are not held by it. Two wrappers are in that position
-    # today -- colour-range and device-restore-retired, over a device
-    # buffer that outlives the device a setpagedevice retired -- so the
-    # run's own result is still counted rather than blocked, and the
-    # count earns the ratchet on its own.
+    # The sanitizer's exit status is turned off for the same reason from
+    # the other side. A report otherwise ends the process through the
+    # sanitizer's own exit, which returns a failing status and skips the
+    # flush of whatever the interpreter had buffered -- so a wrapper
+    # reading back what it printed fails for want of its own output, and
+    # reports a broken interpreter where what happened was a leak. With
+    # it off, the suite's result says whether the tree works and the
+    # count says what leaked, and neither stands in for the other. A
+    # memory-safety error keeps the sanitizer's status in the job above,
+    # which is where that class blocks.
+    #
+    # The suppressions name what the tree links but does not own, so
+    # what is counted is the tree's own. The count is held at the number
+    # below rather than at zero: a device that setpagedevice installs
+    # while a save is outstanding is dropped by the matching restore,
+    # which reinstates the device the graphics state named before it
+    # (PLRM 6.1), and nothing retires the one it displaces -- so the
+    # eight device classes that hold a page buffer or a content
+    # accumulator in memory of their own each report one, from
+    # tests/device_restore_retired_test.ps.
     #
     # The count and the allocation sites are both printed, so a red run
     # says how much leaked and where without opening the log.
     - name: test and check
       env:
-        ASAN_OPTIONS: detect_leaks=1:abort_on_error=0
-        # meson runs each test from the build tree, so the file is named
-        # from the checkout rather than relative to it.
+        # log_path names a directory that must already exist; the run
+        # step below makes it. meson runs each test from the build tree,
+        # so both paths are named from the checkout rather than relative
+        # to it.
+        ASAN_OPTIONS: >-
+          detect_leaks=1:abort_on_error=0:exitcode=0:log_path=${{ github.workspace }}/leak-logs/asan
         LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
       run: |
+        mkdir -p leak-logs
         meson test -C builddir --no-suite memacct \
           --timeout-multiplier 5 || true
-        echo '--- tests reporting a leak ---'
-        leaks=$(grep -c 'LeakSanitizer: detected' \
-          builddir/meson-logs/testlog.txt || true)
+        echo '--- processes reporting a leak ---'
+        leaks=$(grep -l 'LeakSanitizer: detected' leak-logs/* 2>/dev/null \
+          | wc -l)
         echo "$leaks"
         echo '--- allocation sites ---'
-        grep -A4 'Direct leak' builddir/meson-logs/testlog.txt \
-          | grep -oE 'src/lib/[a-z_0-9]+\.c' | sort | uniq -c | sort -rn || true
-        [ "$leaks" -eq 0 ]
+        cat leak-logs/* 2>/dev/null | grep -A4 'Direct leak' \
+          | grep -oE 'src/lib/[a-z_0-9]+\.c:[0-9]+' \
+          | sort | uniq -c | sort -rn || true
+        [ "$leaks" -le 8 ]
     - uses: actions/upload-artifact@v4
       with:
         name: leak-log
-        path: builddir/meson-logs/testlog.txt
+        path: |
+          builddir/meson-logs/testlog.txt
+          leak-logs
         retention-days: 30
       if: always()
 
