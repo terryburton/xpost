@@ -1,0 +1,13 @@
+# Allocations LeakSanitizer reaches through this tree but which this
+# tree does not own.
+#
+# The font configuration library builds a process-wide cache the first
+# time a font is asked for and holds it until the process ends, by its
+# own design; the XML parser it reads its configuration files with is
+# reached only from there. Neither allocation belongs to a context, so
+# neither is freed when one ends, and neither grows with the work a
+# process does -- a job server serving a million pages holds the same
+# cache it held after the first. They are named here so that the leaks
+# the tree does own can be held to zero.
+leak:libfontconfig
+leak:libexpat

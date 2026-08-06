@@ -118,6 +118,7 @@ tests/isolation_test.ps \
 tests/large_object_test.ps \
 tests/lockdown_test.c \
 tests/loop_exit_test.ps \
+tests/lsan.supp \
 tests/must_check.golden \
 tests/namespace_test.ps \
 tests/narrow_cursors.golden \

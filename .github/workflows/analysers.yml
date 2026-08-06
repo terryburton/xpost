@@ -13,8 +13,9 @@ name: analysers
 # meets it there; a class kept out of the blocking set says here why the
 # checker cannot be held to zero on it.
 #
-# Blocking today: every class the gcc analyser reports, and all of
-# cppcheck's but memleak and the style severities.
+# Blocking today: the leak count under the address sanitizer, every
+# class the gcc analyser reports, and all of cppcheck's but memleak and
+# the style severities.
 
 on:
   push:
@@ -49,7 +50,7 @@ jobs:
       run: ninja -C builddir
     - name: test
       env:
-        # Leak detection is off here and reported by the job below: what
+        # Leak detection is off here and checked by the job below: what
         # blocks is a memory-safety error or undefined behaviour, which
         # the tree is clean of, so this job is green from its first run
         # and a regression is what turns it red.
@@ -63,7 +64,7 @@ jobs:
           --no-suite memacct --timeout-multiplier 5
 
   leaks:
-    name: leak report (informational)
+    name: leak check
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
@@ -76,22 +77,39 @@ jobs:
       run: |
         meson setup builddir -Db_sanitize=address -Db_lundef=false
         ninja -C builddir
-    # One test reports a leak today: a second xpost_create replaces the
-    # interpreter instance without freeing the first, so the API test that
-    # builds a second context ends holding one. Counted rather than
-    # blocked until that reaches zero.
-    - name: test and count
+    # No test reports a leak, so the count is held to zero and this job
+    # blocks on it. The suppressions name what the tree links but does
+    # not own, so what is counted is the tree's own.
+    #
+    # What the count reaches is a sanitizer report that arrives in a
+    # test's output. A wrapper that runs the interpreter and reads what
+    # it printed consumes the report along with it, and meson records
+    # only the wrapper's verdict; leaks reached that way are outside the
+    # count and are not held by it. Two wrappers are in that position
+    # today -- colour-range and device-restore-retired, over a device
+    # buffer that outlives the device a setpagedevice retired -- so the
+    # run's own result is still counted rather than blocked, and the
+    # count earns the ratchet on its own.
+    #
+    # The count and the allocation sites are both printed, so a red run
+    # says how much leaked and where without opening the log.
+    - name: test and check
       env:
         ASAN_OPTIONS: detect_leaks=1:abort_on_error=0
+        # meson runs each test from the build tree, so the file is named
+        # from the checkout rather than relative to it.
+        LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
       run: |
         meson test -C builddir --no-suite memacct \
           --timeout-multiplier 5 || true
         echo '--- tests reporting a leak ---'
-        grep -c 'LeakSanitizer: detected' \
-          builddir/meson-logs/testlog.txt || echo 0
+        leaks=$(grep -c 'LeakSanitizer: detected' \
+          builddir/meson-logs/testlog.txt || true)
+        echo "$leaks"
         echo '--- allocation sites ---'
         grep -A4 'Direct leak' builddir/meson-logs/testlog.txt \
-          | grep -oE 'src/lib/[a-z_0-9]+\.c' | sort | uniq -c | sort -rn
+          | grep -oE 'src/lib/[a-z_0-9]+\.c' | sort | uniq -c | sort -rn || true
+        [ "$leaks" -eq 0 ]
     - uses: actions/upload-artifact@v4
       with:
         name: leak-log
