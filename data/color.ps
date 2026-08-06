@@ -239,6 +239,43 @@ currentglobal true setglobal
     dup 1 get exch 0 get
     //.ciefams exch get exec
 } bind def
+
+% space  .cierange  range
+% The range a CIE-based space declares its components over. Each family
+% names the entry that carries it and has its own default for a
+% dictionary that leaves the entry out (PLRM 4.8.3).
+/.cierangekeys <<
+    /CIEBasedA    [ /RangeA    [0 1] ]
+    /CIEBasedABC  [ /RangeABC  [0 1 0 1 0 1] ]
+    /CIEBasedDEF  [ /RangeDEF  [0 1 0 1 0 1] ]
+    /CIEBasedDEFG [ /RangeDEFG [0 1 0 1 0 1 0 1] ]
+>> def
+/.cierange {
+    dup 0 get //.cierangekeys exch get
+    aload pop
+    3 -1 roll 1 get
+    3 -1 roll 2 copy known
+        { get exch pop }{ pop pop } ifelse
+} bind def
+
+% space comps  .cieclampcomps  comps
+% Each component of a CIE-based colour brought inside the range its space
+% declares: a value outside it is the nearest one inside, and no error
+% (PLRM 4.8.3).
+/.cieclampcomps {
+    3 dict begin
+    /cc exch def
+    /rg exch //.cierange exec def
+    0 1 cc length 1 sub {
+        dup cc exch get
+        1 index 2 mul rg exch get
+        2 index 2 mul 1 add rg exch get
+        //.cieclamp exec
+        cc 3 1 roll put
+    } for
+    cc
+    end
+} bind def
 end
 setglobal
 
@@ -304,6 +341,22 @@ currentglobal true setglobal
     } ifelse
     end
     setcolor
+} bind put
+
+% comps  .tintsclamp  comps
+% Each tint of a Separation or DeviceN colour brought inside 0.0 to 1.0,
+% the range PLRM 4.8.4 states a tint lies in. The transform is called
+% with what comes out: its domain is that range, and the tint the
+% graphics state ends up holding is the one it was called with.
+.xpostsys /.tintsclamp {
+    1 dict begin
+    /tc exch def
+    0 1 tc length 1 sub {
+        dup tc exch get 0.0 1.0 //.xpostsys /.cieclamp get exec
+        tc 3 1 roll put
+    } for
+    tc
+    end
 } bind put
 
 % the alternative-space colour a Separation or DeviceN tint transforms to
@@ -528,10 +581,15 @@ setglobal
     currentcolorspace
     dup type /arraytype eq { dup 0 get /Indexed eq } { false } ifelse {
         % [/Indexed base hival lookup] index setcolor: the index names a
-        % palette entry, resolved and set in the base space
-        exch cvi
+        % palette entry, resolved and set in the base space. A real index
+        % is the nearest whole number to it and an index outside 0 to
+        % hival is the nearer of those two bounds (PLRM 4.8.4); the
+        % rounding and the clipping are both done before the integer is
+        % taken, so an index with no integer in it still names an entry
+        exch round
         dup 0 lt { pop 0 } if
         1 index 2 get 1 index lt { pop dup 2 get } if
+        cvi
         1 array astore
         //.xpostsys /.idxconv get //.xpostsys /.withspace get exec
     }{
@@ -541,6 +599,7 @@ setglobal
         % tints convert through the transform into the alternative space
         dup 0 get /Separation eq { pop 1 }{ 1 get length } ifelse
         array astore
+        //.xpostsys /.tintsclamp get exec
         currentcolorspace exch
         //.xpostsys /.sepconv get //.xpostsys /.withspace get exec
     } {
@@ -551,6 +610,8 @@ setglobal
         pop //.xpostsys /.ncomponents get exec
         array astore
         currentcolorspace exch
+        1 index exch
+        //.xpostsys /.cieclampcomps get exec
         //.xpostsys /.cieconv get //.xpostsys /.withspace get exec
     }{
         % a pattern space arrives as an array: dispatch on the family

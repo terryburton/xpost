@@ -118,6 +118,155 @@ spaces {
     clear
 } forall
 
+% --------------------------------------- components outside a space's range
+% Every colour space states the range each of its components lies in, and
+% a value outside it is the nearest valid one (PLRM 4.8): a Separation or
+% DeviceN tint lies in 0.0 to 1.0, a CIE-based component lies in the Range
+% its dictionary declares, and an Indexed index is clipped to the nearest
+% of 0 and hival. Setting the colour is where that happens, so the colour
+% the graphics state holds is one the space can express and currentcolor
+% reports it as such.
+%
+% Folding the value where it leaves for a device would answer this for a
+% raster page and for nothing else: what a Separation tint transform is
+% called with, what an Indexed index looks up, and what currentcolor says
+% are all decided before then.
+
+% The current colour, read back and compared component by component. The
+% count is part of the answer: a space that reported three numbers where
+% one was asked for would otherwise compare equal on the ones that lined
+% up.
+/is { % want (what)  .  -
+    /is.what exch def /is.want exch def
+    count /is.d0 exch def
+    currentcolor
+    count is.d0 sub /is.n exch def
+    is.n is.want length eq {
+        is.n array astore
+        true
+        0 1 is.want length 1 sub {
+            /is.i exch def
+            1 index is.i get is.want is.i get sub abs 0.001 lt and
+        } for
+        exch pop
+    }{
+        is.n { pop } repeat false
+    } ifelse
+    is.what assert
+} bind def
+
+/sepsp [ /Separation /Spot /DeviceGray { pop 0.5 } ] def
+/devnsp [ /DeviceN [/S1 /S2] /DeviceGray { pop pop 0.5 } ] def
+
+sepsp setcolorspace 0.5 setcolor
+[0.5] (a tint inside the range is the tint set) is
+sepsp setcolorspace 3.0 setcolor
+[1.0] (a tint above the range is the top of it) is
+sepsp setcolorspace -2.0 setcolor
+[0.0] (a tint below the range is the bottom of it) is
+sepsp setcolorspace 1e30 setcolor
+[1.0] (a tint far above the range is the top of it) is
+
+devnsp setcolorspace 3.0 -2.0 setcolor
+[1.0 0.0] (each DeviceN tint is folded on its own) is
+
+% the transform is called with the tint the space can express, not with
+% the number the program wrote: PLRM 4.8.4 states the tint range, and the
+% transform's domain is that range
+/rec 1 dict def
+/recsep [ /Separation /Spot /DeviceGray { //rec /tin 2 index put pop 0.5 } ] def
+recsep setcolorspace 3.0 setcolor
+rec /tin known (the tint transform is called when the colour is set) assert
+rec /tin known { rec /tin get }{ -1 } ifelse 1.0 sub abs 0.001 lt
+    (the tint transform is called with the folded tint) assert
+
+% a CIE-based component is folded to the Range its own dictionary
+% declares, which need not be 0 to 1
+/cieaA [ /CIEBasedA << /DecodeA { } /MatrixA [0.9642 1 0.8249]
+                       /RangeA [0 1] /WhitePoint [0.9642 1 0.8249] >> ] def
+/cieaB [ /CIEBasedA << /DecodeA { } /MatrixA [0.9642 1 0.8249]
+                       /RangeA [0 2] /WhitePoint [0.9642 1 0.8249] >> ] def
+/cieaC [ /CIEBasedA << /DecodeA { } /MatrixA [0.9642 1 0.8249]
+                       /RangeA [0.25 0.75] /WhitePoint [0.9642 1 0.8249] >> ] def
+/cieaD [ /CIEBasedA << /DecodeA { } /MatrixA [0.9642 1 0.8249]
+                       /WhitePoint [0.9642 1 0.8249] >> ] def
+
+cieaA setcolorspace 5.0 setcolor
+[1.0] (a CIEBasedA component folds to RangeA) is
+cieaB setcolorspace 5.0 setcolor
+[2.0] (a RangeA above one is folded to, not past) is
+cieaB setcolorspace -1.0 setcolor
+[0.0] (a component below RangeA is the bottom of it) is
+cieaC setcolorspace 0.9 setcolor
+[0.75] (a narrow RangeA folds from above) is
+cieaC setcolorspace 0.1 setcolor
+[0.25] (a narrow RangeA folds from below) is
+cieaD setcolorspace 3.0 setcolor
+[1.0] (a CIEBasedA with no RangeA folds to 0 to 1) is
+
+/cieabc [ /CIEBasedABC << /DecodeABC [ {} {} {} ]
+                          /MatrixABC [1 0 0 0 1 0 0 0 1]
+                          /RangeABC [0 1 0 2 0.25 0.75]
+                          /WhitePoint [0.9642 1 0.8249] >> ] def
+cieabc setcolorspace 3.0 5.0 -1.0 setcolor
+[1.0 2.0 0.25] (each CIEBasedABC component folds to its own range) is
+
+/ciedef [ /CIEBasedDEF << /DecodeDEF [ {} {} {} ]
+                          /RangeDEF [0 1 0 2 0 1]
+                          /Table [2 2 2 [ <000000000000000000000000>
+                                          <000000000000000000000000> ] ]
+                          /DecodeABC [ {} {} {} ]
+                          /MatrixABC [1 0 0 0 1 0 0 0 1]
+                          /RangeABC [0 1 0 1 0 1]
+                          /WhitePoint [0.9642 1 0.8249] >> ] def
+ciedef setcolorspace 3.0 -1.0 0.5 setcolor
+[1.0 0.0 0.5] (a CIEBasedDEF component folds to RangeDEF) is
+
+/ciedefg [ /CIEBasedDEFG << /DecodeDEFG [ {} {} {} {} ]
+                            /RangeDEFG [0 1 0 1 0 1 0 2]
+                            /Table [2 2 2 2 [ [ <000000000000000000000000>
+                                                <000000000000000000000000> ]
+                                              [ <000000000000000000000000>
+                                                <000000000000000000000000> ] ] ]
+                            /DecodeABC [ {} {} {} ]
+                            /MatrixABC [1 0 0 0 1 0 0 0 1]
+                            /RangeABC [0 1 0 1 0 1]
+                            /WhitePoint [0.9642 1 0.8249] >> ] def
+ciedefg setcolorspace -1.0 0.5 3.0 5.0 setcolor
+[0.0 0.5 1.0 2.0] (a CIEBasedDEFG component folds to RangeDEFG) is
+
+% a real Indexed index is the nearest whole number to it, and an index
+% outside 0 to hival is the nearer of those two bounds (PLRM 4.8.4)
+/indsp [ /Indexed /DeviceGray 3 (\000\100\200\377) ] def
+indsp setcolorspace 2 setcolor
+[2] (an index inside the palette is the index set) is
+indsp setcolorspace 99 setcolor
+[3] (an index past the palette is hival) is
+indsp setcolorspace -5 setcolor
+[0] (an index below the palette is zero) is
+indsp setcolorspace 1e30 setcolor
+[3] (an index too large to be an integer is still hival) is
+indsp setcolorspace 1.7 setcolor
+[2] (a real index is the nearest whole number to it) is
+indsp setcolorspace 1.4 setcolor
+[1] (a real index below the half way point rounds down) is
+indsp setcolorspace 2.5 setcolor
+[3] (a real index half way between two rounds to the greater) is
+indsp setcolorspace 3.6 setcolor
+[3] (a real index rounding past hival is clipped to it) is
+indsp setcolorspace -0.4 setcolor
+[0] (a real index rounding below zero is clipped to it) is
+
+% and the device spaces, which have answered this way all along
+/DeviceGray setcolorspace 3 setcolor
+[1.0] (a DeviceGray component above the range is white) is
+/DeviceGray setcolorspace -3 setcolor
+[0.0] (a DeviceGray component below the range is black) is
+/DeviceRGB setcolorspace 3 -1 0.5 setcolor
+[1.0 0.0 0.5] (each DeviceRGB component is folded on its own) is
+
+0 setgray
+
 % ------------------------------------------------- the spaces that are not
 % A family this interpreter cannot record a colour in is refused when
 % the space is set, not by the next operator to ask a question of it:
