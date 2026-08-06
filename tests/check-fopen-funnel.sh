@@ -34,11 +34,19 @@ src=${1:?usage: check-fopen-funnel.sh <source tree root>}
 guard_require_srcroot "$src"
 guard_require_dir "$src/src/lib" "the library source directory"
 guard_require_dir "$src/src/bin" "the program source directory"
-funnel_file="$src/src/lib/xpost_file.c"
-guard_require_file "$funnel_file" "the file layer"
+guard_require_file "$src/src/lib/xpost_file.c" "the file layer"
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
+# The scan reads each record as path, line and code, split on colons, so
+# the paths it reads must not carry one themselves. A source root named
+# by a drive letter does, and every record then parsed one field short:
+# the funnel's own extent was never found and the tree read as having no
+# opener in it. The mirror is under the scratch directory, whose name has
+# no drive letter on any platform.
+guard_mirror_tree "$src"
+src=$mirror
+funnel_file="$src/src/lib/xpost_file.c"
 fail=0
 
 # every C file the project builds, read as code
@@ -97,7 +105,7 @@ inside=$(awk -F: -v f="$funnel_file" -v a="$fstart" -v b="$fend" '
 
 if [ -s "$work/outside" ]; then
     echo "check-fopen-funnel: fopen named outside xpost_raw_fopen():" >&2
-    sed 's/^/  /' "$work/outside" >&2
+    sed "s|^$mirror/||; s|^|  |" "$work/outside" >&2
     echo "Route disk opens through xpost_diskfile_fopen()." >&2
     fail=1
 fi
@@ -130,7 +138,7 @@ if awk -F: -v pat="$pat" '
     }' "$work/code" > "$work/others"; then :; fi
 if [ -s "$work/others" ]; then
     echo "check-fopen-funnel: another spelling of the same open:" >&2
-    sed 's/^/  /' "$work/others" >&2
+    sed "s|^$mirror/||; s|^|  |" "$work/others" >&2
     echo "Route disk opens through xpost_diskfile_fopen()." >&2
     fail=1
 fi
@@ -157,7 +165,7 @@ awk -F: -v known="$known" '
     }' "$work/code" > "$work/unknown"
 if [ -s "$work/unknown" ]; then
     echo "check-fopen-funnel: an opener this check does not know:" >&2
-    sed 's/^/  /' "$work/unknown" >&2
+    sed "s|^$mirror/||; s|^|  |" "$work/unknown" >&2
     echo "Route disk opens through xpost_diskfile_fopen(), or declare the" >&2
     echo "name here if it belongs to the funnel." >&2
     fail=1
