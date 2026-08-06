@@ -150,8 +150,8 @@ int xpost_op_dict_maxlength(Xpost_Context *ctx,
     if (!xpost_object_is_readable(ctx, D))
         return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->os,
-                     xpost_int_cons(xpost_dict_requested_length_memory(xpost_context_select_memory(ctx, D),
-                                                                 D)));
+                     xpost_int_cons(xpost_dict_capacity_memory(xpost_context_select_memory(ctx, D),
+                                                               D)));
     return 0;
 }
 

@@ -1,0 +1,84 @@
+% Dictionary capacity against dictionary length (PLRM 8.2 maxlength: the
+% value returned is "at least as large as that returned by length"), run
+% through `xpost -d null` by run-ps-test.sh.
+%
+% A dictionary's table is over-allocated from the capacity it was asked
+% for, so it accepts entries past that capacity before it grows. Between
+% the two, a capacity reported as the number originally asked for is a
+% number smaller than the dictionary's own length.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
+
+% A dictionary that has not outgrown the capacity it was asked for
+% reports exactly that capacity, whatever the table beneath it holds.
+0 dict maxlength 0 eq (0 dict reports capacity 0) assert
+1 dict maxlength 1 eq (1 dict reports capacity 1) assert
+5 dict maxlength 5 eq (5 dict reports capacity 5) assert
+8 dict maxlength 8 eq (8 dict reports capacity 8) assert
+10 dict maxlength 10 eq (10 dict reports capacity 10) assert
+100 dict maxlength 100 eq (100 dict reports capacity 100) assert
+
+% Filling one to exactly the capacity it was asked for leaves that
+% capacity as it was.
+/D 10 dict def
+0 1 9 { dup D 3 1 roll put } for
+D length 10 eq (a dict filled to its capacity holds ten entries) assert
+D maxlength 10 eq (a dict filled to its capacity still reports ten) assert
+
+% Capacity is at least length at every step of a growing dictionary, and
+% never falls back as the dictionary grows.
+/G 1 dict def
+/atleast true def
+/monotone true def
+/prev G maxlength def
+0 1 200 {
+    dup G 3 1 roll put
+    G maxlength G length lt { /atleast false store } if
+    G maxlength prev lt { /monotone false store } if
+    /prev G maxlength store
+} for
+G length 201 eq (a grown dict holds every entry put in it) assert
+atleast (capacity is never less than length while a dict grows) assert
+monotone (capacity never decreases while a dict grows) assert
+
+% The same, at the sizes where the over-allocation shows: a dictionary
+% asked for n takes more than n entries before it grows.
+/A 10 dict def
+0 1 12 { dup A 3 1 roll put } for
+A length 13 eq (a 10 dict takes thirteen entries) assert
+A maxlength 13 ge (a 10 dict holding thirteen reports at least thirteen) assert
+
+/B 1 dict def
+0 1 2 { dup B 3 1 roll put } for
+B length 3 eq (a 1 dict takes three entries) assert
+B maxlength 3 ge (a 1 dict holding three reports at least three) assert
+
+/C 8 dict def
+0 1 8 { dup C 3 1 roll put } for
+C length 9 eq (an 8 dict takes nine entries) assert
+C maxlength 9 ge (an 8 dict holding nine reports at least nine) assert
+
+% Removing entries does not lower the capacity a dictionary has reached.
+/E 4 dict def
+0 1 99 { dup E 3 1 roll put } for
+/cap E maxlength def
+cap 100 ge (a 4 dict holding a hundred reports at least a hundred) assert
+0 1 99 { E exch undef } for
+E length 0 eq (undef empties the dict) assert
+E maxlength cap eq (undef does not lower the capacity reached) assert
+
+% Capacity is a property of the dictionary, not of the type of its keys.
+/F 2 dict def
+F /a 1 put F /b 2 put F /c 3 put
+F length 3 eq (a name-keyed 2 dict takes three entries) assert
+F maxlength 3 ge (a name-keyed dict past its request reports at least length) assert
+
+% A copy carries the capacity of its destination, which must have been
+% large enough to receive the source.
+/H 300 dict def
+A H copy pop
+H length 13 eq (copy moves every entry) assert
+H maxlength 300 eq (a copy keeps the capacity of its destination) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

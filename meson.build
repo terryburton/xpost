@@ -873,6 +873,18 @@ test('composite-limit',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# The capacity a dictionary reports against the length it reports (PLRM
+# 8.2 maxlength, "at least as large as that returned by length"). A
+# dictionary's table is over-allocated from the size asked for, so it
+# takes entries past that size before it grows; a capacity that stayed
+# at the size asked for would be smaller than the dictionary's own
+# length for every entry in that window, at every size.
+test('dict-capacity',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/op_dict_capacity_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
 # is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
 test('scanner-eof',

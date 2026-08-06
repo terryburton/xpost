@@ -82,6 +82,7 @@ xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
 xpost_dev_png_options_set
 xpost_device_get_filename
+xpost_dict_capacity_memory
 xpost_dict_compare_objects
 xpost_dict_cons
 xpost_dict_cons_memory
@@ -98,7 +99,6 @@ xpost_dict_length_memory
 xpost_dict_max_length_memory
 xpost_dict_put
 xpost_dict_put_memory
-xpost_dict_requested_length_memory
 xpost_dict_set_access
 xpost_dict_undef
 xpost_dict_undef_memory

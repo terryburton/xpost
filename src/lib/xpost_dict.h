@@ -192,9 +192,10 @@ XPOST_TEST_VISIBLE unsigned xpost_dict_length_memory(/*@dependent@*/ Xpost_Memor
 unsigned xpost_dict_max_length_memory(/*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d);
 
 /**
- * @brief the nominal capacity the dict was requested with (for maxlength)
+ * @brief the capacity of the dict (for maxlength): the size it was
+ *        asked for, or the size of its table once it holds more
  */
-unsigned xpost_dict_requested_length_memory(/*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d);
+unsigned xpost_dict_capacity_memory(/*@dependent@*/ Xpost_Memory_File *mem, Xpost_Object d);
 
 /**
    investigate if size == maximum size.

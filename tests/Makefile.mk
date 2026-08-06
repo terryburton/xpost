@@ -124,6 +124,7 @@ tests/op_control_test.ps \
 tests/op_cvi_test.ps \
 tests/op_cvn_test.ps \
 tests/op_cvs_test.ps \
+tests/op_dict_capacity_test.ps \
 tests/op_dictstack_test.ps \
 tests/op_dispatch_typecheck_test.ps \
 tests/op_env_test.ps \

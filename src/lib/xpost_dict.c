@@ -253,7 +253,7 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     unsigned int ent;
     unsigned int hashnull;
 
-    dword reqsz = sz; /* nominal capacity, as maxlength reports it */
+    dword reqsz = sz; /* capacity asked for, as maxlength reports it */
     dword tabsz;      /* internal size, over-allocated from the above */
 
     if (sz < 8) sz = 8;
@@ -290,7 +290,7 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
     dp->tag = d.tag;
     dp->sz = sz;
     dp->nused = 0;
-    dp->pad = (word)reqsz; /* remember the requested capacity for maxlength */
+    dp->pad = (word)reqsz; /* the capacity maxlength reports */
 
     tp = xpost_dict_table_of(dp); /* clear table */
     hashnull = hash(null);
@@ -343,10 +343,12 @@ unsigned int xpost_dict_max_length_memory (Xpost_Memory_File *mem,
     return dp->sz;
 }
 
-/* the nominal capacity the dict was created with, which maxlength must
-   report; the internal size above is over-allocated (min 8, x1.25) and
-   would over-report */
-unsigned int xpost_dict_requested_length_memory (Xpost_Memory_File *mem,
+/* the capacity maxlength reports: the size the dict was created with
+   while it holds no more than that, and the size of its table once it
+   holds more. The internal size above is over-allocated (min 8, x1.25),
+   so reporting it from the start would over-report a dict that has room
+   it was never asked for */
+unsigned int xpost_dict_capacity_memory (Xpost_Memory_File *mem,
                       Xpost_Object d)
 {
     dichead *dp;
@@ -734,6 +736,21 @@ Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
     return invalid;
 }
 
+/* Bring the capacity up to what the dictionary has.
+
+   The table is over-allocated from the capacity the dictionary was
+   asked for, so it takes entries past that capacity before it grows. A
+   dictionary holding more than it was asked for has the capacity of its
+   table, which is at least its length (PLRM 8.2 maxlength) and, since
+   the table only ever grows, is never less than the capacity reported
+   before it. */
+static
+void note_capacity(dichead *dp)
+{
+    if (dp->nused > dp->pad)
+        dp->pad = dp->sz;
+}
+
 /*
    Put key+value in dict with specified memory file.
    (dict must be valid for this memory file)
@@ -813,6 +830,7 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
 
         dp = xpost_dict_head(mem, xpost_object_get_ent(d));
         ++ dp->nused;
+        note_capacity(dp);
         r->key = k; /* canonicalised above */
         r->hash = hash(k);
     }

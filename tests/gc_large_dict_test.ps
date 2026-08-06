@@ -63,11 +63,12 @@ D /probe get 42 eq (the pre-save dict is intact after restore) assert
 % The table is over-allocated by a quarter, so the over-allocated size
 % of the largest dict the size field can describe does not itself fit in
 % that field; the count of entries in use is held in a field of the same
-% width again. A dict that reports one capacity and then grows itself at
-% another has truncated the over-allocation, and one that keeps taking
-% entries past what the count field holds reads back as a nearly empty
-% dict holding tens of thousands of retrievable keys. A build whose
-% fields cannot reach that far must refuse the entry instead.
+% width again. A dict that keeps taking entries past what the count
+% field holds reads back as a nearly empty dict holding tens of
+% thousands of retrievable keys; a build whose fields cannot reach that
+% far must refuse the entry instead. A dict that truncated the
+% over-allocation runs out of table where its own capacity says there is
+% room, and doubles the table to find some.
 /CD 65535 dict def
 CD maxlength 65535 eq (a dict at the size field's limit reports its capacity) assert
 /naccept 0 def
@@ -76,7 +77,8 @@ mark
 { $error /errorname get /limitcheck eq
     (a dict that can take no more entries raises limitcheck) assert } if
 cleartomark
-CD maxlength 65535 eq (a dict at the size field's limit does not grow early) assert
+CD maxlength naccept ge (a dict at the size field's limit has room for all it took) assert
+CD maxlength 65535 2 mul lt (a dict at the size field's limit does not grow early) assert
 CD length naccept eq (a dict reports every entry it took) assert
 1 vmreclaim
 CD 0 get 0 eq (the first entry survives a collection) assert
