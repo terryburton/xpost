@@ -2,21 +2,28 @@
 % Run against a live device (-d <dev>) by run-device-getpix-test.sh: prints
 % SUCCESS iff every step holds.
 %
-% Destroy releases a device's raster but leaves the instance dictionary,
+% Destroy releases what a device holds, but leaves the instance dictionary,
 % and the device contract requires Destroy itself to be idempotent because
 % the program may call it. That leaves the program holding a dictionary
 % whose slots are all still callable, and GetPix is the one read slot it
 % calls for itself. A device that keeps its raster in a buffer of its own
 % has to test the handle before following it: the released buffer is a
 % cleared pointer, not a short raster, so no bounds check stands between
-% GetPix and the read.
+% GetPix and the read. Following the cleared handle is the outcome under
+% test.
 %
-% Two answers satisfy the contract. A device holding its raster as
-% PostScript objects loses the name those objects were reached by and
-% reports undefined, which is an answer the program can catch. A device
-% holding a buffer of its own reads the released raster as the ground,
-% which is what a pixel outside the raster already reads as. Following the
-% cleared handle is the third outcome and the one under test.
+% What the read owes after Destroy depends on how the device reaches its
+% raster, and the device says which it is: a read outside the raster
+% either raises, which means the raster is reached by indexing a
+% PostScript object and Destroy has no buffer handle to release, or
+% answers the ground, which means the device keeps a buffer of its own
+% and its GetPix tests the bounds it is given. So a device of the first
+% kind must answer after Destroy what it answered before, and one of the
+% second kind must answer the ground -- its own ground, read off it here
+% rather than assumed, since a device whose components are not bytes
+% grounds them somewhere else. A device that loses the name its raster
+% was reached by and reports the read undefined satisfies the contract
+% too: that is an answer the program can catch.
 
 /getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
 
@@ -26,38 +33,64 @@
 % in the contract, and the vector devices carry no raster to read.
 dev /GetPix known not { (SUCCESS) = quit } if
 
-% establish the slot's arity on the live raster
+/readpix { % x y  .  c1..cN
+    dev dup /GetPix get exec
+} def
+
+/sameok true def
+/samepix { % array array  .  bool
+    /sameok true store
+    2 copy length exch length ne
+        { /sameok false store }
+        { 0 1 2 index length 1 sub {
+              dup 3 index exch get exch 2 index exch get
+              ne { /sameok false store } if
+          } for }
+    ifelse
+    pop pop sameok
+} def
+
+% establish the slot's arity on the live raster, and keep what it read
 clear
-2 2 dev dup /GetPix get exec
-count /ncomp exch def
-ncomp 0 le { (FAILURE: GetPix returned no components) = quit } if
+2 2 readpix
+count array astore /live exch def
+live length 0 le { (FAILURE: GetPix returned no components) = quit } if
 clear
+
+% ask the device which of the two answers it owes, by reading a pixel
+% that is outside any raster
+/expect live def
+{ -1 -1 readpix } stopped
+    { clear }
+    { count array astore /expect exch def }
+ifelse
+clear
+expect length live length ne
+    { (FAILURE: a read outside the raster answered a different arity) = quit }
+if
 
 % release the raster; the contract makes this callable by the program
 dev dup /Destroy 2 copy known { get exec }{ pop pop pop } ifelse
 
 % the same read on the released raster must answer, one way or the other
 clear
-{ 2 2 dev dup /GetPix get exec } stopped
+{ 2 2 readpix } stopped
     { clear (SUCCESS) = quit }
 if
 
-count ncomp ne
+count expect length ne
     { (FAILURE: GetPix answered a different arity on a released raster) = quit }
 if
 
-% every component reads as the ground
-/bad 0 def
-ncomp { 0 ne { /bad bad 1 add def } if } repeat
-bad 0 ne
-    { (FAILURE: a released raster did not read as the ground) = quit }
+count array astore expect samepix not
+    { (FAILURE: a released raster did not read as it owes) = quit }
 if
 
 % reading twice more is the same no-op, as a repeated Destroy is
 clear
-2 2 dev dup /GetPix get exec
-2 2 dev dup /GetPix get exec
-count ncomp 2 mul ne
+2 2 readpix
+2 2 readpix
+count expect length 2 mul ne
     { (FAILURE: a repeated read on a released raster did not answer) = quit }
 if
 clear
