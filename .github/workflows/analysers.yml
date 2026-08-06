@@ -98,14 +98,10 @@ jobs:
     # which is where that class blocks.
     #
     # The suppressions name what the tree links but does not own, so
-    # what is counted is the tree's own. The count is held at the number
-    # below rather than at zero: a device that setpagedevice installs
-    # while a save is outstanding is dropped by the matching restore,
-    # which reinstates the device the graphics state named before it
-    # (PLRM 6.1), and nothing retires the one it displaces -- so the
-    # eight device classes that hold a page buffer or a content
-    # accumulator in memory of their own each report one, from
-    # tests/device_restore_retired_test.ps.
+    # what is counted is the tree's own, and the count required is zero.
+    # The suite's own result is required too: a run that ends the job
+    # early leaves the count reading zero for want of processes to
+    # report, which is the shape a leak gate fails silently in.
     #
     # The count and the allocation sites are both printed, so a red run
     # says how much leaked and where without opening the log.
@@ -120,8 +116,8 @@ jobs:
         LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
       run: |
         mkdir -p leak-logs
-        meson test -C builddir --no-suite memacct \
-          --timeout-multiplier 5 || true
+        meson test -C builddir --print-errorlogs --no-suite memacct \
+          --timeout-multiplier 5
         echo '--- processes reporting a leak ---'
         leaks=$(grep -l 'LeakSanitizer: detected' leak-logs/* 2>/dev/null \
           | wc -l)
@@ -130,7 +126,7 @@ jobs:
         cat leak-logs/* 2>/dev/null | grep -A4 'Direct leak' \
           | grep -oE 'src/lib/[a-z_0-9]+\.c:[0-9]+' \
           | sort | uniq -c | sort -rn || true
-        [ "$leaks" -le 8 ]
+        [ "$leaks" -eq 0 ]
     - uses: actions/upload-artifact@v4
       with:
         name: leak-log
