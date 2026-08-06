@@ -82,7 +82,7 @@ int fpurge(FILE *);
 static unsigned long long _xpost_time_start;
 #elif HAVE_CLOCK_GETTIME
 static clockid_t _xpost_time_clock_id = 0;
-struct timespec _xpost_time_start;
+static struct timespec _xpost_time_start;
 #else
 static time_t _xpost_time_start = 0;
 #endif

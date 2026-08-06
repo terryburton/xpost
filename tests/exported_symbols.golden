@@ -6,14 +6,13 @@
 # The reserved-exception lines at the end name the exports that begin with
 # an underscore. C99 7.1.3 reserves every file-scope identifier that does,
 # so exporting one is a collision waiting on a libc that uses the same
-# name. These five predate the rule and are recorded rather than renamed;
+# name. These four predate the rule and are recorded rather than renamed;
 # the list may shrink and may not grow.
 DEBUGLOAD
 _currentpoint
 _xpost_garbage_diag_verify
 _xpost_garbage_diag_xbank
 _xpost_interpreter_is_tracing
-_xpost_time_start
 a85_methods
 dct_methods
 disk_methods
@@ -347,4 +346,3 @@ reserved-exception _currentpoint
 reserved-exception _xpost_garbage_diag_verify
 reserved-exception _xpost_garbage_diag_xbank
 reserved-exception _xpost_interpreter_is_tracing
-reserved-exception _xpost_time_start
