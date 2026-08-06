@@ -446,8 +446,11 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 # endif
 # undef XPOST_UNICODE_PATH_MAX
 
-            /* the conversion wrote the whole path and terminated it */
-            /* cppcheck-suppress uninitdata */
+            /* the module name is whole and terminated here: the system
+               wrote it into the wide buffer above, and the conversion
+               that narrows it either wrote all of it or ended the
+               lookup */
+            /* cppcheck-suppress uninitvar */
             pos = strrchr(path, '\\');
             if (pos)
             {

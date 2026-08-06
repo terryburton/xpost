@@ -295,8 +295,8 @@ int grok(Xpost_Context *ctx,
            may still be too wide; ERANGE has already caught it where it did not. */
         /* the shift is reached only where an integer is the narrower of
            the two, so it always names a bit inside an unsigned long */
-        /* cppcheck-suppress shiftTooManyBits */
         if (sizeof(integer) < sizeof(long)
+                /* cppcheck-suppress shiftTooManyBits */
                 && num > (((unsigned long)1 << (8 * sizeof(integer))) - 1))
         {
             XPOST_LOG_ERR("radixnumber exceeds integer width");
