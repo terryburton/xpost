@@ -343,7 +343,14 @@ int Rexp(Xpost_Context *ctx,
     if (base.real_.val < 0)
         expn.real_.val = (real)trunc(expn.real_.val);
     r = pow(base.real_.val, expn.real_.val);
-    if (!isfinite(r) || !isfinite((double)(real)r))
+    if (!isfinite(r))
+        return undefinedresult;
+    /* and it has to still be finite once narrowed to the real a stack
+       carries, which is the shorter type in the default build: a result
+       pow answers finitely can overflow that on the way to the stack.
+       A separate test rather than a second term, because in the build
+       whose real is already the wider type the two say the same thing */
+    if (!isfinite((double)(real)r))
         return undefinedresult;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)r));
     return 0;

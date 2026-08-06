@@ -63,8 +63,13 @@
 # include <mach/mach_time.h> /* mach_absolute_time */
 #endif
 
-// This prototype isn't visible under cygwin
+// This prototype isn't visible under cygwin, which has the function but
+// does not declare it at the feature-test level this builds with. Every
+// other platform declares it in stdlib.h, where redeclaring it here
+// would say the same thing twice.
+#ifdef __CYGWIN__
 char *realpath(const char *restrict file_name, char *restrict resolved_name);
+#endif
 
 // This prototype isn't visible under OS X
 int fpurge(FILE *);

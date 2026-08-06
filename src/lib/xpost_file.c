@@ -2648,6 +2648,16 @@ static const Xpost_Fax_Code fax_ext[] =
     {2432,12,0x01d}, {2496,12,0x01e}, {2560,12,0x01f},
 };
 
+/* The two run-length tables hold the same number of codes, so a caller
+   that has chosen one of them by colour needs no second choice for its
+   extent. Said here rather than left to hold by luck: a code added to
+   one table alone would leave the walks below reading the wrong number
+   of entries for the other, and nothing would say so. (A negative array
+   size rather than _Static_assert: this builds as C99 with
+   -pedantic-errors, which rejects the latter.) */
+typedef char xpost_fax_run_tables_are_the_same_length[
+    sizeof(fax_black) == sizeof(fax_white) ? 1 : -1];
+
 typedef struct Xpost_FaxFile
 {
     Xpost_BitDecBase base;
@@ -2685,8 +2695,7 @@ fax_runlength(Xpost_FaxFile *ff, int color)
     for (;;)
     {
         const Xpost_Fax_Code *tab = color ? fax_black : fax_white;
-        int n = color ? (int)(sizeof(fax_black)/sizeof(*fax_black))
-                      : (int)(sizeof(fax_white)/sizeof(*fax_white));
+        int n = (int)(sizeof(fax_white)/sizeof(*fax_white));
         int next = (int)(sizeof(fax_ext)/sizeof(*fax_ext));
         unsigned int code = 0;
         int len = 0, run = FAX_RUN_ERR, i, b;
@@ -3910,8 +3919,7 @@ static int
 faxenc_run(Xpost_FaxEncFile *ff, int run, int color)
 {
     const Xpost_Fax_Code *tab = color ? fax_black : fax_white;
-    int n = color ? (int)(sizeof(fax_black)/sizeof(*fax_black))
-                  : (int)(sizeof(fax_white)/sizeof(*fax_white));
+    int n = (int)(sizeof(fax_white)/sizeof(*fax_white));
     int next = (int)(sizeof(fax_ext)/sizeof(*fax_ext));
 
     while (run >= 2624)

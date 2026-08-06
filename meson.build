@@ -84,6 +84,40 @@ comparison_errors = [
 ]
 add_project_arguments(cc.get_supported_arguments(comparison_errors), language: 'c')
 
+# Diagnostics the tree already satisfies, promoted to errors so that it
+# goes on satisfying them. Each says something a reviewer cannot see by
+# reading one file: that a cast changes an object's alignment, that a
+# function has no declaration anyone could have checked it against, that
+# a name tested by the preprocessor was never defined, that a shift runs
+# off the end of its type, that two arms of a condition were written to
+# differ and do not. A warning nobody has to answer is a warning the
+# build gets used to.
+#
+# They go through get_supported_arguments, so a compiler that does not
+# know one drops it rather than failing, and none of them is promoted
+# anywhere it would fire on a construct this code uses deliberately:
+# -Wformat-security is taken rather than the whole of -Wformat=2,
+# because -Wformat-nonliteral would fire on the device table's own
+# templates, which are the interpreter's strings and not a program's.
+kept_clean = [
+  '-Werror=cast-align',
+  '-Werror=missing-declarations',
+  '-Werror=null-dereference',
+  '-Werror=vla',
+  '-Werror=shift-overflow=2',
+  '-Werror=duplicated-cond',
+  '-Werror=duplicated-branches',
+  '-Werror=logical-op',
+  '-Werror=jump-misses-init',
+  '-Werror=old-style-definition',
+  '-Werror=missing-include-dirs',
+  '-Werror=redundant-decls',
+  '-Werror=undef',
+  '-Werror=format-security',
+  '-Wstrict-overflow=2',
+]
+add_project_arguments(cc.get_supported_arguments(kept_clean), language: 'c')
+
 # Release builds enable link-time optimization by default: it inlines the hot
 # cross-translation-unit interpreter accessors and is the single largest
 # speedup. debug and debugoptimized builds stay LTO-free for fast compiles, so
