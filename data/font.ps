@@ -482,14 +482,15 @@ currentglobal true setglobal
     end
 } put
 
-% subject hook  .showpattern  -
-% Paint the text by filling its glyph outlines, which is how a pattern
-% colour reaches the page: the raster route plots a glyph's coverage
-% straight through the device's pixel methods in one colour, and a
-% pattern is not one colour but a procedure tiled over the page. The
-% outlines go through the ordinary fill, where the pattern paint is,
-% so the pixels a pattern marks are the pixels a solid fill of the same
-% path marks.
+% subject hook stroked  .showoutline  -
+% Paint the text by its glyph outlines. The raster route plots a
+% glyph's coverage straight through the device's pixel methods, filled
+% in one colour, so text the page cannot take that way comes here
+% instead: a pattern is not one colour but a procedure tiled over the
+% page, and an outline font's glyphs are stroked rather than filled.
+% The outlines go through the ordinary fill and stroke, where the
+% pattern paint and the line machinery are, so the pixels the text
+% marks are the pixels the same path painted the same way marks.
 %
 % The subject is the string to paint, or the name of a single glyph as
 % glyphshow selects one. The hook runs after each character with its
@@ -497,17 +498,29 @@ currentglobal true setglobal
 % between characters; a null hook means the operator moves it by
 % nothing, and then the whole string is one charpath.
 %
+% Stroked says the font's glyphs are its outlines stroked with
+% StrokeWidth, a character space distance carried to user space through
+% FontMatrix, rather than filled; the route that sent the text here has
+% already asked the font.
+%
 % The pen ends where the walk left it: the outlines are built inside a
 % gsave, since charpath takes over the current path, and the point the
 % last of them ended at is carried back out.
-.xpostsys /.showpattern {
-    3 dict begin
+.xpostsys /.showoutline {
+    4 dict begin
+    /pstroke exch def
     % a hook is a procedure, and a name holding one runs when it is
     % read: it is defined only when there is one, and asked after by
     % the dictionary rather than by reading it
     dup null eq { pop }{ /phook exch def } ifelse
     /psubj exch def
     gsave
+        pstroke {
+            graphicsdict /currgstate get /currfont get
+            dup /StrokeWidth 2 copy known { get }{ pop pop 0 } ifelse
+            0 3 -1 roll /FontMatrix get dtransform
+            dup mul exch dup mul add sqrt setlinewidth
+        } if
         currentpoint newpath moveto
         psubj type /nametype eq {
             psubj //.xpostsys /.glyphcharpath get exec
@@ -523,31 +536,42 @@ currentglobal true setglobal
         } ifelse
         } ifelse
         currentpoint
-        //fill exec
+        pstroke { //stroke exec }{ //fill exec } ifelse
     grestore
     moveto
     end
 } put
 
 % subject hook plain  .showroute  -
-% Which route text of a simple font takes to the page. A pattern colour
-% goes by the outlines and the fill route; every other colour goes by
-% the raster route, which the plain procedure drives through the
-% operator's own binding with the operands that binding wants. The
-% subject is left for the plain procedure, which consumes it -- an
-% operator whose binding takes more than the text carries the rest
-% itself.
+% Which route text takes to the page. Text the glyph raster cannot
+% carry goes by the outlines: a pattern colour, which is a procedure
+% tiled over the page rather than a colour a pixel can be set to, and
+% an outline font, whose glyphs are strokes rather than filled
+% coverage. Everything else goes by the raster route, which the plain
+% procedure drives through the operator's own binding with the
+% operands that binding wants. The subject is left for the plain
+% procedure, which consumes it -- an operator whose binding takes more
+% than the text carries the rest itself.
 %
 % Every text operator of a simple font comes through here, so the
-% choice is made once. Making it in each operator instead is what left
-% four of them painting a pattern in whatever single colour the raster
-% route read out of the graphics state.
+% choice is made once and every one of them shares whatever is decided
+% here. Making it in each operator instead is what left four of them
+% painting a pattern in whatever single colour the raster route read
+% out of the graphics state, and all but one of them painting an
+% outline font's glyphs solid.
+%
+% Both questions are answered from one read of the graphics state,
+% since this runs once per call of every text operator: the font's
+% PaintType first, because the answer to it is what the outline route
+% needs anyway, and the colour space only when the font has not already
+% settled the route.
 .xpostsys /.showroute {
-    //.xpostsys /.patternactive get exec {
-        pop //.xpostsys /.showpattern get exec
-    }{
-        exch pop exec
-    } ifelse
+    graphicsdict /currgstate get
+    dup /currfont get
+    /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse
+    exch 1 index { pop true }{ /colorspace get /Pattern eq } ifelse
+    { exch pop //.xpostsys /.showoutline get exec }
+    { pop exch pop exec } ifelse
 } put
 setglobal
 
@@ -560,25 +584,8 @@ setglobal
         exch //.xpostsys /.showtype0 get exec
     }{
     dup /FontType get 3 ne {
-        % PaintType 2 marks an outline font: its glyphs are the
-        % character outlines stroked with StrokeWidth, a character
-        % space distance carried to user space through FontMatrix
-        dup /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse {
-            gsave
-            dup /StrokeWidth 2 copy known { get }{ pop pop 0 } ifelse
-            0 2 index /FontMatrix get dtransform
-            dup mul exch dup mul add sqrt setlinewidth
-            pop
-            dup
-            currentpoint newpath moveto
-            true charpath
-            stroke
-            grestore
-            stringwidth rmoveto
-        }{
-            pop
-            null { //show } //.xpostsys /.showroute get exec
-        } ifelse
+        pop
+        null { //show } //.xpostsys /.showroute get exec
     }{
     gsave
         currentpoint translate

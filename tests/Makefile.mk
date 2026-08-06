@@ -167,6 +167,7 @@ tests/op_userparams_test.ps \
 tests/op_vm_param_test.ps \
 tests/op_vmreclaim_test.ps \
 tests/op_wrapsig_test.ps \
+tests/outline_font_test.ps \
 tests/page_semantics_test.c \
 tests/path_confine_test.c \
 tests/pattern_phase_test.ps \

@@ -579,6 +579,16 @@ test('show-pattern',
   args: [ xpost_exe, files('tests/show_pattern_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# An outline font's glyphs are its character outlines stroked with
+# StrokeWidth, not the filled coverage the glyph raster route plots, so
+# text in one leaves that route for its outlines and the ordinary
+# stroke. Every operator of the family is held to the same glyphs sent
+# round by charpath and stroked with the same width.
+test('outline-font',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/outline_font_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What an operator leaves on the operand stack when it refuses. An error
 # raised in PostScript with signalerror ends in a stop and never reaches
 # the interpreter's handler, so the unwinding every other error gets has

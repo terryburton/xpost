@@ -1,0 +1,196 @@
+% What the text operators mark when the font is an outline font.
+% Run through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% PaintType 2 marks an outline font (PLRM 5.4): its glyphs are the
+% character outlines stroked with StrokeWidth, a character space
+% distance carried to user space through FontMatrix, rather than the
+% filled coverage a face renders. The glyph raster route plots that
+% filled coverage straight through the device's pixel methods, so an
+% outline font has to leave that route and go by its outlines and the
+% ordinary stroke, where the line machinery is.
+%
+% The rule this suite holds every operator to is therefore the same
+% glyphs sent round by charpath and stroked with the same width: each
+% operator is asked twice, once by itself and once by an outline built
+% with the same pen movements, and the two renders must agree pixel for
+% pixel. A stroke of the outline is not a fill of it, so each render is
+% held apart from the filled form as well -- an operator painting solid
+% coverage would otherwise pass by marking something.
+%
+% The pen is asked as well. PaintType settles how a glyph is painted and
+% not how wide it is, so each operator's pen under the outline font is
+% compared with its pen under the same face at PaintType 0.
+
+/faildict 2 dict def
+faildict /n 0 put
+/p.name () def
+/check { % bool (what)  .  -
+    exch { pop }{
+        (FAIL: ) print p.name print ( ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/DEV 200 70 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 70 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/dark { 128 lt } bind def
+/inkof { 0 exch { { dark { 1 add } if } forall } forall } bind def
+/differs { % a b  .  n
+    3 dict begin
+    /b exch def /a exch def /n 0 def
+    0 1 a length 1 sub { /y exch def
+        0 1 a y get length 1 sub { /x exch def
+            a y get x get dark  b y get x get dark  ne { /n n 1 add def } if
+        } for
+    } for
+    n
+    end
+} bind def
+
+% the same face twice, painted as outlines and as solid glyphs
+/SW 30 def
+/Times-Roman findfont dup length dict copy begin
+    /PaintType 2 def
+    /StrokeWidth SW def
+    currentdict
+end
+/OutlineTimes exch definefont pop
+
+/setfnt { /OutlineTimes findfont 26 scalefont setfont } bind def
+/setsolid { /Times-Roman findfont 26 scalefont setfont } bind def
+/snapof { % proc  .  snap
+    initgraphics erasepage setfnt 0 setgray exec snap
+} bind def
+/penof { % proc  .  x y
+    initgraphics erasepage exec currentpoint
+} bind def
+/near { % a b  .  bool
+    sub abs 0.001 lt
+} bind def
+
+% StrokeWidth reaches user space through the font matrix, which is
+% where the stroked outline is built
+/setlw {
+    currentfont /StrokeWidth get 0
+    currentfont /FontMatrix get dtransform
+    dup mul exch dup mul add sqrt setlinewidth
+} bind def
+
+% one character's outline, stroked where it stands, and the pen advanced
+% past it: the walkers below paint a glyph per call
+/one { % (c)  .  -
+    dup gsave currentpoint newpath moveto setlw true charpath stroke grestore
+    stringwidth rmoveto
+} bind def
+
+% Each case is the operator, an outline built with the same pen
+% movements and stroked the same number of times, and the same outline
+% filled -- what the operator would mark if it painted the face's solid
+% coverage instead.
+/CASES [
+  [ (show      )
+    { 6 24 moveto (Hxy) show }
+    { 6 24 moveto gsave currentpoint newpath moveto setlw
+      (Hxy) true charpath stroke grestore }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (Hxy) true charpath fill grestore } ]
+  [ (ashow     )
+    { 6 24 moveto 3 0 (Hxy) ashow }
+    { 6 24 moveto gsave currentpoint newpath moveto setlw
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto
+      (y) true charpath 3 0 rmoveto stroke grestore }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto
+      (y) true charpath 3 0 rmoveto fill grestore } ]
+  [ (widthshow )
+    { 6 24 moveto 5 0 (x) 0 get (Hxy) widthshow }
+    { 6 24 moveto gsave currentpoint newpath moveto setlw
+      (H) true charpath
+      (x) true charpath 5 0 rmoveto
+      (y) true charpath stroke grestore }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath
+      (x) true charpath 5 0 rmoveto
+      (y) true charpath fill grestore } ]
+  [ (awidthshow)
+    { 6 24 moveto 5 0 (x) 0 get 3 0 (Hxy) awidthshow }
+    { 6 24 moveto gsave currentpoint newpath moveto setlw
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto 5 0 rmoveto
+      (y) true charpath 3 0 rmoveto stroke grestore }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto 5 0 rmoveto
+      (y) true charpath 3 0 rmoveto fill grestore } ]
+  % glyphshow selects by name rather than by code, and takes the
+  % outline by name too; it paints one glyph a call
+  [ (glyphshow )
+    { 6 24 moveto /H glyphshow /x glyphshow /y glyphshow }
+    { 6 24 moveto (H) one (x) one (y) one }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (Hxy) true charpath fill grestore } ]
+  % and the walkers that reach the raster through show, a glyph a call
+  [ (xshow     )
+    { 6 24 moveto (Hxy) [ 20 14 12 ] xshow }
+    { 6 24 moveto (H) one 26 24 moveto (x) one 40 24 moveto (y) one }
+    { 6 24 moveto gsave currentpoint newpath moveto (H) true charpath
+      26 24 moveto (x) true charpath 40 24 moveto (y) true charpath
+      fill grestore } ]
+  [ (kshow     )
+    { 6 24 moveto { pop pop 3 0 rmoveto } (Hxy) kshow }
+    { 6 24 moveto (H) one 3 0 rmoveto (x) one 3 0 rmoveto (y) one }
+    { 6 24 moveto gsave currentpoint newpath moveto
+      (H) true charpath 3 0 rmoveto
+      (x) true charpath 3 0 rmoveto
+      (y) true charpath fill grestore } ]
+] def
+
+CASES {
+    aload pop
+    /c.solid exch def /c.oracle exch def /c.subject exch def /p.name exch def
+    /S currentdict /c.subject get snapof def
+    /O currentdict /c.oracle get snapof def
+    /F currentdict /c.solid get snapof def
+    O inkof 0 gt (the stroke of the outline marks the page) check
+    S inkof 0 gt (the text marks the page) check
+    S O differs 0 eq (the text marks exactly what that stroke marks) check
+    S F differs 0 gt (the text is not the solid glyph) check
+    { setsolid currentdict /c.subject get exec } penof
+    { setfnt currentdict /c.subject get exec } penof
+    3 -1 roll near exch 3 -1 roll near and
+    (an outline font leaves the pen where a solid one does) check
+} forall
+
+% --- the width the outline is stroked with ---------------------------
+% StrokeWidth is a character space distance, so a font of twice the size
+% strokes twice as wide, and a font without one strokes as thin as the
+% device allows rather than refusing.
+/p.name (stroke width:) def
+/W1 { 6 24 moveto (H) show } snapof def
+/setfnt { /OutlineTimes findfont 52 scalefont setfont } bind def
+/W2 { 6 48 moveto (H) show } snapof def
+W2 inkof W1 inkof gt (a larger size strokes a wider line) check
+
+/Times-Roman findfont dup length dict copy begin
+    /PaintType 2 def
+    currentdict
+end
+/BareOutline exch definefont pop
+/setfnt { /BareOutline findfont 26 scalefont setfont } bind def
+/W3 { 6 24 moveto (H) show } snapof def
+W3 inkof 0 gt (a font without StrokeWidth still marks its outline) check
+
+count 0 eq (the suite leaves the operand stack empty) check
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit
