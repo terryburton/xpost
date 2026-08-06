@@ -5,10 +5,16 @@ name: analysers
 # static analysers that walk paths rather than statements, and two
 # dynamic ones that run the suite and watch what it touches.
 #
-# Each job reports rather than blocks, for now: the analysers have
-# findings on the tree today, and a job that fails from the first run is
-# a job that gets disabled. The counts are the ratchet -- when a class
-# reaches zero, promote it by dropping its `|| true`.
+# A job blocks on what the tree already answers and counts the rest: a
+# job that fails from the first run is a job that gets disabled, so a
+# class earns its place among the blocking ones by reaching zero first.
+# The counts are the ratchet. Where a finding cannot happen, the reason
+# belongs at the site the checker points at, so that the next reader
+# meets it there; a class kept out of the blocking set says here why the
+# checker cannot be held to zero on it.
+#
+# Blocking today: every class the gcc analyser reports, and all of
+# cppcheck's but memleak and the style severities.
 
 on:
   push:
@@ -128,6 +134,10 @@ jobs:
           libfreetype6-dev libfontconfig1-dev meson ninja-build
     - name: setup
       run: meson setup builddir -Dc_args=-fanalyzer
+    # Every class this analyser reports is at zero on the tree, so a
+    # finding of any class is a regression and this job blocks. Where a
+    # path it walks cannot happen, the reason it cannot is written at the
+    # site rather than being carried here as an exception.
     - name: build and summarise
       run: |
         ninja -C builddir 2>&1 | tee analyzer.log || true
@@ -136,6 +146,7 @@ jobs:
           | sort | uniq -c | sort -rn | tee analyzer.counts
         echo '--- total ---'
         grep -c 'warning:' analyzer.log || true
+        ! grep -q '\[-Wanalyzer-' analyzer.log
     - uses: actions/upload-artifact@v4
       with:
         name: gcc-analyzer
@@ -169,6 +180,29 @@ jobs:
         sed -E 's/^[^ ]+ //; s/:.*$//' cppcheck.log | sort | uniq -c | sort -rn | head -30
         echo '--- errors only ---'
         grep -E ': error: ' cppcheck.log || echo 'none'
+        # The classes below are at zero on the tree and block. The rest
+        # are counted above. What is not here and why:
+        #
+        # memleak reads a filter constructor handing its struct to the
+        # object layer as the base the struct begins with, sees a pointer
+        # into the allocation rather than the allocation, and calls the
+        # transfer a leak. It says so at four of the nineteen
+        # constructors that do exactly the same thing, and which four
+        # moves with the version, so the class cannot be held to zero
+        # without marking sites at random. The leak class the gcc
+        # analyser reports covers the same ground and does block, having
+        # been shown the transfer.
+        #
+        # The style severities -- variableScope, constVariablePointer,
+        # constParameterPointer -- are a separate argument about how the
+        # tree declares things, not about what it does.
+        echo '--- classes held to zero ---'
+        blocking='uninitvar|uninitdata|va_list_usedBeforeStarted'
+        blocking="$blocking|shiftTooManyBits|nullPointerRedundantCheck"
+        blocking="$blocking|unreachableCode|unsignedLessThanZero"
+        blocking="$blocking|invalidPrintfArgType_[a-z]+"
+        grep -E ": ($blocking):" cppcheck.log || echo 'none'
+        ! grep -qE ": ($blocking):" cppcheck.log
     - uses: actions/upload-artifact@v4
       with:
         name: cppcheck
