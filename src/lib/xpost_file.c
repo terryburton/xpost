@@ -5025,6 +5025,8 @@ int xpost_file_open(Xpost_Memory_File *mem,
             return invalidfileaccess;
         }
         f = xpost_file_cons(mem, stdin);
+        if (xpost_object_get_type(f) != filetype)
+            return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     }
@@ -5035,6 +5037,8 @@ int xpost_file_open(Xpost_Memory_File *mem,
             return invalidfileaccess;
         }
         f = xpost_file_cons(mem, stdout);
+        if (xpost_object_get_type(f) != filetype)
+            return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     }
@@ -5045,6 +5049,8 @@ int xpost_file_open(Xpost_Memory_File *mem,
             return invalidfileaccess;
         }
         f = xpost_file_cons(mem, stderr);
+        if (xpost_object_get_type(f) != filetype)
+            return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_WRITE << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     }
@@ -5056,6 +5062,11 @@ int xpost_file_open(Xpost_Memory_File *mem,
             return ret;
         }
         f = xpost_file_cons(mem, fp);
+        if (xpost_object_get_type(f) != filetype)
+        {
+            fclose(fp);
+            return VMerror;
+        }
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     }
@@ -5067,6 +5078,11 @@ int xpost_file_open(Xpost_Memory_File *mem,
             return ret;
         }
         f = xpost_file_cons(mem, fp);
+        if (xpost_object_get_type(f) != filetype)
+        {
+            fclose(fp);
+            return VMerror;
+        }
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     }
@@ -5099,6 +5115,11 @@ int xpost_file_open(Xpost_Memory_File *mem,
         if (fp == NULL)
             return ret;
         f = xpost_file_cons(mem, fp);
+        if (xpost_object_get_type(f) != filetype)
+        {
+            fclose(fp);
+            return VMerror;
+        }
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
         f.tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
     }
