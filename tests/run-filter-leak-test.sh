@@ -25,8 +25,8 @@ supp=$3
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
-case $supp in /*) ;; *) supp=$PWD/$supp ;; esac
+case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
+case $supp in /* | ?:/* | ?:\\*) ;; *) supp=$PWD/$supp ;; esac
 
 if ! command -v valgrind >/dev/null 2>&1; then
     echo "SKIP: no leak checker on this platform"

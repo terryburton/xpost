@@ -19,7 +19,7 @@ script=$2
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

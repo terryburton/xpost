@@ -21,7 +21,7 @@ script=$2
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+case $script in /* | ?:/* | ?:\\*) ;; *) script=$PWD/$script ;; esac
 
 allowance=96
 if ! ( ulimit -n "$allowance" ) 2>/dev/null; then
