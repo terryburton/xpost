@@ -126,12 +126,22 @@ guard_mirror_tree() {
     done
     set +f
     eval "( cd \"\$1\" && find data src tests $gm_prune -type f -print )" \
-        2>/dev/null \
-    | while read -r rel; do
-        d=${rel%/*}
-        [ -d "$mirror/$d" ] || mkdir -p "$mirror/$d"
-        tr -d '\r' < "$1/$rel" > "$mirror/$rel"
-    done
+        2>/dev/null > "$work/gm-list"
+    # The directories, and the files a single pass will not reach: an
+    # empty one has no line to be read and so is never opened.
+    while read -r gm_rel; do
+        gm_d=${gm_rel%/*}
+        [ "$gm_d" = "$gm_rel" ] || [ -d "$mirror/$gm_d" ] || mkdir -p "$mirror/$gm_d"
+        [ -s "$1/$gm_rel" ] || : > "$mirror/$gm_rel"
+    done < "$work/gm-list"
+    # Then the contents, in one pass over the whole list rather than a
+    # process for each file. A tree of a few hundred files costs a few
+    # hundred processes that way, which on a platform where starting one
+    # is expensive took this longer than the guard that called it.
+    ( cd "$1" && xargs awk -v dir="$mirror" '
+        FNR == 1 { if (gm_out != "") close(gm_out); gm_out = dir "/" FILENAME }
+        { gsub(/\r/, ""); print > gm_out }
+      ' < "$work/gm-list" )
     for f in Makefile.am meson.build; do
         [ -f "$1/$f" ] && tr -d '\r' < "$1/$f" > "$mirror/$f"
     done
