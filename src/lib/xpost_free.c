@@ -219,38 +219,18 @@ void xpost_free_dump(Xpost_Memory_File *mem)
 {
     unsigned int e;
     unsigned int z;
-    int ret;
+    unsigned int b;
+    unsigned int headz;
 
-    z = xpost_memory_free_lists_adr(mem);
+    headz = xpost_memory_free_lists_adr(mem);
 
     printf("freelist: ");
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
     {
-        unsigned int b, headz = z;
-        for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
-        {
-            z = headz + b * sizeof(unsigned int);
-            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
-            if (e) printf("[bucket %u] ", b);
-            _dump_chain(mem, z);
-        }
-    }
-    return;
-    memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
-    while (e)
-    {
-        unsigned int sz;
-        ret = xpost_memory_table_get_size(mem, e, &sz);
-        if (!ret)
-        {
-            return;
-        }
-        printf("%u(%u) ", e, sz);
-        ret = xpost_memory_table_get_addr(mem, e, &z);
-        if (!ret)
-        {
-            return;
-        }
+        z = headz + b * sizeof(unsigned int);
         memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+        if (e) printf("[bucket %u] ", b);
+        _dump_chain(mem, z);
     }
 }
 
