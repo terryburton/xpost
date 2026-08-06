@@ -218,7 +218,17 @@ char *xpost_string_allocate_cstring(Xpost_Context *ctx,
                                     Xpost_Object s)
 {
     char *p = calloc( s.comp_.sz + 1, 1 );
-    memcpy( p, xpost_string_get_pointer(ctx, s), s.comp_.sz );
+    char *bytes;
+
+    if (!p)
+        return NULL;
+    /* a string object whose entity no longer describes a string yields no
+       pointer; the nul the allocation already holds is then the whole
+       answer, so the caller gets an empty string rather than a copy of
+       whatever the entity now holds */
+    bytes = xpost_string_get_pointer(ctx, s);
+    if (bytes)
+        memcpy( p, bytes, s.comp_.sz );
     return p;
 }
 
