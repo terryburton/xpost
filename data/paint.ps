@@ -98,6 +98,113 @@
     } if
 } bind put
 
+% poly  .polybounds  xlo ylo xhi yhi true
+%                    false
+% The device-space box a polygon's own vertices reach, or false when it
+% has none. This is where an answer about the polygon can lie, so it is
+% what the tiling walks cut their tiles out of: a tile stretched past it
+% would be halved over rows that could hold nothing.
+.xpostsys /.polybounds {
+    8 dict begin
+    /any false def
+    {
+        dup null eq { pop }{
+            aload pop /py exch def /px exch def
+            any {
+                px xlo lt { /xlo px def } if
+                px xhi gt { /xhi px def } if
+                py ylo lt { /ylo py def } if
+                py yhi gt { /yhi py def } if
+            }{
+                /xlo px def /xhi px def /ylo py def /yhi py def
+                /any true def
+            } ifelse
+        } ifelse
+    } forall
+    any { xlo ylo xhi yhi true }{ false } ifelse
+    end
+} bind put
+
+% subject y0 y1  .eospantile  spans ...
+% The even-odd interior of the subject within the rows from y0 up to y1,
+% in the pixel-band rectangles .eospanpoly answers in: one array, or
+% several over shallower windows when what is left holds more bands than
+% one array's length field describes.
+%
+% The cut is across the rows, halving the window until each piece
+% carries its own bands. A window one row deep cannot be cut again, so a
+% row holding more runs than an array carries hands its refusal up.
+%
+% The windows meet along row boundaries and no two of them describe the
+% same row, which is what lets their spans be painted one after another:
+% a pixel two windows both described would be painted twice, and blended
+% twice as dark.
+.xpostsys /.eospantile {
+    8 dict begin
+    /ty1 exch def /ty0 exch def /subj exch def
+    count /n0 exch def
+    { subj ty0 ty1 .eospanpoly } stopped {
+        count n0 sub { pop } repeat
+        ty1 ty0 sub 1 gt {
+            /tm ty0 ty1 ty0 sub 2 idiv add def
+            subj ty0 tm //.xpostsys /.eospantile get exec
+            subj tm ty1 //.xpostsys /.eospantile get exec
+        }{
+            stop
+        } ifelse
+    } if
+    end
+} put
+
+% subjectpoly  .eospanparts  [ spans ... ]
+% The even-odd interior of the subject, in the parts a painter marks one
+% after another. Normally the one array .eospanpoly answers with;
+% several, over disjoint bands of rows, when the interior holds more
+% bands than one array's length field describes.
+%
+% The even-odd rule has no scan conversion of its own downstream: an
+% interior is stated as pixel-band rectangles here and the rectangles,
+% winding-uniform, travel the ordinary pipeline. So a comb or a stipple
+% has an interior too finely divided for any single array to describe
+% before any region is consulted -- fifty teeth over three hundred rows
+% are fifteen thousand bands and five elements apiece. That is a bound
+% on the description and not on the painting: the parts describe the
+% same pixels between them, so what is painted is what one array would
+% have given.
+.xpostsys /.eospanparts {
+    16 dict begin
+    /subj exch def
+    count /n0 exch def
+    /d0 countdictstack def
+    {
+        { [ subj .eospanpoly ] } stopped {
+            count n0 sub { pop } repeat
+            subj //.xpostsys /.polybounds get exec {
+                /yhi exch def pop /ylo exch def pop
+                /sl //.xpostsys /.cliptilerows get def
+                /ylim yhi ceiling cvi 1 add def
+                [ ylo floor cvi sl yhi ceiling cvi {
+                      /yb exch def
+                      subj yb yb sl add dup ylim gt { pop ylim } if
+                      //.xpostsys /.eospantile get exec
+                  } for ]
+            }{
+                % a subject with no vertices covers no pixel
+                [ ]
+            } ifelse
+        } if
+    } stopped {
+        % a window that handed its refusal up leaves its own dictionaries
+        % open behind it, and the caller is owed a clean stack under the
+        % failure it is about to be given
+        countdictstack d0 sub { end } repeat
+        count n0 sub { pop } repeat
+        end
+        stop
+    } if
+    end
+} put
+
 % [ spans ... ]  .fillparts  -
 % Paint the parts of a region in the current colour, through the
 % device's polygon fill. A region that no single array describes
@@ -180,12 +287,10 @@
     }{
         closepath
         flattenpath
-        .fillpolyargs .eospanpoly
+        .fillpolyargs //.xpostsys /.eospanparts get exec
         .cliptrivial not {
-            //.xpostsys /.clipmeetparts get exec
-        }{
-            [ exch ]
-        } ifelse
+            //.xpostsys /.clippartsmeet get exec
+        } if
 
         //.xpostsys /.fillparts get exec
 
@@ -198,14 +303,15 @@
 % x y proc  .intest  bool
 % upath proc  .intest  bool
 % The insideness core: proc resolves the subject region -- the spans
-% the corresponding painting operator would mark -- and the probe is
-% either the device pixel holding the point or the region an aperture
-% user path encloses. The point's pixel is inset by the fill grid's
-% quantum so mere boundary contact stays outside, and insideness is
-% any span surviving the intersection. The clip does not participate:
-% the test asks about the painting operator's own marks
+% the corresponding painting operator would mark, in the parts that
+% operator would mark them in -- and the probe is either the device
+% pixel holding the point or the region an aperture user path encloses.
+% The point's pixel is inset by the fill grid's quantum so mere boundary
+% contact stays outside, and insideness is any span of any part
+% surviving the intersection. The clip does not participate: the test
+% asks about the painting operator's own marks
 .xpostsys /.intest {
-    4 dict begin
+    8 dict begin
     /.insp exch def
     dup type dup /integertype eq exch /realtype eq or {
         transform
@@ -218,7 +324,11 @@
     }{
         gsave newpath uappend flattenpath .fillpolyargs grestore
     } ifelse
-    gsave .insp exec exch 0 .regionmeet length 2 gt grestore
+    /.inprobe exch def
+    gsave .insp exec grestore
+    /.inany false def
+    { .inprobe 0 .regionmeet length 2 gt { /.inany true def } if } forall
+    .inany
     end
 } put
 
@@ -227,10 +337,11 @@
 % would fill (eofill) of the current path mark the point's pixel, or
 % any of the aperture's region
 /infill [ [ /numbertype /numbertype ] [ /arraytype ] ]
-    { { flattenpath .fillpolyargs } //.xpostsys /.intest get exec }
+    { { flattenpath .fillpolyargs [ exch ] } //.xpostsys /.intest get exec }
      //.xpostsys /.defop get exec
 /ineofill [ [ /numbertype /numbertype ] [ /arraytype ] ]
-    { { closepath flattenpath .fillpolyargs .eospanpoly } //.xpostsys /.intest get exec }
+    { { closepath flattenpath .fillpolyargs
+        //.xpostsys /.eospanparts get exec } //.xpostsys /.intest get exec }
      //.xpostsys /.defop get exec
 
 % the stroke and user-path forms wrap the two above: the subject

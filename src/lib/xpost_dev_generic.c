@@ -721,9 +721,16 @@ int _rspans_to_poly(Xpost_Context *ctx,
     Xpost_Object result;
     int i, ret;
 
+    /* A band costs five elements, and this is the length one array is
+       allowed to reach. The number is a deliberate bound and not the
+       size field's own ceiling -- the field is sixteen bits in the
+       ordinary build and thirty-two in the large-object one, so a
+       ceiling taken from it would let the two builds refuse at
+       different sizes and only one of them would ever reach the
+       machinery that answers in parts. It is the length .fillpolyargs
+       allows a polygon, so the two ends of the pipeline agree, and it
+       keeps one answer's allocation bounded whatever the build. */
     if (5 * (long)nout > 65535)
-        /* too many spans for a single backing array (the object size
-           field is 16 bits) */
         return limitcheck;
 
     result = xpost_array_cons(ctx, 5 * nout);
@@ -1060,6 +1067,39 @@ int _eospanpoly(Xpost_Context *ctx,
         return code;
 
     code = _rspans_to_poly(ctx, rsp, nrsp);
+    free(rsp);
+    return code;
+}
+
+/* poly ylo yhi  .eospanpoly  spanpoly
+   The same interior over a window of pixel rows: the bands from ylo up
+   to but not including yhi, and nothing else. A path's interior can
+   hold more bands than one array describes -- a comb or a stipple over
+   a whole page does -- and then it is asked for a window at a time,
+   narrowing until each answer fits. The windows are read off the same
+   scan conversion, so a band falls in exactly one of them and the
+   windows together are the whole interior. */
+static
+int _eospanpoly_rows(Xpost_Context *ctx,
+                     Xpost_Object poly,
+                     Xpost_Object ylo,
+                     Xpost_Object yhi)
+{
+    struct rspan *rsp = NULL;
+    int nrsp, lo, hi, i, m;
+    int code;
+
+    code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 1);
+    if (code)
+        return code;
+
+    lo = ylo.int_.val;
+    hi = yhi.int_.val;
+    for (i = 0, m = 0; i < nrsp; i++)
+        if (rsp[i].band >= lo && rsp[i].band < hi)
+            rsp[m++] = rsp[i];
+
+    code = _rspans_to_poly(ctx, rsp, m);
     free(rsp);
     return code;
 }
@@ -3181,6 +3221,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              arraytype, arraytype, integertype); INSTALL;
     op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 1, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly_rows, 1, 3,
+                             arraytype, integertype, integertype); INSTALL;
     op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 0, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 1, 6,
             numbertype, numbertype, numbertype, numbertype,

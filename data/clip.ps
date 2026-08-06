@@ -141,22 +141,8 @@
     {
         { [ subj //.xpostsys /.clipmeet get exec ] } stopped {
             count n0 sub { pop } repeat
-            /any false def
-            subj {
-                dup null eq { pop }{
-                    aload pop /py exch def /px exch def
-                    any {
-                        px xlo lt { /xlo px def } if
-                        px xhi gt { /xhi px def } if
-                        py ylo lt { /ylo py def } if
-                        py yhi gt { /yhi py def } if
-                    }{
-                        /xlo px def /xhi px def /ylo py def /yhi py def
-                        /any true def
-                    } ifelse
-                } ifelse
-            } forall
-            any {
+            subj //.xpostsys /.polybounds get exec {
+                /yhi exch def /xhi exch def /ylo exch def /xlo exch def
                 /sl //.xpostsys /.cliptilerows get def
                 /tx0 xlo floor cvi 1 sub def
                 /tx1 xhi ceiling cvi 1 add def
@@ -182,6 +168,15 @@
     } if
     end
 } put
+
+% [ spans ... ]  .clippartsmeet  [ spans ... ]
+% What the clip in force leaves of a subject already stated in parts.
+% Each part is met on its own and the answers stand together: the parts
+% describe disjoint bands of rows, so the answers do too, and a painter
+% marking them one after another marks no pixel twice.
+.xpostsys /.clippartsmeet {
+    [ exch { //.xpostsys /.clipmeetparts get exec aload pop } forall ]
+} bind put
 
 % -  initclip  -
 % Replace the clip region with the whole page (PLRM 8.2). The device

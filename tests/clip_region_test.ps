@@ -435,9 +435,8 @@ end
 .privatedict /.gstatetemplate get exec /device DEV5 put
 graphicsdict /currgstate get /device DEV5 put
 
-% a comb of vertical bars `bar` wide every `step` columns, taken as the
-% clip region
-/combclip { % bar step  .  -
+% a comb of vertical bars `bar` wide every `step` columns
+/combpath { % bar step  .  -
     4 dict begin
     /step exch def /bar exch def
     newpath
@@ -446,8 +445,12 @@ graphicsdict /currgstate get /device DEV5 put
         cx 0 moveto cx bar add 0 lineto
         cx bar add 300 lineto cx 300 lineto closepath
     } for
-    clip newpath
     end
+} bind def
+
+% the same comb taken as the clip region
+/combclip { % bar step  .  -
+    combpath clip newpath
 } bind def
 
 % what the page carries: how many pixels are marked, and how many of
@@ -560,6 +563,59 @@ DEV5 /bands 0 put
 24000 eq (a fill under a rectangular region marks the region's pixels) assert
 DEV5 /bands get 1 eq
     (a fill under a rectangular region is handed over as one rectangle) assert
+
+% --- a subject divided into more bands than one array describes -------
+% The even-odd rule has no scan conversion of its own in the device: a
+% path's even-odd interior is resolved to pixel-band rectangles first
+% and the rectangles, winding-uniform, then travel the ordinary
+% pipeline. So eofill states its own subject as bands before any region
+% is consulted, and the comb has fifteen thousand of them with no clip
+% in force at all.
+%
+% That too is a bound on the description and not on the painting: the
+% interior is resolved a band of rows at a time, and what is painted is
+% what one array would have given. The nonzero fill of the same path
+% hands the device the polygon and never states the bands, so it is the
+% control -- the two must mark the same pixels.
+
+initgraphics erasepage
+0 setgray 2 4 combpath fill
+2 4 tally
+0 eq (a fill of the comb alone stays inside the teeth) assert
+30000 eq (a fill of the comb alone marks every pixel of them) assert
+
+initgraphics erasepage
+0 setgray 2 4 combpath eofill
+2 4 tally
+0 eq (an eofill of the comb alone stays inside the teeth) assert
+30000 eq (an eofill of the comb alone marks every pixel of them) assert
+
+% twice as fine again, which one halving of the rows still cannot hold
+initgraphics erasepage
+0 setgray 1 2 combpath eofill
+1 2 tally
+0 eq (an eofill of the hundred-tooth comb stays inside its teeth) assert
+30000 eq (an eofill of the hundred-tooth comb marks every pixel of them) assert
+
+% ineofill asks the same question of the same interior without painting
+% it, so it meets the same bound and answers over the same parts
+initgraphics
+2 4 combpath
+1 1 ineofill (a point inside a tooth is inside the comb's even-odd interior)
+    assert
+initgraphics
+2 4 combpath
+3 1 ineofill not (a point between the teeth is outside it) assert
+
+% and the two ends together: a subject of fifteen thousand bands met
+% against a region of fifteen thousand more. The comb met with itself
+% is the comb
+initgraphics erasepage 2 4 combclip
+0 setgray 2 4 combpath eofill
+2 4 tally
+0 eq (an eofill of the comb under the comb stays inside the teeth) assert
+30000 eq (an eofill of the comb under the comb marks every pixel of them)
+    assert
 
 % --- clipsave's depth limit is the exhaustion PLRM 8.2 names for it ---
 % The stack is a fixed depth. Running past it is the operator running out
