@@ -42,6 +42,8 @@
  * @{
  */
 
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
+
 typedef struct tst
 {
     unsigned val,
@@ -50,7 +52,7 @@ typedef struct tst
              hi;
 } tst;
 int xpost_name_init(Xpost_Context *ctx);
-Xpost_Object xpost_name_cons(Xpost_Context *ctx, const char *s);
+XPOST_TEST_VISIBLE Xpost_Object xpost_name_cons(Xpost_Context *ctx, const char *s);
 
 /*
    construct a name object from a counted string, which may contain

@@ -84,7 +84,7 @@
     #_ "type" ,
 
 #define XPOST_OBJECT_DECLARE_SINGLETON(_) \
-    extern Xpost_Object _ ;
+    XPOST_TEST_VISIBLE extern Xpost_Object _ ;
 
 #define XPOST_OBJECT_DEFINE_SINGLETON(_) \
     Xpost_Object _ = \
@@ -438,7 +438,7 @@ const char *xpost_object_type_names[]
  * It sets the type to booleantype, sets unlimited access, sets the
  * pad to 0, sets the value to @p b. It returns the object as literal.
  */
-Xpost_Object xpost_bool_cons(int b);
+XPOST_TEST_VISIBLE Xpost_Object xpost_bool_cons(int b);
 
 /**
  * @brief Construct an integertype object with the given value.
