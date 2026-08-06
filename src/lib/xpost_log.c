@@ -205,6 +205,11 @@ _xpost_log_fprint_cb(FILE *stream,
     int res;
     int s;
 
+    /* args arrives started: the caller opened it and closes it, and this
+       is one of two readers of it. A list is readable once, so the second
+       reading -- the one that writes the text after the first measured it
+       -- goes through a copy made before either. */
+    /* cppcheck-suppress-begin va_list_usedBeforeStarted */
     va_copy(args_copy, args);
 
     s = vsnprintf(NULL, 0, fmt, args);
@@ -223,6 +228,7 @@ _xpost_log_fprint_cb(FILE *stream,
 
     s = vsnprintf(str, s + 1, fmt, args_copy);
     va_end(args_copy);
+    /* cppcheck-suppress-end va_list_usedBeforeStarted */
     if (s == -1)
     {
         free(str);
