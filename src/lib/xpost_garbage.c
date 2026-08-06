@@ -249,7 +249,10 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
            filter build one and hand it over. Follow the chain down from
            the filter, or the sweep takes a source out from under a filter
            still reading it. The walk stops at a stream already marked,
-           which is also what ends it if a chain ever reaches itself. */
+           which is also what ends it if a chain ever reaches itself.
+
+           Every file object is answered here, so the type switch below
+           carries no arm for one. */
         while (fm && xpost_ent_in_collector_band(fm, fent)
                && !(fm->table.tab[fent].mark
                     & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK))
@@ -393,28 +396,6 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
             {
                 XPOST_LOG_ERR("cannot mark string");
                 return 0;
-            }
-            break;
-
-        case filetype:
-            objmem = xpost_context_select_memory(ctx, o);
-            if (ent < objmem->start)
-            {
-                XPOST_LOG_ERR("attempt to mark %s object %d",
-                        xpost_object_type_names[type],
-                        ent);
-                return 0;
-            }
-            if (objmem == ctx->gl)
-            {
-                printf("file found in global vm\n");
-            } else {
-                ret = _xpost_garbage_mark_ent(objmem, o.mark_.padw);
-                if (!ret)
-                {
-                    XPOST_LOG_ERR("cannot mark file");
-                    return 0;
-                }
             }
             break;
     }
