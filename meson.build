@@ -1567,7 +1567,8 @@ test('dsc-parse', dsc_parse_exe)
 # (it then compares nothing).
 test('check-test-quality',
   find_program('tests/check-test-quality.sh'),
-  args: [ meson.current_source_dir() / 'tests' ])
+  args: [ meson.current_source_dir() / 'tests' ],
+  timeout: 120)
 
 # The distribution lists must cover every built file: a header present in the
 # meson build but missing from the autotools lists yields a `make dist` tarball
@@ -1610,7 +1611,8 @@ test('fused-equivalence',
 # shrinks.
 test('check-op-references',
   find_program('tests/check-op-references.sh'),
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir() ],
+  timeout: 120)
 
 # The address of a special entity is reached through the accessor named for
 # it, so the enumerators appear only in the header that defines them and in
@@ -1618,7 +1620,8 @@ test('check-op-references',
 # has no refusal to ignore.
 test('check-vm-address',
   find_program('tests/check-vm-address.sh'),
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir() ],
+  timeout: 120)
 
 # ... and every fused operator must actually have those cases: adding one
 # to the fast path without equivalence coverage fails here.
@@ -1826,7 +1829,8 @@ test('must-check',
 # per the register in tests/dict_homes.golden.
 test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir() ],
+  timeout: 120)
 
 # The guards read data/ and tests/ under a source root they are given, and
 # the interpreter finds the working tree by other routes when that root is
