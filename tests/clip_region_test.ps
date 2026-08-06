@@ -392,6 +392,175 @@ nearbothink nearwant eq
     (a fill under a clip marks the pixels the clip and the subject both cover)
     assert
 
+% --- a region divided into more bands than one array describes --------
+% A painter meets the clipping region as a set of pixel bands and reads
+% the bands out of an array. A band costs five array elements and an
+% array's length is a bounded field, so a page painted under a comb or a
+% stipple has an answer no single array states: fifty teeth over three
+% hundred rows are fifteen thousand bands and seventy-five thousand
+% elements, where the field runs out around thirteen thousand bands.
+%
+% That is a bound on the description and not on the painting. PLRM 7.5.1
+% makes what any painting operation marks the intersection of the pixels
+% it would cover with the pixels of the region, and the intersection is
+% the same set however many arrays it takes to state it: the answer is
+% cut into tiles of rows until each tile fits one.
+%
+% Every painter that meets a region is asked the comb, and each is held
+% to the pixels rather than to the absence of a complaint. A painter
+% that fell back on the region's bounding box would mark twice as many,
+% and one that dropped a tile would mark fewer. The bands are counted at
+% the device as well: tiles that described a row twice would send more
+% than the fifteen thousand the region holds, and the page could not say
+% so, since a row painted twice in one colour looks like a row painted
+% once.
+
+/DEV5 200 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV5 begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /bands 0 def
+    % the pixel-band rectangles the painter handed over, counted on the
+    % way through to the fill that marks them
+    /FillPoly {                         % mark comps... poly devdic  .  devdic
+        dup begin
+            exch dup
+            0 exch { null eq { 1 add } if } forall
+            /bands exch bands add def
+            exch
+        end
+        .fillpoly
+    } bind def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV5 put
+graphicsdict /currgstate get /device DEV5 put
+
+% a comb of vertical bars `bar` wide every `step` columns, taken as the
+% clip region
+/combclip { % bar step  .  -
+    4 dict begin
+    /step exch def /bar exch def
+    newpath
+    0 step 200 step sub {
+        /cx exch def
+        cx 0 moveto cx bar add 0 lineto
+        cx bar add 300 lineto cx 300 lineto closepath
+    } for
+    clip newpath
+    end
+} bind def
+
+% what the page carries: how many pixels are marked, and how many of
+% those lie outside the teeth of the comb the region was cut from
+/tally { % bar step  .  marked strayed
+    8 dict begin
+    /step exch def /bar exch def
+    /marked 0 def /strayed 0 def
+    /rows DEV5 /ImgData get def
+    0 1 rows length 1 sub {
+        /ty exch def
+        /row rows ty get def
+        0 1 row length 1 sub {
+            /tx exch def
+            row tx get 128 lt {
+                /marked marked 1 add def
+                tx step mod bar ge { /strayed strayed 1 add def } if
+            } if
+        } for
+    } for
+    marked strayed
+    end
+} bind def
+
+/wholepage { newpath -1 -1 moveto 201 -1 lineto
+             201 301 lineto -1 301 lineto closepath } bind def
+
+initgraphics erasepage 2 4 combclip
+DEV5 /bands 0 put
+0 setgray wholepage fill
+2 4 tally
+0 eq (a fill under a fifty-tooth comb stays inside the teeth) assert
+30000 eq (a fill under a fifty-tooth comb marks every pixel of them) assert
+DEV5 /bands get 15000 eq
+    (the fill sends the fifteen thousand bands the region holds, once each)
+    assert
+
+initgraphics erasepage 2 4 combclip
+0 setgray wholepage eofill
+2 4 tally
+0 eq (an eofill under the comb stays inside the teeth) assert
+30000 eq (an eofill under the comb marks every pixel of them) assert
+
+initgraphics erasepage 2 4 combclip
+0 setgray -1 -1 202 302 rectfill
+2 4 tally
+0 eq (a rectfill under the comb stays inside the teeth) assert
+30000 eq (a rectfill under the comb marks every pixel of them) assert
+
+% the image route writes rows straight into the raster and clamps each
+% write against the region's own spans, so it meets the comb by a road
+% of its own
+initgraphics erasepage 2 4 combclip
+gsave
+    200 0 0 300 0 0 6 array astore concat
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+       /Decode [0 1] /ImageMatrix [2 0 0 -2 0 2]
+       /DataSource <00000000> >> image
+grestore
+2 4 tally
+0 eq (an image under the comb stays inside the teeth) assert
+30000 eq (an image under the comb marks every pixel of them) assert
+
+initgraphics erasepage 2 4 combclip
+gsave
+    0 setgray
+    200 0 0 300 0 0 6 array astore concat
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 1
+       /Decode [0 1] /ImageMatrix [2 0 0 -2 0 2]
+       /DataSource <0000> >> imagemask
+grestore
+2 4 tally
+0 eq (an imagemask under the comb stays inside the teeth) assert
+30000 eq (an imagemask under the comb marks every pixel of them) assert
+
+% twice as fine again: a hundred teeth over the same rows are thirty
+% thousand bands, which one halving of the page still cannot hold, so
+% the cutting has to go on until it can
+initgraphics erasepage 1 2 combclip
+DEV5 /bands 0 put
+0 setgray wholepage fill
+1 2 tally
+0 eq (a fill under a hundred-tooth comb stays inside the teeth) assert
+30000 eq (a fill under a hundred-tooth comb marks every pixel of them) assert
+DEV5 /bands get 30000 eq
+    (the finer fill sends the thirty thousand bands the region holds, once each)
+    assert
+
+% and a subject reaching part of the way down it: what a painter marks
+% is bounded by the subject as well as by the region, and the tiles are
+% cut out of the rows the subject reaches
+initgraphics erasepage 2 4 combclip
+0 setgray newpath -1 100 moveto 201 100 lineto
+          201 200 lineto -1 200 lineto closepath fill
+2 4 tally
+0 eq (a fill of part of the page under the comb stays inside the teeth) assert
+10000 eq (a fill of part of the page under the comb marks that part of them)
+    assert
+
+% the control: a page fill under a region a single array holds easily
+% marks that region and nothing more, and is handed over as the one
+% rectangle it is -- so what is asserted above is a region divided too
+% finely for one array and not a painter that has stopped meeting one
+initgraphics erasepage
+newpath 40 50 moveto 160 50 lineto 160 250 lineto 40 250 lineto closepath
+clip newpath
+DEV5 /bands 0 put
+0 setgray wholepage fill
+200 200 tally pop
+24000 eq (a fill under a rectangular region marks the region's pixels) assert
+DEV5 /bands get 1 eq
+    (a fill under a rectangular region is handed over as one rectangle) assert
+
 % --- clipsave's depth limit is the exhaustion PLRM 8.2 names for it ---
 % The stack is a fixed depth. Running past it is the operator running out
 % of storage, not a bad index handed to it, and a program that catches the

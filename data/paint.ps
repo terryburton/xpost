@@ -98,6 +98,25 @@
     } if
 } bind put
 
+% [ spans ... ]  .fillparts  -
+% Paint the parts of a region in the current colour, through the
+% device's polygon fill. A region that no single array describes
+% arrives in several, over disjoint bands of rows; each is painted in
+% turn, and a part holding no band is nothing to paint.
+.xpostsys /.fillparts {
+    {
+        dup length 2 gt {
+            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
+            //.xpostsys /.applytransfer get exec
+            counttomark 2 add -1 roll
+            DEVICE dup /FillPoly get exec
+            pop
+        }{
+            pop
+        } ifelse
+    } forall
+} bind put
+
 /fill [ ] {
     //.xpostsys /.patternactive get exec { //.xpostsys /.patternfill get exec }{
     closepath
@@ -122,12 +141,12 @@
     % for any region the nonzero rule can describe.
     .cliptrivial not {
         .cliprect { pop pop pop pop true }{ false } ifelse {
-            //.xpostsys /doclip get exec .fillpolyargs
+            //.xpostsys /doclip get exec .fillpolyargs [ exch ]
         }{
-            .fillpolyargs //.xpostsys /.clipmeet get exec
+            .fillpolyargs //.xpostsys /.clipmeetparts get exec
         } ifelse
     }{
-        .fillpolyargs
+        .fillpolyargs [ exch ]
     } ifelse
     /DEBUGFILL where { pop
         (fill)=
@@ -135,16 +154,7 @@
         hook
     } if
 
-    dup length 2 gt {
-        [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-        //.xpostsys /.applytransfer get exec
-        counttomark 2 add -1 roll
-        DEVICE dup /FillPoly get exec
-        pop
-        %pstack()=
-    }{
-        pop
-    } ifelse
+    //.xpostsys /.fillparts get exec
 
     flushpage
     newpath
@@ -172,18 +182,12 @@
         flattenpath
         .fillpolyargs .eospanpoly
         .cliptrivial not {
-            //.xpostsys /.clipmeet get exec
-        } if
-
-        dup length 2 gt {
-            [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
-            //.xpostsys /.applytransfer get exec
-            counttomark 2 add -1 roll
-            DEVICE dup /FillPoly get exec
-            pop
+            //.xpostsys /.clipmeetparts get exec
         }{
-            pop
+            [ exch ]
         } ifelse
+
+        //.xpostsys /.fillparts get exec
 
         flushpage
         newpath
@@ -502,22 +506,23 @@
 % already-resolved spans -- runs through the fill machinery's
 % scan-conversion either way
 .xpostsys /.clipspans {
-    gsave
-    //.xpostsys /.clipregionpath get exec flattenpath
-    % resolve by the nonzero rule: the region may hold overlapping
-    % subpaths (a stencil's adjacent runs under magnification), which
-    % the even-odd resolver would cancel; intersecting with the page
-    % rectangle scan-converts the region as the fills themselves do
-    .fillpolyargs
+    % the page met against the region is the region resolved: the
+    % rectangle covers every pixel the device has, and the meeting
+    % scan-converts the region as the fills themselves do -- by the
+    % nonzero rule, so a region holding overlapping subpaths (a
+    % stencil's adjacent runs under magnification) keeps the pixels an
+    % even-odd resolver would cancel. The answer arrives in parts when
+    % no single array describes it, and the quads run on across them.
     [ [0 0]
       [DEVICE /dimensions get 0 get 0]
       [DEVICE /dimensions get 0 get DEVICE /dimensions get 1 get]
-      [0 DEVICE /dimensions get 1 get] ]
-    0 .regionmeet
-    grestore
-    6 dict begin
-    /q exch def
+      [0 DEVICE /dimensions get 1 get] null ]
+    //.xpostsys /.clipmeetparts get exec
+    8 dict begin
+    /parts exch def
     [
+    parts {
+    /q exch def
     /i 0 def
     {
         i q length ge { exit } if
@@ -538,6 +543,7 @@
         } loop
         got { mnx mny mxx mxy } if
     } loop
+    } forall
     ]
     end
 } put

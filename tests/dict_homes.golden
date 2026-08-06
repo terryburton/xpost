@@ -48,6 +48,10 @@
 .xpostsys /.setclipregion
 .xpostsys /.clipregionpoly
 .xpostsys /.clipmeet
+.xpostsys /.clipmeetparts
+.xpostsys /.cliptile
+.xpostsys /.cliptilerows
+.xpostsys /.fillparts
 .xpostsys /ColorConversion
 .xpostsys /cpath
 .xpostsys /crossdashbound

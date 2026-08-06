@@ -73,6 +73,116 @@
     .regionmeet
 } bind put
 
+% How deep a tile of the page reaches before anything is asked of it.
+% A tile is halved until what it holds fits one array, so this settles
+% where the halving starts and not where it ends.
+.xpostsys /.cliptilerows 2048 put
+
+% subject x0 y0 x1 y1  .cliptile  spans ...
+% What the clip in force leaves of the subject region inside the tile,
+% in the pixel-band rectangles .clipmeet answers in: one array, or
+% several over shallower tiles when what is left holds more bands than
+% one array's length field describes. A null subject asks for the whole
+% of the tile.
+%
+% The cut is across the rows, halving the tile until each piece carries
+% its own bands, so a region divided finely across the rows is resolved
+% as readily as one reaching far down them. A tile one row deep cannot
+% be cut again, so a row holding more runs than an array carries hands
+% its refusal up.
+%
+% The tiles meet along row boundaries and no two of them describe the
+% same row, which is what lets their spans be painted one after
+% another: a pixel two tiles both described would be painted twice, and
+% blended twice as dark.
+.xpostsys /.cliptile {
+    5 dict begin
+    /ty1 exch def /tx1 exch def /ty0 exch def /tx0 exch def
+    /subj exch def
+    count /n0 exch def
+    { [ [ tx0 ty0 ] [ tx1 ty0 ] [ tx1 ty1 ] [ tx0 ty1 ] null ]
+      subj null ne { subj exch 0 .regionmeet } if
+      //.xpostsys /.clipmeet get exec
+    } stopped {
+        count n0 sub { pop } repeat
+        ty1 ty0 sub 1 gt {
+            /tm ty0 ty1 ty0 sub 2 idiv add def
+            subj tx0 ty0 tx1 tm //.xpostsys /.cliptile get exec
+            subj tx0 tm tx1 ty1 //.xpostsys /.cliptile get exec
+        }{
+            stop
+        } ifelse
+    } if
+    end
+} put
+
+% subjectpoly  .clipmeetparts  [ spans ... ]
+% What the clip in force leaves of the subject region, in the parts a
+% painter marks one after another. Normally the one array .clipmeet
+% answers with; several, over disjoint bands of rows, when the answer
+% holds more bands than one array's length field describes.
+%
+% A band costs five array elements and an array's length is a bounded
+% field, so a fill of a page under a comb or a stipple has an answer
+% too finely divided for any single array to describe. That is a bound
+% on the description and not on the painting: the parts describe the
+% same pixels between them, so what is painted is what PLRM 7.5.1 asks
+% for -- the pixels the operation covers met with the pixels of the
+% region -- whether the answer took one array or twenty.
+%
+% The tiles are cut out of the rows and columns the subject reaches,
+% which is where the answer can lie: a tile stretched past the subject
+% would be halved over rows that could hold nothing.
+.xpostsys /.clipmeetparts {
+    16 dict begin
+    /subj exch def
+    count /n0 exch def
+    /d0 countdictstack def
+    {
+        { [ subj //.xpostsys /.clipmeet get exec ] } stopped {
+            count n0 sub { pop } repeat
+            /any false def
+            subj {
+                dup null eq { pop }{
+                    aload pop /py exch def /px exch def
+                    any {
+                        px xlo lt { /xlo px def } if
+                        px xhi gt { /xhi px def } if
+                        py ylo lt { /ylo py def } if
+                        py yhi gt { /yhi py def } if
+                    }{
+                        /xlo px def /xhi px def /ylo py def /yhi py def
+                        /any true def
+                    } ifelse
+                } ifelse
+            } forall
+            any {
+                /sl //.xpostsys /.cliptilerows get def
+                /tx0 xlo floor cvi 1 sub def
+                /tx1 xhi ceiling cvi 1 add def
+                /ylim yhi ceiling cvi 1 add def
+                [ ylo floor cvi sl yhi ceiling cvi {
+                      /yb exch def
+                      subj tx0 yb tx1 yb sl add dup ylim gt { pop ylim } if
+                      //.xpostsys /.cliptile get exec
+                  } for ]
+            }{
+                % a subject with no vertices covers no pixel
+                [ ]
+            } ifelse
+        } if
+    } stopped {
+        % a tile that handed its refusal up leaves its own dictionaries
+        % open behind it, and the caller is owed a clean stack under the
+        % failure it is about to be given
+        countdictstack d0 sub { end } repeat
+        count n0 sub { pop } repeat
+        end
+        stop
+    } if
+    end
+} put
+
 % -  initclip  -
 % Replace the clip region with the whole page (PLRM 8.2). The device
 % reports its dimensions in device pixels, so the rectangle is built with
