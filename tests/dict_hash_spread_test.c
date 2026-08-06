@@ -35,18 +35,9 @@
 #include "xpost_string.h"
 #include "xpost_error.h"
 
+#include "xpost_test.h"
+
 #define KEYS 20000
-
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
 
 static int cmp_uint(const void *a, const void *b)
 {
@@ -77,8 +68,7 @@ static void spread(Xpost_Context *ctx, Xpost_Object d, const char *what,
     hv = malloc(tabn * sizeof *hv);
     if (!hv)
     {
-        printf("FAIL: %s: out of memory\n", what);
-        failures++;
+        report_failure("%s: out of memory", what);
         return;
     }
 
@@ -95,9 +85,8 @@ static void spread(Xpost_Context *ctx, Xpost_Object d, const char *what,
 
     if (held != n)
     {
-        printf("FAIL: %s: the table holds %u entries, not %u\n",
-               what, held, n);
-        failures++;
+        report_failure("%s: the table holds %u entries, not %u",
+                       what, held, n);
         free(hv);
         return;
     }
@@ -133,16 +122,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
 
     /* integer keys */
@@ -151,8 +140,7 @@ int main(void)
         if (xpost_dict_put(ctx, d, xpost_int_cons((integer)i),
                            xpost_int_cons((integer)i)) != 0)
         {
-            printf("FAIL: an integer key was refused\n");
-            failures++;
+            report_failure("an integer key was refused");
             break;
         }
     spread(ctx, d, "integer keys", KEYS);
@@ -163,8 +151,7 @@ int main(void)
         if (xpost_dict_put(ctx, d, xpost_real_cons((real)i + (real)0.5),
                            xpost_int_cons((integer)i)) != 0)
         {
-            printf("FAIL: a real key was refused\n");
-            failures++;
+            report_failure("a real key was refused");
             break;
         }
     spread(ctx, d, "real keys   ", KEYS);
@@ -178,8 +165,7 @@ int main(void)
         if (xpost_dict_put(ctx, d, xpost_name_cons(ctx, buf),
                            xpost_int_cons((integer)i)) != 0)
         {
-            printf("FAIL: a name key was refused\n");
-            failures++;
+            report_failure("a name key was refused");
             break;
         }
     }
@@ -199,8 +185,7 @@ int main(void)
         if (xpost_object_get_type(v) != integertype ||
             v.int_.val != (integer)i + 1)
         {
-            printf("FAIL: integer key %u did not read back\n", i);
-            failures++;
+            report_failure("integer key %u did not read back", i);
             break;
         }
     }
@@ -258,11 +243,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

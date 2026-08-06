@@ -13,7 +13,7 @@
 #include <string.h>
 #include "xpost.h"
 
-static int failures = 0;
+#include "xpost_test.h"
 
 static char out_buf[512];
 static size_t out_len = 0;
@@ -27,15 +27,6 @@ static size_t out_sink(void *user, const char *buf, size_t len)
         out_len += len;
     }
     return len;
-}
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
 }
 
 /* run a program and answer what it printed */
@@ -62,8 +53,8 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
 
     /* the library reports where it and its data live */
@@ -75,8 +66,8 @@ int main(void)
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
     xpost_job_snapshots_set(ctx, 0);
     xpost_stdout_handler_set(ctx, out_sink, NULL);
@@ -112,11 +103,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

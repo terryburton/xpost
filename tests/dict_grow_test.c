@@ -22,16 +22,7 @@
 #include "xpost_dict.h"
 #include "xpost_error.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 static void sweep(Xpost_Memory_File *mem, const char *what)
 {
@@ -45,9 +36,9 @@ static void sweep(Xpost_Memory_File *mem, const char *what)
         if (mem->table.tab[ent].sz > 0 &&
             mem->table.tab[ent].used > mem->table.tab[ent].sz)
         {
-            printf("FAIL: %s: ent %u used %u > sz %u\n", what, ent,
-                   mem->table.tab[ent].used, mem->table.tab[ent].sz);
-            failures++;
+            report_failure("%s: ent %u used %u > sz %u", what, ent,
+                           mem->table.tab[ent].used,
+                           mem->table.tab[ent].sz);
         }
     }
 }
@@ -60,16 +51,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
 
     sweep(ctx->lo, "before growth (local)");
@@ -89,8 +80,7 @@ int main(void)
         Xpost_Object v = xpost_dict_get(ctx, d, xpost_int_cons(i));
         if (xpost_object_get_type(v) != integertype || v.int_.val != i)
         {
-            printf("FAIL: grown dict lost key %d\n", i);
-            failures++;
+            report_failure("grown dict lost key %d", i);
             break;
         }
     }
@@ -141,8 +131,7 @@ int main(void)
             Xpost_Object v = xpost_dict_get(ctx, big, xpost_int_cons(j));
             if (xpost_object_get_type(v) != integertype || v.int_.val != j + 1)
             {
-                printf("FAIL: relocating growth lost key %d\n", j);
-                failures++;
+                report_failure("relocating growth lost key %d", j);
                 break;
             }
         }
@@ -153,11 +142,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

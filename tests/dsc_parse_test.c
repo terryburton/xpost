@@ -21,16 +21,7 @@
 #include "xpost.h"
 #include "xpost_dsc.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 /* parse a document held in memory; 1 if the parse reported success */
 static int parse(const char *text, Xpost_Dsc *dsc)
@@ -144,8 +135,8 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
 
     memset(&dsc, 0, sizeof(dsc));
@@ -507,11 +498,5 @@ int main(void)
 
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

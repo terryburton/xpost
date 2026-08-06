@@ -26,20 +26,11 @@
 # include <sys/resource.h>
 #endif
 
+#include "xpost_test.h"
+
 /* comfortably more jobs than the allowance below */
 #define JOBS 200
 #define ALLOWANCE 64
-
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
 
 /* lower this process's open-file allowance; 1 if it was lowered */
 static int narrow_allowance(void)
@@ -72,16 +63,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
     xpost_job_snapshots_set(ctx, 0);
 
@@ -92,9 +83,8 @@ int main(void)
         st = xpost_run(ctx, XPOST_INPUT_STRING, "1 0 div", 0);
         if (st != XPOST_RUN_ERRORED)
         {
-            printf("FAIL: erroring job %d of %d reported %d, not an error\n",
-                   i + 1, JOBS, (int)st);
-            failures++;
+            report_failure("erroring job %d of %d reported %d, not an error",
+                           i + 1, JOBS, (int)st);
             break;
         }
     }
@@ -110,11 +100,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

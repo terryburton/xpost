@@ -20,16 +20,7 @@
 #include "xpost_context.h"
 #include "xpost_string.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 int main(void)
 {
@@ -40,16 +31,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
 
     s = xpost_string_cons(ctx, 5, "hello");
@@ -77,11 +68,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

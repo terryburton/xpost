@@ -11,7 +11,7 @@
 #include <string.h>
 #include "xpost.h"
 
-static int failures = 0;
+#include "xpost_test.h"
 
 static char out_buf[256];
 static size_t out_len = 0;
@@ -40,15 +40,6 @@ static size_t err_sink(void *user, const char *buf, size_t len)
     return len;
 }
 
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
-
 int main(void)
 {
     Xpost_Context *ctx;
@@ -56,16 +47,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
     xpost_job_snapshots_set(ctx, 0);
 
@@ -151,7 +142,5 @@ int main(void)
     xpost_destroy(ctx);
     xpost_quit();
 
-    if (failures == 0)
-        printf("SUCCESS\n");
-    return failures ? 1 : 0;
+    return verdict();
 }

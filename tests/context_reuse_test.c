@@ -26,6 +26,8 @@
 # include <sys/resource.h>
 #endif
 
+#include "xpost_test.h"
+
 #define CYCLES 8
 
 /* the peak resident size of this process in KiB, or 0 where the
@@ -47,8 +49,6 @@ static long peak_resident_kib(void)
 #endif
 }
 
-static int failures = 0;
-
 static char out_buf[256];
 static size_t out_len = 0;
 
@@ -63,15 +63,6 @@ static size_t out_sink(void *user, const char *buf, size_t len)
     return len;
 }
 
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
-
 int main(void)
 {
     long settled = 0;
@@ -80,8 +71,8 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
 
     for (i = 0; i < CYCLES; i++)
@@ -94,8 +85,7 @@ int main(void)
                            XPOST_USE_SIZE, 100, 100);
         if (!ctx)
         {
-            printf("FAIL: context %d of %d was not created\n", i + 1, CYCLES);
-            failures++;
+            report_failure("context %d of %d was not created", i + 1, CYCLES);
             break;
         }
         xpost_job_snapshots_set(ctx, 0);
@@ -127,11 +117,5 @@ int main(void)
 
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

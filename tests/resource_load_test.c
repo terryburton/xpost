@@ -25,7 +25,8 @@
 
 #include "xpost.h"
 
-static int failures = 0;
+#include "xpost_test.h"
+
 static char out_buf[256];
 static size_t out_len = 0;
 
@@ -40,15 +41,6 @@ static size_t out_sink(void *user, const char *buf, size_t len)
     return len;
 }
 
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
-
 int main(void)
 {
     Xpost_Context *ctx;
@@ -60,21 +52,21 @@ int main(void)
 
     if (!mkdtemp(root))
     {
-        printf("FAIL: mkdtemp\n");
-        return 1;
+        report_failure("mkdtemp");
+        return verdict();
     }
     snprintf(dir, sizeof dir, "%s/TestCategory", root);
     if (test_mkdir(dir) != 0)
     {
-        printf("FAIL: mkdir\n");
-        return 1;
+        report_failure("mkdir");
+        return verdict();
     }
     snprintf(file, sizeof file, "%s/TestCategory/testinstance", root);
     w = fopen(file, "wb");
     if (!w)
     {
-        printf("FAIL: write instance\n");
-        return 1;
+        report_failure("write instance");
+        return verdict();
     }
     fputs("/testinstance (RESOURCE-OK) /TestCategory defineresource pop\n", w);
     fclose(w);
@@ -103,16 +95,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
-        return 1;
+        report_failure("xpost_create");
+        return verdict();
     }
     xpost_job_snapshots_set(ctx, 0);
     xpost_stdout_handler_set(ctx, out_sink, NULL);
@@ -190,11 +182,5 @@ int main(void)
     snprintf(dir, sizeof dir, "%s/DiskCat", root); rmdir(dir);
     rmdir(root);
 
-    if (failures)
-    {
-        printf("%d failure(s)\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

@@ -17,7 +17,7 @@
 
 #include "xpost.h"
 
-static int failures = 0;
+#include "xpost_test.h"
 
 static char out_buf[256];
 static size_t out_len = 0;
@@ -31,15 +31,6 @@ static size_t out_sink(void *user, const char *buf, size_t len)
         out_len += len;
     }
     return len;
-}
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
 }
 
 static Xpost_Context *make(void)
@@ -69,16 +60,16 @@ int main(void)
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
-        return 1;
+        report_failure("xpost_init");
+        return verdict();
     }
 
     first = make();
     if (!first)
     {
-        printf("FAIL: the first instance was not created\n");
+        report_failure("the first instance was not created");
         xpost_quit();
-        return 1;
+        return verdict();
     }
     xpost_job_snapshots_set(first, 0);
     xpost_stdout_handler_set(first, out_sink, NULL);
@@ -108,11 +99,5 @@ int main(void)
 
     xpost_quit();
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

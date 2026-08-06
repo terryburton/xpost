@@ -29,16 +29,7 @@
 #include "xpost_operator.h"
 #include "xpost_dev_driver.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 /* a 100x50 device throughout */
 static void rect(const char *what,
@@ -81,10 +72,7 @@ static void line(const char *what,
         n += (size_t)snprintf(got + n, sizeof(got) - n,
                               n ? " %d,%d" : "%d,%d", px, py);
     if (strcmp(got, expect) != 0)
-    {
-        printf("FAIL: %s\n  want %s\n  got  %s\n", what, expect, got);
-        failures++;
-    }
+        report_failure("%s\n  want %s\n  got  %s", what, expect, got);
 }
 
 int main(void)
@@ -183,11 +171,5 @@ int main(void)
     check(xpost_dev_num_to_component(xpost_real_cons((real)0.25)) == 0.25,
           "a colour inside the range passes through");
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

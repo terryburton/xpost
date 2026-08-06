@@ -55,20 +55,7 @@
 #include "xpost_file.h"
 #include "xpost_error.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (cond)
-    {
-        printf("ok: %s\n", what);
-    }
-    else
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 /* the lowest descriptor the system has free, which a temporary file is
    given because open() answers with the lowest available one */
@@ -107,8 +94,8 @@ int main(void)
     deep = (char *)malloc(NREQUESTS * 64 + 1);
     if (!deep)
     {
-        printf("FAIL: cannot build the input\n");
-        return 1;
+        report_failure("cannot build the input");
+        return verdict();
     }
     memset(deep, '{', NREQUESTS * 64);
     deep[NREQUESTS * 64] = '\0';
@@ -116,33 +103,33 @@ int main(void)
     in = fopen(inpath, "w");
     if (!in || fputs(deep, in) == EOF)
     {
-        printf("FAIL: cannot write the input\n");
-        return 1;
+        report_failure("cannot write the input");
+        return verdict();
     }
     fclose(in);
     free(deep);
 
     if (!freopen(inpath, "r", stdin))
     {
-        printf("FAIL: cannot read the input as standard input\n");
+        report_failure("cannot read the input as standard input");
         remove(inpath);
-        return 1;
+        return verdict();
     }
 
     if (!xpost_init())
     {
-        printf("FAIL: xpost_init\n");
+        report_failure("xpost_init");
         remove(inpath);
-        return 1;
+        return verdict();
     }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
-        printf("FAIL: xpost_create\n");
+        report_failure("xpost_create");
         remove(inpath);
-        return 1;
+        return verdict();
     }
 
     s = xpost_string_cons(ctx, 1, "x");
@@ -168,11 +155,5 @@ int main(void)
     xpost_quit();
     remove(inpath);
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

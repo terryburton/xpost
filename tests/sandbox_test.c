@@ -25,22 +25,13 @@
 
 #include "xpost.h"
 
-static int failures = 0;
+#include "xpost_test.h"
 
 /* swallow the interpreter's error report for the runs meant to fail */
 static size_t discard(void *user, const char *buf, size_t len)
 {
     (void)user; (void)buf;
     return len;
-}
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
 }
 
 /* run a one-line program and report whether it completed */
@@ -73,7 +64,7 @@ int main(void)
     char aliasdir[600]; /* a symlink that reaches the tree from outside it */
 #endif
 
-    if (!mkdtemp(root)) { printf("FAIL: mkdtemp\n"); return 1; }
+    if (!mkdtemp(root)) { report_failure("mkdtemp"); return verdict(); }
     snprintf(readable, sizeof readable, "%s/readable", root);
     w = fopen(readable, "wb");
     if (w) { fputs("DATA", w); fclose(w); }
@@ -122,11 +113,11 @@ int main(void)
     }
 #endif
 
-    if (!xpost_init()) { printf("FAIL: xpost_init\n"); return 1; }
+    if (!xpost_init()) { report_failure("xpost_init"); return verdict(); }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
-    if (!ctx) { printf("FAIL: xpost_create\n"); return 1; }
+    if (!ctx) { report_failure("xpost_create"); return verdict(); }
     xpost_job_snapshots_set(ctx, 0);
     xpost_stderr_handler_set(ctx, discard, NULL);
 
@@ -246,7 +237,5 @@ int main(void)
     rmdir(wdir);
     rmdir(root);
 
-    if (failures) { printf("%d failure(s)\n", failures); return 1; }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

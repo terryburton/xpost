@@ -28,16 +28,7 @@
 #include "xpost_error.h"
 #include "xpost_strbuf.h"
 
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
+#include "xpost_test.h"
 
 /* the mirror the buffer is compared against */
 static char *model = NULL;
@@ -139,11 +130,5 @@ int main(void)
     xpost_strbuf_free(&b);
     free(model);
 
-    if (failures)
-    {
-        printf("FAILURES: %d\n", failures);
-        return 1;
-    }
-    printf("SUCCESS\n");
-    return 0;
+    return verdict();
 }

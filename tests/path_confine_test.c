@@ -20,22 +20,13 @@
 # include <sys/stat.h>
 #endif
 
+#include "xpost_test.h"
+
 /* Declared in xpost_file.h; forward-declared here so this focused test
    need not pull in the interpreter object headers. A signature drift
    would fail to link. */
 int xpost_path_safe_leaf(const char *s, size_t len);
 FILE *xpost_diskfile_fopen_beneath(const char *root, const char *rel, int *err);
-
-static int failures = 0;
-
-static void check(int cond, const char *what)
-{
-    if (!cond)
-    {
-        printf("FAIL: %s\n", what);
-        failures++;
-    }
-}
 
 static void test_safe_leaf(void)
 {
@@ -146,11 +137,5 @@ int main(void)
 #ifndef _WIN32
     test_beneath();
 #endif
-    if (failures)
-    {
-        printf("%d failure(s)\n", failures);
-        return 1;
-    }
-    printf("ok\n");
-    return 0;
+    return verdict();
 }
