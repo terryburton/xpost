@@ -16,6 +16,7 @@ set -u
 xpost=$1
 script=$2
 dev=$3
+. "$(dirname "$0")/verdict.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -33,8 +34,4 @@ if [ "$status" -ne 0 ]; then
     echo "FAILURES: the interpreter exited with status $status under forced relocation"
     exit 1
 fi
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:)'; then
-    echo "FAILURES: the suite reported failures above"
-    exit 1
-fi
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the suite"

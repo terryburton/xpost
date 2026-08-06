@@ -15,6 +15,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 out=$(XPOST_GC_VERIFY=1 XPOST_GC_XBANK_CHECK=1 XPOST_GC_CENSUS=1 \
       "$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
@@ -28,10 +29,7 @@ fi
 
 # the workload must have run to its end: a job that died early would
 # report no gaps simply by never collecting
-if ! printf '%s\n' "$out" | grep -q '^SUCCESS$'; then
-    echo "FAILURES: the workload did not report SUCCESS"
-    exit 1
-fi
+verdict_ok "$out" "the workload" || exit 1
 
 # the census runs alongside the verifier, so its line is the evidence that
 # the diagnostics were reached at all rather than compiled out or skipped

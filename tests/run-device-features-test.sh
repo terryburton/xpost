@@ -15,6 +15,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 # an absolute path may begin with a drive letter as well as a slash;
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
@@ -42,16 +43,7 @@ for dev in $devices; do
         fail=1
         continue
     fi
-    if printf '%s\n' "$out" | grep -qE '^FAIL:'; then
-        echo "FAIL: $dev could not paint:"
-        printf '%s\n' "$out" | grep -E '^FAIL:' | sed 's/^/      /'
-        fail=1
-        continue
-    fi
-    printf '%s\n' "$out" | grep -q '^SUCCESS$' || {
-        echo "FAIL: $dev did not report success"
-        fail=1
-    }
+    verdict_ok "$out" "$dev" || fail=1
 done
 
 # The window device needs a display. Where one can be conjured, it is
@@ -64,9 +56,7 @@ if command -v xvfb-run >/dev/null 2>&1; then
     if [ "$status" -ne 0 ]; then
         echo "FAIL: xcb exited with status $status"
         fail=1
-    elif printf '%s\n' "$out" | grep -qE '^FAIL:'; then
-        echo "FAIL: xcb could not paint:"
-        printf '%s\n' "$out" | grep -E '^FAIL:' | sed 's/^/      /'
+    elif ! verdict_ok "$out" "xcb"; then
         fail=1
     fi
 else

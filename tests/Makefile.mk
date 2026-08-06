@@ -248,6 +248,7 @@ tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
 tests/trapping_test.ps \
 tests/vecout_gc_test.ps \
+tests/verdict.sh \
 tests/vm_test.ps \
 tests/wrapped_bind.golden \
 tests/wrapped_bind_test.ps

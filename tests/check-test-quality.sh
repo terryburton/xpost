@@ -19,6 +19,10 @@
 #      clean. So does one whose content was commented out.
 #   5. A guard that is not executable runs only because meson falls back
 #      to the shebang, and not at all through any other route.
+#   6. A wrapper that looks for SUCCESS anywhere in a run's output passes
+#      a run that printed a failure and then printed SUCCESS. Seventeen
+#      wrappers did, and one of them was passing over a real failure.
+#      The rule lives in tests/verdict.sh so there is one of it.
 #
 # This check reads a directory, so it says which directory it will
 # accept. It used to accept any: pointed at a directory that does not
@@ -33,6 +37,7 @@ dir=${1:?usage: check-test-quality.sh <tests directory>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_dir "$dir" "the tests directory"
 guard_require_file "$dir/guard-paths.sh" "the guard path helper"
+guard_require_file "$dir/verdict.sh" "the verdict helper"
 
 count_of() {
     n=0
@@ -110,9 +115,31 @@ for f in "$dir"/check-*.sh "$dir"/run-*.sh; do
     fi
 done
 
-# The verdict's position on the line is not checked here: the wrappers
-# already require ^SUCCESS$ at run time, so a suite that prints without a
-# trailing newline fails the moment it runs.
+# 6. the verdict a run printed is judged by one rule, in one place
+#
+# A wrapper that matches SUCCESS against a run's output itself is
+# deciding, on its own, what makes a verdict count -- and what every one
+# of them left out was that a run which printed a failure first has
+# already failed, whatever it went on to conclude. tests/verdict.sh
+# carries that; a wrapper reaches it through verdict_ok.
+#
+# This catches the spelling the suite uses. A wrapper that reads a
+# verdict of some other spelling is outside it, which is why the helper
+# is where the rule lives rather than where it is checked: the way to
+# stay outside this is to write a wrapper that judges a run some other
+# way entirely, and that wrapper would be a new thing to review.
+for f in "$dir"/run-*.sh; do
+    [ -e "$f" ] || continue
+    body=$(tr -d '\r' < "$f" | sed 's/#.*//')
+    printf '%s\n' "$body" | grep -qE 'grep[^|]*SUCCESS|=[[:space:]]*"?SUCCESS' \
+        || continue
+    if ! printf '%s\n' "$body" | grep -q 'verdict_ok'; then
+        echo "FAIL: $(basename "$f") matches SUCCESS against a run's output"
+        echo "      itself; a run that printed a failure first has already"
+        echo "      failed -- judge it with verdict_ok from verdict.sh"
+        fail=1
+    fi
+done
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a test cannot reliably fail"

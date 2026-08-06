@@ -8,6 +8,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 out=$("$xpost" -q --no-sandbox -d ppm -o /dev/null "$script" </dev/null 2>&1)
 status=$?
 if [ "$status" -ne 0 ]; then
@@ -15,4 +16,4 @@ if [ "$status" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$out"
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the script"

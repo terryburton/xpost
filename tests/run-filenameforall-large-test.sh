@@ -17,6 +17,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 # the run happens in the scratch directory, so both paths must survive the
 # change of directory
@@ -65,8 +66,4 @@ if [ "$status" -ne 0 ]; then
     fi
     exit 1
 fi
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:)'; then
-    echo "FAILURES: the suite reported failures above"
-    exit 1
-fi
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the suite"

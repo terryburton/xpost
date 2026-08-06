@@ -12,6 +12,7 @@ set -u
 xpost=$1
 script=$2
 device=$3
+. "$(dirname "$0")/verdict.sh"
 
 # 200 MB of address space: enough for the interpreter, the calibration
 # fills and the pre-grown VM; not enough for the accumulator to double
@@ -60,7 +61,4 @@ if printf '%s\n' "$result" | grep -q '^INCONCLUSIVE'; then
     echo "SKIP: the limit never bit on this platform"
     exit 77
 fi
-if printf '%s\n' "$result" | grep -q '^FAIL'; then
-    exit 1
-fi
-printf '%s\n' "$result" | grep -q '^PASS'
+verdict_ok "$result" "the check" '^PASS'

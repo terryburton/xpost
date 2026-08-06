@@ -19,6 +19,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 # devices whose GetPix reports back what a marking method wrote
 readback_min=8
@@ -48,11 +49,9 @@ for dev in $devices; do
     if printf '%s\n' "$out" | grep -q '^READBACK$'; then
         readback=$((readback + 1))
     fi
-    if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+    if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
     else
-        echo "FAIL $dev:"
-        printf '%s\n' "$out" | tail -3
         fail=1
     fi
 done
@@ -65,14 +64,13 @@ if command -v xvfb-run >/dev/null 2>&1; then
     case "$out" in
         *"wrong device"*) echo "SKIP xcb (not built in)" ;;
         *)
-            if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+            if verdict_ok "$out" "xcb"; then
                 echo "OK   xcb"
             else
-                # the whole run, not its last lines: this device talks to
-                # a display server, and what it says on the way to the
-                # failure is the diagnosis
-                echo "FAIL xcb:"
-                printf '%s\n' "$out"
+                # the whole run, not just the failure lines: this device
+                # talks to a display server, and what it says on the way
+                # to the failure is the diagnosis
+                printf '%s\n' "$out" | sed 's/^/      /'
                 fail=1
             fi
             ;;

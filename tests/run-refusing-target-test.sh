@@ -12,6 +12,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
 status=$?
@@ -24,8 +25,4 @@ if printf '%s\n' "$out" | grep -q '^INCONCLUSIVE'; then
     echo "SKIP: this platform offers no data target that refuses data"
     exit 77
 fi
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:)'; then
-    echo "FAILURES: the check reported failures above"
-    exit 1
-fi
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the check"

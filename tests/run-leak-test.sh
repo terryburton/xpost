@@ -18,6 +18,7 @@ set -u
 xpost=$1
 script=$2
 supp=$3
+. "$(dirname "$0")/verdict.sh"
 
 # the run happens in a scratch directory, so every path must survive the
 # change of directory
@@ -62,14 +63,7 @@ if [ "$status" -ne 0 ]; then
     [ -f "$log" ] && cat "$log"
     exit 1
 fi
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:)'; then
-    echo "FAILURES: the suite reported failures above"
-    exit 1
-fi
-if ! printf '%s\n' "$out" | grep -q '^SUCCESS$'; then
-    echo "FAILURES: the suite did not report success"
-    exit 1
-fi
+verdict_ok "$out" "the suite" || exit 1
 
 # what the checker found: anything lost outright, or lost through
 # something that was, is memory the run held for the program and never

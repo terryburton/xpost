@@ -17,6 +17,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 # an absolute path may begin with a drive letter as well as a slash;
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
@@ -44,8 +45,4 @@ if [ "$status" -ne 0 ]; then
     echo "FAILURES: the interpreter exited with status $status"
     exit 1
 fi
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:)'; then
-    echo "FAILURES: the workload reported failures above"
-    exit 1
-fi
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the workload"

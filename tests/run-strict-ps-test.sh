@@ -9,6 +9,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 # capture stdout only: the silence requirement is about the page-stream
 # channel; the log channel (stderr) is judged by other tests
 out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>/dev/null)
@@ -25,4 +26,6 @@ filtered=$(printf '%s\n' "$out" \
     | grep -v '^see the file COPYING' \
     | sed 's/^PS> *$//' \
     | grep -v '^$')
+verdict_ok "$filtered" "the run" || exit 1
+# and nothing but: the silence is the other half of what is asserted here
 test "$filtered" = "SUCCESS"

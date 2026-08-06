@@ -24,6 +24,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 # these conformance tests exercise the interpreter's own file operations, so
 # run with the CLI file-access sandbox lifted
 # capture the interpreter's exit status as well as its output: a run that
@@ -36,9 +37,4 @@ if [ "$status" -ne 0 ]; then
     echo "FAILURES: the interpreter exited with status $status"
     exit 1
 fi
-# a suite that printed any failure line has failed, whatever it concluded
-if printf '%s\n' "$out" | grep -qE '^(FAIL:|FAILURES:|MISMATCH)'; then
-    echo "FAILURES: the suite reported failures above"
-    exit 1
-fi
-printf '%s\n' "$out" | grep -q '^SUCCESS$'
+verdict_ok "$out" "the suite"

@@ -16,6 +16,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 # devices whose GetPix reports back what BlendPix wrote
 readback_min=5
@@ -45,11 +46,9 @@ for dev in $devices; do
     if printf '%s\n' "$out" | grep -q '^READBACK$'; then
         readback=$((readback + 1))
     fi
-    if printf '%s\n' "$out" | grep -q '^SUCCESS$'; then
+    if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
     else
-        echo "FAIL $dev:"
-        printf '%s\n' "$out" | tail -4
         fail=1
     fi
 done

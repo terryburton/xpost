@@ -14,6 +14,7 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -36,11 +37,9 @@ for dev in $devices; do
         fail=1
         continue
     fi
-    if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+    if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
     else
-        echo "FAIL $dev:"
-        printf '%s\n' "$out" | tail -3
         fail=1
     fi
 done
@@ -50,11 +49,9 @@ if command -v xvfb-run >/dev/null 2>&1; then
     case "$out" in
         *"wrong device"*) echo "SKIP xcb (not built in)" ;;
         *)
-            if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+            if verdict_ok "$out" "xcb"; then
                 echo "OK   xcb"
             else
-                echo "FAIL xcb:"
-                printf '%s\n' "$out" | tail -3
                 fail=1
             fi
             ;;
@@ -79,11 +76,9 @@ for dev in gdi gl; do
         fail=1
         continue
     fi
-    if printf '%s\n' "$out" | grep -q 'SUCCESS$'; then
+    if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
     else
-        echo "FAIL $dev:"
-        printf '%s\n' "$out"
         fail=1
     fi
 done
