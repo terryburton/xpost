@@ -42,6 +42,7 @@ tests/check-opsigs-writer.sh \
 tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
+tests/check-show-clip.sh \
 tests/check-test-quality.sh \
 tests/check-vecbase.sh \
 tests/check-vm-address.sh \
@@ -221,6 +222,7 @@ tests/scanner_eof_test.ps \
 tests/semantics_test.ps \
 tests/setpagedevice_failure_test.ps \
 tests/shadowed_operators.golden \
+tests/show_clip_routes.golden \
 tests/show_clip_test.ps \
 tests/show_pattern_test.ps \
 tests/showop_matrix_test.ps \

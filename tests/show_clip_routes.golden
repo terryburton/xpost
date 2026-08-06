@@ -1,0 +1,41 @@
+# The routes to the glyph raster, and how each meets the clipping
+# region. Held by tests/check-show-clip.sh, which derives every line
+# from the sources rather than reading them: a line here is a record of
+# what the tree holds, and a route that arrives or leaves shows up as a
+# line to write or retire.
+#
+# reads-cache      a C binding that reaches the raster with the region
+#                  taken out of the clip's cache holder. Every route a
+#                  program has to it must run .showclip first, and the
+#                  check holds them to that.
+# narrows-itself   a C binding that reaches the raster and narrows it by
+#                  means of its own, so its callers are not held to
+#                  .showclip. Each line is a claim about a binding, and
+#                  the claim is why the line is here rather than under
+#                  reads-cache.
+# resolves         a language operator whose body runs .showclip before
+#                  it reaches the raster.
+#
+# .maskcachehit replays a stored glyph mask only where the clip is a
+# rectangle that holds the whole raster, and refuses otherwise, so a
+# glyph the region's edge crosses is built again and painted through the
+# ordinary fill. .stencilaa paints a small stencil mask for the image
+# machinery, which has met the region in the fill that called it.
+
+entries 13
+
+reads-cache show
+reads-cache ashow
+reads-cache widthshow
+reads-cache awidthshow
+reads-cache .glyphshow
+reads-cache .glyphshowidx
+
+narrows-itself .maskcachehit
+narrows-itself .stencilaa
+
+resolves show
+resolves ashow
+resolves widthshow
+resolves awidthshow
+resolves glyphshow

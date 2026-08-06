@@ -1847,6 +1847,15 @@ test('encoder-units',
   find_program('tests/check-encoder-units.sh'),
   args: [ meson.current_source_dir() ])
 
+# Every route a program has to the glyph raster resolves the clipping
+# region first. The raster route plots a glyph straight through the
+# device's pixel methods and takes the region out of the clip's cache
+# holder, so an operator that reaches it without filling the holder
+# paints wherever the glyphs fall and nothing says so.
+test('show-clip-routes',
+  find_program('tests/check-show-clip.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.
