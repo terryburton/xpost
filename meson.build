@@ -1808,6 +1808,14 @@ test('one-bytebuf',
   find_program('tests/check-one-bytebuf.sh'),
   args: [ meson.current_source_dir() ])
 
+# A cursor is held in a slot as wide as the bound it is checked against.
+# A word is sixteen bits in the default build, so a cursor of that width
+# reaches the end of what it counts only where the bound is the size
+# field itself; against a derived one it wraps and the loop does not end.
+test('narrow-cursors',
+  find_program('tests/check-narrow-cursors.sh'),
+  args: [ meson.current_source_dir() ])
+
 # Path-component validation and beneath-root confinement: traversal and
 # symlink-escape attempts are refused. POSIX-only: the escape probe builds
 # its test tree with symlink(), which the Windows CRT does not provide.

@@ -34,6 +34,7 @@ tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
 tests/check-guard-paths.sh \
 tests/check-must-check.sh \
+tests/check-narrow-cursors.sh \
 tests/check-one-bytebuf.sh \
 tests/check-op-references.sh \
 tests/check-opsigs-writer.sh \
@@ -108,6 +109,7 @@ tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/must_check.golden \
 tests/namespace_test.ps \
+tests/narrow_cursors.golden \
 tests/nographics_test.ps \
 tests/op_bind_test.ps \
 tests/op_bytesavailable_test.ps \

@@ -1,0 +1,66 @@
+# Every slot a word wide that the code advances, and the class of bound
+# it is held to. Checked by tests/check-narrow-cursors.sh.
+#
+# A word is sixteen bits in the default build. A cursor of that width
+# reaches the end of what it is counting only if the bound is a quantity
+# the same width holds -- which is what a composite's own size field is,
+# and what a value derived from one is not. The classes:
+#
+#   size       every bound the cursor is compared against is a size
+#              field of a composite, or a difference of two of them.
+#              The extent is the field, so every value the cursor takes
+#              fits the slot carrying it.
+#   const      the bound is an integer literal.
+#   elsewhere  the cursor is not compared in the function that advances
+#              it; what bounds it is stated below, per entry.
+#   derived    the bound is neither. None are recorded and none may be:
+#              a cursor with a derived bound fails the check outright.
+#
+# A line is "<class> <file> <function> <slot>". The class is the one the
+# check derives from the source, so an entry recorded with the wrong one
+# fails as surely as a missing entry.
+#
+# The count below is the size of the list, so that retiring an entry is
+# two edits and a set that shrank says so with a number that went down.
+
+entries 14
+
+# ---- bounded by the composite's own size field ----
+
+size src/lib/xpost_dev_generic.c _zerorows ix
+size src/lib/xpost_dev_generic.c _zerorows iy
+size src/lib/xpost_dev_xcb.c _fillpoly i
+size src/lib/xpost_op_array.c xpost_op_array_aload i
+size src/lib/xpost_op_file.c xpost_op_file_readhexstring n
+size src/lib/xpost_op_file.c xpost_op_file_readline n
+size src/lib/xpost_op_file.c xpost_op_file_writehexstring n
+size src/lib/xpost_op_font.c _cid_emit_entry i
+size src/lib/xpost_op_font.c _loadfont42 i
+size src/lib/xpost_op_string.c Ssearch i
+
+# ---- bounded by something the check cannot read ----
+#
+# getinterval adds a starting index to the offset of the composite the
+# interval is taken from. Both are positions in that composite and the
+# sum is another, which is what the field spans; the index is checked
+# against the composite's size before the addition.
+elsewhere src/lib/xpost_object.c xpost_object_get_interval a.comp_.off
+
+# The count of entries a dictionary holds rises by one for each key that
+# takes an empty slot, and the slot is taken from a table the dictionary
+# grew if it was full. What holds the count is therefore what holds the
+# table: a growth that would answer with a dictionary no larger than the
+# one it is growing reports limitcheck, so the count stops below a size
+# the field carries.
+elsewhere src/lib/xpost_dict.c xpost_dict_put_memory dp->nused
+
+# The string token reader walks one string as a shrinking interval: the
+# two fields move together and their sum does not change, so each stays
+# inside the string the pair describes. Snext advances the offset only
+# after refusing an empty interval, and Sback is its inverse.
+elsewhere src/lib/xpost_op_token.c Snext S->comp_.off
+elsewhere src/lib/xpost_op_token.c Sback S->comp_.sz
+
+# The number of entries in that last class, counted so that adding one
+# is a deliberate act rather than the easiest way past this check.
+bound-elsewhere 4
