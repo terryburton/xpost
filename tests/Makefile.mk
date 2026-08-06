@@ -49,6 +49,7 @@ tests/check-wrapped-bind.sh \
 tests/clip_region_test.ps \
 tests/colorspace_matrix_test.ps \
 tests/colour_range_test.ps \
+tests/composite_limit_test.ps \
 tests/context_reuse_test.c \
 tests/corpus/.gitignore \
 tests/corpus/README.md \

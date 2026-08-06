@@ -85,7 +85,8 @@ int xpost_op_int_dict(Xpost_Context *ctx,
 static
 int xpost_op_dict_to_mark(Xpost_Context *ctx)
 {
-    integer i; /* the counted length, in the width the count arrives in */
+    integer i; /* the counted objects, in the width the count arrives in */
+    integer npairs; /* the entries they make, two objects to each */
     Xpost_Object d, k, v;
     Xpost_Object t;
     int ret;
@@ -98,11 +99,16 @@ int xpost_op_dict_to_mark(Xpost_Context *ctx)
     i = t.int_.val;
     if ((i % 2) == 1)
         return rangecheck;
-    if (i > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full, as the dict operator enforces:
+    /* what lies between the marks is counted in objects and asked for in
+       entries: this is the dict operator with a put for each pair (PLRM
+       3.2.4), so it is held to the capacity that operator is held to and
+       reaches the same one */
+    npairs = i / 2;
+    if (npairs > (integer)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full, as the dict operator enforces:
                       raise limitcheck rather than let dict_cons truncate the
                       capacity and then fault putting the discarded pairs */
         return limitcheck;
-    d = xpost_object_cvlit(xpost_dict_cons (ctx, i));
+    d = xpost_object_cvlit(xpost_dict_cons (ctx, (unsigned int)npairs));
     if (xpost_object_get_type(d) == nulltype)
         return VMerror;
     for ( ; i > 0; i -= 2)

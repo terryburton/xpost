@@ -849,6 +849,19 @@ test('large-object',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# The same ceiling reached along every path that builds a composite and
+# every path that extends one, at the last size the size field describes
+# and at one past it. A constructor that counts what it is given in
+# units other than the ones the field holds refuses a size its own
+# operator equivalent accepts, or accepts one the field then truncates;
+# neither is visible from a composite of the right length, so each path
+# is asked for its length as well as for its error.
+test('composite-limit',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/composite_limit_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
 # is a syntaxerror on both scan paths (PLRM is silent; Distiller and gs agree).
 test('scanner-eof',

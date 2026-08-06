@@ -1,0 +1,238 @@
+% Composite construction and extension at the ceiling the size field
+% describes, run through `xpost -d null` by run-ps-test.sh: prints
+% SUCCESS iff every assertion holds.
+%
+% Every composite carries its length in a field one word wide. In the
+% default build a word is sixteen bits, so 65,535 elements is the
+% largest composite it describes -- the limit PLRM Appendix B.1
+% documents -- and a request for more is limitcheck. The large-object
+% build's word is twice that: the same requests succeed there and the
+% ceiling stands further out, still refusing a request past the wider
+% field. The ceiling moves; it does not go away.
+%
+% Both halves of the contract are checked at each boundary. One element
+% past the ceiling must name the error PLRM gives it, and at the ceiling
+% the composite must report the length -- and a dictionary the capacity
+% -- that was asked for. A composite that accepts a size its field
+% cannot hold reads back shorter than the program wrote it, and no later
+% operator can tell that from a composite that was always that short.
+%
+% Every path that makes a composite and every path that extends one is
+% here: for arrays array, [ ], packedarray, astore, aload, copy,
+% getinterval and putinterval; for strings string, copy, cvs,
+% getinterval, putinterval, readstring, readhexstring, readline and
+% token; for dictionaries dict, << >>, copy and growth by put. The
+% count between two marks is here in its own right, because [ ] and
+% << >> are both built on it and one of them counts objects where the
+% other counts pairs.
+%
+% Two cases here are deliberately stricter than other interpreters. An
+% array constructor closed over more objects than the size field
+% describes, and a dictionary constructor closed over more pairs, are
+% limitcheck here; an interpreter that counts what lies between the
+% marks in a field of the composite's own width returns instead an
+% array of length zero and a dictionary holding the remainder of the
+% count, with no error raised. A composite shorter than the program
+% wrote is not a thing any later operator can detect, so the error is
+% raised where the length is decided.
+
+/failcount 0 def
+/assert { % bool (name) . -
+    exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse
+} def
+
+% Run a procedure and answer with what it left on top, with null where
+% it left nothing, or with the name of the error it raised. The stack is
+% returned to the depth it had, so a case that builds tens of thousands
+% of objects leaves none of them for the next one. The procedure is
+% taken from the stack rather than through a name: an executable name
+% bound to a procedure runs where it stands instead of pushing.
+/result { % {proc} . any
+    count 1 sub /r.depth exch def
+    stopped { $error /errorname get }{ count r.depth eq { null } if } ifelse
+    /r.val exch def
+    count r.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    r.val
+} def
+
+/AT   65535 def         % the largest composite the narrow size field describes
+/OVER 65536 def         % one element past it
+
+% The build is identified by what it does with that one element.
+/wide { OVER array length } result OVER eq def
+
+% What a build answers one element past the narrow ceiling: the size
+% itself where the field reaches it, limitcheck where it does not.
+/past { % any n . bool
+    wide { eq }{ pop /limitcheck eq } ifelse
+} def
+
+% ---------------- the count between two marks ----------------
+%
+% counttomark answers with a count of objects, which is not held in any
+% composite's field and so reaches past every composite's ceiling. Both
+% constructors below are built on it, and each has to read it in its own
+% units.
+
+{ mark 0 1 AT 1 sub { pop 0 } for counttomark } result
+    AT eq (counttomark counts the objects at the ceiling) assert
+{ mark 0 1 OVER 1 sub { pop 0 } for counttomark } result
+    OVER eq (counttomark counts objects past the ceiling) assert
+{ mark counttomark } result 0 eq (counttomark of nothing is zero) assert
+{ counttomark } result /unmatchedmark eq (counttomark without a mark is unmatchedmark) assert
+
+% ---------------- arrays ----------------
+
+{ AT array length } result AT eq (an array at the ceiling reports its length) assert
+{ OVER array length } result OVER past (an array past the ceiling) assert
+{ AT array AT 1 sub 42 put } result null eq (the last element of such an array stores) assert
+{ AT array dup AT 1 sub 42 put AT 1 sub get } result 42 eq (and reads back) assert
+{ AT array AT get } result /rangecheck eq (one element past its end is rangecheck) assert
+
+{ mark 0 1 AT 1 sub { pop 0 } for ] length } result
+    AT eq (an array constructor at the ceiling reports its length) assert
+{ mark 0 1 OVER 1 sub { pop 0 } for ] length } result
+    OVER past (an array constructor past the ceiling) assert
+
+{ mark 0 1 AT 1 sub { pop 0 } for counttomark packedarray exch pop length } result
+    AT eq (a packed array at the ceiling reports its length) assert
+{ mark 0 1 OVER 1 sub { pop 0 } for counttomark packedarray exch pop length } result
+    OVER past (a packed array past the ceiling) assert
+
+{ 0 1 AT 1 sub { } for AT array astore length } result
+    AT eq (astore fills an array at the ceiling) assert
+{ 0 1 AT 2 sub { } for AT array astore } result
+    /stackunderflow eq (astore of more elements than the stack holds is stackunderflow) assert
+
+{ count /a.d exch def AT array aload pop count a.d sub } result
+    AT eq (aload pushes every element of an array at the ceiling) assert
+
+{ AT array AT array copy length } result
+    AT eq (copy at the ceiling copies the whole array) assert
+{ AT array AT 1 sub array copy } result
+    /rangecheck eq (copy into a shorter array is rangecheck) assert
+{ AT array 0 AT getinterval length } result
+    AT eq (a whole-array interval carries its length) assert
+{ AT array 0 OVER getinterval } result
+    /rangecheck eq (an interval past the end of the array is rangecheck) assert
+{ AT array 1 AT getinterval } result
+    /rangecheck eq (and so is one that runs off the end) assert
+{ AT array dup 0 3 getinterval 0 exch putinterval } result
+    null eq (putinterval within the array is accepted) assert
+{ AT array dup 0 3 getinterval AT 2 sub exch putinterval } result
+    /rangecheck eq (putinterval running off the end is rangecheck) assert
+
+% ---------------- strings ----------------
+
+{ AT string length } result AT eq (a string at the ceiling reports its length) assert
+{ OVER string length } result OVER past (a string past the ceiling) assert
+{ AT string AT 1 sub 65 put } result null eq (the last byte of such a string stores) assert
+{ AT string dup AT 1 sub 65 put AT 1 sub get } result 65 eq (and reads back) assert
+{ AT string AT get } result /rangecheck eq (one byte past its end is rangecheck) assert
+
+{ AT string AT string copy length } result
+    AT eq (copy at the ceiling copies the whole string) assert
+{ AT string AT 1 sub string copy } result
+    /rangecheck eq (copy into a shorter string is rangecheck) assert
+{ AT string 0 AT getinterval length } result
+    AT eq (a whole-string interval carries its length) assert
+{ AT string 0 OVER getinterval } result
+    /rangecheck eq (an interval past the end of the string is rangecheck) assert
+{ AT string AT 1 sub (ab) putinterval } result
+    /rangecheck eq (putinterval running off the end is rangecheck) assert
+{ AT string AT 2 sub (ab) putinterval } result
+    null eq (and one ending exactly at the end is accepted) assert
+{ 4 string 123456789 exch cvs } result
+    /rangecheck eq (cvs into a string too small is rangecheck) assert
+{ AT string 123456789 exch cvs length } result
+    9 eq (cvs into a string at the ceiling answers with the digits alone) assert
+
+% A file to read from, made from a string of the ceiling's length so the
+% reading operators are asked for as much as they can hold.
+/src { AT string dup length () /SubFileDecode filter } bind def
+
+{ src AT string readstring pop length } result
+    AT eq (readstring fills a string at the ceiling) assert
+{ src AT string readstring exch pop } result
+    true eq (and reports that it filled it) assert
+{ (abc) 3 () /SubFileDecode filter AT string readstring pop length } result
+    3 eq (a short read answers with a substring of what arrived) assert
+{ (abc) 3 () /SubFileDecode filter AT string readstring exch pop } result
+    false eq (and reports that the string was not filled) assert
+{ (414243) 6 () /SubFileDecode filter AT string readhexstring pop length } result
+    3 eq (readhexstring answers with the bytes the digits made) assert
+{ src AT string readline pop length } result
+    AT eq (readline at the ceiling answers with what it read) assert
+{ src 3 string readline } result
+    /rangecheck eq (readline into a string too small is rangecheck) assert
+{ AT string dup 0 (12 34) putinterval token pop } result
+    12 eq (token reads a token out of a string at the ceiling) assert
+{ AT string dup 0 (12 34) putinterval token pop pop length } result
+    AT 3 sub eq (and leaves the rest of the string, truthfully measured) assert
+
+% ---------------- dictionaries ----------------
+
+{ AT dict maxlength } result AT eq (a dict at the ceiling reports its capacity) assert
+{ AT dict length } result 0 eq (and no entries) assert
+{ OVER dict maxlength } result OVER past (a dict past the ceiling) assert
+
+% n distinct name keys, each with a value: the pairs the cases below are
+% counted in.
+/keys { % n . k_1 1 ... k_n 1
+    1 sub 0 1 3 2 roll { 12 string cvs cvn 1 } for
+} def
+
+% The constructor is shorthand for the dict operator and a put for each
+% pair (PLRM 3.2.4), so it must not refuse a size the pair of them takes.
+% It counts the objects between the marks, two to a pair.
+{ /D 40000 dict def 40000 keys 40000 { D 3 1 roll put } repeat D length } result
+    40000 eq (a dict operator and a put for each pair takes 40000 pairs) assert
+{ << 40000 keys >> length } result
+    40000 eq (and so does the constructor for the same pairs) assert
+{ << 40000 keys >> maxlength } result
+    40000 eq (which reports the capacity the pairs asked for) assert
+{ << 20000 keys >> length } result
+    20000 eq (the constructor takes 20000 pairs) assert
+{ << AT keys >> length } result
+    AT eq (the constructor takes as many pairs as the size field describes) assert
+{ << AT keys >> maxlength } result
+    AT eq (and reports that capacity) assert
+{ << OVER keys >> length } result
+    OVER past (the constructor one pair past the ceiling) assert
+{ << /a 1 /b >> } result
+    /rangecheck eq (a constructor closed over an odd number of objects is rangecheck) assert
+{ << >> length } result 0 eq (an empty constructor makes an empty dict) assert
+
+% Growth by put stops at the same ceiling, and the dict counts what it
+% took rather than what it was asked for.
+/GD AT dict def
+{ 0 1 OVER { 12 string cvs cvn GD exch 1 put } for GD length } result
+    OVER 1 add past (a dict grown by put past the ceiling) assert
+GD length wide { OVER 1 add }{ AT } ifelse eq
+    (a dict grown by put counts every entry it took) assert
+
+/CD { << 40000 keys >> } result def
+{ CD 40000 dict copy length } result
+    40000 eq (copy carries every entry into a dict of the same capacity) assert
+{ CD 8 dict copy length } result
+    40000 eq (and into one that has to grow to hold them) assert
+{ << /a 1 /b 2 /c 3 >> 1 dict copy /c get } result
+    3 eq (a copy into a smaller dict carries the entries) assert
+
+% ---------------- the wider field's own ceiling ----------------
+%
+% The large-object build reaches further, not without end: a size past
+% the wider field is refused there exactly as the narrower one refuses
+% 65536. The request is named in a literal the narrow build cannot
+% carry as an integer at all, so it is asked only where it means
+% something.
+wide {
+    { OVER array length } result OVER eq (the wider field describes 65536 elements) assert
+    { OVER string length } result OVER eq (and a string of them) assert
+    { OVER dict maxlength } result OVER eq (and a dict of them) assert
+    { 4294967296 array } result /limitcheck eq (an array past the wider field is limitcheck) assert
+    { 4294967296 string } result /limitcheck eq (and a string past it) assert
+    { 4294967296 dict } result /limitcheck eq (and a dict past it) assert
+} if
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse

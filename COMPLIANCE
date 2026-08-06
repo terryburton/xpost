@@ -405,6 +405,12 @@ Known behavioural deviations
      form; a procedure that never ends is bounded by limitcheck.
  [X] SubFileDecode  a zero count with an empty EOD string passes zero bytes
      (PLRM), where some interpreters read to end-of-file.
+ [X] ]  a construction closed over more objects than an array can hold is
+     limitcheck, where some interpreters return an array shorter than the
+     objects they were given.
+ [X] >>  a construction closed over more pairs than a dictionary can hold is
+     limitcheck, where some interpreters return a dictionary shorter than the
+     pairs they were given.
 
  Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
  carry about seven significant figures and large values print in exponent form

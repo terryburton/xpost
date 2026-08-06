@@ -43,26 +43,33 @@ length 3 eq (dict build length) assert
 
 % --- construction across the composite-size cap ---
 % The small-object build caps composites at 65,535 elements: the array `[ ]`
-% and dict `<< >>` constructors must reject an over-cap length the same way
-% the array/dict operators do -- with a single limitcheck -- rather than let
+% and dict `<< >>` constructors reject an over-cap length the same way the
+% array/dict operators do -- with a single limitcheck -- rather than let
 % array_cons/dict_cons truncate the 16-bit size and then fault putting each
-% discarded element (a rangecheck error storm). The large-object build
-% carries the same construction through whole.
+% discarded element (a rangecheck error storm). Each counts what lies
+% between the marks in its own units: the array constructor's cap is on the
+% objects, the dictionary constructor's on the pairs they make. The
+% large-object build carries the same construction through whole. The
+% boundary of each constructor is covered in composite_limit_test.
 /widesz { 70000 array pop true } stopped { pop false } if def
 widesz {
     [ 65536 { 0 } repeat ] length 65536 eq (array across the narrow cap builds) assert
-    << 32768 { /k 0 } repeat >> length 1 ge (dict across the narrow cap builds) assert
+    << 65536 { /k 0 } repeat >> length 1 ge (dict across the narrow cap builds) assert
 }{
     { [ 65536 { 0 } repeat ] } stopped
         { $error /errorname get /limitcheck eq (array over cap -> limitcheck) assert }
         { false (array over cap should raise limitcheck) assert } ifelse
     clear
-    { << 32768 { /k 0 } repeat >> } stopped   % 32768 pairs = 65536 objects
+    { << 65536 { /k 0 } repeat >> } stopped   % 65536 pairs, one past the cap
         { $error /errorname get /limitcheck eq (dict over cap -> limitcheck) assert }
         { false (dict over cap should raise limitcheck) assert } ifelse
     clear
 } ifelse
 [ 65535 { 0 } repeat ] length 65535 eq (array at the cap still builds) assert
+{ << 65535 { /k 0 } repeat >> } stopped
+    { false (dict at the cap should build) assert }
+    { length 1 ge (dict at the cap still builds) assert } ifelse
+clear
 
 % --- a count that spans several 1000-element stack segments ---
 mark 20000 { 7 } repeat counttomark 20000 eq (multi-segment counttomark) assert
