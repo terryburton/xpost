@@ -15,7 +15,14 @@ script=$2
 textps= textpdf= strokeps= strokepdf= ra= rb= infops= infopdf=
 colorps= colorpdf= craster=
 pdf=$(mktemp)
-trap 'rm -f "$pdf"' EXIT
+# A sink for output the checks below do not read. /dev/null is a POSIX
+# name for it and the platform null device is not that word everywhere,
+# while a scratch file is a file wherever the interpreter runs. The name
+# is relative for the same reason the separation file's is: the shell and
+# a program built for another environment need not read one absolute path
+# the same way.
+discard=./discard-$$.pdf
+trap 'rm -f "$pdf" "$discard"' EXIT
 
 "$xpost" -q -d pdfwrite -o "$pdf" "$script" </dev/null >/dev/null 2>&1
 
@@ -44,7 +51,7 @@ if command -v gs >/dev/null 2>&1; then
     # tolerance rather than exactly.
     textps=$(mktemp)
     textpdf=$(mktemp)
-    trap 'rm -f "$pdf" "$textps" "$textpdf"' EXIT
+    trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf"' EXIT
     cat > "$textps" <<'EOF'
 /Helvetica findfont 20 scalefont setfont
 72 100 moveto (Vector Glyphs) show
@@ -77,7 +84,7 @@ EOF
     colorps=$(mktemp)
     colorpdf=$(mktemp)
     craster=$(mktemp)
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster"' EXIT
+    trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster"' EXIT
     cat > "$colorps" <<'EOF'
 0 setgray
 20 40 moveto 300 40 lineto 300 100 lineto 20 100 lineto closepath fill
@@ -107,7 +114,7 @@ EOF
     strokepdf=$(mktemp)
     ra=$(mktemp)
     rb=$(mktemp)
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb"' EXIT
+    trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb"' EXIT
     cat > "$strokeps" <<'EOF'
 0.75 setlinewidth
 100 100 moveto 105 103.5 lineto 100 107 lineto
@@ -129,7 +136,7 @@ EOF
     # Info dictionary, readable by the consumer
     infops=$(mktemp)
     infopdf=$(mktemp)
-    trap 'rm -f "$pdf" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf"' EXIT
+    trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf" "$colorps" "$colorpdf" "$craster" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf"' EXIT
     cat > "$infops" <<'EOF'
 [ /Creator (pdf-device check) /DOCINFO pdfmark
 100 100 moveto 200 100 lineto 200 200 lineto closepath fill
@@ -152,8 +159,8 @@ fi
 # pure-K ink as pure K rather than a converted black.
 # Probed through the uncompressed accumulator, no consumer needed.
 cspps=$(mktemp)
-cat > "$cspps" <<'EOF'
-<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] >> setpagedevice
+cat > "$cspps" <<EOF
+<< /OutputDevice /pdfwrite /OutputFile ($discard) /PageSize [100 100] >> setpagedevice
 0.5 setgray newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
 1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
 0 0 0 1 setcmykcolor newpath 70 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
@@ -196,8 +203,8 @@ echo "colour-space preservation OK"
 # as pure K, explicit CMYK passed through, strokes as K, glyphs as k.
 # Probed through the uncompressed accumulator, no consumer needed.
 cmykps=$(mktemp)
-cat > "$cmykps" <<'EOF'
-<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] /ProcessColorModel /DeviceCMYK >> setpagedevice
+cat > "$cmykps" <<EOF
+<< /OutputDevice /pdfwrite /OutputFile ($discard) /PageSize [100 100] /ProcessColorModel /DeviceCMYK >> setpagedevice
 newpath 10 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
 1 0 0 setrgbcolor newpath 40 10 moveto 20 0 rlineto 0 20 rlineto -20 0 rlineto closepath fill
 0 setgray 2 setlinewidth newpath 10 50 moveto 60 70 lineto stroke
@@ -240,7 +247,7 @@ sepps=$(mktemp)
 # interpreter, which is embedded in the program below and need not share the
 # shell's view of an absolute path (e.g. a native binary under a POSIX shell).
 seppdf=./sep-$$.pdf
-trap 'rm -f "$pdf" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
 cat > "$sepps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($seppdf) /PageSize [100 100] >> setpagedevice
 [/Separation (Spot A) /DeviceCMYK {dup 0 exch dup 0.5 mul exch 0.25 mul}] setcolorspace
@@ -302,7 +309,7 @@ fi
 # it.
 mpps=$(mktemp)
 mppdf=./mp-$$.pdf
-trap 'rm -f "$pdf" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$textps" "$textpdf" "$strokeps" "$strokepdf" "$ra" "$rb" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
 cat > "$mpps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($mppdf) /PageSize [80 80] >> setpagedevice
 save
@@ -342,8 +349,8 @@ fi
 # nonzero fill, and a redefined fill that itself invokes eofill would
 # otherwise recurse without bound
 recps=$(mktemp)
-cat > "$recps" <<'EOF'
-<< /OutputDevice /pdfwrite /OutputFile (/dev/null) /PageSize [100 100] >> setpagedevice
+cat > "$recps" <<EOF
+<< /OutputDevice /pdfwrite /OutputFile ($discard) /PageSize [100 100] >> setpagedevice
 /fill { 0.5 setgray eofill } def
 newpath 10 10 moveto 80 10 lineto 45 80 lineto closepath eofill
 (eofill-under-redefined-fill OK\n) print

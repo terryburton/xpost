@@ -39,21 +39,28 @@ if ! ( ulimit -v "$limitkb"; "$xpost" -V ) >/dev/null 2>&1; then
     exit 77
 fi
 
-out=$(
+# A sink for output nothing reads. /dev/null is a POSIX name for it and
+# the platform null device is not that word everywhere, while a scratch
+# file is a file wherever the interpreter runs; the name is relative so
+# that the shell and a program built for another environment need not
+# read one absolute path the same way.
+out=./append-fail-$$.out
+trap 'rm -f "$out"' EXIT
+result=$(
     ulimit -v "$limitkb"
-    "$xpost" -q -d "$device" -o /dev/null "$script" </dev/null 2>/dev/null
+    "$xpost" -q -d "$device" -o "$out" "$script" </dev/null 2>/dev/null
 )
 status=$?
-printf '%s\n' "$out"
+printf '%s\n' "$result"
 if [ "$status" -ne 0 ]; then
     echo "FAILURES: the interpreter exited with status $status"
     exit 1
 fi
-if printf '%s\n' "$out" | grep -q '^INCONCLUSIVE'; then
+if printf '%s\n' "$result" | grep -q '^INCONCLUSIVE'; then
     echo "SKIP: the limit never bit on this platform"
     exit 77
 fi
-if printf '%s\n' "$out" | grep -q '^FAIL'; then
+if printf '%s\n' "$result" | grep -q '^FAIL'; then
     exit 1
 fi
-printf '%s\n' "$out" | grep -q '^PASS'
+printf '%s\n' "$result" | grep -q '^PASS'
