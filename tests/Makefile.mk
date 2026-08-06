@@ -68,6 +68,7 @@ tests/device_features_test.ps \
 tests/device_getpix_destroyed_test.ps \
 tests/device_restore_retired_test.ps \
 tests/dict_grow_test.c \
+tests/dict_hash_spread_test.c \
 tests/dict_homes.golden \
 tests/dsc_parse_test.c \
 tests/empty_clip_test.ps \

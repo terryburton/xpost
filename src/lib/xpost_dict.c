@@ -200,29 +200,52 @@ cont:
     }
 }
 
+/* fold a payload as wide as this build's dword into the unsigned int
+   the hash is mixed in, so that no part of it is dropped where a dword
+   is the wider of the two */
+static inline
+unsigned int fold_payload(dword v)
+{
+    unsigned long long w = (unsigned long long)v;
+    return (unsigned int)w ^ (unsigned int)(w >> 32);
+}
+
 /* more like scrambled eggs */
 static
 unsigned int hash(Xpost_Object k)
 {
     unsigned int h;
-    /* names are identified by bank and name-stack index alone;
-       xpost_object_get_ent() is -1 for non-composites, so without this
-       case every name key would hash identically */
-    if (xpost_object_get_type(k) == nametype)
-        h = ( (nametype
-                | (k.mark_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK))
-                << 1)
-            + ((unsigned int)k.mark_.padw << 3);
-    else
-        h = ( (xpost_object_get_type(k)
-                | (k.comp_.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK))
-                << 1) /* ignore flags (except BANK!) */
+    unsigned int t = (unsigned int)(xpost_object_get_type(k)
+                | (k.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)); /* ignore
+                     the other flags: a key equal to another under
+                     xpost_dict_compare_objects must hash with it */
+
+    /* Each key is hashed over the fields its own type occupies. Reading
+       the composite fields of every key would read, for a key that is
+       not a composite, whatever those fields happen to overlay -- which
+       in one build is part of the payload and in another is the padding
+       above it, so a hash written for one layout collapses in the
+       other. */
+    if (xpost_object_is_composite(k))
+        h = (t << 1)
             + (k.comp_.sz << 3)
-            /* get_ent is -1 for a non-composite key; shift it as unsigned
-               so the mix is defined (same bits, no signed-shift UB) */
             + ((unsigned int)xpost_object_get_ent(k) << 7)
             + (k.comp_.off << 5);
-    /* h = xpost_object_get_type(k); /\* test collisions. *\/ */
+    else if (xpost_object_get_type(k) == extendedtype)
+        /* A number key holds the sign, exponent and fraction of the
+           double it was made from. The fraction is added where it lies:
+           consecutive integers differ only in its upper bits, which a
+           shift toward the top of the mix would push out of it. */
+        h = (t << 1)
+            + ((unsigned int)k.extended_.sign_exp << 3)
+            + fold_payload(k.extended_.fraction);
+    else
+        /* every other key is identified by the single unsigned payload
+           beside its tag: a name's index, a file's entity, an
+           operator's opcode, a boolean's value */
+        h = (t << 1)
+            + (fold_payload(k.mark_.padw) << 3);
+
     /* mix bits so the modulo by the table size spreads keys across
        all slots for any size */
     h *= 2654435761u; /* Knuth multiplicative hash (golden ratio) */

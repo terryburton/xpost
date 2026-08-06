@@ -467,6 +467,25 @@ test('dict-grow',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 
+# How far the dictionary hash spreads its keys, read off the hash values
+# a filled dictionary stored and the distance its entries sit from the
+# slots those name. A dictionary holds the right entries whatever the
+# hash does, so a hash blind to a whole class of keys is invisible from
+# the contents and shows only as a lookup that walks the table. The
+# fields an object occupies differ between the two builds, so the bound
+# is asked of each.
+dict_hash_spread_exe = executable('dict_hash_spread_test',
+  'tests/dict_hash_spread_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dict-hash-spread',
+  dict_hash_spread_exe,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 300)
+
 # Collecting over a dictionary whose hash table is longer than a
 # composite's size field can count. Growing such a dictionary is covered
 # above, but growth alone never walks the table the way the collector
