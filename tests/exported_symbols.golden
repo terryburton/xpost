@@ -8,6 +8,11 @@
 # so exporting one is a collision waiting on a libc that uses the same
 # name. These four predate the rule and are recorded rather than renamed;
 # the list may shrink and may not grow.
+#
+# The conditional lines at the end name entry points a build has only if
+# it was configured for them: each is a display device compiled for one
+# windowing system and absent everywhere else. They are neither required
+# nor refused. tests/check-device-roster.sh is what holds the device set.
 DEBUGLOAD
 _currentpoint
 _xpost_garbage_diag_verify
@@ -290,7 +295,6 @@ xpost_oper_init_stack_ops
 xpost_oper_init_string_ops
 xpost_oper_init_token_ops
 xpost_oper_init_type_ops
-xpost_oper_init_xcb_device_ops
 xpost_operator_cons
 xpost_operator_cons_opcode
 xpost_operator_cons_wrapped
@@ -346,3 +350,6 @@ reserved-exception _currentpoint
 reserved-exception _xpost_garbage_diag_verify
 reserved-exception _xpost_garbage_diag_xbank
 reserved-exception _xpost_interpreter_is_tracing
+
+conditional xpost_oper_init_win32_device_ops
+conditional xpost_oper_init_xcb_device_ops

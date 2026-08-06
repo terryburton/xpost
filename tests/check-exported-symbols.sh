@@ -21,6 +21,24 @@
 # taking only the strong ones let a weak symbol be exported without
 # appearing here at all.
 #
+# Two shapes of library are read. An ELF object keeps its exports in a
+# dynamic symbol table, which nm reads; a PE image keeps them in an
+# export table of its own, which nm does not, and reading one with nm
+# yields nothing at all. Nothing is not an answer, so the export table is
+# read directly when that happens.
+#
+# A name with a full stop in it is not an identifier. The compiler makes
+# them when it privatises or clones a function -- foo.lto_priv.0,
+# foo.isra.0, foo.part.0 -- and an export table filled by taking every
+# symbol the linker can name lists them beside the interface. They are
+# not part of it and are read out.
+#
+# Some entry points exist only in builds configured for them: a device
+# compiled for one windowing system is absent from every other build.
+# Those are named on "conditional" lines, which neither require the
+# symbol nor refuse it. What holds the device set itself is
+# tests/check-device-roster.sh, which reads the sources.
+#
 # The comparison is a set comparison, so it is done in one collation --
 # the C one, which is also the one a POSIX default environment sorts in.
 # Sorting the register in the author's locale and comparing it without
@@ -61,7 +79,16 @@ trap 'rm -rf "$work"' EXIT
 
 # every defined dynamic symbol, whatever section or linkage it has
 nm -D --defined-only "$lib" 2>/dev/null | tr -d '\r' \
-    | awk 'NF == 3 && $2 !~ /^[a-z]$/ { print $3 }' | sort -u > "$work/have"
+    | awk 'NF == 3 && $2 !~ /^[a-z]$/ { print $3 }' > "$work/raw"
+
+# a PE image, whose exports are not in a symbol table nm reads
+if [ ! -s "$work/raw" ] && command -v objdump >/dev/null 2>&1; then
+    objdump -p "$lib" 2>/dev/null | tr -d '\r' \
+        | awk '/\[Ordinal\/Name Pointer\] Table/ { table = 1; next }
+               table && /\+base\[/ { print $NF }' > "$work/raw"
+fi
+
+grep -v '\.' "$work/raw" | sort -u > "$work/have"
 
 if [ ! -s "$work/have" ]; then
     case $lib in
@@ -74,9 +101,18 @@ if [ ! -s "$work/have" ]; then
 fi
 
 sed 's/\r$//' "$golden" | grep -vE '^[[:space:]]*(#|$)' \
-    | grep -v '^reserved-exception ' | sort -u > "$work/register"
+    | grep -vE '^(reserved-exception|conditional) ' | sort -u > "$work/register"
 sed 's/\r$//' "$golden" | sed -n 's/^reserved-exception //p' \
     | sort -u > "$work/allowed-reserved"
+sed 's/\r$//' "$golden" | sed -n 's/^conditional //p' \
+    | sort -u > "$work/conditional"
+
+# a conditional name is neither required nor refused, so it takes no part
+# in either direction of the comparison
+if [ -s "$work/conditional" ]; then
+    comm -23 "$work/have" "$work/conditional" > "$work/have.t"
+    mv "$work/have.t" "$work/have"
+fi
 
 if [ ! -s "$work/register" ]; then
     echo "FAILURES: the register at $golden names no symbols"
