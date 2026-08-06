@@ -356,8 +356,8 @@ put
     % (the straight line arc appends is the common case, building a
     % ring as one keyhole path). Split polygons at the close as well
     % as at movetos, so each ring boundary classifies separately.
-    /CR                         % Clip Region   clippath array
-    clippath [
+    /CR                         % Clip Region   region array
+    //.xpostsys /.clipregionpath get exec [
         %{ 2 array astore [ exch } { 2 array astore } {} {]} .devpathforall
         [
         { 2 array astore

@@ -648,18 +648,45 @@ setglobal
     } if
 } //.xpostsys /.defop get exec
 
-% -  clippath  -
-% Replace the current path with the clip region's boundary. The region
-% is handed over as a copy: a segment appended to a path is written into
-% the storage the path already holds while there is room, and only a
-% path that has run out of room moves to fresh storage. Handing over the
-% region itself would therefore let a path built on from here reach into
-% the clip in force, or not, according to how much spare room the
-% region's storage happened to have.
-/clippath [ ] {
+% -  .clipregionpath  -
+% Replace the current path with the clip region as the machinery holds
+% it, which for a region covering no pixels is a path with no elements.
+% This is what the region walkers -- the half-plane clipper, the tiling
+% walk, the shading radius, the span resolver -- ask for: each is deciding
+% what to do about the pixels the region covers, and a region covering
+% none of them is an answer they have their own.
+%
+% The region is handed over as a copy: a segment appended to a path is
+% written into the storage the path already holds while there is room,
+% and only a path that has run out of room moves to fresh storage.
+% Handing over the region itself would therefore let a path built on from
+% here reach into the clip in force, or not, according to how much spare
+% room the region's storage happened to have.
+.xpostsys /.clipregionpath {
     graphicsdict /currgstate get
         dup /clipregion get .copypath
         /currpath exch put
+} bind put
+
+% -  clippath  -
+% Replace the current path with the clip region's boundary (PLRM 8.2).
+%
+% A region covering no pixels has no boundary, and what a program is
+% given for one is a single point at the centre of the page: a moveto and
+% a closepath, bounding no area. PLRM 8.2 gives clippath no errors, so a
+% region that bounds nothing is as much a question clippath has to answer
+% as one that bounds something, and clippath pathbbox -- the way a
+% program asks how much room it has to paint in -- then sizes nothing
+% rather than failing. The point carries no area into any arithmetic done
+% on that box, and the region the painters enforce is not changed by it.
+/clippath [ ] {
+    //.xpostsys /.clipregionpath get exec
+    .pathempty {
+        DEVICE /dimensions get aload pop
+        2 div exch 2 div exch
+        .devmoveto
+        closepath
+    } if
 } //.xpostsys /.defop get exec
 
 % pathbbox is implemented in xpost_op_path.c

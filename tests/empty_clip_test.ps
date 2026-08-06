@@ -10,12 +10,13 @@
 % of them is empty the answer is the empty set: every painter paints
 % nothing, and none of them has anything to report.
 %
-% The region is then a path with no elements, and clippath hands that over
-% as it stands -- PLRM 8.2 gives clippath no errors, and this is not one.
-% Asking such a path for its bounding box is a nocurrentpoint, which is
-% what PLRM 8.2 specifies for pathbbox over an empty path. So the question
-% is the machinery's to avoid rather than pathbbox's to answer otherwise,
-% and both halves of that are asserted at the end.
+% Such a region has no boundary, and clippath hands back a single point
+% at the centre of the page for one -- PLRM 8.2 gives clippath no errors,
+% and a region that bounds nothing is as much a question clippath has to
+% answer as one that bounds something. The point encloses no area, so the
+% box it reports is empty in both directions and clippath pathbbox, the
+% sizing idiom, sizes nothing rather than failing. The region the painters
+% enforce is unchanged by any of that, which the sweep above holds to.
 %
 % Each painter is asked twice. Once under a region that covers what it
 % paints, where it has to mark something -- otherwise "marked nothing"
@@ -182,30 +183,123 @@ newpath 0 70.1 96 4.3 rectfill
 inkcount 0 gt (a pattern fill inside the clip marks the page) assert
 
 % --- what the region itself answers -------------------------------------
-% clippath hands the region over as a path. A region covering no pixels is
-% a path with no elements, and that is what comes back; PLRM 8.2 gives
-% clippath no errors and an empty region is not one.
+% clippath hands the region over as a path. A region covering no pixels
+% has no boundary to hand over, and what comes back for one is a single
+% point at the centre of the page: a moveto and a closepath, enclosing no
+% area. So clippath pathbbox answers for such a region -- with a box of no
+% width and no height, which sizes nothing -- rather than raising.
+
+/near { % a b  .  bool
+    sub abs 0.01 lt
+} bind def
+% the page centre, in the user space the assertions are made in
+/pagecx DEV /dimensions get 0 get 2 div def
+/pagecy DEV /dimensions get 1 get 2 div def
+initgraphics
+pagecx pagecy itransform /ucy exch def /ucx exch def
 
 emptyclip
 { clippath } stopped not (clippath over an empty region returns quietly) assert
-/nelem 0 def
-clippath
-    { pop pop /nelem nelem 1 add def }
-    { pop pop /nelem nelem 1 add def }
-    { pop pop pop pop pop pop /nelem nelem 1 add def }
-    { /nelem nelem 1 add def }
-pathforall
-nelem 0 eq (clippath over an empty region gives a path with no elements) assert
 
-% and pathbbox over that path is a nocurrentpoint, as PLRM 8.2 states for
-% an empty path. That is the operator behaving, not misbehaving, so the
-% machinery is what must not put the question -- which is exactly what the
-% sweep above holds it to.
+% the shape: a moveto and a closepath, in that order and nothing else
+/eseq 16 string def
+/enel 0 def
+/eput { eseq enel 3 -1 roll put /enel enel 1 add def } bind def
 emptyclip
 clippath
-{ pathbbox } stopped
+    { pop pop 109 eput }
+    { pop pop 108 eput }
+    { pop pop pop pop pop pop 99 eput }
+    { 104 eput }
+pathforall
+enel 2 eq { eseq 0 2 getinterval (mh) eq }{ false } ifelse
+    (clippath over an empty region gives a moveto and a closepath) assert
+
+% and where it is
+emptyclip
+clippath
+{ pathbbox } stopped not
+    (pathbbox over what clippath handed back returns quietly) assert
+/ey1 exch def /ex1 exch def /ey0 exch def /ex0 exch def
+ex0 ucx near (the empty region's box starts at the page centre in x) assert
+ey0 ucy near (the empty region's box starts at the page centre in y) assert
+ex1 ex0 near (the empty region's box has no width) assert
+ey1 ey0 near (the empty region's box has no height) assert
+
+emptyclip
+clippath
+currentpoint /cpy exch def /cpx exch def
+cpx ucx near (clippath leaves a current point at the page centre in x) assert
+cpy ucy near (clippath leaves a current point at the page centre in y) assert
+
+% the point is the page's, not the current space's: it is carried in
+% device coordinates like the rest of a path, so a coordinate system set
+% up after the clip reports it through that system
+emptyclip
+2 2 scale
+clippath pathbbox
+/sy1 exch def /sx1 exch def /sy0 exch def /sx0 exch def
+sx0 ucx 2 div near (a scaled space reports half the centre's x) assert
+sy0 ucy 2 div near (a scaled space reports half the centre's y) assert
+sx1 sx0 near (the scaled box still has no width) assert
+sy1 sy0 near (the scaled box still has no height) assert
+
+% every way of arriving at a region covering no pixels answers the same
+/emptyways [
+  [ (two clips that do not overlap) { liveclip 0 5 96 15 boxpath clip newpath } ]
+  [ (a clip on an empty path)       { initgraphics newpath clip } ]
+  [ (a clip entirely off the page)  { initgraphics
+                                      -50 -50 -10 -10 boxpath clip newpath } ]
+  [ (a region carried in a gstate)  { initgraphics newpath clip
+                                      /eg gstate currentgstate def
+                                      initclip eg setgstate } ]
+] def
+emptyways {
+    aload pop /p.proc exch def /p.name exch def
+    p.proc
+    clippath pathbbox
+    /wy1 exch def /wx1 exch def /wy0 exch def /wx0 exch def
+    wx0 ucx near wy0 ucy near and wx1 wx0 near and wy1 wy0 near and
+    (reports the page centre for a region covering no pixels) check
+} forall
+
+% a region that bounds no area but does have a boundary is not the same
+% question: it reports its own box, which is where the program put it
+initgraphics
+newpath 30 30 moveto 30 30 lineto closepath clip
+clippath pathbbox
+/zy1 exch def /zx1 exch def /zy0 exch def /zx0 exch def
+zx0 30 near zy0 30 near and zx1 30 near and zy1 30 near and
+    (a region bounding no area reports its own box) assert
+
+% and clipping to what clippath handed back leaves the region as it was:
+% a point bounds no pixels, so the painters still mark nothing and the
+% next clippath answers the same way
+emptyclip
+clippath clip newpath
+clippath pathbbox
+/ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
+rx0 ucx near ry0 ucy near and rx1 rx0 near and ry1 ry0 near and
+    (clipping to the point reported leaves the region covering nothing) assert
+emptyclip
+clippath clip newpath
+0 setgray 10 40 80 60 boxpath fill
+inkcount 0 eq (a fill under the reclipped region marks nothing) assert
+
+% and the point itself is a shape that marks nothing, asked where there
+% is a region to mark under
+emptyclip
+clippath
+initclip
+0 setgray fill
+inkcount 0 eq (filling the point clippath reported marks nothing) assert
+
+% pathbbox over an empty current path is still a nocurrentpoint, as PLRM
+% 8.2 states: what changed is what clippath hands over, not pathbbox
+initgraphics
+{ newpath pathbbox } stopped
     { $error /errorname get /nocurrentpoint eq }{ false } ifelse
-    (pathbbox over the empty region's path is a nocurrentpoint) assert
+    (pathbbox over an empty current path is a nocurrentpoint) assert
 clear
 
 initclip newpath

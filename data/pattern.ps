@@ -67,7 +67,8 @@ currentglobal true setglobal
         % corners through the CTM to the device, then back through
         % the pattern space. A region covering no pixels bounds
         % nothing, and there is no cell of it for a cell to meet
-        gsave clippath flattenpath .pathempty { grestore }{
+        gsave //.xpostsys /.clipregionpath get exec flattenpath
+        .pathempty { grestore }{
         pathbbox grestore
         /uy1 exch def /ux1 exch def /uy0 exch def /ux0 exch def
         /im pm matrix invertmatrix def

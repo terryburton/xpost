@@ -206,7 +206,8 @@ currentglobal true setglobal
 /.clipbig {
     6 dict begin
     /py exch def /px exch def
-    gsave clippath flattenpath .pathempty { grestore 0 }{
+    gsave //.xpostsys /.clipregionpath get exec flattenpath
+    .pathempty { grestore 0 }{
     pathbbox grestore
     /y1 exch def /x1 exch def /y0 exch def /x0 exch def
     x0 px sub dup mul y0 py sub dup mul add sqrt

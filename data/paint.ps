@@ -503,7 +503,7 @@
 % scan-conversion either way
 .xpostsys /.clipspans {
     gsave
-    clippath flattenpath
+    //.xpostsys /.clipregionpath get exec flattenpath
     % resolve by the nonzero rule: the region may hold overlapping
     % subpaths (a stencil's adjacent runs under magnification), which
     % the even-odd resolver would cancel; intersecting with the page
