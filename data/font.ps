@@ -388,37 +388,6 @@ currentglobal true setglobal
 % holder starts again. A holder of serial zero is the one every
 % graphics state is built with and shares until its first clip: nothing
 % may be kept there, so that one is worked out afresh each time.
-.xpostsys /.showclipslice 2048 put
-% x0 y0 x1 y1  .showcliptile  spans ...
-% The part of the clip region inside the tile, resolved to the
-% pixel-band rectangles every painter meets a region in: one array, or
-% several over shallower tiles when the region inside this one holds
-% more bands than one array's length field describes.
-%
-% The cut is across the rows, halving the tile until each piece carries
-% its own bands, which is what makes a comb or a stipple resolve rather
-% than a page's depth alone. A tile one row deep cannot be cut again, so
-% a row divided into more runs than an array carries hands its refusal
-% up and the region's bounds stand in for the whole of it -- a region
-% whose polygon is already longer than the fill route can hold.
-.xpostsys /.showcliptile {
-    5 dict begin
-    /ty1 exch def /tx1 exch def /ty0 exch def /tx0 exch def
-    count /n0 exch def
-    { [ [ tx0 ty0 ] [ tx1 ty0 ] [ tx1 ty1 ] [ tx0 ty1 ] null ]
-      //.xpostsys /.clipmeet get exec
-    } stopped {
-        count n0 sub { pop } repeat
-        ty1 ty0 sub 1 gt {
-            /tm ty0 ty1 ty0 sub 2 idiv add def
-            tx0 ty0 tx1 tm //.xpostsys /.showcliptile get exec
-            tx0 tm tx1 ty1 //.xpostsys /.showcliptile get exec
-        }{
-            stop
-        } ifelse
-    } if
-    end
-} put
 .xpostsys /.showclip {
     16 dict begin
     /h graphicsdict /currgstate get /clipcache get def
@@ -451,7 +420,7 @@ currentglobal true setglobal
                 % a region with no vertices covers no pixel
                 h /clipspans [ ] put
             }{
-                /sl //.xpostsys /.showclipslice get def
+                /sl //.xpostsys /.cliptilerows get def
                 % every column the region could reach: a tile spanning
                 % those, met against the region, leaves the region's own
                 /tx0 xlo floor cvi 1 sub def
@@ -464,8 +433,8 @@ currentglobal true setglobal
                 /d0 countdictstack def
                 { [ ylo floor cvi sl yhi ceiling cvi {
                       /yb exch def
-                      tx0 yb tx1 yb sl add dup ylim gt { pop ylim } if
-                      //.xpostsys /.showcliptile get exec
+                      null tx0 yb tx1 yb sl add dup ylim gt { pop ylim } if
+                      //.xpostsys /.cliptile get exec
                     } for ]
                 } stopped {
                     % a tile handed its refusal up leaves its own

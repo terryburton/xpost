@@ -303,19 +303,6 @@ end
 .privatedict /.gstatetemplate get exec /device DEV put
 graphicsdict /currgstate get /device DEV put
 
-% The oracle stays the fill route, taken over a window rather than the
-% whole page: a fill of the page under this region has the same fifteen
-% thousand bands, and the fill route holds a fill's bands in one array
-% or raises limitcheck. The window holds every pixel the text marks,
-% which is all the comparison asks of it.
-/regionsnap {
-    initgraphics erasepage exec
-    0 setgray
-    newpath -1 118 moveto 201 118 lineto 201 182 lineto -1 182 lineto closepath
-    fill
-    snap
-} bind def
-
 /COMB { newpath
     0 1 49 {
         4 mul /cx exch def
