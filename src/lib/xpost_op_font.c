@@ -1225,8 +1225,10 @@ int _clip_ceil(double v)
 }
 
 /* Read the region's resolved form into the band table above. The form
-   is an array of row slices, each a null-separated array of pixel-band
-   rectangles of five objects apiece, as .regionmeet returns one.
+   is an array of tiles, each a null-separated array of pixel-band
+   rectangles of five objects apiece, as .regionmeet returns one. The
+   tiles meet along row boundaries and no two describe the same row, so
+   the bands only need ordering.
    Answers the band count, or -1 when the array is not in that form. */
 static
 int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)

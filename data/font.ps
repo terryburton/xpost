@@ -371,14 +371,17 @@ currentglobal true setglobal
 % resolved to pixel-band rectangles, the form .regionmeet reduces a
 % region to and every painter meets one in.
 %
-% The resolving is done a slice of rows at a time, and /clipspans is the
-% array of slices rather than one array of bands. A band costs five
+% The resolving is done a tile of the page at a time, and /clipspans is
+% the array of tiles rather than one array of bands. A band costs five
 % array elements and an array's length is a bounded field, so a region
-% deep enough in rows outruns a single array long before it outruns the
-% page: the slices keep each array short and the region whole. A region
-% divided into more bands than even one slice's array holds has no such
-% form, and its bounds stand in for it -- which reaches every pixel it
-% covers, and some it does not.
+% of enough bands outruns a single array: a page deep in rows outruns
+% one, and so does a page divided finely across them. The tiles start
+% as slices of rows, and a tile whose bands outrun its array is cut in
+% two and its halves resolved in its place, so how finely the region is
+% divided settles how small the tiles become and not whether the region
+% survives. Its bounds stand in for it only when the tiles themselves
+% cannot be held -- which reaches every pixel it covers, and some it
+% does not.
 %
 % The answer belongs to the region and no other, so a graphics state
 % that shares the holder shares it, and a clip that installs a fresh
@@ -386,10 +389,36 @@ currentglobal true setglobal
 % graphics state is built with and shares until its first clip: nothing
 % may be kept there, so that one is worked out afresh each time.
 .xpostsys /.showclipslice 2048 put
-% how far past any device the slices reach across: a slice spans every
-% column there could be, and meeting it against the region leaves the
-% region's own columns
-.xpostsys /.showclipwide 1000000 put
+% x0 y0 x1 y1  .showcliptile  spans ...
+% The part of the clip region inside the tile, resolved to the
+% pixel-band rectangles every painter meets a region in: one array, or
+% several over shallower tiles when the region inside this one holds
+% more bands than one array's length field describes.
+%
+% The cut is across the rows, halving the tile until each piece carries
+% its own bands, which is what makes a comb or a stipple resolve rather
+% than a page's depth alone. A tile one row deep cannot be cut again, so
+% a row divided into more runs than an array carries hands its refusal
+% up and the region's bounds stand in for the whole of it -- a region
+% whose polygon is already longer than the fill route can hold.
+.xpostsys /.showcliptile {
+    5 dict begin
+    /ty1 exch def /tx1 exch def /ty0 exch def /tx0 exch def
+    count /n0 exch def
+    { [ [ tx0 ty0 ] [ tx1 ty0 ] [ tx1 ty1 ] [ tx0 ty1 ] null ]
+      //.xpostsys /.clipmeet get exec
+    } stopped {
+        count n0 sub { pop } repeat
+        ty1 ty0 sub 1 gt {
+            /tm ty0 ty1 ty0 sub 2 idiv add def
+            tx0 ty0 tx1 tm //.xpostsys /.showcliptile get exec
+            tx0 tm tx1 ty1 //.xpostsys /.showcliptile get exec
+        }{
+            stop
+        } ifelse
+    } if
+    end
+} put
 .xpostsys /.showclip {
     16 dict begin
     /h graphicsdict /currgstate get /clipcache get def
@@ -400,8 +429,8 @@ currentglobal true setglobal
         }{
             /poly //.xpostsys /.clipregionpoly get exec def
             % the rows and columns the region reaches, read off its own
-            % vertices: the slices are cut over the rows, and the bounds
-            % are what stands in for the region if the slices fail
+            % vertices: the tiles are cut out of them, and the bounds
+            % are what stands in for the region if the tiles fail
             /any false def
             poly {
                 dup null eq { pop }{
@@ -423,15 +452,25 @@ currentglobal true setglobal
                 h /clipspans [ ] put
             }{
                 /sl //.xpostsys /.showclipslice get def
-                /wd //.xpostsys /.showclipwide get def
+                % every column the region could reach: a tile spanning
+                % those, met against the region, leaves the region's own
+                /tx0 xlo floor cvi 1 sub def
+                /tx1 xhi ceiling cvi 1 add def
+                % and no further across the rows than the region
+                % reaches: a tile that runs past it would be halved over
+                % rows it could hold nothing in
+                /ylim yhi ceiling cvi 1 add def
                 count /n0 exch def
+                /d0 countdictstack def
                 { [ ylo floor cvi sl yhi ceiling cvi {
                       /yb exch def
-                      [ [ wd neg yb ] [ wd yb ]
-                        [ wd yb sl add ] [ wd neg yb sl add ] null ]
-                      //.xpostsys /.clipmeet get exec
+                      tx0 yb tx1 yb sl add dup ylim gt { pop ylim } if
+                      //.xpostsys /.showcliptile get exec
                     } for ]
                 } stopped {
+                    % a tile handed its refusal up leaves its own
+                    % dictionaries open behind it
+                    countdictstack d0 sub { end } repeat
                     count n0 sub { pop } repeat
                     h /clipbox [ xlo ylo xhi yhi ] put
                 }{

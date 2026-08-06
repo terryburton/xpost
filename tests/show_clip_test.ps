@@ -264,9 +264,9 @@ t3tricut t3tri outside 0 eq
 % --- a region too deep for one array of bands ------------------------
 % A band costs five array elements and an array's length is a bounded
 % field, so a region reaching over enough rows has more bands than one
-% array carries. It is resolved a slice of rows at a time for that
-% reason, and only a page deeper than a slice exercises the seam between
-% slices: this one is several slices deep.
+% array carries. It is resolved a tile of rows at a time for that
+% reason, and only a page deeper than a tile exercises the seam between
+% tiles: this one is several tiles deep.
 
 /DEV 32 5000 .privatedict /newPGMIMAGEdevice get exec def
 DEV begin
@@ -280,6 +280,50 @@ graphicsdict /currgstate get /device DEV put
 /DEEP { newpath 0 0 moveto 32 0 lineto 16 4900 lineto closepath clip newpath } bind def
 (deep region:) { DEEP } { /Times-Roman findfont 22 scalefont setfont
                           2 2400 moveto (Hgxy) show } crossing
+
+% --- a region divided too finely for one array of bands --------------
+% Depth is one way past what a single array carries and fineness is the
+% other. A comb of fifty teeth over three hundred rows is fifteen
+% thousand bands, seventy-five thousand array elements, on a page no
+% tile of rows is deep enough to make the difference to: the tile that
+% cannot hold its bands is halved and its halves resolved in its place.
+% Without that the region has no form the raster route can read and its
+% bounds stand in for it, which paints the text between the teeth.
+%
+% The halving puts a seam across the middle of this page, where the text
+% is, so a pixel described by two tiles at once would be painted twice
+% -- and painted twice as dark, since this device blends coverage.
+
+/DEV 200 300 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 300 ] def
+    /FillPoly 1183615869 internaldict /.fillpoly get def
+    /FillRect 1183615869 internaldict /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% The oracle stays the fill route, taken over a window rather than the
+% whole page: a fill of the page under this region has the same fifteen
+% thousand bands, and the fill route holds a fill's bands in one array
+% or raises limitcheck. The window holds every pixel the text marks,
+% which is all the comparison asks of it.
+/regionsnap {
+    initgraphics erasepage exec
+    0 setgray
+    newpath -1 118 moveto 201 118 lineto 201 182 lineto -1 182 lineto closepath
+    fill
+    snap
+} bind def
+
+/COMB { newpath
+    0 1 49 {
+        4 mul /cx exch def
+        cx 0 moveto cx 2 add 0 lineto cx 2 add 300 lineto cx 300 lineto closepath
+    } for
+    clip newpath } bind def
+(comb region:) { COMB } { /Times-Roman findfont 22 scalefont setfont
+                          10 150 moveto (Hgxy) show } crossing
 
 initclip newpath
 count 0 eq (the suite leaves the operand stack empty) assert
