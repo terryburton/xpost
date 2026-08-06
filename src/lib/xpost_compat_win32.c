@@ -139,13 +139,19 @@ xpost_fpurge(FILE *f)
     fflush(f);
 }
 
+/* The clock's origin is arbitrary (PLRM 8.2 realtime), and both clocks
+   take the interpreter's own start for it. Counting one from there and
+   the other from the counter's own zero divides by the frequency at two
+   different points, so the two disagreed by the millisecond each
+   truncated away and an interval measured on one could come out longer
+   than the same interval measured on the other. */
 long long
 xpost_get_realtime_ms(void)
 {
     LARGE_INTEGER count;
 
     QueryPerformanceCounter(&count);
-    return (count.QuadPart * 1000LL) / _xpost_time_freq;
+    return ((count.QuadPart - _xpost_time_start) * 1000LL) / _xpost_time_freq;
 }
 
 long long
