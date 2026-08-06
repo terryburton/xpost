@@ -118,6 +118,11 @@ struct Xpost_File
     Xpost_File_Wraps wraps;
 };
 
+/* Every file subtype begins with the base, so a subtype's address and its
+   base's address are the same address and the cast between them is the
+   whole conversion. That is what lets the method table hold one function
+   type for every subtype: a method receives the base and casts back down
+   to the struct the allocation actually is. */
 typedef struct Xpost_DiskFile
 {
     Xpost_File methods;

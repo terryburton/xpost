@@ -905,7 +905,7 @@ xpost_diskfile_open(const FILE *fp)
        can stall (pipes, terminals, sockets) */
     df->poll_before_read = !(fstat(fileno(df->file), &st) == 0 &&
                              S_ISREG(st.st_mode));
-    return &df->methods;
+    return (Xpost_File *)df;
 }
 
 
@@ -995,7 +995,7 @@ memory_unreadch(Xpost_File *f, int c)
 
     if (!mf->is_read)
         return EOF;
-    if (mf->read_next <= 0)
+    if (mf->read_next == 0)
         return EOF;
 
     mf->contents[ --mf->read_next ] = c;
@@ -1047,7 +1047,7 @@ xpost_memoryfile_open_read(unsigned char *ptr, size_t limit)
     mf->is_malloc = 0;
     mf->read_next = 0;
     mf->read_limit = limit;
-    return &mf->methods;
+    return (Xpost_File *)mf;
 }
 
 /* What every decode filter is, whatever it decodes: a read-only stream
@@ -1811,6 +1811,9 @@ flate_refill(Xpost_FlateFile *ff)
 
     if (ff->strm.avail_out == 0 && !ff->base.eod)
     {
+        /* the byte the decompressor is given room for; room left over is
+           what says it produced none, so it is read only where the room
+           is gone */
         unsigned char sb;
         for (;;)
         {
@@ -1834,6 +1837,7 @@ flate_refill(Xpost_FlateFile *ff)
                 ff->base.eod = 1;
                 if (ff->strm.avail_out == 0)   /* the final byte came with the end */
                 {
+                    /* cppcheck-suppress uninitvar */
                     ff->look = sb;
                     ff->haslook = 1;
                 }
@@ -4666,7 +4670,14 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
 }
 
 /* A decode filter: the source it reads, one byte of pushback and the
-   end-of-data latch, whatever the coding above them. */
+   end-of-data latch, whatever the coding above them.
+
+   The struct becomes this call's, and a constructor that has reached
+   here has nothing left to release: an object made holds the struct, and
+   a refusal tears it down as far as a close does. So the struct arrives
+   as the base it begins with -- the same address, the coding's own name
+   for it dropped -- and the constructor's last act is to answer with
+   what this returns. */
 static Xpost_Object
 _dec_cons(Xpost_Memory_File *mem, Xpost_FilterBase *ff,
           Xpost_File_Methods *methods, Xpost_File *source)
@@ -5444,15 +5455,19 @@ int xpost_file_write(const char *buf, int size, int count, Xpost_File *fp)
 Xpost_Object xpost_file_read_byte(Xpost_Memory_File *mem,
                                   Xpost_Object f)
 {
+    Xpost_File *fp;
     int c;
 
-    if (!xpost_file_get_status(mem, f))
+    /* one lookup answers both questions: whether the object still names a
+       stream, and which stream to read */
+    fp = xpost_file_get_file_pointer(mem, f);
+    if (!fp)
     {
         return invalid;
     }
 retry:
     errno=0;
-    c = xpost_file_getc(xpost_file_get_file_pointer(mem, f));
+    c = xpost_file_getc(fp);
     if (c == EOF && errno==EINTR)
         goto retry;
 
@@ -5465,11 +5480,16 @@ int xpost_file_write_byte(Xpost_Memory_File *mem,
                           Xpost_Object f,
                           Xpost_Object b)
 {
-    if (!xpost_file_get_status(mem, f))
+    Xpost_File *fp;
+
+    /* one lookup answers both questions: whether the object still names a
+       stream, and which stream to write */
+    fp = xpost_file_get_file_pointer(mem, f);
+    if (!fp)
     {
         return ioerror;
     }
-    if (xpost_file_putc(xpost_file_get_file_pointer(mem, f), b.int_.val) == EOF)
+    if (xpost_file_putc(fp, b.int_.val) == EOF)
     {
         return ioerror;
     }
