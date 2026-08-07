@@ -1195,6 +1195,16 @@ int evalfile(Xpost_Context *ctx, Xpost_Object f)
     Xpost_Object b,t;
     int ret;
 
+    /* Executing a file reads it, a token at a time, so the access
+       attribute the file object carries governs execution as it governs
+       read: a file the attribute will not let be read is not executed
+       either (PLRM 3.8.2). The attribute belongs to the object rather
+       than to the stream, so it is asked before the stream's state is,
+       and every route by which a file reaches the execution stack --
+       exec, run, a file object stored in a procedure -- arrives here. */
+    if (!xpost_object_is_readable(ctx, f))
+        return invalidaccess;
+
     /* a program may close the file it is executing from -- the
        Type 1 font idiom mark currentfile closefile -- and a closed
        file simply has nothing further to run */
@@ -2685,8 +2695,19 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
     }
     else if (ps_file_ptr)
     {
+        /* the stream the embedding caller handed over is the program to
+           run, so the file object over it carries the attribute of a
+           stream opened to be read: the start procedure executes it, and
+           execution reads it */
         ctx->run_input_file =
             xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr));
+        if (xpost_object_get_type(ctx->run_input_file) == filetype)
+        {
+            ctx->run_input_file.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+            ctx->run_input_file.tag |=
+                XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        }
         xpost_stack_push(ctx->lo, ctx->os, ctx->run_input_file);
         push_start_proc(ctx, ctx->skip_graphics ? "startfilenographics" : "startfile");
     }

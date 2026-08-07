@@ -38,7 +38,9 @@
  *
  * Executing an array or a string reads its contents, which an object
  * with no access forbids (PLRM 3.3.2); a dictionary is only pushed onto
- * the dictionary stack, so it is exempt.
+ * the dictionary stack, so it is exempt. A file is read a token at a
+ * time as it runs rather than scheduled whole, so its own rule is asked
+ * where that reading happens, in the interpreter's evalfile.
  */
 static inline int xpost_op_exec_access_ok(Xpost_Context *ctx, Xpost_Object O)
 {

@@ -79,6 +79,32 @@ f closefile
 { f read } /invalidaccess (a file opened w refuses a read) erris
 f closefile
 
+% --- executing a file reads it, so the attribute governs that too ---
+% PLRM 3.8.2: accessing a file object in a way its access attribute forbids
+% is an invalidaccess. Execution reads the file, one token at a time, so a
+% file the attribute will not let be read will not be executed either.
+/f nm (w) file def
+{ f cvx exec } /invalidaccess (a file opened w refuses to be executed) erris
+f closefile
+/f nm (a) file def
+{ f cvx exec } /invalidaccess (a file opened a refuses to be executed) erris
+f closefile
+% a filter carries the attribute of the direction it codes in
+/f nm (w) file /ASCIIHexEncode filter def
+{ f cvx exec } /invalidaccess (an encoding filter refuses to be executed) erris
+f closefile
+% while every readable one runs as before, to the end of the file
+nm deletefile
+/f nm (w) file def f (/f.ran f.ran 1 add def\n) writestring f closefile
+/f.ran 0 def
+nm (r) file cvx exec
+f.ran 1 eq (a file opened r executes) assert
+nm (r+) file cvx exec
+f.ran 2 eq (a file opened r+ executes) assert
+nm (w+) file dup (/f.ran f.ran 1 add def\n) writestring
+    dup 0 setfileposition cvx exec
+f.ran 3 eq (a file opened w+ executes) assert
+
 % --- an access string outside the table is invalidfileaccess ---
 { nm (q) file } /invalidfileaccess (an unknown access string is refused) erris
 { nm (rw) file } /invalidfileaccess (an access string must start r, w or a) erris
