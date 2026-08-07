@@ -58,8 +58,18 @@
 # another member's too. Adding one is free; taking one out is a claim
 # about the sources, and the claim is written above.
 
+# DEVICE_FLEET_OPTIONAL names the members that need a library the build
+# may not have, and so the only ones that may legitimately answer "wrong
+# device". It is what lets a wrapper hold itself to a floor: a device
+# that is not built in skips, a roster that skipped from end to end
+# leaves every verdict untaken, and a wrapper with nothing to say prints
+# the same SUCCESS as one that asked its question of everything. The
+# floor is the roster less this list, so it follows the roster instead
+# of being a number typed beside it.
 DEVICE_FLEET_ALL='pgm ppm pbm tiff null bbox raster bgr png pngalpha
                   pdfwrite svgwrite dscwrite jpeg'
+
+DEVICE_FLEET_OPTIONAL='png pngalpha jpeg'
 
 DEVICE_FLEET_LIFETIME='pgm null bbox raster bgr png jpeg pdfwrite svgwrite'
 

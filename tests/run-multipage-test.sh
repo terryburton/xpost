@@ -87,6 +87,9 @@ render() {   # $1=device $2=output-path ; returns 1 on skip/error
 
 sweep() {   # $1=job label ; renders $prog through every device and checks the shape
     job=$1
+    ran=0
+    want=0
+    for de in $devices; do want=$((want + 1)); done
     for de in $devices; do
         dev=${de%%:*}
         rest=${de#*:}
@@ -99,6 +102,7 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
             [ "$fail" -eq 0 ] && echo "SKIP $dev (not built in)"
             continue
         fi
+        ran=$((ran + 1))
         p1="$work/page_1.$ext"; p2="$work/page_2.$ext"; p3="$work/page_3.$ext"
         n=$(ls "$work"/page_*."$ext" 2>/dev/null | wc -l)
         if [ "$n" -ne 3 ]; then
@@ -145,6 +149,17 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
             echo "OK   $dev ($job: one page per file via %d; fixed name = last page)"
         fi
     done
+
+    # None of these devices needs a library the build may not have, so
+    # "not built in" from any of them is a build to fix. A sweep that
+    # skipped from end to end renders nothing, compares nothing and
+    # leaves every verdict untaken, which is what a sweep that passed
+    # leaves too.
+    if [ "$ran" -ne "$want" ]; then
+        echo "FAIL ($job): $ran of $want devices rendered; the rest said they"
+        echo "     were not built in, and all of them are built from this tree"
+        fail=1
+    fi
 }
 
 prog=$plain;   sweep pages
