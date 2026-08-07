@@ -686,6 +686,8 @@ xpost_memory_table_init(Xpost_Memory_File *mem)
         return 0;
     }
     mem->table.nextent = 0;
+    mem->ent_reserve_open = 0;
+    mem->ent_exhausted = 0;
     return 1;
 }
 
@@ -723,6 +725,7 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
 {
     unsigned int ent;
     unsigned int adr;
+    unsigned int last;
 
     if (!mem)
     {
@@ -730,13 +733,30 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
         return 0;
     }
 
+    /* The end of the range belongs to the machinery that reports
+       reaching it, and is out of reach until the interpreter opens it
+       (see XPOST_MEMORY_TABLE_ENT_RESERVE). It shuts again of its own
+       accord here, where a slot outside it is being handed out: that is
+       the run allocating with room to spare, which is the whole of what
+       the reserve was waiting for. */
+    last = XPOST_OBJECT_COMP_MAX_ENT - XPOST_MEMORY_TABLE_ENT_RESERVE;
+
     ent = mem->table.nextent;
-    if (ent > XPOST_OBJECT_COMP_MAX_ENT)
+    if (ent <= last)
+        mem->ent_reserve_open = 0;
+    else if (mem->ent_reserve_open)
+        last = XPOST_OBJECT_COMP_MAX_ENT;
+
+    if (ent > last)
     {
         /* an ent number beyond the object field width would be silently
-           truncated when stored in an object, aliasing another entity */
-        XPOST_LOG_ERR("%d entity numbers exhausted (max %u)",
-                VMerror, XPOST_OBJECT_COMP_MAX_ENT);
+           truncated when stored in an object, aliasing another entity.
+           The width is an implementation limit and the memory behind it
+           is not spent, so this is limitcheck and not VMerror; the flag
+           carries that distinction to where the error is raised. */
+        mem->ent_exhausted = 1;
+        XPOST_LOG_ERR("%d entity numbers exhausted (%u of a possible %u)",
+                limitcheck, ent, XPOST_OBJECT_COMP_MAX_ENT);
         return 0;
     }
     ++mem->table.nextent;
@@ -778,6 +798,10 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
                          unsigned int *entity)
 {
     int ret;
+
+    /* the flag describes this request, so it says nothing about any
+       earlier one */
+    mem->ent_exhausted = 0;
 
     if (mem->free_list_alloc_is_installed)
     {

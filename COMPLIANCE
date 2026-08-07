@@ -422,3 +422,26 @@ Known behavioural deviations
  Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
  carry about seven significant figures and large values print in exponent form
  (4e+09).
+
+Implementation limits
+---------------------
+
+ Arrays, strings and dictionaries hold 65,535 elements (PLRM Appendix B.1);
+ the large-object build carries them to memory instead. Past either, limitcheck.
+
+ There is a second limit on composites that Appendix B does not name, and a
+ program inside every limit that appendix does list can still reach it: how
+ many composites may exist at once. Every string, array and dictionary takes
+ one number from a table however large it is, and there are 524,287 numbers
+ (2,147,483,647 in the large-object build) of which the last thousand are not
+ the program's: they are what the interpreter reports the exhaustion with.
+ Past that, limitcheck -- vmstatus says nothing about this limit, and the
+ "maximum" it reports is not this ceiling.
+
+ A composite the program can no longer reach gives its number back when the
+ collector next runs, so what the limit counts is composites held at once,
+ not composites made. Not all of them are the program's own: a gsave and its
+ grestore spend about four numbers between them, released like any other
+ garbage, where a save and its restore spend none. `1183615869 internaldict
+ /.vmentcount get exec` reports how many numbers each of local and global VM
+ has handed out.

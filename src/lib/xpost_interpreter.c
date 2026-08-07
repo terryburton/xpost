@@ -1651,6 +1651,28 @@ void _onerror(Xpost_Context *ctx,
 
     if (err > unknownerror) err = unknownerror;
 
+    /* An allocation refused for want of entity numbers is an
+       implementation limit reached, not memory spent: the object field
+       that carries an entity number is only so wide, while the memory
+       behind the table has room and vmstatus reports it. PLRM Appendix
+       B has limitcheck for exactly this and keeps VMerror for VM
+       resources exhausted. The composite that was refused is a
+       constructor's, several call frames below, so the distinction
+       arrives here on the memory file rather than in the returned
+       code. */
+    if (err == VMerror && (ctx->lo->ent_exhausted || ctx->gl->ent_exhausted))
+        err = limitcheck;
+
+    /* Whatever the error, reporting it starts here and wants entities
+       of its own: the error's name, $error's stack snapshots, the text
+       the handler prints, and whatever the program's own handler makes
+       of them. Open the numbers held back for that, in both memory
+       files -- an error over one is reported with names and snapshots
+       drawn from either. They shut themselves again at the first
+       allocation the run makes with room to spare. */
+    ctx->lo->ent_reserve_open = 1;
+    ctx->gl->ent_reserve_open = 1;
+
     strncpy(ctx->run_error_name, errorname[err], sizeof ctx->run_error_name - 1);
     ctx->run_error_name[sizeof ctx->run_error_name - 1] = '\0';
 

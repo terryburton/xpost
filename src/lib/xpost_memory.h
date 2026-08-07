@@ -142,6 +142,39 @@ typedef enum
     XPOST_MEMORY_TABLE_GC_BUDGET = 65536
 } Xpost_Memory_Table_Pressure;
 
+/**
+ * @typedef Xpost_Memory_Table_Reserve
+ * @brief The entity numbers held back for reporting their exhaustion.
+ *
+ * Telling a program that the numbers have run out costs numbers:
+ * interning the error's name is a string, recording the error in $error
+ * is three arrays, and printing what happened is more of both. A run
+ * that spent the last number on the program's own data would have
+ * nothing left to say so with, and an error a program is never told
+ * about is one it cannot catch.
+ *
+ * So the last of the range is not the program's to spend while it has
+ * anything else: ordinary allocation stops this far short of the end
+ * and raises limitcheck there. The interpreter opens the reserve as it
+ * raises an error, and it shuts at the first allocation made with room
+ * outside it -- the run has recovered, and the reserve is whole again.
+ *
+ * That leaves it open across the recovery itself, which is deliberate.
+ * A program handed back a wall it may not describe is no better off
+ * than one never told: its own handler prints, formats and records like
+ * any other code. A program that ignores the error and keeps allocating
+ * spends the reserve instead, and meets the same wall a thousand
+ * composites later with the machinery's own needs by then long since
+ * paid for -- so the error stays catchable however often it is met.
+ *
+ * The size is what the error machinery wants many times over, and the
+ * whole of it is a five-hundredth of the ordinary build's range.
+ */
+typedef enum
+{
+    XPOST_MEMORY_TABLE_ENT_RESERVE = 1024
+} Xpost_Memory_Table_Reserve;
+
 
 /*
  *
@@ -225,6 +258,17 @@ typedef struct Xpost_Memory_File
                                       inside the triggering allocation, so
                                       operator-internal intermediates held
                                       only in C variables cannot be swept */
+    int ent_reserve_open; /**< the entity numbers held back for error
+                               reporting are available. Opened by the
+                               interpreter as it raises an error and
+                               closed by the first allocation made with
+                               room outside them, so the shortage a
+                               program is being told about cannot
+                               silence the telling */
+    int ent_exhausted; /**< the last entity allocation was refused for
+                            want of entity numbers rather than for want
+                            of memory, which is the difference between
+                            limitcheck and VMerror */
     int (*garbage_collect)(struct Xpost_Memory_File *mem,
                            int dosweep,
                            int markall);

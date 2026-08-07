@@ -1376,6 +1376,21 @@ test('large-object',
   suite: cost_fast,
   timeout: 300)
 
+# The other limit the object's width sets: how many composites there may
+# be at once, each taking one entity number of the memory table whatever
+# its size. It is an implementation limit like the composite size above,
+# so it is limitcheck, and a program can be inside every limit PLRM names
+# and still reach it. The whole of the contract is what happens there --
+# the error is a program's to catch, and the interpreter that raised it
+# can still name it, run the next statement and report -- because
+# reporting wants entity numbers of its own.
+test('entity-limit',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/entity_limit_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The same ceiling reached along every path that builds a composite and
 # every path that extends one, at the last size the size field describes
 # and at one past it. A constructor that counts what it is given in

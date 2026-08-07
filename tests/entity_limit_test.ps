@@ -1,0 +1,147 @@
+% The entity-number budget, run through `xpost -q --no-sandbox -d null`
+% by run-ps-test.sh.
+%
+% Every composite -- string, array, dictionary -- takes one number from
+% the memory table however large it is, and an object carries that
+% number in a field of fixed width. The width is a limit of the same
+% kind as the 65,535 elements a composite holds: an implementation
+% limit, so limitcheck. Virtual memory is not exhausted when it is
+% reached and vmstatus says nothing about it, which is how a program
+% inside every limit PLRM names reaches this one.
+%
+% What happens at the wall is the whole of the contract. The error is a
+% program's to catch; the interpreter that raised it can still name it,
+% report it and run the next statement; and past the numbers held back
+% for that reporting the wall is still a wall, still catchable. All of
+% it costs entity numbers, which is why the last of them are not the
+% program's to spend.
+%
+% The ordinary build's field spans 524,287 numbers and a fixture of a
+% few hundred thousand composites reaches it in about a second. The
+% large-object build's spans 2^31-1, which no fixture reaches; there the
+% same fixture must simply pass. The build is probed and each
+% personality held to its own contract.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.vmentcount 1183615869 internaldict /.vmentcount get def
+
+% The build, by the width of its integer rather than by the width of a
+% composite: the two follow each other (build_personality_test holds
+% them to it), and asking the composite would mean raising limitcheck
+% here, which is the one thing this test must not do before the wall.
+/widebuild 2147483648 type /integertype eq def
+
+% The fixture. Rows of small composites, held from one array so that
+% nothing is garbage and a collection cannot relieve the pressure. The
+% nesting is two deep on purpose: a chain half a million long is a depth
+% the collector's marking walk cannot follow.
+/hold 60000 array def
+/i 0 def
+/fill {
+    { /row 9 array def
+      0 1 8 { row exch 4 string put } for
+      hold i row put
+      /i i 1 add store
+      i 60000 ge { exit } if
+    } loop
+} def
+
+% A second, bounded run at the wall, to spend whatever the reporting
+% left and see the refusal come back.
+/spare 4000 array def
+/j 0 def
+/spend {
+    { spare j 8 string put
+      /j j 1 add store
+      j 4000 ge { exit } if
+    } loop
+} def
+
+% let go of both fixtures and reclaim them
+/release { /row null store /hold null store /spare null store 1 vmreclaim } def
+
+% Reading the source allocates: a string literal is a string and a name
+% not yet seen is interned into one. Everything below runs from inside a
+% procedure -- both arms of the ifelse are scanned, and their literals
+% allocated, before either is executed -- so the wall is reached with
+% nothing left to read.
+
+% Reporting an error allocates too, and $error keeps what it allocates:
+% a run that had already reported one would reach the wall with the
+% snapshot arrays paid for and would not ask the reserve for them. This
+% run has reported none, which is what makes the rest of it a test.
+$error /ostackarray get null eq
+    (nothing has been spent on reporting before the wall) assert
+
+widebuild {
+
+    % the wider field's numbers are not reachable: the fixture fills
+    { fill } stopped not (the wider build fills the fixture) assert
+    .vmentcount pop 524287 gt
+        (and its table passes where the ordinary build's stops) assert
+    { spend } stopped not (and goes on past it) assert
+    release
+    /expected 8 def
+
+}{
+
+    % ---------------------------------------------------- at the wall
+    { fill } stopped (filling past the ceiling raises) assert
+    $error /errorname get /limitcheck eq
+        (an exhausted entity budget is limitcheck) assert
+    i 60000 lt (the fixture stopped short of its own bound) assert
+
+    % Reporting is what the reserve buys. handleerror is the standard
+    % way a program reports the error it caught, it wants entities of
+    % its own to do it with, and it clears $error's newerror as it goes
+    % -- so the flag turning over is the report having happened.
+    $error /newerror get (the caught error is there to be reported) assert
+    handleerror
+    $error /newerror get not (and the interpreter reports it) assert
+
+    % Still at the wall, and still the interpreter: it interns a name it
+    % has never seen and evaluates.
+    /anamefirstseenatthewall type /nametype eq
+        (a fresh name interns at the wall) assert
+    2 3 add 5 eq (a statement runs at the wall) assert
+
+    % Past what reporting was given, the wall is where it was, and the
+    % refusal is still the program's to catch rather than a cascade the
+    % run cannot come back from.
+    { spend } stopped (the reserve does not move the wall) assert
+    $error /errorname get /limitcheck eq
+        (and the wall past it is limitcheck too) assert
+    j 4000 lt (the second run stopped short of its own bound) assert
+
+    % ---------------------------------------------------- afterwards
+    clear
+    release
+    /expected 15 def
+
+} ifelse
+
+% Shared of both arms, once the fixtures are gone: the numbers come
+% back, and the interpreter that met the ceiling is the one still
+% running.
+.vmentcount pop /entsbefore exch def
+/third 30000 array def
+0 1 29999 { third exch 8 string put } for
+.vmentcount pop entsbefore le
+    (the released numbers are handed out again) assert
+64 string length 64 eq (a composite allocates again) assert
+2 3 add 5 eq (a statement runs) assert
+.vmentcount pop type /integertype eq (the budget is still reported) assert
+
+% Neither arm may be skipped into: each names how many checks it
+% carries, and a run reporting a different number took a branch that
+% stopped asserting.
+checks expected eq (every check in this build's arm was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse
