@@ -970,8 +970,8 @@ basefont null ne {
     } ifelse
 } if
 
-% a hairline's round and projecting caps reach half the width past
-% the segment ends; a butt cap adds nothing
+% a sub-pixel stroke's round and projecting caps reach half the width
+% past the segment ends; a butt cap adds nothing
 erasepage
 0.9 setlinewidth
 0 setlinecap
@@ -980,8 +980,58 @@ newpath 10.2 40 moveto 20.2 40 lineto stroke
 erasepage
 2 setlinecap
 newpath 10.2 40 moveto 20.2 40 lineto stroke
-countink capbutt gt (a projecting cap lengthens a hairline) assert
+countink capbutt gt (a projecting cap lengthens a sub-pixel stroke) assert
 0 setlinecap
+1 setlinewidth
+
+% --- a stroke of nonzero width marks every pixel its band meets ---
+% The coverage rule is a floor and holds for strokes of nonzero width
+% as it does for fills: a pixel is marked when the shape meets its
+% square region at all, and only a zero-width stroke may mark fewer
+% pixels than that (PLRM 7.5.1). So a band a fraction of a pixel wide
+% lying along a pixel boundary marks the rows on both sides of it.
+%
+% The band this draws is 0.4 wide about y = 32, and the device row
+% boundary at 32 runs down its middle. What proves the sets equal
+% rather than merely the same size is the third count: painting both
+% shapes onto one raster marks their union, and a union no larger than
+% either part is both parts.
+/twoline { % - . -  (the band, drawn as a stroke)
+    newpath 12 32 moveto 52 32 lineto
+} bind def
+erasepage
+0.4 setlinewidth
+twoline stroke
+/thin.stroke countink def
+erasepage
+twoline strokepath fill
+/thin.fill countink def
+erasepage
+twoline stroke twoline strokepath fill
+/thin.union countink def
+thin.stroke 0 gt (a sub-pixel stroke marks something) assert
+thin.stroke thin.fill eq
+    (a sub-pixel stroke marks as much as its outline filled) assert
+thin.union thin.stroke eq
+    (a sub-pixel stroke marks the same pixels as its outline filled) assert
+thin.stroke 80 ge
+    (a sub-pixel band across a pixel boundary marks the rows either side) assert
+
+% the same stroke under a clip that contains it whole marks the same
+% pixels: a clip decides what survives, not how thick a line is
+erasepage
+gsave newpath 32 32 28 0 360 arc clip twoline stroke grestore
+countink thin.stroke eq
+    (a containing clip leaves a sub-pixel stroke's coverage alone) assert
+
+% a zero-width stroke is the one case the rule leaves to the device,
+% and this one draws the thinnest line it can: a single row
+erasepage
+0 setlinewidth
+twoline stroke
+countink dup
+    0 gt (a zero-width stroke still marks the device) assert
+    thin.stroke lt (a zero-width stroke is the thinnest line there is) assert
 1 setlinewidth
 
 % A Type 3 glyph that declares setcachedevice builds once: repeats
@@ -2722,7 +2772,7 @@ end
 userdict /.wrappedprocs known not
 userdict /.imginterp known not and
 userdict /.fontserial known not and
-userdict /.hairhw known not and
+userdict /.hairrect known not and
 (the machinery keeps its state out of userdict) assert
 gsave
 { 10 10 8 [10 0 0 -10 0 10]

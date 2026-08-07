@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 284
+entries 282
 
 .gscratch /.lresources
 .gscratch /.pfdict
@@ -50,7 +50,6 @@ entries 284
 .privatedict /.gscratchdict
 .privatedict /.gscratchproc
 .privatedict /.gstatetemplate
-.privatedict /.hairhw
 .privatedict /.hairrect
 .privatedict /.imginterp
 .privatedict /.resourcepath
@@ -174,7 +173,6 @@ entries 284
 .xpostsys /.gsetcolor
 .xpostsys /.gsunwind
 .xpostsys /.gtri
-.xpostsys /.hairext
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror
 .xpostsys /.ht5component

@@ -210,10 +210,11 @@ W3 inkof 0 gt (a font without StrokeWidth still marks its outline) check
 % whose glyphs are filled the two are one path and the boolean decides
 % nothing.
 %
-% The line is made several pixels wide here. A fill of a band narrower
-% than a pixel and a stroke of the same line are two different
-% questions for the scan converter, and the answer to those is not
-% charpath's.
+% The line is made several pixels wide here, so that what the two forms
+% are held to is charpath's answer and not the one width at which a
+% stroke and a fill of its outline are allowed to part: a stroke of zero
+% width is left to the device to draw as thinly as it can (PLRM 7.5.1),
+% and the outline it would have filled encloses nothing.
 /p.name (charpath bool:) def
 /SWW 4 26 div /Times-Roman findfont /FontMatrix get 0 get div def
 /Times-Roman findfont dup length dict copy begin
