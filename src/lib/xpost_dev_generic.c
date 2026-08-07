@@ -1299,7 +1299,13 @@ _ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
         return NULL;
     *w = wo.int_.val;
     *h = ho.int_.val;
-    if (*w < 1 || *h < 1 || (unsigned int)(*w * *h) > c.comp_.sz)
+    /* the cell is addressed as h rows of w thresholds, and the
+       dimensions come out of a dictionary a program can build, so the
+       cell has to hold that many bytes; the row count is compared
+       against the length divided by the row width, which holds for
+       every pair of dimensions rather than only those whose product
+       fits the type a multiplication would form it in */
+    if (*w < 1 || *h < 1 || (unsigned int)*h > c.comp_.sz / (unsigned int)*w)
         return NULL;
     return (const unsigned char *)xpost_string_get_pointer(ctx, c);
 }

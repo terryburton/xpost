@@ -1226,6 +1226,16 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A screening device's threshold cell is addressed by two dimensions
+# carried beside it in the device dictionary, so a pair of dimensions
+# the cell does not hold leaves the fill unscreened rather than reading
+# past the cell.
+test('halftone-cell',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/halftone_cell_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A captured glyph mask is copied into the cache at the dimensions its
 # dictionary states, so dimensions the coverage bytes do not hold are a
 # rangecheck rather than a copy past them.

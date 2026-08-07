@@ -134,6 +134,7 @@ tests/graphicsdict_slots.golden \
 tests/gstate_matrix_test.ps \
 tests/gstate_object_test.ps \
 tests/guard-paths.sh \
+tests/halftone_cell_test.ps \
 tests/halftone_matrix_test.ps \
 tests/image_matrix_test.ps \
 tests/internal_debug_ops_test.ps \

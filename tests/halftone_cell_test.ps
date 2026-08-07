@@ -1,0 +1,92 @@
+%!
+% A screening device carries its threshold cell in the device
+% dictionary, as .htcell with the .htw and .hth it is addressed by: the
+% threshold under a pixel is read from row (y mod .hth) at column
+% (x mod .htw). A device dictionary is an ordinary dictionary a program
+% can build and hand to the compiled fills, so the two dimensions have
+% to agree with the cell they address before a threshold is read
+% through them -- and the agreement has to hold for every pair of
+% dimensions, including the pairs whose product is larger than the type
+% a multiplication would form it in. A cell the dimensions overrun is
+% no cell: the fill paints unscreened rather than reading past it.
+%
+% Each case below hands a fill a device whose cell is sound apart from
+% its dimensions, and requires that the raster is still only the
+% raster's own bytes afterwards.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/frg id /.fillrectgray get def
+/blit id /.blitrow get def
+
+% -  .  a two-row grey device, its rows distinguishable
+/dev {
+  << /ImgData [ 4 string 4 string ] >>
+} def
+
+% dev label  .  -   fill it grey; require that the run survives
+/fillsurvives {
+  /label exch def
+  /d exch def
+  /d0 countdictstack def
+  { 0.5 0 0 4 4 d frg } stopped
+  countdictstack d0 sub { end } repeat
+  { /fails fails 1 add def
+    (FAIL: ) print label print ( raised ) print
+    $error /errorname get 128 string cvs note }
+  { (ok   ) print label note } ifelse
+} def
+
+% --- the cell dimensions address the cell ---
+% a width past the cell reaches beyond its last row
+dev dup /.htcell 4 string put dup /.htw 8 put dup /.hth 2 put
+  (a fill through a cell narrower than its width) fillsurvives
+% a height past the cell reaches beyond its last row
+dev dup /.htcell 4 string put dup /.htw 2 put dup /.hth 8 put
+  (a fill through a cell shorter than its height) fillsurvives
+% the pair whose product leaves the type it would be formed in: the
+% cell holds four bytes and the dimensions claim four thousand million
+dev dup /.htcell 4 string put dup /.htw 268435456 put dup /.hth 16 put
+  (a fill through a cell of unformable extent) fillsurvives
+
+% --- the same cell reaches the row blitter ---
+/blitdev {
+  /white 256 string def
+  0 1 255 { white exch 255 put } for
+  <<
+    /devw 4 /devh 4 /nat 1 /w 1 /ncomp 1 /y 1
+    /packed false /cmyk false
+    /xoff 0 /xscale 1 /yoff 0 /yscale 1
+    /cx0 0 /cy0 0 /cx1 4 /cy1 4
+    /rows [ 4 string 4 string 4 string 4 string ]
+    /lut white /buf 8 string
+  >>
+} def
+/b blitdev def
+b /.htcell 4 string put b /.htw 268435456 put b /.hth 16 put
+{ b blit } stopped
+{ /fails fails 1 add def
+  (FAIL: a blit through a cell of unformable extent raised ) print
+  $error /errorname get 128 string cvs note }
+{ (ok   a blit through a cell of unformable extent) note } ifelse
+
+% --- a cell the dimensions do fit still screens ---
+% four thresholds in a two by two cell: the two low ones whiten under a
+% mid grey and the two high ones do not, so the fill comes out mixed
+/cell 4 string def
+cell 0 1 put cell 1 255 put cell 2 255 put cell 3 1 put
+/sd dev def
+sd /.htcell cell put sd /.htw 2 put sd /.hth 2 put
+{ 0.5 0 0 4 4 sd frg } stopped
+{ /fails fails 1 add def
+  (FAIL: a sound cell raised ) print
+  $error /errorname get 128 string cvs note }
+{ sd /ImgData get 0 get dup 0 get 255 eq exch 1 get 0 eq and
+  { (ok   a sound cell still screens) note }
+  { /fails fails 1 add def
+    (FAIL: a sound cell screened nothing) note } ifelse } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
