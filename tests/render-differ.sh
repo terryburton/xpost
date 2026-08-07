@@ -286,7 +286,13 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/render-differ.XXXXXX" 2>/dev/null) || work=
     die "could not make a working directory"
 trap 'if [ "$KEEP" = 0 ]; then rm -rf "$work"; \
       else echo "render-differ: renders kept in $work"; fi' EXIT
-trap 'exit 1' INT TERM HUP
+# A signal reaches the trap below, which exits, which reaches the one on
+# EXIT. PIPE is one of them because reading a long report through head or
+# less is the ordinary way to read one, and the reader closing the pipe
+# kills a run that has not tidied up: without it every such reading
+# leaves a directory behind, which is how a temporary directory becomes a
+# thing somebody has to go and clear out.
+trap 'exit 1' INT TERM HUP PIPE
 
 # The launcher, put to a case with a known answer before it is trusted
 # with a render. Three things have to hold, and each of them is a way a
