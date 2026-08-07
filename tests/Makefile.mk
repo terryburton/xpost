@@ -211,6 +211,7 @@ tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
+tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
 tests/reloc_fused_test.ps \

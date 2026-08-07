@@ -2069,6 +2069,15 @@ test('numstring-decode',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The interpreter's private machinery dictionary is recorded in the
+# context once, and is local: a global one is refused every write the
+# machinery makes, and no restore puts back a displaced record.
+test('privatedict-install',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/privatedict_install_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

@@ -396,11 +396,24 @@ int op_sysdictrelock(Xpost_Context *ctx)
 /* dict  .setprivatedict  -
    Record the interpreter's private local machinery dictionary in the context,
    where the collector roots it and the C reaches it, without it ever going on
-   the dict stack. Called once from init.ps. */
+   the dict stack. Called once from init.ps.
+
+   The dictionary must be local. What it holds are local objects -- the device
+   class dictionaries, the graphics scratch and template, the anchor procedures
+   of the wrapped operators -- and a global dictionary may hold none of them, so
+   a global one leaves the machinery that writes there refused at every write.
+
+   It is recorded once. The record is context state rather than virtual memory,
+   so no `restore` puts back a dictionary displaced from it, and a second
+   install would stand for the rest of the run. */
 static
 int op_setprivatedict(Xpost_Context *ctx,
                       Xpost_Object D)
 {
+    if (xpost_object_get_type(ctx->privatedict) == dicttype)
+        return invalidaccess;
+    if (xpost_context_select_memory(ctx, D) != ctx->lo)
+        return invalidaccess;
     ctx->privatedict = D;
     return 0;
 }
