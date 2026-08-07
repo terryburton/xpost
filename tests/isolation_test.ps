@@ -222,8 +222,9 @@ SCATNAMES { { (PROGRAM-OWNED) } def } forall
 
 % font/CID family (font.ps + cid.ps) now in .xpostsys
 /FONTNAMES [ /.cmapnext /.cidface /.fmapnext /.fmapdesc /.showfmap /.showtype0
-    /.cshmeasure /.cshsetfont /.bytecmap /.runbuild /.t3capture /.t3build
-    /.glyphbytes /.kshowshow /.rootsetfont /.patternink ] def
+    /.cmapwalk /.cshmeasure /.cshsetfont /.bytecmap /.runbuild /.t3capture
+    /.t3build /.glyphbytes /.kshowshow /.rootsetfont /.patternink
+    /.charpathoutline ] def
 FONTNAMES {
     dup where { pop (FONT-VISIBLE: ) print == false }{ pop true } ifelse
     (font helper name is hidden) assert

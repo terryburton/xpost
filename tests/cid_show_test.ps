@@ -226,6 +226,24 @@ O inkof 0 gt (the pattern stroke of the outlines marks the page) check
 S inkof 0 gt (the composite text marks the page) check
 S O differs 0 eq (the composite marks exactly what that stroke marks) check
 
+% --- the outlines, taken as a path -----------------------------------
+% A CID-keyed glyph has no name and no code a string can carry, so the
+% only way to its outline is the walk that selects it. charpath goes
+% that way too: it appends what the walk would have painted and leaves
+% the pen past the text, as it does for a simple font. Without it a
+% program taking the outline of composite text is handed an empty path
+% and marks nothing.
+/p.name (charpath:) def
+/S { cidfnt newpath 10 20 moveto CODES true charpath fill } greysnap def
+/O { oraclefnt newpath 10 20 moveto (AB) true charpath fill } greysnap def
+O inkof 0 gt (the simple font's outlines mark the page) check
+S inkof 0 gt (the composite's outlines mark the page) check
+S O differs 0 eq (the composite appends what the simple font appends) check
+{ cidfnt newpath 10 20 moveto CODES true charpath } pen
+{ oraclefnt newpath 10 20 moveto (AB) true charpath } pen
+3 -1 roll near exch 3 -1 roll near and
+(charpath leaves the pen where the simple font's does) check
+
 count 0 eq (the suite leaves the operand stack empty) check
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit

@@ -1061,24 +1061,57 @@ currentglobal true setglobal
     gax gay neg idtransform rmoveto
     end
 } put
+
+% font str  .charpathoutline  -
+% Append the text's glyph outlines to the current path and leave the pen
+% past the text.
+%
+% A composite font selects each glyph through its CMap rather than by
+% code, so the outlines come from the same walk its text goes through,
+% told to append a glyph where it would paint one. That reaches a
+% CID-keyed descendant, whose glyphs a string names no other way. A
+% composite mapped by bytes carries no such selector and only the pen
+% moves.
+.xpostsys /.charpathoutline {
+    2 dict begin
+    /cpstr exch def
+    /cpfont exch def
+    cpfont /FontType 2 copy known { get }{ pop pop -1 } ifelse 0 eq {
+        cpfont /FMapType 2 copy known { get 9 eq }{ pop pop false } ifelse {
+            cpfont cpstr
+            { //.xpostsys /.glyphcharpath get exec }
+            //.xpostsys /.cmapwalk get exec
+        }{
+            cpstr stringwidth rmoveto
+        } ifelse
+    }{
+        cpstr .stringoutline //.xpostsys /.outlinepath get exec
+        cpstr stringwidth rmoveto
+    } ifelse
+    end
+} put
 setglobal
 
 %   str bool  charpath  -
 % Append the text's glyph outlines to the current path and advance the
-% pen by the text's width. Type 3 fonts only advance the pen.
+% pen by the text's width.
+%
+% A Type 3 font describes its glyphs as procedures rather than as
+% outlines, so there is nothing to append and only the pen moves; PLRM
+% 8.2 has charpath produce no result for a glyph described as an image
+% or a mask, which is what such a procedure paints.
 /charpath [ /stringtype /booleantype ] {
     /charpath //.xpostsys /.needfont get exec
     pop
-    graphicsdict /currgstate get /currfont get
-    dup /FontType known { /FontType get dup 3 eq exch 0 eq or }{ pop false } ifelse {
-        stringwidth rmoveto
-    }{
-        1 dict begin
-        /cpstr exch def
-        cpstr .stringoutline //.xpostsys /.outlinepath get exec
+    2 dict begin
+    /cpstr exch def
+    /cpfont graphicsdict /currgstate get /currfont get def
+    cpfont /FontType 2 copy known { get }{ pop pop -1 } ifelse 3 eq {
         cpstr stringwidth rmoveto
-        end
+    }{
+        cpfont cpstr //.xpostsys /.charpathoutline get exec
     } ifelse
+    end
 } //.xpostsys /.defop get exec
 
 % the standard text encoding, as the PLRM's Appendix E defines it

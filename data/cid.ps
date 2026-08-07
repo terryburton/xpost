@@ -353,20 +353,23 @@ currentglobal true setglobal
     end
 } def
 
-% font str  .showtype0  -
-% paint a string through a composite font: a CMap-mapped font (the
-% FMapType 9 of composefont) decodes each code to a CID, the CID
-% maps to a glyph index through the descendant's CIDMap (GDBytes
-% bytes per entry, across the array of segments), and the glyph
-% paints by index under the descendant's face carried through the
-% composite's matrix; the byte-mapped FMapTypes decode and dispatch
-% per descendant instead
-/.showtype0 {
-    1 index /FMapType get 9 ne {
-        //.xpostsys /.showfmap get exec
-    }{
+% font str proc  .cmapwalk  -
+% Walk a string through a CMap-mapped composite font (the FMapType 9
+% of composefont), calling the procedure with each glyph's index in
+% the descendant's face. Each code decodes to a CID, the CID maps to a
+% glyph index through the descendant's CIDMap (GDBytes bytes per
+% entry, across the array of segments), and the descendant is the font
+% in force while the procedure runs, its face carried through the
+% composite's matrix.
+%
+% What becomes of the glyph is the procedure's and not the walk's,
+% because this is the only way to a CID-keyed glyph: a string names it
+% no other way, so taking its outline goes through here as painting it
+% does. The walk itself paints nothing.
+/.cmapwalk {
     20 dict begin
     /.showhook where { pop }{ /.showhook { pop } def } ifelse
+    /gproc exch def
     /str exch def
     /fnt exch def
     /cm fnt /CMap get def
@@ -425,7 +428,7 @@ currentglobal true setglobal
                 } if
             } ifelse
         } if
-        gid null { .glyphshowidx } //.xpostsys /.showroute get exec
+        gid gproc
         /fc 0 def
         0 1 w 1 sub { str p 3 -1 roll add get fc 256 mul add /fc exch def } for
         fc .showhook
@@ -433,6 +436,19 @@ currentglobal true setglobal
     } loop
     graphicsdict /currgstate get /currfont fnt put
     end
+} def
+
+% font str  .showtype0  -
+% Paint a string through a composite font: a CMap-mapped one goes by
+% the walk above, each glyph painted by the route the graphics state
+% settles; the byte-mapped FMapTypes decode and dispatch per
+% descendant instead.
+/.showtype0 {
+    1 index /FMapType get 9 ne {
+        //.xpostsys /.showfmap get exec
+    }{
+        { null { .glyphshowidx } //.xpostsys /.showroute get exec }
+        //.xpostsys /.cmapwalk get exec
     } ifelse
 } def
 
