@@ -2070,6 +2070,34 @@ test('filenameforall-large',
   suite: cost_slow,
   timeout: 120)
 
+# An encoded number string is decoded into an array made while the string
+# is being read, and making it grows -- and so moves -- the memory file:
+# the bytes are reached through the string's entity each time round.
+test('numstring-decode',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/numstring_decode_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The interpreter's private machinery dictionary is recorded in the
+# context once, and is local: a global one is refused every write the
+# machinery makes, and no restore puts back a displaced record.
+test('privatedict-install',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/privatedict_install_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The font cache's byte parameters are program data, and the per-glyph
+# ceiling is the only size gate an entry passes into the store: both are
+# held to the largest cache the implementation offers, substituted for a
+# value above it with no error indication.
+test('cacheparams-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/cacheparams_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

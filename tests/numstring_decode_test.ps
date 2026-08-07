@@ -1,0 +1,82 @@
+%!
+% An encoded number string (PLRM 3.14.5) is decoded into a fresh array,
+% and the array is made in virtual memory while the string is being
+% read. Making it grows the memory file, and a memory file grows by
+% moving: the bytes the decode reads are reached through the string's
+% entity, not through a pointer taken before the array existed.
+%
+% The count a string can carry is what the string holds -- four header
+% bytes and two or four per value -- so a string near the composite
+% ceiling states thousands of values, and the array those fill is large
+% enough that making it grows the file. Every value here is the same
+% two bytes, so an element read from anywhere but the string reads as
+% something else.
+%
+% The relocation is what the sizes below are for. A small decode fits
+% the file as it stands, takes no growth, and passes either way.
+
+/failcount 0 def
+/note { print (\n) print } def
+/assert {
+  exch { pop } { (FAIL: ) print note /failcount failcount 1 add store } ifelse
+} def
+
+/n2a 1183615869 internaldict /.numstring2array get def
+
+% count  .  an encoded number string of that many 16-bit integers,
+% every one of them 257 (0x0101), high-order byte first
+/mkstr {
+  /cnt exch def
+  /s 4 cnt 2 mul add string def
+  s 0 149 put                          % the leading byte of the form
+  s 1 32 put                           % 16-bit fixed point, scale 0
+  s 2 cnt -8 bitshift 255 and put
+  s 3 cnt 255 and put
+  4 1 s length 1 sub { s exch 1 put } for
+  s
+} def
+
+% count  .  true when every element of the decode is 257
+/decodes {
+  /cnt exch def
+  /a cnt mkstr n2a def
+  a length cnt eq {
+    /ok true def
+    0 1 a length 1 sub { a exch get 257 ne { /ok false store } if } for
+    ok
+  }{ false } ifelse
+} def
+
+% --- a decode the memory file has to grow for ---
+32000 decodes (a decode of 32000 values reads them all from the string) assert
+
+% --- and again, so a file already grown once is grown again ---
+32000 decodes (a second decode of 32000 values reads them all) assert
+
+% --- the same form, small enough to need no growth ---
+3 decodes (a decode of three values reads them all from the string) assert
+
+% --- 32-bit values, whose array is larger still per value stated ---
+/mk32 {
+  /cnt exch def
+  /s 4 cnt 4 mul add string def
+  s 0 149 put                          % the leading byte of the form
+  s 1 0 put                            % 32-bit fixed point, scale 0
+  s 2 cnt -8 bitshift 255 and put
+  s 3 cnt 255 and put
+  4 1 s length 1 sub { s exch 1 put } for
+  s
+} def
+/a32 16000 mk32 n2a def
+a32 length 16000 eq (a 32-bit decode states one element per four bytes) assert
+/ok32 true def
+0 1 a32 length 1 sub { a32 exch get 16843009 ne { /ok32 false store } if } for
+ok32 (a 32-bit decode reads every value from the string) assert
+
+% --- the operator still refuses a string that is not one of these ---
+{ (xxxx) n2a } stopped
+  { $error /errorname get /rangecheck eq }{ false } ifelse
+  (a string that is not an encoded number string is a rangecheck) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+quit

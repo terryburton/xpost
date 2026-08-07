@@ -23,6 +23,7 @@ tests/bind_packed_test.ps \
 tests/blit_access_test.ps \
 tests/blit_range_test.ps \
 tests/build_personality_test.ps \
+tests/cacheparams_range_test.ps \
 tests/callback_reentry_test.ps \
 tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
@@ -152,6 +153,7 @@ tests/must_check.golden \
 tests/namespace_test.ps \
 tests/narrow_cursors.golden \
 tests/nographics_test.ps \
+tests/numstring_decode_test.ps \
 tests/op_bind_test.ps \
 tests/op_bytesavailable_test.ps \
 tests/op_closed_read_test.ps \
@@ -211,6 +213,7 @@ tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
+tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
 tests/reloc_fused_test.ps \

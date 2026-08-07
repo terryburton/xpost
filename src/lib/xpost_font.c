@@ -73,6 +73,15 @@ static FT_Library _xpost_font_ft_library = NULL;
 
 #define GCACHE_BUCKETS 512
 
+/* The largest font cache this implementation offers, and so the largest
+   value either byte parameter takes: a cache size above it, or a
+   per-glyph ceiling above it, is substituted by it with no error
+   indication (PLRM 8.2, setcacheparams). The per-glyph ceiling needs a
+   ceiling of its own because it is the only size gate an entry passes
+   on its way into the store below -- what an entry costs is a rendered
+   raster, and a ceiling of a whole word admits any of them. */
+#define GCACHE_BYTES_MAX 67108864L
+
 typedef struct Xpost_Glyph_Entry
 {
     const void *k1;            /* face, or the procedure font's key */
@@ -286,7 +295,7 @@ void
 xpost_font_cache_setlimit(long blimit)
 {
     if (blimit >= 0)
-        gcache_blimit = blimit;
+        gcache_blimit = blimit > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : blimit;
 }
 
 void
@@ -294,9 +303,9 @@ xpost_font_cache_setparams(long bmax, long lower, long upper)
 {
     (void)lower;   /* the compression threshold: rasters stay flat */
     if (bmax > 0)
-        gcache_bmax = bmax;
+        gcache_bmax = bmax > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : bmax;
     if (upper > 0)
-        gcache_blimit = upper;
+        gcache_blimit = upper > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : upper;
     while ((gcache_bsize > gcache_bmax || gcache_csize > gcache_cmax)
            && gcache_tail)
         gcache_drop(gcache_tail);

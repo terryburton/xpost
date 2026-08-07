@@ -1,0 +1,75 @@
+%!
+% The interpreter's private machinery dictionary is recorded in the
+% context, where the collector roots it and the C reaches it. Two things
+% hold of the dictionary recorded there, and the operator that records
+% it is the only place either can be established.
+%
+% It is local. What it holds are local objects -- the device class
+% dictionaries, the graphics scratch and template, the anchor procedures
+% of the wrapped operators -- and a local object may not be stored in a
+% global dictionary, so a global one is refused every write the
+% machinery makes through it and the machinery quietly stops working.
+%
+% It is recorded once. The record is context state, not virtual memory:
+% no `restore` puts back a dictionary displaced from it, so a second
+% install stands for the rest of the run.
+
+/failcount 0 def
+/note { print (\n) print } def
+/assert {
+  exch { pop } { (FAIL: ) print note /failcount failcount 1 add store } ifelse
+} def
+
+/setpd 1183615869 internaldict /.setprivatedict get def
+
+% proc label  .  -   the proc must raise invalidaccess. A refused
+% operator leaves its operands where its caller pushed them
+% (PLRM 3.11.1), so the depth is put back before the verdict is taken.
+/refuses {
+  /label exch def
+  count 1 sub /base exch def
+  stopped
+  { $error /errorname get /invalidaccess eq }
+  { false } ifelse
+  /ok exch def
+  count base sub { pop } repeat
+  ok label assert
+} def
+
+% --- a dictionary already recorded is not displaced ---
+{ 64 dict setpd } (a second private dictionary is refused) refuses
+
+% --- nor by one made where the machinery cannot write ---
+currentglobal true setglobal /gd 64 dict def setglobal
+{ gd setpd } (a global private dictionary is refused) refuses
+
+% --- the refusal is of the install, not of every dictionary: the one
+% the interpreter recorded at startup is still the one in hand ---
+.privatedict type /dicttype eq
+  (the interpreter still has its private dictionary) assert
+.privatedict /.graphicsdict known
+  (it still holds the graphics machinery) assert
+.gscratch type /dicttype eq
+  (the graphics scratch dictionary still answers) assert
+
+% --- and the machinery it roots still renders ---
+{ newpath 100 100 moveto 200 100 lineto 200 200 lineto closepath
+  0.5 setgray fill } stopped not
+  (a page still paints through the recorded dictionary) assert
+
+% --- a restore does not hand the record back to be set again ---
+% the verdict is carried out of the save on the operand stack: the
+% failure count lives in local memory, which the restore reverts
+save
+count /nsave exch def
+{ 64 dict setpd } stopped
+  { $error /errorname get /invalidaccess eq }
+  { false } ifelse
+/verdict exch def
+count nsave sub { pop } repeat
+verdict exch restore
+(a second install is refused inside a save too) assert
+{ 64 dict setpd } (and after the restore) refuses
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+quit

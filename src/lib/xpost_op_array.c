@@ -423,7 +423,7 @@ int _numstring2array (Xpost_Context *ctx,
                       Xpost_Object str)
 {
     unsigned char *p;
-    unsigned int sz, n, i, width;
+    unsigned int sz, n, i, width, rep;
     int le, r;
     Xpost_Object arr;
 
@@ -433,7 +433,8 @@ int _numstring2array (Xpost_Context *ctx,
     p = (unsigned char *)xpost_string_get_pointer(ctx, str);
     if (p[0] != 149)
         return rangecheck;
-    r = p[1];
+    rep = p[1];
+    r = (int)rep;
     le = r >= 128;
     if (le)
         r -= 128;
@@ -451,11 +452,16 @@ int _numstring2array (Xpost_Context *ctx,
         Xpost_Object el;
         int ret;
 
-        /* p[1] carries representation and byte order exactly as a
-           binary token's rep byte does: decode through the scanner's
-           shared routine rather than a fourth copy of the byte math */
-        ret = xpost_scanner_rep_number((unsigned int)p[1],
-                                       p + 4 + i * width, &el);
+        /* The array's own allocation, and the backup a put records,
+           each grow the memory file, which moves it: the encoded bytes
+           are reached through the string's entity here rather than
+           through the pointer the header was read with.
+
+           rep carries representation and byte order exactly as a binary
+           token's rep byte does: decode through the scanner's shared
+           routine rather than a fourth copy of the byte math */
+        p = (unsigned char *)xpost_string_get_pointer(ctx, str);
+        ret = xpost_scanner_rep_number(rep, p + 4 + i * width, &el);
         if (ret)
             return ret;
         ret = xpost_array_put(ctx, arr, (integer)i, el);
