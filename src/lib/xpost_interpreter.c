@@ -2518,18 +2518,33 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     return xpost_ctx;
 }
 
+/* Scan one PostScript token out of str. The token operator answers a
+   flag beneath its results, and reads that flag only where the operator
+   ran to its end: a scan the operator refused -- text that stops inside
+   a literal is the reachable one -- pushes nothing at all, and what lies
+   under a refusal belongs to whatever put it there. Answers the scan's
+   own refusal, 0 with the token in *out otherwise, and 0 with a null
+   there for text that held no token. */
 static
-Xpost_Object get_token(Xpost_Context *ctx, char *str){
-    Xpost_Object o;
-    xpost_stack_push(ctx->lo, ctx->os, xpost_string_cons(ctx, strlen(str), str));
-    xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
+int get_token(Xpost_Context *ctx, char *str, Xpost_Object *out)
+{
+    Xpost_Object s = xpost_string_cons(ctx, strlen(str), str);
+    int ret;
+
+    if (xpost_object_get_type(s) != stringtype)
+        return VMerror;
+    if (!xpost_stack_push(ctx->lo, ctx->os, s))
+        return stackoverflow;
+    ret = xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
+    if (ret)
+        return ret;
     if (xpost_stack_pop(ctx->lo, ctx->os).int_.val){
-        o = xpost_stack_pop(ctx->lo, ctx->os);
+        *out = xpost_stack_pop(ctx->lo, ctx->os);
         xpost_stack_pop(ctx->lo, ctx->os);
     } else {
-        o = null;
+        *out = null;
     }
-    return o;
+    return 0;
 }
 
 XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
@@ -2548,12 +2563,22 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx, int cnt, char *defs[])
         XPOST_LOG_INFO("%s", defs[i]);
         if (eq)
         {
+            Xpost_Object tok;
+            int ret;
+
             *eq++ = '\0';
-            if (xpost_dict_put(ctx, ud,
-                        xpost_name_cons(ctx, defs[i]),
-                        get_token(ctx, eq)))
+            ret = get_token(ctx, eq, &tok);
+            if (ret)
+            {
+                XPOST_LOG_ERR("%s scanning the value of %s",
+                              errorname[ret], defs[i]);
+                eq[-1] = '=';
                 return 0;
+            }
+            ret = xpost_dict_put(ctx, ud, xpost_name_cons(ctx, defs[i]), tok);
             eq[-1] = '=';
+            if (ret)
+                return 0;
         }
         else
         {

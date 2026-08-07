@@ -8,6 +8,12 @@
  * of the type the text spells, not a string of it. A key given without a
  * value is defined as null.
  *
+ * Which is why a value the scanner will not take has to be refused and
+ * not recorded: text that stops inside a literal is not a token, and
+ * defining the key as null for it is the answer a key given no value at
+ * all gets. The program cannot tell those apart, and the caller -- which
+ * is told whether its definitions were taken -- would be told they were.
+ *
  * The data directory is derived from where the library itself was loaded
  * from, so what the library answers there is a fact about the directories
  * around the build and not about the library. An uninstalled build has
@@ -70,6 +76,8 @@ int main(void)
     static char d_str[]  = "greeting=(hello)";
     static char d_name[] = "which=/second";
     static char d_bare[] = "bare";
+    /* stops inside a string literal, so it holds no whole token */
+    static char d_part[] = "broken=(unterminated";
     char *defs[5];
 
     Xpost_Context *ctx;
@@ -160,6 +168,18 @@ int main(void)
     /* the strings the caller passed are its own again */
     check(strcmp(d_int, "answer=42") == 0,
           "the caller's string is left as it was found");
+
+    /* A value the scanner refuses is refused here, and the key it was
+       given for is left undefined rather than defined as the null a key
+       with no value at all gets. The whole-token case above is the
+       control: a refusal for every value would satisfy this on its own. */
+    defs[0] = d_part;
+    check(xpost_add_definitions(ctx, 1, defs) == 0,
+          "a value that holds no whole token is refused");
+    check(strcmp(ran(ctx, "userdict /broken known { (y) print } if flush"), "") == 0,
+          "and its key is not defined");
+    check(strcmp(d_part, "broken=(unterminated") == 0,
+          "the caller's string is left as it was found after a refusal");
 
     xpost_stdout_handler_set(ctx, NULL, NULL);
     xpost_destroy(ctx);
