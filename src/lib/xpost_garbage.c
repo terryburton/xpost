@@ -1008,7 +1008,8 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
         for (i = 0; i < MAXCONTEXT && cid[i]; i++)
         {
             ctx = mem->interpreter_cid_get_context(cid[i]);
-            xpost_garbage_collect(ctx->lo, 0, markall);
+            if (xpost_garbage_collect(ctx->lo, 0, markall) < 0)
+                return -1;
         }
 
     }

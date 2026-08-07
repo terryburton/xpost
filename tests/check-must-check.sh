@@ -64,6 +64,13 @@ fail=0
 # every mark was written in front; a mark written after the parameter
 # list, which is the other placement the compiler accepts, made the scan
 # run on into the next declaration and record the wrong name.
+#
+# A function reached through a pointer is declared the other way round --
+# the name is inside the first parenthesised group, int (*name)(args) --
+# and the compiler honours the mark there, so a call through the pointer
+# is held to answering the refusal exactly as a call by name is. Reading
+# such a declaration as though the name came before the first
+# parenthesis records the return type instead.
 scan() {
     guard_c_source "$@" \
     | sed 's/^[^:]*:[0-9]*://' \
@@ -73,7 +80,14 @@ scan() {
         /XPOST_MUST_CHECK/ {
             p = index($0, "(")
             if (p == 0) next
-            head = substr($0, 1, p - 1)
+            rest = substr($0, p + 1)
+            if (rest ~ /^[ \t]*\*/) {
+                q = index(rest, ")")
+                if (q == 0) next
+                head = substr(rest, 1, q - 1)
+            }
+            else
+                head = substr($0, 1, p - 1)
             sub(/[ \t*]+$/, "", head)
             n = split(head, w, /[^A-Za-z0-9_]+/)
             if (n > 0 && w[n] != "" && w[n] != "XPOST_MUST_CHECK")

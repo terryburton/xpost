@@ -7,12 +7,19 @@
 # untouched, a store that did not land. It does not belong here merely
 # for returning a status nobody happens to want.
 #
+# A name here may be a function pointer rather than a function. The
+# refusal a caller has to answer is the same one, and the compiler holds
+# a call through the pointer to answering it, so a function whose callers
+# reach it through a member is only covered where that member carries the
+# mark: the collector was called through two of them, and both discarded
+# its answer while the function's own declaration said nothing.
+#
 # The count below the list is the size of the list. It is here so that
 # retiring a name is two edits rather than one, and so that a set which
 # shrank says so with a number that went down -- a diff dropping a name
 # and its mark together otherwise reads as a tidy-up.
 
-entries 20
+entries 23
 
 xpost_array_put
 xpost_array_put_memory
@@ -22,6 +29,7 @@ xpost_dev_private_put
 xpost_dict_put
 xpost_dict_put_memory
 xpost_free_memory_ent
+xpost_garbage_collect
 xpost_memory_file_alloc
 xpost_memory_file_grow
 xpost_memory_file_init
@@ -34,6 +42,8 @@ xpost_stack_init
 xpost_stack_topdown_replace
 xpost_string_put
 _pdf_acc_put
+garbage_collect
+garbage_collect_function
 
 # Sites consuming an answer because the refusal cannot arise there.
 refusal-impossible 10
