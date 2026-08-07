@@ -946,6 +946,22 @@ test('job-snapshot-balance',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The matrix operators store their six numbers in one bulk write, so the
+# copy-on-write done per element elsewhere is done once by hand here. A
+# write that goes in over a backup the memory file declined is one restore
+# has no record of, and carries out of the save it was made inside.
+matrix_backup_exe = executable('matrix_backup_test',
+  'tests/matrix_backup_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('matrix-backup',
+  matrix_backup_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # How much of an allocation a save's backup says is in use. The extent
 # is what the collector reads an allocation's contents by, so a backup
 # that records the block's capacity instead has the collector reading

@@ -153,6 +153,7 @@ tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/lsan.supp \
 tests/mask_cache_range_test.ps \
+tests/matrix_backup_test.c \
 tests/memory_bounds_test.c \
 tests/must_check.golden \
 tests/namespace_test.ps \
