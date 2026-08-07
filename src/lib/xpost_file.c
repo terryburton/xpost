@@ -5026,14 +5026,57 @@ give_up:
     return ret;
 }
 
+/* Give a stream this process opened to a file object carrying the
+   access the mode granted. The object holds the stream from here on;
+   a stream no object could be made for is closed rather than left
+   open, since nothing else names it. */
+static
+int _file_adopt_stream(Xpost_Memory_File *mem,
+                       FILE *fp,
+                       unsigned int access,
+                       Xpost_Object *retval)
+{
+    Xpost_Object f;
+
+    f = xpost_file_cons(mem, fp,
+                        access == XPOST_OBJECT_TAG_ACCESS_FILE_READ);
+    if (xpost_object_get_type(f) != filetype)
+    {
+        fclose(fp);
+        return VMerror;
+    }
+    f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+    f.tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+    *retval = f;
+    return 0;
+}
+
 /* Open a file object,
    check for "special" filenames,
    fallback to fopen.
 
    A stream this function opened has nothing else naming it until the
-   object exists, so a constructor that cannot make the object leaves the
-   stream to be closed here. The three standard streams belong to the
-   process and are never this function's to close. */
+   object exists, so it goes through the adopter above, which closes it
+   when no object can be made for it. The three standard streams belong
+   to the process and are never this function's to close, so they go to
+   the constructor directly.
+
+   The leak the analyser reports here is the one path that cannot run.
+   It walks into the constructor, takes the branch that reports failure,
+   and then does not carry that failure into the object the constructor
+   returns -- a struct return it declines to model -- so it comes back
+   out and takes the passing side of the check as well. On that pairing
+   nothing closes the stream. Either half alone is handled: a failing
+   constructor sends the stream to fclose above, and a succeeding one
+   has already stored it in the file record. The class is held at zero
+   across the tree, so it is turned off for this function alone, whose
+   only allocations are the streams it hands to the adopter. Only gcc
+   is shown the directive: the class is gcc's, and clang parses the
+   group name, does not know it, and warns about the pragma itself. */
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#endif
 int xpost_file_open(Xpost_Memory_File *mem,
                     char *fn,
                     char *mode,
@@ -5088,14 +5131,10 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return ret;
         }
-        f = xpost_file_cons(mem, fp, 1);
-        if (xpost_object_get_type(f) != filetype)
-        {
-            fclose(fp);
-            return VMerror;
-        }
-        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-        f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        ret = _file_adopt_stream(mem, fp,
+                                 XPOST_OBJECT_TAG_ACCESS_FILE_READ, &f);
+        if (ret)
+            return ret;
     }
     else if (strcmp(fn, "%statementedit") == 0)
     {
@@ -5104,14 +5143,10 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return ret;
         }
-        f = xpost_file_cons(mem, fp, 1);
-        if (xpost_object_get_type(f) != filetype)
-        {
-            fclose(fp);
-            return VMerror;
-        }
-        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-        f.tag |= (XPOST_OBJECT_TAG_ACCESS_FILE_READ << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        ret = _file_adopt_stream(mem, fp,
+                                 XPOST_OBJECT_TAG_ACCESS_FILE_READ, &f);
+        if (ret)
+            return ret;
     }
     else
     {
@@ -5141,15 +5176,9 @@ int xpost_file_open(Xpost_Memory_File *mem,
         fp = xpost_diskfile_fopen(fn, mode, 0, &ret);
         if (fp == NULL)
             return ret;
-        f = xpost_file_cons(mem, fp,
-                            access == XPOST_OBJECT_TAG_ACCESS_FILE_READ);
-        if (xpost_object_get_type(f) != filetype)
-        {
-            fclose(fp);
-            return VMerror;
-        }
-        f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
-        f.tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;
+        ret = _file_adopt_stream(mem, fp, access, &f);
+        if (ret)
+            return ret;
     }
 
     f.tag |= XPOST_OBJECT_TAG_DATA_FLAG_LIT;
@@ -5158,6 +5187,9 @@ int xpost_file_open(Xpost_Memory_File *mem,
 
     return 0;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic pop
+#endif
 
 /* adapter:
            stream <- filetype object
