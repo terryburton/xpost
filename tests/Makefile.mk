@@ -117,6 +117,7 @@ tests/free_list_recovery_test.c \
 tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \
 tests/gc_clip_region_test.ps \
+tests/gc_deep_chain_test.ps \
 tests/gc_diagnostics_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \

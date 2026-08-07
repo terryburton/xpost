@@ -65,6 +65,96 @@
 #endif
 
 
+/* Marking walks the object graph over the worklist below rather than
+   over the C stack. Nothing in the language bounds how deeply a program
+   may nest one composite inside another -- a chain of arrays each
+   holding the next costs only the entity numbers and the virtual memory
+   it spends -- so a walk that took a C frame per link would reach the
+   end of the stack while the program was still inside every limit the
+   specification names, and end the process rather than the program.
+
+   The worklist is storage of the collector's own, fixed at load time, so
+   walking never allocates: a mark that had to allocate in order to walk
+   would fail exactly where the collector is what a shortage calls for.
+   What fixed storage cannot promise is room for a frontier of any width,
+   so an entity is marked before it is queued, and one that finds the
+   worklist full is left carrying a bit in its mark word in place of a
+   seat in the queue. When the worklist next empties, the tables are
+   walked for entities carrying that bit and the descent resumes from
+   each. An entity is queued only in the step that marks it, and an
+   entity is marked once, so every such pass takes up entities no earlier
+   pass reached and the walk ends. */
+
+/* the mark word packs four fields into its low 31 bits (see
+   Xpost_Memory_Table_Mark_Data); the top bit is the collector's, and
+   says that an entity is marked but not yet descended into */
+#define XPOST_GARBAGE_MARK_WAITING 0x80000000u
+
+#define XPOST_GARBAGE_WORK_MAX 8192
+
+/* an entity whose contents are still to be walked, with the memory file
+   it belongs to: a composite in one bank may hold objects in the other */
+typedef struct
+{
+    Xpost_Memory_File *mem;
+    unsigned int ent;
+    unsigned int isdict;
+} Xpost_Garbage_Work;
+
+static Xpost_Garbage_Work _xpost_garbage_work[XPOST_GARBAGE_WORK_MAX];
+static unsigned int _xpost_garbage_work_n;
+static int _xpost_garbage_work_waiting;
+static int _xpost_garbage_work_ready;
+
+/* clear the waiting flag over a table, leaving the marks as they are */
+static
+void _xpost_garbage_unwait(Xpost_Memory_File *mem)
+{
+    unsigned int i;
+
+    if (!mem) return;
+
+    for (i = mem->start; i < mem->table.nextent; i++)
+    {
+        mem->table.tab[i].mark &= ~(unsigned int)XPOST_GARBAGE_MARK_WAITING;
+    }
+}
+
+/* queue a marked entity for its contents to be walked, or, if the
+   worklist is full, leave it for the table pass to take up.
+
+   The flag is read back out of the mark word, so a bit found set has to
+   be one this walk set: a table slot handed out for the first time
+   carries whatever the table's growth left in that word. Both banks are
+   swept clear of it here, on the first entity of a collection that has
+   to wait, rather than where a collection begins -- a walk whose
+   frontier stays inside the worklist never reads the flag at all, and
+   most do. */
+static
+void _xpost_garbage_work_push(Xpost_Context *ctx,
+                              Xpost_Memory_File *mem,
+                              unsigned int ent,
+                              unsigned int isdict)
+{
+    if (_xpost_garbage_work_n < XPOST_GARBAGE_WORK_MAX)
+    {
+        _xpost_garbage_work[_xpost_garbage_work_n].mem = mem;
+        _xpost_garbage_work[_xpost_garbage_work_n].ent = ent;
+        _xpost_garbage_work[_xpost_garbage_work_n].isdict = isdict;
+        ++_xpost_garbage_work_n;
+        return;
+    }
+
+    if (!_xpost_garbage_work_ready)
+    {
+        _xpost_garbage_unwait(ctx->lo);
+        _xpost_garbage_unwait(ctx->gl);
+        _xpost_garbage_work_ready = 1;
+    }
+    mem->table.tab[ent].mark |= XPOST_GARBAGE_MARK_WAITING;
+    _xpost_garbage_work_waiting = 1;
+}
+
 /* iterate through all tables,
     clear the MARK in the mark. */
 static
@@ -121,16 +211,16 @@ int _xpost_garbage_ent_is_marked(Xpost_Memory_File *mem,
     return 1;
 }
 
-/* recursively mark an object */
+/* mark what an object refers to, queueing it if it has contents to walk */
 static
-int _xpost_garbage_mark_object(Xpost_Context *ctx, Xpost_Memory_File *mem, Xpost_Object o, int markall);
+int _xpost_garbage_mark_reach(Xpost_Context *ctx, Xpost_Memory_File *mem, Xpost_Object o, int markall);
 
-/* recursively mark a dictionary */
+/* mark what a dictionary's keys and values refer to */
 static
-int _xpost_garbage_mark_dict(Xpost_Context *ctx,
-                             Xpost_Memory_File *mem,
-                             unsigned int adr,
-                             int markall)
+int _xpost_garbage_reach_dict(Xpost_Context *ctx,
+                              Xpost_Memory_File *mem,
+                              unsigned int adr,
+                              int markall)
 {
     if (!mem) return 0;
 
@@ -150,7 +240,7 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
         for (j = 0; j < n; j++)
         {
             if (xpost_object_get_type(tp[j].key) != nulltype){
-                if (!_xpost_garbage_mark_object(ctx,
+                if (!_xpost_garbage_mark_reach(ctx,
                             xpost_context_select_memory(ctx,tp[j].key), tp[j].key, markall))
                     return 0;
 #ifdef DEBUG_GC
@@ -177,7 +267,7 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
             printf(":");
             printf("%s\n", xpost_object_type_names[xpost_object_get_type(tp[j].value)]);
 #endif
-                if (!_xpost_garbage_mark_object(ctx,
+                if (!_xpost_garbage_mark_reach(ctx,
                             xpost_context_select_memory(ctx,tp[j].value), tp[j].value, markall))
                     return 0;
             }
@@ -187,13 +277,13 @@ int _xpost_garbage_mark_dict(Xpost_Context *ctx,
     return 1;
 }
 
-/* recursively mark all elements of array */
+/* mark what an array's elements refer to */
 static
-int _xpost_garbage_mark_array(Xpost_Context *ctx,
-                              Xpost_Memory_File *mem,
-                              unsigned int adr,
-                              unsigned int sz,
-                              int markall)
+int _xpost_garbage_reach_array(Xpost_Context *ctx,
+                               Xpost_Memory_File *mem,
+                               unsigned int adr,
+                               unsigned int sz,
+                               int markall)
 {
     if (!mem) return 0;
 
@@ -210,9 +300,9 @@ int _xpost_garbage_mark_array(Xpost_Context *ctx,
 #ifdef DEBUG_GC
             printf("%u:%s\n", j, xpost_object_type_names[xpost_object_get_type(op[j])]);
 #endif
-            if (!_xpost_garbage_mark_object(ctx,
-                                            xpost_context_select_memory(ctx,op[j]),
-                                            op[j], markall))
+            if (!_xpost_garbage_mark_reach(ctx,
+                                           xpost_context_select_memory(ctx,op[j]),
+                                           op[j], markall))
                 return 0;
         }
     }
@@ -220,20 +310,19 @@ int _xpost_garbage_mark_array(Xpost_Context *ctx,
     return 1;
 }
 
-/* traverse the contents of composite objects
+/* mark the entity an object names, and queue it if it has contents of
+   its own to walk.
    if markall is true, this is a collection of global vm,
-   so we must mark objects and recurse
+   so we must mark objects
    even if it means switching memory files
  */
 static
-int _xpost_garbage_mark_object(Xpost_Context *ctx,
-                               Xpost_Memory_File *mem,
-                               Xpost_Object o,
-                               int markall)
+int _xpost_garbage_mark_reach(Xpost_Context *ctx,
+                              Xpost_Memory_File *mem,
+                              Xpost_Object o,
+                              int markall)
 {
-    unsigned int ad;
     int ret;
-    unsigned int tag;
     unsigned int ent;
     Xpost_Object_Type type;
     Xpost_Memory_File *objmem;
@@ -312,27 +401,12 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
                     XPOST_LOG_ERR("cannot mark array %d", ent);
                     return 0;
                 }
-                ret = xpost_memory_table_get_addr(objmem, ent, &ad);
-                if (!ret)
-                {
-                    XPOST_LOG_ERR("cannot retrieve address for array ent %u", ent);
-                    return 0;
-                }
-                ret = xpost_memory_table_get_tag(objmem, ent, &tag);
-                if (!ret)
-                {
-                    XPOST_LOG_ERR("cannot retrieve tag for array ent %u", ent);
-                    return 0;
-                }
-                /* subarray views share the entity: descend over the whole
-                   underlying allocation, not the view window, so elements
-                   reachable only through another view stay marked (the
-                   ent-level marked flag makes the first view visited the
-                   only one descended) */
-                if (!_xpost_garbage_mark_array(ctx, objmem, ad,
-                            objmem->table.tab[ent].used/sizeof(Xpost_Object),
-                            markall))
-                    return 0;
+                /* subarray views share the entity: the descent covers the
+                   whole underlying allocation, not the view window, so
+                   elements reachable only through another view stay marked
+                   (the ent-level marked flag makes the first view visited
+                   the only one queued) */
+                _xpost_garbage_work_push(ctx, objmem, ent, 0);
             }
             break;
 
@@ -360,14 +434,7 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
                     XPOST_LOG_ERR("cannot mark dict");
                     return 0;
                 }
-                ret = xpost_memory_table_get_addr(objmem, ent, &ad);
-                if (!ret)
-                {
-                    XPOST_LOG_ERR("cannot retrieve address for dict ent %u", ent);
-                    return 0;
-                }
-                if (!_xpost_garbage_mark_dict(ctx, objmem, ad, markall))
-                    return 0;
+                _xpost_garbage_work_push(ctx, objmem, ent, 1);
             }
             break;
 
@@ -401,6 +468,139 @@ int _xpost_garbage_mark_object(Xpost_Context *ctx,
     }
 
     return 1;
+}
+
+/* mark what a queued entity holds. Its slot is read directly: an entity
+   reaches the worklist only through the step that marks it, which is
+   where the number is checked against the table. */
+static
+int _xpost_garbage_mark_contents(Xpost_Context *ctx,
+                                 Xpost_Memory_File *mem,
+                                 unsigned int ent,
+                                 unsigned int isdict,
+                                 int markall)
+{
+    if (isdict)
+        return _xpost_garbage_reach_dict(ctx, mem,
+                                         mem->table.tab[ent].adr, markall);
+
+    return _xpost_garbage_reach_array(ctx, mem,
+                                      mem->table.tab[ent].adr,
+                                      mem->table.tab[ent].used
+                                          / sizeof(Xpost_Object),
+                                      markall);
+}
+
+/* walk the worklist until nothing is queued */
+static
+int _xpost_garbage_mark_drain(Xpost_Context *ctx, int markall)
+{
+    while (_xpost_garbage_work_n)
+    {
+        Xpost_Garbage_Work w = _xpost_garbage_work[--_xpost_garbage_work_n];
+
+        if (!_xpost_garbage_mark_contents(ctx, w.mem, w.ent, w.isdict, markall))
+        {
+            _xpost_garbage_work_n = 0;
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/* take up the entities the worklist had no room for, descending each
+   before the next is queued so that the worklist has room for it */
+static
+int _xpost_garbage_mark_resume(Xpost_Context *ctx,
+                               Xpost_Memory_File *mem,
+                               int markall)
+{
+    unsigned int i;
+
+    if (!mem) return 1;
+
+    for (i = mem->start; i < mem->table.nextent; i++)
+    {
+        if (!(mem->table.tab[i].mark & XPOST_GARBAGE_MARK_WAITING))
+            continue;
+        mem->table.tab[i].mark &= ~(unsigned int)XPOST_GARBAGE_MARK_WAITING;
+        _xpost_garbage_work_push(ctx, mem, i,
+                                 mem->table.tab[i].tag == dicttype);
+        if (!_xpost_garbage_mark_drain(ctx, markall))
+            return 0;
+    }
+
+    return 1;
+}
+
+/* walk everything queued, and everything queued by walking it */
+static
+int _xpost_garbage_mark_walk(Xpost_Context *ctx, int markall)
+{
+    for (;;)
+    {
+        if (!_xpost_garbage_mark_drain(ctx, markall))
+            return 0;
+        if (!_xpost_garbage_work_waiting)
+            return 1;
+        _xpost_garbage_work_waiting = 0;
+        /* an entity waits only where it was marked, and a context marks
+           in the two banks it selects between, so these are all of them */
+        if (!_xpost_garbage_mark_resume(ctx, ctx->lo, markall))
+            return 0;
+        if (!_xpost_garbage_mark_resume(ctx, ctx->gl, markall))
+            return 0;
+    }
+}
+
+/* mark an object and everything reachable through it */
+static
+int _xpost_garbage_mark_object(Xpost_Context *ctx,
+                               Xpost_Memory_File *mem,
+                               Xpost_Object o,
+                               int markall)
+{
+    if (!_xpost_garbage_mark_reach(ctx, mem, o, markall))
+    {
+        _xpost_garbage_work_n = 0;
+        return 0;
+    }
+
+    return _xpost_garbage_mark_walk(ctx, markall);
+}
+
+/* mark an array's elements and everything reachable through them */
+static
+int _xpost_garbage_mark_array(Xpost_Context *ctx,
+                              Xpost_Memory_File *mem,
+                              unsigned int adr,
+                              unsigned int sz,
+                              int markall)
+{
+    if (!_xpost_garbage_reach_array(ctx, mem, adr, sz, markall))
+    {
+        _xpost_garbage_work_n = 0;
+        return 0;
+    }
+
+    return _xpost_garbage_mark_walk(ctx, markall);
+}
+
+/* mark a dictionary's entries and everything reachable through them */
+static
+int _xpost_garbage_mark_dict(Xpost_Context *ctx,
+                             Xpost_Memory_File *mem,
+                             unsigned int adr,
+                             int markall)
+{
+    if (!_xpost_garbage_reach_dict(ctx, mem, adr, markall))
+    {
+        _xpost_garbage_work_n = 0;
+        return 0;
+    }
+
+    return _xpost_garbage_mark_walk(ctx, markall);
 }
 
 
@@ -769,6 +969,13 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 #ifdef DEBUG_GC
     printf("using cid=%u\n", ctx->id);
 #endif
+
+    /* the walk begins with nothing queued and nothing waiting: a
+       collection abandoned partway through leaves both behind, and this
+       collection is not the one they were left for */
+    _xpost_garbage_work_n = 0;
+    _xpost_garbage_work_waiting = 0;
+    _xpost_garbage_work_ready = 0;
 
     if (isglobal)
     {

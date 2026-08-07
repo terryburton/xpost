@@ -40,8 +40,9 @@
 
 % The fixture. Rows of small composites, held from one array so that
 % nothing is garbage and a collection cannot relieve the pressure. The
-% nesting is two deep on purpose: a chain half a million long is a depth
-% the collector's marking walk cannot follow.
+% nesting is two deep because what is wanted here is entity numbers
+% spent as cheaply as possible; how deep a nest a collection can walk is
+% gc_deep_chain_test's question.
 /hold 60000 array def
 /i 0 def
 /fill {

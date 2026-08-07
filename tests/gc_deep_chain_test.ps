@@ -1,0 +1,139 @@
+% Collecting over deeply nested composites, run through `xpost -d null`
+% by run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% Nothing in the language bounds how deeply a program may nest one
+% composite inside another. A chain of arrays each holding the next
+% costs one entity number and a few bytes of virtual memory per link, so
+% a program inside every limit PLRM names can hold hundreds of thousands
+% of links, and a collection has to walk every one of them. The
+% collector walks over a worklist of its own rather than over the C
+% stack, so the depth it follows is the depth a program can build: a
+% walk bounded by the stack would stop at some tens of thousands of
+% links, and it would stop by ending the process, which is not an
+% outcome a program can catch.
+%
+% Depth is one axis of that walk and breadth is the other. The worklist
+% is fixed in size, so a container holding more not-yet-visited
+% containers than it has room for leaves the remainder to a pass over
+% the memory table afterwards. The wide fixture below crosses that
+% boundary, which no chain crosses however long it is -- a chain offers
+% one link at a time.
+%
+% Every fixture carries a marker at the far end of it and is read back
+% after the collection, so a walk that stops short shows up as a lost
+% marker and not only as a process that died.
+%
+% The wide fixture runs first and the chains after it, longest first:
+% each of them is released before the next is built, and small
+% composites allocated after a release of larger ones are served from a
+% free list they do not fit, which costs more than the assertions here
+% are worth.
+
+/failcount 0 def
+/assert { % bool (name)  .  -
+    exch { pop } { (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+} def
+
+% --- a frontier wider than the worklist holds at once ---
+%
+% One array of many arrays: the whole of its breadth is offered to the
+% worklist in a single step, so whatever does not fit is taken up by the
+% table pass, and every element has to survive either way.
+
+/wide 20000 def
+/row wide array def
+0 1 wide 1 sub {
+    /i exch def
+    /cell 1 array def
+    cell 0 i put
+    row i cell put
+} for
+
+1 vmreclaim
+
+/tally 0 def
+0 1 wide 1 sub {
+    /i exch def
+    row i get 0 get i eq { /tally tally 1 add store } if
+} for
+tally wide eq
+    (a collection walks a frontier wider than its worklist) assert
+
+/row null def
+/cell null def
+1 vmreclaim
+
+% Deep enough that no C stack of the usual size reaches the end of
+% either chain, and shallow enough to leave most of the narrow build's
+% entity numbers unspent. A dictionary costs more per link than an
+% array, so its chain is the shorter of the two.
+/links 200000 def
+/dlinks 120000 def
+
+% --- a chain of arrays, walked from the roots ---
+
+/bottom 1 array def
+bottom 0 (deepest) put
+/chain bottom def
+1 1 links {
+    pop
+    /link 1 array def
+    link 0 chain put
+    /chain link def
+} for
+
+1 vmreclaim
+
+/probe chain def
+1 1 links { pop /probe probe 0 get def } for
+probe 0 get (deepest) eq
+    (a collection walks an array chain to the far end of it) assert
+
+% --- and the same chain, walked from a snapshot ---
+%
+% The save stack is walked before the roots are, and a composite
+% modified after a save keeps its earlier contents in the snapshot, so
+% the record of the change is descended from there too. The verdict is
+% left on the operand stack and judged after the restore, which reverts
+% the failcount along with the rest of local VM.
+
+/holder 1 array def
+save
+holder 0 chain put
+1 vmreclaim
+/probe holder 0 get def
+1 1 links { pop /probe probe 0 get def } for
+probe 0 get (deepest) eq
+exch restore
+    (a collection walks a chain a snapshot records) assert
+
+/probe null def
+/link null def
+/chain null def
+/bottom null def
+/holder null def
+1 vmreclaim
+
+% --- a chain of dictionaries ---
+
+/dbottom 1 dict def
+dbottom /marker (deepest) put
+/dchain dbottom def
+1 1 dlinks {
+    pop
+    /dlink 1 dict def
+    dlink /next dchain put
+    /dchain dlink def
+} for
+
+1 vmreclaim
+
+/dprobe dchain def
+1 1 dlinks { pop /dprobe dprobe /next get def } for
+dprobe /marker get (deepest) eq
+    (a collection walks a dictionary chain to the far end of it) assert
+
+failcount 0 eq { (SUCCESS\n) print } { (FAILURES: ) print failcount 20 string cvs print (\n) print } ifelse
+flush
+quit

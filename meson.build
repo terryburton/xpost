@@ -938,6 +938,21 @@ test('gc-large-dict-pressure',
   suite: cost_fast,
   timeout: 300)
 
+# How deep and how wide the marking walk reaches. The depth of a chain
+# of composites is bounded by the entity numbers and the memory it
+# spends and by nothing else, so a walk that took a C frame per link
+# would end the process on data a program is entitled to build; the
+# width of a container is bounded by the size field, which is more than
+# a fixed worklist holds at once. Depth and breadth are separate
+# mechanisms and each fixture reads its marker back through the fixture,
+# so a walk that stops short is a lost marker and not only a crash.
+test('gc-deep-chain',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/gc_deep_chain_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # A collection nothing asked for, provoked by the entity table rather
 # than by the bytes behind it. A finely divided clipping region costs
 # tens of thousands of entity slots and the next clip leaves every one
