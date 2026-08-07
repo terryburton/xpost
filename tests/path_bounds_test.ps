@@ -1,0 +1,216 @@
+%!
+% The current path is a packed string in the graphics state dictionary,
+% and that dictionary is reachable from a program: /currpath can be
+% replaced with any string a program made, and the header of a real one
+% can be written through the string object the graphics state hands out.
+% So every field the packed layout carries -- the content extent at
+% offset 0, the subpath start at offset 4, the last-element offset at
+% offset 8 -- is program data, and the operators that read the layout
+% bound each against the bytes the string actually holds.
+%
+% What the bound is worth is not visible in the answer: a walk that runs
+% off the end of the string reads whatever was allocated after it and
+% mostly decides "not a rectangle" either way. What is visible is the
+% refusal, so that is what is asked for here. A header no string could
+% hold is a rangecheck, raised before the walk starts; an offset naming
+% no element is the same. Each case below is a path that is well formed
+% apart from one field.
+%
+% Every operator is asked twice: once with the tampered path, where it
+% must refuse, and once with a real one, where it must still answer.
+% A bound that rejected legitimate paths would pass the first half of
+% every case here and nothing else in the suite would notice until a
+% page came out blank.
+
+/fails 0 def
+/note { print (\n) print flush } def
+
+/id 1183615869 internaldict def
+/pathisrect id /.pathisrect get def
+/cliprect   id /.cliprect   get def
+/cliptrivial id /.cliptrivial get def
+/svgfillpath id /.svgfillpath get def
+/pdffillpath id /.pdffillpath get def
+
+/gs graphicsdict /currgstate get def
+
+% The header widens with the build's real type, so its size is read off
+% a real path rather than assumed: the string the graphics state hands
+% out is exactly the header long.
+/hdr gs /currpath get length def
+/rsz hdr 16 sub 4 idiv def          % sizeof(real)
+/esz 1 rsz 2 mul add def            % a move, line or close element
+
+% str off val  .  -    a 32-bit field, low byte first
+/put32 {
+  /v exch def /o exch def /str exch def
+  str o        v          255 and put
+  str o 1 add  v -8  bitshift 255 and put
+  str o 2 add  v -16 bitshift 255 and put
+  str o 3 add  v -24 bitshift 255 and put
+} def
+
+% -  .  str    a path string holding one move element at the origin,
+%              with every header field naming what it should
+/forge {
+  hdr esz add /len exch def
+  /s len string def
+  0 1 len 1 sub { s exch 0 put } for
+  s 0  len put32                    % extent: the whole string
+  s 4  hdr put32                    % subpath start: the move
+  s 8  hdr put32                    % last element: the move
+  s 12 len put32                    % capacity
+  s hdr 0 put                       % the move's command code
+  s
+} def
+
+% proc name  .  -    the proc must raise rangecheck
+/expectrange {
+  /label exch def
+  /d0 countdictstack def
+  stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  exch
+  { dup (rangecheck) eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% proc errorname name  .  -    the proc must raise that error
+/expecterror {
+  /label exch def /want exch def
+  /d0 countdictstack def
+  stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  exch
+  { dup want eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% bool name  .  -
+/assert {
+  exch { (ok   ) print note }
+  { /fails fails 1 add def (FAIL: ) print note } ifelse
+} def
+
+% -  .  -    a real four-sided path, and a clip that is one rectangle
+/realpath {
+  initgraphics
+  newpath 100 100 moveto 200 100 lineto 200 200 lineto 100 200 lineto
+  closepath
+} def
+
+% --- the answers a real path gets, before anything is tampered with ----
+% Every refusal below has to be the tampering's doing and not the
+% operator's, so the same operators answer an untouched path first.
+
+realpath
+pathisrect { pop pop pop pop true }{ false } ifelse
+(.pathisrect calls a real rectangle one) assert
+realpath clip
+cliprect { pop pop pop pop true }{ false } ifelse
+(.cliprect calls a rectangular clip one) assert
+realpath cliptrivial
+(.cliptrivial accepts a path inside its clip) assert
+realpath currentpoint 2 copy
+100 sub abs 0.01 lt exch 100 sub abs 0.01 lt and 3 1 roll pop pop
+(currentpoint reads a real path) assert
+realpath { flattenpath } stopped not
+(flattenpath walks a real path) assert
+realpath 200 200 moveto 300 200 lineto { closepath } stopped not
+(closepath closes a real subpath) assert
+
+% --- an extent larger than the string holding it ----------------------
+% Offset 0 says how much content the string has. A walk that takes it on
+% trust leaves the string at the first element past the end and reads on
+% through whatever was allocated after it: with a run of close command
+% bytes there, thousands of bytes of unrelated objects.
+
+/bigextent { forge dup 0 16#7FFFFFFF put32 } def
+
+realpath gs /currpath bigextent put
+{ pathisrect } (.pathisrect refuses an extent past the string) expectrange
+
+realpath gs /clipregion bigextent put
+{ cliprect } (.cliprect refuses an extent past the string) expectrange
+
+realpath gs /clipregion bigextent put
+{ cliptrivial } (.cliptrivial refuses an extent past the string) expectrange
+
+realpath gs /currpath bigextent put
+{ flattenpath } (flattenpath refuses an extent past the string) expectrange
+
+% closepath is not asked here: an extent past the string reaches its
+% append, which has bounded the extent against the capacity for as long
+% as it has grown paths, and the refusal comes from there whether the
+% read before it is bounded or not. What that extent is worth to
+% closepath is that the two offsets below are measured against it, so
+% that is where it is asked for.
+
+% The vector devices emit the path themselves rather than through the
+% span pipeline, so they walk the same layout. Under a device that keeps
+% no content accumulator the walk cannot get past its first append, so
+% what is asked here is that the extent is refused before the walk
+% begins at all: the device is never reached.
+realpath gs /currpath bigextent put
+{ DEVICE pdffillpath } (.pdffillpath refuses an extent past the string) expectrange
+
+realpath gs /currpath bigextent put
+{ 0 0 0 DEVICE svgfillpath } (.svgfillpath refuses an extent past the string) expectrange
+
+% --- a string too short to hold a header ------------------------------
+% The trivial-accept test reads the path's bounding box straight out of
+% the header, having found the clip rectangular.
+
+realpath clip
+gs /currpath 4 string put
+{ cliptrivial } (.cliptrivial refuses a string shorter than a header) expectrange
+
+% --- an offset naming no element --------------------------------------
+% Offset 8 names the element the current point comes from. A coordinate
+% byte is not an element start: the command code read there is whatever
+% the coordinate happens to be, and a curve code there widens the read
+% to three points -- past the string when the last element is near its
+% end. The path is otherwise sound, so the walk over its elements says
+% nothing about it.
+
+realpath
+/s forge def
+s 8 hdr 1 add put32                % a coordinate byte of the move
+gs /currpath s put
+{ currentpoint } (nocurrentpoint)
+(currentpoint refuses a last-element offset naming no element) expecterror
+
+% Offset 4 names the subpath start, whose coordinates closepath repeats.
+% It is applied to the path pointer as it stands.
+
+realpath
+/s forge def
+s 4 hdr esz add 1 sub put32        % an element that cannot fit
+gs /currpath s put
+{ closepath } (closepath refuses a subpath start that cannot fit) expectrange
+
+% The same field carrying an offset no allocation reaches. Left last:
+% before this is bounded the read is a wild pointer and the run ends
+% here rather than reporting anything.
+
+realpath
+/s forge def
+s 4 16#40000000 put32
+gs /currpath s put
+{ closepath } (closepath refuses a subpath start past every allocation) expectrange
+
+initgraphics
+fails 0 eq { (SUCCESS\n) print flush }
+{ (FAILURES: ) print fails 20 string cvs print ( assertions failed\n) print flush }
+ifelse
+quit

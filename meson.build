@@ -1250,6 +1250,16 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The current path is a packed string in a program-reachable dictionary,
+# so the extent and the two element offsets its header carries are
+# program data: a field naming more than the string holds is a
+# rangecheck rather than a walk past it.
+test('path-bounds',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/path_bounds_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A screening device's threshold cell is addressed by two dimensions
 # carried beside it in the device dictionary, so a pair of dimensions
 # the cell does not hold leaves the fill unscreened rather than reading

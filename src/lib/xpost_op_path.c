@@ -195,19 +195,20 @@ _path_avail(Xpost_Context *ctx, Xpost_Object path)
     return off < entsz ? entsz - off : 0;
 }
 
-/* True when a path string's header and element chain lie within its own
-   allocation. The current path lives in a program-reachable dictionary and
-   can be replaced with a forged string, so a reader that trusts the packed
-   layout (extent at offset 0, last-element offset at offset 8, an element
-   chain from PATH_HDR) validates it first. */
+/* A path string's content extent, taken from offset 0 and bounded to the
+   bytes the string itself holds. The current path lives in a
+   program-reachable dictionary and can be replaced with a forged string,
+   so a reader that trusts the packed layout takes the extent from here
+   rather than from the header directly; the element chain then bounds
+   each element against that extent as it walks. 0 when the string is too
+   short for a header or declares more content than it has. */
 static int
-_path_ok(Xpost_Context *ctx, Xpost_Object path)
+_path_extent(Xpost_Context *ctx, Xpost_Object path,
+             char **pp, unsigned int *usedp)
 {
-    unsigned int avail, used, last, o;
-    const char *p;
+    unsigned int avail, used;
+    char *p;
 
-    if (xpost_object_get_type(path) != stringtype)
-        return 0;
     avail = _path_avail(ctx, path);
     if (avail < PATH_HDR)
         return 0;
@@ -215,6 +216,31 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
     used = _path_get_u32(p, 0);
     if (used < PATH_HDR || used > avail)
         return 0;
+    *pp = p;
+    *usedp = used;
+    return 1;
+}
+
+/* True when a path string's header and element chain lie within its own
+   allocation: the extent fits the string, every element of the chain
+   from PATH_HDR fits the extent, and the subpath start at offset 4 and
+   the last-element offset at offset 8 each name an element the chain
+   reaches. The readers take a command code and its coordinates from
+   those two offsets, so an offset naming a coordinate byte reads a
+   command the coordinate happens to spell and a width to match. */
+static int
+_path_ok(Xpost_Context *ctx, Xpost_Object path)
+{
+    unsigned int used, last, sps, o;
+    char *p;
+    int lastok = 0, spsok = 0;
+
+    if (xpost_object_get_type(path) != stringtype)
+        return 0;
+    if (!_path_extent(ctx, path, &p, &used))
+        return 0;
+    sps = _path_get_u32(p, 4);
+    last = _path_get_u32(p, 8);
     for (o = PATH_HDR; o < used; )
     {
         unsigned int esz;
@@ -224,12 +250,13 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
         esz = _path_elem_size(p[o]);
         if (esz > used - o)   /* the element must fit the declared content */
             return 0;
+        if (o == sps)
+            spsok = 1;
+        if (o == last)
+            lastok = 1;
         o += esz;
     }
-    last = _path_get_u32(p, 8);
-    if (used > PATH_HDR && (last < PATH_HDR || last >= used))
-        return 0;   /* offset 8 must name an element start within content */
-    return 1;
+    return used == PATH_HDR || (spsok && lastok);
 }
 
 /* paths always live in local VM: the graphics state dictionary is
@@ -544,6 +571,7 @@ int _lineto(Xpost_Context *ctx, Xpost_Object x, Xpost_Object y)
 {
     Xpost_Object gstate, path;
     char *p;
+    unsigned int used;
     real m[6];
     real co[2];
     int ret;
@@ -557,8 +585,9 @@ int _lineto(Xpost_Context *ctx, Xpost_Object x, Xpost_Object y)
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    if (_path_get_u32(p, 0) <= PATH_HDR)
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
+    if (used <= PATH_HDR)
         return nocurrentpoint;
     co[0] = m[0] * x.real_.val + m[2] * y.real_.val + m[4];
     co[1] = m[1] * x.real_.val + m[3] * y.real_.val + m[5];
@@ -593,6 +622,7 @@ int _curveto(Xpost_Context *ctx,
 {
     Xpost_Object gstate, path;
     char *p;
+    unsigned int used;
     real m[6];
     real co[6];
     int ret;
@@ -606,8 +636,9 @@ int _curveto(Xpost_Context *ctx,
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    if (_path_get_u32(p, 0) <= PATH_HDR)
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
+    if (used <= PATH_HDR)
         return nocurrentpoint;
     co[0] = m[0] * x1.real_.val + m[2] * y1.real_.val + m[4];
     co[1] = m[1] * x1.real_.val + m[3] * y1.real_.val + m[5];
@@ -715,27 +746,35 @@ int _path_walk_bbox(Xpost_Context *ctx, Xpost_Object path,
     return any ? 1 : 2;
 }
 
-/* test whether a path is a single closed axis-aligned rectangle
-   and return its bounds */
+/* Test whether a path is a single closed axis-aligned rectangle and
+   return its bounds: 1 when it is one, 0 when it is not, -1 when the
+   string does not hold a path at all -- its extent or one of its
+   elements reaching past the bytes it has. The walk stops at the second
+   subpath, so a region of many rectangles costs the first few elements
+   and not the whole chain; the bounds are applied as it goes rather
+   than by a validating pass over the chain ahead of it. */
 static
 int _path_is_rect(Xpost_Context *ctx, Xpost_Object path,
                   real *minx, real *miny, real *maxx, real *maxy)
 {
     char *p;
-    unsigned int used, o;
+    unsigned int used, o, esz;
     real px[5], py[5];
     int npts = 0;
     int j;
 
     if (xpost_object_get_type(path) != stringtype)
         return 0;
-    p = xpost_string_get_pointer(ctx, path);
-    used = _path_get_u32(p, 0);
-    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    if (!_path_extent(ctx, path, &p, &used))
+        return -1;
+    for (o = PATH_HDR; o < used; o += esz)
     {
         int cmd = p[o];
         real co[2];
 
+        esz = _path_elem_size(cmd);
+        if (esz > used - o)
+            return -1;
         if (cmd == PATH_CMD_CLOSE)
             continue; /* close repeats the start point */
         if (o == PATH_HDR)
@@ -1047,6 +1086,7 @@ int _cliptrivial(Xpost_Context *ctx)
     real cminx, cminy, cmaxx, cmaxy;
     real pminx, pminy, pmaxx, pmaxy;
     int accept = 0;
+    int rect;
 
     gstate = _gstate(ctx);
     if (xpost_object_get_type(gstate) == invalidtype)
@@ -1054,18 +1094,24 @@ int _cliptrivial(Xpost_Context *ctx)
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     clipregion = xpost_dict_get(ctx, gstate, nameclipregion);
 
-    if (xpost_object_get_type(path) == stringtype &&
-        _path_is_rect(ctx, clipregion, &cminx, &cminy, &cmaxx, &cmaxy))
+    rect = _path_is_rect(ctx, clipregion, &cminx, &cminy, &cmaxx, &cmaxy);
+    if (rect < 0)
+        return rangecheck;
+    if (xpost_object_get_type(path) == stringtype && rect)
     {
         /* the header maintains a conservative bounding box (curve
            control hulls contain their curves); an empty path is
            accepted, there being nothing to clip */
-        char *p = xpost_string_get_pointer(ctx, path);
+        char *p;
+        unsigned int used;
+
+        if (!_path_extent(ctx, path, &p, &used))
+            return rangecheck;
         pminx = _path_get_f32(p, PATH_BBOX(0));
         pminy = _path_get_f32(p, PATH_BBOX(1));
         pmaxx = _path_get_f32(p, PATH_BBOX(2));
         pmaxy = _path_get_f32(p, PATH_BBOX(3));
-        accept = _path_get_u32(p, 0) <= PATH_HDR ||
+        accept = used <= PATH_HDR ||
                  (pminx >= cminx && pmaxx <= cmaxx &&
                   pminy >= cminy && pmaxy <= cmaxy);
     }
@@ -1084,12 +1130,16 @@ int _pathisrect(Xpost_Context *ctx)
 {
     Xpost_Object gstate, path;
     real minx, miny, maxx, maxy;
+    int rect;
 
     gstate = _gstate(ctx);
     if (xpost_object_get_type(gstate) == invalidtype)
         return undefined;
     path = xpost_dict_get(ctx, gstate, namecurrpath);
-    if (_path_is_rect(ctx, path, &minx, &miny, &maxx, &maxy))
+    rect = _path_is_rect(ctx, path, &minx, &miny, &maxx, &maxy);
+    if (rect < 0)
+        return rangecheck;
+    if (rect)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(minx));
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(miny));
@@ -1112,12 +1162,16 @@ int _cliprect(Xpost_Context *ctx)
 {
     Xpost_Object gstate, clipregion;
     real cminx, cminy, cmaxx, cmaxy;
+    int rect;
 
     gstate = _gstate(ctx);
     if (xpost_object_get_type(gstate) == invalidtype)
         return undefined;
     clipregion = xpost_dict_get(ctx, gstate, nameclipregion);
-    if (_path_is_rect(ctx, clipregion, &cminx, &cminy, &cmaxx, &cmaxy))
+    rect = _path_is_rect(ctx, clipregion, &cminx, &cminy, &cmaxx, &cmaxy);
+    if (rect < 0)
+        return rangecheck;
+    if (rect)
     {
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(cminx));
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(cminy));
@@ -1141,7 +1195,7 @@ int _fillpath_emit(Xpost_Context *ctx,
 {
     Xpost_Object gstate, path;
     char *p;
-    unsigned int used, o;
+    unsigned int used, o, esz;
     char tmp[192];
     int n, i, ret;
 
@@ -1158,8 +1212,8 @@ int _fillpath_emit(Xpost_Context *ctx,
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    used = _path_get_u32(p, 0);
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
     if (used <= PATH_HDR)
         return 0;
 
@@ -1180,7 +1234,7 @@ int _fillpath_emit(Xpost_Context *ctx,
             return ret;
     }
 
-    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    for (o = PATH_HDR; o < used; o += esz)
     {
         int cmd = p[o];
         int nco = cmd == PATH_CMD_CURVE ? 6 : 2;
@@ -1188,6 +1242,9 @@ int _fillpath_emit(Xpost_Context *ctx,
 
         if (cmd < PATH_CMD_MOVE || cmd > PATH_CMD_CLOSE)
             return unregistered;
+        esz = _path_elem_size(cmd);
+        if (esz > used - o)
+            return rangecheck;
         _path_get_coords(p, o, co, nco);
         n = 0;
         if (cmd == PATH_CMD_CLOSE)
@@ -1266,14 +1323,22 @@ int _closepath(Xpost_Context *ctx)
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    used = _path_get_u32(p, 0);
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
     if (used <= PATH_HDR)
         return 0;
     last = _path_get_u32(p, 8);
+    sps = _path_get_u32(p, 4);
+    /* offset 8 names the element whose command code decides whether the
+       subpath is already closed, and offset 4 the one whose first point
+       the close repeats: each is applied to the path pointer, so each
+       has to name content wide enough for what is read there */
+    if (last >= used || used - last < _path_elem_size(p[last]))
+        return rangecheck;
+    if (sps >= used || used - sps < _path_elem_size(PATH_CMD_MOVE))
+        return rangecheck;
     if (p[last] == PATH_CMD_CLOSE)
         return 0;
-    sps = _path_get_u32(p, 4);
     _path_get_coords(p, sps, co, 2);
     return _path_append(ctx, gstate, &path, PATH_CMD_CLOSE, co, 2);
 }
@@ -1322,6 +1387,7 @@ int _devlineto(Xpost_Context *ctx, Xpost_Object x, Xpost_Object y)
 {
     Xpost_Object gstate, path;
     char *p;
+    unsigned int used;
     real co[2];
 
     gstate = _gstate(ctx);
@@ -1330,8 +1396,9 @@ int _devlineto(Xpost_Context *ctx, Xpost_Object x, Xpost_Object y)
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    if (_path_get_u32(p, 0) <= PATH_HDR)
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
+    if (used <= PATH_HDR)
         return nocurrentpoint;
     co[0] = x.real_.val;
     co[1] = y.real_.val;
@@ -1348,6 +1415,7 @@ int _devcurveto(Xpost_Context *ctx,
 {
     Xpost_Object gstate, path;
     char *p;
+    unsigned int used;
     real co[6];
 
     gstate = _gstate(ctx);
@@ -1356,8 +1424,9 @@ int _devcurveto(Xpost_Context *ctx,
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    if (_path_get_u32(p, 0) <= PATH_HDR)
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
+    if (used <= PATH_HDR)
         return nocurrentpoint;
     co[0] = x1.real_.val;
     co[1] = y1.real_.val;
@@ -1884,7 +1953,7 @@ int _flattenpath (Xpost_Context *ctx)
     Xpost_Object path;
     _flatten_dst dst;
     char *p;
-    unsigned int used, o;
+    unsigned int used, o, esz;
     real cp[2] = { 0, 0 };
     real tol;
     int curved = 0;
@@ -1902,15 +1971,18 @@ int _flattenpath (Xpost_Context *ctx)
     path = xpost_dict_get(ctx, gstate, namecurrpath);
     if (xpost_object_get_type(path) != stringtype)
         return unregistered;
-    p = xpost_string_get_pointer(ctx, path);
-    used = _path_get_u32(p, 0);
+    if (!_path_extent(ctx, path, &p, &used))
+        return rangecheck;
 
     /* a path without curves is already flat: leave it untouched
        rather than rebuild an identical copy */
-    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    for (o = PATH_HDR; o < used; o += esz)
     {
         if (p[o] < PATH_CMD_MOVE || p[o] > PATH_CMD_CLOSE)
             return unregistered;
+        esz = _path_elem_size(p[o]);
+        if (esz > used - o)
+            return rangecheck;
         if (p[o] == PATH_CMD_CURVE)
         {
             curved = 1;
@@ -1931,11 +2003,16 @@ int _flattenpath (Xpost_Context *ctx)
     dst.gstate = gstate;
     dst.path = xpost_dict_get(ctx, gstate, namecurrpath);
 
-    for (o = PATH_HDR; o < used; o += _path_elem_size(p[o]))
+    for (o = PATH_HDR; o < used; o += esz)
     {
         int cmd = p[o];
         real co[6];
 
+        if (cmd < PATH_CMD_MOVE || cmd > PATH_CMD_CLOSE)
+            return unregistered;
+        esz = _path_elem_size(cmd);
+        if (esz > used - o)
+            return rangecheck;
         _path_get_coords(p, o, co, cmd == PATH_CMD_CURVE ? 6 : 2);
         if (cmd == PATH_CMD_CURVE)
         {

@@ -204,6 +204,7 @@ tests/op_wrapsig_test.ps \
 tests/outline_font_test.ps \
 tests/page_cover_test.ps \
 tests/page_semantics_test.c \
+tests/path_bounds_test.ps \
 tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
