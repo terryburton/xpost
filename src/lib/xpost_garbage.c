@@ -757,8 +757,16 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 
     if (isglobal)
     {
+        /* Global VM is not collected, so intermediate working storage
+           belongs in local VM, which is. The rest of this branch is the
+           global collection itself -- unmark, mark from the save and
+           name stacks, then walk each context's local VM -- and nothing
+           reaches it: the return is above it. It is parked here, beside
+           the decision it belongs to, rather than being kept anywhere
+           else; a reader meeting it should read it as not yet enabled
+           rather than as something left behind. */
         dosweep = 0;
-        return 0; /* do not perform global collections at this time */
+        return 0;
 
         _xpost_garbage_unmark(mem);
 

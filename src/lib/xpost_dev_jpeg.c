@@ -113,17 +113,18 @@ _JPEGFatalErrorHandler(j_common_ptr cinfo)
    return;
 }
 
+/* The library's message emitters, replaced so that it writes nothing to
+   the process's error stream: what it has to say about an image arrives
+   through the fatal handler above, which longjmps back to the caller. */
 static void
 _JPEGErrorHandler(j_common_ptr cinfo)
 {
-   return;
    (void)cinfo;
 }
 
 static void
 _JPEGErrorHandler2(j_common_ptr cinfo, int msg_level)
 {
-   return;
    (void)cinfo;
    (void)msg_level;
 }

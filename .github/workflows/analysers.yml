@@ -14,8 +14,9 @@ name: analysers
 # checker cannot be held to zero on it.
 #
 # Blocking today: the leak count under the address sanitizer, every
-# class the gcc analyser reports, and all of cppcheck's but memleak and
-# the style severities.
+# class the gcc analyser reports, all of cppcheck's but memleak and the
+# style severities, and unreachable code outside the sites that declare
+# themselves parked.
 
 on:
   push:
@@ -268,5 +269,80 @@ jobs:
       with:
         name: scan-build
         path: plist/**/*.html
+        retention-days: 30
+      if: always()
+
+  unreachable-code:
+    name: unreachable code
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build clang
+    # -Wunreachable-code is asked for here rather than in meson.build,
+    # and the reason is that meson would take it and it would do
+    # nothing. cc.get_supported_arguments tests whether a compiler
+    # accepts a flag, not whether the flag says anything: gcc accepts
+    # this one -- it is a recognised option name, and misspelling it is
+    # an error that suggests the right spelling -- and reports nothing
+    # for it, on this tree or on a function written to be unreachable.
+    # A flag in the default build that the primary compiler ignores is
+    # worse than no flag, because reading the build says the class is
+    # covered. clang implements it, so it is asked of clang, in the job
+    # where clang is what compiles.
+    - name: setup and build
+      run: |
+        # The build's own status is read through the tee, so a build that
+        # broke is a red job here rather than a log with no findings in
+        # it -- which the check below would otherwise read as three
+        # parked sites having gone quiet.
+        set -o pipefail
+        CC=clang meson setup builddir -Dc_args=-Wunreachable-code
+        ninja -C builddir 2>&1 | tee unreachable.log
+    # Three sites are unreachable on purpose: each is an implementation
+    # kept beside the decision that would enable it, behind a return
+    # that says it is not enabled, and each says so where the checker
+    # points. They are named by file, because a line number moves and a
+    # register that has to be renumbered to stay true is a register that
+    # stops being true.
+    #
+    # Held from both ends. A finding in any other file fails: that is
+    # code nobody meant to be unreachable, which is the class this job
+    # exists for. A file named here that no longer produces one fails
+    # too -- the parked implementation was enabled or removed, and an
+    # entry describing neither would go on excusing whatever appeared in
+    # that file next.
+    - name: check
+      run: |
+        cat > parked <<'REGISTER'
+        src/lib/xpost_garbage.c
+        src/lib/xpost_interpreter.c
+        src/lib/xpost_memory.c
+        REGISTER
+        grep -F '[-Wunreachable-code]' unreachable.log \
+          | sed -E 's@^.*(src/(lib|bin)/[A-Za-z_0-9]+\.[ch]).*@\1@' \
+          | sort > found.all
+        sort -u found.all > found
+        echo '--- findings by file ---'
+        uniq -c found.all
+        echo '--- unparked ---'
+        comm -23 found parked | tee unparked
+        echo '--- parked and silent ---'
+        comm -13 found parked | tee stale
+        [ ! -s unparked ] || {
+          echo 'code is unreachable in a file that does not say it is parked'
+          exit 1
+        }
+        [ ! -s stale ] || {
+          echo 'a file is registered as holding parked code and holds none'
+          exit 1
+        }
+    - uses: actions/upload-artifact@v4
+      with:
+        name: unreachable-code
+        path: unreachable.log
         retention-days: 30
       if: always()

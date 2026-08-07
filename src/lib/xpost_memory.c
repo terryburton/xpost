@@ -615,6 +615,12 @@ xpost_memory_file_dump(const Xpost_Memory_File *mem)
             mem->max, mem->max,
             mem->start);
 
+    /* The header above is the whole of what this reports. The rest is
+       the hex-and-character dump of every byte the file holds, and
+       nothing reaches it: the return is above it. It is parked here
+       beside the header it would follow; a reader meeting it should
+       read it as not yet enabled rather than as something left
+       behind. */
     return;
 
     for (u = 0; u < (int)mem->used; u++)

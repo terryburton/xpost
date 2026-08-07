@@ -1792,6 +1792,13 @@ Xpost_Context *_switch_context(Xpost_Context *ctx)
 {
     int i;
 
+    /* One context executes, so the next one to execute is this one. The
+       rest of this function is the scan across the context table -- the
+       next entry in C_RUN, wrapping at the end, moving the entries it
+       passes out of C_WAIT and C_IOBLOCK so a wait condition is retried
+       -- and nothing reaches it: the return is above it. It is parked
+       here beside the choice it would make; a reader meeting it should
+       read it as not yet enabled rather than as something left behind. */
     return ctx;
 
     /* return next context to execute */
