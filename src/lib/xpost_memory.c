@@ -310,8 +310,14 @@ xpost_memory_file_exit(Xpost_Memory_File *mem)
 #else
     if (mem->fd != -1)
     {
-        (void) lseek(mem->fd, 0, SEEK_SET);
-        if (write(mem->fd, mem->base, mem->used) == -1)
+        /* the arena is written back from its start, so a descriptor that
+           will not seek there has no offset the write could go to: it
+           would land wherever the descriptor happened to be, and the file
+           the next run reads back as its memory would be shifted */
+        if (lseek(mem->fd, 0, SEEK_SET) == (off_t)-1)
+            XPOST_LOG_ERR("%d unable to rewind memory file (error: %s)",
+                          VMerror, strerror(errno));
+        else if (write(mem->fd, mem->base, mem->used) == -1)
             XPOST_LOG_ERR("%d unable to write memory file (error: %s)",
                           VMerror, strerror(errno));
     }
