@@ -319,12 +319,15 @@ end
 
 % The stroke outline is constructed in user coordinates and mapped to
 % the device by the live CTM, so a circular pen becomes the correct
-% ellipse under an anisotropic matrix. The pen diameter is the user
-% line width; a zero width is the thinnest renderable line, taken as
-% one device pixel carried back to user space.
+% ellipse under an anisotropic matrix. The pen diameter is the magnitude
+% of the user line width -- PLRM puts half the absolute value of the
+% number on each side of the path, so a width and its negation describe
+% the same pen, while currentlinewidth goes on reporting the number that
+% was set. Only a width of zero is the thinnest renderable line, taken
+% as one device pixel carried back to user space.
 .xpostsys /minlinewidth {
-    currentlinewidth
-    dup 0 le { pop 1 0 idtransform dup mul exch dup mul add sqrt } if
+    currentlinewidth abs
+    dup 0 eq { pop 1 0 idtransform dup mul exch dup mul add sqrt } if
 } bind put
 
 .xpostsys /dolinejoin { % RR|LL R|L C

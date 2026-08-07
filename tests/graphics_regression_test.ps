@@ -2251,6 +2251,27 @@ newpath 10 10 moveto 20 10 lineto
 5 setlinewidth
 15 11 instroke (instroke within the stroke width) assert
 15 14 instroke not (instroke beyond the stroke width) assert
+
+% PLRM setlinewidth puts half the ABSOLUTE value of the number on each
+% side of the path, so a width and its negation describe the same pen.
+% The parameter itself is the number that was set, which is what
+% currentlinewidth answers with -- only the pen takes the magnitude.
+% A negative width used as given collapses one side of the outline, and
+% what that leaves is a narrower line rather than an error, so this asks
+% how far the pen reaches rather than whether the stroke succeeded.
+newpath 10 10 moveto 20 10 lineto
+-5 setlinewidth
+% the parameter keeps the number; only the pen takes the magnitude, so
+% this fails if the absolute value is taken in the setter instead
+currentlinewidth -5 eq (a negative width is reported as it was set) assert
+% 2.4 from the path is inside a pen of half-width 2.5 and outside the
+% half-pixel pen a collapsed side leaves, so this is the distance that
+% separates the two readings -- nearer than 2.5 and both answer yes
+15 12.4 instroke (a negative width reaches half its magnitude) assert
+15 14 instroke not (and no further than half its magnitude) assert
+-5 setlinewidth 15 12.4 instroke
+ 5 setlinewidth 15 12.4 instroke eq
+    (a width and its negation cover the same pixels) assert
 1 setlinewidth
 5 2 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
 inufill (inufill inside the triangle) assert
