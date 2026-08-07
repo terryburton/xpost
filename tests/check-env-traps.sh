@@ -16,9 +16,12 @@
 # so it is a specified ending rather than a fault, and the interpreter
 # cannot answer it with an error: errordict's handlers themselves finish
 # with stop, so raising one recurses without bound. The path is normal
-# and reachable -- the job error handler is the one piece of a run that
-# is outside every stopped context, so a failure inside it arrives here
-# -- and a process that aborts on it aborts on specified behaviour.
+# and reachable -- the job error handler is the outermost frame of a run
+# and something has to be, so a failure in its own body arrives here --
+# and a process that aborts on it aborts on specified behaviour. The
+# report that handler calls is not the way in: reporting has a stopped
+# context of its own, so that a job whose report fails still ends with
+# the notice that says the rest of it was flushed.
 #
 # Ending the process is the loudest case, not the only one. The same
 # reasoning reaches anything a variable can take away from a run that the
@@ -97,10 +100,13 @@ window=4
 # the program getting to the path would leave this reporting that an
 # abort did not happen on a path nobody took.
 cat > "$work/nostop.ps" <<'EOF'
-% Fail inside the job error handler, which runs outside every stopped
-% context: the errordict handler for the failure ends with `stop`, and
-% there is no stopped context left for it to end.
-/handleerror { 1 0 idiv } def
+% Fail inside the job error handler's own body, which runs outside every
+% stopped context: the errordict handler for the failure ends with
+% `stop`, and there is no stopped context left for it to end. The report
+% the handler goes on to call is not the way in -- that has a stopped
+% context of its own -- so the failure is put where the handler reads
+% $error to find out whether an error happened at all.
+userdict /$error 3 put
 1 0 idiv
 EOF
 

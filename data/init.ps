@@ -528,15 +528,36 @@ end
 % occurred, not on a normal quit -- the notice that the rest of the job
 % is flushed to end of file. An interactive executive keeps going, so it
 % reports without this line.
+%
+% Whether an error occurred is read before anything else runs and the
+% rest of the report happens inside that answer, because nothing here may
+% rely on the operand stack surviving: an error recovers by restoring the
+% stack it recorded, so a report that raises one comes back to a stack
+% that is not the one it left.
+%
+% Reporting is given a stopped context of its own. The branch this runs
+% from has spent the job's, so an error raised while reporting -- the
+% standard handler is a program's to replace, and even the standard one
+% asks for names, strings and dictionaries a run at an implementation
+% limit may not have to give -- would find no context to stop into and
+% take the remainder of the report with it, ending the job's output
+% mid-sentence with nothing to say it had ended. What survives that is
+% what this procedure holds in its own body: the two notices below are
+% its own strings and print without asking for anything.
+%
 % in the private global namespace, reached by the start procedures below through
 % a frozen reference, so it does not sit visible in systemdict
 currentglobal true setglobal
 .xpostsys /.handlejoberror {
-    $error /newerror get
-    handleerror
-    { //.internaldict /.rundied get exec
-      (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
-      print flush } if
+    $error /newerror get {
+        { handleerror } stopped {
+            (%%[ Report incomplete: reporting this error raised another ]%%\n)
+            print flush
+        } if
+        //.internaldict /.rundied get exec
+        (%%[ Flushing: rest of job \(to end-of-file\) will be ignored ]%%\n)
+        print flush
+    } if
 } put
 setglobal
 

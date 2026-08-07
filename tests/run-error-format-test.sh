@@ -11,7 +11,7 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 tmp=${TMPDIR:-/tmp}/errfmt-$$
-trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps' 0
+trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps "$tmp".badreport.ps' 0
 
 # 1. a top-level undefined error: the error line (with its trailing space)
 #    and then the flush notice
@@ -52,6 +52,22 @@ printf 'errordict /undefinedresult { 1 0 div } put 1 0 div\n' > "$tmp".cascade.p
 out=$("$xpost" -q --no-sandbox -d null "$tmp".cascade.ps </dev/null 2>&1)
 rc=$?
 printf '%s\n' "$out" | grep -Fq 'runaway error cascade' || exit 1
+[ "$rc" -ne 0 ] || exit 1
+
+# 6. an error whose report does not finish. handleerror is the program's
+#    to replace and the standard one asks for names, strings and
+#    dictionaries a run at an implementation limit may not have to give,
+#    so the report is a place an error can be raised. The job still ends
+#    with the flush notice, and says the report ahead of it stopped
+#    short: a report that tails off with nothing to mark the end reads as
+#    the whole of what the interpreter had to say.
+printf 'errordict /handleerror { thishandlerisbroken } put\nmistypedname\n' \
+    > "$tmp".badreport.ps
+out=$("$xpost" -q --no-sandbox -d null "$tmp".badreport.ps </dev/null 2>&1)
+rc=$?
+printf '%s\n' "$out"
+printf '%s\n' "$out" | grep -Fq '%%[ Report incomplete: reporting this error raised another ]%%' || exit 1
+printf '%s\n' "$out" | grep -Fq '%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%' || exit 1
 [ "$rc" -ne 0 ] || exit 1
 
 exit 0
