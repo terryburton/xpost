@@ -36,6 +36,7 @@ tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
 tests/check-guard-paths.sh \
 tests/check-must-check.sh \
+tests/check-name-registers.sh \
 tests/check-narrow-cursors.sh \
 tests/check-one-bytebuf.sh \
 tests/check-op-references.sh \

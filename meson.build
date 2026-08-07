@@ -2306,6 +2306,16 @@ test('private-refs',
   suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir() ])
 
+# The isolation tests assert that a name is not reachable, so a register
+# entry naming something the interpreter does not have passes because
+# nothing defines it -- an entry that cannot fail, and does not check
+# what it was written to check. Every name those registers carry is held
+# to a live startup here.
+test('name-registers',
+  find_program('tests/check-name-registers.sh'),
+  suite: cost_fast,
+  args: [ xpost_exe, meson.current_source_dir() ])
+
 # The raster classes stay a single generated suite: pgm/ppm are parameter
 # files over .makerasterclass, pbm/tiff dict-copies overriding emission,
 # and every shared method is defined exactly once, in the prototype.

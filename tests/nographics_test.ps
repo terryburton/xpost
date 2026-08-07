@@ -2,7 +2,7 @@
 % run-nographics-test.sh; prints SUCCESS iff every assertion holds. The start
 % procedure runs .finalize (the interpreter lockdown) WITHOUT loadgraphics, so:
 %   (1) the graphics modules are never loaded -- /graphicsdict is undefined, as
-%       are the render helpers the graphics load would define, and
+%       are the operators the graphics load would put in systemdict, and
 %   (2) the interpreter is still fully locked down -- the language relocates into
 %       systemdict, the private C operators relocate into .internaldict, and the
 %       private namespaces are sealed and hidden -- exactly as when graphics does
@@ -22,9 +22,19 @@ faildict /n 0 put
 % --- graphics is genuinely not loaded ---
 /graphicsdict where { pop false }{ true } ifelse
     (graphicsdict is undefined -- no graphics loaded) assert
-% render helpers the graphics load would have defined are absent
-[ /ravec /strcat /dolinejoin /arcbez /rect ] {
-    where { pop false }{ true } ifelse (graphics helper name is absent) assert
+% the names the graphics load would have defined are absent. They are the
+% operators the graphics modules contribute to systemdict, and not the private
+% helpers behind them: a helper lives off the dictionary stack whether graphics
+% loaded or not, so its absence here tells the two runs apart no better than a
+% name nothing ever defined would. tests/check-name-registers.sh holds every
+% name in this register to being one that graphics puts in systemdict and no
+% graphics leaves out.
+/GFXNAMES [ /stroke /fill /eofill /clip /gsave /grestore /initgraphics
+    /setlinewidth /setdash /setgray /setrgbcolor /setcolorspace
+    /image /imagemask /shfill /makepattern /sethalftone /setscreen
+    /charpath /showpage /setpagedevice /nulldevice ] def
+GFXNAMES {
+    where { pop false }{ true } ifelse (graphics operator name is absent) assert
 } forall
 
 % --- the interpreter is nonetheless locked down ---
