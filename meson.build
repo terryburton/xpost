@@ -1756,7 +1756,10 @@ test('op-literal',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The command line: the geometry option sets the page size and a geometry that
-# does not parse is refused, and the three reporting options report.
+# does not parse is refused, the three reporting options report, -D defines a
+# name in userdict before the program starts and -I adds a directory the
+# resource machinery searches. Each of the two value-carrying options is asked
+# for in both of its spellings and once with the option left out.
 test('cli-options',
   find_program('tests/run-cli-options-test.sh'),
   args: [ xpost_exe ],

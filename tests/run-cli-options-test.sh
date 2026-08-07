@@ -5,6 +5,15 @@
 # size to it; a geometry that does not parse is an error rather than
 # something to carry on past. -V, -L and -h report and exit.
 #
+# -D and -I are the two options that hand the job something rather than
+# configure the run: -Dname=token defines the name in userdict before the
+# program starts, and -I adds a directory the resource machinery searches
+# when findresource misses in VM. Each is asked for twice, in the form
+# that carries its value attached to the letter and the form that carries
+# it as the next argument, and each is asked once more with the option
+# left out -- an assertion that a name is defined proves nothing unless
+# the same program finds it undefined when nothing defined it.
+#
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
@@ -69,6 +78,83 @@ if [ -f "$work/def.pgm" ]; then
 else
     note "no page without a geometry"
 fi
+
+# -D reports what it left in userdict, for a name given a token, a name
+# given a string and a name given nothing at all
+cat > "$work/defs.ps" <<'PSEOF'
+/report { % /name  .  -
+    dup dup 32 string cvs print (=) print
+    userdict exch known { load == }{ (absent) = pop } ifelse
+} bind def
+/alpha report /beta report /gamma report
+quit
+PSEOF
+
+# the run's output is left in got rather than handed back through a
+# command substitution: a subshell that records a failure records it in a
+# copy of the variable and the run it judged passes
+run_defs() {  # $1 what to call it, $2... the options before the program
+    d_who=$1
+    shift
+    got=$("$xpost" -q -d null "$@" "$work/defs.ps" </dev/null 2>&1)
+    verdict_run "$?" "$got" "$d_who" || fail=1
+}
+
+run_defs "a run with three definitions" \
+        -Dalpha=42 --define 'beta=(hi)' -Dgamma
+printf '%s\n' "$got" | grep -q '^alpha=42$' \
+    || note "-Dalpha=42 did not define alpha as 42"
+printf '%s\n' "$got" | grep -q '^beta=(hi)$' \
+    || note "--define beta=(hi) did not define beta as the string"
+printf '%s\n' "$got" | grep -q '^gamma=null$' \
+    || note "-Dgamma with no value did not define gamma as null"
+
+# the same program with nothing defining them: the three names are the
+# option's doing and not the interpreter's
+run_defs "a run with no definitions"
+printf '%s\n' "$got" | grep -q '^alpha=absent$' \
+    || note "alpha is defined without -D"
+printf '%s\n' "$got" | grep -q '^beta=absent$' \
+    || note "beta is defined without --define"
+printf '%s\n' "$got" | grep -q '^gamma=absent$' \
+    || note "gamma is defined without -D"
+
+# -I: an instance the program asks for by name, sitting in a resource
+# tree that only the option knows about. Two directories are given so
+# that the search reaches past the first, and the run keeps the sandbox
+# so that a directory named this way is one the confinement lets in.
+mkdir -p "$work/res1/ProcSet" "$work/res2/ProcSet"
+printf '/CliProbe << /Greeting (INCLUDE-OK) >> /ProcSet defineresource pop\n' \
+    > "$work/res2/ProcSet/CliProbe"
+cat > "$work/incs.ps" <<'PSEOF'
+{ /CliProbe /ProcSet findresource /Greeting get }
+stopped { (include=absent) = }{ (include=) print print (\n) print } ifelse
+quit
+PSEOF
+
+run_incs() {  # $1 what to call it, $2... the options before the program
+    n_who=$1
+    shift
+    got=$("$xpost" -q -d null "$@" "$work/incs.ps" </dev/null 2>&1)
+    verdict_run "$?" "$got" "$n_who" || fail=1
+}
+
+run_incs "a run with two include directories" \
+        -I "$work/res1" "-I$work/res2"
+printf '%s\n' "$got" | grep -q '^include=INCLUDE-OK$' \
+    || note "-I did not put the instance's directory on the resource path"
+
+run_incs "a run with no include directory"
+printf '%s\n' "$got" | grep -q '^include=absent$' \
+    || note "the instance is found without -I"
+
+# an option whose value is the next argument and has no next argument is
+# refused rather than taken as empty
+for opt in --define --include; do
+    "$xpost" -q -d null "$opt" </dev/null >/dev/null 2>&1
+    status=$?
+    [ "$status" -eq 0 ] && note "$opt with no value was accepted"
+done
 
 [ "$fail" = 0 ] || { echo "FAILURES: the options above"; exit 1; }
 echo "SUCCESS"
