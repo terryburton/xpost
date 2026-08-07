@@ -196,6 +196,7 @@ unsigned int _copy_ent(Xpost_Memory_File *mem,
     Xpost_Memory_Table *tab;
     unsigned new;
     unsigned int adr;
+    unsigned int extent;
     int ret;
 
     tab = &mem->table;
@@ -204,6 +205,17 @@ unsigned int _copy_ent(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot find table for ent %u", ent);
         return 0;
     }
+    /* An entity's capacity and its extent are two numbers: the block it
+       holds, and how much of that block its owner asked for. They come
+       apart whenever the free list serves a request out of a roomier
+       corpse. The backup takes the whole block, so that restore hands
+       the object back a block as large as the one it had; but the
+       extent it records is the object's own, because that is what the
+       collector reads an allocation's contents by. A backup claiming
+       the capacity would have the object claim it too once restore
+       swapped the storage identity in, and the collector would then
+       read the block's previous owner's leavings as objects. */
+    extent = tab->tab[ent].used;
     if (!xpost_memory_table_alloc(mem, tab->tab[ent].sz, tab->tab[ent].tag, &new))
     {
         XPOST_LOG_ERR("cannot allocate entity to backup object");
@@ -225,6 +237,7 @@ unsigned int _copy_ent(Xpost_Memory_File *mem,
     memcpy(xpost_vm_ptr(mem, adr),
            xpost_ent_ptr(mem, ent),
            tab->tab[ent].sz);
+    tab->tab[new].used = extent;
 
     XPOST_LOG_INFO("ent %u copied to ent %u in %s", ent, new, mem->fname);
     return new;

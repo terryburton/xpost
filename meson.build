@@ -877,6 +877,23 @@ test('gc-marking',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# How much of an allocation a save's backup says is in use. The extent
+# is what the collector reads an allocation's contents by, so a backup
+# that records the block's capacity instead has the collector reading
+# the block's previous owner's leavings as objects -- which ends
+# marking, and with it every later collection, without saying so.
+save_backup_extent_exe = executable('save_backup_extent_test',
+  'tests/save_backup_extent_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('save-backup-extent',
+  save_backup_extent_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The editing streams open a temporary file before the text they are asked
 # for is known to be acceptable, so a refusal is the only thing that can
 # close it: a request refused for nesting depth must leave no descriptor
