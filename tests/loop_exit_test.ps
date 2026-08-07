@@ -40,10 +40,34 @@ n 1 eq (exit terminates dict forall) assert
 (abcd) { pop /n n 1 add def n 2 eq { exit } if } forall
 n 2 eq (exit terminates string forall) assert
 
+% --- pathforall ---
+% Its enumerator keeps state of its own in a dictionary, so an exit that ends
+% it must leave the dictionary stack at the depth it found it (PLRM 8.2: exit
+% does not affect the dictionary stack).
+/mkpath { newpath 10 10 moveto 20 20 lineto 25 30 30 35 40 40 curveto closepath } def
+/counters { { pop pop /n n 1 add def } { pop pop /n n 1 add def }
+            { 6 { pop } repeat /n n 1 add def } { /n n 1 add def } } def
+
+/n 0 def
+mkpath counters pathforall
+n 4 eq (pathforall visits every path element) assert
+
+/n 0 def /depth countdictstack def
+mkpath { pop pop /n n 1 add def exit } { pop pop exit }
+       { 6 { pop } repeat exit } { exit } pathforall
+n 1 eq (exit terminates pathforall) assert
+countdictstack depth eq (exit from pathforall leaves the dictionary stack alone) assert
+
 % --- exit unwinds only the innermost loop ---
 /inner 0 def /outer 0 def
 3 { /outer outer 1 add def [ 1 2 3 ] { pop /inner inner 1 add def exit } forall } repeat
 outer 3 eq inner 3 eq and (exit stops only the innermost loop) assert
+
+/outer 0 def
+3 { /outer outer 1 add def
+    mkpath { pop pop exit } { pop pop exit } { 6 { pop } repeat exit } { exit } pathforall
+  } repeat
+outer 3 eq (exit from pathforall spares the enclosing loop) assert
 
 % --- filenameforall ---
 % create two files the template is guaranteed to match
