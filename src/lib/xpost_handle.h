@@ -93,6 +93,7 @@
 typedef enum
 {
     XPOST_HANDLE_DEVICE = 1, /**< a device's instance state */
+    XPOST_HANDLE_CONTENT,    /**< a vector writer's accumulated content */
     XPOST_HANDLE_FONT        /**< a font's face */
 } Xpost_Handle_Kind;
 
@@ -100,7 +101,11 @@ typedef enum
  * @brief Issue a block of the given kind and store its handle in the
  * dictionary under key.
  *
- * The block is zeroed. Returns 0, or an error code.
+ * The block is zeroed. For a device's instance state the operator the
+ * dictionary then holds under /Destroy is recorded with the block as the
+ * release it is to be given up by, taken here where a device's own
+ * Create has just filled the dictionary from its class and the program
+ * has not yet reached it. Returns 0, or an error code.
  */
 int xpost_handle_cons(Xpost_Context *ctx,
                       Xpost_Object dic,
@@ -129,6 +134,21 @@ void *xpost_handle_block_of(Xpost_Context *ctx,
                             Xpost_Object dic,
                             Xpost_Handle_Kind kind,
                             size_t size);
+
+/**
+ * @brief The release operator recorded for the device instance state
+ * issued to this dictionary, or zero where the dictionary was issued no
+ * device state or the state carries no release.
+ *
+ * A device's instance state is issued with the release its class named
+ * at that moment -- see xpost_handle_cons -- and this reports it. The
+ * record is asked rather than the dictionary, so a value the program
+ * wrote under /Destroy after the fact changes nothing: what comes back
+ * is the operator the state was issued to be released by.
+ */
+XPOST_NOINLINE
+unsigned int xpost_handle_device_release(Xpost_Context *ctx,
+                                         Xpost_Object dic);
 
 /**
  * @brief Give up the block an entity's handle names.

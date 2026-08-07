@@ -31,6 +31,31 @@
 /bail { /verdict exch def stop } def
 
 {
+    % An operator of the program's own under /Destroy, which a page
+    % device request puts there: setpagedevice writes the keys it was
+    % given into the instance it builds, so the slot is one a program
+    % reaches without naming anything internal. The release runs where no
+    % procedure can run and nothing catches an error, so what runs there
+    % is a release a device class installed or nothing at all. dup is an
+    % operator whose having run is visible: the release pushes the
+    % instance before calling what it recorded, so a call leaves the
+    % instance and its duplicate behind on the operand stack. Every
+    % device answers this one, the request reaching the instance whatever
+    % the class put in the slot.
+    count /before exch def
+    save
+    << /PageSize [400 400] /Destroy /dup load >> setpagedevice
+    getdevice /Destroy get type /operatortype ne
+        { (FAILURE: the request's Destroy did not reach the instance) bail }
+    if
+
+    restore
+
+    count before ne
+        { (FAILURE: an operator of the program's own ran from the restore)
+          bail }
+    if
+
     getdevice /Destroy get type /operatortype ne { (SUCCESS) bail } if
     getdevice /GetPix known not { (SUCCESS) bail } if
 
@@ -98,6 +123,16 @@
         { (FAILURE: an overwritten Destroy chose the release) bail }
     if
 
+    % The same again with an operator of the program's own under
+    % /Destroy, which a page device request puts there: setpagedevice
+    % writes the keys it was given into the instance it builds, so the
+    % slot is one a program reaches without naming anything internal.
+    % The release runs where no procedure can run and nothing catches an
+    % error, so what runs there is a release a device class installed or
+    % nothing at all. dup is an operator whose having run is visible: the
+    % release pushes the instance before calling what it recorded, so a
+    % call leaves the instance and its duplicate behind on the operand
+    % stack.
     % A restore that leaves the install standing displaces nothing and so
     % retires nothing: the device below is installed under the outer save
     % and the inner restore goes back only as far as the inner save. A

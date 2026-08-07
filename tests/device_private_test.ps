@@ -191,5 +191,28 @@ impostor pdffree
 acc pdffree
 (ok   a free through a copied handle left the buffers to the instance) note
 
+% --- the release a restore performs ------------------------------------
+%
+% A restore that displaces an installed device releases what it holds
+% outside virtual memory, and that release runs where no PostScript can:
+% restore is one operator, not an interpreter loop. So what runs there is
+% a release a device class installed, on an instance that was issued
+% state to release -- never an operator the program named. A dictionary
+% of the program's own making is issued nothing and names no release.
+%
+% The operator below is the one whose having run leaves nothing to read
+% afterwards: it ends the run, with whatever the job had still to write
+% unwritten and an exit status saying the job finished. So this case is
+% answered by the run reaching its verdict at all, which is why it is
+% asked last.
+
+/devinstalled id /.devinstalled get def
+
+save
+<< /Destroy /quit load /width 4 /height 4 >> devinstalled
+restore
+(ok   an operator held by a dictionary of the program's own did not run)
+  note
+
 fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
 quit
