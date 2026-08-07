@@ -505,7 +505,10 @@ int grok(Xpost_Context *ctx,
                             XPOST_LOG_ERR("base-85 string exceeds buf");
                             return limitcheck;
                         }
-                        for (k = 0; k < nbytes; k++)
+                        /* a partial group carries one byte fewer than
+                           it has characters, and the tuple it decodes
+                           to is four bytes wide */
+                        for (k = 0; k < nbytes && k < 4; k++)
                             *sp++ = (tuple >> (24 - 8 * k)) & 0xff;
                     }
                     if (c == EOF)
@@ -1161,7 +1164,9 @@ int binary_token(Xpost_Context *ctx,
                  int (*next)(Xpost_Context *ctx, Xpost_Object *src),
                  Xpost_Object *retval)
 {
-    unsigned char p[4];
+    /* the payload buffer holds whatever width the token declares, and
+       carries a value for every byte of it before any read */
+    unsigned char p[4] = { 0, 0, 0, 0 };
 
     switch (t)
     {

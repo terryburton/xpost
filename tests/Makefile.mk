@@ -20,6 +20,7 @@ tests/binary_token_test.expected \
 tests/binary_token_test.ps \
 tests/bind_packed_test.ps \
 tests/blit_access_test.ps \
+tests/blit_range_test.ps \
 tests/build_personality_test.ps \
 tests/callback_reentry_test.ps \
 tests/check-callout-bracket.sh \

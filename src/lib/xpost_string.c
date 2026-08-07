@@ -84,11 +84,11 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
         if (data)
             memset(data, 0, sz);
     }
+    /* every field carries a value before the object is passed by value */
     o.tag = stringtype | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     o.comp_.sz = sz;
-    //o.comp_.ent = ent;
-    o = xpost_object_set_ent(o, ent);
     o.comp_.off = 0;
+    o = xpost_object_set_ent(o, ent);
 
     return o;
 }

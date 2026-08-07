@@ -1201,6 +1201,15 @@ test('blit-access',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The counts a blit dictionary carries index fixed per-component and
+# per-native-byte tables inside the operator, so a count outside what
+# those tables hold is a rangecheck rather than a read past them.
+test('blit-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/blit_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.
