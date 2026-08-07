@@ -167,10 +167,13 @@
     /.vw { % str  .  -
         //.xpostsys /.vecout get /F get exch writestring
     } bind
-    % write a byte offset as a 10-digit zero-padded field
+    % write a byte offset as a 10-digit zero-padded field. How many zeros
+    % the field wants is read from the number alone and settled before the
+    % pad itself is on the stack, so no count of positions stands between
+    % the length taken and the number it belongs to.
     /.vwoff { % n  .  -
-        20 string cvs
-        //.xpostsys /.zeros get 0 10 2 index length sub getinterval .vw
+        20 string cvs dup length 10 exch sub    % s  padlen
+        //.xpostsys /.zeros get exch 0 exch getinterval .vw
         .vw
     } bind
     % take the next object number, advancing the shared counter

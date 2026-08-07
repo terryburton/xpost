@@ -46,11 +46,71 @@ grep -q 'stream' "$pdf"                || { echo "FAIL: no content stream"; exit
 tail -c 16 "$pdf" | grep -q '%%EOF'    || { echo "FAIL: no EOF trailer";  exit 1; }
 echo "PDF structure OK"
 
+# Cross-reference table geometry (PDF 7.5.4). Every entry is twenty bytes:
+# a ten-digit byte offset, a five-digit generation, the type letter and a
+# two-byte ending. The width is what the table is for -- a reader reaches
+# entry n by seeking twenty times n from the head of the table rather than
+# by scanning -- so an entry written without its leading zeros is not a
+# short entry but a table whose every later entry is at an address nobody
+# computes. The reading here is the one a reader does: follow startxref to
+# the table, take the count the subsection names, and measure.
+xrefwidth() {   # $1 what to call it in a complaint, $2 the file
+    xw_who=$1
+    xw_pdf=$2
+    # startxref and its value are the last three lines before %%EOF
+    xw_off=$(tail -c 64 "$xw_pdf" | tr -d '\r' \
+             | awk '/^startxref$/ { getline v; print v; exit }')
+    case $xw_off in
+        '' | *[!0-9]*)
+            echo "FAIL: $xw_who names no startxref offset"; return 1 ;;
+    esac
+    # The entry's own text is the first eighteen bytes; the length rule
+    # covers the two that end it, whichever of the endings PDF allows the
+    # writer chose.
+    tail -c "+$((xw_off + 1))" "$xw_pdf" | awk -v who="$xw_who" '
+        NR == 1 { if ($0 != "xref") {
+                      printf "FAIL: %s startxref reaches \"%s\", not a table\n",
+                             who, $0
+                      bad = 1; done = 1; exit }
+                  next }
+        NR == 2 { want = $2 + 0; next }
+        $1 == "trailer" { done = 1; exit }
+        { n++
+          if (length($0) + 1 != 20) {
+              printf "FAIL: %s xref entry %d is %d bytes, want 20\n",
+                     who, n, length($0) + 1
+              bad = 1 }
+          if ($0 !~ /^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9] [0-9][0-9][0-9][0-9][0-9] [nf]/) {
+              printf "FAIL: %s xref entry %d is not ten digits, five digits and a type\n",
+                     who, n
+              bad = 1 } }
+        END { if (!done) {
+                  printf "FAIL: %s xref table runs off the end with no trailer\n", who
+                  bad = 1 }
+              else if (n != want) {
+                  printf "FAIL: %s xref subsection names %d entries and holds %d\n",
+                         who, want, n
+                  bad = 1 }
+              exit bad ? 1 : 0 }' || return 1
+    return 0
+}
+
+xrefwidth "the single-file PDF" "$pdf" || exit 1
+# The two output shapes are written by two different offset writers, so a
+# rule held at one of them is a rule held nowhere in particular. A %d in
+# the name puts each page in its own file, which is the other writer.
+perpdf=./page-$$-1.pdf
+trap 'rm -f "$pdf" "$discard" "$perpdf"' EXIT
+run_xpost "the per-page pdfwrite run" -d pdfwrite -o "./page-$$-%d.pdf" "$script"
+[ -f "$perpdf" ] || { echo "FAIL: the per-page run wrote no first page"; exit 1; }
+xrefwidth "the per-page PDF" "$perpdf" || exit 1
+echo "xref entry width OK"
+
 # document metadata: a DOCINFO pdfmark must land in the trailer's
 # Info dictionary, readable by the consumer
 infops=$(mktemp)
 infopdf=$(mktemp)
-trap 'rm -f "$pdf" "$discard" "$infops" "$infopdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf"' EXIT
 cat > "$infops" <<'EOF'
 [ /Creator (pdf-device check) /DOCINFO pdfmark
 100 100 moveto 200 100 lineto 200 200 lineto closepath fill
@@ -152,7 +212,7 @@ sepps=$(mktemp)
 # interpreter, which is embedded in the program below and need not share the
 # shell's view of an absolute path (e.g. a native binary under a POSIX shell).
 seppdf=./sep-$$.pdf
-trap 'rm -f "$pdf" "$discard" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf"' EXIT
 cat > "$sepps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($seppdf) /PageSize [100 100] >> setpagedevice
 [/Separation (Spot A) /DeviceCMYK {dup 0 exch dup 0.5 mul exch 0.25 mul}] setcolorspace
@@ -206,7 +266,7 @@ echo "separation colour spaces OK"
 # it.
 mpps=$(mktemp)
 mppdf=./mp-$$.pdf
-trap 'rm -f "$pdf" "$discard" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
+trap 'rm -f "$pdf" "$discard" "$perpdf" "$infops" "$infopdf" "$sepps" "$seppdf" "$mpps" "$mppdf"' EXIT
 cat > "$mpps" <<EOF
 << /OutputDevice /pdfwrite /OutputFile ($mppdf) /PageSize [80 80] >> setpagedevice
 save
