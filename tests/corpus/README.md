@@ -48,6 +48,38 @@ lapsed, and a file saying something untrue about what it holds is worse
 than no file, because it is read as a known cost and stops anyone
 looking.
 
+A page one engine drew is not the same as a page there was to draw. The
+run compares the pages both engines wrote and can see no further than
+the further of the two, so a page neither of them reached is not in the
+comparison and is not missing from either side of it: a program that
+stops emitting halfway through matches on every page it did draw and is
+silent about the rest. So each corpus declares in a `pages` file how
+many pages each of its programs has, a basename and a count per line,
+and the run reaches that far whatever the engines wrote. This is held
+from both ends too -- a program with no count fails the corpus, so one
+cannot be added without a count, and a count naming a program the
+corpus does not hold fails it as well.
+
+The counts are not a record of what this tree draws, which would make
+whatever it draws today correct by definition and lock in the next
+defect the moment it appeared. Each file says where its numbers come
+from, and in every case that is something other than xpost: the
+producer's own `%%Pages:` line corroborated by the reference engine,
+the single `showpage` a drawing ends with, or the arithmetic of the
+data a program paginates. The naive readings of the same comments are
+not sources and were measured not to be -- an embedded EPS is
+paginated too, so counting `%%Page:` lines overstates three of the
+casselman chapters and finds none at all in two thirds of the corpus,
+and `%%Pages: (atend)` says nothing until the trailer.
+
+Each corpus therefore closes with three numbers: the pages declared,
+the pages compared, and the pages absent. The wrapper that meson runs
+works the same three out for itself from the corpus directory and its
+registers, and fails when the report does not meet them. The evaluator's
+summary is otherwise the evaluator's account of itself -- it agrees with
+the work the run did and says nothing about the work the run was given,
+so a run that named half the programs reports honestly on that half.
+
 The corpora
 -----------
 

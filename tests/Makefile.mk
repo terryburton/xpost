@@ -66,13 +66,16 @@ tests/corpus/.gitignore \
 tests/corpus/README.md \
 tests/corpus/bwipp/nondeterministic \
 tests/corpus/bwipp/nopage \
+tests/corpus/bwipp/pages \
 tests/corpus/bwipp/prelude.fetched \
 tests/corpus/casselman/heldout \
 tests/corpus/casselman/nopage \
+tests/corpus/casselman/pages \
 tests/corpus/evaluate.sh \
 tests/corpus/fetch.sh \
 tests/corpus/ghostscript/nondeterministic \
 tests/corpus/ghostscript/nopage \
+tests/corpus/ghostscript/pages \
 tests/corpus/ghostscript/prelude \
 tests/corpus/run-corpus-test.sh \
 tests/counttomark_test.ps \

@@ -1,0 +1,45 @@
+# How many pages each program of this corpus draws. One basename and
+# one count per line.
+#
+# A run compares the pages both engines drew, so a page neither of them
+# drew is not in the comparison and is not missing from either side of
+# it. A program that stops emitting partway through reports every page
+# it reached as a match and says nothing whatever about the rest, which
+# is how a chapter of this corpus once lost its seventeenth page to an
+# uncaught limitcheck without the corpus noticing. This is what says
+# how many pages there were to reach, so the run can name the ones it
+# never got to.
+#
+# It is held from both ends: a program of this corpus with no count
+# here fails the corpus, so one cannot be added without a count, and a
+# count naming a program the corpus does not hold fails it too.
+#
+# The counts are not a record of what this tree draws -- a count taken
+# from that makes whatever the tree does today correct by definition,
+# and locks in the next defect the moment it appears. Each of these is
+# the %%Pages: line the file's own producer wrote, corroborated program
+# for program by the pages the reference engine draws. Neither source
+# is xpost, and on the count that xpost disagreed with when these were
+# taken -- ch8, eight pages of twelve on a narrow build -- the number
+# here is twelve.
+#
+# The naive readings of the same comments are not sources. Counting
+# %%Page: lines gives ch1 nineteen, ch8 thirteen and ch10 twenty for
+# seventeen, twelve and thirteen pages, because an embedded EPS is
+# paginated too, and a %%Pages: of (atend) says nothing at all until
+# the trailer.
+ch1 17
+ch2 14
+ch3 9
+ch4 18
+ch5 8
+ch6 20
+ch7 9
+ch8 12
+ch9 10
+ch10 13
+ch11 2
+ch12 17
+ch13 9
+ch14 20
+ch15 13

@@ -19,6 +19,13 @@
 #     tell the two apart: a run in which every program failed reaches all of
 #     them. So the pages that were never drawn are held to a declared set as
 #     well, and a run that compared nothing has nothing declaring it may.
+#     Nor is a page one engine drew the same as a page there was to draw: a
+#     program that stops emitting partway through matches on every page it
+#     reached and is silent about the rest, so the count of pages each
+#     program has is declared too. The three numbers the run closes with --
+#     what was declared, compared and absent -- are worked out a second time
+#     here from the corpus on disk, and a report that does not meet them
+#     fails whichever of the two is wrong.
 #   - PASS (exit 0) otherwise, with the per-page differences left in the log for
 #     inspection (meson test corpus -v, or meson-logs/testlog.txt).
 #   $1  path to the built xpost binary (optional; evaluate.sh finds one itself)
@@ -72,6 +79,12 @@ printf '%s\n' "$out" | grep -q 'REGISTER NAMES NOTHING' && {
     echo "corpus: a register names a program the corpus does not hold -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'DECLARED NONDETERMINISTIC AND IS NOT' && {
     echo "corpus: a program declared to differ from itself does not -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'REGISTER MALFORMED' && {
+    echo "corpus: a page count declares no number -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'PAGES NOT DECLARED' && {
+    echo "corpus: a program has no declared page count -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'PAGE COUNT DIFFERS' && {
+    echo "corpus: a program drew other than the pages declared for it -- see above"; exit 1; }
 # What the evaluator says it did, read as numbers rather than as the
 # presence of a sentence. A corpus every program of which is held out
 # prints its held-out lines and no summary at all; a corpus that reached
@@ -89,6 +102,88 @@ if ! printf '%s\n' "$out" | grep -q 'programs evaluated'; then
     echo "corpus: the evaluator reported on no corpus at all -- see above"
     exit 1
 fi
-printf '%s\n' "$out" | grep -q ', 0 pages compared' && {
-    echo "corpus: a corpus compared no pages, so nothing was measured -- see above"; exit 1; }
+
+# The corpus as it stands on disk, worked out here rather than taken
+# from the report: the programs its directory holds less the ones its
+# registers hold out, the pages its "pages" file declares for those, and
+# the pages of those its "nopage" file declares are never drawn. Three
+# numbers this script can arrive at without running anything.
+#   $1 corpus -> "programs pages absent"
+corpus_expects() {
+    cdir="$here/$1"
+    progs=0; pgs=0; gone=0
+    for cp in "$cdir"/*.ps "$cdir"/*.eps; do
+        [ -f "$cp" ] || continue
+        cb=$(basename "$cp" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
+        [ -f "$cdir/heldout" ] && grep -qxF "$cb" "$cdir/heldout" && continue
+        [ "${SKIP_NONDET:-0}" != 0 ] && [ -f "$cdir/nondeterministic" ] &&
+            grep -qxF "$cb" "$cdir/nondeterministic" && continue
+        progs=$((progs + 1))
+        cn=$(awk -v b="$cb" '$1 == b { print $2; exit }' "$cdir/pages" 2>/dev/null)
+        case ${cn:-} in ''|*[!0-9]*) cn=0 ;; esac
+        pgs=$((pgs + cn))
+        [ -f "$cdir/nopage" ] || continue
+        # a program declared to draw no page at all stands for every
+        # page declared for it; one declared to lose a page stands for
+        # that page
+        if [ "$(awk -v b="$cb" '{ sub(/#.*/, "") } $1 == b && NF == 1 { c++ }
+                                END { print c + 0 }' "$cdir/nopage")" != 0 ]; then
+            gone=$((gone + cn))
+        else
+            gone=$((gone + $(awk -v b="$cb" '{ sub(/#.*/, "") }
+                                             $1 == b && NF == 2 { c++ }
+                                             END { print c + 0 }' "$cdir/nopage")))
+        fi
+    done
+    echo "$progs $pgs $gone"
+}
+
+# and the report held to them. The evaluator's summary is the
+# evaluator's account of itself: it agrees with the work the run did,
+# and says nothing about the work the run was given. A run that named
+# half the programs reports honestly on that half; a run that lost the
+# tail of a program compares the pages it reached and reports every one
+# of them as a match. So the numbers are worked out a second time, here,
+# from the corpus rather than from the run, and a summary that does not
+# meet them fails -- whichever of the two is wrong.
+if [ -n "$corpus" ]; then set -- "$here/$corpus/"; else set -- "$here"/*/; fi
+for d in "$@"; do
+    name=$(basename "$d")
+    seen=0
+    for p in "$d"*.ps "$d"*.eps; do [ -f "$p" ] && { seen=1; break; }; done
+    [ "$seen" = 1 ] || continue
+    # a corpus waiting for a prelude it does not carry is passed over by
+    # the evaluator, and there is nothing of it to hold to anything
+    [ -f "$d"prelude.fetched ] && [ ! -s "$d"prelude ] && continue
+    line=$(printf '%s\n' "$out" | grep "^$name: " | tail -n 1)
+    if [ -z "$line" ]; then
+        echo "corpus: the evaluator reported nothing for $name -- see above"
+        exit 1
+    fi
+    said=$(printf '%s\n' "$line" | sed -n \
+        's/^[^:]*: \([0-9][0-9]*\) programs evaluated.*, \([0-9][0-9]*\) pages declared, \([0-9][0-9]*\) compared, \([0-9][0-9]*\) absent$/\1 \2 \3 \4/p')
+    if [ -z "$said" ]; then
+        echo "corpus: $name reported no count of what it did -- see above"
+        exit 1
+    fi
+    read -r sprogs sdecl scmp sabs <<SAID
+$said
+SAID
+    read -r wprogs wpages wabsent <<WANT
+$(corpus_expects "$name")
+WANT
+    if [ "$wprogs" = 0 ] || [ "$wpages" = 0 ]; then
+        echo "corpus: $name holds no program with a page declared for it, so a run of it measures nothing"
+        exit 1
+    fi
+    if [ "$sprogs" != "$wprogs" ] || [ "$sdecl" != "$wpages" ] ||
+       [ "$sabs" != "$wabsent" ]; then
+        echo "corpus: $name says it evaluated $sprogs programs over $sdecl declared pages with $sabs absent, and the corpus on disk comes to $wprogs, $wpages and $wabsent -- see above"
+        exit 1
+    fi
+    if [ "$scmp" != $((sdecl - sabs)) ] || [ "$scmp" = 0 ]; then
+        echo "corpus: $name compared $scmp pages of $sdecl declared, $sabs of which are declared to be drawn by nothing -- see above"
+        exit 1
+    fi
+done
 exit 0

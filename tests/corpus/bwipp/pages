@@ -1,0 +1,28 @@
+# How many pages each program of this corpus draws. One basename and
+# one count per line.
+#
+# A run compares the pages both engines drew, so a page neither of them
+# drew is not in the comparison and is not missing from either side of
+# it. A program that stops emitting partway through reports every page
+# it reached as a match and says nothing whatever about the rest. This
+# is what says how many pages there were to reach, so the run can name
+# the ones it never got to.
+#
+# It is held from both ends: a program of this corpus with no count
+# here fails the corpus, so one cannot be added without a count, and a
+# count naming a program the corpus does not hold fails it too.
+#
+# The counts are not a record of what this tree draws -- a count taken
+# from that makes whatever the tree does today correct by definition.
+# These programs carry no page count of their own to read, and their
+# pages are not in the source at all: each lays out the records it
+# reads from its own tail, one showpage per full sheet, so the count is
+# the arithmetic of the data and the grid. vdp fills forty labels to a
+# page from two hundred and forty records, vdp_with_eps one page per
+# record from ten, and vdp_ltotapelabel a three-by-eleven grid from
+# thirty-three. dimensions defines a procedure and names showpage
+# nowhere, so it draws none and nopage carries the reason.
+dimensions 0
+vdp 6
+vdp_ltotapelabel 1
+vdp_with_eps 10

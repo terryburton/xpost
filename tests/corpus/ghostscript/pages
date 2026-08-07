@@ -1,0 +1,39 @@
+# How many pages each program of this corpus draws. One basename and
+# one count per line.
+#
+# A run compares the pages both engines drew, so a page neither of them
+# drew is not in the comparison and is not missing from either side of
+# it. A program that stops emitting partway through reports every page
+# it reached as a match and says nothing whatever about the rest. This
+# is what says how many pages there were to reach, so the run can name
+# the ones it never got to.
+#
+# It is held from both ends: a program of this corpus with no count
+# here fails the corpus, so one cannot be added without a count, and a
+# count naming a program the corpus does not hold fails it too.
+#
+# The counts are not a record of what this tree draws -- a count taken
+# from that makes whatever the tree does today correct by definition.
+# These programs carry no page count of their own to read: only
+# doretree has a %%Pages: line at all and it is (atend), which says
+# nothing until the trailer. Each is instead a single drawing that ends
+# in one showpage below the restore that closes it, which is the count
+# below; ridt91 is the one whose showpage is commented out, so it draws
+# none and nopage carries the reason.
+#
+# Counting showpage is not the same as counting pages and is not what
+# was done here. alphabet has a second one inside the loop that lays
+# out its text, reached only when the text outgrows the page, and its
+# text does not.
+alphabet 1
+colorcir 1
+doretree 1
+escher 1
+golfer 1
+grayalph 1
+ridt91 0
+snowflak 1
+spots 1
+tiger 1
+vasarely 1
+waterfal 1
