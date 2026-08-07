@@ -383,15 +383,6 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    if (argc == 1)
-    {
-        /* XPOST_LOG_INFO("FIXME"); */
-    }
-    else
-    {
-        /* XPOST_LOG_INFO("FIXME"); */
-    }
-
     i = 0;
     while (++i < argc)
     {
