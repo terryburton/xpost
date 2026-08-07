@@ -752,7 +752,7 @@ int loadrasterdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "rasterCreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
+    op = xpost_operator_cons(ctx, "rasterCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
     ret = xpost_dev_class_install(ctx, classdic, 3, 1,
@@ -774,7 +774,7 @@ int loadrasterdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "newrasterdevice", (Xpost_Op_Func)newrasterdevice, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "newrasterdevice", (Xpost_Op_Func)newrasterdevice, 2, integertype, integertype);
     ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newrasterdevice"), op);
     if (ret)
         return ret;
@@ -807,8 +807,8 @@ int xpost_oper_init_raster_device_ops (Xpost_Context *ctx,
         return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
-    op = xpost_operator_cons(ctx, "loadrasterdevice", (Xpost_Op_Func)loadrasterdevice, 1, 0); INSTALL;
-    op = xpost_operator_cons(ctx, "loadrasterdevicecont", (Xpost_Op_Func)loadrasterdevicecont, 1, 1, dicttype);
+    op = xpost_operator_cons(ctx, "loadrasterdevice", (Xpost_Op_Func)loadrasterdevice, 0); INSTALL;
+    op = xpost_operator_cons(ctx, "loadrasterdevicecont", (Xpost_Op_Func)loadrasterdevicecont, 1, dicttype);
     _loadrasterdevicecont_opcode = op.mark_.padw;
 
     return 0;

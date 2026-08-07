@@ -83,7 +83,6 @@ static void _op_restore_note(Xpost_Context *ctx, int idx, Xpost_Object orig)
    int in;
    unsigned t;
    int (*checkstack)(Xpost_Context *ctx);
-   int out;
    } Xpost_Signature;
 
    typedef struct Xpost_Operator {
@@ -398,15 +397,13 @@ Xpost_Object xpost_operator_cons_opcode(int opcode)
 /* construct an operator object by name
    If function-pointer fp is not NULL, attempts to install a new operator
    in OPTAB, otherwise just perform a lookup.
-   If installing a new operator, out and in specify the number of
-   output values the function may yield and the number of input
+   If installing a new operator, in specifies the number of input
    values whose presence and types should be checked.
    There should follow 'in' number of typenames passed after 'in'.
 */
 Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                                  const char *name,
                                  /*@null@*/ Xpost_Op_Func fp,
-                                 int out,
                                  int in, ...)
 {
     Xpost_Object nm;
@@ -427,8 +424,8 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
 
     if (!(in < XPOST_STACK_SEGMENT_SIZE))
     {
-        printf("!(in < XPOST_STACK_SEGMENT_SIZE) in xpost_operator_cons(%s, %d. %d)\n", name, out, in);
-        fprintf(stderr, "!(in < XPOST_STACK_SEGMENT_SIZE) in xpost_operator_cons(%s, %d. %d)\n", name, out, in);
+        printf("!(in < XPOST_STACK_SEGMENT_SIZE) in xpost_operator_cons(%s, %d)\n", name, in);
+        fprintf(stderr, "!(in < XPOST_STACK_SEGMENT_SIZE) in xpost_operator_cons(%s, %d)\n", name, in);
         exit(EXIT_FAILURE);
     }
     //assert(in < XPOST_STACK_SEGMENT_SIZE); // or else xpost_operator_exec can't call it using HOLD
@@ -516,7 +513,6 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
             }
             va_end(args);
             sp[si].in = in;
-            sp[si].out = out;
             sp[si].fp = (int(*)(Xpost_Context *))fp;
             sp[si].checkstack = NULL;
             {
@@ -664,7 +660,6 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
             for (k = 0; k < in; k++)
                 b[k] = sigs[s].types[k];
             sig[s].in = in;
-            sig[s].out = 0;
             sig[s].t = tadr;
             sig[s].fp = NULL;
             sig[s].checkstack = NULL;

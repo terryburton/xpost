@@ -861,59 +861,57 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "exec", (Xpost_Op_Func)xpost_op_any_exec, 0, 1, anytype);
+    op = xpost_operator_cons(ctx, "exec", (Xpost_Op_Func)xpost_op_any_exec, 1, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "if", (Xpost_Op_Func)xpost_op_bool_proc_if, 0, 2, booleantype, proctype);
+    op = xpost_operator_cons(ctx, "if", (Xpost_Op_Func)xpost_op_bool_proc_if, 2, booleantype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "ifelse", (Xpost_Op_Func)xpost_op_bool_proc_proc_ifelse, 0, 3, booleantype, proctype, proctype);
+    op = xpost_operator_cons(ctx, "ifelse", (Xpost_Op_Func)xpost_op_bool_proc_proc_ifelse, 3, booleantype, proctype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_int_int_int_proc_for, 0, 4, \
+    op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_int_int_int_proc_for, 4, \
                              integertype, integertype, numbertype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_real_real_real_proc_for, 0, 4, \
+    op = xpost_operator_cons(ctx, "for", (Xpost_Op_Func)xpost_op_real_real_real_proc_for, 4, \
                              floattype, floattype, floattype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "repeat", (Xpost_Op_Func)xpost_op_int_proc_repeat, 0, 2, integertype, proctype);
+    op = xpost_operator_cons(ctx, "repeat", (Xpost_Op_Func)xpost_op_int_proc_repeat, 2, integertype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "loop", (Xpost_Op_Func)xpost_op_proc_loop, 0, 1, proctype);
+    op = xpost_operator_cons(ctx, "loop", (Xpost_Op_Func)xpost_op_proc_loop, 1, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
-    op = xpost_operator_cons(ctx, "wrap.sealed", (Xpost_Op_Func)xpost_op_wrapdone, 0, 0);
+    op = xpost_operator_cons(ctx, "wrap.done", (Xpost_Op_Func)xpost_op_wrapdone, 0);
+    op = xpost_operator_cons(ctx, "wrap.sealed", (Xpost_Op_Func)xpost_op_wrapdone, 0);
     op = xpost_operator_cons(ctx, "callout.done",
-                             (Xpost_Op_Func)xpost_op_calloutdone, 0, 0);
+                             (Xpost_Op_Func)xpost_op_calloutdone, 0);
     /* internal loop-continuation operators, referenced by opcode only */
-    op = xpost_operator_cons(ctx, "for.iterate", (Xpost_Op_Func)xpost_op_for_iterate, 0, 0);
-    op = xpost_operator_cons(ctx, "repeat.iterate", (Xpost_Op_Func)xpost_op_repeat_iterate, 0, 0);
-    op = xpost_operator_cons(ctx, "loop.iterate", (Xpost_Op_Func)xpost_op_loop_iterate, 0, 0);
-    op = xpost_operator_cons(ctx, "exit", (Xpost_Op_Func)xpost_op_exit, 0, 0);
+    op = xpost_operator_cons(ctx, "for.iterate", (Xpost_Op_Func)xpost_op_for_iterate, 0);
+    op = xpost_operator_cons(ctx, "repeat.iterate", (Xpost_Op_Func)xpost_op_repeat_iterate, 0);
+    op = xpost_operator_cons(ctx, "loop.iterate", (Xpost_Op_Func)xpost_op_loop_iterate, 0);
+    op = xpost_operator_cons(ctx, "exit", (Xpost_Op_Func)xpost_op_exit, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "stop", (Xpost_Op_Func)xpost_op_stop, 0, 0);
+    op = xpost_operator_cons(ctx, "stop", (Xpost_Op_Func)xpost_op_stop, 0);
     if (xpost_object_get_type(op) == invalidtype)
         return VMerror;
     if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, ".rundied"),
                        xpost_operator_cons(ctx, ".rundied",
-                                           (Xpost_Op_Func)xpost_op_rundied,
-                                           0, 0)))
+                                           (Xpost_Op_Func)xpost_op_rundied, 0)))
         return VMerror;
     INSTALL;
     op = xpost_operator_cons(ctx, ".errorunwind",
-                             (Xpost_Op_Func)xpost_op_errorunwind, 0, 0);
+                             (Xpost_Op_Func)xpost_op_errorunwind, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".coexec", (Xpost_Op_Func)xpost_op_proc_coexec,
-                             0, 1, proctype);
+    op = xpost_operator_cons(ctx, ".coexec", (Xpost_Op_Func)xpost_op_proc_coexec, 1, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 1, 2, nametype, proctype);
+    op = xpost_operator_cons(ctx, ".wrapop", (Xpost_Op_Func)xpost_op_wrapop, 2, nametype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".wrapopsig", (Xpost_Op_Func)xpost_op_wrapopsig, 1, 3,
+    op = xpost_operator_cons(ctx, ".wrapopsig", (Xpost_Op_Func)xpost_op_wrapopsig, 3,
                              nametype, proctype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "stopped", (Xpost_Op_Func)xpost_op_any_stopped, 0, 1, anytype);
+    op = xpost_operator_cons(ctx, "stopped", (Xpost_Op_Func)xpost_op_any_stopped, 1, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "countexecstack", (Xpost_Op_Func)xpost_op_countexecstack, 1, 0);
+    op = xpost_operator_cons(ctx, "countexecstack", (Xpost_Op_Func)xpost_op_countexecstack, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "execstack", (Xpost_Op_Func)xpost_op_array_execstack, 1, 1, arraytype);
+    op = xpost_operator_cons(ctx, "execstack", (Xpost_Op_Func)xpost_op_array_execstack, 1, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "quit", (Xpost_Op_Func)xpost_op_quit, 0, 0);
+    op = xpost_operator_cons(ctx, "quit", (Xpost_Op_Func)xpost_op_quit, 0);
     INSTALL;
     /*
     op = xpost_operator_cons(ctx, "eq", (Xpost_Op_Func)Aeq, 1, 2, anytype, anytype);

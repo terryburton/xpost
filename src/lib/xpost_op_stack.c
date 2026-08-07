@@ -260,28 +260,28 @@ int xpost_oper_init_stack_ops(Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
-    op = xpost_operator_cons(ctx, "pop", (Xpost_Op_Func)Apop, 0, 1, anytype);
+    op = xpost_operator_cons(ctx, "pop", (Xpost_Op_Func)Apop, 1, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "exch", (Xpost_Op_Func)AAexch, 2, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "exch", (Xpost_Op_Func)AAexch, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "dup", (Xpost_Op_Func)Adup, 2, 1, anytype);
+    op = xpost_operator_cons(ctx, "dup", (Xpost_Op_Func)Adup, 1, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)Icopy, 0, 1, integertype);
+    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)Icopy, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "index", (Xpost_Op_Func)Iindex, 1, 1, integertype);
+    op = xpost_operator_cons(ctx, "index", (Xpost_Op_Func)Iindex, 1, integertype);
     INSTALL;
     //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
-    op = xpost_operator_cons(ctx, "roll", (Xpost_Op_Func)IIroll, 0, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "roll", (Xpost_Op_Func)IIroll, 2, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "clear", (Xpost_Op_Func)Zclear, 0, 0);
+    op = xpost_operator_cons(ctx, "clear", (Xpost_Op_Func)Zclear, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "count", (Xpost_Op_Func)Zcount, 1, 0);
+    op = xpost_operator_cons(ctx, "count", (Xpost_Op_Func)Zcount, 0);
     INSTALL;
     if (xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark))
         return VMerror;
-    op = xpost_operator_cons(ctx, "cleartomark", (Xpost_Op_Func)xpost_op_cleartomark, 0, 0);
+    op = xpost_operator_cons(ctx, "cleartomark", (Xpost_Op_Func)xpost_op_cleartomark, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "counttomark", (Xpost_Op_Func)xpost_op_counttomark, 1, 0);
+    op = xpost_operator_cons(ctx, "counttomark", (Xpost_Op_Func)xpost_op_counttomark, 0);
     INSTALL;
     return 0;
 }

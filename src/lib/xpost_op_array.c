@@ -475,45 +475,45 @@ int xpost_oper_init_array_ops (Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "array", (Xpost_Op_Func)xpost_op_int_array, 1, 1,
+    op = xpost_operator_cons(ctx, "array", (Xpost_Op_Func)xpost_op_int_array, 1,
             integertype);
     INSTALL;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "["), mark);
     if (ret)
         return ret;
-    op = xpost_operator_cons(ctx, "]", (Xpost_Op_Func)xpost_op_array_to_mark, 1, 0);
+    op = xpost_operator_cons(ctx, "]", (Xpost_Op_Func)xpost_op_array_to_mark, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)xpost_op_array_length, 1, 1,
+    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)xpost_op_array_length, 1,
             arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)xpost_op_array_int_get, 1, 2,
+    op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)xpost_op_array_int_get, 2,
             arraytype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "put", (Xpost_Op_Func)xpost_op_array_int_any_put, 0, 3,
+    op = xpost_operator_cons(ctx, "put", (Xpost_Op_Func)xpost_op_array_int_any_put, 3,
             arraytype, integertype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "getinterval", (Xpost_Op_Func)xpost_op_array_int_int_getinterval, 1, 3,
+    op = xpost_operator_cons(ctx, "getinterval", (Xpost_Op_Func)xpost_op_array_int_int_getinterval, 3,
             arraytype, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "putinterval", (Xpost_Op_Func)xpost_op_array_int_array_putinterval, 0, 3,
+    op = xpost_operator_cons(ctx, "putinterval", (Xpost_Op_Func)xpost_op_array_int_array_putinterval, 3,
             arraytype, integertype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "aload", (Xpost_Op_Func)xpost_op_array_aload, 1, 1,
+    op = xpost_operator_cons(ctx, "aload", (Xpost_Op_Func)xpost_op_array_aload, 1,
             arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "astore", (Xpost_Op_Func)xpost_op_anyn_array_astore, 1, 1,
+    op = xpost_operator_cons(ctx, "astore", (Xpost_Op_Func)xpost_op_anyn_array_astore, 1,
             arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".numstring2array", (Xpost_Op_Func)_numstring2array, 1, 1,
+    op = xpost_operator_cons(ctx, ".numstring2array", (Xpost_Op_Func)_numstring2array, 1,
             stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)xpost_op_array_copy, 1, 2,
+    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)xpost_op_array_copy, 2,
             arraytype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "forall", (Xpost_Op_Func)xpost_op_array_proc_forall, 0, 2,
+    op = xpost_operator_cons(ctx, "forall", (Xpost_Op_Func)xpost_op_array_proc_forall, 2,
             arraytype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "forall.array.iterate", (Xpost_Op_Func)xpost_op_array_forall_iterate, 0, 0);
+    op = xpost_operator_cons(ctx, "forall.array.iterate", (Xpost_Op_Func)xpost_op_array_forall_iterate, 0);
 
     return 0;
 }

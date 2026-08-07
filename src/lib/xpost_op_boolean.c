@@ -252,33 +252,33 @@ int xpost_oper_init_bool_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "eq", (Xpost_Op_Func)xpost_op_any_any_eq, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "eq", (Xpost_Op_Func)xpost_op_any_any_eq, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "ne", (Xpost_Op_Func)xpost_op_any_any_ne, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "ne", (Xpost_Op_Func)xpost_op_any_any_ne, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "ge", (Xpost_Op_Func)xpost_op_any_any_ge, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "ge", (Xpost_Op_Func)xpost_op_any_any_ge, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "gt", (Xpost_Op_Func)xpost_op_any_any_gt, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "gt", (Xpost_Op_Func)xpost_op_any_any_gt, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "le", (Xpost_Op_Func)xpost_op_any_any_le, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "le", (Xpost_Op_Func)xpost_op_any_any_le, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "lt", (Xpost_Op_Func)xpost_op_any_any_lt, 1, 2, anytype, anytype);
+    op = xpost_operator_cons(ctx, "lt", (Xpost_Op_Func)xpost_op_any_any_lt, 2, anytype, anytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "and", (Xpost_Op_Func)xpost_op_bool_bool_and, 1, 2, booleantype, booleantype);
+    op = xpost_operator_cons(ctx, "and", (Xpost_Op_Func)xpost_op_bool_bool_and, 2, booleantype, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "and", (Xpost_Op_Func)xpost_op_int_int_and, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "and", (Xpost_Op_Func)xpost_op_int_int_and, 2, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "not", (Xpost_Op_Func)xpost_op_bool_not, 1, 1, booleantype);
+    op = xpost_operator_cons(ctx, "not", (Xpost_Op_Func)xpost_op_bool_not, 1, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "not", (Xpost_Op_Func)xpost_op_int_not, 1, 1, integertype);
+    op = xpost_operator_cons(ctx, "not", (Xpost_Op_Func)xpost_op_int_not, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "or", (Xpost_Op_Func)xpost_op_bool_bool_or, 1, 2, booleantype, booleantype);
+    op = xpost_operator_cons(ctx, "or", (Xpost_Op_Func)xpost_op_bool_bool_or, 2, booleantype, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "or", (Xpost_Op_Func)xpost_op_int_int_or, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "or", (Xpost_Op_Func)xpost_op_int_int_or, 2, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "xor", (Xpost_Op_Func)xpost_op_bool_bool_xor, 1, 2, booleantype, booleantype);
+    op = xpost_operator_cons(ctx, "xor", (Xpost_Op_Func)xpost_op_bool_bool_xor, 2, booleantype, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "xor", (Xpost_Op_Func)xpost_op_int_int_xor, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "xor", (Xpost_Op_Func)xpost_op_int_int_xor, 2, integertype, integertype);
     INSTALL;
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "true"), xpost_bool_cons(1));
     if (ret)
@@ -286,7 +286,7 @@ int xpost_oper_init_bool_ops(Xpost_Context *ctx,
     ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "false"), xpost_bool_cons(0));
     if (ret)
         return ret;
-    op = xpost_operator_cons(ctx, "bitshift", (Xpost_Op_Func)xpost_op_int_int_bitshift, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "bitshift", (Xpost_Op_Func)xpost_op_int_int_bitshift, 2, integertype, integertype);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL); */

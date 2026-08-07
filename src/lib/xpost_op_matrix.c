@@ -602,80 +602,80 @@ int xpost_oper_init_matrix_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "matrix", (Xpost_Op_Func)_matrix, 1, 0);
+    op = xpost_operator_cons(ctx, "matrix", (Xpost_Op_Func)_matrix, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "initmatrix", (Xpost_Op_Func)_init_matrix, 0, 0);
+    op = xpost_operator_cons(ctx, "initmatrix", (Xpost_Op_Func)_init_matrix, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "identmatrix", (Xpost_Op_Func)_ident_matrix, 1, 1,
+    op = xpost_operator_cons(ctx, "identmatrix", (Xpost_Op_Func)_ident_matrix, 1,
                              arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "defaultmatrix", (Xpost_Op_Func)_default_matrix, 1, 1,
-                             arraytype);
-    INSTALL;
-
-    op = xpost_operator_cons(ctx, "currentmatrix", (Xpost_Op_Func)_current_matrix, 1, 1,
-                             arraytype);
-    INSTALL;
-    op = xpost_operator_cons(ctx, "setmatrix", (Xpost_Op_Func)_set_matrix, 0, 1,
+    op = xpost_operator_cons(ctx, "defaultmatrix", (Xpost_Op_Func)_default_matrix, 1,
                              arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "translate", (Xpost_Op_Func)_translate, 0, 2,
+    op = xpost_operator_cons(ctx, "currentmatrix", (Xpost_Op_Func)_current_matrix, 1,
+                             arraytype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "setmatrix", (Xpost_Op_Func)_set_matrix, 1,
+                             arraytype);
+    INSTALL;
+
+    op = xpost_operator_cons(ctx, "translate", (Xpost_Op_Func)_translate, 2,
                              floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "translate", (Xpost_Op_Func)_mat_translate, 1, 3,
+    op = xpost_operator_cons(ctx, "translate", (Xpost_Op_Func)_mat_translate, 3,
                              floattype, floattype, arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "scale", (Xpost_Op_Func)_scale, 0, 2,
+    op = xpost_operator_cons(ctx, "scale", (Xpost_Op_Func)_scale, 2,
             floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "scale", (Xpost_Op_Func)_mat_scale, 1, 3,
+    op = xpost_operator_cons(ctx, "scale", (Xpost_Op_Func)_mat_scale, 3,
                              floattype, floattype, arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_rotate, 0, 1,
+    op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_rotate, 1,
                              floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_mat_rotate, 1, 2,
+    op = xpost_operator_cons(ctx, "rotate", (Xpost_Op_Func)_mat_rotate, 2,
                              floattype, arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "concat", (Xpost_Op_Func)_concat, 0, 1,
+    op = xpost_operator_cons(ctx, "concat", (Xpost_Op_Func)_concat, 1,
             arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "concatmatrix", (Xpost_Op_Func)_concat_matrix, 1, 3,
+    op = xpost_operator_cons(ctx, "concatmatrix", (Xpost_Op_Func)_concat_matrix, 3,
                              arraytype, arraytype, arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_transform, 2, 2,
+    op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_transform, 2,
                              floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_mat_transform, 2, 3,
+    op = xpost_operator_cons(ctx, "transform", (Xpost_Op_Func)_mat_transform, 3,
                              floattype, floattype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "dtransform", (Xpost_Op_Func)_dtransform, 2, 2,
+    op = xpost_operator_cons(ctx, "dtransform", (Xpost_Op_Func)_dtransform, 2,
                              floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "dtransform", (Xpost_Op_Func)_mat_dtransform, 2, 3,
+    op = xpost_operator_cons(ctx, "dtransform", (Xpost_Op_Func)_mat_dtransform, 3,
                              floattype, floattype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_itransform, 2, 2,
+    op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_itransform, 2,
                              floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_mat_itransform, 2, 3,
+    op = xpost_operator_cons(ctx, "itransform", (Xpost_Op_Func)_mat_itransform, 3,
                              floattype, floattype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "idtransform", (Xpost_Op_Func)_idtransform, 2, 2,
+    op = xpost_operator_cons(ctx, "idtransform", (Xpost_Op_Func)_idtransform, 2,
                              floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "idtransform", (Xpost_Op_Func)_mat_idtransform, 2, 3,
+    op = xpost_operator_cons(ctx, "idtransform", (Xpost_Op_Func)_mat_idtransform, 3,
                              floattype, floattype, arraytype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "invertmatrix", (Xpost_Op_Func)_invert_matrix, 1, 2,
+    op = xpost_operator_cons(ctx, "invertmatrix", (Xpost_Op_Func)_invert_matrix, 2,
                              arraytype, arraytype);
     INSTALL;
 

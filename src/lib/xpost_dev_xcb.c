@@ -747,7 +747,7 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "xcbCreateCont", (Xpost_Op_Func)_create_cont, 1, 3,
+    op = xpost_operator_cons(ctx, "xcbCreateCont", (Xpost_Op_Func)_create_cont, 3,
                              integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
@@ -783,12 +783,12 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "newxcbdevice", (Xpost_Op_Func)newxcbdevice, 1, 2, integertype, integertype);
+    op = xpost_operator_cons(ctx, "newxcbdevice", (Xpost_Op_Func)newxcbdevice, 2, integertype, integertype);
     ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newxcbdevice"), op);
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "xcbEventHandler", (Xpost_Op_Func)_event_handler, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, "xcbEventHandler", (Xpost_Op_Func)_event_handler, 1, dicttype);
     _event_handler_opcode = op.mark_.padw;
 
     return 0;
@@ -818,8 +818,8 @@ int xpost_oper_init_xcb_device_ops (Xpost_Context *ctx,
         return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
-    op = xpost_operator_cons(ctx, "loadxcbdevice", (Xpost_Op_Func)loadxcbdevice, 1, 0); INSTALL;
-    op = xpost_operator_cons(ctx, "loadxcbdevicecont", (Xpost_Op_Func)loadxcbdevicecont, 1, 1, dicttype);
+    op = xpost_operator_cons(ctx, "loadxcbdevice", (Xpost_Op_Func)loadxcbdevice, 0); INSTALL;
+    op = xpost_operator_cons(ctx, "loadxcbdevicecont", (Xpost_Op_Func)loadxcbdevicecont, 1, dicttype);
     _loadxcbdevicecont_opcode = op.mark_.padw;
     //printf("initxcbops\n");
 

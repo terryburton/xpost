@@ -1478,9 +1478,9 @@ int xpost_oper_init_token_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Ftoken, 2, 1, filetype);
+    op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Ftoken, 1, filetype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Stoken, 3, 1, stringtype);
+    op = xpost_operator_cons(ctx, "token", (Xpost_Op_Func)Stoken, 1, stringtype);
     INSTALL;
     return 0;
 }

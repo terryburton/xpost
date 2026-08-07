@@ -295,18 +295,18 @@ int xpost_oper_init_save_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "save", (Xpost_Op_Func)Zsave, 1, 0);
+    op = xpost_operator_cons(ctx, "save", (Xpost_Op_Func)Zsave, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "restore", (Xpost_Op_Func)Vrestore, 0, 1, savetype);
+    op = xpost_operator_cons(ctx, "restore", (Xpost_Op_Func)Vrestore, 1, savetype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "setglobal", (Xpost_Op_Func)Bsetglobal, 0, 1, booleantype);
+    op = xpost_operator_cons(ctx, "setglobal", (Xpost_Op_Func)Bsetglobal, 1, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "currentglobal", (Xpost_Op_Func)Zcurrentglobal, 1, 0);
+    op = xpost_operator_cons(ctx, "currentglobal", (Xpost_Op_Func)Zcurrentglobal, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "gcheck", (Xpost_Op_Func)Agcheck, 1, 1, anytype);
+    op = xpost_operator_cons(ctx, "gcheck", (Xpost_Op_Func)Agcheck, 1, anytype);
     INSTALL;
 #if 0
-    op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)Zvmstatus, 3, 0);
+    op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)Zvmstatus, 0);
     INSTALL;
 #endif
 

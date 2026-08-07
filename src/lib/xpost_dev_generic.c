@@ -3413,64 +3413,64 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
 
     optab = xpost_operator_table(ctx->gl);
 
-    op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 0, 1, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 0, 2, arraytype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 2, arraytype, dicttype); INSTALL;
     _region_memo_flush();
-    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 1, 3,
+    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 3,
                              arraytype, arraytype, integertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 1, 3,
+    op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 3,
                              arraytype, stringtype, integertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 1, 0); INSTALL;
-    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, 1, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly_rows, 1, 3,
+    op = xpost_operator_cons(ctx, ".newregionserial", (Xpost_Op_Func)_newregionserial, 0); INSTALL;
+    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly_rows, 3,
                              arraytype, integertype, integertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 0, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 1, 6,
+    op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 6,
             numbertype, numbertype, numbertype, numbertype,
             numbertype, numbertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".linepix", (Xpost_Op_Func)_linepix, 1, 6,
+    op = xpost_operator_cons(ctx, ".linepix", (Xpost_Op_Func)_linepix, 6,
             numbertype, numbertype, numbertype, numbertype,
             numbertype, numbertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 0, 6,
+    op = xpost_operator_cons(ctx, ".fillrectgray", (Xpost_Op_Func)_fillrectgray, 6,
             numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".blendpixgray", (Xpost_Op_Func)_blendpixgray, 0, 5,
+    op = xpost_operator_cons(ctx, ".blendpixgray", (Xpost_Op_Func)_blendpixgray, 5,
             numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".blendpixrgb", (Xpost_Op_Func)_blendpixrgb, 0, 7,
+    op = xpost_operator_cons(ctx, ".blendpixrgb", (Xpost_Op_Func)_blendpixrgb, 7,
             numbertype, numbertype, numbertype, numbertype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 0, 8,
+    op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 8,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".zerorows", (Xpost_Op_Func)_zerorows, 0, 1, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".base64", (Xpost_Op_Func)_base64, 1, 1, stringtype); INSTALL;
-    op = xpost_operator_cons(ctx, ".formmask", (Xpost_Op_Func)_formmask, 1, 2,
+    op = xpost_operator_cons(ctx, ".zerorows", (Xpost_Op_Func)_zerorows, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".base64", (Xpost_Op_Func)_base64, 1, stringtype); INSTALL;
+    op = xpost_operator_cons(ctx, ".formmask", (Xpost_Op_Func)_formmask, 2,
                              arraytype, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".blitform", (Xpost_Op_Func)_blitform, 0, 5,
+    op = xpost_operator_cons(ctx, ".blitform", (Xpost_Op_Func)_blitform, 5,
                              arraytype, arraytype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 0, 2,
+    op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 2,
                              arraytype, filetype); INSTALL;
-    op = xpost_operator_cons(ctx, ".writepbmrows", (Xpost_Op_Func)_writepbmrows, 0, 2,
+    op = xpost_operator_cons(ctx, ".writepbmrows", (Xpost_Op_Func)_writepbmrows, 2,
                              arraytype, filetype); INSTALL;
-    op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 0, 2,
+    op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 2,
                              arraytype, filetype); INSTALL;
-    op = xpost_operator_cons(ctx, ".flatecompress", (Xpost_Op_Func)_flatecompress, 2, 1, arraytype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 0, 2,
+    op = xpost_operator_cons(ctx, ".flatecompress", (Xpost_Op_Func)_flatecompress, 1, arraytype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffillpoly", (Xpost_Op_Func)_pdffillpoly, 2,
             arraytype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".svgfillpoly", (Xpost_Op_Func)_svgfillpoly, 0, 5,
+    op = xpost_operator_cons(ctx, ".svgfillpoly", (Xpost_Op_Func)_svgfillpoly, 5,
             numbertype, numbertype, numbertype, arraytype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfinit", (Xpost_Op_Func)_pdfinit, 0, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfput", (Xpost_Op_Func)_pdfput, 0, 2, stringtype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfchunks", (Xpost_Op_Func)_pdfchunks, 1, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdffree", (Xpost_Op_Func)_pdffree, 0, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".devinstalled", (Xpost_Op_Func)_devinstalled, 0, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfreset", (Xpost_Op_Func)_pdfreset, 0, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfnumstr", (Xpost_Op_Func)_pdfnumstr, 1, 1,
+    op = xpost_operator_cons(ctx, ".pdfinit", (Xpost_Op_Func)_pdfinit, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfput", (Xpost_Op_Func)_pdfput, 2, stringtype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfchunks", (Xpost_Op_Func)_pdfchunks, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdffree", (Xpost_Op_Func)_pdffree, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".devinstalled", (Xpost_Op_Func)_devinstalled, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfreset", (Xpost_Op_Func)_pdfreset, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfnumstr", (Xpost_Op_Func)_pdfnumstr, 1,
             numbertype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdffindsep", (Xpost_Op_Func)_pdffindsep, 2, 2,
+    op = xpost_operator_cons(ctx, ".pdffindsep", (Xpost_Op_Func)_pdffindsep, 2,
             stringtype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfregsep", (Xpost_Op_Func)_pdfregsep, 1, 4,
+    op = xpost_operator_cons(ctx, ".pdfregsep", (Xpost_Op_Func)_pdfregsep, 4,
             stringtype, stringtype, stringtype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfsepcount", (Xpost_Op_Func)_pdfsepcount, 1, 1, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".pdfsepget", (Xpost_Op_Func)_pdfsepget, 2, 2,
+    op = xpost_operator_cons(ctx, ".pdfsepcount", (Xpost_Op_Func)_pdfsepcount, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pdfsepget", (Xpost_Op_Func)_pdfsepget, 2,
             integertype, dicttype); INSTALL;
     if (xpost_object_get_type((nameImgData = xpost_name_cons(ctx, "ImgData"))) == invalidtype)
         return VMerror;

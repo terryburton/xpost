@@ -392,39 +392,39 @@ int xpost_oper_init_string_ops (Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
-    op = xpost_operator_cons(ctx, "string", (Xpost_Op_Func)Istring, 1, 1,
+    op = xpost_operator_cons(ctx, "string", (Xpost_Op_Func)Istring, 1,
                              integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)Slength, 1, 1,
+    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)Slength, 1,
                              stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)Nlength, 1, 1,
+    op = xpost_operator_cons(ctx, "length", (Xpost_Op_Func)Nlength, 1,
                              nametype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)Scopy, 1, 2,
+    op = xpost_operator_cons(ctx, "copy", (Xpost_Op_Func)Scopy, 2,
                              stringtype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)Sget, 1, 2,
+    op = xpost_operator_cons(ctx, "get", (Xpost_Op_Func)Sget, 2,
                              stringtype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "put", (Xpost_Op_Func)Sput, 0, 3,
+    op = xpost_operator_cons(ctx, "put", (Xpost_Op_Func)Sput, 3,
                              stringtype, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "getinterval", (Xpost_Op_Func)Sgetinterval, 1, 3,
+    op = xpost_operator_cons(ctx, "getinterval", (Xpost_Op_Func)Sgetinterval, 3,
                              stringtype, integertype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "putinterval", (Xpost_Op_Func)Sputinterval, 0, 3,
+    op = xpost_operator_cons(ctx, "putinterval", (Xpost_Op_Func)Sputinterval, 3,
                              stringtype, integertype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "anchorsearch", (Xpost_Op_Func)Sanchorsearch, 3, 2,
+    op = xpost_operator_cons(ctx, "anchorsearch", (Xpost_Op_Func)Sanchorsearch, 2,
                              stringtype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "search", (Xpost_Op_Func)Ssearch, 4, 2,
+    op = xpost_operator_cons(ctx, "search", (Xpost_Op_Func)Ssearch, 2,
                              stringtype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "forall", (Xpost_Op_Func)Sforall, 0, 2,
+    op = xpost_operator_cons(ctx, "forall", (Xpost_Op_Func)Sforall, 2,
                              stringtype, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "forall.string.iterate", (Xpost_Op_Func)xpost_op_string_forall_iterate, 0, 0);
+    op = xpost_operator_cons(ctx, "forall.string.iterate", (Xpost_Op_Func)xpost_op_string_forall_iterate, 0);
     return 0;
 }

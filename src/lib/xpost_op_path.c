@@ -1989,107 +1989,107 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
         return VMerror;
 
 
-    op = xpost_operator_cons(ctx, "newpath", (Xpost_Op_Func)_newpath, 0, 0);
+    op = xpost_operator_cons(ctx, "newpath", (Xpost_Op_Func)_newpath, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "currentpoint", (Xpost_Op_Func)_currentpoint, 0, 0);
+    op = xpost_operator_cons(ctx, "currentpoint", (Xpost_Op_Func)_currentpoint, 0);
     _currentpoint_opcode = op.mark_.padw;
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "moveto", (Xpost_Op_Func)_moveto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, "moveto", (Xpost_Op_Func)_moveto, 2, floattype, floattype);
     _moveto_opcode = op.mark_.padw;
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "rmoveto", (Xpost_Op_Func)_rmoveto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, "rmoveto", (Xpost_Op_Func)_rmoveto, 2, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "rmoveto_cont", (Xpost_Op_Func)_rmoveto_cont, 0, 4,
+    op = xpost_operator_cons(ctx, "rmoveto_cont", (Xpost_Op_Func)_rmoveto_cont, 4,
                              floattype, floattype, floattype, floattype);
     _rmoveto_cont_opcode = op.mark_.padw;
 
-    op = xpost_operator_cons(ctx, "lineto", (Xpost_Op_Func)_lineto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, "lineto", (Xpost_Op_Func)_lineto, 2, floattype, floattype);
     _lineto_opcode = op.mark_.padw;
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "rlineto", (Xpost_Op_Func)_rlineto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, "rlineto", (Xpost_Op_Func)_rlineto, 2, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "rlineto_cont", (Xpost_Op_Func)_rlineto_cont, 0, 4,
+    op = xpost_operator_cons(ctx, "rlineto_cont", (Xpost_Op_Func)_rlineto_cont, 4,
                              floattype, floattype, floattype, floattype);
     _rlineto_cont_opcode = op.mark_.padw;
 
-    op = xpost_operator_cons(ctx, "curveto", (Xpost_Op_Func)_curveto, 0, 6,
+    op = xpost_operator_cons(ctx, "curveto", (Xpost_Op_Func)_curveto, 6,
                              floattype, floattype, floattype, floattype, floattype, floattype);
     _curveto_opcode = op.mark_.padw;
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "rcurveto", (Xpost_Op_Func)_rcurveto, 0, 6,
+    op = xpost_operator_cons(ctx, "rcurveto", (Xpost_Op_Func)_rcurveto, 6,
                              floattype, floattype, floattype, floattype, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "rcurveto_cont", (Xpost_Op_Func)_rcurveto_cont, 0, 8,
+    op = xpost_operator_cons(ctx, "rcurveto_cont", (Xpost_Op_Func)_rcurveto_cont, 8,
                              floattype, floattype, floattype, floattype, floattype, floattype, floattype, floattype);
     _rcurveto_cont_opcode = op.mark_.padw;
 
-    op = xpost_operator_cons(ctx, "closepath", (Xpost_Op_Func)_closepath, 0, 0);
+    op = xpost_operator_cons(ctx, "closepath", (Xpost_Op_Func)_closepath, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, ".cliprect", (Xpost_Op_Func)_cliprect, 5, 0);
+    op = xpost_operator_cons(ctx, ".cliprect", (Xpost_Op_Func)_cliprect, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".pathisrect", (Xpost_Op_Func)_pathisrect, 5, 0);
+    op = xpost_operator_cons(ctx, ".pathisrect", (Xpost_Op_Func)_pathisrect, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".cliptrivial", (Xpost_Op_Func)_cliptrivial, 1, 0);
-    INSTALL;
-
-    op = xpost_operator_cons(ctx, ".fillpolyargs", (Xpost_Op_Func)_fillpolyargs, 1, 0);
+    op = xpost_operator_cons(ctx, ".cliptrivial", (Xpost_Op_Func)_cliptrivial, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, ".newpathstr", (Xpost_Op_Func)_newpathstr, 1, 0);
+    op = xpost_operator_cons(ctx, ".fillpolyargs", (Xpost_Op_Func)_fillpolyargs, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".pathempty", (Xpost_Op_Func)_pathempty, 1, 0);
+
+    op = xpost_operator_cons(ctx, ".newpathstr", (Xpost_Op_Func)_newpathstr, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".pathempty", (Xpost_Op_Func)_pathempty, 0);
     INSTALL;
     pathempty_op = op;   /* baked into _arc_start_proc below, so the arc
                             machinery reaches it after it relocates off systemdict */
-    op = xpost_operator_cons(ctx, ".devmoveto", (Xpost_Op_Func)_devmoveto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, ".devmoveto", (Xpost_Op_Func)_devmoveto, 2, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".devlineto", (Xpost_Op_Func)_devlineto, 0, 2, floattype, floattype);
+    op = xpost_operator_cons(ctx, ".devlineto", (Xpost_Op_Func)_devlineto, 2, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".devcurveto", (Xpost_Op_Func)_devcurveto, 0, 6,
+    op = xpost_operator_cons(ctx, ".devcurveto", (Xpost_Op_Func)_devcurveto, 6,
                              floattype, floattype, floattype, floattype, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".retagclose", (Xpost_Op_Func)_retagclose, 0, 0);
+    op = xpost_operator_cons(ctx, ".retagclose", (Xpost_Op_Func)_retagclose, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".copypath", (Xpost_Op_Func)_copypath, 1, 1, stringtype);
+    op = xpost_operator_cons(ctx, ".copypath", (Xpost_Op_Func)_copypath, 1, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".pathnext", (Xpost_Op_Func)_pathnext, 1, 2, stringtype, integertype);
+    op = xpost_operator_cons(ctx, ".pathnext", (Xpost_Op_Func)_pathnext, 2, stringtype, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "pathbbox", (Xpost_Op_Func)_pathbbox, 4, 0);
-    INSTALL;
-
-    op = xpost_operator_cons(ctx, "arc", (Xpost_Op_Func)_arc, 0, 5,
-                             floattype, floattype, floattype, floattype, floattype);
-    INSTALL;
-    op = xpost_operator_cons(ctx, "arcn", (Xpost_Op_Func)_arcn, 0, 5,
-                             floattype, floattype, floattype, floattype, floattype);
+    op = xpost_operator_cons(ctx, "pathbbox", (Xpost_Op_Func)_pathbbox, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "arct", (Xpost_Op_Func)_arct, 0, 5,
+    op = xpost_operator_cons(ctx, "arc", (Xpost_Op_Func)_arc, 5,
                              floattype, floattype, floattype, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "arct_cont", (Xpost_Op_Func)_arct_cont, 0, 7,
+    op = xpost_operator_cons(ctx, "arcn", (Xpost_Op_Func)_arcn, 5,
+                             floattype, floattype, floattype, floattype, floattype);
+    INSTALL;
+
+    op = xpost_operator_cons(ctx, "arct", (Xpost_Op_Func)_arct, 5,
+                             floattype, floattype, floattype, floattype, floattype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "arct_cont", (Xpost_Op_Func)_arct_cont, 7,
                              floattype, floattype, floattype, floattype, floattype, floattype, floattype);
     _arct_cont_opcode = op.mark_.padw;
 
-    op = xpost_operator_cons(ctx, "arcto", (Xpost_Op_Func)_arcto, 4, 5,
+    op = xpost_operator_cons(ctx, "arcto", (Xpost_Op_Func)_arcto, 5,
                              floattype, floattype, floattype, floattype, floattype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "arcto_cont", (Xpost_Op_Func)_arcto_cont, 4, 7,
+    op = xpost_operator_cons(ctx, "arcto_cont", (Xpost_Op_Func)_arcto_cont, 7,
                              floattype, floattype, floattype, floattype, floattype, floattype, floattype);
     _arcto_cont_opcode = op.mark_.padw;
 
-    op = xpost_operator_cons(ctx, "flattenpath", (Xpost_Op_Func)_flattenpath, 0, 0);
+    op = xpost_operator_cons(ctx, "flattenpath", (Xpost_Op_Func)_flattenpath, 0);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, ".pdffillpath", (Xpost_Op_Func)_pdffillpath, 0, 1,
+    op = xpost_operator_cons(ctx, ".pdffillpath", (Xpost_Op_Func)_pdffillpath, 1,
             dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".svgfillpath", (Xpost_Op_Func)_svgfillpath, 0, 4,
+    op = xpost_operator_cons(ctx, ".svgfillpath", (Xpost_Op_Func)_svgfillpath, 4,
             numbertype, numbertype, numbertype, dicttype);
     INSTALL;
 

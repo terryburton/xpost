@@ -91,7 +91,6 @@ typedef struct Xpost_Signature
     int in;       /* number of argument objects */
     unsigned t;   /* memory address of array of ints representing argument types */
     int (*checkstack)(Xpost_Context *ctx);  /* stack-checking function to bypass generic type-check loop */
-    int out;      /* number of output objects */
 } Xpost_Signature;
 
 /**
@@ -186,7 +185,6 @@ Xpost_Object xpost_operator_cons_opcode(int opcode);
 Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                                  const char *name,
                                  /*@null@*/ Xpost_Op_Func fp,
-                                 int out,
                                  int in,
                                  ...);
 

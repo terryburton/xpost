@@ -4517,59 +4517,59 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "findfont", (Xpost_Op_Func)_findfont, 1, 1, nametype);
+    op = xpost_operator_cons(ctx, "findfont", (Xpost_Op_Func)_findfont, 1, nametype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "findfont", (Xpost_Op_Func)_findfont, 1, 1, stringtype);
+    op = xpost_operator_cons(ctx, "findfont", (Xpost_Op_Func)_findfont, 1, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadfont42", (Xpost_Op_Func)_loadfont42, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, ".loadfont42", (Xpost_Op_Func)_loadfont42, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "setfont", (Xpost_Op_Func)_setfont, 1, 1, dicttype);
+    op = xpost_operator_cons(ctx, "setfont", (Xpost_Op_Func)_setfont, 1, dicttype);
     INSTALL;
 
-    op = xpost_operator_cons(ctx, "show", (Xpost_Op_Func)_show, 0, 1, stringtype);
+    op = xpost_operator_cons(ctx, "show", (Xpost_Op_Func)_show, 1, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".glyphshow", (Xpost_Op_Func)_glyphshow, 0, 1, nametype);
+    op = xpost_operator_cons(ctx, ".glyphshow", (Xpost_Op_Func)_glyphshow, 1, nametype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".glyphshowidx", (Xpost_Op_Func)_glyphshowidx, 0, 1, integertype);
+    op = xpost_operator_cons(ctx, ".glyphshowidx", (Xpost_Op_Func)_glyphshowidx, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadcidfont0", (Xpost_Op_Func)_loadcidfont0, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, ".loadcidfont0", (Xpost_Op_Func)_loadcidfont0, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".stencilaa", (Xpost_Op_Func)_stencilaa, 1, 1, dicttype);
+    op = xpost_operator_cons(ctx, ".stencilaa", (Xpost_Op_Func)_stencilaa, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 0, 2,
+    op = xpost_operator_cons(ctx, ".loadfont1", (Xpost_Op_Func)_loadfont1, 2,
             dicttype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".loadcidfont2", (Xpost_Op_Func)_loadcidfont2, 0, 2,
+    op = xpost_operator_cons(ctx, ".loadcidfont2", (Xpost_Op_Func)_loadcidfont2, 2,
             dicttype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "ashow", (Xpost_Op_Func)_ashow, 0, 3,
+    op = xpost_operator_cons(ctx, "ashow", (Xpost_Op_Func)_ashow, 3,
         floattype, floattype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "widthshow", (Xpost_Op_Func)_widthshow, 0, 4,
+    op = xpost_operator_cons(ctx, "widthshow", (Xpost_Op_Func)_widthshow, 4,
         floattype, floattype, integertype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "awidthshow", (Xpost_Op_Func)_awidthshow, 0, 6,
+    op = xpost_operator_cons(ctx, "awidthshow", (Xpost_Op_Func)_awidthshow, 6,
         floattype, floattype, integertype,
         floattype, floattype, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "stringwidth", (Xpost_Op_Func)_stringwidth, 2, 1, stringtype);
+    op = xpost_operator_cons(ctx, "stringwidth", (Xpost_Op_Func)_stringwidth, 1, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, 1, stringtype);
+    op = xpost_operator_cons(ctx, ".stringoutline", (Xpost_Op_Func)_stringoutline, 1, stringtype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".glyphoutline", (Xpost_Op_Func)_glyphoutline, 3, 1, nametype);
+    op = xpost_operator_cons(ctx, ".glyphoutline", (Xpost_Op_Func)_glyphoutline, 1, nametype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".glyphoutlineidx", (Xpost_Op_Func)_glyphoutlineidx, 3, 1, integertype);
+    op = xpost_operator_cons(ctx, ".glyphoutlineidx", (Xpost_Op_Func)_glyphoutlineidx, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 7, 0);
+    op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".maskcachehit", (Xpost_Op_Func)_maskcachehit, 0, 5,
+    op = xpost_operator_cons(ctx, ".maskcachehit", (Xpost_Op_Func)_maskcachehit, 5,
         floattype, floattype, arraytype, integertype, arraytype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".maskcacheput", (Xpost_Op_Func)_maskcacheput, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, ".maskcacheput", (Xpost_Op_Func)_maskcacheput, 1, dicttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".setcachelimit", (Xpost_Op_Func)_setcachelimit, 0, 1, integertype);
+    op = xpost_operator_cons(ctx, ".setcachelimit", (Xpost_Op_Func)_setcachelimit, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".setcacheparams", (Xpost_Op_Func)_setcacheparams, 0, 3,
+    op = xpost_operator_cons(ctx, ".setcacheparams", (Xpost_Op_Func)_setcacheparams, 3,
         integertype, integertype, integertype);
     INSTALL;
 

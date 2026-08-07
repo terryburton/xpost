@@ -452,15 +452,15 @@ xpost_dev_method_cons(Xpost_Context *ctx,
                       int ncomp)
 {
     /* numeric operands before the device dictionary, and results */
-    int n = 0, out = 0, poly = 0;
+    int n = 0, poly = 0;
 
     switch (m->kind)
     {
         case XPOST_DEV_M_CREATE:
-            return xpost_operator_cons(ctx, m->opname, m->func, 1, 3,
+            return xpost_operator_cons(ctx, m->opname, m->func, 3,
                                        integertype, integertype, dicttype);
         case XPOST_DEV_M_PUTPIX: n = ncomp + 2; break;
-        case XPOST_DEV_M_GETPIX: n = 2; out = ncomp; break;
+        case XPOST_DEV_M_GETPIX: n = 2; break;
         case XPOST_DEV_M_LINE:   n = ncomp + 4; break;
         case XPOST_DEV_M_RECT:   n = ncomp + 4; break;
         case XPOST_DEV_M_BLEND:  n = ncomp + 3; break;
@@ -472,11 +472,11 @@ xpost_dev_method_cons(Xpost_Context *ctx,
     {
         switch (n)
         {
-            case 1: return xpost_operator_cons(ctx, m->opname, m->func, out, 3,
+            case 1: return xpost_operator_cons(ctx, m->opname, m->func, 3,
                         numbertype, arraytype, dicttype);
-            case 3: return xpost_operator_cons(ctx, m->opname, m->func, out, 5,
+            case 3: return xpost_operator_cons(ctx, m->opname, m->func, 5,
                         numbertype, numbertype, numbertype, arraytype, dicttype);
-            case 4: return xpost_operator_cons(ctx, m->opname, m->func, out, 6,
+            case 4: return xpost_operator_cons(ctx, m->opname, m->func, 6,
                         numbertype, numbertype, numbertype, numbertype,
                         arraytype, dicttype);
         }
@@ -485,24 +485,24 @@ xpost_dev_method_cons(Xpost_Context *ctx,
 
     switch (n)
     {
-        case 0: return xpost_operator_cons(ctx, m->opname, m->func, out, 1,
+        case 0: return xpost_operator_cons(ctx, m->opname, m->func, 1,
                     dicttype);
-        case 2: return xpost_operator_cons(ctx, m->opname, m->func, out, 3,
+        case 2: return xpost_operator_cons(ctx, m->opname, m->func, 3,
                     numbertype, numbertype, dicttype);
-        case 3: return xpost_operator_cons(ctx, m->opname, m->func, out, 4,
+        case 3: return xpost_operator_cons(ctx, m->opname, m->func, 4,
                     numbertype, numbertype, numbertype, dicttype);
-        case 4: return xpost_operator_cons(ctx, m->opname, m->func, out, 5,
+        case 4: return xpost_operator_cons(ctx, m->opname, m->func, 5,
                     numbertype, numbertype, numbertype, numbertype, dicttype);
-        case 5: return xpost_operator_cons(ctx, m->opname, m->func, out, 6,
+        case 5: return xpost_operator_cons(ctx, m->opname, m->func, 6,
                     numbertype, numbertype, numbertype, numbertype,
                     numbertype, dicttype);
-        case 6: return xpost_operator_cons(ctx, m->opname, m->func, out, 7,
+        case 6: return xpost_operator_cons(ctx, m->opname, m->func, 7,
                     numbertype, numbertype, numbertype, numbertype,
                     numbertype, numbertype, dicttype);
-        case 7: return xpost_operator_cons(ctx, m->opname, m->func, out, 8,
+        case 7: return xpost_operator_cons(ctx, m->opname, m->func, 8,
                     numbertype, numbertype, numbertype, numbertype,
                     numbertype, numbertype, numbertype, dicttype);
-        case 8: return xpost_operator_cons(ctx, m->opname, m->func, out, 9,
+        case 8: return xpost_operator_cons(ctx, m->opname, m->func, 9,
                     numbertype, numbertype, numbertype, numbertype,
                     numbertype, numbertype, numbertype, numbertype, dicttype);
     }

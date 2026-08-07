@@ -97,7 +97,7 @@ int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
                          xpost_stack_topdown_fetch(ctx->lo, ctx->os, n));
     (void)xpost_op_cleartomark(ctx);
 
-    xpost_stack_push(newctx->lo, newctx->es, xpost_operator_cons(newctx, "_i_am_zombie_", NULL,0,0));
+    xpost_stack_push(newctx->lo, newctx->es, xpost_operator_cons(newctx, "_i_am_zombie_", NULL,0));
     xpost_stack_push(newctx->lo, newctx->es, proc);
     //xpost_op_currentcontext(newctx);
     newctx->state = C_RUN;
@@ -209,7 +209,7 @@ int xpost_op_detach (Xpost_Context *ctx, Xpost_Object context)
        run to its end and there is nothing left to detach */
     if (!xpost_stack_bottomup_replace(child->lo, child->es, 0,
                                       xpost_operator_cons(child, "_i_am_free_",
-                                                          NULL, 0, 0)))
+                                                          NULL, 0)))
         return invalidaccess;
     return contextswitch;
 }
@@ -239,19 +239,19 @@ int xpost_oper_init_context_ops (Xpost_Context *ctx,
 
     assert(ctx->gl->base);
     //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
-    op = xpost_operator_cons(ctx, "currentcontext", (Xpost_Op_Func)xpost_op_currentcontext, 1, 0);
+    op = xpost_operator_cons(ctx, "currentcontext", (Xpost_Op_Func)xpost_op_currentcontext, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "fork", (Xpost_Op_Func)xpost_op_fork, 1, 1, proctype);
+    op = xpost_operator_cons(ctx, "fork", (Xpost_Op_Func)xpost_op_fork, 1, proctype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "_i_am_zombie_", (Xpost_Op_Func)_i_am_zombie_, 0, 0);
+    op = xpost_operator_cons(ctx, "_i_am_zombie_", (Xpost_Op_Func)_i_am_zombie_, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "_i_am_free_", (Xpost_Op_Func)_i_am_free_, 0, 0);
+    op = xpost_operator_cons(ctx, "_i_am_free_", (Xpost_Op_Func)_i_am_free_, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "join", (Xpost_Op_Func)xpost_op_join, 1, 1, contexttype);
+    op = xpost_operator_cons(ctx, "join", (Xpost_Op_Func)xpost_op_join, 1, contexttype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "yield", (Xpost_Op_Func)xpost_op_yield, 0, 0);
+    op = xpost_operator_cons(ctx, "yield", (Xpost_Op_Func)xpost_op_yield, 0);
     INSTALL;
-    op = xpost_operator_cons(ctx, "detach", (Xpost_Op_Func)xpost_op_detach, 0, 1, contexttype);
+    op = xpost_operator_cons(ctx, "detach", (Xpost_Op_Func)xpost_op_detach, 1, contexttype);
     INSTALL;
     //xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark);
     //op = xpost_operator_cons(ctx, "counttomark", (Xpost_Op_Func)xpost_op_counttomark, 1, 0); INSTALL;

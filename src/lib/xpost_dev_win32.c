@@ -925,7 +925,7 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 1, 3, integertype, integertype, dicttype);
+    op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
     ret = xpost_dev_class_install(ctx, classdic, 3, 1,
@@ -959,13 +959,13 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "newwin32device", (Xpost_Op_Func)newwin32device, 1, 2,
+    op = xpost_operator_cons(ctx, "newwin32device", (Xpost_Op_Func)newwin32device, 2,
                              integertype, integertype);
     ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newwin32device"), op);
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "win32EventHandler", (Xpost_Op_Func)_event_handler, 0, 1, dicttype);
+    op = xpost_operator_cons(ctx, "win32EventHandler", (Xpost_Op_Func)_event_handler, 1, dicttype);
     _event_handler_opcode = op.mark_.padw;
 
     return 0;
@@ -992,8 +992,8 @@ int xpost_oper_init_win32_device_ops(Xpost_Context *ctx,
         return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
-    op = xpost_operator_cons(ctx, "loadwin32device", (Xpost_Op_Func)loadwin32device, 1, 0); INSTALL;
-    op = xpost_operator_cons(ctx, "loadwin32devicecont", (Xpost_Op_Func)loadwin32devicecont, 1, 1, dicttype);
+    op = xpost_operator_cons(ctx, "loadwin32device", (Xpost_Op_Func)loadwin32device, 0); INSTALL;
+    op = xpost_operator_cons(ctx, "loadwin32devicecont", (Xpost_Op_Func)loadwin32devicecont, 1, dicttype);
     _loadwin32devicecont_opcode = op.mark_.padw;
 
     return 0;

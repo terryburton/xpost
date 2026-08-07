@@ -112,11 +112,11 @@ int xpost_oper_init_packedarray_ops(Xpost_Context *ctx,
 
     assert(ctx->gl->base);
 
-    op = xpost_operator_cons(ctx, "packedarray", (Xpost_Op_Func)packedarray, 1, 1, integertype);
+    op = xpost_operator_cons(ctx, "packedarray", (Xpost_Op_Func)packedarray, 1, integertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "setpacking", (Xpost_Op_Func)setpacking, 0, 1, booleantype);
+    op = xpost_operator_cons(ctx, "setpacking", (Xpost_Op_Func)setpacking, 1, booleantype);
     INSTALL;
-    op = xpost_operator_cons(ctx, "currentpacking", (Xpost_Op_Func)currentpacking, 1, 0);
+    op = xpost_operator_cons(ctx, "currentpacking", (Xpost_Op_Func)currentpacking, 0);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
