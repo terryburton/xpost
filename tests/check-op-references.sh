@@ -43,6 +43,20 @@ guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 
+# Rules 1 and 2 and half of rule 3 are scans of the library's sources for
+# something that must not be there, and each of them agrees with a
+# directory holding nothing exactly as it agrees with a clean one: the
+# glob matches nothing, the loop is not entered, the greps find no file
+# to read, and every rule reads as kept. The header the table lives in is
+# required above, so that one file being there is no evidence about the
+# rest. The population is counted here, once, for all three.
+nsrc=$(ls "$lib"/*.c "$lib"/*.h 2>/dev/null | wc -l)
+if [ "$nsrc" -lt 40 ]; then
+    echo "FAILURES: $lib holds $nsrc sources; the scans below would read"
+    echo "      almost nothing and report the rules kept"
+    exit 1
+fi
+
 # ---------------------------------------------------------------- rule 1
 #
 # Two files legitimately make a name: the scanner, which answers with the
