@@ -623,6 +623,28 @@ test('stack-bounds',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The snapshot of the top of a stack converges. copy, roll and the
+# interpreter's own start-up all take one, so a walk that does not
+# converge stops every test in the suite before any of them reports
+# anything, and nothing is left to say so but a harness noticing hours
+# later. The walk is therefore run in a child under a bound on the work
+# it may do and the parent, which walks nothing, reports both the answer
+# and its absence. POSIX-only: the bounded run is a fork with a CPU
+# budget on it, neither of which the Windows CRT provides.
+if host_machine.system() != 'windows'
+  stack_peek_bound_exe = executable('stack_peek_bound_test',
+    'tests/stack_peek_bound_test.c',
+    c_args: '-DHAVE_CONFIG_H',
+    dependencies: libxpost_dep,
+    link_args: internals_link_args,
+    include_directories: [ config_dir, include_directories('src/lib') ],
+    install: false)
+  test('stack-peek-bound',
+    stack_peek_bound_exe,
+    suite: cost_fast,
+    env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+endif
+
 # The editing streams open a temporary file before the text they are asked
 # for is known to be acceptable, so a refusal is the only thing that can
 # close it: a request refused for nesting depth must leave no descriptor
