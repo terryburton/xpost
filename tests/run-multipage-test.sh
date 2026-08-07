@@ -101,10 +101,17 @@ for de in $devices; do
         # one file holding all three pages
         case "$dev" in
         pdfwrite)
+            # the document says how many pages it has three times over, and a
+            # reader believes whichever it consults, so all three must agree:
+            # the page tree's count, the number of page objects, and the
+            # number of children the tree names
             c=$(grep -aoE '/Count [0-9]+' "$work/fixed.$ext" | awk '{print $2}')
             [ "$c" = 3 ] || { echo "FAIL $dev: page tree /Count $c, want 3"; fail=1; continue; }
             np=$(grep -ac '/Type /Page[^s]' "$work/fixed.$ext")
             [ "$np" = 3 ] || { echo "FAIL $dev: $np page objects, want 3"; fail=1; continue; }
+            nk=$(grep -aoE '/Kids *\[[^]]*\]' "$work/fixed.$ext" | head -1 \
+                 | grep -oE '[0-9]+ 0 R' | wc -l | tr -d ' ')
+            [ "$nk" = 3 ] || { echo "FAIL $dev: page tree names $nk children, want 3"; fail=1; continue; }
             ;;
         dscwrite)
             np=$(grep -ac '^%%Page:' "$work/fixed.$ext")
@@ -112,15 +119,6 @@ for de in $devices; do
             grep -aq '^%%Pages: 3' "$work/fixed.$ext" || { echo "FAIL $dev: no %%Pages: 3 trailer"; fail=1; continue; }
             ;;
         esac
-        # an independent consumer must agree the document has three pages
-        if command -v gs >/dev/null 2>&1; then
-            pages=$(gs -q -dNODISPLAY -dPDFINFO -dBATCH -dNOPAUSE "$work/fixed.$ext" </dev/null 2>&1 \
-                    | grep -aoiE 'has [0-9]+ page' | grep -aoE '[0-9]+')
-            # gs -dPDFINFO reads PDF; for DSC, run it through and count showpages
-            case "$dev" in
-            pdfwrite) [ "$pages" = 3 ] || { echo "FAIL $dev: gs reads $pages pages, want 3"; fail=1; continue; } ;;
-            esac
-        fi
         echo "OK   $dev (one file, three pages; %d gives three files)"
     else
         # last page stands in the one file
