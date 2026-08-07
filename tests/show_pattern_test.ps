@@ -169,6 +169,75 @@ O inkof 0 gt (the pattern fill of the outline marks the page) check
 S inkof 0 gt (the text marks the page) check
 S O differs 0 eq (the text marks exactly what that fill marks) check
 
+% --- a Type 3 font ---------------------------------------------------
+% A Type 3 glyph is a procedure rather than a face's coverage, and it
+% has no outline to leave the raster route for. It leaves the glyph
+% mask instead: a build that declares setcachedevice is ordinarily
+% captured to a coverage mask and replayed in one colour, which a
+% pattern cannot come through, so the build runs direct and its own
+% marks carry the pattern's paint.
+%
+% The oracle is the marks the build makes, painted by hand at the same
+% place in the same pattern. The build is counted as well: a glyph the
+% operators never reach would agree with an oracle that paints nothing.
+/t3hits 1 dict def
+t3hits /n 0 put
+9 dict begin
+    /FontType 3 def
+    /FontMatrix [0.001 0 0 0.001 0 0] def
+    /FontBBox [0 0 800 800] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /box put
+    Encoding 66 /bar put
+    /BuildGlyph {
+        t3hits /n t3hits /n get 1 add put
+        exch pop
+        dup /box eq {
+            pop 800 0  0 0 600 600 setcachedevice
+            0 0 600 600 rectfill
+        }{
+        /bar eq {
+            800 0  0 0 300 700 setcachedevice
+            0 0 300 700 rectfill
+        }{
+            800 0 setcharwidth
+        } ifelse } ifelse
+    } def
+currentdict end
+/PatT3 exch definefont pop
+/setfnt { /PatT3 findfont 26 scalefont setfont } bind def
+% the marks the two builds make, painted by hand where the text
+% operator puts them: from the current point, through the font's
+% matrix, advancing between glyphs by the width each declared
+/p.name (Type 3 glyphs:) def
+t3hits /n 0 put
+/S { 6 24 moveto (AB) show } patsnap def
+/nbuilds t3hits /n get def
+/O { gsave 6 24 translate currentfont /FontMatrix get concat
+     0 0 600 600 rectfill
+     800 0 translate
+     0 0 300 700 rectfill
+     grestore } patsnap def
+nbuilds 0 gt (the glyph procedure ran) check
+O inkof 0 gt (the pattern fill of the glyph shapes marks the page) check
+S inkof 0 gt (the text marks the page) check
+S O differs 0 eq (the text marks exactly what that fill marks) check
+/F { 6 24 moveto (AB) show } greysnap def
+S F differs 0 gt (the pattern text is not the solid glyph) check
+{ setfnt 0 setgray 6 24 moveto (AB) show } greypen
+{ setfnt setpat 6 24 moveto (AB) show } patpen
+3 -1 roll near exch 3 -1 roll near and
+(the pattern leaves the pen where a solid colour does) check
+
+% the same glyphs a second time: a mask filed for the solid render must
+% not be replayed for the pattern one
+/p.name (Type 3 after a solid render:) def
+/G { 6 24 moveto (AB) show } greysnap def
+/S { 6 24 moveto (AB) show } patsnap def
+G inkof 0 gt (the solid render marks the page) check
+S O differs 0 eq (the pattern text still marks what that fill marks) check
+
 count 0 eq (the suite leaves the operand stack empty) check
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit
