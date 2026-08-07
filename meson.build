@@ -2078,6 +2078,16 @@ test('privatedict-install',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The font cache's byte parameters are program data, and the per-glyph
+# ceiling is the only size gate an entry passes into the store: both are
+# held to the largest cache the implementation offers, substituted for a
+# value above it with no error indication.
+test('cacheparams-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/cacheparams_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

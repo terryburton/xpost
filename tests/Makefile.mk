@@ -23,6 +23,7 @@ tests/bind_packed_test.ps \
 tests/blit_access_test.ps \
 tests/blit_range_test.ps \
 tests/build_personality_test.ps \
+tests/cacheparams_range_test.ps \
 tests/callback_reentry_test.ps \
 tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
