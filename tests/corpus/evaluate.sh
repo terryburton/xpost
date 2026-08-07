@@ -131,7 +131,7 @@ evaluate_corpus() {
     mkdir -p "$cwork" || return
 
     # Name the programs to render, in order, and hold out the ones the
-    # corpus lists as too slow for the per-file timeout.
+    # corpus lists.
     n=0
     held=0
     nondet=
@@ -139,9 +139,12 @@ evaluate_corpus() {
     for p in "$@"; do
         [ -f "$p" ] || continue
         b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
-        # a corpus may list basenames (one per line) in a "slow" file: programs
-        # that render correctly but too slowly to fit the per-file timeout, held
-        # out until the underlying performance work lands
+        # a corpus may list basenames (one per line) in a "slow" file:
+        # the programs it holds out of the run, each recorded there with
+        # the reason it is held. The reason is the entry's whole value --
+        # a name in this list is a program nothing measures again until
+        # someone reads why it is there -- so the file carries it and
+        # this only reads the names
         if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
             echo "  $b  held out (see $corpus/slow)"
             held=$((held + 1))

@@ -1,20 +1,31 @@
-# Programs held out of the differential run: they render correctly but too slowly
-# to fit evaluate.sh's per-file timeout. Remove an entry once its performance is
-# addressed. One basename per line (no extension).
+# Programs held out of the differential run. One basename per line (no
+# extension), each with the reason it is not run; remove an entry once
+# that reason no longer holds. A reason that measurement contradicts is
+# worse than no entry at all -- it is read as a known cost and stops
+# anyone looking.
 #
-# ch8  -- its shfill figures are finely-tessellated 3-D sphere meshes (~100k+
-#         triangles, DataSource arrays ~3000 lines each). xpost paints each
-#         triangle through a per-triangle DeviceN colour reduction and fill in
-#         PostScript, so a single page takes ~300s; Ghostscript does mesh shading
-#         in C. Correct since commit 57aed9a0 (before which it crashed); needs a
-#         C-level mesh rasterizer, or at least cached per-triangle colour
-#         reduction, before it fits the timeout.
+# ch8  -- does not finish on a narrow-object build. Its shfill figures are
+#         finely-tessellated 3-D meshes painted a triangle at a time
+#         through a DeviceN colour reduction in PostScript, and doing so
+#         holds enough composites live at once to exhaust the 524,287
+#         entity numbers a narrow object's 19-bit ent field can name. The
+#         run stops about seven seconds in, having written eight of the
+#         file's twelve pages, under a VMerror out of setcolor that no
+#         stopped context can catch.
+#
+#         That is a limit of the narrow build, not of the renderer and
+#         not of its speed: a large-object build, whose ent field is 31
+#         bits, renders all twelve pages correctly in about 170 seconds,
+#         well inside the per-file budget. So there is nothing here
+#         waiting on a mesh rasterizer, and the entry stays only until
+#         the entity-number cap is addressed.
+#
+#         It is held out rather than run and reported because the manner
+#         of the failure is not something to depend on. The evaluator
+#         carries on past a program that dies under a PostScript error,
+#         counting the pages it could not compare, but a signal death
+#         fails the corpus outright -- and an allocator that has run out
+#         of entity numbers is not a thing to promise which of the two it
+#         will do. A gate that passes only while a known defect keeps
+#         failing politely is not reporting on the renderer.
 ch8
-
-# ch14 -- its Type 4 (free-form Gouraud) mesh figures render through the same
-#         per-triangle PostScript colour reduction as ch8, ~28s per page over 20
-#         pages, so the file cannot finish inside evaluate.sh's per-file timeout.
-#         Renders correctly (per-page pixel differences are the usual font-raster
-#         noise, in line with the rest of the corpus); needs the same C-level mesh
-#         rasterizer as ch8.
-ch14
