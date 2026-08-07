@@ -29,6 +29,7 @@ tests/check-device-skeleton.sh \
 tests/check-dict-homes.sh \
 tests/check-dist-lists.sh \
 tests/check-encoder-units.sh \
+tests/check-env-traps.sh \
 tests/check-error-names.sh \
 tests/check-exported-symbols.sh \
 tests/check-filter-base.sh \

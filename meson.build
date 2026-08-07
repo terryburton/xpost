@@ -1657,6 +1657,18 @@ test('check-error-names',
   suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir() ])
 
+# Nothing in the environment ends the process. The library is embedded, so
+# an error belongs to the run that caused it and not to the host holding
+# it; and stop with no enclosing stopped context is specified behaviour
+# (PLRM 8.2: a message and a quit), reached through the one part of a job
+# that lies outside every stopped context. Held from both sides: the run
+# is made to take that path under the variables and without them, and the
+# sources are read for an ending a getenv decides.
+test('check-env-traps',
+  find_program('tests/check-env-traps.sh'),
+  suite: cost_fast,
+  args: [ xpost_exe, meson.current_source_dir() ])
+
 # The binary form of the error report, which has to be checked on the
 # bytes rather than from inside the interpreter.
 test('error-binary',
