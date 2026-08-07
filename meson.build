@@ -883,14 +883,28 @@ test('bbox-device',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# PDF device: write a PDF and check its structure; round-trip via a reference consumer when
-# present. The input is a single fill large enough to overflow the content
-# buffer, exercising the flush path.
+# PDF device: write a PDF and check the document against itself -- its
+# structure, its cross-reference geometry, the colour spaces its marks
+# reach the content stream in, its page tree and its metadata. The input
+# is a single fill large enough to overflow the content buffer,
+# exercising the flush path.
 test('pdf-device',
   find_program('tests/run-pdf-test.sh'),
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
   suite: cost_slow,
   timeout: 120,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The same PDFs read by consumers that did not write them: qpdf parses the
+# document as a reader does, and poppler images it so that what it paints
+# can be compared with what the interpreter paints from the same drawing.
+# A convention held consistently and wrongly at both ends of our own code
+# passes every self-contained check and fails here. Skips where neither
+# consumer is installed; neither is a build dependency.
+test('pdf-consumer',
+  find_program('tests/run-pdf-consumer-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # PDF content appends under memory pressure: a FillPoly whose content
