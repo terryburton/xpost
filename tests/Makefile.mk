@@ -43,6 +43,7 @@ tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
 tests/check-show-clip.sh \
+tests/check-test-cost.sh \
 tests/check-test-quality.sh \
 tests/check-vecbase.sh \
 tests/check-vm-address.sh \

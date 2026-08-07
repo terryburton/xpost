@@ -382,6 +382,68 @@ if get_option('doc')
   subdir('doc')
 endif
 
+# ---- test profiles ----
+#
+# A test's suites are two independent axes, so a selection can name
+# either without naming the other.
+#
+# What a test is about
+#   xpost     the interpreter's own suite: everything but the corpus
+#   corpus    the differential run over real programs fetched into
+#             tests/corpus, which skips until they are
+#   memacct   the three that weigh the process, and so cannot answer
+#             under an allocator that quarantines or shadows
+#
+# What a test costs, read off its own run time with the suite run one
+# test at a time. The two boundaries sit in the gaps the measurement
+# has rather than on round numbers: twenty-six of the interpreter's
+# tests take five seconds or more and account for seven tenths of what
+# the suite costs, and above them two take longer than forty seconds
+# with nothing between them and the rest -- in a parallel run those two
+# are the floor, so a profile without them finishes in a third of the
+# time rather than a fraction less.
+#   fast      under five seconds
+#   slow      five seconds to forty
+#   veryslow  longer than forty
+#
+# Every registration names exactly one cost, so a test cannot join the
+# cheap profile by leaving the question open; tests/check-test-cost.sh
+# holds the registrations to that, and holds the names to appearing
+# nowhere else -- a second list of what is slow is a second answer.
+#
+# The two axes cross, which is the point of keeping them apart: the
+# corpus programs that run quickly are reachable without the ones that
+# do not.
+#
+#   ninja -C build quick        cost fast, no corpus     -- while editing
+#   ninja -C build check        + cost slow              -- before a commit
+#   ninja -C build full         + cost veryslow          -- the whole suite
+#   ninja -C build corpus       the corpus, all costs    -- with programs fetched
+#   meson test -C build         everything, as before
+#
+# and any other crossing by hand, for instance the corpus programs that
+# are not the expensive ones:
+#
+#   meson test -C build --suite corpus --no-suite veryslow
+#
+# The targets run meson test with no -j, so it takes its own default of
+# one process per core.
+cost_fast = ['xpost', 'fast']
+cost_slow = ['xpost', 'slow']
+cost_veryslow = ['xpost', 'veryslow']
+
+meson_exe = find_program('meson')
+run_target('quick',
+  command: [ meson_exe, 'test', '--no-suite', 'corpus',
+             '--no-suite', 'slow', '--no-suite', 'veryslow' ])
+run_target('check',
+  command: [ meson_exe, 'test', '--no-suite', 'corpus',
+             '--no-suite', 'veryslow' ])
+run_target('full',
+  command: [ meson_exe, 'test', '--no-suite', 'corpus' ])
+run_target('corpus',
+  command: [ meson_exe, 'test', '--suite', 'corpus' ])
+
 # Core-interpreter conformance: run the PLRM operator-example suite through
 # the built interpreter and require its failcount to reach zero. The build-tree
 # binary is not installed, so point it at the source data via XPOST_DATA_DIR.
@@ -389,6 +451,7 @@ test('interpreter',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('data/test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 120)
 
 # The interpreter's surface as an embedding program finds it: the same
@@ -402,6 +465,7 @@ startup_surface_api_exe = executable('startup_surface_api_test',
   install: false)
 test('startup-surface-api',
   startup_surface_api_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: run-status outcomes and error identity across a
@@ -414,6 +478,7 @@ run_status_exe = executable('run_status_test',
   install: false)
 test('run-status',
   run_status_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: showpage and copypage both end a page, so both must
@@ -427,6 +492,7 @@ page_semantics_exe = executable('page_semantics_test',
   install: false)
 test('page-semantics',
   page_semantics_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: the interpreter is one instance holding a table of
@@ -440,6 +506,7 @@ single_instance_exe = executable('single_instance_test',
   install: false)
 test('single-instance',
   single_instance_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: a process may create, use and destroy contexts for as
@@ -455,7 +522,7 @@ context_reuse_exe = executable('context_reuse_test',
 # maps of its own.
 test('context-reuse',
   context_reuse_exe,
-  suite: ['xpost', 'memacct'],
+  suite: cost_fast + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The same embedding runs with the collector set to collect constantly. What
@@ -464,7 +531,7 @@ test('context-reuse',
 test('gc-pressure',
   find_program('tests/run-gc-pressure-test.sh'),
   args: [ run_status_exe, context_reuse_exe ],
-  suite: ['xpost', 'memacct'],
+  suite: cost_fast + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: a run closes the file it wrapped around the program
@@ -478,6 +545,7 @@ run_input_close_exe = executable('run_input_close_test',
   install: false)
 test('run-input-close',
   run_input_close_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: the key=value definitions an embedder supplies land in
@@ -491,6 +559,7 @@ api_definitions_exe = executable('api_definitions_test',
   install: false)
 test('api-definitions',
   api_definitions_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Object-layer bounds discipline: a string object with a corrupt or
@@ -504,6 +573,7 @@ string_bounds_exe = executable('string_bounds_test',
   install: false)
 test('string-bounds',
   string_bounds_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The editing streams open a temporary file before the text they are asked
@@ -519,6 +589,7 @@ edit_stream_close_exe = executable('edit_stream_close_test',
   install: false)
 test('edit-stream-close',
   edit_stream_close_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The one growable byte buffer every byte-stream builder in the tree grows
@@ -536,6 +607,7 @@ strbuf_exe = executable('strbuf_test',
 # serve; AddressSanitizer aborts on such a request unless told to answer null
 # the way the C library does
 test('strbuf', strbuf_exe,
+  suite: cost_fast,
   env: { 'ASAN_OPTIONS': 'allocator_may_return_null=1' })
 
 # Memory-table bookkeeping under dictionary growth: dicgrow's entity swap
@@ -554,6 +626,7 @@ dict_grow_exe = executable('dict_grow_test',
 test('dict-grow',
   dict_grow_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # How far the dictionary hash spreads its keys, read off the hash values
@@ -573,6 +646,7 @@ dict_hash_spread_exe = executable('dict_hash_spread_test',
 test('dict-hash-spread',
   dict_hash_spread_exe,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # Collecting over a dictionary whose hash table is longer than a
@@ -585,6 +659,7 @@ test('gc-large-dict',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/gc_large_dict_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # The same walk, in a collection nothing asked for. The ordinary
@@ -599,6 +674,7 @@ test('gc-large-dict-pressure',
     'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
     'XPOST_GC_THRESHOLD': '4000',
   },
+  suite: cost_fast,
   timeout: 300)
 
 # A collection nothing asked for, provoked by the entity table rather
@@ -614,6 +690,7 @@ test('gc-clip-region',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/gc_clip_region_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Enumerating over that same table, and over the largest array and
@@ -627,12 +704,14 @@ test('forall-large',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/forall_large_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 120)
 
 # Object semantics: file-object comparison and user-space pathbbox.
 test('semantics',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/semantics_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The clip is one value wearing several faces, and one procedure writes
@@ -641,6 +720,7 @@ test('semantics',
 # with -- so the rule is held structurally rather than by a render.
 test('check-clip-writer',
   find_program('tests/check-clip-writer.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # The clip region: what a program may do to it, and whether the faces of
@@ -649,6 +729,7 @@ test('check-clip-writer',
 test('clip-region',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/clip_region_test.ps') ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A clip region can end up covering no pixels at all. PLRM 7.5.1 makes
@@ -660,6 +741,7 @@ test('clip-region',
 test('empty-clip',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/empty_clip_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Text meets the clip region too. A glyph reaches the page as a raster
@@ -670,6 +752,7 @@ test('empty-clip',
 test('show-clip',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/show_clip_test.ps') ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A pattern colour is not a colour a pixel can be set to, so text painted
@@ -681,6 +764,7 @@ test('show-clip',
 test('show-pattern',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/show_pattern_test.ps') ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # An outline font's glyphs are its character outlines stroked with
@@ -691,6 +775,7 @@ test('show-pattern',
 test('outline-font',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/outline_font_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A composite font walked by a CMap reaches its glyphs by index, a route
@@ -701,6 +786,7 @@ test('outline-font',
 test('cid-show',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/cid_show_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # What an operator leaves on the operand stack when it refuses. An error
@@ -712,6 +798,7 @@ test('cid-show',
 test('error-unwind',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/error_unwind_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Graphics regression checks: operator wrapping and the wrapped-operator
@@ -719,6 +806,7 @@ test('error-unwind',
 test('graphics-regression',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Render classes: Type 3 and composite fonts, the shading types, tiling and
@@ -727,6 +815,7 @@ test('graphics-regression',
 test('render-classes',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/render_classes_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Raster device classes as a program-made instance: the grayscale and rgb
@@ -740,6 +829,7 @@ test('render-classes',
 test('raster-formats',
   find_program('tests/run-raster-formats-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every painting operator through every device that runs without a display.
@@ -750,12 +840,14 @@ test('device-features',
   find_program('tests/run-device-features-test.sh'),
   args: [ xpost_exe, files('tests/device_features_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_veryslow,
   timeout: 180)
 
 # wrapper requires the output to be exactly SUCCESS.
 test('raster-class',
   find_program('tests/run-strict-ps-test.sh'),
   args: [ xpost_exe, files('tests/raster_class_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Form cache on a raster device: caching an execform builds an image device and
@@ -765,12 +857,14 @@ test('raster-class',
 test('execform-cache',
   find_program('tests/run-ppm-test.sh'),
   args: [ xpost_exe, files('tests/execform_cache_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Bounding-box device: render a known fill through -d bbox and check the box.
 test('bbox-device',
   find_program('tests/run-bbox-test.sh'),
   args: [ xpost_exe, files('tests/bbox_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # PDF device: write a PDF and check its structure; round-trip via a reference consumer when
@@ -779,6 +873,7 @@ test('bbox-device',
 test('pdf-device',
   find_program('tests/run-pdf-test.sh'),
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
+  suite: cost_slow,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # PDF content appends under memory pressure: a FillPoly whose content
@@ -788,6 +883,7 @@ test('pdf-append-fail',
   find_program('tests/run-append-fail-test.sh'),
   args: [ xpost_exe, files('tests/pdf_append_fail_test.ps'), 'pdfwrite' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 120)
 
 # The same append-completeness contract on the svgwrite device, whose
@@ -796,6 +892,7 @@ test('svg-append-fail',
   find_program('tests/run-append-fail-test.sh'),
   args: [ xpost_exe, files('tests/svg_append_fail_test.ps'), 'svgwrite' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 120)
 
 # Access attributes in the device blitters: painting into a raster row a
@@ -804,6 +901,7 @@ test('svg-append-fail',
 test('blit-access',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/blit_access_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # SVG device: render fills, strokes and glyph outlines through
@@ -812,6 +910,7 @@ test('blit-access',
 test('svg-device',
   find_program('tests/run-svg-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # pngalpha device: RGBA output where the erased page is transparent and
@@ -819,6 +918,7 @@ test('svg-device',
 test('pngalpha-device',
   find_program('tests/run-pngalpha-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Save/restore VM: drive the entity count past 65536 and require dicts and
@@ -826,6 +926,7 @@ test('pngalpha-device',
 test('save-restore',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/save_restore_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Local/global VM integrity: the put operators reject a local value entering a
@@ -834,6 +935,7 @@ test('save-restore',
 test('vm',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/vm_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # roll operator: correctness (checked against Ghostscript) plus a large-roll
@@ -841,6 +943,7 @@ test('vm',
 test('roll',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/roll_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # counttomark and the [ ] / << >> constructors built on it: correctness plus
@@ -848,6 +951,7 @@ test('roll',
 test('counttomark',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/counttomark_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # In-RIP trapping procedure set (PLRM 6.3): settrapparams/currenttrapparams
@@ -855,6 +959,7 @@ test('counttomark',
 test('trapping',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/trapping_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Arithmetic/math operators (PLRM 8.2): zero-divisor mod/idiv are undefinedresult
@@ -863,6 +968,7 @@ test('trapping',
 test('op-math',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_math_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # writehexstring over the whole byte range: every byte must encode as two
@@ -871,6 +977,7 @@ test('op-math',
 test('op-hexstring',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_hexstring_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Execution-context operators, an extension to the language: fork, join, detach, yield and
@@ -881,6 +988,7 @@ test('op-context',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_context_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 60)
 
 # Control operators (PLRM 8.2): repeat of a negative count is rangecheck (PLRM: the
@@ -888,6 +996,7 @@ test('op-context',
 test('op-control',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_control_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # exit across every PLRM looping context, including filenameforall, whose loop
@@ -896,6 +1005,7 @@ test('op-control',
 test('loop-exit',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/loop_exit_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Matrix/coordinate and graphics-state operators (PLRM 8.2): a bad-length matrix
@@ -904,6 +1014,7 @@ test('loop-exit',
 test('op-matrix-gstate',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_matrix_gstate_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A wrong-typed operand is a typecheck, not a stackunderflow, when a higher-arity
@@ -912,6 +1023,7 @@ test('op-matrix-gstate',
 test('op-dispatch-typecheck',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_dispatch_typecheck_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Path-construction operators (PLRM 8.2): currentpoint tracking, nocurrentpoint,
@@ -919,6 +1031,7 @@ test('op-dispatch-typecheck',
 test('op-path',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_path_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Rectangle operators (PLRM 8.2): rectfill/rectstroke/rectclip accept the
@@ -926,6 +1039,7 @@ test('op-path',
 test('op-rect',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_rect_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Resource and user-object operators (PLRM 8.2): resourcestatus on a category
@@ -933,6 +1047,7 @@ test('op-rect',
 test('op-resource',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_resource_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # status operator (PLRM 8.2): the (filename) form returns pages/bytes/referred/
@@ -940,6 +1055,7 @@ test('op-resource',
 test('op-status',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_status_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # User/system parameter operators (PLRM 8.2): current* return a parameter
@@ -947,12 +1063,14 @@ test('op-status',
 test('op-userparams',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_userparams_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # bytesavailable (PLRM 8.2): remaining bytes for a seekable file, -1 for a filter.
 test('op-bytesavailable',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_bytesavailable_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Operand restoration on error (PLRM 3.11): an operator error restores the
@@ -960,12 +1078,14 @@ test('op-bytesavailable',
 test('op-error-restore',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_error_restore_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Array packing mode (PLRM 8.2): setpacking/currentpacking and read-only procs.
 test('op-packing',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_packing_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # bind (PLRM 8.2): bind rewrites packed arrays and descends into nested ones,
@@ -973,18 +1093,21 @@ test('op-packing',
 test('bind-packed',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/bind_packed_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # vmreclaim (PLRM 8.2): 2 (local and global) reclaims local VM like 1 (local).
 test('op-vmreclaim',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_vmreclaim_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Integer-literal range (PLRM 3.3.2): an over-range constant becomes a real.
 test('op-intoverflow',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_intoverflow_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # SIGINT raises the PostScript interrupt error between evaluation steps;
@@ -992,6 +1115,7 @@ test('op-intoverflow',
 test('interrupt',
   find_program('tests/run-interrupt-test.sh'),
   args: [ xpost_exe, files('tests/interrupt_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Composite-size limits: the small-object build holds Appendix B.1's 65,535
@@ -1001,6 +1125,7 @@ test('large-object',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/large_object_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # The same ceiling reached along every path that builds a composite and
@@ -1014,6 +1139,7 @@ test('composite-limit',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/composite_limit_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # The capacity a dictionary reports against the length it reports (PLRM
@@ -1026,6 +1152,7 @@ test('dict-capacity',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_dict_capacity_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # Unterminated string literals: end of input inside (...), <...> or <~...~>
@@ -1033,6 +1160,7 @@ test('dict-capacity',
 test('scanner-eof',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/scanner_eof_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Radix number range (PLRM 3.2): unsigned twos-complement in the integer width,
@@ -1040,6 +1168,7 @@ test('scanner-eof',
 test('op-radix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_radix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # cvi/cvr number conversion (PLRM 8.2): reject non-PostScript syntax; cvi of an
@@ -1047,30 +1176,35 @@ test('op-radix',
 test('op-cvi',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_cvi_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Graphics-state number parameters are reals (PLRM), matching Distiller and gs.
 test('op-gstate-types',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_gstate_types_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # cvs yields --nostringval-- for every type outside the string-representable set.
 test('op-cvs',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_cvs_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # array and string get/put require an integer index (a real is a typecheck).
 test('op-index-type',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_index_type_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # reading from a closed file reports end-of-data rather than raising an error.
 test('op-closed-read',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_closed_read_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
@@ -1081,6 +1215,7 @@ test('op-closed-read',
 test('save-restore-ctm',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Interpreter isolation: internal helper procedures hide in .xpostsys, so their
@@ -1090,6 +1225,7 @@ test('save-restore-ctm',
 test('isolation',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/isolation_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Dispatch-dictionary tamper resistance: no internal dispatch dictionary may
@@ -1102,12 +1238,14 @@ test('isolation',
 test('op-subfiledecode',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_subfiledecode_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # String data sources for filters (PLRM 3.8.4): a filter may read from a string.
 test('op-string-filter',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_string_filter_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # readstring (PLRM 8.2): verbatim transfer, the boolean result at end of
@@ -1115,6 +1253,7 @@ test('op-string-filter',
 test('op-readstring',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_readstring_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Boundaries of the file operators (PLRM 3.8, 8.2): empty operands, end of
@@ -1123,6 +1262,7 @@ test('op-readstring',
 test('op-file-edges',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_file_edges_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every file operator against every filter. Which methods a filter carries
@@ -1132,6 +1272,7 @@ test('op-file-edges',
 test('filter-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The predictor stage over a compressed stream: a stage that did nothing
@@ -1140,6 +1281,7 @@ test('filter-matrix',
 test('filter-predictor',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_predictor_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every mutating operator against restore. Whether an operator records
@@ -1148,6 +1290,7 @@ test('filter-predictor',
 test('save-restore-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/save_restore_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every graphics state parameter through gsave and grestore. A parameter
@@ -1156,6 +1299,7 @@ test('save-restore-matrix',
 test('gstate-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/gstate_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The gstate object: gstate returns a copy of the current graphics state,
@@ -1165,6 +1309,7 @@ test('gstate-matrix',
 test('gstate-object',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/gstate_object_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every colour space family through every colour operator. Each family
@@ -1173,6 +1318,7 @@ test('gstate-object',
 test('colorspace-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/colorspace_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Program code is called out to through one bracket. This holds the tree
@@ -1181,6 +1327,7 @@ test('colorspace-matrix',
 # spelling. Both failures are silent until a program re-enters or raises.
 test('callout-bracket',
   find_program('tests/check-callout-bracket.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # Every procedure the graphics machinery calls out to, asked whether the
@@ -1190,6 +1337,7 @@ test('callout-bracket',
 test('callback-reentry',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/callback_reentry_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every text-showing operator against both kinds of font. Each operator
@@ -1198,6 +1346,7 @@ test('callback-reentry',
 test('showop-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/showop_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every function type against every shading that can take one. A branch
@@ -1206,6 +1355,7 @@ test('function-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/function_matrix_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 120)
 
 # Every resource operator against every category the interpreter admits
@@ -1214,6 +1364,7 @@ test('function-matrix',
 test('resource-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/resource_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every way of presenting an image against every way of painting one:
@@ -1222,6 +1373,7 @@ test('resource-matrix',
 test('image-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/image_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every halftone dictionary fault against the error it is defined to
@@ -1231,6 +1383,7 @@ test('image-matrix',
 test('halftone-matrix',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/halftone_matrix_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every setter of a transfer function or a spot function, asked whether
@@ -1240,6 +1393,7 @@ test('halftone-matrix',
 test('colour-sampling',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/colour_sampling_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The ordered comparisons take two numbers or two strings, and refusing
@@ -1247,6 +1401,7 @@ test('colour-sampling',
 test('op-compare',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_compare_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Operators handed an operand of a type they cannot want. Accepting one
@@ -1255,6 +1410,7 @@ test('op-compare',
 test('op-operand-types',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_operand_types_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # An operator written in PostScript stating the operands it takes, so
@@ -1262,6 +1418,7 @@ test('op-operand-types',
 test('op-wrapsig',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_wrapsig_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The two font directories hold different populations: the local one goes
@@ -1269,6 +1426,7 @@ test('op-wrapsig',
 test('font-directory',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_directory_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Where a pattern's tiles land: the tiling is anchored in pattern space,
@@ -1276,6 +1434,7 @@ test('font-directory',
 test('pattern-phase',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/pattern_phase_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Where every group of names ends up: which dictionary, which VM, and
@@ -1283,6 +1442,7 @@ test('pattern-phase',
 test('startup-surface',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/startup_surface_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Standard operators written in PostScript are operator objects, so bind
@@ -1290,6 +1450,7 @@ test('startup-surface',
 test('op-bind',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_bind_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The operators taking more than one shape of operand list: every shape
@@ -1297,6 +1458,7 @@ test('op-bind',
 test('op-operand-shapes',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_operand_shapes_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Names implemented twice, in C and in PostScript: which of the two wins
@@ -1306,7 +1468,8 @@ test('check-shadowed-operators',
   find_program('tests/check-shadowed-operators.sh'),
   args: [ meson.current_source_dir() / 'src/lib',
           meson.current_source_dir() / 'data',
-          files('tests/shadowed_operators.golden') ])
+          files('tests/shadowed_operators.golden') ],
+  suite: cost_fast)
 
 # A standard operator written in PostScript holds the operators it calls,
 # not their names: a name is resolved when it runs, so one left in a body
@@ -1314,6 +1477,7 @@ test('check-shadowed-operators',
 # is what an already-bound body put out of bind's reach, and only shrinks.
 test('check-wrapped-bind',
   find_program('tests/check-wrapped-bind.sh'),
+  suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir(), files('tests/wrapped_bind.golden') ])
 
 # The same invariant as a program sees it: redefine what a standard
@@ -1321,6 +1485,7 @@ test('check-wrapped-bind',
 test('wrapped-bind',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/wrapped_bind_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # initgraphics on its own: the fault it guards against is invisible in a
@@ -1329,12 +1494,14 @@ test('wrapped-bind',
 test('op-initgraphics',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_initgraphics_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The showing operators and the state each requires.
 test('op-showstate',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_showstate_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The printer's descent into a structure that contains itself.
@@ -1342,6 +1509,7 @@ test('op-printdepth',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_printdepth_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 60)
 
 # What the error dictionary carries and what the standard handler does
@@ -1349,6 +1517,7 @@ test('op-printdepth',
 test('error-dict',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/error_dict_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # An error is named in C, by the ERRORS enumeration, and in PostScript, by
@@ -1358,6 +1527,7 @@ test('error-dict',
 # name C never returns reads as coverage it is not.
 test('check-error-names',
   find_program('tests/check-error-names.sh'),
+  suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir() ])
 
 # The binary form of the error report, which has to be checked on the
@@ -1365,6 +1535,7 @@ test('check-error-names',
 test('error-binary',
   find_program('tests/run-error-binary-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The virtual-memory parameter operators: vmstatus and globalvmstatus report
@@ -1373,6 +1544,7 @@ test('error-binary',
 test('op-vm-param',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_vm_param_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # cvn interns a name from characters that live in the memory file the
@@ -1381,6 +1553,7 @@ test('op-vm-param',
 test('op-cvn',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_cvn_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Exceeding the number of files a context may hold open is a limitcheck
@@ -1389,6 +1562,7 @@ test('op-cvn',
 test('op-file-limit',
   find_program('tests/run-file-limit-test.sh'),
   args: [ xpost_exe, files('tests/op_file_limit_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # File lifetime against a small open-file allowance: eight hundred files ended
@@ -1398,6 +1572,7 @@ test('op-file-limit',
 test('file-lifetime',
   find_program('tests/run-file-lifetime-test.sh'),
   args: [ xpost_exe, files('tests/file_lifetime_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Enumerating a directory holding more names than a composite object's own
@@ -1416,6 +1591,7 @@ test('filenameforall-large',
   args: [ xpost_exe, files('tests/filenameforall_large_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   is_parallel: false,
+  suite: cost_slow,
   timeout: 120)
 
 # The font cache parameter operators: cachestatus reports what setcachelimit
@@ -1423,6 +1599,7 @@ test('filenameforall-large',
 test('op-fontcache',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_fontcache_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The clock operators: realtime counts real time, usertime the time the
@@ -1431,6 +1608,7 @@ test('op-fontcache',
 test('op-time',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_time_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The environment operators: a variable set by putenv has to survive the call,
@@ -1438,6 +1616,7 @@ test('op-time',
 test('op-env',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_env_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # String and number literals as the scanner reads them (PLRM 3.2): the escapes,
@@ -1446,6 +1625,7 @@ test('op-env',
 test('op-literal',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_literal_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The command line: the geometry option sets the page size and a geometry that
@@ -1453,6 +1633,7 @@ test('op-literal',
 test('cli-options',
   find_program('tests/run-cli-options-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The dictionary stack: begin and end above the three permanent entries,
@@ -1460,6 +1641,7 @@ test('cli-options',
 test('op-dictstack',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_dictstack_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The loop operators resume through continuations whose state sits on the
@@ -1469,6 +1651,7 @@ test('op-dictstack',
 test('op-loop-depth',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_loop_depth_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A JPEG stream that stops early, or was never a JPEG, must end the decode
@@ -1477,6 +1660,7 @@ test('dct-truncated',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/dct_truncated_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 60)
 
 # The interpreter's own debugging printers, which live in the private
@@ -1485,6 +1669,7 @@ test('dct-truncated',
 test('internal-debug-ops',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/internal_debug_ops_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # %statementedit gathers standard input until the statement is complete, over
@@ -1493,6 +1678,7 @@ test('internal-debug-ops',
 test('statementedit',
   find_program('tests/run-statementedit-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The collector's own diagnostics, which no ordinary run reaches: an
@@ -1501,6 +1687,7 @@ test('statementedit',
 test('gc-diagnostics',
   find_program('tests/run-gc-diagnostics-test.sh'),
   args: [ xpost_exe, files('tests/gc_diagnostics_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A collection between two pieces of vector output must leave the device's
@@ -1509,6 +1696,7 @@ test('gc-diagnostics',
 test('vecout-gc',
   find_program('tests/run-vecout-gc-test.sh'),
   args: [ xpost_exe, files('tests/vecout_gc_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
@@ -1517,6 +1705,7 @@ test('vecout-gc',
 test('op-file-access',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_file_access_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # readline (PLRM 8.2): terminator handling for CR, LF and CRLF, the boolean
@@ -1525,6 +1714,7 @@ test('op-file-access',
 test('op-readline',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_readline_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # filenameforall enumerates the files matching a template (PLRM 8.2), and a
@@ -1532,6 +1722,7 @@ test('op-readline',
 test('op-filenameforall',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_filenameforall_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A filter and the stream beneath it may be closed in either order: the
@@ -1540,23 +1731,27 @@ test('op-filenameforall',
 test('filter-source-life',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_source_life_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Procedure data sources for filters (PLRM 3.8.4).
 test('op-proc-filter',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_proc_filter_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # setcachedevice/setcharwidth are valid only within a glyph description (PLRM 8.2).
 test('op-glyphcontext',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_glyphcontext_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 test('tamper-dispatch',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/tamper_dispatch_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Startup namespace cleanliness: after startup userdict and globaldict are empty
@@ -1567,6 +1762,7 @@ test('tamper-dispatch',
 test('namespace',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/namespace_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # No-graphics lockdown: --no-graphics selects the no-graphics start procedures,
@@ -1578,6 +1774,7 @@ test('namespace',
 test('nographics',
   find_program('tests/run-nographics-test.sh'),
   args: [ xpost_exe, files('tests/nographics_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Filter EOD consumption: a decode filter must swallow its own end-of-data marker
@@ -1589,6 +1786,7 @@ test('nographics',
 test('filter-eod',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_eod_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 # The write-side counterpart: closefile on an encoding filter writes the
 # coding's end-of-data marker, and a target that cannot accept it leaves a
@@ -1597,6 +1795,7 @@ test('filter-eod',
 test('filter-close-eod',
   find_program('tests/run-refusing-target-test.sh'),
   args: [ xpost_exe, files('tests/filter_close_eod_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 # The partial unit an encoding filter carries between writes: the leftover
 # group, code or scanline is padded out at closefile so the matching decode
@@ -1606,6 +1805,7 @@ test('filter-close-eod',
 test('filter-encode-pad',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/filter_encode_pad_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 # A filter releases the stream it was given to wrap: it drops the reference
 # it took, and closes and frees a stream the machinery made for it alone --
@@ -1616,7 +1816,7 @@ test('filter-leak',
   find_program('tests/run-leak-test.sh'),
   args: [ xpost_exe, files('tests/filter_leak_test.ps'),
           files('glibc.supp') ],
-  suite: ['xpost', 'memacct'],
+  suite: cost_slow + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 # A stream nothing names any longer is reached by collection, and a stream
@@ -1627,7 +1827,7 @@ test('filter-abandon',
   find_program('tests/run-leak-test.sh'),
   args: [ xpost_exe, files('tests/filter_abandon_test.ps'),
           files('glibc.supp') ],
-  suite: ['xpost', 'memacct'],
+  suite: cost_slow + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 # A face built over a font program in memory reads the program where it
@@ -1639,12 +1839,13 @@ test('font-leak',
   find_program('tests/run-leak-test.sh'),
   args: [ xpost_exe, files('tests/font_leak_test.ps'),
           files('glibc.supp') ],
-  suite: ['xpost', 'memacct'],
+  suite: cost_slow + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 300)
 test('stream-exec',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stream_exec_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 
@@ -1656,6 +1857,7 @@ test('stream-exec',
 test('access',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/access_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every output device renders: the rest of the suite runs under -d null,
@@ -1666,6 +1868,7 @@ test('devices',
   find_program('tests/run-devices-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 300)
 
 # Relocation stress: every memory grow forced to relocate, so a pointer
@@ -1676,6 +1879,7 @@ test('reloc-stress',
   find_program('tests/run-reloc-stress-test.sh'),
   args: [ xpost_exe, files('tests/reloc_stress_test.ps'), 'pgm' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
   timeout: 120)
 
 # The library's exported symbol set is a register, not a side effect. A
@@ -1683,6 +1887,7 @@ test('reloc-stress',
 # external linkage; the compiler reports only a useless-storage-class note.
 test('check-exported-symbols',
   find_program('tests/check-exported-symbols.sh'),
+  suite: cost_fast,
   args: [ libxpost_lib.full_path(), files('tests/exported_symbols.golden') ])
 
 # Document Structuring Convention parsing: a header list continued over %%+
@@ -1694,7 +1899,7 @@ dsc_parse_exe = executable('dsc_parse_test',
   dependencies: [ libxpost_dep, libxpost_dsc_dep ],
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
-test('dsc-parse', dsc_parse_exe)
+test('dsc-parse', dsc_parse_exe, suite: cost_fast)
 
 # A test must be able to fail. Each rule here encodes a defect this suite
 # actually carried: a failure counter incremented with def inside a scratch
@@ -1705,13 +1910,23 @@ test('dsc-parse', dsc_parse_exe)
 test('check-test-quality',
   find_program('tests/check-test-quality.sh'),
   args: [ meson.current_source_dir() / 'tests' ],
+  suite: cost_fast,
   timeout: 120)
+
+# Every test declares what it costs, where it is registered. A test that
+# names no cost joins the quick profile by omission, and a profile that
+# slowly fills with minute-long checks is a profile nobody runs.
+test('check-test-cost',
+  find_program('tests/check-test-cost.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast)
 
 # The distribution lists must cover every built file: a header present in the
 # meson build but missing from the autotools lists yields a `make dist` tarball
 # that does not compile, which no in-tree build would ever reveal.
 test('check-dist-lists',
   find_program('tests/check-dist-lists.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # A quiet run must be silent: the interpreter's own self-checks report only
@@ -1719,6 +1934,7 @@ test('check-dist-lists',
 test('clean-startup',
   find_program('tests/run-clean-startup-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # An operator implemented in C reaches another operator by holding it, not by
@@ -1730,6 +1946,7 @@ test('clean-startup',
 test('op-references',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_reference_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Fused-execution equivalence: the interpreter inlines the hottest operators
@@ -1739,6 +1956,7 @@ test('op-references',
 test('fused-equivalence',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/fused_equivalence_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # ... and the complement of the op-references test: that one shows the rule
@@ -1749,6 +1967,7 @@ test('fused-equivalence',
 test('check-op-references',
   find_program('tests/check-op-references.sh'),
   args: [ meson.current_source_dir() ],
+  suite: cost_fast,
   timeout: 120)
 
 # The address of a special entity is reached through the accessor named for
@@ -1758,6 +1977,7 @@ test('check-op-references',
 test('check-vm-address',
   find_program('tests/check-vm-address.sh'),
   args: [ meson.current_source_dir() ],
+  suite: cost_fast,
   timeout: 120)
 
 # ... and every fused operator must actually have those cases: adding one
@@ -1765,7 +1985,8 @@ test('check-vm-address',
 test('check-fused-ops',
   find_program('tests/check-fused-ops.sh'),
   args: [ meson.current_source_dir() / 'src' / 'lib',
-          files('tests/fused_equivalence_test.ps') ])
+          files('tests/fused_equivalence_test.ps') ],
+  suite: cost_fast)
 
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
@@ -1778,6 +1999,7 @@ test('golden-render',
   args: [ xpost_exe, files('tests/golden_page.ps'),
           meson.current_source_dir() / 'tests' / 'golden' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Device method contract, safety tier: every built device must accept the
@@ -1789,6 +2011,7 @@ test('device-contract',
   find_program('tests/run-device-contract-test.sh'),
   args: [ xpost_exe, files('tests/device_contract_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Values outside the range their contract names: a colour component from a
@@ -1800,6 +2023,7 @@ test('colour-range',
   find_program('tests/run-colour-range-test.sh'),
   args: [ xpost_exe, files('tests/colour_range_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
@@ -1810,6 +2034,7 @@ test('device-destroy',
   find_program('tests/run-device-destroy-test.sh'),
   args: [ xpost_exe, files('tests/device_destroy_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # A restore back past a setpagedevice makes the retired device current again --
@@ -1821,6 +2046,7 @@ test('device-restore-retired',
   find_program('tests/run-device-restore-test.sh'),
   args: [ xpost_exe, files('tests/device_restore_retired_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # The other half of that: the device the restore displaces is retired there,
@@ -1834,6 +2060,7 @@ test('device-retire-restored',
   find_program('tests/run-device-restore-test.sh'),
   args: [ xpost_exe, files('tests/device_retire_restored_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # GetPix is callable on a device the program has already destroyed: Destroy
@@ -1845,6 +2072,7 @@ test('device-getpix-destroyed',
   find_program('tests/run-device-getpix-test.sh'),
   args: [ xpost_exe, files('tests/device_getpix_destroyed_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # quit ends the run (PLRM 8.2), and what happens next is the device's
@@ -1855,6 +2083,7 @@ test('device-quit',
   find_program('tests/run-device-quit-test.sh'),
   args: [ xpost_exe, files('tests/quit_run_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # A setpagedevice whose maker fails at run time must leave the incumbent device
@@ -1866,6 +2095,7 @@ test('setpagedevice-failure',
   find_program('tests/run-setpagedevice-failure-test.sh'),
   args: [ xpost_exe, files('tests/setpagedevice_failure_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Multi-page output: a save...showpage...restore job (the separation-plate
@@ -1877,6 +2107,7 @@ test('multipage',
   find_program('tests/run-multipage-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
   timeout: 300)
 
 # Embedded Type 1 with a no-access Private: definefont must reach the loader and
@@ -1886,6 +2117,7 @@ test('multipage',
 test('font-type1-noaccess',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_type1_noaccess_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedded Type 1 with an over-allocated /Subrs array -- more slots declared than
@@ -1896,6 +2128,7 @@ test('font-type1-noaccess',
 test('font-type1-sparse-subrs',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Type 1 emission across many doublings of the font-program buffer: an
@@ -1907,6 +2140,7 @@ test('font-type1-sparse-subrs',
 test('font-bigbuf',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_bigbuf_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The bounds the anti-aliased stencil painter puts on its mask. Every byte
@@ -1918,6 +2152,7 @@ test('font-bigbuf',
 test('stencil-mask-size',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/stencil_mask_size_test.ps') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Differential corpus: render whatever real-program corpora the developer has
@@ -1927,12 +2162,21 @@ test('stencil-mask-size',
 # crashes or hangs on a program.
 # One test per corpus, so that meson overlaps them instead of running them end
 # to end; each skips on its own when its corpus has not been fetched.
-foreach corpus : [ 'ghostscript', 'casselman', 'bwipp', 'adobe' ]
-  test('corpus-' + corpus,
+#
+# Each carries its own cost, which is the point of costing a test apart
+# from saying what it is about: two of these corpora take minutes and two
+# do not, and the cheap pair is worth running far more often than the
+# expensive one. The adobe corpus is costed as the others are rather than
+# as the skip it is until its programs are fetched.
+foreach corpus : [ [ 'ghostscript', 'slow' ],
+                   [ 'casselman', 'veryslow' ],
+                   [ 'bwipp', 'veryslow' ],
+                   [ 'adobe', 'slow' ] ]
+  test('corpus-' + corpus[0],
     find_program('tests/corpus/run-corpus-test.sh'),
-    args: [ xpost_exe, corpus ],
+    args: [ xpost_exe, corpus[0] ],
     env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-    suite: 'corpus',
+    suite: [ 'corpus', corpus[1] ],
     timeout: 1800)
 endforeach
 
@@ -1944,6 +2188,7 @@ test('binary-tokens',
   args: [ xpost_exe,
           files('tests/binary_token_test.ps'),
           files('tests/binary_token_test.expected') ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Error reporting: a top-level job error prints the standard Adobe error line
@@ -1951,6 +2196,7 @@ test('binary-tokens',
 test('error-format',
   find_program('tests/run-error-format-test.sh'),
   args: [ xpost_exe ],
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 # Single-opener invariant: fopen is named only inside xpost_raw_fopen(),
 # which xpost_diskfile_fopen() reaches through, so every disk file the
@@ -1958,6 +2204,7 @@ test('error-format',
 # enforcement point.
 test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
+  suite: cost_slow,
   args: [ meson.current_source_dir() ])
 
 # Device-driver skeleton: the compiled-buffer device fleet reaches its
@@ -1965,6 +2212,7 @@ test('fopen-funnel',
 # xpost_dev_driver.h -- the contract stays written in one place.
 test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # One device roster. -d and setpagedevice are two spellings of one
@@ -1973,6 +2221,7 @@ test('check-device-skeleton',
 # wrappers, which carry rosters of their own, run every one of them.
 test('check-device-roster',
   find_program('tests/check-device-roster.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # A function that can refuse returns that fact and no caller may ignore
@@ -1982,6 +2231,7 @@ test('check-device-roster',
 # cannot arise.
 test('must-check',
   find_program('tests/check-must-check.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # Machinery stays born in its final home: every registered private-namespace
@@ -1990,6 +2240,7 @@ test('must-check',
 test('dict-homes',
   find_program('tests/check-dict-homes.sh'),
   args: [ meson.current_source_dir() ],
+  suite: cost_fast,
   timeout: 120)
 
 # The guards read data/ and tests/ under a source root they are given, and
@@ -1999,6 +2250,7 @@ test('dict-homes',
 test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
   args: [ meson.current_source_dir(), xpost_exe, libxpost_lib.full_path() ],
+  suite: cost_veryslow,
   timeout: 300)
 
 # An operator's operand statement is recorded where the operator is
@@ -2006,6 +2258,7 @@ test('guard-paths',
 # could not reach it and had their statements written by hand instead.
 test('opsigs-writer',
   find_program('tests/check-opsigs-writer.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # The complement of dict-homes: that guards a registered member against
@@ -2014,6 +2267,7 @@ test('opsigs-writer',
 # checked against a live startup rather than a second set of patterns.
 test('private-refs',
   find_program('tests/check-private-refs.sh'),
+  suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir() ])
 
 # The raster classes stay a single generated suite: pgm/ppm are parameter
@@ -2021,6 +2275,7 @@ test('private-refs',
 # and every shared method is defined exactly once, in the prototype.
 test('raster-classes-derivation',
   find_program('tests/check-raster-classes.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # The vector writers share one base: exactly one two-decimal formatter
@@ -2029,6 +2284,7 @@ test('raster-classes-derivation',
 # dict-copy derivation of the PDF device.
 test('vecbase',
   find_program('tests/check-vecbase.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # The filter base: what every filter shares is declared once, every filter
@@ -2037,6 +2293,7 @@ test('vecbase',
 # looked up in a hand-maintained list of the method tables.
 test('filter-base',
   find_program('tests/check-filter-base.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # One growable byte buffer for the whole tree: the builders that assemble
@@ -2045,6 +2302,7 @@ test('filter-base',
 # own, and none reads the answer as a success flag.
 test('one-bytebuf',
   find_program('tests/check-one-bytebuf.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # A cursor is held in a slot as wide as the bound it is checked against.
@@ -2053,6 +2311,7 @@ test('one-bytebuf',
 # field itself; against a derived one it wraps and the loop does not end.
 test('narrow-cursors',
   find_program('tests/check-narrow-cursors.sh'),
+  suite: cost_slow,
   args: [ meson.current_source_dir() ])
 
 # An encoder gives up a part-finished unit before offering it to the
@@ -2060,6 +2319,7 @@ test('narrow-cursors',
 # running past the width the shifts and subscripts around it read it as.
 test('encoder-units',
   find_program('tests/check-encoder-units.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # Every route a program has to the glyph raster resolves the clipping
@@ -2069,6 +2329,7 @@ test('encoder-units',
 # paints wherever the glyphs fall and nothing says so.
 test('show-clip-routes',
   find_program('tests/check-show-clip.sh'),
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # Path-component validation and beneath-root confinement: traversal and
@@ -2081,7 +2342,7 @@ if host_machine.system() != 'windows'
     dependencies: libxpost_dep,
     include_directories: [ config_dir, include_directories('src/lib') ],
     install: false)
-  test('path-confine', path_confine_exe)
+  test('path-confine', path_confine_exe, suite: cost_fast)
 endif
 
 # File-access sandbox: once engaged, only permitted directories may be
@@ -2094,6 +2355,7 @@ sandbox_exe = executable('sandbox_test',
   install: false)
 test('sandbox',
   sandbox_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # From-PostScript lockdown: .permitfileread/.permitfilewrite/.lockdown raise
@@ -2106,6 +2368,7 @@ lockdown_exe = executable('lockdown_test',
   install: false)
 test('lockdown',
   lockdown_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Implicit resource loading: findresource loads a named instance from the
@@ -2118,6 +2381,7 @@ resource_load_exe = executable('resource_load_test',
   install: false)
 test('resource-load',
   resource_load_exe,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The driver contract's rectangle definition: xpost_dev_rect_normalize()
@@ -2133,7 +2397,7 @@ dev_rect_exe = executable('dev_rect_test',
   link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
-test('dev-rect', dev_rect_exe)
+test('dev-rect', dev_rect_exe, suite: cost_fast)
 #if get_option('nls') == true
 #  subdir('po')
 #endif
