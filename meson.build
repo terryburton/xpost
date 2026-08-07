@@ -1226,6 +1226,15 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# .swap exchanges two elements by index, and an index outside the array
+# names an element of whatever else the backing entity holds, so it is a
+# rangecheck at both ends.
+test('array-swap-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/array_swap_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.

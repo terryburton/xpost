@@ -15,6 +15,7 @@ EXTRA_DIST += \
 tests/Makefile.mk \
 tests/access_test.ps \
 tests/api_definitions_test.c \
+tests/array_swap_range_test.ps \
 tests/bbox_test.ps \
 tests/binary_token_test.expected \
 tests/binary_token_test.ps \

@@ -1,0 +1,59 @@
+%!
+% .swap exchanges two elements of an array by index. The elements are
+% reached through the array's backing entity, which for a subarray holds
+% the elements the subarray was cut from as well as the subarray's own:
+% an index outside the array therefore names an element the caller was
+% never handed, and swapping with it both reads that element into the
+% caller's array and writes the caller's element over it. So an index
+% has to name an element of the array on both sides -- an index outside
+% it is a rangecheck (PLRM 3.3.2) -- and the operator must still be
+% there afterwards.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/swap id /.swap get def
+
+/A [ 10 20 30 40 50 60 70 80 ] def
+/B A 4 4 getinterval def
+
+% array i j label  .  -   swap; expect rangecheck
+/expectrange {
+  /label exch def
+  /d0 countdictstack def
+  { swap } stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  exch
+  { dup (rangecheck) eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% --- an index before the array reaches what it was cut from ---
+B -4 0 (a swap from before a subarray) expectrange
+B 0 -4 (a swap into before a subarray) expectrange
+B -1 0 (a swap from before an array) expectrange
+% --- and an index past its end reaches the same way ---
+B 0 4 (a swap from past a subarray) expectrange
+B 4 0 (a swap into past a subarray) expectrange
+
+% the elements outside the subarray are untouched by any of that
+A 0 get 10 eq A 1 get 20 eq and A 2 get 30 eq and A 3 get 40 eq and
+{ (ok   the elements outside the subarray are as they were) note }
+{ /fails fails 1 add def
+  (FAIL: an element outside the subarray moved) note } ifelse
+
+% the operator still swaps two elements it was given
+B 0 3 swap
+B 0 get 80 eq B 3 get 50 eq and
+{ (ok   a swap inside the array still exchanges) note }
+{ /fails fails 1 add def
+  (FAIL: a swap inside the array did not exchange: ) print B == } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
