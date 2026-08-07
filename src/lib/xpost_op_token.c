@@ -205,6 +205,19 @@ int fsm_check(char *s,
     return accept(sta);
 }
 
+/* A numeral is read into a field that spans the whole of the integer
+   object's, and is judged against the integer's own range afterwards. The
+   two are separate: the field belongs to the conversion functions and the
+   range belongs to the object, and the range is the only one a program can
+   observe. `long` is the width of an integer object on some platforms and
+   half of it on others, so a numeral judged in a `long` would be a
+   different numeral on each; `long long` is at least the integer's width
+   everywhere, which is what this pins. */
+typedef char xpost_scan_field_spans_the_integer[
+    sizeof(long long) >= sizeof(integer)
+    && sizeof(unsigned long long) >= sizeof(dword)
+    && sizeof(dword) == sizeof(integer) ? 1 : -1];
+
 static
 int grok(Xpost_Context *ctx,
          char *s,
@@ -233,10 +246,10 @@ int grok(Xpost_Context *ctx,
             do { p++; } while (isdigit((unsigned char)*p));
             if (p - s == ns)
             {
-                long num;
+                long long num;
                 errno = 0;
-                num = strtol(s, NULL, 10);
-                if (errno == ERANGE || (long)(integer)num != num)
+                num = strtoll(s, NULL, 10);
+                if (errno == ERANGE || (long long)(integer)num != num)
                 {
                     /* beyond the integer range: PLRM 3.3.2 makes it a real */
                     *retval = xpost_real_cons((real)strtod(s, NULL));
@@ -255,10 +268,10 @@ int grok(Xpost_Context *ctx,
 
     if (fsm_check(s, ns, fsm_dec, accept_dec))
     {
-        long num;
+        long long num;
         errno = 0;
-        num = strtol(s, NULL, 10);
-        if (errno == ERANGE || (long)(integer)num != num)
+        num = strtoll(s, NULL, 10);
+        if (errno == ERANGE || (long long)(integer)num != num)
         {
             /* beyond the integer range: PLRM 3.3.2 makes it a real */
             *retval = xpost_real_cons((real)strtod(s, NULL));
@@ -270,7 +283,12 @@ int grok(Xpost_Context *ctx,
 
     else if (fsm_check(s, ns, fsm_rad, accept_rad))
     {
-        unsigned long base, num;
+        /* the base is the decimal 2 to 36 the syntax allows and nothing
+           wider, so it is bounded below rather than by the field it is
+           read into: a numeral too large for that field saturates, and
+           saturation fails the same bound */
+        unsigned long base;
+        unsigned long long num;
         base = strtoul(s, &s, 10);
         if ((base > 36) || (base < 2))
         {
@@ -278,31 +296,24 @@ int grok(Xpost_Context *ctx,
             return limitcheck;
         }
         errno = 0;
-        /* PLRM 3.2: a radix number is unsigned. Read it unsigned so the full
-           integer width parses on every platform: where long is no wider than
-           int (LLP64, e.g. Windows), a signed read would overflow on any value
-           past INT_MAX -- 16#FFFFFFFF among them -- and spuriously limitcheck. */
-        num = strtoul(s + 1, NULL, base);
+        /* PLRM 3.2: a radix number is unsigned, so it is read unsigned and
+           the whole of the integer's field is available to it */
+        num = strtoull(s + 1, NULL, base);
         if (errno == ERANGE)
         {
             XPOST_LOG_ERR("radixnumber out of range");
             return limitcheck;
         }
-        /* it keeps the same twos-complement representation, so it must fit the
-           integer type's bit width; one that exceeds it is a limitcheck (not
-           narrowed, and not promoted to a real the way an over-range decimal
-           integer is). Where long is wider than int the value parsed above but
-           may still be too wide; ERANGE has already caught it where it did not. */
-        /* the shift is reached only where an integer is the narrower of
-           the two, so it always names a bit inside an unsigned long */
-        if (sizeof(integer) < sizeof(long)
-                /* cppcheck-suppress shiftTooManyBits */
-                && num > (((unsigned long)1 << (8 * sizeof(integer))) - 1))
+        /* it becomes the integer of the same twos-complement representation,
+           so it must fit the integer's own field; one that exceeds that field
+           is a limitcheck, neither narrowed to fit nor promoted to a real the
+           way an over-range decimal integer is */
+        if (num > (unsigned long long)(dword)~(dword)0)
         {
             XPOST_LOG_ERR("radixnumber exceeds integer width");
             return limitcheck;
         }
-        *retval = xpost_int_cons((integer)num);
+        *retval = xpost_int_cons((integer)(dword)num);
         return 0;
     }
 

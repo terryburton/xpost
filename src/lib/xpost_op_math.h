@@ -47,24 +47,35 @@ int xpost_oper_init_math_ops(Xpost_Context *ctx, Xpost_Object sd);
     ((long long)(((unsigned long long)1 << (sizeof(integer)*8 - 1)) - 1))
 #define XPOST_INTEGER_MIN (-XPOST_INTEGER_MAX - 1)
 
-static inline int xpost_int_add_willover(long x, long y)
+/* The operands arrive in the integer's own width, which is the width the
+   bounds above are drawn in. `long` is that width on some platforms and
+   half of it on others, so an operand taken as a `long` would be a
+   different operand on each. */
+typedef char xpost_integer_range_spans_the_integer[
+    sizeof(long long) >= sizeof(integer)
+    && sizeof(dword) == sizeof(integer) ? 1 : -1];
+
+static inline int xpost_int_add_willover(integer x, integer y)
 {
     if (y < 0) return x < XPOST_INTEGER_MIN - y;
     return x > XPOST_INTEGER_MAX - y;
 }
 
-static inline int xpost_int_sub_willunder(long x, long y)
+static inline int xpost_int_sub_willunder(integer x, integer y)
 {
     if (y < 0) return x > XPOST_INTEGER_MAX + y;
     return x < XPOST_INTEGER_MIN + y;
 }
 
-static inline int xpost_int_mul_willover(long x, long y)
+static inline int xpost_int_mul_willover(integer x, integer y)
 {
-    long long xx = x < 0 ? -(long long)x : (long long)x;
-    long long yy = y < 0 ? -(long long)y : (long long)y;
+    /* the magnitudes are held unsigned, so the most negative operand --
+       which has no positive counterpart -- is measured without leaving the
+       field, and the division that follows is over two magnitudes */
+    dword xx = x < 0 ? (dword)0 - (dword)x : (dword)x;
+    dword yy = y < 0 ? (dword)0 - (dword)y : (dword)y;
     if (xx == 0 || yy == 0) return 0;
-    return xx > XPOST_INTEGER_MAX / yy;
+    return xx > (dword)XPOST_INTEGER_MAX / yy;
 }
 
 /**

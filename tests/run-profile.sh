@@ -34,6 +34,24 @@
 # never in the tree, and is held from both ends: a name it excuses that
 # turns out to have run is an excuse that has lapsed and fails too.
 #
+# The memacct tests are the one case that is neither. They weigh the
+# memory a run holds rather than the answers it gives, so a build whose
+# sanitizer holds freed memory in quarantine and carries shadow maps of
+# its own leaves them nothing to measure and all five fail. That is not
+# something the run was given nothing to work on -- a skip would say
+# that, and would then have to be excused every time -- and it is not a
+# fault in the tree either. It is a property of the build, recorded in
+# the build directory, which is why it is read off the build and why no
+# profile selects them where it holds. Never selected is what keeps them
+# from being silently absent: they leave the count the profile reports,
+# every profile says so in its verdict, and `everything` says in its own
+# terms that the run does not speak for them. A declared list in the tree
+# would be the alternative and is the thing the excuse channel above
+# deliberately refuses -- a register of permitted absences goes on
+# excusing something after it stops being absent, and a fact derived from
+# the build cannot: reconfigure and the same run selects them again with
+# nothing edited.
+#
 #   $1        profile: quick, full, corpus, vendor or everything
 #   $2...     further arguments for meson test (-v, --num-processes, ...)
 #
@@ -94,6 +112,47 @@ case $profile in
             echo "      one of quick, full, corpus, vendor, everything"
             exit 1 ;;
 esac
+
+# Whether this build displaces the measurement the memacct tests take.
+# Two of them weigh the process through getrusage and three run it under
+# valgrind, so what puts the measurement out of reach is a runtime that
+# intercepts the allocator or maps shadow memory of its own: the address,
+# leak, memory and thread sanitizers do, and valgrind will not run over
+# any of them either. `undefined` does neither -- it instruments
+# arithmetic and casts and leaves the heap where it was -- and all five
+# pass under it, so it is the one sanitizer they are still answerable in
+# and it is not read as displacing them.
+#
+# The value is taken from between "value" and "section" in the
+# introspection, which is where the choices list -- which always names
+# every sanitizer -- is not. It is a plain string in the meson this tree
+# requires and a list in later ones, so it is split on anything that is
+# not a letter and read name by name. Anything left after `none` and
+# `undefined` are taken out displaces the measurement, which means a
+# sanitizer this tree has not met is read as displacing rather than as
+# harmless.
+displaces=no
+sanval=$(meson introspect "$build" --buildoptions 2>/dev/null | tr '{' '\n' |
+    awk '/"name": "b_sanitize"/ {
+             i = index($0, "\"value\":")
+             j = index($0, ", \"section\"")
+             if (i && j > i) print substr($0, i + 8, j - i - 8)
+         }')
+if [ -z "$sanval" ]; then
+    # An answer that could not be read takes nothing out. Selecting the
+    # five where the build does displace them costs five failures, which
+    # is loud and is the behaviour without this paragraph at all; dropping
+    # them from a build that could have run them is the silence the whole
+    # of this wrapper exists to prevent.
+    echo "profile $profile: could not read b_sanitize from $build, so the"
+    echo "      memacct tests are selected; they cannot pass under a"
+    echo "      sanitizer that displaces the heap"
+elif printf '%s\n' "$sanval" | tr -c 'a-z' ' ' | tr ' ' '\n' |
+     grep -vx '' | grep -vx none | grep -qvx undefined; then
+    displaces=yes
+    filter="$filter --no-suite memacct"
+    without="$without memacct"
+fi
 
 work=$(mktemp -d 2>/dev/null) || work=
 if [ -z "$work" ] || [ ! -d "$work" ]; then
@@ -163,6 +222,47 @@ fi
 
 selected=$(wc -l < "$work/want")
 echo "profile $profile: $what -- $selected of $(wc -l < "$work/all") tests"
+
+# How many tests weigh a run's memory: in the build, and in what this
+# profile selected. Both are counted off the listing rather than from a
+# number written here, so neither can drift from what the tree carries,
+# and both read the suite field rather than the line, so a test whose
+# name happens to say memacct is not one of them.
+count_memacct() {
+    awk '{
+        i = index($0, " / ")
+        if (i == 0) next
+        suites = substr($0, 1, i - 1)
+        sub(/^[^:]*:/, "", suites)
+        n = split(suites, s, "+")
+        for (j = 1; j <= n; j++) if (s[j] == "memacct") { c++; break }
+    } END { print c + 0 }' "$1"
+}
+nmemacct=$(count_memacct "$work/all")
+nmemacct_sel=$(count_memacct "$work/want")
+
+# Said only by the profiles that would otherwise hold them: the corpus
+# and the consumer suite never carry the tag, so an exclusion notice
+# there would name an absence that was never this profile's to report.
+case $profile in
+  quick|full|everything)
+    if [ "$displaces" = yes ]; then
+        echo "profile $profile: this build's sanitizer displaces the heap, so the"
+        echo "      $nmemacct memacct test(s) are outside it -- they weigh the memory a"
+        echo "      run holds, which a quarantine and shadow maps put out of reach"
+    elif [ "$nmemacct" -gt 0 ] && [ "$nmemacct_sel" -eq 0 ]; then
+        # The other side of the same claim. Where the heap is left alone
+        # the five are answerable and a profile over their costs has to
+        # hold them; an exclusion that misfired, or a suite tag that went
+        # missing, would take them out of every run with the filter and
+        # the predicate agreeing about it and nothing left to notice.
+        echo "FAILURES: the $profile profile selects none of the $nmemacct"
+        echo "      memacct test(s) in a build that leaves the heap alone,"
+        echo "      so the tests that weigh a run's memory would go unrun"
+        echo "      with nothing in the verdict saying so"
+        exit 1
+    fi ;;
+esac
 
 # The run is read out of the record meson writes rather than out of the
 # summary it prints. The summary counts a skip apart from a pass and
@@ -258,6 +358,13 @@ if [ "$profile" = everything ]; then
     fi
     if [ -s "$work/excused.u" ]; then
         echo "profile everything: this run does not speak for $(wc -l < "$work/excused.u") excused test(s)"
+    fi
+    # Said again in this profile's own terms, because this is the profile
+    # whose claim is that every test ran: where the heap is displaced that
+    # claim stops short of the five, and a green line here has to carry it.
+    if [ "$displaces" = yes ]; then
+        echo "profile everything: this run does not speak for the $nmemacct memacct"
+        echo "      test(s) -- this build's sanitizer displaces the memory they weigh"
     fi
 fi
 

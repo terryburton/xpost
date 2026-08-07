@@ -32,6 +32,20 @@
 { -2147483648 -1 idiv } stopped { pop false }{ pop true } ifelse
     (INT_MIN idiv -1 yields a value, no fault) assert
 
+% --- the most negative integer, multiplied out of the range ---
+% PLRM 3.3.2: a product the integer cannot hold is the real of the true
+% value. The most negative integer is the operand that says so, because it
+% is the one with no positive counterpart: a product weighed by taking the
+% magnitudes has to measure it without leaving the field it lies in. Which
+% integer that is belongs to the object width and is asked in
+% build_personality_test.ps; what is asserted here holds at either width.
+/wideint 2147483648 type /integertype eq def
+/intmin wideint { -9223372036854775807 1 sub }{ -2147483647 1 sub } ifelse def
+intmin 2 mul type /realtype eq (INT_MIN 2 mul leaves the integer range) assert
+intmin 2 mul 0 lt (INT_MIN 2 mul is the negative product) assert
+intmin -1 mul type /realtype eq (INT_MIN -1 mul leaves the integer range) assert
+intmin -1 mul 0 gt (INT_MIN -1 mul is the positive product) assert
+
 % --- mod sign follows the dividend (PLRM examples) ---
 5 3 mod 2 eq (5 3 mod = 2) assert
 5 2 mod 1 eq (5 2 mod = 1) assert
