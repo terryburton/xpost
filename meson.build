@@ -740,6 +740,10 @@ test('clip-region',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/clip_region_test.ps') ],
   suite: cost_slow,
+  # a slow test on an idle machine is a marginal one on a busy machine:
+  # this needs about a third of the default budget alone and has been
+  # killed at the default while the rest of the suite ran beside it
+  timeout: 120,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A clip region can end up covering no pixels at all. PLRM 7.5.1 makes
@@ -763,6 +767,7 @@ test('show-clip',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/show_clip_test.ps') ],
   suite: cost_slow,
+  timeout: 120,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A pattern colour is not a colour a pixel can be set to, so text painted
@@ -817,6 +822,7 @@ test('graphics-regression',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
   suite: cost_slow,
+  timeout: 120,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Render classes: Type 3 and composite fonts, the shading types, tiling and
@@ -884,6 +890,7 @@ test('pdf-device',
   find_program('tests/run-pdf-test.sh'),
   args: [ xpost_exe, files('tests/pdf_bigfill_test.ps') ],
   suite: cost_slow,
+  timeout: 120,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # PDF content appends under memory pressure: a FillPoly whose content
@@ -2358,7 +2365,8 @@ test('one-bytebuf',
 test('narrow-cursors',
   find_program('tests/check-narrow-cursors.sh'),
   suite: cost_slow,
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir() ],
+  timeout: 120)
 
 # An encoder gives up a part-finished unit before offering it to the
 # target, so a refused byte cannot leave the unit open and its counter
