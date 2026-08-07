@@ -7,6 +7,15 @@
 # keeps per page (a page counter, an open output file) must not be rewound with
 # it, or later pages collide with the first.
 #
+# The whole sweep runs twice: once on a job that takes the device it started
+# on, and once on a job that changes the page device first. The second is the
+# ordinary shape of a real job, and it is a different case: setpagedevice
+# retires one device and builds another, so every page is written by a device
+# that arrived after the job began, and the first of them is emitted inside a
+# save. Anything such a device leaves until its first page -- an output file it
+# has not opened yet, say -- is opened inside that save and closed by its
+# restore.
+#
 # Two shapes, by device:
 #
 #  * Paginated container formats (PDF, DSC) default to ONE file holding every
@@ -41,12 +50,20 @@ else
 fi
 
 work=$(mktemp -d)
-prog="$work/pages.ps"
+plain="$work/pages.ps"
 # three pages, each a stroke at its own position, so the pages differ in content
 printf '%s\n' \
     'save 10 10 moveto 40 40 lineto stroke showpage restore' \
     'save 40 40 moveto 70 70 lineto stroke showpage restore' \
-    'save 70 10 moveto 95 35 lineto stroke showpage restore' > "$prog"
+    'save 70 10 moveto 95 35 lineto stroke showpage restore' > "$plain"
+
+# the same job after a page device change. setpagedevice retires the device the
+# job started on and builds another, so every page here is written by a device
+# that arrived while the job was already running -- and the first of them is
+# emitted inside a save. A device that leaves any part of its output to the
+# first page is tying that part to the first page's restore.
+pagedev="$work/pagesdev.ps"
+{ printf '%s\n' '<< /PageSize [100 100] >> setpagedevice'; cat "$plain"; } > "$pagedev"
 
 # device:extension:paginated(1=one file holds all pages, 0=one page per file)
 devices='pgm:pgm:0 ppm:ppm:0 pbm:pbm:0 tiff:tiff:0 svgwrite:svg:0 pdfwrite:pdf:1 dscwrite:ps:1'
@@ -68,64 +85,70 @@ render() {   # $1=device $2=output-path ; returns 1 on skip/error
     return 0
 }
 
-for de in $devices; do
-    dev=${de%%:*}
-    rest=${de#*:}
-    ext=${rest%%:*}
-    pag=${rest#*:}
-    rm -f "$work"/page_* "$work"/fixed.* 2>/dev/null
+sweep() {   # $1=job label ; renders $prog through every device and checks the shape
+    job=$1
+    for de in $devices; do
+        dev=${de%%:*}
+        rest=${de#*:}
+        ext=${rest%%:*}
+        pag=${rest#*:}
+        rm -f "$work"/page_* "$work"/fixed.* 2>/dev/null
 
-    # every device: a %d gives one file per page, all three distinct
-    if ! render "$dev" "$work/page_%d.$ext"; then
-        [ "$fail" -eq 0 ] && echo "SKIP $dev (not built in)"
-        continue
-    fi
-    p1="$work/page_1.$ext"; p2="$work/page_2.$ext"; p3="$work/page_3.$ext"
-    n=$(ls "$work"/page_*."$ext" 2>/dev/null | wc -l)
-    if [ "$n" -ne 3 ]; then
-        echo "FAIL $dev: %d gave $n file(s), want 3"; fail=1; continue
-    fi
-    for p in "$p1" "$p2" "$p3"; do
-        [ -s "$p" ] || { echo "FAIL $dev: $(basename "$p") missing or empty"; fail=1; }
+        # every device: a %d gives one file per page, all three distinct
+        if ! render "$dev" "$work/page_%d.$ext"; then
+            [ "$fail" -eq 0 ] && echo "SKIP $dev (not built in)"
+            continue
+        fi
+        p1="$work/page_1.$ext"; p2="$work/page_2.$ext"; p3="$work/page_3.$ext"
+        n=$(ls "$work"/page_*."$ext" 2>/dev/null | wc -l)
+        if [ "$n" -ne 3 ]; then
+            echo "FAIL $dev ($job): %d gave $n file(s), want 3"; fail=1; continue
+        fi
+        for p in "$p1" "$p2" "$p3"; do
+            [ -s "$p" ] || { echo "FAIL $dev ($job): $(basename "$p") missing or empty"; fail=1; }
+        done
+        [ "$fail" -ne 0 ] && continue
+        if cmp -s "$p1" "$p2" || cmp -s "$p2" "$p3" || cmp -s "$p1" "$p3"; then
+            echo "FAIL $dev ($job): %d page files are not all distinct (counter rewound?)"; fail=1; continue
+        fi
+
+        # fixed name (no %d)
+        if ! render "$dev" "$work/fixed.$ext"; then
+            echo "FAIL $dev ($job): fixed-name render failed"; fail=1; continue
+        fi
+        if [ "$pag" = 1 ]; then
+            # one file holding all three pages
+            case "$dev" in
+            pdfwrite)
+                # the document says how many pages it has three times over, and a
+                # reader believes whichever it consults, so all three must agree:
+                # the page tree's count, the number of page objects, and the
+                # number of children the tree names
+                c=$(grep -aoE '/Count [0-9]+' "$work/fixed.$ext" | awk '{print $2}')
+                [ "$c" = 3 ] || { echo "FAIL $dev ($job): page tree /Count $c, want 3"; fail=1; continue; }
+                np=$(grep -ac '/Type /Page[^s]' "$work/fixed.$ext")
+                [ "$np" = 3 ] || { echo "FAIL $dev ($job): $np page objects, want 3"; fail=1; continue; }
+                nk=$(grep -aoE '/Kids *\[[^]]*\]' "$work/fixed.$ext" | head -1 \
+                     | grep -oE '[0-9]+ 0 R' | wc -l | tr -d ' ')
+                [ "$nk" = 3 ] || { echo "FAIL $dev ($job): page tree names $nk children, want 3"; fail=1; continue; }
+                ;;
+            dscwrite)
+                np=$(grep -ac '^%%Page:' "$work/fixed.$ext")
+                [ "$np" = 3 ] || { echo "FAIL $dev ($job): $np %%Page sections, want 3"; fail=1; continue; }
+                grep -aq '^%%Pages: 3' "$work/fixed.$ext" || { echo "FAIL $dev ($job): no %%Pages: 3 trailer"; fail=1; continue; }
+                ;;
+            esac
+            echo "OK   $dev ($job: one file, three pages; %d gives three files)"
+        else
+            # last page stands in the one file
+            cmp -s "$work/fixed.$ext" "$p3" || { echo "FAIL $dev ($job): fixed-name output is not the last page"; fail=1; continue; }
+            echo "OK   $dev ($job: one page per file via %d; fixed name = last page)"
+        fi
     done
-    [ "$fail" -ne 0 ] && continue
-    if cmp -s "$p1" "$p2" || cmp -s "$p2" "$p3" || cmp -s "$p1" "$p3"; then
-        echo "FAIL $dev: %d page files are not all distinct (counter rewound?)"; fail=1; continue
-    fi
+}
 
-    # fixed name (no %d)
-    if ! render "$dev" "$work/fixed.$ext"; then
-        echo "FAIL $dev: fixed-name render failed"; fail=1; continue
-    fi
-    if [ "$pag" = 1 ]; then
-        # one file holding all three pages
-        case "$dev" in
-        pdfwrite)
-            # the document says how many pages it has three times over, and a
-            # reader believes whichever it consults, so all three must agree:
-            # the page tree's count, the number of page objects, and the
-            # number of children the tree names
-            c=$(grep -aoE '/Count [0-9]+' "$work/fixed.$ext" | awk '{print $2}')
-            [ "$c" = 3 ] || { echo "FAIL $dev: page tree /Count $c, want 3"; fail=1; continue; }
-            np=$(grep -ac '/Type /Page[^s]' "$work/fixed.$ext")
-            [ "$np" = 3 ] || { echo "FAIL $dev: $np page objects, want 3"; fail=1; continue; }
-            nk=$(grep -aoE '/Kids *\[[^]]*\]' "$work/fixed.$ext" | head -1 \
-                 | grep -oE '[0-9]+ 0 R' | wc -l | tr -d ' ')
-            [ "$nk" = 3 ] || { echo "FAIL $dev: page tree names $nk children, want 3"; fail=1; continue; }
-            ;;
-        dscwrite)
-            np=$(grep -ac '^%%Page:' "$work/fixed.$ext")
-            [ "$np" = 3 ] || { echo "FAIL $dev: $np %%Page sections, want 3"; fail=1; continue; }
-            grep -aq '^%%Pages: 3' "$work/fixed.$ext" || { echo "FAIL $dev: no %%Pages: 3 trailer"; fail=1; continue; }
-            ;;
-        esac
-        echo "OK   $dev (one file, three pages; %d gives three files)"
-    else
-        # last page stands in the one file
-        cmp -s "$work/fixed.$ext" "$p3" || { echo "FAIL $dev: fixed-name output is not the last page"; fail=1; continue; }
-        echo "OK   $dev (one page per file via %d; fixed name = last page)"
-    fi
-done
+prog=$plain;   sweep pages
+prog=$pagedev; sweep 'pages after setpagedevice'
 
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then
