@@ -132,6 +132,10 @@ typedef struct Xpost_DiskFile
     int poll_before_read; /* select() before each read: only needed for
                              pipes/terminals/sockets, where a read may block;
                              regular files are always ready */
+    int input;            /* opened for reading only. flushfile means two
+                             different things by the direction (PLRM 8.2) and
+                             a stdio stream does not say which it is, so the
+                             opener, which knows the access string, says */
 } Xpost_DiskFile;
 
 typedef struct Xpost_MemoryFile
@@ -204,9 +208,11 @@ int xpost_file_seek(Xpost_File *f, long offset)
 
 
 /**
- * @brief Construct a file object given a FILE*.
+ * @brief Construct a file object given a FILE* and the direction it was
+ * opened in (non-zero for a stream that is only read).
  */
-Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp);
+Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp,
+                             int input);
 
 /**
  * @brief Construct a readable file object over a private copy of a

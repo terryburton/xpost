@@ -938,27 +938,24 @@ int xpost_op_flush (Xpost_Context *ctx)
 }
 
 /* file  flushfile  -
-   flush output buffer for file */
+   An output file writes through whatever it has buffered; an input file
+   is read and discarded to end of data (PLRM 8.2). Each stream carries
+   the direction it was opened in and its flush method does the half that
+   belongs to it, so a filter's own way of reaching the end of its data is
+   what runs when the file is one. A file that grants neither access is
+   left alone. */
 static
 int xpost_op_file_flushfile (Xpost_Context *ctx,
                              Xpost_Object F)
 {
-    int ret;
     Xpost_File *f;
+
     if (!xpost_file_get_status(ctx->lo, F)) return 0;
+    if (!xpost_object_is_readable(ctx, F) && !xpost_object_is_writeable(ctx, F))
+        return 0;
     f = xpost_file_get_file_pointer(ctx->lo, F);
-    if (xpost_object_is_writeable(ctx, F))
-    {
-        ret = xpost_file_flush(f);
-        if (ret != 0)
-            return ioerror;
-    }
-    else if (xpost_object_is_readable(ctx,F))
-    { /* flush input file. yes yes I know ... but it's in the spec! */
-        int c;
-        while ((c = xpost_file_getc(f)) != EOF)
-            /**/;
-    }
+    if (xpost_file_flush(f) != 0)
+        return ioerror;
     return 0;
 }
 
@@ -1030,7 +1027,7 @@ int xpost_op_currentfile (Xpost_Context *ctx)
         xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(o));
         return 0;
     }
-    o = xpost_file_cons(ctx->lo, NULL);
+    o = xpost_file_cons(ctx->lo, NULL, 1);
     if (xpost_object_get_type(o) == invalidtype)
         return VMerror;
     xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(o));
@@ -1771,7 +1768,7 @@ int xpost_op_resourcefileopen (Xpost_Context *ctx,
         return 0;
     }
 
-    f = xpost_file_cons(ctx->lo, fp);
+    f = xpost_file_cons(ctx->lo, fp, 1);
     if (xpost_object_get_type(f) == invalidtype)
     {
         fclose(fp);

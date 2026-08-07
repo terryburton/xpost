@@ -815,6 +815,12 @@ disk_close(Xpost_File *file)
     return ret;
 }
 
+/* flushfile: an output stream writes through what it has buffered, an
+   input stream is read and discarded to end of data (PLRM 8.2). Reading a
+   stream opened for output would set its error indicator, and flushing one
+   opened for input would leave the characters the program asked to be rid
+   of still in front of it, so the two halves are told apart by the
+   direction the stream was opened in rather than attempted together. */
 static int
 disk_flush(Xpost_File *file)
 {
@@ -822,6 +828,12 @@ disk_flush(Xpost_File *file)
 
     if (!df->file)
         return 0;
+    if (df->input)
+    {
+        while (disk_readch(file) != EOF)
+            /**/;
+        return 0;
+    }
     return fflush(df->file);
 }
 
@@ -892,7 +904,7 @@ _plain_file_init(Xpost_File *f, Xpost_File_Methods *methods)
 }
 
 static Xpost_File *
-xpost_diskfile_open(const FILE *fp)
+xpost_diskfile_open(const FILE *fp, int input)
 {
     Xpost_DiskFile *df = malloc(sizeof *df);
     struct stat st;
@@ -901,6 +913,7 @@ xpost_diskfile_open(const FILE *fp)
         return NULL;
     _plain_file_init(&df->methods, &disk_methods);
     df->file = (FILE*)fp;
+    df->input = input;
     /* reads from a regular file never block, so only poll fds that
        can stall (pipes, terminals, sockets) */
     df->poll_before_read = !(fstat(fileno(df->file), &st) == 0 &&
@@ -970,12 +983,16 @@ memory_close(Xpost_File *f)
     return 0;
 }
 
+/* flushfile (PLRM 8.2): a stream over memory holds nothing on its way out,
+   and reaches the end of its data on the way in as soon as the read
+   position is the limit. */
 static int
 memory_flush(Xpost_File *f)
 {
     Xpost_MemoryFile *mf = (Xpost_MemoryFile *)f;
 
-    (void)mf;
+    if (mf->is_read)
+        mf->read_next = mf->read_limit;
     return 0;
 }
 
@@ -1220,13 +1237,6 @@ a85_close(Xpost_File *f)
     return 0;
 }
 
-static int
-a85_flush(Xpost_File *f)
-{
-    (void)f;
-    return 0;
-}
-
 static void
 a85_purge(Xpost_File *f)
 {
@@ -1248,7 +1258,9 @@ a85_unreadch(Xpost_File *f, int c)
     return 0;
 }
 
-/* the positioning methods shared by every filter (see filter_tell) */
+/* the draining and positioning methods shared by every decode filter
+   (see filter_flush and filter_tell) */
+static int filter_flush(Xpost_File *f);
 static long filter_tell(Xpost_File *f);
 static int filter_seek(Xpost_File *f, long offset);
 
@@ -1257,7 +1269,7 @@ struct Xpost_File_Methods a85_methods =
     a85_readch,
     a85_writech,
     a85_close,
-    a85_flush,
+    filter_flush,
     a85_purge,
     a85_unreadch,
     filter_tell,
@@ -1281,7 +1293,7 @@ struct Xpost_File_Methods a85_methods =
    default is writable.
    eg.
     FILE *fp = xpost_diskfile_fopen(path, mode, 0, &err);
-    Xpost_Object f = readonly(xpost_file_cons(fp)).
+    Xpost_Object f = readonly(xpost_file_cons(fp, 1)).
  */
 
 /* Tie a freshly allocated file entity to the stream it holds.
@@ -1384,7 +1396,8 @@ _file_forget_entity(Xpost_Memory_File *mem, Xpost_File *fp)
 }
 
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
-                             /*@NULL@*/ const FILE *fp)
+                             /*@NULL@*/ const FILE *fp,
+                             int input)
 {
     Xpost_Object f;
     unsigned int ent;
@@ -1395,7 +1408,7 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
     printf("xpost_file_cons %p\n", fp);
 #endif
     f.tag = filetype /*| (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET)*/;
-    df = xpost_diskfile_open(fp);
+    df = xpost_diskfile_open(fp, input);
     if (!df)
         return invalid;
     /* xpost_memory_table_alloc(mem, sizeof(FILE *), 0, &f.mark_.padw); */
@@ -2088,12 +2101,12 @@ filter_close(Xpost_File *f)
     return 0;
 }
 
+/* flushfile on an input file reads and discards to end of data (PLRM 8.2):
+   programs drain a decode filter to position the underlying file just past
+   an inline stream they skip. */
 static int
 filter_flush(Xpost_File *f)
 {
-    /* flushfile on an input file reads and discards to end of data
-       (PLRM): programs drain a decode filter to position the
-       underlying file just past an inline stream they skip */
     while (f->methods->readch(f) != EOF)
         ;
     return 0;
@@ -4581,6 +4594,9 @@ rsd_seek(Xpost_File *f, long offset)
     return 0;
 }
 
+/* flushfile leaves an input file at the end of its data (PLRM 8.2), which
+   a reusable stream is already holding whole: there is nothing to read
+   through to reach it. */
 static int
 rsd_flush(Xpost_File *f)
 {
@@ -5035,7 +5051,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return invalidfileaccess;
         }
-        f = xpost_file_cons(mem, stdin);
+        f = xpost_file_cons(mem, stdin, 1);
         if (xpost_object_get_type(f) != filetype)
             return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
@@ -5047,7 +5063,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return invalidfileaccess;
         }
-        f = xpost_file_cons(mem, stdout);
+        f = xpost_file_cons(mem, stdout, 0);
         if (xpost_object_get_type(f) != filetype)
             return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
@@ -5059,7 +5075,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return invalidfileaccess;
         }
-        f = xpost_file_cons(mem, stderr);
+        f = xpost_file_cons(mem, stderr, 0);
         if (xpost_object_get_type(f) != filetype)
             return VMerror;
         f.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
@@ -5072,7 +5088,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return ret;
         }
-        f = xpost_file_cons(mem, fp);
+        f = xpost_file_cons(mem, fp, 1);
         if (xpost_object_get_type(f) != filetype)
         {
             fclose(fp);
@@ -5088,7 +5104,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
         {
             return ret;
         }
-        f = xpost_file_cons(mem, fp);
+        f = xpost_file_cons(mem, fp, 1);
         if (xpost_object_get_type(f) != filetype)
         {
             fclose(fp);
@@ -5125,7 +5141,8 @@ int xpost_file_open(Xpost_Memory_File *mem,
         fp = xpost_diskfile_fopen(fn, mode, 0, &ret);
         if (fp == NULL)
             return ret;
-        f = xpost_file_cons(mem, fp);
+        f = xpost_file_cons(mem, fp,
+                            access == XPOST_OBJECT_TAG_ACCESS_FILE_READ);
         if (xpost_object_get_type(f) != filetype)
         {
             fclose(fp);

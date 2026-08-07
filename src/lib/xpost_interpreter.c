@@ -2700,7 +2700,7 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
            stream opened to be read: the start procedure executes it, and
            execution reads it */
         ctx->run_input_file =
-            xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr));
+            xpost_object_cvlit(xpost_file_cons(ctx->lo, ps_file_ptr, 1));
         if (xpost_object_get_type(ctx->run_input_file) == filetype)
         {
             ctx->run_input_file.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
