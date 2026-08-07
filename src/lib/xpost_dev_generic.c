@@ -780,29 +780,31 @@ int _fillpoly(Xpost_Context *ctx,
     return 0;
 }
 
+/* How many bands one polygon array carries. A band costs five
+   elements, and 65535 is the length one array is allowed to reach.
+   The number is a deliberate bound and not the size field's own
+   ceiling -- the field is sixteen bits in the ordinary build and
+   thirty-two in the large-object one, so a ceiling taken from it would
+   let the two builds refuse at different sizes and only one of them
+   would ever reach the machinery that answers in parts. It is the
+   length .fillpolyargs allows a polygon, so the two ends of the
+   pipeline agree, and it keeps one answer's allocation bounded
+   whatever the build. */
+#define POLY_ARRAY_MAX 65535
+#define POLY_BANDS_MAX (POLY_ARRAY_MAX / 5)
+
 /* Build a null-separated polygon array of pixel-band rectangles, one
    per resolved span, in the FillPoly argument format: winding-uniform
    output any consumer may treat by either insideness rule. Consumes
-   nothing; pushes the array on the operand stack. 0 on success. */
+   nothing; the array comes back through polyp. 0 on success. */
 static
-int _rspans_to_poly(Xpost_Context *ctx,
-                    struct rspan *out,
-                    int nout)
+int _rspans_poly_cons(Xpost_Context *ctx,
+                      const struct rspan *out,
+                      int nout,
+                      Xpost_Object *polyp)
 {
     Xpost_Object result;
     int i, ret;
-
-    /* A band costs five elements, and this is the length one array is
-       allowed to reach. The number is a deliberate bound and not the
-       size field's own ceiling -- the field is sixteen bits in the
-       ordinary build and thirty-two in the large-object one, so a
-       ceiling taken from it would let the two builds refuse at
-       different sizes and only one of them would ever reach the
-       machinery that answers in parts. It is the length .fillpolyargs
-       allows a polygon, so the two ends of the pipeline agree, and it
-       keeps one answer's allocation bounded whatever the build. */
-    if (5 * (long)nout > 65535)
-        return limitcheck;
 
     result = xpost_array_cons(ctx, 5 * nout);
     if (xpost_object_get_type(result) == invalidtype)
@@ -836,7 +838,28 @@ int _rspans_to_poly(Xpost_Context *ctx,
             return ret;
     }
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(result));
+    *polyp = xpost_object_cvlit(result);
+    return 0;
+}
+
+/* The same polygon, pushed on the operand stack, for the answers that
+   are one array or none. 0 on success. */
+static
+int _rspans_to_poly(Xpost_Context *ctx,
+                    struct rspan *out,
+                    int nout)
+{
+    Xpost_Object result;
+    int ret;
+
+    if (nout > POLY_BANDS_MAX)
+        return limitcheck;
+
+    ret = _rspans_poly_cons(ctx, out, nout, &result);
+    if (ret)
+        return ret;
+
+    xpost_stack_push(ctx->lo, ctx->os, result);
     return 0;
 }
 
@@ -1182,6 +1205,72 @@ int _eospanpoly_rows(Xpost_Context *ctx,
     code = _rspans_to_poly(ctx, rsp, m);
     free(rsp);
     return code;
+}
+
+/* path evenodd  .pathspanparts  [ spanpoly ... ]
+   A path's interior, in the pixel-band rectangles a painter marks one
+   after another. The vertices are read straight out of the packed path,
+   where an array's bounded length does not reach them, so a path of
+   more points than one polygon describes is answered here rather than
+   refused: a LanguageLevel 2 path has no length of its own to exceed
+   (PLRM 4.4), and the polygon a fill hands a device is the only bound
+   in the way.
+
+   The answer is as many polygons as the bands need. They are cut out of
+   one scan conversion in band order, so a band falls in exactly one
+   part and the parts together are the whole interior; the rectangles
+   are winding-uniform, so a painter marking them one after another
+   marks what one polygon would have given, and no pixel twice. */
+static
+int _pathspanparts(Xpost_Context *ctx,
+                   Xpost_Object path,
+                   Xpost_Object evenodd)
+{
+    struct rspan *rsp = NULL;
+    Xpost_Object parts, poly;
+    int nrsp, nparts, i, n;
+    int code;
+
+    code = _path_resolved_spans(ctx, path, &rsp, &nrsp,
+                                evenodd.int_.val ? 1 : 0);
+    if (code)
+        return code;
+
+    nparts = (nrsp + POLY_BANDS_MAX - 1) / POLY_BANDS_MAX;
+    if (nparts > POLY_ARRAY_MAX)
+    {
+        free(rsp);
+        return limitcheck;
+    }
+
+    parts = xpost_array_cons(ctx, nparts);
+    if (xpost_object_get_type(parts) == invalidtype)
+    {
+        free(rsp);
+        return VMerror;
+    }
+    /* the parts already built are reachable only through this array
+       while the next one allocates */
+    xpost_stack_push(ctx->lo, ctx->hold, parts);
+
+    for (i = 0; i < nparts; i++)
+    {
+        n = nrsp - i * POLY_BANDS_MAX;
+        if (n > POLY_BANDS_MAX)
+            n = POLY_BANDS_MAX;
+        code = _rspans_poly_cons(ctx, rsp + i * POLY_BANDS_MAX, n, &poly);
+        if (!code)
+            code = xpost_array_put(ctx, parts, i, poly);
+        if (code)
+        {
+            free(rsp);
+            return code;
+        }
+    }
+    free(rsp);
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(parts));
+    return 0;
 }
 
 /* A colour component scaled to a 0..max channel value, through the
@@ -3432,6 +3521,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".eospanpoly", (Xpost_Op_Func)_eospanpoly_rows, 3,
                              arraytype, integertype, integertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".pathspanparts", (Xpost_Op_Func)_pathspanparts, 2,
+                             stringtype, booleantype); INSTALL;
     op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 6,
             numbertype, numbertype, numbertype, numbertype,

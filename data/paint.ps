@@ -209,6 +209,55 @@
     end
 } put
 
+% evenodd  .fillsubjparts  [ spans ... ]
+% The region the current path encloses under the named rule, in the
+% parts a painter marks one after another. This is the one way the
+% current path becomes a subject: what fill and eofill paint, what clip
+% and eoclip keep, and what a pattern colour tiles across.
+%
+% Normally one part, and the polygon .fillpolyargs reads the path into
+% -- the fill's own subject, and what the device scan-converts.
+%
+% A path of more points than that polygon's array describes has no such
+% form. A LanguageLevel 2 path has no length of its own to exceed --
+% path storage competes with other uses of memory (PLRM 4.4) and a path
+% carries its extent in a header field of its own -- so the bound in the
+% way is the array's and not the path's, and a path that outruns it is
+% resolved to its pixel-band rectangles instead, in as many parts as
+% they need. That is a bound on the description and not on the
+% painting: the parts describe the same pixels between them, so what is
+% painted is what one polygon would have given.
+%
+% This is the length a stroke reaches first. A stroke of nonzero width
+% fills the outline it encloses, and that outline runs to about a dozen
+% points a segment -- the body of each segment and the join at each end
+% of it -- so a polyline outruns one polygon at a few thousand segments,
+% well before the path itself grows large.
+.xpostsys /.fillsubjparts {
+    4 dict begin
+    /eo exch def
+    count /n0 exch def
+    /d0 countdictstack def
+    {
+        {
+            eo { .fillpolyargs //.xpostsys /.eospanparts get exec }
+               { [ .fillpolyargs ] } ifelse
+        } stopped {
+            count n0 sub { pop } repeat
+            graphicsdict /currgstate get /currpath get eo .pathspanparts
+        } if
+    } stopped {
+        % a refusal handed up from either route leaves its own
+        % dictionaries open behind it, and the caller is owed a clean
+        % stack under the failure it is about to be given
+        countdictstack d0 sub { end } repeat
+        count n0 sub { pop } repeat
+        end
+        stop
+    } if
+    end
+} put
+
 % [ spans ... ]  .fillparts  -
 % Paint the parts of a region in the current colour, through the
 % device's polygon fill. A region that no single array describes
@@ -252,12 +301,14 @@
     % for any region the nonzero rule can describe.
     .cliptrivial not {
         .cliprect { pop pop pop pop true }{ false } ifelse {
-            //.xpostsys /doclip get exec .fillpolyargs [ exch ]
+            //.xpostsys /doclip get exec
+            false //.xpostsys /.fillsubjparts get exec
         }{
-            .fillpolyargs //.xpostsys /.clipmeetparts get exec
+            false //.xpostsys /.fillsubjparts get exec
+            //.xpostsys /.clippartsmeet get exec
         } ifelse
     }{
-        .fillpolyargs [ exch ]
+        false //.xpostsys /.fillsubjparts get exec
     } ifelse
     /DEBUGFILL where { pop
         (fill)=
@@ -291,7 +342,7 @@
     }{
         closepath
         flattenpath
-        .fillpolyargs //.xpostsys /.eospanparts get exec
+        true //.xpostsys /.fillsubjparts get exec
         .cliptrivial not {
             //.xpostsys /.clippartsmeet get exec
         } if

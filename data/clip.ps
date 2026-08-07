@@ -283,7 +283,8 @@
         % stacked regions of any shape combine exactly. The answer
         % arrives in parts where no single array states it, and the
         % parts become the one path the region is held in
-        .fillpolyargs //.xpostsys /.clipmeetparts get exec
+        false //.xpostsys /.fillsubjparts get exec
+        //.xpostsys /.clippartsmeet get exec
         //.xpostsys /.clipstoreparts get exec
     } ifelse
     } ifelse
@@ -651,7 +652,7 @@ put
 /eoclip [ ] {
     graphicsdict /currgstate get /currpath get .copypath
     flattenpath
-    .fillpolyargs //.xpostsys /.eospanparts get exec
+    true //.xpostsys /.fillsubjparts get exec
     .cliptrivial not {
         //.xpostsys /.clippartsmeet get exec
     } if
