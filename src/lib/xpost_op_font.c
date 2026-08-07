@@ -2269,6 +2269,9 @@ int _show_glyph(Xpost_Context *ctx,
     return 1;
 }
 
+/* Paint the glyph the encoding selects for one character code and
+   advance the pen over it. Answers 0 when the face would not give the
+   glyph up: nothing reached the page and the pen stands where it was. */
 static
 int _show_char(Xpost_Context *ctx,
                Xpost_Object devdic,
@@ -2419,6 +2422,7 @@ int _show(Xpost_Context *ctx,
     int ncomp;
     Xpost_Object comp[4];
     Xpost_Object finalize;
+    int painted = 1;
     int ret;
 
 
@@ -2477,12 +2481,20 @@ int _show(Xpost_Context *ctx,
 
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++) {
-        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp[0], comp[1], comp[2], comp[3]);
+        if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
+                ncomp, comp[0], comp[1], comp[2], comp[3]))
+        {
+            painted = 0;
+            break;
+        }
     }
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the glyphs the string asked for are the font's to supply, and one
+       it will not is that font failing the operator (PLRM 8.2 show) */
+    if (!ret && !painted)
+        ret = invalidfont;
 
     free(cstr);
     return ret;
@@ -2513,6 +2525,7 @@ int _glyphshow_common(Xpost_Context *ctx,
     Xpost_Object comp[4];
     Xpost_Object finalize;
     unsigned int glyph_index;
+    int painted;
     int ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
@@ -2552,11 +2565,22 @@ int _glyphshow_common(Xpost_Context *ctx,
     glyph_index = byname
         ? _glyph_index_for_name(ctx, ts.charstrings, data.face, gname)
         : gid;
-    _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
-                glyph_index, byname ? gname : invalid,
-                ncomp, comp[0], comp[1], comp[2], comp[3]);
+    painted = _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
+                          glyph_index, byname ? gname : invalid,
+                          ncomp, comp[0], comp[1], comp[2], comp[3]);
 
-    return _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the point the operator reached is the point it leaves behind,
+       whether or not the glyph was painted from it */
+    ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    if (ret)
+        return ret;
+    /* A glyph the face would not give up is nothing on the page and no
+       advance over it. Selecting by index reaches the CIDFont's glyphs,
+       and past them is out of range; selecting by name asks the font for
+       a glyph it turns out not to be able to supply (PLRM 8.2). */
+    if (!painted)
+        return byname ? invalidfont : rangecheck;
+    return 0;
 }
 
 static
@@ -3734,6 +3758,7 @@ int _ashow(Xpost_Context *ctx,
     int ncomp;
     Xpost_Object comp[4];
     Xpost_Object finalize;
+    int painted = 1;
     int ret;
 
 
@@ -3793,14 +3818,22 @@ int _ashow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp[0], comp[1], comp[2], comp[3]);
+        if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
+                   ncomp, comp[0], comp[1], comp[2], comp[3]))
+        {
+            painted = 0;
+            break;
+        }
         xpos += dx.real_.val;
         ypos += dy.real_.val;
     }
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the glyphs the string asked for are the font's to supply, and one
+       it will not is that font failing the operator (PLRM 8.2 show) */
+    if (!ret && !painted)
+        ret = invalidfont;
 
     free(cstr);
     return ret;
@@ -3828,6 +3861,7 @@ int _widthshow(Xpost_Context *ctx,
     int ncomp;
     Xpost_Object comp[4];
     Xpost_Object finalize;
+    int painted = 1;
     int ret;
 
 
@@ -3887,8 +3921,12 @@ int _widthshow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp[0], comp[1], comp[2], comp[3]);
+        if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
+                   ncomp, comp[0], comp[1], comp[2], comp[3]))
+        {
+            painted = 0;
+            break;
+        }
         if ((unsigned char)*ch == charcode.int_.val)
         {
             xpos += cx.real_.val;
@@ -3898,6 +3936,10 @@ int _widthshow(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the glyphs the string asked for are the font's to supply, and one
+       it will not is that font failing the operator (PLRM 8.2 show) */
+    if (!ret && !painted)
+        ret = invalidfont;
 
     free(cstr);
     return ret;
@@ -3927,6 +3969,7 @@ int _awidthshow(Xpost_Context *ctx,
     int ncomp;
     Xpost_Object comp[4];
     Xpost_Object finalize;
+    int painted = 1;
     int ret;
 
 
@@ -3986,8 +4029,12 @@ int _awidthshow(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++)
     {
-        _show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp[0], comp[1], comp[2], comp[3]);
+        if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
+                ncomp, comp[0], comp[1], comp[2], comp[3]))
+        {
+            painted = 0;
+            break;
+        }
         xpos += dx.real_.val;
         ypos += dy.real_.val;
         if ((unsigned char)*ch == charcode.int_.val)
@@ -3999,6 +4046,10 @@ int _awidthshow(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the glyphs the string asked for are the font's to supply, and one
+       it will not is that font failing the operator (PLRM 8.2 show) */
+    if (!ret && !painted)
+        ret = invalidfont;
 
     free(cstr);
     return ret;

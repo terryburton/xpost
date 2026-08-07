@@ -29,11 +29,22 @@
  * undoing it. It is a refusal that does not move: every allocation in
  * that file is declined for as long as it stands, rather than the next
  * one happening to fit.
+ *
+ * The bracket is one call's, and a job is not always one call. Under
+ * XPOST_SHOWPAGE_RETURN the job hands control back at each showpage and
+ * ends on a later call, so no bracket is taken over it: a level pushed
+ * by the first call is one no call of that job rewinds, and a context
+ * serving job after job would gather one per job. Both halves of that
+ * are held here -- the stacks stay where they were, and each job starts
+ * from the virtual memory the one before it left, which is where the
+ * graphics the first job loaded are.
  */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
+
+#include <string.h>
 
 #include "xpost.h"
 #include "xpost_memory.h"
@@ -65,6 +76,72 @@ static void allow_allocation(Xpost_Memory_File *mem)
 static int global_save_depth(Xpost_Context *ctx)
 {
     return xpost_stack_count(ctx->gl, xpost_memory_save_stack_adr(ctx->gl));
+}
+
+static int local_save_depth(Xpost_Context *ctx)
+{
+    return xpost_stack_count(ctx->lo, xpost_memory_save_stack_adr(ctx->lo));
+}
+
+static char out_buf[64];
+static size_t out_len;
+
+static size_t out_sink(void *user, const char *buf, size_t len)
+{
+    (void)user;
+    if (out_len + len < sizeof out_buf)
+    {
+        memcpy(out_buf + out_len, buf, len);
+        out_len += len;
+    }
+    return len;
+}
+
+/* Jobs on a context whose showpage returns to the caller. */
+static void returning_jobs_leave_the_save_stacks_alone(void)
+{
+    Xpost_Context *ctx;
+    int gdepth;
+    int ldepth;
+    int i;
+
+    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
+                       XPOST_SHOWPAGE_RETURN, XPOST_OUTPUT_MESSAGE_QUIET,
+                       XPOST_USE_SIZE, 100, 100);
+    if (!ctx)
+    {
+        report_failure("xpost_create");
+        return;
+    }
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+
+    gdepth = global_save_depth(ctx);
+    ldepth = local_save_depth(ctx);
+
+    for (i = 0; i < 3; i++)
+    {
+        out_len = 0;
+        (void) xpost_run(ctx, XPOST_INPUT_STRING,
+                         "0 0 moveto 10 10 lineto stroke (drew) print flush", 0);
+        out_buf[out_len] = '\0';
+        /* the graphics this job needs were loaded by the first of them:
+           a job whose virtual memory was rewound out from under it comes
+           back with them gone */
+        check(strcmp(out_buf, "drew") == 0,
+              "every job of a returning context runs against the graphics");
+    }
+
+    if (global_save_depth(ctx) != gdepth)
+        report_failure("jobs that return at showpage left the global save "
+                       "stack at %d, not %d",
+                       global_save_depth(ctx), gdepth);
+    if (local_save_depth(ctx) != ldepth)
+        report_failure("jobs that return at showpage left the local save "
+                       "stack at %d, not %d",
+                       local_save_depth(ctx), ldepth);
+
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
 }
 
 /* The snapshot's own answer, with the refusal and without it. */
@@ -161,6 +238,7 @@ int main(void)
     snapshot_reports_refusal();
     a_job_rewinds_only_its_own_level(0);
     a_job_rewinds_only_its_own_level(1);
+    returning_jobs_leave_the_save_stacks_alone();
 
     xpost_quit();
 

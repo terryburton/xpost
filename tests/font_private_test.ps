@@ -176,6 +176,57 @@ Base 30 scalefont setfont
 dup length 0 gt (.stringoutline gives the glyph outlines back) require
 pop
 
+% --- a glyph the face has not got ---------------------------------------
+
+% The face answers for the glyphs it holds, and an operator can be sent
+% past them. An index selects a glyph directly, so an index past the last
+% one is out of range (PLRM 8.2 glyphshow); a name goes through the
+% font's CharStrings, which is an ordinary dictionary a program builds,
+% so an entry there can name a glyph the face turns out not to hold and
+% the font has failed to supply what was asked of it. Either way nothing
+% reaches the page and the pen does not move, which is not the operator
+% having done what it was asked.
+
+Base 30 scalefont setfont
+blank
+4 8 moveto
+{ 999999 gshowidx } (rangecheck) (an index past the face's glyphs) expecterr
+ink 0 eq (a refused index marked nothing) require
+
+% a CharStrings of the program's own, sending a name past the face
+/Past Base dup length 2 add dict copy def
+Past /CharStrings 2 dict dup /A 999999 put dup /.notdef 0 put put
+/FontPrivatePast /FontPrivatePast Past definefont def
+
+blank
+{ FontPrivatePast 30 scalefont setfont 4 8 moveto (A) show }
+  (invalidfont) (show of a glyph the face has not got) expecterr
+{ FontPrivatePast 30 scalefont setfont 4 8 moveto 1 0 (A) ashow }
+  (invalidfont) (ashow of a glyph the face has not got) expecterr
+{ FontPrivatePast 30 scalefont setfont 4 8 moveto 1 0 8#101 (A) widthshow }
+  (invalidfont) (widthshow of a glyph the face has not got) expecterr
+{ FontPrivatePast 30 scalefont setfont 4 8 moveto 1 0 8#101 1 0 (A) awidthshow }
+  (invalidfont) (awidthshow of a glyph the face has not got) expecterr
+{ FontPrivatePast 30 scalefont setfont 4 8 moveto /A gshow }
+  (invalidfont) (.glyphshow of a glyph the face has not got) expecterr
+ink 0 eq (none of them marked the page) require
+
+% the control: the same operators over the same font's other glyphs,
+% which the face does hold. A font that refused everything would satisfy
+% the refusals above on its own.
+blank
+FontPrivatePast 30 scalefont setfont
+4 8 moveto (b) show
+ink 0 gt (a glyph the face does hold still marks the page) require
+blank
+FontPrivatePast 30 scalefont setfont
+4 8 moveto /b gshow
+ink 0 gt (.glyphshow of one still marks the page) require
+blank
+Base 30 scalefont setfont
+4 8 moveto 36 gshowidx
+ink 0 gt (an index the face does hold still marks the page) require
+
 % --- a copy of a font dictionary shares its face ------------------------
 
 % the pages a plain font renders the two glyphs on, to hold a re-encoded
