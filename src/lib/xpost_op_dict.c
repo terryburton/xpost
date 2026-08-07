@@ -280,7 +280,14 @@ int xpost_op_any_store(Xpost_Context *ctx,
                        Xpost_Object V)
 {
     Xpost_Object D;
-    xpost_op_any_where(ctx, K);
+    int ret;
+
+    /* where answers a flag, and a dictionary under it where it found
+       one. A key it refuses is a key it pushes nothing for, and what
+       lies under a refusal is the program's own operands. */
+    ret = xpost_op_any_where(ctx, K);
+    if (ret)
+        return ret;
     if (xpost_stack_pop(ctx->lo, ctx->os).int_.val) /* booleantype */
     {
         D = xpost_stack_pop(ctx->lo, ctx->os);

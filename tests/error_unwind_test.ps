@@ -186,6 +186,28 @@ count d0 sub 2 eq
     { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
     (findresource gives back the operands it was called with) assert
 
+% store looks the key up before it writes it, and reads the answer off
+% the operand stack. A key the lookup refuses -- null, which is no key
+% (PLRM 3.3.5) -- is a key it answers nothing for, and what lies under a
+% refusal is whatever the program left there. Two operands are placed
+% below the call to stand in that position, and the typecheck has to give
+% the caller all four back.
+
+count /d0 exch def
+{ 11 22 null 33 store } stopped pop
+count d0 sub 4 eq
+    { 33 eq exch null eq and exch 22 eq and exch 11 eq and }
+    { d0 wrongdepth } ifelse
+    (store refusing a key gives back what was under the call) assert
+
+% the control: a key it does not refuse is stored, and the operands are
+% consumed as the operator's own
+count /d0 exch def
+/zzstore 1 def
+/zzstore 2 store
+count d0 sub 0 eq (store takes its own operands when it stores) assert
+zzstore 2 eq (and stores the value it was given) assert
+
 % image runs a procedure of the program's. What fails in there is not
 % image refusing: the object being executed is the program's own
 % procedure, so the stack goes back no further than that procedure found
