@@ -48,11 +48,14 @@ device_for() {   # corpus base -> "ppm" | "pbm"
 # One program, rendered by both engines in a directory of its own so that
 # any number of these may run at once.
 #   $1 corpus  $2 base name  $3 path to the program  $4 work directory
+#   $5 the pages the corpus declares it draws, or "-" where it declares none
 evaluate_one() {
     corpus=$1
     b=$2
     p=$3
     work=$4
+    want=$5
+    [ "$want" = - ] && want=0
     mkdir -p "$work" || return
     # Beside the report, what this program produced no page for and how
     # many pages it did get compared. The reader below holds both
@@ -139,18 +142,27 @@ evaluate_one() {
 
         i=1
         compared=0
-        # The pages either engine drew, rather than the pages one of
-        # them did. A bound taken from the reference never reaches a
-        # page xpost drew and the reference did not, and a page lost by
-        # the side the bound comes from shortens the walk instead of
-        # appearing in it -- an absence that removes its own evidence.
+        # The pages either engine drew, and the pages the corpus says
+        # the program has. A bound taken from the reference never
+        # reaches a page xpost drew and the reference did not, and a
+        # page lost by the side the bound comes from shortens the walk
+        # instead of appearing in it -- an absence that removes its own
+        # evidence. A page neither engine drew removes it from both
+        # sides at once, which no bound either of them supplies can
+        # see, so the declared count is a bound as well.
         np=$ng
         [ "$nx" -gt "$np" ] && np=$nx
+        [ "$want" -gt "$np" ] && np=$want
         while [ "$i" -le "$np" ]; do
             gp="$work/g_$i.$dev"; xp="$work/x_$i.$dev"
             # a program that stops partway leaves the pages after it
             # unwritten, and each of those is an absence of its own:
             # keyed by its page, so the corpus declares it by the page
+            if [ ! -f "$xp" ] && [ ! -f "$gp" ]; then
+                echo "  $b p$i  no page from either engine"
+                printf '%s p%s\n' "$b" "$i" >> "$work.miss"
+                i=$((i+1)); continue
+            fi
             [ -f "$xp" ] || { echo "  $b p$i  no xpost page"
                               printf '%s p%s\n' "$b" "$i" >> "$work.miss"
                               i=$((i+1)); continue; }
@@ -211,6 +223,7 @@ evaluate_corpus() {
     # corpus lists.
     n=0
     held=0
+    uncounted=0
     nondet=
     : > "$cwork/list"
     : > "$cwork/all"
@@ -244,8 +257,25 @@ evaluate_corpus() {
             fi
             nondet="$nondet $b"
         fi
+        # and how many pages the corpus says it draws, from a "pages"
+        # file of basenames and counts. The run compares the pages both
+        # engines drew and can see no further than the further of them,
+        # so a page neither drew is one the run does not reach and does
+        # not report: a program that stops emitting halfway through
+        # matches on every page it did draw. The count is the only
+        # thing that says how many there were. A program without one is
+        # a program whose pages nothing bounds, so it is rendered and
+        # reported but the corpus fails for it.
+        want=$(awk -v b="$b" '$1 == b { print $2; exit }' "$dir/pages" 2>/dev/null)
+        case ${want:-} in
+            ''|*[!0-9]*)
+                echo "  $b  no page count in $corpus/pages"
+                uncounted=$((uncounted + 1))
+                want=- ;;
+        esac
         n=$((n + 1))
-        printf '%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$cwork/$n" >> "$cwork/list"
+        printf '%s\n%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$cwork/$n" "$want" \
+            >> "$cwork/list"
     done
     [ "$n" = 0 ] && return
 
@@ -256,17 +286,51 @@ evaluate_corpus() {
     # and a program whose report is not there is named as one rather than
     # passed over: a run that evaluates a fraction of a corpus and says
     # nothing about the rest agrees with whatever the rest would have said.
-    xargs -P "$jobs" -n4 "$0" --one < "$cwork/list" >/dev/null 2>&1
+    xargs -P "$jobs" -n5 "$0" --one < "$cwork/list" >/dev/null 2>&1
     seen=0
     pages=0
+    declared=0
+    absent=0
+    miscount=0
     : > "$cwork/missing"
     : > "$cwork/ran"
-    while read -r c && read -r b && read -r p && read -r d; do
+    while read -r c && read -r b && read -r p && read -r d && read -r want; do
         if [ -s "$d.out" ]; then
             cat "$d.out"
             [ -f "$d.miss" ] && cat "$d.miss" >> "$cwork/missing"
-            [ -s "$d.cmp" ] && pages=$((pages + $(cat "$d.cmp")))
+            got=0
+            [ -s "$d.cmp" ] && got=$(cat "$d.cmp")
+            pages=$((pages + got))
             printf '%s\n' "$b" >> "$cwork/ran"
+            # Every page the corpus declares, either compared or gone:
+            # a program that drew nothing is gone whole, one that
+            # stopped partway is gone by the page, and the two together
+            # have to come to the count. They fall short when a page
+            # went missing from both engines at once, which is the one
+            # absence neither engine's own output can show; they exceed
+            # it when the program drew a page the count does not know
+            # about, which is either a defect fixed and not written
+            # down or a page arriving twice.
+            if [ "$want" != - ]; then
+                # this program's absences and no other's: the file
+                # holds either the one key that is the whole program,
+                # standing for all of its pages, or a key for each page
+                # that went missing
+                gone=0
+                if [ -s "$d.miss" ]; then
+                    if grep -qxF "$b" "$d.miss"; then
+                        gone=$want
+                    else
+                        gone=$(wc -l < "$d.miss")
+                    fi
+                fi
+                declared=$((declared + want))
+                absent=$((absent + gone))
+                if [ $((got + gone)) != "$want" ]; then
+                    echo "  $b  $got pages compared and $gone missing, of the $want $corpus/pages declares"
+                    miscount=$((miscount + 1))
+                fi
+            fi
             # a program that differs from itself between two runs differs
             # from anything, so say so beside its numbers rather than
             # leaving them to be read as the renderer's doing
@@ -322,29 +386,65 @@ evaluate_corpus() {
     # whoever finds it: a name that has outlived its program keeps a
     # question closed that nothing is asking any more.
     stale=0
-    for reg in heldout nondeterministic; do
+    for reg in heldout nondeterministic pages; do
         [ -f "$dir/$reg" ] || continue
         while read -r u; do
             case $u in ''|'#'*) continue ;; esac
-            grep -qxF "$u" "$cwork/all" && continue
-            echo "  $u  named in $corpus/$reg and not in the corpus"
+            grep -qxF "${u%% *}" "$cwork/all" && continue
+            echo "  ${u%% *}  named in $corpus/$reg and not in the corpus"
             stale=$((stale + 1))
         done < "$dir/$reg"
     done
 
+    # and the page counts as declarations in their own right. A count
+    # that is not a number is a program declared to draw none of its
+    # pages, and a program counted twice is two answers of which a
+    # reader takes whichever it meets first; either reads as a
+    # declaration and holds nothing.
+    malformed=0
+    if [ -f "$dir/pages" ]; then
+        while read -r u v rest; do
+            case $u in ''|'#'*) continue ;; esac
+            case ${v:-} in
+                ''|*[!0-9]*)
+                    echo "  $u  has no page count in $corpus/pages"
+                    malformed=$((malformed + 1)); continue ;;
+            esac
+            [ -z "$rest" ] || {
+                echo "  $u  has more than a page count in $corpus/pages"
+                malformed=$((malformed + 1)); }
+        done < "$dir/pages"
+        for u in $(grep -v '^[[:space:]]*#' "$dir/pages" \
+                   | awk 'NF { print $1 }' | sort | uniq -d); do
+            echo "  $u  counted more than once in $corpus/pages"
+            malformed=$((malformed + 1))
+        done
+    fi
+
     note=
     [ "$held" = 0 ] || note=", $held held out"
     [ -z "$nondet" ] || note="$note, nondeterministic:$nondet"
-    # the count of programs is what was reached; the count of pages is
-    # what was actually compared, which is the number a run that reached
-    # everything and drew nothing cannot inflate
-    note="$note, $pages pages compared"
+    # The count of programs is what was reached; the counts of pages are
+    # what the corpus said there was to compare, what was compared, and
+    # what was not. A run that reached everything and drew nothing
+    # cannot inflate the second, and cannot leave the third at zero.
+    # They are printed in a fixed order at the end of the line and
+    # arrive at the same three numbers the corpus on disk gives, so a
+    # reader outside this script can work them out for itself and hold
+    # this line to them.
+    note="$note, $declared pages declared, $pages compared, $absent absent"
     if [ "$seen" != "$n" ]; then
         echo "$corpus: NOT EVALUATED -- $seen of $n programs reported$note"
     elif [ "$stale" != 0 ]; then
         echo "$corpus: REGISTER NAMES NOTHING -- $stale entries name no program of this corpus; $n programs evaluated$note"
+    elif [ "$malformed" != 0 ]; then
+        echo "$corpus: REGISTER MALFORMED -- $malformed entries of $corpus/pages declare no count; $n programs evaluated$note"
+    elif [ "$uncounted" != 0 ]; then
+        echo "$corpus: PAGES NOT DECLARED -- $uncounted programs have no count in $corpus/pages; $n programs evaluated$note"
     elif [ "$undeclared" != 0 ] || [ "$lapsed" != 0 ]; then
         echo "$corpus: NO-PAGE SET DIFFERS -- $undeclared undeclared, $lapsed lapsed; $n programs evaluated$note"
+    elif [ "$miscount" != 0 ]; then
+        echo "$corpus: PAGE COUNT DIFFERS -- $miscount programs drew other than the pages declared for them; $n programs evaluated$note"
     else
         echo "$corpus: $n programs evaluated$note"
     fi
