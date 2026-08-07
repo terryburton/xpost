@@ -180,6 +180,7 @@ tests/op_vm_param_test.ps \
 tests/op_vmreclaim_test.ps \
 tests/op_wrapsig_test.ps \
 tests/outline_font_test.ps \
+tests/page_cover_test.ps \
 tests/page_semantics_test.c \
 tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
@@ -217,6 +218,7 @@ tests/run-leak-test.sh \
 tests/run-interrupt-test.sh \
 tests/run-multipage-test.sh \
 tests/run-nographics-test.sh \
+tests/run-page-cover-test.sh \
 tests/run-pdf-test.sh \
 tests/run-pngalpha-test.sh \
 tests/run-ppm-test.sh \

@@ -1045,16 +1045,20 @@ setglobal
                 cm2 5 cm 5 get fby sub put
                 cm2 setmatrix
                 initclip
-                rgbdev { 0 0 0 0 0 fw fh mdev //.internaldict /.fillrectrgb get exec }
-                       { 0 0 0 fw fh mdev //.internaldict /.fillrectgray get exec } ifelse
+                % a fill's extent operands name an inclusive pixel span,
+                % so the rectangle covering a mask of fw columns is
+                % spanned by fw-1 (the driver contract,
+                % src/lib/xpost_dev_driver.h)
+                rgbdev { 0 0 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
+                       { 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse
                 fd //.xpostsys /.execformdirect get exec
                 /rowsa [ mdev /ImgData get {
                     dup type /stringtype eq
                         { dup length string copy }
                         { dup length array copy } ifelse
                 } forall ] def
-                rgbdev { 1 1 1 0 0 fw fh mdev //.internaldict /.fillrectrgb get exec }
-                       { 1 0 0 fw fh mdev //.internaldict /.fillrectgray get exec } ifelse
+                rgbdev { 1 1 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
+                       { 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse
                 fd //.xpostsys /.execformdirect get exec
                 grestore
                 fc length 8 ge {

@@ -60,7 +60,11 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         get exec
         //.xpostsys /.applytransfer get exec
+        % a fill's extent operands name an inclusive pixel span, so the
+        % rectangle covering a page of w columns is spanned by w-1 (the
+        % driver contract, src/lib/xpost_dev_driver.h)
         0 0 DEVICE /dimensions get aload pop
+        1 sub exch 1 sub exch
         DEVICE dup /FillRect get exec
         pop
         flushpage

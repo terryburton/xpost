@@ -1,0 +1,95 @@
+% What a fill meant to cover a whole surface actually covers.
+%
+% A marking method's extent operands name an inclusive pixel span: the
+% span runs from the pixel holding (x, y) to the pixel holding
+% (x+w, y+h), so an integral w gives w+1 columns (the driver contract,
+% src/lib/xpost_dev_driver.h). A caller that owns a surface's size and
+% wants to cover it therefore hands the far corner, one less than the
+% size; a caller that hands the size asks for a column and a row the
+% surface does not have.
+%
+% A raster device clips the surplus away and shows nothing, so the
+% question is asked of the operands, which every device answers alike.
+% A vector writer has no pixels to clip against: it converts the
+% inclusive span to a half-open rectangle and emits it, so there the
+% surplus is a background rectangle larger than the media box, and
+% run-page-cover-test.sh reads those documents as well.
+%
+% Run against a live device (-d <dev>) by run-page-cover-test.sh.
+
+/covfail false def
+/covered false def
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        /covfail true def
+    } ifelse
+} def
+
+/device? { .privatedict /.graphicsdict get /currgstate get /device get } def
+
+% The method displaced by the interception below is kept in a dictionary
+% and reached with get: a method that is an operator, named by an
+% executable name, runs where it was meant to be handed on.
+/held 1 dict def
+
+% -  coverpage  -
+% Clear the page with the device's FillRect intercepted, and hold the
+% span the operands name to the page the device reports.
+/coverpage {
+    /dev device? def
+    /W dev /dimensions get 0 get def
+    /H dev /dimensions get 1 get def
+    /seen false def
+    held /fr dev /FillRect get put
+    % the operands sit under the device dictionary: x y w h IMAGE
+    dev /FillRect {
+        4 index 4 index 4 index 4 index
+        /ch exch def /cw exch def /cy exch def /cx exch def
+        /seen true def
+        held /fr get exec
+    } bind put
+    erasepage
+    dev /FillRect held /fr get put
+
+    seen (the page clear reaches the device's FillRect) assert
+    seen {
+        /covered true def
+        cx 0 eq cy 0 eq and
+            (the page clear starts at the origin) assert
+        cx cw add 1 add W eq
+            (the page clear covers the page's columns and no more) assert
+        cy ch add 1 add H eq
+            (the page clear covers the page's rows and no more) assert
+    } if
+} def
+
+% A device that resets the page itself never reaches FillRect, and one
+% without the method never had it to reach.
+/checkpage {
+    device? /Erase known {
+        (SKIP: this device clears the page through Erase\n) print
+    }{
+        device? /FillRect known {
+            coverpage
+        }{
+            (SKIP: this device has no FillRect\n) print
+        } ifelse
+    } ifelse
+} def
+
+% The page the device was made with, and then a page of odd size: an
+% extent that happens to agree with a size on one page disagrees on
+% every other, and a page whose dimensions are both odd and unequal
+% cannot have the two confused by symmetry.
+checkpage
+<< /PageSize [201 101] >> setpagedevice
+checkpage
+
+showpage
+
+% a run in which every device skipped would report success having asked
+% nothing, so a run that reached the question says so
+covered { (COVERED\n) print } if
+covfail not { (SUCCESS\n) print } if
+quit

@@ -2024,6 +2024,20 @@ test('device-contract',
   suite: cost_slow,
   timeout: 300)
 
+# What a fill meant to cover a whole surface covers. A marking method's
+# extent operands name an inclusive pixel span, so a caller holding a
+# surface's size hands the far corner, one less than the size. A raster
+# device clips a surplus column and row away and reads the same either way;
+# a vector writer emits the rectangle, so the surplus reaches the document.
+# Asked of the operands on every marking device, and of the documents the
+# vector writers wrote.
+test('page-cover',
+  find_program('tests/run-page-cover-test.sh'),
+  args: [ xpost_exe, files('tests/page_cover_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # Values outside the range their contract names: a colour component from a
 # transfer function or a tint transform, and a blend coverage from a glyph
 # rasteriser. Each must be folded to the nearest valid value on its way to a
