@@ -158,6 +158,7 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     mem->interpreter_set_initializing = xpost_interpreter_set_initializing;
 
     mem->free_scan = 0;
+    mem->push_refused = 0;
 
     if(fname)
     {

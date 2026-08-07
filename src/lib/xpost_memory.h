@@ -283,6 +283,19 @@ typedef struct Xpost_Memory_File
                             want of entity numbers rather than for want
                             of memory, which is the difference between
                             limitcheck and VMerror */
+    int push_refused; /**< a push put its object on no stack in this file.
+                           A stack grows in segments and linking a fresh
+                           one is an allocation, so a push into a full
+                           segment is refusable; the object is then
+                           nowhere and the stack is one shorter than
+                           whoever pushed believes. The refusal is
+                           recorded here rather than carried back by hand
+                           because pushing is several hundred calls across
+                           two dozen modules, and read where the pushing
+                           is done with: by the operator dispatch when an
+                           operator returns, and at the interpreter's safe
+                           point for the pushes made outside one. Cleared
+                           by whichever of those reads it */
     XPOST_MUST_CHECK int (*garbage_collect)(struct Xpost_Memory_File *mem,
                                             int dosweep,
                                             int markall);

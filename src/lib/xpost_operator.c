@@ -1135,5 +1135,16 @@ int xpost_operator_exec(Xpost_Context *ctx,
     }
     if (ret)
         return ret;
+    /* An operator that pushed its result onto a stack that would not take
+       it has finished without producing what it answers for. The push
+       sites do not carry that back -- there are several hundred of them
+       -- so it is read here, once, for every operator alike, while the
+       operator that did the pushing is still the one an error would be
+       reported against. */
+    if (ctx->lo->push_refused)
+    {
+        ctx->lo->push_refused = 0;
+        return VMerror;
+    }
     return 0;
 }
