@@ -1324,6 +1324,21 @@ test('interrupt',
 # Composite-size limits: the small-object build holds Appendix B.1's 65,535
 # ceiling with limitcheck; the large-object build carries composites to
 # memory. The test probes the build and holds it to its own contract.
+# The object width sizes the integer and the real as well as the
+# composite, so the same program is arithmetic of one precision in one
+# build and another in the other. That is deliberate and PLRM settles
+# neither -- the appendix stating both ranges says it describes what
+# implementations typically do -- but a test that reads whatever a build
+# produces and asks only whether it equals itself passes under both and
+# reports nothing. This writes each build's answers down, and probes the
+# three faces of the width apart so a build that widens one and not the
+# others names which.
+test('build-personality',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/build_personality_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 test('large-object',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/large_object_test.ps') ],

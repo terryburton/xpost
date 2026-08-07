@@ -1,0 +1,118 @@
+% What the object width means to a program, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The build has two object widths, and the width is not only a matter of
+% how large a composite may be: it sizes the integer and the real as
+% well. So the same program is arithmetic of one precision in one build
+% and of another in the other, and a branch that turns on a rounded
+% comparison or on where an integer stops being one answers differently.
+%
+% That is a deliberate arrangement -- a build configured for large
+% objects gives the language more room throughout -- and PLRM does not
+% settle it either way: the appendix stating a real's range and an
+% integer's says it describes what implementations typically do, and
+% states both in the same breath.
+%
+% What the arrangement must not be is unstated. A test that reads the
+% values either build produces and asks only whether they are equal to
+% themselves passes under both and reports nothing, which is how the
+% arrangement stayed invisible: the integer-overflow test asks what a
+% sum IS past the signed 32-bit horizon, and never what TYPE it has, so
+% it answers the same in a build that converts there and one that does
+% not.
+%
+% This asks the questions that separate them. Each build's answers are
+% written down, and the three faces of the width are probed apart from
+% one another so that a build which widens one and not the others says
+% which.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+/erris { % {proc} /want (tag)  .  -
+    /e.tag exch def /e.want exch def
+    stopped { $error /errorname get e.want eq }{ false } ifelse
+    e.tag assert clear
+} def
+
+% ----------------------------------------------------- the three probes
+% Each face of the width is asked its own question, so a build that
+% widened one and not another is a named failure rather than a silent
+% disagreement between two tests.
+
+% the composite size field: does a composite reach past the 16-bit count
+/widesz { 70000 array pop true } stopped { pop false } if def
+
+% the integer: does a literal past the signed 32-bit horizon stay one
+/wideint 2147483648 type /integertype eq def
+
+% the real: 2^24+1 is the first integer a single-precision significand
+% cannot hold, so it folds back onto 2^24 there and does not in double
+/widereal 16777216.0 1.0 add 16777216.0 eq not def
+
+wideint  widesz eq (the integer width follows the object width) assert
+widereal widesz eq (the real precision follows the object width) assert
+
+% 2^23+1 fits either significand, so this must fold in neither build --
+% it is the control that says the probe above is reading the boundary
+% rather than answering the same way to everything
+8388608.0 1.0 add 8388608.0 eq not
+    (a value inside both significands is held by both) assert
+
+% --------------------------------------------------- the wider build
+widesz {
+
+    % an integer stays one past the signed 32-bit horizon
+    2147483648 type /integertype eq (a literal past 2^31 is an integer) assert
+    2147483647 1 add type /integertype eq (a sum past 2^31 is an integer) assert
+    2147483647 1 add 2147483648 eq (and carries the value) assert
+
+    % a radix literal is read in the wider field
+    16#FFFFFFFF 4294967295 eq (a radix literal fills the wider field) assert
+    -1 32 bitshift -4294967296 eq (a shift moves within the wider field) assert
+
+    % cvi accepts what the wider integer can hold
+    4294967296 cvi 4294967296 eq (cvi takes a value the wider integer holds) assert
+
+    % double precision: a third is held to more than a float's digits,
+    % and the sum of three of them falls short of three rather than past
+    1.0 3 { 2 3 div add } repeat ceiling 3.0 eq
+        (three thirds fall short of three) assert
+    0.1 0.2 add 0.3 eq not (a tenth and a fifth do not meet three tenths) assert
+    /expected 11 def
+
+}{
+
+    % ------------------------------------------------ the default build
+    % PLRM 3.3.2: a decimal literal or an arithmetic result that would
+    % exceed the largest integer becomes a real
+
+    2147483648 type /realtype eq (a literal past 2^31 becomes a real) assert
+    2147483647 1 add type /realtype eq (a sum past 2^31 becomes a real) assert
+
+    % a radix literal is unsigned two's complement in the integer's width
+    16#FFFFFFFF -1 eq (a radix literal fills the field and wraps) assert
+    -1 32 bitshift -1 eq (a shift stays within the field) assert
+
+    % PLRM cvi: a real too large for an integer is a rangecheck
+    { 4294967296 cvi } /rangecheck (cvi refuses what the integer cannot hold) erris
+
+    % single precision: a third rounds up, so three of them pass three
+    1.0 3 { 2 3 div add } repeat ceiling 4.0 eq
+        (three thirds pass three) assert
+    0.1 0.2 add 0.3 eq (a tenth and a fifth meet three tenths) assert
+    /expected 10 def
+
+} ifelse
+
+% Neither arm may be skipped into. Each arm names how many checks it
+% carries, on top of the three shared ones, and a run that reports a
+% different number has taken a branch that stopped asserting -- which is
+% the way a test of two personalities goes quiet without failing.
+checks expected eq (every check in this build's arm was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse
