@@ -21,12 +21,20 @@ jobs:
           # 32-bit lane says in its log that it is not making it. Which
           # lanes carry the reader is named here rather than inferred, so
           # that the step below can hold each one to its own answer.
+          #
+          # The base 35 fonts are packaged for the same environments, so
+          # the 64-bit lane installs them and the 32-bit lane resolves the
+          # standard names against the faces the host itself carries,
+          # which fontconfig reads on this platform. Both lanes are held
+          # to resolving them either way: the tests run on both, and a
+          # name that reaches no face raises invalidfont wherever it is
+          # named.
           - msystem: mingw32
             reader: none
             install: base-devel git mingw-w64-i686-toolchain mingw-w64-i686-libjpeg-turbo mingw-w64-i686-libpng mingw-w64-i686-freetype mingw-w64-i686-fontconfig mingw-w64-i686-meson mingw-w64-i686-ninja
           - msystem: mingw64
             reader: qpdf
-            install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-qpdf
+            install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-qpdf mingw-w64-x86_64-gsfonts
         object: [small, large]
     name: msys2 - ${{ matrix.config.msystem }} - ${{ matrix.object }}-object
     runs-on: windows-latest
@@ -53,6 +61,19 @@ jobs:
         else
           echo "no qpdf in this environment: the structural reading of the written PDF is not made on this lane"
         fi
+    # Eighteen of the tests name one of the standard faces, and all but one
+    # of those call sites take the face for granted. findfont reaches them
+    # through fontconfig, which answers a machine carrying no fonts with
+    # nothing at all, and the name then raises invalidfont: the runner is
+    # held to carrying the faces rather than the tests to doing without
+    # them. The query below is the one findfont makes.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
     - name: meson
       run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: meson test

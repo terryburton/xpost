@@ -36,7 +36,19 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential libpng-dev libjpeg-dev \
-          libfreetype6-dev libfontconfig1-dev meson ninja-build llvm
+          libfreetype6-dev libfontconfig1-dev fontconfig fonts-urw-base35 \
+          meson ninja-build llvm
+    # These lanes run the same suite, so they need the same faces: a
+    # standard name reaches findfont through fontconfig, which answers a
+    # machine carrying no fonts with nothing at all, and the name then
+    # raises invalidfont.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
     # The suite is the workload: it already drives every device, every
     # filter and the collector. A sanitizer over it is the cheapest
     # coverage available, and it is how a heap overflow in the fax
@@ -73,7 +85,19 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential libpng-dev libjpeg-dev \
-          libfreetype6-dev libfontconfig1-dev meson ninja-build llvm
+          libfreetype6-dev libfontconfig1-dev fontconfig fonts-urw-base35 \
+          meson ninja-build llvm
+    # These lanes run the same suite, so they need the same faces: a
+    # standard name reaches findfont through fontconfig, which answers a
+    # machine carrying no fonts with nothing at all, and the name then
+    # raises invalidfont.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
     - name: setup and build
       run: |
         meson setup builddir -Db_sanitize=address -Db_lundef=false
@@ -146,7 +170,19 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential libpng-dev libjpeg-dev \
-          libfreetype6-dev libfontconfig1-dev meson ninja-build valgrind
+          libfreetype6-dev libfontconfig1-dev fontconfig fonts-urw-base35 \
+          meson ninja-build valgrind
+    # These lanes run the same suite, so they need the same faces: a
+    # standard name reaches findfont through fontconfig, which answers a
+    # machine carrying no fonts with nothing at all, and the name then
+    # raises invalidfont.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
     - name: setup and build
       run: |
         meson setup builddir

@@ -19,13 +19,27 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get -qq update
-        sudo apt install -y build-essential libpng-dev libjpeg-dev libfreetype6-dev libfontconfig1-dev meson ninja-build qpdf
+        sudo apt install -y build-essential libpng-dev libjpeg-dev libfreetype6-dev libfontconfig1-dev fontconfig fonts-urw-base35 meson ninja-build qpdf
     # qpdf is what the pdf-consumer test hands the written document to, and
     # that test skips where it is absent. A skip reads as a pass, so the
     # reader's presence is asserted here rather than left to the test to
     # discover: a lane whose install stops carrying it is red, not quiet.
     - name: PDF reader
       run: qpdf --version
+    # Eighteen of the tests name one of the standard faces, and all but one
+    # of those call sites take the face for granted. findfont reaches them
+    # through fontconfig, which answers a machine carrying no fonts with
+    # nothing at all, and the name then raises invalidfont: the runner is
+    # held to carrying the faces rather than the tests to doing without
+    # them. The base 35 are what the names mean, so they are what is
+    # installed, and the query below is the one findfont makes.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
     - name: meson
       run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: ninja
