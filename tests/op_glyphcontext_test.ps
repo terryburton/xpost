@@ -40,4 +40,26 @@ end def
 { /T3G findfont 10 scalefont setfont newpath 0 0 moveto (b) show } stopped not
 (Type 3 BuildGlyph renders through show) assert
 
+% A build procedure may bracket itself in save and restore -- generated
+% PostScript commonly does -- and the metrics it declared still reach the
+% showing operator. restore reverts the program's own virtual memory, so
+% nothing the interpreter is mid-use of across the build may be kept there.
+/T3R 9 dict dup begin
+    /FontType 3 def /FontMatrix [0.01 0 0 0.01 0 0] def /FontBBox [0 0 100 100] def
+    /Encoding 256 array def 0 1 255 { Encoding exch /.notdef put } for Encoding 67 /c put
+    /BuildChar {
+        save 3 1 roll
+        pop pop
+        100 0 0 0 100 100 setcachedevice
+        0 0 100 100 rectfill
+        restore
+    } bind def
+end def
+/T3R T3R definefont pop
+/cx 0 def
+{ /T3R findfont 10 scalefont setfont newpath 0 0 moveto (cc) show
+  currentpoint pop /cx exch def } stopped not
+(a Type 3 build bracketed in save and restore renders through show) assert
+cx 20 sub abs 0.001 lt (that build's advance carries the current point) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 283
+entries 284
 
 .gscratch /.lresources
 .gscratch /.pfdict
@@ -169,6 +169,7 @@ entries 283
 .xpostsys /.glyphbytes
 .xpostsys /.glyphcharpath
 .xpostsys /.glyphkey
+.xpostsys /.glyphstate
 .xpostsys /.gmid
 .xpostsys /.gsetcolor
 .xpostsys /.gsunwind

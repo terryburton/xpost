@@ -26,6 +26,16 @@ currentglobal true setglobal
 .xpostsys /.buildkeys [ /.inglyph ] put
 % the capture pair the glyph cache is mid-use of while a build runs
 .xpostsys /.t3capkeys [ /.t3want /.t3cap ] put
+% What a build declared, kept where the build itself cannot take it back.
+% A build procedure is the program's, and a program may bracket one in save
+% and restore -- generated PostScript commonly does, to unwind whatever the
+% glyph left behind. restore reverts local virtual memory wholesale, so
+% anything the machinery parks there while the build runs is reverted with
+% it, including a metric the build had already declared. This dictionary is
+% global, which restore leaves alone (PLRM 3.7.2): /advx and /advy are the
+% advance the build declared, and /capturing says its marks were going to a
+% capture raster rather than to the page.
+.xpostsys /.glyphstate << /advx 0 /advy 0 /capturing false >> put
 .xpostsys /.runbuild { % ... proc  .runbuild  ...
     //.xpostsys /.runbuildbody get
     //.xpostsys /.buildkeys get 1
@@ -170,6 +180,11 @@ setglobal
 /setcharwidth [ /numbertype /numbertype ] {
     graphicsdict /.inglyph 2 copy known { get }{ pop pop 0 } ifelse
     0 eq { /setcharwidth cvx /undefined signalerror } if
+    % the declaration itself, recorded out of the build's reach
+    //.xpostsys /.glyphstate get
+    dup /advy 3 index put
+    dup /advx 4 index put
+    pop
     graphicsdict /currgstate get /currfont get
     dup /xadvance 5 4 roll put
     /yadvance 3 2 roll put
@@ -241,6 +256,11 @@ currentglobal true setglobal
             /mdev mdev /w W /h H /bx0 bx0 /by0 by0 /ox ox /oy oy
             /advx wx /advy wy
         >> put
+        % said out of the build's reach as well: the capture, the raster it
+        % paints into and the marks on it are all younger than any save the
+        % build has open, so a restore of its own takes the three of them
+        % together and the record here is what is left to say so
+        //.xpostsys /.glyphstate get /capturing true put
         graphicsdict /currgstate get /device mdev put
         matrix currentmatrix
         dup 4 2 copy get bx0 sub put
@@ -281,8 +301,15 @@ setglobal
 currentglobal true setglobal
 .xpostsys /.t3build {
     {
-    10 dict begin
+    20 dict begin
     /code exch def /font exch def
+    % what an enclosing build declared, held while this one declares its own
+    % and put back once this one has been read: a build may show text, and
+    % the glyphs of that text declare against the same record
+    /gst //.xpostsys /.glyphstate get def
+    /heldadvx gst /advx get def
+    /heldadvy gst /advy get def
+    /heldcapturing gst /capturing get def
     /devmat matrix currentmatrix def
     0 0 transform /devy exch def /devx exch def
     % the cache serves only within a rectangular clip that holds the
@@ -302,10 +329,11 @@ currentglobal true setglobal
     { false } ifelse
     {
         /ya exch def /xa exch def
-        graphicsdict /currgstate get /currfont get
-        dup /xadvance xa put
-        /yadvance ya put
+        gst /advx xa put
+        gst /advy ya put
     }{
+    % nothing of this glyph has been drawn anywhere yet
+    gst /capturing false put
     maskok not {
         % build direct, marks clipped and coloured by the ordinary
         % paint pipeline. setcachedevice declares the metrics and
@@ -347,9 +375,8 @@ currentglobal true setglobal
             { false } ifelse
             {
                 /ya exch def /xa exch def
-                graphicsdict /currgstate get /currfont get
-                dup /xadvance xa put
-                /yadvance ya put
+                gst /advx xa put
+                gst /advy ya put
             }{
                 % past the cache ceiling: build again, painting direct
                 gsave
@@ -357,9 +384,28 @@ currentglobal true setglobal
                 //.xpostsys /.runbuild get exec
                 grestore
             } ifelse
-        } if
+        }{
+            gst /capturing get {
+                % a restore of the build's own took the capture back, and
+                % the raster its marks went to with it, so the glyph stands
+                % undrawn: build it again with its marks going to the page
+                gsave
+                graphicsdict /.t3want false put
+                font code font /BuildChar get
+                //.xpostsys /.runbuild get exec
+                grestore
+            } if
+        } ifelse
     } ifelse
     } ifelse
+    % the advance this glyph declared, put where the showing operators read
+    % it, and the enclosing build's record put back
+    graphicsdict /currgstate get /currfont get
+    dup /xadvance gst /advx get put
+    /yadvance gst /advy get put
+    gst /advx heldadvx put
+    gst /advy heldadvy put
+    gst /capturing heldcapturing put
     end
     } //.xpostsys /.t3capkeys get 0 //.xpostsys /.callout get exec
 } put
