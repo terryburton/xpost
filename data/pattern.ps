@@ -152,7 +152,8 @@ currentglobal true setglobal
 /.patternfill {
     gsave
     flattenpath
-    .fillpolyargs //.xpostsys /.clipmeetparts get exec
+    false //.xpostsys /.fillsubjparts get exec
+    //.xpostsys /.clippartsmeet get exec
     //.patternclip exec
     //.patterntile exec
     grestore
@@ -162,7 +163,7 @@ currentglobal true setglobal
 /.patterneofill {
     gsave
     flattenpath
-    .fillpolyargs //.xpostsys /.eospanparts get exec
+    true //.xpostsys /.fillsubjparts get exec
     //.xpostsys /.clippartsmeet get exec
     //.patternclip exec
     //.patterntile exec

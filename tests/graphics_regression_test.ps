@@ -1034,6 +1034,109 @@ countink dup
     thin.stroke lt (a zero-width stroke is the thinnest line there is) assert
 1 setlinewidth
 
+% --- a path of more points than one polygon describes still paints ---
+% A LanguageLevel 2 path has no fixed length: path storage competes
+% with other uses of memory (PLRM 4.4), and a path carries its extent
+% in a header field of its own. The polygon the current path becomes on
+% its way to the device is an array, whose length is bounded, so a path
+% outrunning that is resolved and used in parts instead of refused.
+%
+% The two rectangles below are the same rectangle: one states its
+% bottom edge in thirty-three thousand collinear points and the other
+% in one. The union count is what proves the two mark the same pixels
+% rather than merely as many of them.
+/longrect { % - . -
+    newpath 12 12 moveto
+    1 1 33000 { 33000 div 40 mul 12 add 12 lineto } for
+    52 52 lineto 12 52 lineto closepath
+} bind def
+/shortrect { % - . -
+    newpath 12 12 moveto 52 12 lineto 52 52 lineto 12 52 lineto closepath
+} bind def
+erasepage
+{ longrect fill } stopped not (a thirty-three-thousand-point path fills) assert
+/long.ink countink def
+erasepage shortrect fill
+/short.ink countink def
+erasepage longrect fill shortrect fill
+/both.ink countink def
+long.ink 0 gt (a long path's fill marks something) assert
+long.ink short.ink eq
+    (a long path marks as much as the same shape stated in four points) assert
+both.ink short.ink eq
+    (a long path marks the same pixels as the same shape in four points) assert
+
+% the same path is a subject for every operator the current path is a
+% subject for, and each answers what the four-point rectangle answers
+erasepage
+{ longrect eofill } stopped not (a long path eofills) assert
+countink short.ink eq
+    (a long path's even-odd interior is the same) assert
+
+% a clip stacked on one that is not a rectangle has no rectangle
+% intersection to take, so the region goes the span route the long path
+% reaches; an unclipped page keeps the path itself and never gets there
+/spot { newpath 32 32 15 0 360 arc } bind def
+/clipink { % clipproc pathproc . n  (what survives the two clips)
+    erasepage
+    gsave
+        spot clip
+        exec exec
+        newpath 0 0 moveto 64 0 lineto 64 64 lineto 0 64 lineto closepath fill
+    grestore
+    countink
+} bind def
+{ clip }   { shortrect } clipink /short.clip exch def
+{ eoclip } { shortrect } clipink /short.eoclip exch def
+{ { clip }   { longrect } clipink } stopped not
+    (a long path clips) assert
+countink short.clip eq
+    (a long path's clip keeps what the same shape in four points keeps) assert
+{ { eoclip } { longrect } clipink } stopped not
+    (a long path eoclips) assert
+countink short.eoclip eq
+    (a long path's eoclip keeps what the same shape in four points keeps) assert
+short.clip 0 gt (the stacked clip keeps something to compare) assert
+short.clip short.ink lt (and less than the rectangle alone) assert
+
+% a pattern colour reaches the page by making the path its clip, which
+% is the same subject read the same way
+/checker <<
+    /PatternType 1 /PaintType 1 /TilingType 1
+    /BBox [0 0 4 4] /XStep 4 /YStep 4
+    /PaintProc { pop newpath 0 0 moveto 2 0 lineto 2 2 lineto 0 2 lineto
+                 closepath fill }
+>> matrix makepattern def
+erasepage
+gsave checker setpattern
+    { longrect fill } stopped not (a long path fills with a pattern) assert
+grestore
+/long.pat countink def
+erasepage
+gsave checker setpattern shortrect fill grestore
+long.pat countink eq
+    (a pattern marks a long path as it marks the same shape in four points) assert
+long.pat 0 gt (the pattern marked something) assert
+erasepage
+gsave checker setpattern
+    { longrect eofill } stopped not (a long path eofills with a pattern) assert
+grestore
+countink long.pat eq
+    (a pattern's even-odd interior of a long path is the same) assert
+
+% A stroke of nonzero width fills its outline, and that outline runs to
+% about a dozen points a segment -- the body of each segment, and the
+% join at each end of it -- so a polyline outruns one polygon at a few
+% thousand segments, well before the path itself grows large.
+erasepage
+0.4 setlinewidth
+{ newpath 12 20 moveto
+  1 1 4000 { dup 4000 div 40 mul 12 add exch 2 mod 8 mul 20 add lineto } for
+  stroke } stopped not
+    (a stroke whose outline outruns one polygon still paints) assert
+countink 0 gt (that stroke marks the page) assert
+1 setlinewidth
+
 % A Type 3 glyph that declares setcachedevice builds once: repeats
 % replay its mask from the glyph cache, and the raster still lands
 erasepage

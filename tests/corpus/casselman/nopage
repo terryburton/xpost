@@ -13,21 +13,3 @@
 # declared absence that turns out to have rendered -- the entry's reason
 # has lapsed, and the line is left telling its next reader something
 # untrue.
-#
-# ch10 p12, p13 -- the chapter's twelfth page raises a limitcheck out of
-#                  stroke. The error is not caught, so the job stops
-#                  there and the rest of the file is flushed unread,
-#                  leaving the last two of the reference's thirteen
-#                  pages unwritten. The eleven before them are drawn and
-#                  compared as usual, which is why this is two pages
-#                  named here rather than the whole program.
-#
-#                  Both pages are held rather than the program because
-#                  that is what the state is: page twelve is where the
-#                  stroke is and page thirteen is only downstream of it,
-#                  and an entry for ch10 as a whole would stop reporting
-#                  the eleven that do render. Both come back the moment
-#                  the limit stroke runs into is lifted, and the entries
-#                  fail the corpus when they do.
-ch10 p12
-ch10 p13
