@@ -1212,9 +1212,17 @@ basefont null ne {
 % the sfnt's glyph names (post format 3.0) and its character map; the
 % font dictionary's /CharStrings dictionary, mapping glyph names to
 % glyph indices, is then the only route from an /Encoding name to a
-% glyph. The embedded 660-byte program holds .notdef, a filled
-% square (glyph 1, on-curve corners only) and a filled triangle
-% (glyph 2), both 600 units wide on an advance of 800.
+% glyph. The embedded 700-byte program holds .notdef, a filled
+% square (glyph 1, on-curve corners only), a filled triangle
+% (glyph 2) and a lens closed by two curves (glyph 3), each 600 units
+% wide on an advance of 800.
+%
+% Glyph 3 is what a TrueType program describes a curve with and a Type 1
+% one cannot: a quadratic, given as one control point between two points
+% on the outline. Every other face the suite traces carries cubics, so
+% the step that raises a quadratic to the cubic a path is built from had
+% never run. The lens has an off-curve point at (400,700) between
+% (100,100) and (700,100), and another at (400,300) closing it.
 12 dict begin
     /FontType 42 def
     /FontMatrix [1 0 0 1 0 0] def
@@ -1223,28 +1231,30 @@ basefont null ne {
     0 1 255 { Encoding exch /.notdef put } for
     Encoding 65 /sq put
     Encoding 66 /tri put
-    /CharStrings << /.notdef 0 /sq 1 /tri 2 >> def
+    Encoding 67 /lens put
+    /CharStrings << /.notdef 0 /sq 1 /tri 2 /lens 3 >> def
     /sfnts [
 <
-00010000000A0080000300204F532F3240F642000000012800000060636D6170000C0046
-000001940000002C676C79665D14F5C4000001C800000034686561642F39E06E000000AC
-0000003668686561064202BF000000E400000024686D747805780064000001880000000A
-6C6F6361000D001A000001C0000000086D6178700005000600000108000000206E616D65
-FBB25C27000001FC00000078706F73740003000000000274000000200001000000010000
-FBF3ACAF5F0F3CF5000303E800000000E681CE9B00000000E681CE9B0064000002BC0258
-000000030002000000000000000100000320FF38000003200064006402BC000100000000
-000000000000000000000002000100000003000400010000000000020000000000000000
-0000000000000000000302BC019000050004000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000003F3F3F3F0000
-000000000000000000000000000000000000000000000000000000000020000001F40000
-032000640064000000000002000000030000001400030001000000140004001800000002
-000200000000FFFF0000FFFF0001000000000000000D001A00010064000002BC02580003
-0000331121116402580258FDA80000010064000002BC02580002000033010164012C012C
-0258FDA80000000400360001000000000001000F000000010000000000020007000F0003
-000104090001001E00160003000104090002000E003458706F7374543432466978747572
-65526567756C617200580070006F00730074005400340032004600690078007400750072
-00650052006500670075006C006100720003000000000000000000000000000000000000
-000000000000000000000000
+00010000000A0080000300204F532F3240F64200000000AC00000060636D6170000C00
+460000010C0000002C676C79666456F983000001380000005668656164205DD5E60000
+01900000003668686561064202BF000001C800000024686D7478057800C8000001EC00
+00000C6C6F63610038001A000001F80000000A6D617870000600060000020400000020
+6E616D65FBB25C270000022400000078706F7374000300000000029C00000020000302
+BC01900005000400000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000003F3F3F3F0000000000000000000000
+0000000000000000000000000000000000000000200000000000020000000300000014
+00030001000000140004001800000002000200000000FFFF0000FFFF00010000000100
+64000002BC025800030000331121116402580258FDA80000010064000002BC02580002
+000033010164012C012C0258FDA800010064006402BC02BC0003000001000100006401
+2C012CFED400640258FDA800C800000001000000010000F123F5785F0F3CF5000303E8
+00000000E681CE9B00000000E681CE9B0064000002BC02580000000300020000000000
+00000100000320FF38000003200064006402BC00010000000000000000000000000000
+000201F40000032000640064006400000000000D001A002B0000000100000004000400
+0100000000000200000000000000000000000000000000000000040036000100000000
+0001000F000000010000000000020007000F0003000104090001001E00160003000104
+090002000E003458706F737454343246697874757265526567756C617200580070006F
+0073007400540034003200460069007800740075007200650052006500670075006C00
+6100720003000000000000000000000000000000000000000000000000000000000000
 >
     ] def
 currentdict end
@@ -1268,6 +1278,29 @@ not {
     10 16 moveto /tri glyphshow
     countink 40 ge (glyphshow reaches a subset glyph through CharStrings) assert
     currentpoint pop 26 sub abs 0.5 le (glyphshow advances by the program width) assert
+
+    % The quadratic glyph. A path is built from cubics, so a quadratic
+    % is raised to the cubic that draws the same curve, whose control
+    % points are two thirds of the way from each end towards the
+    % quadratic's single one. That is what makes the raising visible
+    % here: charpath's bounding box takes in the control points, so the
+    % lens's off-curve point at y=700 reaches the box at y=500 -- ten
+    % points above the baseline at this size. A segment that ran
+    % straight through the control point instead would put the box at
+    % the point itself, four points higher.
+    erasepage
+    newpath 10 10 moveto (C) false charpath
+    pathbbox 4 array astore /lensbox exch def
+    lensbox 3 get 20 (a quadratic segment traces as a curve) assertnear
+    lensbox 1 get 12 (the traced curve starts on the outline) assertnear
+    lensbox 0 get 12 (the traced curve begins at the glyph's left) assertnear
+    lensbox 2 get 24 (the traced curve ends at the glyph's right) assertnear
+    erasepage
+    10 16 moveto (C) show
+    countink 20 ge (a glyph bounded by curves paints) assert
+    countink sqink lt
+    (the lens covers less than the square its curves are drawn across) assert
+    currentpoint pop 26 sub abs 0.5 le (the curved glyph carries the program width) assert
 
     % widthshow and awidthshow through an ordinary font. Their deltas are
     % user-space (PLRM 8.2): widthshow adds (cx, cy) after each glyph for
