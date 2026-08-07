@@ -5,6 +5,8 @@
 %     mod/idiv -1
 %   - sqrt of a negative operand is rangecheck
 %   - RAD_PER_DEG is M_PI/180, so atan/sin/cos hit the PLRM examples
+%   - bitshift moves a bit pattern: the fill is 0 both ways and a count
+%     that reaches the integer's width leaves nothing
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
@@ -77,6 +79,34 @@
 
 % --- integer add overflowing to real (value; representation is impl-defined) ---
 2000000000 2000000000 add 4.0e9 (int add overflow -> real) assertnear
+
+% --- bitshift moves a bit pattern, not a value ---
+% PLRM 8.2: bitshift "shifts the binary representation of int1", bits
+% shifted out are lost and bits shifted in are 0. So the operand is its
+% two's-complement pattern rather than its magnitude, the fill is 0 in
+% both directions, and a count that reaches the integer's width has
+% carried every bit out. What that width is belongs to the object width
+% and is asked in build_personality_test.ps; everything below holds
+% whichever width the build has.
+7 3 bitshift 56 eq (7 3 bitshift = 56) assert
+142 -3 bitshift 17 eq (142 -3 bitshift = 17) assert
+-1 0 bitshift -1 eq (a shift of no bits returns the operand) assert
+-1 1 bitshift -2 eq (a negative operand shifts as a bit pattern) assert
+
+% A right shift fills with 0 and not with the sign, so a negative
+% operand comes back positive. An arithmetic shift would hand back a
+% negative value here whatever the width.
+-1 -1 bitshift 0 gt (a right shift fills a negative operand with zeros) assert
+-2 -1 bitshift 0 gt (a right shift of any negative operand is positive) assert
+
+% Counts past any width: every bit is carried out, leaving nothing. The
+% last is the most negative count there is, which has no positive
+% counterpart to be negated into.
+1 1000 bitshift 0 eq (a left shift past the width leaves nothing) assert
+-1 1000 bitshift 0 eq (a left shift past the width keeps nothing back) assert
+1 -1000 bitshift 0 eq (a right shift past the width leaves nothing) assert
+-1 -1000 bitshift 0 eq (a right shift past the width keeps nothing back) assert
+1 -2147483648 bitshift 0 eq (the most negative count leaves nothing) assert
 
 % --- results land on the operand stack in the same interpreter cycle ---
 % A result misrouted to the exec stack only reaches the operand stack a cycle

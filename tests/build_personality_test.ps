@@ -73,7 +73,13 @@ widesz {
 
     % a radix literal is read in the wider field
     16#FFFFFFFF 4294967295 eq (a radix literal fills the wider field) assert
+
+    % PLRM 8.2 bitshift shifts a binary representation and fills with 0,
+    % so the count at which a shift stops moving anything is where this
+    % build's integer field ends. The semantics either build shares are
+    % asserted in op_math_test.ps; what is asked here is the width.
     -1 32 bitshift -4294967296 eq (a shift moves within the wider field) assert
+    -1 64 bitshift 0 eq (a shift of the whole wider field leaves nothing) assert
 
     % cvi accepts what the wider integer can hold
     4294967296 cvi 4294967296 eq (cvi takes a value the wider integer holds) assert
@@ -83,7 +89,7 @@ widesz {
     1.0 3 { 2 3 div add } repeat ceiling 3.0 eq
         (three thirds fall short of three) assert
     0.1 0.2 add 0.3 eq not (a tenth and a fifth do not meet three tenths) assert
-    /expected 11 def
+    /expected 12 def
 
 }{
 
@@ -96,7 +102,13 @@ widesz {
 
     % a radix literal is unsigned two's complement in the integer's width
     16#FFFFFFFF -1 eq (a radix literal fills the field and wraps) assert
-    -1 32 bitshift -1 eq (a shift stays within the field) assert
+
+    % PLRM 8.2 bitshift shifts a binary representation and fills with 0,
+    % so the count at which a shift stops moving anything is where this
+    % build's integer field ends. The semantics either build shares are
+    % asserted in op_math_test.ps; what is asked here is the width.
+    -1 31 bitshift -2147483648 eq (a shift reaches the top of the field) assert
+    -1 32 bitshift 0 eq (a shift of the whole field leaves nothing) assert
 
     % PLRM cvi: a real too large for an integer is a rangecheck
     { 4294967296 cvi } /rangecheck (cvi refuses what the integer cannot hold) erris
@@ -105,7 +117,7 @@ widesz {
     1.0 3 { 2 3 div add } repeat ceiling 4.0 eq
         (three thirds pass three) assert
     0.1 0.2 add 0.3 eq (a tenth and a fifth meet three tenths) assert
-    /expected 10 def
+    /expected 11 def
 
 } ifelse
 

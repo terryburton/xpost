@@ -227,6 +227,16 @@ int xpost_op_int_int_xor (Xpost_Context *ctx,
 /* defined as the booleantype object directly */
 
 
+/* The shift below moves a bit pattern within the integer's own width, so
+   the unsigned type carrying it has to be exactly that wide -- a wider
+   one lets a right shift bring down bits the integer does not have, and
+   a narrower one drops bits it does. dword is that type in both object
+   widths; this says so rather than leaving it to hold by luck. (A
+   negative array size rather than _Static_assert: this builds as C99
+   with -pedantic-errors, which rejects the latter.) */
+typedef char xpost_bitshift_field_is_the_integer_width[
+    sizeof(dword) == sizeof(integer) ? 1 : -1];
+
 /* int1 shift  bitshift  int2
    bitwise shift of int1 (positive is left) */
 static
@@ -234,12 +244,35 @@ int xpost_op_int_int_bitshift (Xpost_Context *ctx,
                                Xpost_Object x,
                                Xpost_Object y)
 {
-    if (y.int_.val >= 0)
-        xpost_stack_push(ctx->lo, ctx->os,
-                         xpost_int_cons(x.int_.val << y.int_.val));
+    /* PLRM 8.2: bitshift "shifts the binary representation of int1",
+       bits shifted out are lost and bits shifted in are 0. What moves is
+       therefore the operand's bit pattern and not its value, which
+       decides the three cases the value-shaped reading leaves open: a
+       negative int1 shifts as its two's-complement pattern (PLRM says
+       only that the result is then not arithmetically meaningful, not
+       that it is disallowed), a right shift fills with 0 rather than
+       with the sign, and a count that reaches the width has carried
+       every bit out and leaves 0.
+
+       The pattern is held unsigned for the shift, so none of it is C's
+       undefined shifting: a left shift of a negative value, and a count
+       at or past the type's width, are both undefined on a signed
+       operand. The width is the integer's, so the answer follows the
+       object width and nothing else. */
+    const integer width = (integer)(sizeof(integer) * 8);
+    dword bits = (dword)x.int_.val;
+    integer count = y.int_.val;
+    dword res;
+
+    if (count >= 0)
+        res = (count >= width) ? 0 : (dword)(bits << count);
     else
-        xpost_stack_push(ctx->lo, ctx->os,
-                         xpost_int_cons( (unsigned long)x.int_.val >> -y.int_.val));
+        /* the count is negated only once it is known to lie inside the
+           width, so the most negative count -- which has no positive
+           counterpart -- is answered by the zero above it */
+        res = (count <= -width) ? 0 : (dword)(bits >> -count);
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)res));
     return 0;
 }
 
