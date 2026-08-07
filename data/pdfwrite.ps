@@ -65,13 +65,23 @@
         % first content op: the device matrix mapping device coords to PDF
         % user space (y-up). Part of the content so it compresses with the rest.
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
-        % choose the output form and, when the name is already set, open the
+        % choose the output form and, when the name is already set, reach the
         % single-file output now -- before the job's first per-page save -- so
         % restore cannot close it (a handle opened after a save is closed by
         % that restore)
-        //.xpostsys /.vecout get /ready false put
         currentdict dup /.setupoutput get exec
     currentdict
+    end } bind
+
+    % Take the ticket on the open document. The record names one ticket and
+    % the device holding it is the one that finishes the document, so a device
+    % that hands the document on and is then retired leaves it alone.
+    /.claimdoc { % IMAGE  .  -
+    begin
+        //.xpostsys /.vecout get /docid get 1 add
+        //.xpostsys /.vecout get /docid 2 index put
+        //.xpostsys /.vecout get /owner 2 index put
+        currentdict /.vecticket 3 -1 roll put
     end } bind
 
     % Decide the output form from the name and, for the single-file form, open
@@ -82,9 +92,39 @@
     % again at the first Emit, by which point the name is set. The single-file
     % file opens as early as the name is known -- at Create in the page-device
     % flow, before any per-page save.
+    %
+    % A page device change builds the replacement device before it retires the
+    % incumbent, so a device arriving mid-job meets a document that is already
+    % open. One writing the same name takes that document over and its ticket
+    % with it: reopening the file would discard the pages already in it, and an
+    % open left until the first Emit falls inside the page's save, whose
+    % restore closes it again. One writing a different name is a different
+    % document, so the open one is finished off before this one starts.
     /.setupoutput { % IMAGE  .  -
     begin
-        //.xpostsys /.vecout get /ready get not {
+        //.xpostsys /.vecout get /ready get {
+            currentdict /OutputFileName known {
+                //.xpostsys /.vecout get /name get OutputFileName ne {
+                    //.xpostsys /.vecout get /single get {
+                        currentdict dup /.endfile get exec
+                    } if
+                    //.xpostsys /.vecout get dup /single false put
+                        dup /ready false put /owner undef
+                } if
+            } if
+        } if
+        //.xpostsys /.vecout get /ready get {
+            % the document stays open across the change of device; this one
+            % writes it from here on
+            //.xpostsys /.vecout get /owner known
+            currentdict /.vecticket known and {
+                //.xpostsys /.vecout get /owner get currentdict /.vecticket get ne {
+                    currentdict dup /.claimdoc get exec
+                } if
+            }{
+                currentdict dup /.claimdoc get exec
+            } ifelse
+        }{
             currentdict /OutputFileName known {
                 currentglobal true setglobal
                 OutputFileName (%d) search { pop pop pop false }{ pop true } ifelse
@@ -117,44 +157,65 @@
                         dup /off 256 dict put
                         dup /pobj 64 dict put
                         dup /sobj 16 dict put
+                        % the name this document answers for, copied where the
+                        % record itself lives so a global dictionary holds no
+                        % local value
+                        dup /name OutputFileName dup length string copy put
                         /ready true put
                     } ifelse
                 }{
                     % a %d selects the per-file writer, which opens each page's
                     % own file at Emit; this record stays idle
-                    //.xpostsys /.vecout get dup /single false put /ready true put
+                    //.xpostsys /.vecout get dup /single false put
+                    dup /name OutputFileName dup length string copy put
+                    /ready true put
                 } ifelse
                 setglobal
+                //.xpostsys /.vecout get /ready get {
+                    currentdict dup /.claimdoc get exec
+                } if
             } if
-        } if
+        } ifelse
     end } bind
 
     /Destroy { % IMAGE  .  -
         % finalise the accumulating file (page tree, cross-reference and
-        % trailer) before releasing the content accumulator
+        % trailer) before releasing the content accumulator, and only from the
+        % device holding the ticket on it: a page device change hands the open
+        % document to its replacement, and the device being retired is no
+        % longer the one writing it.
         % .endfile `begin`s the device, so it needs its own copy (get consumes
         % one, begin the other) while leaving the device for .pdffree
-        //.xpostsys /.vecout get /single get { dup dup /.endfile get exec } if
-        % stand the shared record down: the interpreter retires a device at
-        % setpagedevice and again at job end, so a repeated Destroy must not
-        % finalise the closed file a second time
-        //.xpostsys /.vecout get dup /single false put /ready false put
+        dup /.vecticket known //.xpostsys /.vecout get /owner known and {
+            dup /.vecticket get //.xpostsys /.vecout get /owner get eq
+        }{ false } ifelse
+        {
+            //.xpostsys /.vecout get /single get { dup dup /.endfile get exec } if
+            % stand the shared record down: the interpreter retires a device at
+            % setpagedevice and again at job end, so a repeated Destroy must not
+            % finalise the closed file a second time
+            //.xpostsys /.vecout get dup /single false put
+                dup /ready false put /owner undef
+        } if
         dup //.internaldict /.pdffree get exec pop
     } bind
 
     % the zero pad for xref offsets is a shared read-only constant, kept in the
     % global private dictionary rather than leaking a name into userdict. The
     % paginated single-file path keeps its across-page bookkeeping (the open
-    % file, the running object number, each object's byte offset, the page
-    % list) beside it in a writable global dictionary, so it survives the
-    % save/restore a job wraps around each page; a slot in the local device
+    % file, the name it was opened under, the running object number, each
+    % object's byte offset, the page list, and the ticket saying which device
+    % is writing it) beside it in a writable global dictionary, so it survives
+    % the save/restore a job wraps around each page; a slot in the local device
     % dictionary would be rewound by restore. One output device paginates at a
-    % time, so a single shared record serves.
+    % time, so a single shared record serves, and it outlives any one device:
+    % a page device change replaces the device without ending the document.
     currentglobal true setglobal
         .xpostsys /.zeros (0000000000) put
         .xpostsys /.vecout 16 dict put
         .xpostsys /.vecout get /single false put
         .xpostsys /.vecout get /ready false put
+        .xpostsys /.vecout get /docid 0 put
     setglobal
 
     % append a string to the content accumulator (held outside VM via /Private)
