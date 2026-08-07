@@ -211,6 +211,7 @@ tests/op_userparams_test.ps \
 tests/op_vm_param_test.ps \
 tests/op_vmreclaim_test.ps \
 tests/op_wrapsig_test.ps \
+tests/operator_install_refusal_test.c \
 tests/outline_font_test.ps \
 tests/page_cover_test.ps \
 tests/page_semantics_test.c \

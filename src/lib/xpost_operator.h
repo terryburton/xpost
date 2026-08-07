@@ -256,11 +256,12 @@ xpost_operator_table(Xpost_Memory_File *gl)
  * @brief helper macro for installing an operator
  *
  * The INSTALL macro
- * 1. refreshes the optab pointer
- * 2. extracts the name index from the operator referred to by object op
- * 3. constructs a name object n
- * 4. defines the name/operator-object pair in systemdict
- * 5. refreshes the optab pointer yet again
+ * 1. establishes that @p op is an operator at all
+ * 2. refreshes the optab pointer
+ * 3. extracts the name index from the operator referred to by object op
+ * 4. constructs a name object n
+ * 5. defines the name/operator-object pair in systemdict
+ * 6. refreshes the optab pointer yet again
  *
  * A systemdict that would not take the pair leaves the interpreter
  * without that operator, which no program can work around. The
@@ -268,15 +269,33 @@ xpost_operator_table(Xpost_Memory_File *gl)
  * rather than each one carrying the answer back by hand the refusal is
  * recorded on the context and xpost_oplib_init_ops reads it once, after
  * they have all run.
+ *
+ * The first step is there because xpost_operator_cons has five ways to
+ * refuse -- a name it could not intern, an operator table with no room,
+ * and three allocations global VM can decline -- and answers null for
+ * four of them and invalid for the other. Neither carries an operator
+ * number: both are file scope objects whose unwritten members are zero,
+ * so indexing the table with one reads entry zero, which belongs to the
+ * first operator ever registered. Installing under that entry's name
+ * replaces an operator every program uses with the object cons would not
+ * make, and replacing an entry already in systemdict allocates nothing,
+ * so the store succeeds and there is nothing for the record below to
+ * catch. Testing the type covers all five refusals at once, which
+ * testing for invalid alone would not.
  */
 #define INSTALL \
     do { \
-        optab = xpost_operator_table(ctx->gl); \
-        n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK; \
-        n.mark_.pad0 = 0; \
-        n.mark_.padw = optab[op.mark_.padw].name; \
-        if (xpost_dict_put(ctx, sd, n, op)) \
+        if (xpost_object_get_type(op) != operatortype) \
             ctx->operator_install_refused = 1; \
+        else \
+        { \
+            optab = xpost_operator_table(ctx->gl); \
+            n.mark_.tag = nametype|XPOST_OBJECT_TAG_DATA_FLAG_BANK; \
+            n.mark_.pad0 = 0; \
+            n.mark_.padw = optab[op.mark_.padw].name; \
+            if (xpost_dict_put(ctx, sd, n, op)) \
+                ctx->operator_install_refused = 1; \
+        } \
         optab = xpost_operator_table(ctx->gl); /* recalc */ \
     } while (0)
 
