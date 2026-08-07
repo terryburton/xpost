@@ -566,6 +566,42 @@ endif
 #
 # The targets run meson test with no -j, so it takes its own default of
 # one process per core.
+
+# A test limit is a number of seconds and a sanitizer changes what a
+# second buys. Every allocation goes through an interceptor, freed memory
+# waits in quarantine, and each load and store consults a shadow map:
+# measured across the fast suite here, against the same suite in a plain
+# build of the same tree, the cost runs to eight and a half times. So a
+# test leaning on meson's thirty-second default runs out of them under a
+# sanitizer whatever it is doing, and which tests those are moves with
+# the machine's load rather than with the tree -- nine of them in one run
+# of this suite, four in the next, and not the same four. A limit that
+# answers to the instrument rather than to the test says nothing about
+# the test, and two dozen tests here take no limit but the default.
+#
+# So the limits scale with the build, which knows it is sanitized where
+# the caller of `ninja -C build full` would have to remember. The
+# multiplier sits above the worst ratio measured rather than on it: that
+# measurement was taken on a loaded machine and a limit is a backstop
+# against a run that has stopped making progress, not a budget.
+#
+# RENDER_TIMEOUT scales for the same reason and is worth naming apart.
+# tests/render-differ.sh gives each render a limit of its own and kills
+# the process group that outlives it; a render killed that way is
+# reported as one that crashed, so the differential render comes back
+# failed rather than timed out. That is a clock presenting itself as a
+# broken renderer, which is the shape this is hardest to recognise in.
+# Formatted rather than compared: the option reads as a string in the
+# meson this tree requires and as a list in later ones, and the formatted
+# form carries the sanitizer names either way.
+san = '@0@'.format(get_option('b_sanitize'))
+if not san.contains('none')
+  add_test_setup('sanitized',
+    timeout_multiplier: 10,
+    env: [ 'RENDER_TIMEOUT=2400' ],
+    is_default: true)
+endif
+
 cost_fast = ['xpost', 'fast']
 cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
