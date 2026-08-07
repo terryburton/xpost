@@ -9,6 +9,7 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 tmp=${TMPDIR:-/tmp}/errfmt-$$
 trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps' 0
 
@@ -21,13 +22,19 @@ printf '%s\n' "$out" | grep -Fq '%%[ Error: undefined; OffendingCommand: mistype
 printf '%s\n' "$out" | grep -Fq '%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%' || exit 1
 
 # 2. a clean job that quits normally: no flush notice
+#    A job the interpreter completes is judged as a completed run: it
+#    leaves a zero status and says nothing about a failure of its own.
+#    Cases 1 and 5 are the jobs whose whole point is that they do not
+#    complete, and case 4 below is where their statuses are required.
 printf '(ok) = quit\n' > "$tmp".ok.ps
 out=$("$xpost" -q --no-sandbox -d null "$tmp".ok.ps </dev/null 2>&1)
+verdict_run "$?" "$out" "the clean job" || exit 1
 printf '%s\n' "$out" | grep -Fq 'Flushing' && exit 1
 
 # 3. a job that catches its own error and completes: no flush notice
 printf '{ oops } stopped pop (done) = quit\n' > "$tmp".caught.ps
 out=$("$xpost" -q --no-sandbox -d null "$tmp".caught.ps </dev/null 2>&1)
+verdict_run "$?" "$out" "the self-caught job" || exit 1
 printf '%s\n' "$out" | grep -Fq 'Flushing' && exit 1
 printf '%s\n' "$out" | grep -Fq 'done' || exit 1
 

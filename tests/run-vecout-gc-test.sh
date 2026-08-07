@@ -11,17 +11,15 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 
 pdf=$(mktemp)
 trap 'rm -f "$pdf"' EXIT
 
-"$xpost" -q --no-sandbox -d pdfwrite -o "$pdf" "$script" </dev/null >/dev/null 2>&1
+out=$("$xpost" -q --no-sandbox -d pdfwrite -o "$pdf" "$script" </dev/null 2>&1)
 status=$?
 
-if [ "$status" -ne 0 ]; then
-    echo "FAILURES: the interpreter exited with status $status"
-    exit 1
-fi
+verdict_run "$status" "$out" "the interpreter" || exit 1
 
 head -c 8 "$pdf" | grep -q '%PDF-1' || {
     echo "FAIL: no PDF header -- the output file was not written through"

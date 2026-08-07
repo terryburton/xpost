@@ -18,6 +18,7 @@ xpost=$1
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
+. "$(dirname "$0")/verdict.sh"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -51,12 +52,9 @@ fail=0
 run_check() { # program  description  input  expected
     prog=$1; shift
     rm -f "$work/got.txt"
-    printf '%b' "$2" | ( cd "$work" && "$xpost" -q --no-sandbox -d null "$prog" ) \
-        >/dev/null 2>&1
-    status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAIL: $1"
-        echo "      the interpreter exited with status $status"
+    out=$(printf '%b' "$2" \
+          | ( cd "$work" && "$xpost" -q --no-sandbox -d null "$prog" ) 2>&1)
+    if ! verdict_run "$?" "$out" "$1"; then
         fail=1
         return
     fi
@@ -73,12 +71,9 @@ lcheck() { run_check readline.ps "$@"; }
 
 check() { # description  input  expected
     rm -f "$work/got.txt"
-    printf '%b' "$2" | ( cd "$work" && "$xpost" -q --no-sandbox -d null read.ps ) \
-        >/dev/null 2>&1
-    status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAIL: $1"
-        echo "      the interpreter exited with status $status"
+    out=$(printf '%b' "$2" \
+          | ( cd "$work" && "$xpost" -q --no-sandbox -d null read.ps ) 2>&1)
+    if ! verdict_run "$?" "$out" "$1"; then
         fail=1
         return
     fi

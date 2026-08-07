@@ -13,16 +13,14 @@
 #   $1  path to the run-status test executable
 #   $2  path to the context-reuse test executable
 set -u
+. "$(dirname "$0")/verdict.sh"
 
 fail=0
 for exe in "$@"; do
     name=$(basename "$exe")
-    XPOST_GC_THRESHOLD=4000 "$exe" >/dev/null 2>&1
+    out=$(XPOST_GC_THRESHOLD=4000 "$exe" 2>&1)
     status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAIL: $name exited with status $status while collecting constantly"
-        fail=1
-    fi
+    verdict_run "$status" "$out" "$name under constant collection" || fail=1
 done
 
 [ "$fail" = 0 ] || { echo "FAILURES: the above did not survive the collector"; exit 1; }

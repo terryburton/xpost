@@ -11,6 +11,7 @@ case "$(uname -s 2>/dev/null)" in
 esac
 xpost=$1
 prog=$2
+. "$(dirname "$0")/verdict.sh"
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 
@@ -48,10 +49,7 @@ fi
 # left of its own accord, so it left the way a finished job leaves.
 wait "$pid" 2>/dev/null
 status=$?
-if [ "$status" -ne 0 ]; then
-    echo "FAIL: the interpreter exited with status $status after SIGINT"
-    cat "$out"; exit 1
-fi
+verdict_run "$status" "$(cat "$out")" "the interrupted job" || { cat "$out"; exit 1; }
 
 # stop unwound the job: nothing after the loop may have run
 if grep -q AFTER "$out"; then

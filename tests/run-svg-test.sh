@@ -10,6 +10,7 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 # relative: the OutputFile paths are named inside the PS program the
 # interpreter runs, and a native interpreter under a POSIX shell need not
 # share the shell's view of an absolute path
@@ -34,9 +35,15 @@ showpage
 << /OutputDevice /null >> setpagedevice
 quit
 PSEOF
-"$xpost" -q -d null -o /dev/null "$tmp/t.ps" </dev/null >/dev/null 2>&1
+out=$("$xpost" -q -d null -o /dev/null "$tmp/t.ps" </dev/null 2>&1)
+status=$?
 
 fail() { echo "FAIL: $1"; exit 1; }
+
+# the document is read below; how the run left is read here, since a
+# device that wrote every landmark and then died on the way out leaves a
+# document with every landmark in it
+verdict_run "$status" "$out" "the svg run" || exit 1
 a=$tmp/a.svg; b=$tmp/b.svg
 [ -s "$a" ] || fail "no output"
 grep -q '<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200pt" height="100pt" viewBox="0 0 200 100">' "$a" || fail "svg root"

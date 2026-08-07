@@ -8,6 +8,7 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -22,10 +23,7 @@ fail=0
 for mode in "" "--no-graphics"; do
     err=$("$xpost" -q $ns $mode -d null "$work/t.ps" </dev/null 2>&1 >/dev/null)
     status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAILURES: the interpreter exited with status $status"
-        exit 1
-    fi
+    verdict_run "$status" "$err" "a quiet run${mode:+ ($mode)}" || exit 1
     if [ -n "$err" ]; then
         echo "FAIL: a quiet run wrote to stderr${mode:+ ($mode)}:"
         printf '%s\n' "$err" | head -5

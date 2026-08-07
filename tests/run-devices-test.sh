@@ -22,6 +22,7 @@
 set -u
 xpost=$1
 . "$(dirname "$0")/device-fleet.sh"
+. "$(dirname "$0")/verdict.sh"
 
 # Reach the interpreter's data directory, which lives outside any sandbox
 # root. When this build has a file-access sandbox, disable it for the test;
@@ -57,9 +58,14 @@ run_dev() {   # $1=device
     rm -f "$out"
     # a device this build did not compile in prints "wrong device"; skip it.
     err=$("$xpost" -q $ns -d "$dev" -o "$out" "$prog" </dev/null 2>&1)
+    st=$?
     case "$err" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; return 2 ;;
     esac
+    # what the run left is read by the caller; what it said and how it
+    # left are read here. A device that painted every pixel and then
+    # faulted in its teardown wrote a whole file to be found.
+    verdict_run "$st" "$err" "$dev" || return 1
     if printf '%s' "$err" | grep -q '%%\[ Error'; then
         echo "FAIL $dev: $(printf '%s' "$err" | grep '%%\[ Error' | head -1)"
         return 1

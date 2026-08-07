@@ -1,4 +1,10 @@
-# Sourced by the run-*.sh wrappers: judge the verdict a run printed.
+# Sourced by the run-*.sh wrappers: judge what a run answered with.
+#
+# A run answers in one of two ways, and there is an entry point here for
+# each. A run that prints its own verdict is judged by verdict_ok. A run
+# that reports through its exit status, leaving the wrapper to inspect
+# whatever it produced, is judged by verdict_run. Both carry the same
+# failure half, so neither wrapper has to spell it.
 #
 # A run reports its own result, and a wrapper that looks for SUCCESS
 # anywhere in the output accepts a run that printed a failure and then
@@ -12,6 +18,13 @@
 # when the same run printed no failure. That is the whole rule, kept here
 # so that it is the same rule in every wrapper -- one enforced in some of
 # them and not in others is the same hole with a longer way in.
+#
+# The same two halves make the whole of verdict_run. A wrapper that reads
+# only the artifacts a run left behind accepts a run that wrote every one
+# of them and then died on the way out, which is where a device's
+# teardown lives; and a wrapper that reads only the status accepts a run
+# that complained its way to a clean exit. What a run left and what it
+# said are separate answers and a pass needs both.
 #
 # Position is deliberately not the rule. The verdict is not the last
 # thing a run prints: the startup banner precedes it, the prompt of an
@@ -42,6 +55,38 @@
 # a suite that comes back clean because nothing was asked.
 VERDICT_FAILURE_RE='^(FAIL|MISMATCH)|[^A-Za-z](FAIL|MISMATCH)'
 
+# The failure half of the rule, which both entry points below share.
+# Prints what the run said about a failure and answers yes when it said
+# anything at all.
+_verdict_complained() {
+    printf '%s\n' "$1" | grep -qE "$VERDICT_FAILURE_RE" || return 1
+    echo "FAILURES: $2 printed a failure:"
+    printf '%s\n' "$1" | grep -E "$VERDICT_FAILURE_RE" | sed 's/^/      /'
+    return 0
+}
+
+# Judge a run that reports through its exit status, the wrapper having
+# read whatever the run produced for itself.
+#   $1  the status the run left
+#   $2  the run's output, as captured (the empty string where a wrapper
+#       kept none: the status half still holds)
+#   $3  what to call the run in a complaint (optional)
+# Prints what was wrong and returns non-zero unless the run left a zero
+# status and printed no failure.
+verdict_run() {
+    _verdict_st=$1
+    _verdict_out=$2
+    _verdict_who=${3:-the run}
+    _verdict_bad=0
+
+    _verdict_complained "$_verdict_out" "$_verdict_who" && _verdict_bad=1
+    if [ "$_verdict_st" -ne 0 ]; then
+        echo "FAILURES: $_verdict_who exited with status $_verdict_st"
+        _verdict_bad=1
+    fi
+    return "$_verdict_bad"
+}
+
 # Judge one run's output.
 #   $1  the output, as captured
 #   $2  what to call the run in a complaint (optional)
@@ -55,12 +100,7 @@ verdict_ok() {
     _verdict_who=${2:-the run}
     _verdict_re=${3:-'^SUCCESS[[:space:]]*$|[^A-Za-z]SUCCESS[[:space:]]*$'}
 
-    if printf '%s\n' "$_verdict_out" | grep -qE "$VERDICT_FAILURE_RE"; then
-        echo "FAILURES: $_verdict_who printed a failure:"
-        printf '%s\n' "$_verdict_out" | grep -E "$VERDICT_FAILURE_RE" \
-            | sed 's/^/      /'
-        return 1
-    fi
+    _verdict_complained "$_verdict_out" "$_verdict_who" && return 1
 
     # a trailing carriage return is a line ending, not content: a run on a
     # platform whose text output carries one still reported success

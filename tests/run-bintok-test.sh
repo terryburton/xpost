@@ -10,6 +10,7 @@ set -u
 xpost=$1
 corpus=$2
 golden=$3
+. "$(dirname "$0")/verdict.sh"
 
 # scratch is named inside the PS program the interpreter runs, so keep it
 # relative: a native interpreter under a POSIX shell need not share /tmp
@@ -24,11 +25,8 @@ trap 'rm -f "$scratch" "$job" "$out"' EXIT
 # grep's binary-file heuristic and truncate the stream
 "$xpost" -q -d null "$job" </dev/null 2>/dev/null > "$out.raw"
 status=$?
-if [ "$status" -ne 0 ]; then
-    echo "FAILURES: the interpreter exited with status $status"
-    exit 1
-fi
 grep -av '^Xpost\|^Copyright\|WARRANTY\|COPYING\|^PS' < "$out.raw" > "$out"
+verdict_run "$status" "$(cat "$out")" "the corpus run" || exit 1
 
 # --strip-trailing-cr: the golden may be checked out with CRLF on a host that
 # translates line endings, while the interpreter emits LF

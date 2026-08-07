@@ -22,6 +22,7 @@ xpost=$1
 page=$2
 golden=$3
 regen=${4:-}
+. "$(dirname "$0")/verdict.sh"
 
 devices='pgm ppm pbm tiff pdfwrite svgwrite dscwrite'
 
@@ -66,10 +67,7 @@ for dev in $devices; do
     out="$work/golden.$dev"
     err=$("$xpost" -q $ns -d "$dev" -o "$out" "$page" </dev/null 2>&1)
     status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAILURES: the interpreter exited with status $status"
-        exit 1
-    fi
+    verdict_run "$status" "$err" "$dev" || exit 1
     if printf '%s' "$err" | grep -q '%%\[ Error'; then
         echo "FAIL $dev: $(printf '%s' "$err" | grep '%%\[ Error' | head -1)"
         fail=1

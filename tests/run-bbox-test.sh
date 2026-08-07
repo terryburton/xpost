@@ -11,9 +11,12 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
 expect='%%BoundingBox: 10 10 50 60'
 out=$("$xpost" -q -d bbox -o /dev/null "$script" </dev/null 2>&1)
+status=$?
 printf '%s\n' "$out"
+verdict_run "$status" "$out" "the bbox job" || exit 1
 printf '%s\n' "$out" | grep -qx "$expect" || exit 1
 
 tmp=${TMPDIR:-/tmp}/bbox-wio-$$.ps
@@ -34,7 +37,9 @@ showpage
 quit
 PSEOF
 out=$("$xpost" -q -d null -o /dev/null "$tmp" </dev/null 2>&1)
+status=$?
 printf '%s\n' "$out"
+verdict_run "$status" "$out" "the WhiteIsOpaque job" || exit 1
 printf '%s\n' "$out" | grep -q '%%BoundingBox: 10 10 50 50' || exit 1
 printf '%s\n' "$out" | grep -q '%%BoundingBox: 10 10 150 150' || exit 1
 test "$(printf '%s\n' "$out" | grep -c '%%BoundingBox: 10 10 50 50')" = 2 || exit 1
@@ -55,10 +60,7 @@ PSEOF
 out=$("$xpost" -q -d bbox -o /dev/null "$txt" </dev/null 2>&1)
 status=$?
 printf '%s\n' "$out"
-if [ "$status" -ne 0 ]; then
-    echo "FAIL: the interpreter exited with status $status on the text job"
-    exit 1
-fi
+verdict_run "$status" "$out" "the text job" || exit 1
 box=$(printf '%s\n' "$out" | grep -m1 '^%%BoundingBox:')
 [ -n "$box" ] || { echo "FAIL: shown text produced no bounding box"; exit 1; }
 set -- $box

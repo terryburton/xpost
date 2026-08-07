@@ -7,6 +7,7 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 
 ps=$(mktemp)
 outa=$(mktemp)
@@ -24,8 +25,13 @@ showpage
 quit
 EOF
 
-"$xpost" -q -d pngalpha -o "$outa" "$ps" </dev/null >/dev/null 2>&1
-"$xpost" -q -d png -o "$outrgb" "$ps" </dev/null >/dev/null 2>&1
+# the two images are read below; how each run left is read here, since a
+# device whose teardown faults has already written the image the checks
+# below open
+out=$("$xpost" -q -d pngalpha -o "$outa" "$ps" </dev/null 2>&1)
+verdict_run "$?" "$out" "the pngalpha run" || exit 1
+out=$("$xpost" -q -d png -o "$outrgb" "$ps" </dev/null 2>&1)
+verdict_run "$?" "$out" "the png run" || exit 1
 
 # IHDR colour type: byte 25 of the file (2 = RGB, 6 = RGBA)
 ct() { od -An -j25 -N1 -tu1 "$1" | tr -d ' '; }

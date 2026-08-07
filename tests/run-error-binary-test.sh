@@ -20,6 +20,7 @@ xpost=$1
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
+. "$(dirname "$0")/verdict.sh"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -35,11 +36,9 @@ PSEOF
     "$xpost" -q --no-sandbox -d null "$work/$1.ps" </dev/null \
         >"$work/$1.out" 2>&1
     status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAIL: $1 exited with status $status"
-        fail=1
-        return 1
-    fi
+    # the report is read from the file below, on its bytes; the run's own
+    # answer is read here
+    verdict_run "$status" "$(cat "$work/$1.out")" "$1" || { fail=1; return 1; }
     return 0
 }
 

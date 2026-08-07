@@ -20,9 +20,11 @@
 #   5. A guard that is not executable runs only because meson falls back
 #      to the shebang, and not at all through any other route.
 #   6. A wrapper that looks for SUCCESS anywhere in a run's output passes
-#      a run that printed a failure and then printed SUCCESS. Seventeen
-#      wrappers did, and one of them was passing over a real failure.
-#      The rule lives in tests/verdict.sh so there is one of it.
+#      a run that printed a failure and then printed SUCCESS, and one
+#      that reads only what a run left behind passes a run that wrote
+#      every one of those and then died on the way out. Both rules live
+#      in tests/verdict.sh so there is one of each, and every wrapper the
+#      directory holds reaches one of them.
 #   7. A C test reports through its exit status, so the same hole one
 #      layer down is a path that prints a failure and returns zero: a
 #      failure printed without being recorded, or a status answered
@@ -30,6 +32,10 @@
 #      its own counter, its own assertion and its own verdict, so each
 #      was a place the pair could come apart. The rule lives in
 #      tests/xpost_test.h so there is one of it.
+#   8. A status read off a pipeline is the last stage's. A wrapper that
+#      pipes the interpreter into a text filter and then reads $? is
+#      answered by the filter, which reports on its own reading rather
+#      than on what it was reading, so a run that died passes.
 #
 # This check reads a directory, so it says which directory it will
 # accept. It used to accept any: pointed at a directory that does not
@@ -90,7 +96,7 @@ for f in "$dir"/run-*.sh; do
         echo "      be running the thing under test"
         fail=1
     fi
-    if ! grep -qE 'status=\$\?|st=\$\?|\$\? -ne 0|\|\| (exit|fail)|rc=\$\?|ret=\$\?' "$f"; then
+    if ! grep -qE 'status=\$\?|st=\$\?|\$\? -ne 0|\|\| (exit|fail)|rc=\$\?|ret=\$\?|verdict_run[^|]*\$\?' "$f"; then
         echo "FAIL: $(basename "$f") runs the interpreter without checking its"
         echo "      exit status -- a crash after SUCCESS would pass"
         fail=1
@@ -129,31 +135,97 @@ for f in "$dir"/check-*.sh "$dir"/run-*.sh; do
     fi
 done
 
-# 6. the verdict a run printed is judged by one rule, in one place
+# 6. every wrapper judges its run by the one rule, and 8. reads the
+#    status of the process it ran
 #
-# A wrapper that matches SUCCESS against a run's output itself is
-# deciding, on its own, what makes a verdict count -- and what every one
-# of them left out was that a run which printed a failure first has
-# already failed, whatever it went on to conclude. tests/verdict.sh
-# carries that; a wrapper reaches it through verdict_ok.
+# A wrapper that decides for itself what makes a run a pass leaves out
+# one of the two halves, and which half depends on how the run answers. A
+# run that prints its own verdict has already failed if it printed a
+# failure before it, whatever it went on to conclude; a run that reports
+# through its exit status has already failed if it complained its way to
+# a clean exit, and equally if it wrote every artifact the wrapper reads
+# and then died on the way out. tests/verdict.sh carries both halves of
+# both, as verdict_ok and verdict_run; a wrapper reaches one of them.
 #
-# This catches the spelling the suite uses. A wrapper that reads a
-# verdict of some other spelling is outside it, which is why the helper
-# is where the rule lives rather than where it is checked: the way to
-# stay outside this is to write a wrapper that judges a run some other
-# way entirely, and that wrapper would be a new thing to review.
-for f in "$dir"/run-*.sh; do
+# The population is derived rather than listed: every shell file the
+# directory holds that is not one of the check-*.sh guards, which report
+# verdicts of their own rather than judging a run's. A wrapper written
+# next year is inside it without anyone remembering to put it there. What
+# is outside is named below with the reason it is outside, the list is
+# held to its length, and an exemption naming something the directory
+# does not hold is a failure too -- so the list cannot outlive what it
+# excuses, and cannot grow without the number moving with it.
+verdict_exempt='verdict.sh guard-paths.sh device-fleet.sh run-profile.sh'
+verdict_exempt_n=4
+#   verdict.sh       the rule itself
+#   guard-paths.sh   the path helper the guards source
+#   device-fleet.sh  the device roster the wrappers source
+#   run-profile.sh   drives meson over a selection of the suite rather
+#                    than running the interpreter; the runs it starts
+#                    report to meson, which is what it reads back
+
+# The two rules as one pass over a wrapper, so the self-check below can
+# put cases to them rather than trusting that patterns which find nothing
+# in a sound directory would have found something in an unsound one.
+wrapper_faults() {          # <file>; prints a line per fault, else nothing
+    tr -d '\r' < "$1" | sed 's/#.*//' > "$work/w-body"
+    # a pipeline written over several lines is one line to look at
+    awk '{ while (sub(/\\$/, "")) { if ((getline nxt) <= 0) break; $0 = $0 nxt }
+           print }' "$work/w-body" > "$work/w-joined"
+
+    if ! grep -q 'verdict_ok\|verdict_run' "$work/w-joined"; then
+        echo "judges its run without verdict_ok or verdict_run"
+    elif ! grep -q 'verdict\.sh' "$work/w-joined"; then
+        echo "reaches for a verdict function without sourcing verdict.sh"
+    fi
+
+    # A status read off a pipeline is the last stage's. `xpost | tail`
+    # followed by a status read answers for tail, which reports on its
+    # own reading and not on what it was reading, so a run that died
+    # passes. What is looked for is the last stage being a text filter:
+    # a stage that is a subshell or a group around the thing under test
+    # is the status of the thing under test.
+    awk '
+        /\$\?/ && prev ~ /\|/ {
+            t = prev
+            gsub(/\|\|/, "\001", t)
+            n = split(t, part, "|")
+            if (n > 1 && part[n] ~ /^[[:space:]]*(grep|head|tail|sed|awk|tr|cut|sort|uniq|wc|od|xxd|cmp|diff|cat|tee)([[:space:]]|$)/)
+                print "line " FNR ": reads a status off a pipeline whose last" \
+                      " stage is a text filter"
+        }
+        { if ($0 ~ /[^[:space:]]/) prev = $0 }' "$work/w-joined"
+}
+
+for f in "$dir"/*.sh; do
     [ -e "$f" ] || continue
-    body=$(tr -d '\r' < "$f" | sed 's/#.*//')
-    printf '%s\n' "$body" | grep -qE 'grep[^|]*SUCCESS|=[[:space:]]*"?SUCCESS' \
-        || continue
-    if ! printf '%s\n' "$body" | grep -q 'verdict_ok'; then
-        echo "FAIL: $(basename "$f") matches SUCCESS against a run's output"
-        echo "      itself; a run that printed a failure first has already"
-        echo "      failed -- judge it with verdict_ok from verdict.sh"
+    base=$(basename "$f")
+    case $base in check-*.sh) continue ;; esac
+    case " $verdict_exempt " in *" $base "*) continue ;; esac
+    faults=$(wrapper_faults "$f")
+    [ -n "$faults" ] || continue
+    echo "FAIL: $base does not hold its run to the rule in tests/verdict.sh --"
+    echo "      judge a run that prints a verdict with verdict_ok, and one"
+    echo "      that reports through its exit status with verdict_run:"
+    printf '%s\n' "$faults" | sed 's/^/      /'
+    fail=1
+done
+
+n=0
+for base in $verdict_exempt; do
+    n=$((n + 1))
+    if [ ! -e "$dir/$base" ]; then
+        echo "FAIL: $base is exempt from the verdict rule and is not there;"
+        echo "      an exemption that excuses nothing has outlived its reason"
         fail=1
     fi
 done
+if [ "$n" -ne "$verdict_exempt_n" ]; then
+    echo "FAIL: $n wrappers are exempt from the verdict rule where"
+    echo "      $verdict_exempt_n are declared; a list that grows without its"
+    echo "      length moving with it is a list nobody reviewed"
+    fail=1
+fi
 
 # 7. a C test's printed failure has to reach its exit status
 #
@@ -268,6 +340,103 @@ verdict_expect no "a mismatch before the verdict" \
     "$(printf 'MISMATCH results: 1 2\nSUCCESS')"
 verdict_expect no "two verdicts from one run" "$(printf 'SUCCESS\nSUCCESS')"
 verdict_expect no "a word the verdict is only the tail of" "NOTSUCCESS"
+verdict_run_expect() {      # <want: ok|no> <what> <status> <output>
+    if verdict_run "$3" "$4" "the self-check" >/dev/null 2>&1; then
+        got=ok
+    else
+        got=no
+    fi
+    if [ "$got" != "$1" ]; then
+        echo "FAIL: verdict.sh answered $got where $1 is owed, for $2;"
+        echo "      the rule a wrapper reads its run's status by does not hold"
+        fail=1
+    fi
+}
+verdict_run_expect ok "a run that left cleanly and said nothing" 0 ""
+verdict_run_expect ok "a run that left cleanly saying what it did" 0 \
+    "OK   pgm (12 bytes)"
+verdict_run_expect no "a run that wrote its artifacts and then died" 139 ""
+verdict_run_expect no "a run that complained its way to a clean exit" 0 \
+    "$(printf 'FAIL: an assertion nothing recorded\n')"
+verdict_run_expect no "a mismatch from a run that left cleanly" 0 \
+    "MISMATCH results: 1 2"
+verdict_run_expect ok "a word a failure is only the tail of" 0 "PREFAIL"
+
+# and the two rules over a wrapper, for the same reason: what they find
+# in a directory of sound wrappers is nothing, which is also what a rule
+# that has gone inert finds. So they are given wrappers that are not
+# sound, and have to say so about each; and sound ones they must pass.
+#
+# Each case names the fault it is owed rather than merely that there was
+# one, so that a case is not answered by whichever rule happens to speak.
+wrapper_case() {            # <name> <body>
+    printf '%s\n' "$2" > "$work/wcase-$1.sh"
+    echo "$work/wcase-$1.sh"
+}
+wrapper_expect() {          # <owed: none|<text of the fault>> <what> <file>
+    w_got=$(wrapper_faults "$3")
+    if [ "$1" = none ]; then
+        [ -z "$w_got" ] && return 0
+        echo "FAIL: the wrapper rule complains about $2, which is sound:"
+    else
+        printf '%s\n' "$w_got" | grep -qF "$1" && return 0
+        echo "FAIL: the wrapper rule does not answer \"$1\" for $2:"
+    fi
+    printf '%s\n' "${w_got:-(it said nothing)}" | sed 's/^/      /'
+    echo "      the rule every wrapper judges its run by does not hold"
+    fail=1
+}
+wrapper_expect none "a wrapper that judges a printed verdict" \
+    "$(wrapper_case ok '. "$(dirname "$0")/verdict.sh"
+out=$("$xpost" -q -d null "$script" 2>&1)
+status=$?
+verdict_ok "$out" "the suite"')"
+wrapper_expect none "a wrapper that judges a run by its status" \
+    "$(wrapper_case run '. "$(dirname "$0")/verdict.sh"
+out=$("$xpost" -q -d pgm -o "$page" "$script" 2>&1)
+verdict_run "$?" "$out" "the render" || exit 1
+[ -s "$page" ] || { echo "FAIL: no page"; exit 1; }')"
+wrapper_expect "without verdict_ok or verdict_run" \
+    "a wrapper that matches the verdict itself" \
+    "$(wrapper_case own '. "$(dirname "$0")/device-fleet.sh"
+out=$("$xpost" -q -d null "$script" 2>&1)
+status=$?
+printf "%s\n" "$out" | grep -q SUCCESS || exit 1')"
+wrapper_expect "without sourcing verdict.sh" \
+    "a wrapper that reaches for the rule without loading it" \
+    "$(wrapper_case unsourced 'out=$("$xpost" -q -d null "$script" 2>&1)
+status=$?
+verdict_ok "$out" "the suite"')"
+wrapper_expect "whose last stage is a text filter" \
+    "a status read off the filter the run was piped into" \
+    "$(wrapper_case piped '. "$(dirname "$0")/verdict.sh"
+"$xpost" -q -d null "$script" 2>&1 | tail -20
+status=$?
+verdict_run "$status" "" "the suite"')"
+# the boundaries, each of which reads as the pipeline rule going quiet
+wrapper_expect none "a status read off a subshell around the run" \
+    "$(wrapper_case subshell '. "$(dirname "$0")/verdict.sh"
+printf "%b" "$input" | ( cd "$work" && "$xpost" -q -d null "$script" )
+status=$?
+verdict_run "$status" "" "the suite"')"
+wrapper_expect none "a status read after a run that was piped into nothing" \
+    "$(wrapper_case plain '. "$(dirname "$0")/verdict.sh"
+"$xpost" -q -d null "$script" >/dev/null 2>&1
+status=$?
+verdict_run "$status" "" "the suite"')"
+wrapper_expect none "a status read after a line carrying an or, not a pipe" \
+    "$(wrapper_case orbar '. "$(dirname "$0")/verdict.sh"
+"$xpost" -q -d null "$script" >"$log" 2>&1 || cat "$log"
+status=$?
+verdict_run "$status" "" "the suite"')"
+wrapper_expect "whose last stage is a text filter" \
+    "a pipeline written over lines, the last of them carrying no pipe" \
+    "$(wrapper_case continued '. "$(dirname "$0")/verdict.sh"
+"$xpost" -q -d null "$script" 2>&1 \
+    | tail -20 \
+    > "$log"
+status=$?
+verdict_run "$status" "" "the suite"')"
 
 # and so does the C-test rule, for the same reason
 #

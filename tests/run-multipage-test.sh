@@ -29,6 +29,7 @@
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/verdict.sh"
 
 # Reach the interpreter's data directory outside any sandbox root: disable the
 # file-access sandbox when this build has one (detected from the usage text),
@@ -55,13 +56,10 @@ fail=0
 render() {   # $1=device $2=output-path ; returns 1 on skip/error
     err=$("$xpost" -q $ns -d "$1" -o "$2" "$prog" </dev/null 2>&1)
     status=$?
-    if [ "$status" -ne 0 ]; then
-        echo "FAILURES: the interpreter exited with status $status"
-        exit 1
-    fi
     case "$err" in
         *"wrong device"*) return 1 ;;
     esac
+    verdict_run "$status" "$err" "$1" || exit 1
     if printf '%s' "$err" | grep -q '%%\[ Error'; then
         echo "FAIL $1: $(printf '%s' "$err" | grep '%%\[ Error' | head -1)"
         fail=1

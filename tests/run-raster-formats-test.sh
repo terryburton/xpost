@@ -17,6 +17,7 @@ xpost=$1
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
+. "$(dirname "$0")/verdict.sh"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -35,33 +36,27 @@ quit
 PSEOF
 
 fail=0
+
+paint() {   # $1 the device string
+    p_out=$("$xpost" -q --no-sandbox -d "$1" -o /dev/null "$work/paint.ps" \
+            </dev/null 2>&1)
+    verdict_run "$?" "$p_out" "$1" || fail=1
+}
+
 for sub in rgb argb bgr bgra; do
-    "$xpost" -q --no-sandbox -d "raster:$sub" -o /dev/null "$work/paint.ps" \
-        </dev/null >/dev/null 2>&1
-    status=$?
-    [ "$status" -eq 0 ] || { echo "FAIL: raster:$sub exited with status $status"; fail=1; }
+    paint "raster:$sub"
 done
 
 # a name that names no format, and no name at all
 for sub in "nosuchformat" "" "rg" "argbx"; do
-    "$xpost" -q --no-sandbox -d "raster:$sub" -o /dev/null "$work/paint.ps" \
-        </dev/null >/dev/null 2>&1
-    status=$?
-    [ "$status" -eq 0 ] \
-        || { echo "FAIL: raster:'$sub' exited with status $status"; fail=1; }
+    paint "raster:$sub"
 done
 
 # and the device with no format named at all
-"$xpost" -q --no-sandbox -d raster -o /dev/null "$work/paint.ps" \
-    </dev/null >/dev/null 2>&1
-status=$?
-[ "$status" -eq 0 ] || { echo "FAIL: raster exited with status $status"; fail=1; }
+paint raster
 
 # the other device that keeps its pixels in a buffer of its own
-"$xpost" -q --no-sandbox -d bgr -o /dev/null "$work/paint.ps" \
-    </dev/null >/dev/null 2>&1
-status=$?
-[ "$status" -eq 0 ] || { echo "FAIL: bgr exited with status $status"; fail=1; }
+paint bgr
 
 [ "$fail" = 0 ] || { echo "FAILURES: the formats above"; exit 1; }
 echo "SUCCESS"

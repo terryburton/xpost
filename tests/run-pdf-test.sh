@@ -9,6 +9,19 @@
 set -u
 xpost=$1
 script=$2
+. "$(dirname "$0")/verdict.sh"
+
+# Run the interpreter and hold it to its own answer. What a run wrote is
+# read by the block that asked for it; the status it left and anything it
+# said on the way are read here, since a document with every landmark in
+# it is what a run that wrote the whole file and then died leaves behind.
+# What the run printed stays in `out` for the probe blocks that read it.
+run_xpost() {   # $1 what to call it in a complaint, $2... arguments
+    rx_who=$1
+    shift
+    out=$("$xpost" -q "$@" </dev/null 2>&1)
+    verdict_run "$?" "$out" "$rx_who" || exit 1
+}
 # Temp files below are created only inside the Ghostscript-oracle blocks;
 # predeclare them so the EXIT trap cleanup stays valid under set -u when a
 # block is skipped (gs absent).
@@ -24,7 +37,7 @@ pdf=$(mktemp)
 discard=./discard-$$.pdf
 trap 'rm -f "$pdf" "$discard"' EXIT
 
-"$xpost" -q -d pdfwrite -o "$pdf" "$script" </dev/null >/dev/null 2>&1
+run_xpost "the pdfwrite run" -d pdfwrite -o "$pdf" "$script"
 
 # structural (no external dependency; the content stream may be compressed,
 # so check the object structure rather than content-stream operators)
@@ -57,7 +70,7 @@ if command -v gs >/dev/null 2>&1; then
 72 100 moveto (Vector Glyphs) show
 showpage
 EOF
-    "$xpost" -q -d pdfwrite -o "$textpdf" "$textps" </dev/null >/dev/null 2>&1
+    run_xpost "the vector-text run" -d pdfwrite -o "$textpdf" "$textps"
     a=$(gsbb "$textpdf")
     b=$(gsbb "$textps")
     echo "our text PDF : $a"
@@ -93,7 +106,7 @@ EOF
 30 55 moveto (WHITE) show
 showpage
 EOF
-    "$xpost" -q -d pdfwrite -o "$colorpdf" "$colorps" </dev/null >/dev/null 2>&1
+    run_xpost "the glyph-colour run" -d pdfwrite -o "$colorpdf" "$colorps"
     gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=pgmraw -g320x160 -r72 -o "$craster" "$colorpdf" 2>/dev/null
     dark=$(tail -c 51200 "$craster" | od -An -v -tu1 \
            | awk '{for(i=1;i<=NF;i++) if($i+0<128) n++} END{print n+0}')
@@ -122,7 +135,7 @@ EOF
 stroke
 showpage
 EOF
-    "$xpost" -q -d pdfwrite -o "$strokepdf" "$strokeps" </dev/null >/dev/null 2>&1
+    run_xpost "the vector-stroke run" -d pdfwrite -o "$strokepdf" "$strokeps"
     gsr() { gs -q -dNOSAFER -dNOPAUSE -dBATCH -sDEVICE=pbmraw -g2448x3168 -r288 -o "$2" "$1" 2>/dev/null; }
     gsr "$strokepdf" "$ra"
     gsr "$strokeps" "$rb"
@@ -142,7 +155,7 @@ EOF
 100 100 moveto 200 100 lineto 200 200 lineto closepath fill
 showpage
 EOF
-    "$xpost" -q -d pdfwrite -o "$infopdf" "$infops" </dev/null >/dev/null 2>&1
+    run_xpost "the DOCINFO run" -d pdfwrite -o "$infopdf" "$infops"
     # the Info object's number depends on the page's object layout, so match
     # the reference without pinning it (gs reads the Creator below regardless)
     grep -aqE '/Info [0-9]+ 0 R' "$infopdf" || { echo "FAIL: no Info reference in trailer"; exit 1; }
@@ -186,12 +199,7 @@ showpage
 << /OutputDevice /null >> setpagedevice
 quit
 EOF
-out=$("$xpost" -q -d null -o /dev/null "$cspps" </dev/null 2>&1)
-status=$?
-if [ "$status" -ne 0 ]; then
-    echo "FAILURES: the interpreter exited with status $status"
-    exit 1
-fi
+run_xpost "the colour-space probe" -d null -o /dev/null "$cspps"
 rm -f "$cspps"
 printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: colour-space preservation probes"; exit 1; }
 n=$(printf '%s\n' "$out" | grep -c '^ok ')
@@ -227,7 +235,7 @@ showpage
 << /OutputDevice /null >> setpagedevice
 quit
 EOF
-out=$("$xpost" -q -d null -o /dev/null "$cmykps" </dev/null 2>&1)
+run_xpost "the CMYK probe" -d null -o /dev/null "$cmykps"
 rm -f "$cmykps"
 printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: CMYK separation probes"; exit 1; }
 n=$(printf '%s\n' "$out" | grep -c '^ok ')
@@ -275,7 +283,7 @@ showpage
 << /OutputDevice /null >> setpagedevice
 quit
 EOF
-out=$("$xpost" -q -d null -o /dev/null "$sepps" </dev/null 2>&1)
+run_xpost "the separation probe" -d null -o /dev/null "$sepps"
 rm -f "$sepps"
 printf '%s\n' "$out" | grep -q 'MISSING' && { printf '%s\n' "$out" | grep MISSING; echo "FAIL: separation content probes"; exit 1; }
 n=$(printf '%s\n' "$out" | grep -c '^ok ')
@@ -323,7 +331,7 @@ showpage restore
 << /OutputDevice /null >> setpagedevice
 quit
 EOF
-"$xpost" -q -d null -o /dev/null "$mpps" </dev/null >/dev/null 2>&1
+run_xpost "the multi-page run" -d null -o /dev/null "$mpps"
 grep -aq '/Count 2' "$mppdf" || { echo "FAIL: multi-page tree is not /Count 2"; exit 1; }
 [ "$(grep -ac '/Type /Page[^s]' "$mppdf")" = 2 ] || { echo "FAIL: want two page objects"; exit 1; }
 # the second page references both separations; the first only its own
@@ -358,7 +366,7 @@ showpage
 << /OutputDevice /null >> setpagedevice
 quit
 EOF
-out=$("$xpost" -q -d null -o /dev/null "$recps" </dev/null 2>&1)
+run_xpost "the redefined-fill run" -d null -o /dev/null "$recps"
 rm -f "$recps"
 printf '%s\n' "$out" | grep -q 'eofill-under-redefined-fill OK' || { echo "FAIL: eofill under a redefined fill"; exit 1; }
 echo "eofill under redefined fill OK"

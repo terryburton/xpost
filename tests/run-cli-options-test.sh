@@ -12,6 +12,7 @@ xpost=$1
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
 case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
+. "$(dirname "$0")/verdict.sh"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -19,6 +20,16 @@ printf 'showpage\nquit\n' > "$work/blank.ps"
 
 fail=0
 note() { echo "FAIL: $1"; fail=1; }
+
+# A run the option was meant to be accepted by is read for the page it
+# left and for how it left: an option taken and then rendered from a
+# page that the interpreter died over leaves the page behind either way.
+render() {  # $1 what to call it in a complaint, $2... the arguments
+    r_who=$1
+    shift
+    r_out=$("$xpost" -q --no-sandbox "$@" "$work/blank.ps" </dev/null 2>&1)
+    verdict_run "$?" "$r_out" "$r_who" || fail=1
+}
 
 # the reports each name the program and each says something of its own
 "$xpost" --version 2>&1 | grep -q 'Xpost' || note "--version does not name the program"
@@ -28,8 +39,7 @@ note() { echo "FAIL: $1"; fail=1; }
     || note "--help does not list the geometry option"
 
 # a geometry sets the page size: the raster carries its dimensions
-"$xpost" -q --no-sandbox -g 200x100+0+0 -d pgm -o "$work/g.pgm" "$work/blank.ps" \
-    </dev/null >/dev/null 2>&1
+render "a 200x100 geometry" -g 200x100+0+0 -d pgm -o "$work/g.pgm"
 if [ -f "$work/g.pgm" ]; then
     dim=$(head -c 32 "$work/g.pgm" | tr '\n' ' ' | awk '{print $2"x"$3}')
     [ "$dim" = "200x100" ] || note "a geometry of 200x100 produced a page of $dim"
@@ -52,8 +62,7 @@ status=$?
     && note "a geometry that is not a geometry was accepted"
 
 # without -g the default page size stands
-"$xpost" -q --no-sandbox -d pgm -o "$work/def.pgm" "$work/blank.ps" \
-    </dev/null >/dev/null 2>&1
+render "a run with no geometry" -d pgm -o "$work/def.pgm"
 if [ -f "$work/def.pgm" ]; then
     dim=$(head -c 32 "$work/def.pgm" | tr '\n' ' ' | awk '{print $2"x"$3}')
     [ "$dim" = "612x792" ] || note "the default page is $dim, not 612x792"
