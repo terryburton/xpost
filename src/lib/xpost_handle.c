@@ -43,6 +43,7 @@
 #include "xpost_error.h"
 #include "xpost_dict.h"
 #include "xpost_string.h"
+#include "xpost_name.h"
 #include "xpost_handle.h"
 
 /* One issued block: the entity carrying its handle, the dictionary it
@@ -55,6 +56,7 @@ typedef struct
     unsigned int owner;          /* entity of the dictionary */
     Xpost_Handle_Kind kind;      /* what the block holds */
     unsigned int size;           /* bytes the block holds */
+    unsigned int release;        /* opcode of a device block's release, or zero */
     void *block;
 } Xpost_Handle_Slot;
 
@@ -166,7 +168,24 @@ int xpost_handle_cons(Xpost_Context *ctx,
     _slots[index].owner = (unsigned int)owner;
     _slots[index].kind = kind;
     _slots[index].size = (unsigned int)size;
+    _slots[index].release = 0;
     _slots[index].block = block;
+
+    /* A device's instance state is released by an operator its class
+       installs, and a released one runs where no error is caught, so the
+       operator run is not the program's to name. It is taken here, from
+       the dictionary the device's own Create has just filled and the
+       program has not yet reached, and held against a later reading of
+       the same slot: what the program writes under /Destroy afterwards is
+       not what the state was issued to be released by. */
+    if (kind == XPOST_HANDLE_DEVICE)
+    {
+        Xpost_Object destroy = xpost_dict_get(ctx, dic,
+                                              xpost_name_cons(ctx, "Destroy"));
+
+        if (xpost_object_get_type(destroy) == operatortype)
+            _slots[index].release = destroy.mark_.padw;
+    }
 
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     *anchor = o;
@@ -223,6 +242,27 @@ void *xpost_handle_block_of(Xpost_Context *ctx,
         (slot->owner != (unsigned int)ent))
         return NULL;
     return slot->block;
+}
+
+XPOST_NOINLINE
+unsigned int xpost_handle_device_release(Xpost_Context *ctx,
+                                         Xpost_Object dic)
+{
+    Xpost_Memory_File *mem;
+    unsigned int i;
+    int ent;
+
+    ent = xpost_object_get_ent(dic);
+    if (ent < 0)
+        return 0;
+    mem = xpost_context_select_memory(ctx, dic);
+    for (i = 1; i < _nslots; i++)
+        if ((_slots[i].ent != 0) &&
+            (_slots[i].kind == XPOST_HANDLE_DEVICE) &&
+            (_slots[i].ownermem == mem) &&
+            (_slots[i].owner == (unsigned int)ent))
+            return _slots[i].release;
+    return 0;
 }
 
 void xpost_handle_release_entity(Xpost_Memory_File *mem,

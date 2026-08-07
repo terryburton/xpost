@@ -88,7 +88,6 @@ static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
-static Xpost_Object nameDestroy;
 
 char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
 {
@@ -2990,18 +2989,38 @@ typedef struct
 /* Load/store the accumulator struct via the device's /Private string. The raw
    memory accessors record no save/restore backup, so neither the struct nor the
    malloc'd buffer it points at is reverted by `restore`; the pointer is set once
-   at device creation and never re-homed into virtual memory. */
+   at device creation and never re-homed into virtual memory.
+
+   The block is asked for as content rather than as a device's instance
+   state, which is the other thing a device keeps under this key. The
+   two are told apart by what they were issued as and not by how wide
+   they are: a driver's private struct that happens to be the width of
+   the accumulator would otherwise load as one, and the first member the
+   release then frees is a pointer read out of the middle of it. */
 static int _pdf_acc_get(Xpost_Context *ctx, Xpost_Object devdic,
                         Xpost_Object *priv, Pdf_Acc *a)
 {
-    return xpost_dev_private_get(ctx, devdic, namepdfPrivate,
-                                 priv, a, sizeof(*a));
+    void *block;
+
+    *priv = xpost_dict_get(ctx, devdic, namepdfPrivate);
+    block = xpost_handle_block_of(ctx, *priv, devdic,
+                                  XPOST_HANDLE_CONTENT, sizeof(*a));
+    if (!block)
+        return 0;
+    memcpy(a, block, sizeof(*a));
+    return 1;
 }
 
 static XPOST_MUST_CHECK int
 _pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
 {
-    return xpost_dev_private_put(ctx, priv, a, sizeof(*a));
+    void *block = xpost_handle_block(ctx, priv,
+                                     XPOST_HANDLE_CONTENT, sizeof(*a));
+
+    if (!block)
+        return 0;
+    memcpy(block, a, sizeof(*a));
+    return 1;
 }
 
 /* Create the content accumulator and stash it in the device's /Private. Called
@@ -3017,7 +3036,7 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     a.nseps = 0;
     a.sepcap = 0;
     ret = xpost_handle_cons(ctx, devdic, namepdfPrivate, &priv,
-                            XPOST_HANDLE_DEVICE, sizeof(a));
+                            XPOST_HANDLE_CONTENT, sizeof(a));
     if (ret)
     {
         xpost_strbuf_free(&a.content);
@@ -3409,17 +3428,18 @@ static int _pdffree(Xpost_Context *ctx, Xpost_Object devdic)
    Destroy is the method that does this, and for the devices written in C
    it is an operator, so it is called the way the interpreter's own
    shutdown calls it: the instance goes on the operand stack and the
-   operator runs from here. That operator is the one the device carried
-   when it was installed, taken then and passed in here, rather than read
-   out of the instance now -- see _devinstalled below.
+   operator runs from here. That operator is the release recorded with
+   the instance's block when the block was issued, passed in here, rather
+   than read out of the instance now -- see _devinstalled below.
 
    For the devices written in PostScript, Destroy is a procedure, and the
    callers of this are places no procedure can run: restore is one
    operator, not an interpreter loop. What those classes hold outside
    virtual memory is the vector writers' content accumulator, reached
    here directly. The rest keep their raster as PostScript objects the
-   collector already owns and have nothing to answer: the accumulator
-   fetch finds no /Private and returns.
+   collector already owns and have nothing to answer: the fetch resolves
+   the content block a vector writer was issued, which nothing else was,
+   and returns.
 
    Destroy is idempotent (xpost_dev_driver.h), so a device this releases
    after something else already has is a no-op rather than a double
@@ -3462,24 +3482,38 @@ static int _devinstalled(Xpost_Context *ctx, Xpost_Object devdic)
     if (depth > 254)
         depth = 254;
 
-    /* The release method is taken here, from an instance the device's own
-       Create has just returned, and not later from the instance
-       dictionary -- which the program can reach and write to, and which
-       therefore cannot be asked at release time which of two release
-       paths a device wants.
+    /* What the release will run is settled here rather than read at the
+       release, which happens inside restore: one operator, not an
+       interpreter loop, with nothing above it to catch what it raises.
 
-       The two are not interchangeable. Every device stores its C state
-       in a string under /Private, and what that string holds is the
-       struct its own class put there; the accumulator path reads one as
-       an accumulator, whose first member is a pointer it frees. Deciding
-       between them on a slot a program can rewrite would let a device
-       carrying a raster be released as though it carried an accumulator,
-       and the pointer freed would be whatever lay at that offset of the
-       raster device's private struct. Anything the instance still holds
-       here is what its class gave it. */
-    destroy = xpost_dict_get(ctx, devdic, nameDestroy);
-    if (xpost_object_get_type(destroy) != operatortype)
-        destroy = null;
+       The instance dictionary is an ordinary dictionary and the program
+       writes to it. A page device request's keys are stored into the
+       instance setpagedevice builds, so /Destroy is a slot a program
+       reaches without naming anything internal, and the instance itself
+       is reachable through the graphics state afterwards. So what stands
+       there now is not the class's method to read.
+
+       The release run is the one the instance's own state was issued to
+       be given up by, recorded with the block when the block was issued
+       -- from the dictionary the device's own Create had just filled,
+       before the program regained control. A device carrying such a
+       block is released by that operator whatever the program has since
+       written under /Destroy, so a self-sabotaged device is still given
+       up correctly rather than left leaking or released by whatever the
+       slot now holds; an operator of the program's choosing, and the
+       release of another class whose block is the same width, run
+       neither here nor from the restore.
+
+       A device carrying no such block -- the vector writers, whose
+       Destroy is a procedure, and the devices whose raster the collector
+       already owns -- is released the other way, by the accumulator path
+       in _device_release, which resolves the content block a vector
+       writer was issued and finds none in anything else. */
+    {
+        unsigned int release = xpost_handle_device_release(ctx, devdic);
+
+        destroy = release ? xpost_operator_cons_opcode((int)release) : null;
+    }
 
     ctx->pagedevice = devdic;
     ctx->pagedevice_destroy = destroy;
@@ -3596,8 +3630,6 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namepdfPrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
-        return VMerror;
-    if (xpost_object_get_type((nameDestroy = xpost_name_cons(ctx, "Destroy"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

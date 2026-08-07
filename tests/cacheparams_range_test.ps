@@ -47,6 +47,27 @@ mark 4444 4 40000 setcacheparams
 size 4444 eq (a cache capacity within range is set exactly) assert
 limit 40000 eq (and the per-glyph ceiling stated with it) assert
 
+% --- and bounded below by a substitution, not by a refusal ---
+% PLRM 8.2 gives setcachelimit stackunderflow and typecheck and nothing
+% besides, so a ceiling the store cannot take is answered by the nearest
+% one it can rather than by an error. Below the range that is no ceiling
+% at all, which admits no glyph -- a store that caches nothing, which is
+% a store this implementation can be.
+count /c0 exch def
+{ -1 setcachelimit } stopped not
+  (a per-glyph ceiling below the range raises no error) assert
+count c0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+limit 0 eq
+  (and the ceiling substituted for it is the floor of the range) assert
+
+% setcacheparams states the same parameter (PLRM 8.2, Appendix C:
+% MaxFontItem), so a ceiling stated through it is substituted the same
+% way rather than left standing
+mark 4444 4 40000 setcacheparams
+mark 4444 4 -1 setcacheparams
+limit 0 eq (a ceiling below the range is the floor through setcacheparams)
+  assert
+
 % --- the bound is a ceiling, not a refusal: it is above the ceiling
 % the interpreter starts with, so every glyph that was cacheable before
 % any of this still is ---

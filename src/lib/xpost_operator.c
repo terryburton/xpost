@@ -791,10 +791,23 @@ Xpost_Object _wrapped_save_array(Xpost_Context *ctx)
             return null;
     }
     arr = xpost_dict_get(ctx, ctx->privatedict, namewrapsave);
-    if (xpost_object_get_type(arr) == arraytype)
+    /* The array must be local. It is dereferenced against local memory
+       below and its declared size is the bound the copy is held to, so
+       both hold only for a local array: a copy read out of a local
+       array is read out of the array it was written for, and bounded by
+       that array's own size. privatedict is reachable and a program
+       stores under any key there, so what stands here is the program's
+       to replace; a value that is not a local array -- a global array
+       among them, whose entity number names a different object of a
+       different size in the local table -- is treated as none and
+       rebuilt, which is the same rebuild an absent one gets.
+
+       That it must be local is also what it is for: what it holds are
+       the operands of calls being made, which may be local objects, and
+       a global array may hold none of those. */
+    if (xpost_object_get_type(arr) == arraytype &&
+        xpost_context_select_memory(ctx, arr) == ctx->lo)
         return arr;
-    /* LOCAL: what it holds are the operands of calls being made, which
-       may be local objects, and a global array may not hold those */
     arr = xpost_array_cons_memory(ctx->lo, XPOST_WRAPPED_SAVE_SLOTS);
     if (xpost_object_get_type(arr) != arraytype)
         return null;

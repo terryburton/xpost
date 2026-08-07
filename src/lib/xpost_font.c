@@ -291,21 +291,39 @@ xpost_font_cache_status(long *bsize, long *bmax, long *msize, long *mmax,
     *blimit = gcache_blimit;
 }
 
+/* The per-glyph ceiling a program states, held to the range the store
+   offers: a value above it is that value, and one below it is no
+   ceiling at all, which is a store this implementation can be -- the
+   entry gate below admits nothing and every glyph renders from its
+   description. Neither is an error (PLRM 8.2, setcachelimit raises
+   stackunderflow and typecheck and nothing besides). */
+static long
+gcache_limit_in_range(long upper)
+{
+    if (upper < 0)
+        return 0;
+    return upper > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : upper;
+}
+
 void
 xpost_font_cache_setlimit(long blimit)
 {
-    if (blimit >= 0)
-        gcache_blimit = blimit > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : blimit;
+    gcache_blimit = gcache_limit_in_range(blimit);
 }
 
+/* A cache size of zero is the request stating none: the operator's
+   operands are delimited by a mark rather than counted, and the
+   interpreter fills the absent ones in (data/font.ps), so what stands
+   for a size the request did not carry is a size no request can state.
+   PLRM 8.2 leaves the cache size unchanged where the request omits it.
+   The per-glyph ceiling is always carried and is always taken. */
 void
 xpost_font_cache_setparams(long bmax, long lower, long upper)
 {
     (void)lower;   /* the compression threshold: rasters stay flat */
     if (bmax > 0)
         gcache_bmax = bmax > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : bmax;
-    if (upper > 0)
-        gcache_blimit = upper > GCACHE_BYTES_MAX ? GCACHE_BYTES_MAX : upper;
+    gcache_blimit = gcache_limit_in_range(upper);
     while ((gcache_bsize > gcache_bmax || gcache_csize > gcache_cmax)
            && gcache_tail)
         gcache_drop(gcache_tail);

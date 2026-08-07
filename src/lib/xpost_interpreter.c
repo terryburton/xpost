@@ -67,6 +67,7 @@
 #include "xpost_op_boolean.h"  /* the shared relations */
 #include "xpost_op_stack.h"  /* the shared index and roll rules */
 #include "xpost_oplib.h"
+#include "xpost_handle.h"  /* the release a device's block was issued to be given up by */
 
 static
 Xpost_Object namedollarerror; /* cached result of xpost_name_cons(ctx, "$error")
@@ -2828,19 +2829,28 @@ run:
     if (xpost_object_get_type(device) == dicttype)
     {
         Xpost_Object Destroy;
+        /* The release run is the one the device's block was issued to be
+           given up by, recorded when the block was issued and reached
+           from the block rather than from /Destroy -- an ordinary slot
+           the program writes to. A device carrying such a block (the
+           ones whose Destroy is a C operator) is given up by that
+           operator whatever the slot now holds; the vector writers keep
+           their state under a content block instead and give it up
+           through the procedure under /Destroy, run below. */
+        unsigned int release = xpost_handle_device_release(ctx, device);
         XPOST_LOG_INFO("destroying device dict");
         Destroy = xpost_dict_get(ctx, device, xpost_name_cons(ctx, "Destroy"));
-        if (xpost_object_get_type(Destroy) == operatortype)
+        if (release != 0)
         {
             int res;
             xpost_stack_push(ctx->lo, ctx->os, device);
-            res = xpost_operator_exec(ctx, Destroy.mark_.padw);
+            res = xpost_operator_exec(ctx, release);
             if (res)
                 XPOST_LOG_ERR("%s error destroying device", errorname[res]);
             else
                 XPOST_LOG_INFO("destroyed device");
         }
-	if (xpost_object_get_type(Destroy) == arraytype)
+	else if (xpost_object_get_type(Destroy) == arraytype)
 	{
 	    XPOST_LOG_INFO("running Destroy proc");
 	    xpost_stack_push(ctx->lo, ctx->os, device);
