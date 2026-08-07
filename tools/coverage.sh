@@ -9,7 +9,7 @@
 # untested, and untested code in this project has repeatedly turned out to
 # be broken.
 #
-# Two things a coverage report must say and this one is built to say.
+# Three things a coverage report must say and this one is built to say.
 #
 # Which tests ran. A selection is not "the suite": the corpus tests skip
 # until the programs are fetched, so a run that names no profile measures
@@ -22,6 +22,17 @@
 # failures in it produces a report that looks exactly like a run without.
 # So the profile's exit status is read, and a non-zero one ends this
 # script with no report written at all.
+#
+# Which of it is measured and which is read. The report ranks the gaps by
+# consequence, and a ranking written as prose is a ranking nothing
+# recomputes: the sentence naming the largest block of unexecuted lines
+# goes on naming it after some other file overtakes it, and a figure typed
+# into a paragraph goes on being quoted after the run stops supporting it.
+# So every name and number in the ranking is derived from this run. The
+# single input that is a judgement rather than a measurement -- which code
+# cannot run in this configuration at all, and is therefore not a gap
+# worth anyone's effort -- is declared as data below, applied to the
+# rankings, and printed from the same declaration.
 #
 # The report is written to standard output. To refresh the two checked-in
 # baselines, one per object width:
@@ -272,6 +283,50 @@ nbranch=$(cut -d'|' -f1 "$work/branchtot")
 nnever=$(cut -d'|' -f2 "$work/branchtot")
 nguard=$(wc -l < "$work/never" | tr -d ' ')
 
+# A function defined in a header is compiled into every object that
+# includes it, and gcov counts each copy separately: the copy in an
+# object that never calls it reads as zero even when another object's
+# copy runs. Those are not blind spots, so name them apart.
+: > "$work/inline"
+while IFS='|' read -r f fn; do
+    if grep -rlE "(^|[ *])$fn[[:space:]]*\\(" "$srcdir"/src/lib/*.h >/dev/null 2>&1; then
+        printf '%s|%s\n' "$f" "$fn" >> "$work/inline"
+    fi
+done < "$work/zero.u"
+sort -u "$work/inline" > "$work/inline.u" 2>/dev/null || : > "$work/inline.u"
+comm -23 "$work/zero.u" "$work/inline.u" > "$work/zero.real"
+nzero=$(wc -l < "$work/zero.real" | tr -d ' ')
+ninline=$(wc -l < "$work/inline.u" | tr -d ' ')
+
+# The one reading in this report, written down once.
+#
+# Everything the report ranks is derived from the run. What is left out
+# of a ranking is not: it is a judgement that some code cannot run here
+# and that effort spent on it is wasted. A judgement stated in prose
+# beside a ranking built without it is a judgement the ranking
+# contradicts, and the prose is what goes stale -- a file named as the
+# largest gap stays named after it stops being the largest, because
+# nothing recomputes a sentence. So the judgement is data here, the
+# rankings apply it, and the paragraph explaining it is printed from
+# the same data.
+#
+#   discount_files       compiled for a configuration this run is not:
+#                        the other operating system, or a device that
+#                        needs a display, or a logger nothing turns on
+#   discount_conditions  a guard whose refusing side asserts that
+#                        memory is already corrupt, which is not a
+#                        state a test drives the interpreter into
+discount_files='xpost_compat_posix.c xpost_dev_xcb.c xpost_log.c'
+discount_conditions='CHECK_VALID_ENT'
+
+discount_re=$(printf '%s' "$discount_files" | sed 's,\.,\\.,g; s,  *,|,g')
+
+# the never-taken outcomes worth ranking, and the files worth ranking
+grep -Ev "^[0-9]+\|src/[a-z]*/($discount_re)\|" "$work/never" \
+    | grep -Ev "$discount_conditions" > "$work/never.r" || :
+grep -Ev "^src/[a-z]*/($discount_re)\|" "$work/files.u" > "$work/files.r" || :
+nguardr=$(wc -l < "$work/never.r" | tr -d ' ')
+
 case $width in
     wide) record='doc/COVERAGE-large.md'; setup='meson setup bcovlarge -Db_coverage=true -Dlarge-object=true'
           bdir='bcovlarge' ;;
@@ -337,55 +392,103 @@ printf 'quality figure. Read what follows as a floor: it says where there is\n'
 printf 'nothing to argue about, not that the rest is settled.\n\n'
 
 printf '## Where the gaps matter most\n\n'
-printf 'A ranking by consequence rather than by line count. It is a reading of\n'
-printf 'the tables below and is revised with them.\n\n'
-printf '**Guards nothing has ever made refuse.** The first table is the one to\n'
-printf 'act on: conditions the suite evaluates by the hundred million whose\n'
-printf 'refusing side it never once produces. Among them the write bound in\n'
-printf '`xpost_memory_put`, the entity-number ceiling in\n'
-printf '`xpost_memory_table_alloc`, the free-list validation in `xpost_free.c`\n'
-printf 'that discards a corrupt list rather than hand out an entity two owners\n'
-printf 'share, and the index bounds in `xpost_stack.c`. These are the last\n'
-printf 'thing between a mis-sized entity and a write outside the arena, and\n'
-printf 'nothing in the suite has yet made one say no. The dictionary-growth\n'
-printf 'use-after-free came out of this family, which is reason enough to want\n'
-printf 'the refusals driven on purpose rather than waited for. Read the table\n'
-printf 'past the `CHECK_VALID_ENT` rows, which are discounted below.\n\n'
-printf '**Global VM is barely exercised.** Across every collection this run\n'
-printf 'performs, the global half is never the one collected: the `isglobal`\n'
-printf 'arms in `xpost_garbage.c` never come out true. The relocation recheck\n'
-printf 'against the global bank in the fused `def` and array fast paths in\n'
-printf '`xpost_interpreter.c` is never true either, while the local-bank twin\n'
-printf 'beside it fires a handful of times in twelve million. Two banks of\n'
-printf 'memory, one of them tested.\n\n'
-printf '**Documented options with no coverage at all.** `_xpost_main_list_add`\n'
-printf 'is never entered, so `-D`/`--define` and `-I`/`--include` -- both in the\n'
-printf 'usage text the binary prints -- are untested.\n\n'
-printf '**Reachable from ordinary PostScript, never entered.** Among the\n'
-printf 'functions listed further down: `filter_flush`, `filter_writech` and\n'
-printf '`a85_writech`, the whole memory-file method set\n'
-printf '(`memory_writech`/`seek`/`tell`/`flush`/`purge`), `enc_readch` and\n'
-printf '`enc_unreadch`, `rsd_flush` and `rsd_unreadch`, `_filter_cons_abandon`,\n'
-printf '`dct_skip_input_data` and all four JPEG error handlers,\n'
-printf '`_outline_conicto` -- no TrueType quadratic is ever traced to a path --\n'
-printf '`program_take`, `_strike_resample`, and `_xpost_glyph_name_to_unicode`.\n\n'
-printf '**Discount as unreachable in this configuration**, so that nobody\n'
-printf 'spends effort on them: the Windows halves of `xpost_compat_posix.c` and\n'
-printf 'the portable path-confinement fallback, `xpost_dev_xcb.c` (it needs a\n'
-printf 'display), the mmap and file-backed VM paths, `xpost_log.c`, `evalquit`,\n'
-printf 'the 4 GiB growth clamp, and the `CHECK_VALID_ENT` refusals.\n\n'
-printf '**Largest raw uncovered but lower consequence**, for completeness:\n'
-printf '`xpost_file.c` and `xpost_op_font.c` hold the two largest blocks of\n'
-printf 'unexecuted lines in the tree, and `xpost_dsc_parse.c` and\n'
-printf '`xpost_font.c` the lowest branch coverage of any file not discounted\n'
-printf 'above. None of the four guards memory, which is why they are last here\n'
-printf 'rather than first.\n\n'
+printf 'A ranking by consequence rather than by line count. Which kinds of gap\n'
+printf 'matter is the judgement in this section; which code is in each kind is\n'
+printf 'read out of this run, so a heading here cannot come to name what the\n'
+printf 'tables below no longer say. The discount at the end is the one reading\n'
+printf 'that is not a measurement, and the rankings above it are built with it\n'
+printf 'applied rather than merely stated beside them.\n\n'
+
+printf '**Guards nothing has ever made refuse.** Conditions the suite reaches\n'
+printf 'by the hundred million and never once makes come out the other way.\n'
+printf 'The refusing side of a guard is the whole point of it, so a guard that\n'
+printf 'has never refused anything is untested however often it is reached.\n'
+printf 'The dictionary-growth use-after-free was found on the far side of one\n'
+printf 'of these, which is reason enough to want the refusals driven on purpose\n'
+printf 'rather than waited for. The eight most evaluated, discounted rows\n'
+printf 'taken out:\n\n'
+sort -rn -t'|' -k1 "$work/never.r" | head -8 | awk -F'|' '
+    {
+        text = $0; sub(/^([^|]*\|){5}/, "", text)
+        if (length(text) > 58) text = substr(text, 1, 55) "..."
+        gsub(/`/, "'"'"'", text)
+        n = $1; grouped = ""
+        while (length(n) > 3) {
+            grouped = "," substr(n, length(n) - 2) grouped
+            n = substr(n, 1, length(n) - 3)
+        }
+        printf "- `%s:%s`, %s evaluations, %s of %s outcomes never taken -- `%s`\n",
+            $2, $3, n grouped, $4, $5, text
+    }'
+printf '\n'
+
+# The global bank is the half of VM the suite does not collect, and the
+# conditions that say so are in the run rather than in a sentence about
+# it: name them only where this run actually never took them.
+if grep -qE 'isglobal|is_global' "$work/never.r"; then
+    printf '**Global VM is barely exercised.** Two banks of memory, one of them\n'
+    printf 'tested. The conditions that ask which bank an object is in, and\n'
+    printf 'never once this run came out saying the global one:\n\n'
+    grep -E 'isglobal|is_global' "$work/never.r" | sort -rn -t'|' -k1 | head -6 \
+        | awk -F'|' '
+        {
+            text = $0; sub(/^([^|]*\|){5}/, "", text)
+            if (length(text) > 58) text = substr(text, 1, 55) "..."
+            gsub(/`/, "'"'"'", text)
+            printf "- `%s:%s` -- `%s`\n", $2, $3, text
+        }'
+    printf '\n'
+fi
+
+# The binary's own uncovered functions are worth separating from the
+# library's: what the binary does is the command line, and every option
+# it grows is documented in the usage text it prints.
+if grep -q '^src/bin/' "$work/zero.real"; then
+    printf '**The command line, where nothing enters it.** These are in the\n'
+    printf 'binary rather than the library, so what they carry is an option the\n'
+    printf 'usage text offers and the suite never takes up:\n\n'
+    grep '^src/bin/' "$work/zero.real" \
+        | awk -F'|' '{ printf "- `%s` (in `%s`)\n", $2, $1 }'
+    printf '\n'
+fi
+
+printf '**Functions nothing in the suite enters.** %s of them, listed in full\n' "$nzero"
+printf 'further down. A function nothing reaches is not partly tested, and\n'
+printf 'where they cluster is where the suite stops short:\n\n'
+cut -d'|' -f1 "$work/zero.real" | sort | uniq -c | sort -rn | head -6 \
+    | awk '{ printf "- `%s`: %s\n", $2, $1 }'
+printf '\n'
+
+printf '**Discounted as unreachable in this configuration**, so that nobody\n'
+printf 'spends effort on them. Every ranking above is built with these taken\n'
+printf 'out:\n\n'
+for f in $discount_files; do printf -- '- `%s`\n' "$f"; done
+printf -- '- every `%s` refusal, which fires only where memory is already corrupt\n' \
+    "$discount_conditions"
+printf '\nBeside them, and not separable from the tables by file or by\n'
+printf 'condition: the Windows halves of the compatibility layer, the portable\n'
+printf 'path-confinement fallback used where the kernel has no openat2, the\n'
+printf 'mmap and file-backed VM paths, and the 4 GiB growth clamp.\n\n'
+
+printf '**Largest raw uncovered but lower consequence**, for completeness. The\n'
+printf 'biggest blocks of unexecuted lines outside the discount:\n\n'
+awk -F'|' '{ printf "%d|%s|%s\n", $3 - ($3 * $2 / 100) + 0.5, $1, $4 }' "$work/files.r" \
+    | sort -rn -t'|' -k1 | head -4 \
+    | awk -F'|' '{ printf "- `%s`: %s lines never executed (branch %s%%)\n", $2, $1, $3 }'
+printf '\nand the lowest branch coverage outside it:\n\n'
+awk -F'|' '$5 + 0 > 0 { printf "%s|%s|%s\n", $4, $1, $3 }' "$work/files.r" \
+    | sort -n -t'|' -k1 | head -3 \
+    | awk -F'|' '{ printf "- `%s`: %s%% of branch outcomes, over %s lines\n", $2, $1, $3 }'
+printf '\nThese are last here rather than first because size is the one thing\n'
+printf 'about a gap that says nothing about what it costs.\n\n'
 
 printf '## Conditions whose refusing side nothing takes\n\n'
 printf '%s conditions are reached by the suite and have an outcome it never\n' "$nguard"
-printf 'produces. The count is how many times the condition was evaluated, so\n'
-printf 'the top of this list is code the suite leans on constantly without ever\n'
-printf 'testing what it is there for. The 40 most-evaluated:\n\n'
+printf 'produces, %s of them outside the discount above. The count is how many\n' "$nguardr"
+printf 'times the condition was evaluated, so the top of this list is code the\n'
+printf 'suite leans on constantly without ever testing what it is there for.\n'
+printf 'This table is the measurement rather than the reading of it, so the\n'
+printf 'discount is not applied here. The 40 most-evaluated:\n\n'
 printf '| Evaluations | Site | Never taken | Condition |\n|---:|---|---:|---|\n'
 sort -rn -t'|' -k1 "$work/never" | head -40 | awk -F'|' '
     {
@@ -409,22 +512,7 @@ awk -F'|' '{ printf "%d|%s|%s|%s|%s|%s\n", $3 - ($3 * $2 / 100) + 0.5, $1, $2, $
     | sort -rn -t'|' -k1 \
     | awk -F'|' '{ printf "| `%s` | %s | %s%% | %s | %s |\n", $2, $4, $3, ($6 + 0 == 0 ? "--" : $5 "%"), $1 }'
 
-# A function defined in a header is compiled into every object that
-# includes it, and gcov counts each copy separately: the copy in an object
-# that never calls it reads as zero even when another object's copy runs.
-# Those are not blind spots, so name them apart.
-: > "$work/inline"
-while IFS='|' read -r f fn; do
-    if grep -rlE "(^|[ *])$fn[[:space:]]*\\(" "$srcdir"/src/lib/*.h >/dev/null 2>&1; then
-        printf '%s|%s\n' "$f" "$fn" >> "$work/inline"
-    fi
-done < "$work/zero.u"
-sort -u "$work/inline" > "$work/inline.u" 2>/dev/null || : > "$work/inline.u"
-comm -23 "$work/zero.u" "$work/inline.u" > "$work/zero.real"
-
 printf '\n## Functions the suite never enters\n\n'
-nzero=$(wc -l < "$work/zero.real" | tr -d ' ')
-ninline=$(wc -l < "$work/inline.u" | tr -d ' ')
 printf 'The blind spots: %s functions nothing in the suite reaches.\n\n' "$nzero"
 printf '(A further %s are defined in headers, so every object that includes\n' "$ninline"
 printf 'one carries its own copy and the copies that are not called read as\n'
