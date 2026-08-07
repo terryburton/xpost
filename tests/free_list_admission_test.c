@@ -18,15 +18,35 @@
  *
  * The other is a link that is not an entity number at all, which a stale
  * write into a freed entity's data produces. The walk validates every
- * node before it reads the table at that number. What the refusal is
- * worth is that no entity is handed out and nothing else in the file is
- * disturbed; the read the check stands in front of is of a table slot
- * this fixture's number is far outside, which a sanitizer build reports
- * and an ordinary one does not.
+ * node before it reads the table at that number, and what it does on
+ * finding one is more than decline: the lists are unusable from that
+ * node on, so it empties every bucket and answers that a collection is
+ * due, which is what refills them. Both halves are read here -- the
+ * answer, and the buckets afterwards -- because a walk that returned the
+ * same answer without emptying the buckets would leave the next walk to
+ * reach the same bad link, and a walk that emptied them without asking
+ * for a collection would leave the file with no free list at all.
+ *
+ * Two numbers stand for the two places a stale write can land, and they
+ * are asked in an order the second half of that explains. The first is
+ * inside the table's allocation but past the entities that have been
+ * handed out, and the slot there is made to look exactly like a free
+ * node -- no tag, a plausible size -- so that nothing but the number's
+ * naming no entity tells the walk to stop. A build that has lost that
+ * test reads a slot it is entitled to read and gives a wrong answer,
+ * which this test's own assertions report. The second is past the
+ * table altogether, where the same lost test is a read outside the
+ * allocation: a sanitizer build reports that and an ordinary one does
+ * not, and nothing is left for an assertion to say. So the second is
+ * planted only once the first has shown the test is there, rather than
+ * performing a read outside the table to find out what is already
+ * known.
  *
  * The fixture is a memory file with no interpreter over it: the free
  * list sits below the object layer, and a PostScript program can neither
- * ask for an entity of no size nor write a link into a freed one. */
+ * ask for an entity of no size nor write a link into a freed one. That
+ * the collection this asks for then arrives and refills the lists is the
+ * interpreter's half, and is held in tests/free_list_recovery_test.c. */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -77,16 +97,79 @@ static void set_link(Xpost_Memory_File *mem, unsigned int ent, unsigned int v)
     memcpy(xpost_vm_ptr(mem, mem->table.tab[ent].adr), &v, sizeof v);
 }
 
+/* every bucket, so that a discard is read as the whole free list going
+   away rather than as the one bucket the walk was in */
+static int all_buckets_empty(Xpost_Memory_File *mem)
+{
+    unsigned int b;
+
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+        if (bucket_head(mem, b) != 0)
+            return 0;
+    return 1;
+}
+
+/* Put a link that is not an entity number into the one node on the list,
+   ask for an allocation the node itself does not answer so that the walk
+   follows the link, and hold what the walk does with it. The node is on
+   the list already, since a walk over an empty list reads no link at
+   all. The link is named in each report, since the two numbers are
+   refused by different tests and a report has to say which one went
+   unrefused.
+
+   Answers whether the walk did all three things, which is what the
+   caller needs to know before planting a number whose refusal is the
+   only thing standing between the walk and a read outside the table. */
+static int walk_over_bad_link(Xpost_Memory_File *mem, unsigned int node,
+                              unsigned int bogus, const char *what)
+{
+    unsigned int out = node;
+    int refused = 1;
+
+    if (bucket_head(mem, xpost_free_bucket_for_size(NODE_SZ)) != node)
+    {
+        report_failure("the node was not on the list before %s was planted",
+                       what);
+        return 0;
+    }
+    set_link(mem, node, bogus);
+
+    /* the request is half the node's size: a size the node fits, so the
+       walk enters its bucket, and not the size it is, so the walk does
+       not stop at an exact fit before it reads the link */
+    if (xpost_free_alloc(mem, NODE_SZ / 2u, 0, &out)
+            != XPOST_FREE_WANT_COLLECTION)
+    {
+        report_failure("a walk that reaches %s does not ask for the "
+                       "collection that would rebuild the list", what);
+        refused = 0;
+    }
+    if (out != node)
+    {
+        report_failure("a walk that reaches %s did not leave the caller's "
+                       "entity number alone", what);
+        refused = 0;
+    }
+    if (!all_buckets_empty(mem))
+    {
+        report_failure("a walk that reaches %s left a bucket for a later "
+                       "walk to reach it by again", what);
+        refused = 0;
+    }
+    return refused;
+}
+
 int main(void)
 {
     Xpost_Memory_File mem;
     unsigned int empty = 0, neighbour = 0, again = 0;
-    unsigned int node = 0, out = 0;
+    unsigned int node = 0;
     unsigned int eadr = 0, nadr = 0;
     unsigned char pattern[NEIGHBOUR_SZ];
     unsigned char readback[NEIGHBOUR_SZ];
     unsigned int b0;
     unsigned int i;
+    int refuses_invalid;
 
     if (!xpost_init())
     {
@@ -181,27 +264,32 @@ int main(void)
     check(bucket_head(&mem, xpost_free_bucket_for_size(NODE_SZ)) == node,
           "the admitted entity is the head of its bucket");
 
-    /* a stale write turns the node's link into an arbitrary number. It
-       is inside what an object's entity field can carry -- so the walk's
-       first test passes it -- and far outside the table, so reading the
-       tag at it reads past the table's allocation. */
+    /* A stale write turns the node's link into a number the table has
+       room for but has never handed out. Reading the slot there is
+       inside the table's allocation, so nothing outside this test
+       reports it; the slot is filled in to look like a node of the list
+       -- no tag, a size, an address that is a real one -- so that the
+       only thing left saying the walk must stop is that the number names
+       no entity. This is the case whose refusal can be read off the
+       walk's own answer, so it is asked first. */
     {
-        unsigned int bogus = XPOST_OBJECT_COMP_MAX_ENT - 1u;
+        unsigned int unhanded = mem.table.max / 2u;
 
-        check(bogus >= mem.table.max,
-              "the planted link is past the table's allocation");
-        check(bogus <= XPOST_OBJECT_COMP_MAX_ENT,
+        check(unhanded >= mem.table.nextent,
+              "the planted link names no entity that has been handed out");
+        check(unhanded < mem.table.max,
+              "the planted link is inside the table's allocation");
+        check(unhanded <= XPOST_OBJECT_COMP_MAX_ENT,
               "the planted link is inside what an entity field carries");
-        set_link(&mem, node, bogus);
+        mem.table.tab[unhanded].tag = 0;
+        mem.table.tab[unhanded].sz = NODE_SZ;
+        mem.table.tab[unhanded].used = NODE_SZ;
+        mem.table.tab[unhanded].mark = 0;
+        mem.table.tab[unhanded].adr = mem.table.tab[node].adr;
 
-        /* a request the node does not fit exactly, so the walk follows
-           the node's link rather than stopping at the node */
-        out = node;
-        check(xpost_free_alloc(&mem, NODE_SZ / 2u, 0, &out) != 1,
-              "a walk that reaches a link that is not an entity hands out "
-              "no entity");
-        check(out == node,
-              "and leaves the caller's entity number alone");
+        refuses_invalid = walk_over_bad_link(&mem, node, unhanded,
+                                             "a link into a slot nothing "
+                                             "has been given");
     }
 
     /* the walk stopped rather than following the planted link into the
@@ -211,6 +299,39 @@ int main(void)
           "the neighbour still reads after the corrupt walk");
     check(memcmp(readback, pattern, NEIGHBOUR_SZ) == 0,
           "the neighbour's bytes survive the corrupt walk");
+
+    /* --- a link past the table altogether --- */
+
+    /* The same stale write can equally land on a number past every slot
+       the table has. Nothing here can be read off the answer that the
+       case above does not already say: the walk refuses this one by the
+       same test, and the number's being outside the table as well is
+       what a sanitizer build reports and an ordinary one does not.
+
+       So it is only planted once that test has been seen to work. A
+       build whose walk reads the table at a number naming no entity has
+       already said so above, and planting this number there would put
+       the read outside the table's allocation -- which is not a thing to
+       do on purpose to find out something already known. */
+    if (refuses_invalid)
+    {
+        unsigned int bogus = XPOST_OBJECT_COMP_MAX_ENT - 1u;
+
+        check(bogus >= mem.table.max,
+              "the planted link is past the table's allocation");
+        check(bogus <= XPOST_OBJECT_COMP_MAX_ENT,
+              "the planted link is inside what an entity field carries");
+        check(xpost_free_memory_ent(&mem, node) == (int)NODE_SZ,
+              "the discarded entity is admitted again");
+        (void)walk_over_bad_link(&mem, node, bogus,
+                                 "a link past the table's allocation");
+
+        memset(readback, 0, sizeof readback);
+        check(xpost_memory_get(&mem, neighbour, 0, NEIGHBOUR_SZ, readback) == 1,
+              "the neighbour still reads after the second corrupt walk");
+        check(memcmp(readback, pattern, NEIGHBOUR_SZ) == 0,
+              "the neighbour's bytes survive the second corrupt walk");
+    }
 
     xpost_memory_file_exit(&mem);
     xpost_quit();

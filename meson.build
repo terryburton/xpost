@@ -649,7 +649,8 @@ test('memory-bounds',
 # table slot the walk must not read. Neither case can be presented from
 # PostScript, and neither refusal is legible in a return value: the
 # first is read off the neighbour's bytes and off the list, the second
-# off the entity the walk declines to hand out.
+# off the entity the walk declines to hand out and off the buckets it
+# empties on the way.
 free_list_admission_exe = executable('free_list_admission_test',
   'tests/free_list_admission_test.c',
   c_args: '-DHAVE_CONFIG_H',
@@ -659,6 +660,24 @@ free_list_admission_exe = executable('free_list_admission_test',
   install: false)
 test('free-list-admission',
   free_list_admission_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# What that refusal is worth. Emptying the buckets throws away every
+# entity the list held, so the answer the allocator gives has to reach a
+# collection: an allocator that emptied them and reported a plain
+# failure would leave the run with no free list at all, and nothing
+# about it visible from PostScript. Held over a real interpreter, since
+# a collection takes the stacks for its roots.
+free_list_recovery_exe = executable('free_list_recovery_test',
+  'tests/free_list_recovery_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('free-list-recovery',
+  free_list_recovery_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 

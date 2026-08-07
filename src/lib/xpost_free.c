@@ -72,10 +72,35 @@ static int _xpost_free_gc_threshold(void)
    entity's data area. */
 /* the bucket map and count live in xpost_free.h, shared with the sweep */
 
+/* Write a bucket head.
+
+   The FREE entity records a size of zero rather than the size of the
+   area it owns, so that a composite object left holding entity zero --
+   which is what an object that was never constructed holds -- cannot
+   write through it: every bounded accessor refuses an entity of no
+   size, and the thousand bytes behind this one are there to be the
+   thing such a write would otherwise land in.
+
+   What that costs is this file's own access to the words it keeps
+   there: the accessors refuse the free list its heads for exactly the
+   reason they refuse everybody else. So a head is reached at the
+   address the entity records instead, which is the route the push
+   below, the walk in xpost_free_alloc and the collector's sweep all
+   take. Bounds are met by construction rather than by asking -- b is
+   below XPOST_FREE_NBUCKETS, and the area allocated for the heads is
+   many times the sixteen words they come to. */
+static void _xpost_free_bucket_head_set(Xpost_Memory_File *mem,
+                                        unsigned int b,
+                                        unsigned int ent)
+{
+    memcpy(xpost_vm_ptr(mem, xpost_memory_free_lists_adr(mem)
+                             + b * (unsigned int)sizeof(unsigned int)),
+           &ent, sizeof ent);
+}
+
 int xpost_free_init(Xpost_Memory_File *mem)
 {
     unsigned int ent;
-    unsigned int val = 0;
     int ret;
 
     /* allocate the free list head: 4 bytes in ent 0
@@ -95,18 +120,12 @@ int xpost_free_init(Xpost_Memory_File *mem)
     {
         unsigned int b;
         for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
-        {
-            ret = xpost_memory_put(mem, ent, b * sizeof(unsigned int),
-                                   sizeof(unsigned int), &val);
-            if (!ret)
-            {
-                XPOST_LOG_ERR("xpost_free_init cannot access list head");
-                return 0;
-            }
-        }
+            _xpost_free_bucket_head_set(mem, b, 0);
     }
 
-    /* set zero size to enable guards against NULL writes */
+    /* record no size, so that a write through entity zero is refused
+       rather than landing on interpreter data -- see the head writer
+       above for what the guard is and what it costs */
     {
         Xpost_Memory_Table *tab = &mem->table;
         tab->tab[XPOST_MEMORY_TABLE_SPECIAL_FREE].sz = 0;
@@ -297,19 +316,20 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 !xpost_ent_valid(mem, e) ||
                 mem->table.tab[e].tag != 0)
             {
-                unsigned int zero = 0;
                 unsigned int bb;
                 XPOST_LOG_ERR("free list corrupt at ent %u (tag %u): discarding",
                         e, xpost_ent_valid(mem, e) ? mem->table.tab[e].tag : 0);
+                /* Every bucket, not just this one: a write that spoiled
+                   one link says nothing about the others, and a bucket
+                   left standing is a later walk back into the same
+                   state. The heads are written at their address for the
+                   reason given where that writer is defined. Nothing
+                   here can fail, so the request for a collection is not
+                   conditional on it -- and it must not be, because
+                   returning a plain failure would leave the caller
+                   allocating afresh with the lists never rebuilt. */
                 for (bb = 0; bb < XPOST_FREE_NBUCKETS; bb++)
-                    if (!xpost_memory_put(mem, 0, bb * sizeof(unsigned int),
-                                          sizeof zero, &zero))
-                    {
-                        /* the lists are still corrupt, so a collection
-                           would walk straight back into this */
-                        XPOST_LOG_ERR("cannot discard the free lists");
-                        return 0;
-                    }
+                    _xpost_free_bucket_head_set(mem, bb, 0);
                 return XPOST_FREE_WANT_COLLECTION; /* refill the list first */
             }
             ret = xpost_memory_table_get_size(mem, e, &tsz);
