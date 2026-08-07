@@ -15,10 +15,18 @@ jobs:
     strategy:
       matrix:
         config:
+          # qpdf, which the pdf-consumer test hands the written document
+          # to, is built for the 64-bit environment and not for the 32-bit
+          # one, so the structural reading is made on mingw64 and the
+          # 32-bit lane says in its log that it is not making it. Which
+          # lanes carry the reader is named here rather than inferred, so
+          # that the step below can hold each one to its own answer.
           - msystem: mingw32
+            reader: none
             install: base-devel git mingw-w64-i686-toolchain mingw-w64-i686-libjpeg-turbo mingw-w64-i686-libpng mingw-w64-i686-freetype mingw-w64-i686-fontconfig mingw-w64-i686-meson mingw-w64-i686-ninja
           - msystem: mingw64
-            install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja
+            reader: qpdf
+            install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-qpdf
         object: [small, large]
     name: msys2 - ${{ matrix.config.msystem }} - ${{ matrix.object }}-object
     runs-on: windows-latest
@@ -32,6 +40,19 @@ jobs:
         msystem: ${{ matrix.config.msystem }}
         update: true
         install: ${{ matrix.config.install }}
+    # The pdf-consumer test skips where its reader is absent, and a skip
+    # reads as a pass, so a lane that says it carries the reader is held
+    # to it here: an install that stops carrying qpdf is red rather than
+    # quiet, and a lane that carries none says so where the log records it.
+    - name: PDF reader
+      env:
+        reader: ${{ matrix.config.reader }}
+      run: |
+        if [ "$reader" = qpdf ]; then
+          qpdf --version
+        else
+          echo "no qpdf in this environment: the structural reading of the written PDF is not made on this lane"
+        fi
     - name: meson
       run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: meson test

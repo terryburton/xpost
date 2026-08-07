@@ -18,7 +18,13 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install dependencies
       run: |
-        brew install meson ninja fontconfig freetype libpng jpeg-turbo xcb-util xcb-util-image xcb-util-wm
+        brew install meson ninja fontconfig freetype libpng jpeg-turbo xcb-util xcb-util-image xcb-util-wm qpdf
+    # qpdf is what the pdf-consumer test hands the written document to, and
+    # that test skips where it is absent. A skip reads as a pass, so the
+    # reader's presence is asserted here rather than left to the test to
+    # discover: a lane whose install stops carrying it is red, not quiet.
+    - name: PDF reader
+      run: qpdf --version
     - name: configure
       run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: make

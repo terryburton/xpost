@@ -19,7 +19,13 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get -qq update
-        sudo apt install build-essential libpng-dev libjpeg-dev libfreetype6-dev libfontconfig1-dev meson ninja-build
+        sudo apt install -y build-essential libpng-dev libjpeg-dev libfreetype6-dev libfontconfig1-dev meson ninja-build qpdf
+    # qpdf is what the pdf-consumer test hands the written document to, and
+    # that test skips where it is absent. A skip reads as a pass, so the
+    # reader's presence is asserted here rather than left to the test to
+    # discover: a lane whose install stops carrying it is red, not quiet.
+    - name: PDF reader
+      run: qpdf --version
     - name: meson
       run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
     - name: ninja

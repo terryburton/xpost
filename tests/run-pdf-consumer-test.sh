@@ -20,6 +20,12 @@
 # so a mark that reached the file in the wrong place or not at all shows
 # up as a difference rather than as a well-formed lie.
 #
+# Only what pdfwrite writes is read here. The other writing devices put
+# out other languages -- dscwrite PostScript, svgwrite SVG -- and neither
+# of those carries a cross-reference table for the structural reader to
+# walk or a PDF page for the imaging one to paint, so neither consumer
+# has a reading to give of them.
+#
 # Neither consumer is a build dependency. A tree without them skips.
 #
 #   $1  path to the built xpost binary
