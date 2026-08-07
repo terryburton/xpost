@@ -81,6 +81,7 @@ tests/device-fleet.sh \
 tests/device_contract_test.ps \
 tests/device_destroy.golden \
 tests/device_destroy_test.ps \
+tests/device_private_test.ps \
 tests/device_features_test.ps \
 tests/device_getpix_destroyed_test.ps \
 tests/device_restore_retired_test.ps \

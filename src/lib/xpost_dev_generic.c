@@ -3010,20 +3010,22 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
 {
     Pdf_Acc a;
     Xpost_Object priv;
+    int ret;
 
     xpost_strbuf_init(&a.content, 4096);
     a.seps = NULL;
     a.nseps = 0;
     a.sepcap = 0;
-    priv = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(a), NULL));
-    if (xpost_object_get_type(priv) == invalidtype)
+    ret = xpost_dev_private_cons(ctx, devdic, namepdfPrivate, &priv,
+                                 sizeof(a));
+    if (ret)
     {
         xpost_strbuf_free(&a.content);
-        return VMerror;
+        return ret;
     }
     if (!_pdf_acc_put(ctx, priv, &a))
         return VMerror;
-    return xpost_dict_put(ctx, devdic, namepdfPrivate, priv);
+    return 0;
 }
 
 /* append a string's bytes to the accumulator (the marking methods' .put) */

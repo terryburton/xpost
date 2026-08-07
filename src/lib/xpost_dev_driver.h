@@ -91,11 +91,12 @@
  * answer a pixel outside the raster gets; it takes no marks; and it emits
  * nothing, its output having been finalised when it was released.
  *
- * Instance state: C-level device state lives in a struct serialized into
- * a PostScript string stored under /Private in the instance dictionary.
- * The raw memory accessors record no save/restore backup, so the struct
- * is exempt from `restore` (raster memory is not part of VM, PLRM
- * 3.7.3). Devices load and store it with xpost_dev_private_get()/
+ * Instance state: C-level device state lives in a block outside virtual
+ * memory, so it is exempt from `restore` (raster memory is not part of
+ * VM, PLRM 3.7.3). What the instance dictionary holds under /Private is
+ * a handle on that block, which xpost_dev_private.c issues and resolves;
+ * a device creates one with xpost_dev_private_cons() and loads and
+ * stores its struct through xpost_dev_private_get()/
  * xpost_dev_private_put() below.
  *
  * This header holds only static inline helpers; include it after the
@@ -103,6 +104,8 @@
  * xpost_context.h, xpost_stack.h, xpost_error.h, xpost_dict.h,
  * xpost_string.h, xpost_name.h, xpost_operator.h and <string.h>).
  */
+
+#include "xpost_dev_private.h"
 
 /* fold a numeric operand (integertype or realtype) to an int,
    truncating toward zero */
@@ -146,11 +149,11 @@ xpost_dev_num_to_byte(Xpost_Object obj)
     return xpost_dev_num_to_scaled(obj, 255.0);
 }
 
-/* Load the device's private C struct out of the string stored under
-   key in the instance dictionary. Returns 1 on success and leaves the
-   backing string in *privatestr for a later put; returns 0 when the
-   instance carries no such string, or one too small to hold the struct
-   (the caller reports undefined). A short string is reachable: the
+/* Load the device's private C struct out of the block the handle under
+   key in the instance dictionary names. Returns 1 on success and leaves
+   the handle in *privatestr for a later put; returns 0 when the value
+   under that key is not a handle on a block of this size issued to this
+   instance (the caller reports undefined). That case is reachable: the
    instance dictionary is an ordinary dictionary, and what it holds under
    this key is whatever was last stored there. */
 static inline int
@@ -161,27 +164,33 @@ xpost_dev_private_get(Xpost_Context *ctx,
                       void *priv,
                       size_t size)
 {
+    void *block;
+
     *privatestr = xpost_dict_get(ctx, devdic, key);
-    if (xpost_object_get_type(*privatestr) != stringtype)
+    block = xpost_dev_private_block_of(ctx, *privatestr, devdic, size);
+    if (!block)
         return 0;
-    return xpost_memory_get(xpost_context_select_memory(ctx, *privatestr),
-                            xpost_object_get_ent(*privatestr), 0,
-                            size, priv);
+    memcpy(priv, block, size);
+    return 1;
 }
 
-/* Store the private struct back into its backing string. Returns 1 on
-   success, 0 when the string will not hold it -- the same reachable
-   case xpost_dev_private_get answers, seen from the other side, and the
-   device state the caller was about to record is then lost. */
+/* Store the private struct back into the block its handle names.
+   Returns 1 on success, 0 when the handle names no such block -- the
+   same reachable case xpost_dev_private_get answers, seen from the
+   other side, and the device state the caller was about to record is
+   then lost. */
 static inline XPOST_MUST_CHECK int
 xpost_dev_private_put(Xpost_Context *ctx,
                       Xpost_Object privatestr,
                       const void *priv,
                       size_t size)
 {
-    return xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                            xpost_object_get_ent(privatestr), 0,
-                            size, priv);
+    void *block = xpost_dev_private_block(ctx, privatestr, size);
+
+    if (!block)
+        return 0;
+    memcpy(block, priv, size);
+    return 1;
 }
 
 /*

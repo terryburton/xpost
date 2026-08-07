@@ -1,0 +1,195 @@
+%!
+% A device's C-level instance state lives outside virtual memory, and the
+% device reaches it through what its instance dictionary holds under
+% /Private. That dictionary is an ordinary dictionary and a program can
+% build one of its own, so the value there is a handle on a block this
+% interpreter issued, resolved against the record of what was issued to
+% which instance. A handle naming nothing, a handle issued to another
+% instance, and a copy of a genuine handle are each refused rather than
+% followed.
+%
+% Every device reaches its state through the one accessor, so the cases
+% below drive both families that have one: the vector writers' content
+% accumulator, reached by name through internaldict, and the raster
+% device's methods, reached from an instance this test creates.
+%
+% Eight of the accumulator's operators report the refusal as `undefined`.
+% Two -- .pdfreset and .pdffree -- answer whether or not there is state to
+% work on, because the interpreter calls them on a device that may hold
+% none. Those two are held to the same gate by what they leave a genuine
+% instance holding when they are asked through its handle in another
+% dictionary.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+
+/accput  id /.pdfput get def
+/fillpo  id /.pdffillpoly get def
+/svgfill id /.svgfillpoly get def
+/chunks  id /.pdfchunks get def
+/findsep id /.pdffindsep get def
+/regsep  id /.pdfregsep get def
+/sepcnt  id /.pdfsepcount get def
+/sepget  id /.pdfsepget get def
+/reset   id /.pdfreset get def
+/pdffree id /.pdffree get def
+/pdfinit id /.pdfinit get def
+
+% proc want label  .  -    run proc; require the named error, and leave
+% the stacks as they were found
+/expecterr {
+  /label exch def
+  /want exch def
+  /d0 countdictstack def
+  /c0 count 1 sub def
+  stopped
+  /caught exch def
+  /got caught { $error /errorname get 128 string cvs }{ (none) } ifelse def
+  countdictstack d0 sub { end } repeat
+  count c0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+  caught
+  { got want eq
+    { (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print got note } ifelse }
+  { /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% bool label  .  -
+/require {
+  /label exch def
+  { (ok   ) print label note }
+  { /fails fails 1 add def (FAIL: ) print label note } ifelse
+} def
+
+% -  .  dict     a dictionary shaped like a device instance, carrying a
+% string of the program's own where the handle belongs
+/forged { << /Private 64 string /width 4 /height 4 >> } def
+
+% --- the vector writers' content accumulator -------------------------
+
+{ (x) forged accput } (undefined) (append to a handle of the program's own)
+  expecterr
+{ [ [0 0] [1 0] [1 1] ] forged fillpo } (undefined)
+  (pdf fill through a handle of the program's own) expecterr
+{ 0 0 0 [ [0 0] [1 0] [1 1] ] forged svgfill } (undefined)
+  (svg fill through a handle of the program's own) expecterr
+{ forged chunks } (undefined)
+  (read the content behind a handle of the program's own) expecterr
+{ (Spot) forged findsep } (undefined)
+  (look a separation up behind a handle of the program's own) expecterr
+{ (Spot) (cs) (fn) forged regsep } (undefined)
+  (register a separation behind a handle of the program's own) expecterr
+{ forged sepcnt } (undefined)
+  (count the separations behind a handle of the program's own) expecterr
+{ 0 forged sepget } (undefined)
+  (fetch a separation behind a handle of the program's own) expecterr
+
+% --- the raster device's methods --------------------------------------
+
+loadrasterdevice
+/dev 4 4 newrasterdevice def
+
+/putpix   dev /PutPix get def
+/getpix   dev /GetPix get def
+/fillrect dev /FillRect get def
+/emit     dev /Emit get def
+/rflush   dev /Flush get def
+/destroy  dev /Destroy get def
+
+{ 0 0 0 1 1 forged putpix } (undefined)
+  (paint through a handle of the program's own) expecterr
+{ 1 1 forged getpix } (undefined)
+  (read a pixel through a handle of the program's own) expecterr
+{ 0 0 0 0 0 2 2 forged fillrect } (undefined)
+  (fill through a handle of the program's own) expecterr
+{ forged emit } (undefined)
+  (emit through a handle of the program's own) expecterr
+{ forged rflush } (undefined)
+  (flush through a handle of the program's own) expecterr
+{ forged destroy } (undefined)
+  (destroy through a handle of the program's own) expecterr
+
+% --- a device still holds its own state --------------------------------
+
+1 0 0 2 2 dev putpix
+2 2 dev getpix
+/b exch def /g exch def /r exch def
+r 255 eq g 0 eq and b 0 eq and (a raster instance still takes a mark) require
+
+% Destroy releases the buffer and not the instance, so the instance's
+% state is still there to be read afterwards and the released raster
+% reads as the ground
+dev destroy
+2 2 dev getpix
+/b exch def /g exch def /r exch def
+r 0 eq g 0 eq and b 0 eq and
+  (a released raster still answers, as the ground) require
+{ dev destroy } stopped
+{ /fails fails 1 add def
+  (FAIL: a repeated destroy raised ) print
+  $error /errorname get 128 string cvs note }
+{ (ok   a repeated destroy is still a no-op) note } ifelse
+
+% --- an accumulator still accumulates and still gives its content back --
+
+/acc 10 dict def
+acc pdfinit
+(1 0 0 rg\n) acc accput
+[ [0 0] [4 0] [4 4] ] acc fillpo
+acc chunks
+dup length 1 eq { 0 get }{ pop () } ifelse
+/content exch def
+content length 0 gt (an accumulator still holds what was appended) require
+content 0 8 getinterval (1 0 0 rg) eq
+  (the content is the bytes that were appended) require
+
+(Spot) (cs) (fn) acc regsep /spot exch def
+spot 0 eq (a separation registers under the first index) require
+acc sepcnt 1 eq (the accumulator counts the separation) require
+(Spot) acc findsep { 0 eq }{ pop false } ifelse
+  (the separation is found again by name) require
+0 acc sepget /fn exch def /cs exch def
+cs (cs) eq fn (fn) eq and (the separation gives its bodies back) require
+
+% --- a copy of a genuine handle is not that handle ---------------------
+
+/clone acc /Private get dup length string copy def
+/impostor << /Private clone /width 4 /height 4 >> def
+
+{ impostor sepcnt } (undefined)
+  (count the separations behind a copy of a genuine handle) expecterr
+{ impostor chunks } (undefined)
+  (read the content behind a copy of a genuine handle) expecterr
+
+% --- a genuine handle held by another dictionary is not that dictionary's
+
+/borrowed << /Private acc /Private get /width 4 /height 4 >> def
+
+{ borrowed sepcnt } (undefined)
+  (count the separations behind another instance's handle) expecterr
+{ borrowed chunks } (undefined)
+  (read the content behind another instance's handle) expecterr
+
+% .pdfreset and .pdffree answer whether or not there is state to work on,
+% so what holds them to the same gate is what they leave the genuine
+% instance holding
+borrowed reset
+acc chunks
+dup length 1 eq { 0 get }{ pop () } ifelse
+content eq (a reset through another instance's handle left the content alone)
+  require
+
+% and the release a copied handle asks for is not made, so the instance's
+% own release is still the only one that reaches its buffers -- a second
+% release of the same buffers is what this case would leave behind
+flush
+impostor pdffree
+acc pdffree
+(ok   a free through a copied handle left the buffers to the instance) note
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit

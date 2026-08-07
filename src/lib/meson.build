@@ -9,6 +9,7 @@ libxpost_src = files([
   'xpost_dev_generic.c',
   'xpost_dev_jpeg.c',
   'xpost_dev_png.c',
+  'xpost_dev_private.c',
   'xpost_dev_raster.c',
   'xpost_dict.c',
   'xpost_dsc_file.c',
