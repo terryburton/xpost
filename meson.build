@@ -395,21 +395,29 @@ endif
 #             under an allocator that quarantines or shadows
 #
 # What a test costs, read off its own run time with the suite run one
-# test at a time. The two boundaries sit in the gaps the measurement
-# has rather than on round numbers: twenty-six of the interpreter's
-# tests take five seconds or more and account for seven tenths of what
-# the suite costs, and above them two take longer than forty seconds
-# with nothing between them and the rest -- in a parallel run those two
-# are the floor, so a profile without them finishes in a third of the
-# time rather than a fraction less.
+# test at a time on an otherwise idle machine.
 #   fast      under five seconds
-#   slow      five seconds to forty
-#   veryslow  longer than forty
+#   slow      five seconds to fifty
+#   veryslow  longer than fifty
+#
+# The upper boundary is where the measurement has its one large gap: the
+# whole suite runs in a smooth tail up to twenty-two seconds and then
+# jumps by a factor of four to two runs measured in minutes. Both of
+# those are corpora, so no interpreter test is veryslow today and the
+# profiles that differ only by it select the same set; the tag is what
+# keeps a four-minute run out of them the moment one appears.
+#
+# The lower boundary has no gap to sit in -- the tail is dense -- so it
+# is set by what the tag is worth: fifteen of the interpreter's tests
+# take five seconds or more, which is eight in a hundred of them and
+# half of what the suite costs. Below five seconds a tag would name
+# many tests and save little.
 #
 # Every registration names exactly one cost, so a test cannot join the
 # cheap profile by leaving the question open; tests/check-test-cost.sh
-# holds the registrations to that, and holds the names to appearing
-# nowhere else -- a second list of what is slow is a second answer.
+# holds the registrations to that, and holds the names to being spelt
+# only here and in the profile wrapper -- a second list of what is slow
+# is a second answer.
 #
 # The two axes cross, which is the point of keeping them apart: the
 # corpus programs that run quickly are reachable without the ones that
@@ -417,12 +425,21 @@ endif
 #
 #   ninja -C build quick        cost fast, no corpus     -- while editing
 #   ninja -C build check        + cost slow              -- before a commit
-#   ninja -C build full         + cost veryslow          -- the whole suite
+#   ninja -C build full         + cost veryslow          -- every test but the corpus
 #   ninja -C build corpus       the corpus, all costs    -- with programs fetched
 #   meson test -C build         everything, as before
 #
-# and any other crossing by hand, for instance the corpus programs that
-# are not the expensive ones:
+# Each target goes through tests/run-profile.sh, which is where the
+# profiles are spelt and which checks the selection before running it.
+# A meson suite filter naming a suite nothing carries is inert and exits
+# zero either way -- it runs the whole suite where it meant to subtract,
+# or none of it where it meant to select, and reports success. The
+# wrapper computes what the profile names from the test listing and
+# refuses unless the filter picks exactly that.
+#
+# Any other crossing by hand, for instance the corpus programs that are
+# not the expensive ones, goes through meson directly and carries that
+# risk:
 #
 #   meson test -C build --suite corpus --no-suite veryslow
 #
@@ -432,17 +449,10 @@ cost_fast = ['xpost', 'fast']
 cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
 
-meson_exe = find_program('meson')
-run_target('quick',
-  command: [ meson_exe, 'test', '--no-suite', 'corpus',
-             '--no-suite', 'slow', '--no-suite', 'veryslow' ])
-run_target('check',
-  command: [ meson_exe, 'test', '--no-suite', 'corpus',
-             '--no-suite', 'veryslow' ])
-run_target('full',
-  command: [ meson_exe, 'test', '--no-suite', 'corpus' ])
-run_target('corpus',
-  command: [ meson_exe, 'test', '--suite', 'corpus' ])
+run_profile = find_program('tests/run-profile.sh')
+foreach profile : [ 'quick', 'check', 'full', 'corpus' ]
+  run_target(profile, command: [ run_profile, profile ])
+endforeach
 
 # Core-interpreter conformance: run the PLRM operator-example suite through
 # the built interpreter and require its failcount to reach zero. The build-tree
@@ -690,7 +700,7 @@ test('gc-clip-region',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/gc_clip_region_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # Enumerating over that same table, and over the largest array and
@@ -764,7 +774,7 @@ test('show-clip',
 test('show-pattern',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/show_pattern_test.ps') ],
-  suite: cost_slow,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # An outline font's glyphs are its character outlines stroked with
@@ -829,7 +839,7 @@ test('render-classes',
 test('raster-formats',
   find_program('tests/run-raster-formats-test.sh'),
   args: [ xpost_exe ],
-  suite: cost_slow,
+  suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Every painting operator through every device that runs without a display.
@@ -840,7 +850,7 @@ test('device-features',
   find_program('tests/run-device-features-test.sh'),
   args: [ xpost_exe, files('tests/device_features_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_veryslow,
+  suite: cost_slow,
   timeout: 180)
 
 # wrapper requires the output to be exactly SUCCESS.
@@ -892,7 +902,7 @@ test('svg-append-fail',
   find_program('tests/run-append-fail-test.sh'),
   args: [ xpost_exe, files('tests/svg_append_fail_test.ps'), 'svgwrite' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 120)
 
 # Access attributes in the device blitters: painting into a raster row a
@@ -1868,7 +1878,7 @@ test('devices',
   find_program('tests/run-devices-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # Relocation stress: every memory grow forced to relocate, so a pointer
@@ -1999,7 +2009,7 @@ test('golden-render',
   args: [ xpost_exe, files('tests/golden_page.ps'),
           meson.current_source_dir() / 'tests' / 'golden' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # Device method contract, safety tier: every built device must accept the
@@ -2023,7 +2033,7 @@ test('colour-range',
   find_program('tests/run-colour-range-test.sh'),
   args: [ xpost_exe, files('tests/colour_range_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
@@ -2034,7 +2044,7 @@ test('device-destroy',
   find_program('tests/run-device-destroy-test.sh'),
   args: [ xpost_exe, files('tests/device_destroy_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # A restore back past a setpagedevice makes the retired device current again --
@@ -2060,7 +2070,7 @@ test('device-retire-restored',
   find_program('tests/run-device-restore-test.sh'),
   args: [ xpost_exe, files('tests/device_retire_restored_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # GetPix is callable on a device the program has already destroyed: Destroy
@@ -2072,7 +2082,7 @@ test('device-getpix-destroyed',
   find_program('tests/run-device-getpix-test.sh'),
   args: [ xpost_exe, files('tests/device_getpix_destroyed_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # quit ends the run (PLRM 8.2), and what happens next is the device's
@@ -2083,7 +2093,7 @@ test('device-quit',
   find_program('tests/run-device-quit-test.sh'),
   args: [ xpost_exe, files('tests/quit_run_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # A setpagedevice whose maker fails at run time must leave the incumbent device
@@ -2107,7 +2117,7 @@ test('multipage',
   find_program('tests/run-multipage-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 300)
 
 # Embedded Type 1 with a no-access Private: definefont must reach the loader and
@@ -2204,7 +2214,7 @@ test('error-format',
 # enforcement point.
 test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
-  suite: cost_slow,
+  suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
 # Device-driver skeleton: the compiled-buffer device fleet reaches its
@@ -2250,7 +2260,7 @@ test('dict-homes',
 test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
   args: [ meson.current_source_dir(), xpost_exe, libxpost_lib.full_path() ],
-  suite: cost_veryslow,
+  suite: cost_slow,
   timeout: 300)
 
 # An operator's operand statement is recorded where the operator is

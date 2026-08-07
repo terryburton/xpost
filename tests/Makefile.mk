@@ -218,6 +218,7 @@ tests/run-nographics-test.sh \
 tests/run-pdf-test.sh \
 tests/run-pngalpha-test.sh \
 tests/run-ppm-test.sh \
+tests/run-profile.sh \
 tests/run-ps-test.sh \
 tests/run-raster-formats-test.sh \
 tests/run-refusing-target-test.sh \

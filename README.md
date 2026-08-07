@@ -78,6 +78,13 @@ quickly, without the ones that take minutes, being the useful one:
   meson test -C builddir --suite corpus --no-suite veryslow
 ```
 
+Prefer the targets to their raw filters. A meson filter naming a suite
+no test carries matches nothing and still exits zero, so a mistyped
+`--no-suite` runs the whole suite and a mistyped `--suite` runs none of
+it, both reporting success. The targets go through
+`tests/run-profile.sh`, which works out what the profile names from the
+test listing and refuses unless the filter selects exactly that.
+
 Every test declares its cost where it is registered in `meson.build`,
 and `check-test-cost` fails if one does not, so a slow test added later
 cannot quietly settle into the quick profile.

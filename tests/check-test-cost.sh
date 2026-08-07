@@ -34,13 +34,22 @@
 #   `suite: cost_fast` puts a test in the slow suite and every reading
 #   of meson.build says otherwise
 #
-#   the tags spelled anywhere but meson.build, which is a second list of
-#   what is slow: the two would agree until they did not, and the one
-#   that is wrong is the one nothing runs. Looked for by the one name
-#   that means nothing else -- "slow" is an ordinary English word and
-#   the corpus has a file called it -- across the three directories a
-#   second list could live in. The documentation says what the profiles
-#   are and is not a second list: a name in prose selects nothing.
+#   the tags spelled outside the two files that have to spell them:
+#   meson.build, where a test declares its cost, and the profile wrapper
+#   that selects on it. A third is a second list of what is slow, and
+#   the two would agree until they did not, after which the wrong one is
+#   the one nothing runs. Looked for by the one name that means nothing
+#   else -- "slow" is an ordinary English word and the corpus has a file
+#   called it -- across the three directories a second list could live
+#   in. The documentation says what the profiles are and is not a second
+#   list: a name in prose selects nothing.
+#
+# and one that would make the profiles mean nothing:
+#
+#   a cost declared on a test that no profile can reach. The wrapper's
+#   profiles are cost ranges, so every tag a registration may carry has
+#   to be a tag some profile names; a fourth tag introduced and left out
+#   of the wrapper would put its tests in no profile at all.
 #
 #   $1  path to the source tree root
 set -u
@@ -158,17 +167,35 @@ if [ -n "$many" ]; then
     fail=1
 fi
 
-# ---- the tags are spelt in one file ----
+# ---- every cost is reachable through a profile ----
+#
+# The profiles are cost ranges over the same three names. A tag that no
+# profile names is a tag whose tests run under no profile, which is the
+# same silence as a test carrying no tag at all.
+profile="$src/tests/run-profile.sh"
+guard_require_file "$profile" "the profile wrapper"
+guard_mirror prof "$profile"
+for c in $costs; do
+    if ! grep -qE "want='[^']*$c" "$mirror/run-profile.sh"; then
+        echo "FAIL: no profile in tests/run-profile.sh names the $c cost;"
+        echo "      the tests carrying it run under none of them"
+        fail=1
+    fi
+done
+
+# ---- the tags are spelt where they are declared and where they are
+#      selected on, and nowhere else ----
 #
 # Anywhere else that names them is a second answer to the same question.
-# The build description is where they belong; this guard names them
-# because it is what checks them; the documentation describes the
-# profiles a developer types and selects nothing by doing so.
+# meson.build is where a test declares its cost and run-profile.sh is
+# where a profile selects on it; this guard names them because it is
+# what checks them; the documentation describes the profiles a developer
+# types and selects nothing by doing so.
 elsewhere=$(cd "$src" && grep -rl veryslow data src tests 2>/dev/null \
-            | grep -v '^tests/check-test-cost\.sh$')
+            | grep -vE '^tests/(check-test-cost|run-profile)\.sh$')
 if [ -n "$elsewhere" ]; then
-    echo "FAIL: these name a cost suite outside meson.build, which is a"
-    echo "      second statement of what is slow:"
+    echo "FAIL: these name a cost suite outside meson.build and the profile"
+    echo "      wrapper, which is a second statement of what is slow:"
     printf '%s\n' "$elsewhere" | sed 's/^/      /'
     fail=1
 fi
