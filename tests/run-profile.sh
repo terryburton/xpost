@@ -24,13 +24,27 @@
 # used twice. That is the whole of the protection: an inert filter is
 # inert in one of them and not the other.
 #
-#   $1        profile: quick, full, corpus or vendor
+# A test that skipped is the same silence read from the other side. A
+# skip is how a test says it was given nothing to work on, meson counts
+# it apart from a pass, and every summary line that reports no failures
+# reports none whether the tests ran or not. So the run's own record is
+# read afterwards for what skipped, every profile names them, and the
+# profile whose whole claim is that everything ran refuses to pass while
+# any did not. XPOST_ALLOW_SKIP excuses named tests there, per run and
+# never in the tree, and is held from both ends: a name it excuses that
+# turns out to have run is an excuse that has lapsed and fails too.
+#
+#   $1        profile: quick, full, corpus, vendor or everything
 #   $2...     further arguments for meson test (-v, --num-processes, ...)
+#
+#   XPOST_ALLOW_SKIP  space-separated test names the `everything` profile
+#                     may leave unrun, each named in its verdict as
+#                     something the run does not speak for
 #
 # The build directory is MESON_BUILD_ROOT where meson set it (this runs
 # as a build target), and the working directory otherwise.
 set -u
-profile=${1:?usage: run-profile.sh <quick|full|corpus|vendor> [meson test args...]}
+profile=${1:?usage: run-profile.sh <quick|full|corpus|vendor|everything> [meson test args...]}
 shift
 build=${MESON_BUILD_ROOT:-$PWD}
 
@@ -72,8 +86,12 @@ case $profile in
     vendor) filter='--suite vendor'
             want='vendor'; without=''
             what='the downstream consumer suite' ;;
+    everything)
+            filter=''
+            want='fast slow veryslow'; without=''
+            what='every test the build defines, none of them skipped' ;;
     *)      echo "FAILURES: no such profile: $profile"
-            echo "      one of quick, full, corpus, vendor"
+            echo "      one of quick, full, corpus, vendor, everything"
             exit 1 ;;
 esac
 
@@ -143,8 +161,104 @@ if ! cmp -s "$work/want" "$work/got"; then
     exit 1
 fi
 
-echo "profile $profile: $what -- $(wc -l < "$work/want") of $(wc -l < "$work/all") tests"
+selected=$(wc -l < "$work/want")
+echo "profile $profile: $what -- $selected of $(wc -l < "$work/all") tests"
+
+# The run is read out of the record meson writes rather than out of the
+# summary it prints. The summary counts a skip apart from a pass and
+# then reports "Fail: 0" either way, so a reader watching the failure
+# count sees the same number whether the tests ran or not. The record
+# says per test which it was.
+#
+# It is removed first, because a record left by an earlier run is a
+# record of some other selection: read after a run that never started,
+# it answers for tests this one did not touch.
+record="$build/meson-logs/testlog.json"
+rm -f "$record"
+
 # shellcheck disable=SC2086
 meson test -C "$build" $filter "$@"
 status=$?
+
+if [ ! -f "$record" ]; then
+    echo "FAILURES: the $profile profile ran nothing -- meson wrote no record"
+    echo "      at $record"
+    exit 1
+fi
+
+# One JSON object per line, its name first and its result after the
+# output it captured. Neither key can occur inside that output: a quote
+# in captured text is escaped, so an unescaped '"result": "' is the key
+# and nothing else.
+awk '
+    {
+        name = ""; res = ""
+        if (match($0, /^\{"name": "[^"]*"/))
+            name = substr($0, RSTART + 10, RLENGTH - 11)
+        if (match($0, /, "result": "[A-Z]+"/)) {
+            res = substr($0, RSTART, RLENGTH)
+            sub(/^, "result": "/, "", res)
+            sub(/"$/, "", res)
+        }
+        if (name != "" && res != "") print name "\t" res
+    }' "$record" > "$work/results"
+
+ran=$(wc -l < "$work/results")
+if [ "$ran" -ne "$selected" ]; then
+    echo "FAILURES: the $profile profile named $selected tests and the record"
+    echo "      holds $ran. A run that reports on a fraction of what it"
+    echo "      selected agrees with whatever the rest would have said."
+    exit 1
+fi
+
+awk -F'\t' '$2 == "SKIP" { print $1 }' "$work/results" | sort > "$work/skipped"
+nskip=$(wc -l < "$work/skipped")
+
+# A skipped test is named whatever the profile, because a profile that
+# reports no failures over tests that never ran is reporting on less
+# than it says. Only `everything` refuses to pass for it: the others
+# select part of the suite by design and say which part in their own
+# verdict line, while `everything` has nothing left to stand for it.
+if [ "$nskip" -ne 0 ]; then
+    echo "profile $profile: $nskip of $selected tests did not run:"
+    sed 's/^/      /' "$work/skipped"
+fi
+
+if [ "$profile" = everything ]; then
+    # A name may be given as meson writes it or as the test is called.
+    : > "$work/excused"
+    : > "$work/lapsed"
+    for name in ${XPOST_ALLOW_SKIP:-}; do
+        if awk -F' / ' -v n="$name" '$0 == n || $NF == n { found = 1 }
+                                     END { exit !found }' "$work/skipped"; then
+            awk -F' / ' -v n="$name" '$0 == n || $NF == n' "$work/skipped" \
+                >> "$work/excused"
+        else
+            printf '%s\n' "$name" >> "$work/lapsed"
+        fi
+    done
+    sort -u "$work/excused" > "$work/excused.u"
+    comm -23 "$work/skipped" "$work/excused.u" > "$work/unexcused"
+
+    if [ -s "$work/lapsed" ]; then
+        echo "FAILURES: XPOST_ALLOW_SKIP excuses a test that this run did not"
+        echo "      skip, so the excuse no longer describes anything:"
+        sed 's/^/      /' "$work/lapsed"
+        exit 1
+    fi
+    if [ -s "$work/unexcused" ]; then
+        echo "FAILURES: the everything profile is the claim that every test"
+        echo "      ran, and these did not:"
+        sed 's/^/      /' "$work/unexcused"
+        echo "      give each what it is waiting for -- tests/corpus/fetch.sh"
+        echo "      for a corpus, a checkout for the consumer suite -- or name"
+        echo "      it in XPOST_ALLOW_SKIP, which puts it in this verdict as"
+        echo "      something the run does not speak for"
+        exit 1
+    fi
+    if [ -s "$work/excused.u" ]; then
+        echo "profile everything: this run does not speak for $(wc -l < "$work/excused.u") excused test(s)"
+    fi
+fi
+
 exit $status
