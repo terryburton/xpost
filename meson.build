@@ -605,6 +605,24 @@ test('memory-bounds',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Stack-layer bounds discipline: a bottom-up index is answered by
+# choosing a segment and then a slot within it, and the two boundaries
+# that meet there -- the index one segment long, which is the second
+# segment's first element, and the index one past the top, which is a
+# slot the stack has given up -- are each a segment length from anything
+# the interpreter could be driven to to reach them.
+stack_bounds_exe = executable('stack_bounds_test',
+  'tests/stack_bounds_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('stack-bounds',
+  stack_bounds_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The editing streams open a temporary file before the text they are asked
 # for is known to be acceptable, so a refusal is the only thing that can
 # close it: a request refused for nesting depth must leave no descriptor
