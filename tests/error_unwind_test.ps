@@ -586,6 +586,154 @@ count d0 sub 3 eq
     (setcolor refusing on an operand gives its operands back) assert
 initgraphics
 
+% --- the enumerators and the painters that call back ------------------
+%
+% The four operators below hand control to a procedure of the program's
+% in the middle of a body of their own: pathforall calls one of four per
+% path element, resourceforall calls one per instance it matched, cshow
+% calls one per character, and execform calls the form's paint
+% procedure. Each stands behind the same boundary as image and the
+% setters above, and is asserted the same way.
+%
+% They are worth stating separately because each reaches its procedure
+% through machinery of its own -- a dictionary scope dropped and taken
+% back, a compiled program, an offscreen device -- and a boundary is
+% easy to leave out of one of those without leaving it out of the rest.
+
+newpath 0 0 moveto 100 100 lineto 50 90 20 30 10 10 curveto closepath
+/pf.drop { pop pop } def
+/pf.drop6 { 6 { pop } repeat } def
+
+count /d0 exch def
+/pf.sentinel
+{ { pop pop stop } /pf.drop load /pf.drop6 load { } pathforall } stopped pop
+count d0 sub 1 eq
+    { /pf.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a pathforall procedure restores nothing of pathforall's) assert
+
+count /d0 exch def
+/pf.sentinel
+{ { pop pop zzundefinedname } /pf.drop load /pf.drop6 load { } pathforall }
+    stopped pop
+count d0 sub 1 eq
+    { /pf.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor does an error in one restore anything of pathforall's) assert
+
+count /d0 exch def
+{ { pop pop /zzz /zzz findresource } /pf.drop load /pf.drop6 load { } pathforall }
+    stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside one gives its own back) assert
+
+count /d0 exch def
+{ { } { } { } (notaprocedure) pathforall } stopped pop
+count d0 sub 4 eq
+    { (notaprocedure) eq exch length 0 eq and
+      exch length 0 eq and exch length 0 eq and }
+    { d0 wrongdepth } ifelse
+    (pathforall refusing on an operand gives its operands back) assert
+newpath
+
+% resourceforall enumerates a category that is always populated: the
+% categories themselves. The counter says the procedure was reached, so
+% an enumeration that matched nothing cannot read as a pass.
+
+/rf.hit 0 def
+count /d0 exch def
+/rf.sentinel
+{ (*) { /rf.hit rf.hit 1 add store pop stop } 65 string /Category resourceforall }
+    stopped pop
+count d0 sub 1 eq
+    { /rf.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a resourceforall procedure restores nothing of its own) assert
+rf.hit 0 gt (and the procedure that stopped was reached) assert
+
+/rf.hit 0 def
+count /d0 exch def
+{ (*) { /rf.hit rf.hit 1 add store pop /zzz /zzz findresource }
+  65 string /Category resourceforall } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside one gives its own back) assert
+rf.hit 0 gt (and that procedure was reached too) assert
+
+count /d0 exch def
+{ (*) { pop } 65 string (notacategory) resourceforall } stopped pop
+count d0 sub 4 eq
+    { (notacategory) eq exch length 65 eq and
+      exch length 1 eq and exch (*) eq and }
+    { d0 wrongdepth } ifelse
+    (resourceforall refusing on an operand gives its operands back) assert
+
+% cshow reaches its procedure from a program it compiles, which runs
+% with the machinery's dictionary already gone.
+
+/Helvetica findfont 12 scalefont setfont
+/cw.hit 0 def
+count /d0 exch def
+/cw.sentinel
+{ { /cw.hit cw.hit 1 add store pop pop pop stop } (A) cshow } stopped pop
+count d0 sub 1 eq
+    { /cw.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a cshow procedure restores nothing of cshow's) assert
+cw.hit 0 gt (and the procedure that stopped was reached) assert
+
+/cw.hit 0 def
+count /d0 exch def
+{ { /cw.hit cw.hit 1 add store pop pop pop /zzz /zzz findresource } (A) cshow }
+    stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside one gives its own back) assert
+cw.hit 0 gt (and that procedure was reached too) assert
+
+count /d0 exch def
+{ { pop pop pop } (notastring) 0 get cshow } stopped pop
+count d0 sub 2 eq
+    { 110 eq exch length 3 eq and }{ d0 wrongdepth } ifelse
+    (cshow refusing on an operand gives its operands back) assert
+
+% execform paints the form's procedure through a bounding box of its
+% own, and on some paths through an offscreen device.
+
+/ef.form { % {paintproc}  .  formdict
+    /ef.p exch def
+    << /FormType 1 /BBox [ 0 0 8 8 ] /Matrix [ 1 0 0 1 0 0 ]
+       /PaintProc /ef.p load >>
+} def
+
+initgraphics
+count /d0 exch def
+/ef.sentinel
+{ { pop stop } ef.form execform } stopped pop
+count d0 sub 1 eq
+    { /ef.sentinel eq }{ d0 wrongdepth } ifelse
+    (a stop in a paint procedure restores nothing of execform's) assert
+
+initgraphics
+count /d0 exch def
+/ef.sentinel
+{ { pop zzundefinedname } ef.form execform } stopped pop
+count d0 sub 1 eq
+    { /ef.sentinel eq }{ d0 wrongdepth } ifelse
+    (nor does an error in one restore anything of execform's) assert
+
+initgraphics
+count /d0 exch def
+{ { pop /zzz /zzz findresource } ef.form execform } stopped pop
+count d0 sub 2 eq
+    { /zzz eq exch /zzz eq and }{ d0 wrongdepth } ifelse
+    (an operator refusing inside one gives its own back) assert
+
+initgraphics
+count /d0 exch def
+{ (notaform) execform } stopped pop
+count d0 sub 1 eq
+    { (notaform) eq }{ d0 wrongdepth } ifelse
+    (execform refusing on its operand gives it back) assert
+initgraphics
+
 % --- a procedure is not an operator -----------------------------------
 %
 % Nothing is handed back for a procedure. A stop or an error inside one

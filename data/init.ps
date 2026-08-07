@@ -935,7 +935,11 @@ setglobal
 
 % formdict  .execformdirect  -
 % paint the form afresh: its matrix concatenates, its bounding box
-% clips, and the paint procedure runs with the dictionary at hand
+% clips, and the paint procedure runs with the dictionary at hand.
+% The paint procedure is the program's, so it runs beneath the
+% boundary: a failure inside it is that procedure's own object
+% failing, and the operand stack goes back to what the procedure
+% found rather than to execform's operand
 currentglobal true setglobal
 .xpostsys /.execformdirect {
     gsave
@@ -944,7 +948,7 @@ currentglobal true setglobal
     2 index sub                 % form llx lly urx h
     exch 3 index sub exch       % form llx lly w h
     rectclip
-    dup /PaintProc get exec
+    dup /PaintProc get //.xpostsys /.pexec get exec
     grestore
 } put
 setglobal

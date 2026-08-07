@@ -261,7 +261,10 @@ setglobal
 % copying each name into scratch and calling proc with the substring.
 % The keys are snapshotted first, so the proc may define or undefine
 % resources; whether such changes are enumerated is unspecified, as
-% the language allows.
+% the language allows. The proc is the program's, so it runs beneath
+% the boundary: a failure inside it is that procedure's own object
+% failing, and the operand stack goes back to what the procedure
+% found rather than to resourceforall's four operands.
 /resourceforall [ /stringtype /proctype /stringtype /nametype ] {
     % merge the global table with any local instances over it
     dup //.xpostsys /.instof get exec exch
@@ -277,7 +280,7 @@ setglobal
     {
         dup .rfbuf cvs .rftmpl //.xpostsys /.wcmatch get exec {
             % load, not lookup: a bare name would run the proc early
-            .rfscr cvs /.rfproc load exec
+            .rfscr cvs /.rfproc load //.xpostsys /.pexec get exec
         }{ pop } ifelse
     } forall
     end

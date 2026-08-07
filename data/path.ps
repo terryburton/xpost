@@ -46,7 +46,11 @@ setglobal
 % procedures run outside the enumerator's dictionary scope -- the
 % scope pops around each call and resumes after -- so a procedure
 % that accumulates a running total by def reaches the caller's
-% dictionary, and one that leaves results on the stack keeps them
+% dictionary, and one that leaves results on the stack keeps them.
+% They are the program's procedures, so each runs beneath the
+% boundary: a failure inside one is that procedure's own object
+% failing, and the operand stack goes back to what the procedure
+% found rather than to pathforall's four operands
 currentglobal false setglobal
 .gscratch /.pfdict 10 dict put
 setglobal
@@ -69,7 +73,7 @@ begin
             } if
         } ifelse
         procs exch get
-        end exec .gscratch /.pfdict get begin
+        end //.xpostsys /.pexec get exec .gscratch /.pfdict get begin
     } loop
 end
 } //.xpostsys /.defop get exec
