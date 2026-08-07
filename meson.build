@@ -111,19 +111,68 @@ add_project_arguments(cc.get_supported_arguments(comparison_errors), language: '
 # is answered by an invariant it cannot see, in three files, and turning
 # it on would mean writing the invariant as a cast through void * at
 # every site rather than stating it once.
+#
+# Which compiler answers to which is recorded beside each below, because
+# accepting a flag and acting on it are separate questions and only the
+# first is asked by get_supported_arguments. They come apart in two
+# directions here: clang answers a warning group it does not know with a
+# warning rather than an error, and the text of that warning quotes the
+# flag -- so a probe reading exit status calls the unknown group
+# supported, and a probe grepping the output for the flag's name reads
+# the refusal as the diagnostic firing. And gcc reaches two of these
+# only through passes the optimiser turns on, while meson's default
+# buildtype is debug: a flag can be accepted by every compiler, promoted
+# to an error, and still be answered with silence in every build that
+# asks for it.
+#
+# The notes were taken by compiling a construct written to trip each
+# flag, on gcc 13 and clang 17, and reading back whether the diagnostic
+# appeared -- not by asking whether the flag was taken.
 kept_clean = [
+  # gcc only: clang means something else by the name and reports nothing
+  # under it. The half of this job clang does is -Wmissing-prototypes,
+  # in strict_warnings above.
   '-Werror=missing-declarations',
+  # gcc only, and gcc only with the optimiser on: nothing is reported at
+  # -O0, which is what buildtype=debug compiles at and what every build
+  # that does not say otherwise gets. clang takes the flag and reports
+  # nothing under it at any -O. The analysers workflow compiles the tree
+  # once with the optimiser on so that this is an error somewhere.
   '-Werror=null-dereference',
+  # gcc and clang
   '-Werror=vla',
+  # gcc only: clang has -Wshift-overflow with no levels at all, so the
+  # levelled spelling is an unknown group there and is dropped. The
+  # level is the point -- 1 << 31 and 3 << 30 are reported at 2 and not
+  # at 1 -- and clang's default says nothing about either.
   '-Werror=shift-overflow=2',
+  # gcc only: an unknown group on clang, and dropped there
   '-Werror=duplicated-cond',
+  # gcc only, an unknown group on clang; and like null-dereference it
+  # wants the optimiser. The one instance this tree had was reported
+  # from -O1 upwards and never at -O0.
   '-Werror=duplicated-branches',
+  # gcc only: an unknown group on clang, and dropped there
   '-Werror=logical-op',
   '-Werror=jump-misses-init',
+  # gcc only: clang takes the flag and reports a definition without a
+  # prototype under -Wdeprecated-non-prototype instead, which is on by
+  # default, so nothing is lost by the promotion being dropped.
   '-Werror=old-style-definition',
+  # gcc and clang
   '-Werror=missing-include-dirs',
+  # gcc only: clang takes the flag and reports nothing under it
   '-Werror=redundant-decls',
+  # gcc and clang
   '-Werror=undef',
+  # gcc only, clang taking it and reporting nothing; and the one entry
+  # here that is not a promotion. Level 2 is not empty -- gcc reports a
+  # comparison of an absolute value against zero under it, at every -O,
+  # and level 1 reports nothing there -- but what it reports depends on
+  # what the optimiser made of the code rather than on what the code
+  # says, and the higher levels name simplifications a correct program
+  # invites all the time. So it tells a reader something and does not
+  # stop a build.
   '-Wstrict-overflow=2',
 ]
 add_project_arguments(cc.get_supported_arguments(kept_clean), language: 'c')

@@ -15,8 +15,10 @@ name: analysers
 #
 # Blocking today: the leak count under the address sanitizer, every
 # class the gcc analyser reports, all of cppcheck's but memleak and the
-# style severities, and unreachable code outside the sites that declare
-# themselves parked.
+# style severities, unreachable code outside the sites that declare
+# themselves parked, and the compile of the tree with the optimiser on --
+# which is here rather than in meson.build because two of the promotions
+# meson.build makes are answered with silence until something optimises.
 
 on:
   push:
@@ -307,6 +309,54 @@ jobs:
         path: plist/**/*.html
         retention-days: 30
       if: always()
+
+  optimised-warnings:
+    strategy:
+      matrix:
+        object: [small, large]
+    name: diagnostics that need the optimiser - ${{ matrix.object }}-object
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build
+    # Two of the diagnostics meson.build promotes to errors say nothing
+    # at all to a compiler that has not optimised: gcc reaches a null
+    # dereference, and a condition whose two branches are the same,
+    # through passes -O turns on. meson's default buildtype is debug, so
+    # every other lane in every workflow compiles at -O0 -- the flags are
+    # accepted there, the promotion is on the command line, and neither
+    # class is being looked for anywhere. Reading the build says they are
+    # covered.
+    #
+    # This lane compiles the tree once with the optimiser on and does
+    # nothing else: no suite, no sanitizer, no analyser. The build's own
+    # status is the whole of the check, because what is being asked is
+    # already an error. It is a lane of its own rather than a buildtype
+    # given to one of the lanes above, because each of those reads
+    # something off a run -- what the sanitizers saw, what memcheck saw,
+    # what -fanalyzer walked -- and the optimiser changes all three; the
+    # analyser in particular reports fifteen paths at -O2 that it does
+    # not report at -O0, and that lane blocks at zero.
+    #
+    # -Winline is turned off for the compile rather than answered.
+    # It reports where the optimiser declined an inline, which is a
+    # decision and not a defect, and at -O it has some dozens to report;
+    # the promoted classes are what this lane is reading and they should
+    # not arrive in a page of them.
+    #
+    # Both object widths, like the linux workflow: the width is a type's
+    # width and the optimiser reasons about types, so a comparison or a
+    # shift the promotions catch in one of them is not necessarily
+    # reachable in the other.
+    - name: build with the optimiser on
+      run: |
+        meson setup -Dlarge-object=${{ matrix.object == 'large' }} \
+          --buildtype=debugoptimized -Dc_args=-Wno-inline builddir
+        ninja -C builddir
 
   unreachable-code:
     name: unreachable code
