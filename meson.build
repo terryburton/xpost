@@ -531,6 +531,28 @@ endif
 # stops being absent, and a name excused that turns out to have run fails
 # the run in its own right.
 #
+# The memacct suite is outside every profile in a build whose sanitizer
+# displaces the heap, and is the one exclusion that is neither a cost nor
+# something a machine has to supply. Two of those five weigh the process
+# through getrusage and three run it under valgrind, so a runtime that
+# holds freed memory in quarantine and maps shadow memory of its own
+# leaves them nothing to measure and all five fail. A developer running
+# the suite in such a build would otherwise read five failures that are
+# not faults, and the cure cannot be a skip: `everything` refuses to pass
+# on a skip, so a skip here would have to be excused by hand on every run,
+# which is the standing register of absences the excuse channel above
+# exists to avoid. It is instead read off `b_sanitize`, the build's own
+# record of the fact: never selected rather than selected and skipped.
+# `undefined` is the exception and is read as leaving them answerable --
+# it instruments arithmetic and casts and does not touch the heap, and all
+# five pass under it -- so the lane that runs it alone keeps their
+# coverage. They leave the count each profile reports, every profile names
+# the exclusion in its verdict, and `everything` states that the run does
+# not speak for them, so the absence is never a pass and reconfiguring
+# selects them again with nothing in the tree edited. The other direction
+# is checked too: where the heap is left alone, a profile over their costs
+# that selects none of them fails rather than running quietly without them.
+#
 # What the cheap rung does not answer is the memacct question. Two of
 # the five tests that ask it are in the quick profile, and both weigh
 # the process once it has finished; the three that run the interpreter
