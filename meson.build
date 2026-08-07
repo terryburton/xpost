@@ -655,6 +655,25 @@ test('dict-capacity-field',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a deletion does to the entries that follow it. The table probes
+# linearly, so emptying a slot in the middle of a run of collided
+# entries would cut the rest of the run off from their homes unless
+# those whose home lies inside the closed-up stretch are moved back into
+# the hole. Which slot a key takes is the hash's business, so the keys
+# are chosen by where they land and each configuration is checked to be
+# the one intended before the deletion that tests it.
+dict_undef_reslot_exe = executable('dict_undef_reslot_test',
+  'tests/dict_undef_reslot_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dict-undef-reslot',
+  dict_undef_reslot_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Stack-layer bounds discipline: a bottom-up index is answered by
 # choosing a segment and then a slot within it, and the two boundaries
 # that meet there -- the index one segment long, which is the second

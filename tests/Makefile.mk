@@ -82,6 +82,7 @@ tests/dict_capacity_field_test.c \
 tests/dict_grow_test.c \
 tests/dict_hash_spread_test.c \
 tests/dict_homes.golden \
+tests/dict_undef_reslot_test.c \
 tests/dsc_parse_test.c \
 tests/edit_stream_close_test.c \
 tests/empty_clip_test.ps \
