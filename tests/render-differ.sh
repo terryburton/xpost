@@ -589,6 +589,14 @@ status=0
 if [ "$missing" -ne 0 ]; then
     echo "render-differ: $missing of $n units left no report, so this run says"
     echo "      nothing about them:$failed"
+    # A unit reports by leaving a file, so a unit that left none said
+    # whatever it said on the way out and nowhere else. That is the one
+    # place to find why, and naming the unit without it leaves the reader
+    # to reproduce a failure the run already has in hand.
+    if [ -s "$work/workerlog" ]; then
+        echo "      what the workers said on the way out:"
+        tail -5 "$work/workerlog" | sed 's/^/      /'
+    fi
     status=1
 fi
 if [ "$bad" -ne 0 ]; then
