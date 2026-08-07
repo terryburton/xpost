@@ -18,6 +18,11 @@
 % held apart from the filled form as well -- an operator painting solid
 % coverage would otherwise pass by marking something.
 %
+% The outlines are asked for with charpath's false throughout, which is
+% the glyph path itself and the form a stroke of it takes. Its true is
+% the stroke's own outline, which is a different path under an outline
+% font and is held to its own rule at the end.
+%
 % The pen is asked as well. PaintType settles how a glyph is painted and
 % not how wide it is, so each operator's pen under the outline font is
 % compared with its pen under the same face at PaintType 0.
@@ -94,7 +99,7 @@ end
 % one character's outline, stroked where it stands, and the pen advanced
 % past it: the walkers below paint a glyph per call
 /one { % (c)  .  -
-    dup gsave currentpoint newpath moveto setlw true charpath stroke grestore
+    dup gsave currentpoint newpath moveto setlw false charpath stroke grestore
     stringwidth rmoveto
 } bind def
 
@@ -106,60 +111,60 @@ end
   [ (show      )
     { 6 24 moveto (Hxy) show }
     { 6 24 moveto gsave currentpoint newpath moveto setlw
-      (Hxy) true charpath stroke grestore }
+      (Hxy) false charpath stroke grestore }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (Hxy) true charpath fill grestore } ]
+      (Hxy) false charpath fill grestore } ]
   [ (ashow     )
     { 6 24 moveto 3 0 (Hxy) ashow }
     { 6 24 moveto gsave currentpoint newpath moveto setlw
-      (H) true charpath 3 0 rmoveto
-      (x) true charpath 3 0 rmoveto
-      (y) true charpath 3 0 rmoveto stroke grestore }
+      (H) false charpath 3 0 rmoveto
+      (x) false charpath 3 0 rmoveto
+      (y) false charpath 3 0 rmoveto stroke grestore }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (H) true charpath 3 0 rmoveto
-      (x) true charpath 3 0 rmoveto
-      (y) true charpath 3 0 rmoveto fill grestore } ]
+      (H) false charpath 3 0 rmoveto
+      (x) false charpath 3 0 rmoveto
+      (y) false charpath 3 0 rmoveto fill grestore } ]
   [ (widthshow )
     { 6 24 moveto 5 0 (x) 0 get (Hxy) widthshow }
     { 6 24 moveto gsave currentpoint newpath moveto setlw
-      (H) true charpath
-      (x) true charpath 5 0 rmoveto
-      (y) true charpath stroke grestore }
+      (H) false charpath
+      (x) false charpath 5 0 rmoveto
+      (y) false charpath stroke grestore }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (H) true charpath
-      (x) true charpath 5 0 rmoveto
-      (y) true charpath fill grestore } ]
+      (H) false charpath
+      (x) false charpath 5 0 rmoveto
+      (y) false charpath fill grestore } ]
   [ (awidthshow)
     { 6 24 moveto 5 0 (x) 0 get 3 0 (Hxy) awidthshow }
     { 6 24 moveto gsave currentpoint newpath moveto setlw
-      (H) true charpath 3 0 rmoveto
-      (x) true charpath 3 0 rmoveto 5 0 rmoveto
-      (y) true charpath 3 0 rmoveto stroke grestore }
+      (H) false charpath 3 0 rmoveto
+      (x) false charpath 3 0 rmoveto 5 0 rmoveto
+      (y) false charpath 3 0 rmoveto stroke grestore }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (H) true charpath 3 0 rmoveto
-      (x) true charpath 3 0 rmoveto 5 0 rmoveto
-      (y) true charpath 3 0 rmoveto fill grestore } ]
+      (H) false charpath 3 0 rmoveto
+      (x) false charpath 3 0 rmoveto 5 0 rmoveto
+      (y) false charpath 3 0 rmoveto fill grestore } ]
   % glyphshow selects by name rather than by code, and takes the
   % outline by name too; it paints one glyph a call
   [ (glyphshow )
     { 6 24 moveto /H glyphshow /x glyphshow /y glyphshow }
     { 6 24 moveto (H) one (x) one (y) one }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (Hxy) true charpath fill grestore } ]
+      (Hxy) false charpath fill grestore } ]
   % and the walkers that reach the raster through show, a glyph a call
   [ (xshow     )
     { 6 24 moveto (Hxy) [ 20 14 12 ] xshow }
     { 6 24 moveto (H) one 26 24 moveto (x) one 40 24 moveto (y) one }
-    { 6 24 moveto gsave currentpoint newpath moveto (H) true charpath
-      26 24 moveto (x) true charpath 40 24 moveto (y) true charpath
+    { 6 24 moveto gsave currentpoint newpath moveto (H) false charpath
+      26 24 moveto (x) false charpath 40 24 moveto (y) false charpath
       fill grestore } ]
   [ (kshow     )
     { 6 24 moveto { pop pop 3 0 rmoveto } (Hxy) kshow }
     { 6 24 moveto (H) one 3 0 rmoveto (x) one 3 0 rmoveto (y) one }
     { 6 24 moveto gsave currentpoint newpath moveto
-      (H) true charpath 3 0 rmoveto
-      (x) true charpath 3 0 rmoveto
-      (y) true charpath fill grestore } ]
+      (H) false charpath 3 0 rmoveto
+      (x) false charpath 3 0 rmoveto
+      (y) false charpath fill grestore } ]
 ] def
 
 CASES {
@@ -196,6 +201,57 @@ end
 /setfnt { /BareOutline findfont 26 scalefont setfont } bind def
 /W3 { 6 24 moveto (H) show } snapof def
 W3 inkof 0 gt (a font without StrokeWidth still marks its outline) check
+
+% --- what charpath's boolean asks for --------------------------------
+% An outline font's glyphs are the glyph path stroked, so charpath has
+% two different paths to hand back and the boolean says which (PLRM
+% 8.2): false is the glyph path, the form a stroke of it takes; true is
+% the stroke's own outline, the form a fill or a clip takes. For a font
+% whose glyphs are filled the two are one path and the boolean decides
+% nothing.
+%
+% The line is made several pixels wide here. A fill of a band narrower
+% than a pixel and a stroke of the same line are two different
+% questions for the scan converter, and the answer to those is not
+% charpath's.
+/p.name (charpath bool:) def
+/SWW 4 26 div /Times-Roman findfont /FontMatrix get 0 get div def
+/Times-Roman findfont dup length dict copy begin
+    /PaintType 2 def
+    /StrokeWidth SWW def
+    currentdict
+end
+/WideOutline exch definefont pop
+/setfnt { /WideOutline findfont 26 scalefont setfont } bind def
+/setsolid { /Times-Roman findfont 26 scalefont setfont } bind def
+
+/nelems { % -  .  n
+    2 dict begin /n 0 def
+    { pop pop /n n 1 add def } { pop pop /n n 1 add def }
+    { pop pop pop pop pop pop /n n 1 add def } { /n n 1 add def }
+    pathforall n
+    end
+} bind def
+
+initgraphics setfnt newpath 6 24 moveto (H) false charpath /NF nelems def
+initgraphics setfnt newpath 6 24 moveto (H) true charpath /NT nelems def
+NF 0 gt (false leaves the glyph path) check
+NT NF gt (true leaves a path of its own) check
+
+/T { newpath 6 24 moveto (H) true charpath fill } snapof def
+/K { newpath 6 24 moveto setlw (H) false charpath stroke } snapof def
+T inkof 0 gt (the fill of the true form marks the page) check
+K inkof 0 gt (the stroke of the false form marks the page) check
+T K differs 0 eq (the fill of the true form is the stroke of the false) check
+
+initgraphics setsolid newpath 6 24 moveto (H) false charpath /NF nelems def
+initgraphics setsolid newpath 6 24 moveto (H) true charpath /NT nelems def
+NT NF eq (a filled font answers with the same path either way) check
+
+{ setfnt newpath 6 24 moveto (H) false charpath } penof
+{ setfnt newpath 6 24 moveto (H) true charpath } penof
+3 -1 roll near exch 3 -1 roll near and
+(the boolean does not move the pen) check
 
 count 0 eq (the suite leaves the operand stack empty) check
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse

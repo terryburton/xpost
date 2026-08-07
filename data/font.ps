@@ -540,6 +540,11 @@ currentglobal true setglobal
 % The pen ends where the walk left it: the outlines are built inside a
 % gsave, since charpath takes over the current path, and the point the
 % last of them ended at is carried back out.
+%
+% The outlines are asked for in the form a stroke takes, which is the
+% glyph path itself, so charpath is asked with its false. Its true
+% hands back the stroke's own outline instead, ready to be filled, and
+% stroking that would draw the outline of the line.
 .xpostsys /.showoutline {
     4 dict begin
     /pstroke exch def
@@ -562,11 +567,11 @@ currentglobal true setglobal
         currentdict /phook known {
             0 1 psubj length 1 sub {
                 /pi exch def
-                psubj pi 1 getinterval true charpath
+                psubj pi 1 getinterval false charpath
                 psubj pi get phook
             } for
         }{
-            psubj true charpath
+            psubj false charpath
         } ifelse
         } ifelse
         currentpoint
@@ -1090,6 +1095,58 @@ currentglobal true setglobal
     } ifelse
     end
 } put
+
+% font str  .charpathstroked  -
+% The same for an outline font, appending the stroke's own outline of
+% the glyph outlines rather than the outlines themselves.
+%
+% strokepath takes over the whole current path, so the glyphs are built
+% in a path of their own: the caller's is set aside first and put back
+% before the result is appended onto it, element by element in the
+% device coordinates a path is held in. A close element is written as
+% the line back to its subpath's start and retagged, which is the form
+% the path holds it in. The pen ends past the text, where the outlines
+% left it.
+.xpostsys /.charpathstroked {
+    12 dict begin
+    /cpstr exch def
+    /cpfont exch def
+    currentpoint /cpy exch def /cpx exch def
+    /cplw currentlinewidth def
+    /cpheld graphicsdict /currgstate get /currpath get def
+    newpath
+    cpx cpy moveto
+    % StrokeWidth is a character space distance, carried to user space
+    % through the font's matrix
+    cpfont /StrokeWidth 2 copy known { get }{ pop pop 0 } ifelse
+    0 cpfont /FontMatrix get dtransform
+    dup mul exch dup mul add sqrt setlinewidth
+    cpfont cpstr //.xpostsys /.charpathoutline get exec
+    currentpoint /cpay exch def /cpax exch def
+    //strokepath exec
+    /cpbuilt graphicsdict /currgstate get /currpath get def
+    graphicsdict /currgstate get /currpath cpheld put
+    cplw setlinewidth
+    /cpoff 0 def
+    /cpsx 0 def /cpsy 0 def
+    {
+        cpbuilt cpoff .pathnext not { exit } if
+        /cpoff exch def
+        dup 0 eq {
+            pop 2 copy /cpsy exch def /cpsx exch def .devmoveto
+        }{
+        dup 1 eq {
+            pop .devlineto
+        }{
+        dup 2 eq {
+            pop .devcurveto
+        }{
+            pop cpsx cpsy .devlineto .retagclose
+        } ifelse } ifelse } ifelse
+    } loop
+    cpax cpay moveto
+    end
+} put
 setglobal
 
 %   str bool  charpath  -
@@ -1100,16 +1157,29 @@ setglobal
 % outlines, so there is nothing to append and only the pen moves; PLRM
 % 8.2 has charpath produce no result for a glyph described as an image
 % or a mask, which is what such a procedure paints.
+%
+% The boolean settles what an outline font -- one whose glyphs are the
+% character outlines stroked with StrokeWidth -- hands back. False is
+% the glyph path itself, which is the form a stroke of it takes; true
+% is the stroke's own outline, which is the form a fill or a clip
+% takes. For every other font the two are one path and the boolean
+% decides nothing.
 /charpath [ /stringtype /booleantype ] {
     /charpath //.xpostsys /.needfont get exec
-    pop
-    2 dict begin
+    3 dict begin
+    /cpwant exch def
     /cpstr exch def
     /cpfont graphicsdict /currgstate get /currfont get def
     cpfont /FontType 2 copy known { get }{ pop pop -1 } ifelse 3 eq {
         cpstr stringwidth rmoveto
     }{
-        cpfont cpstr //.xpostsys /.charpathoutline get exec
+        cpwant
+        cpfont /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse
+        and {
+            cpfont cpstr //.xpostsys /.charpathstroked get exec
+        }{
+            cpfont cpstr //.xpostsys /.charpathoutline get exec
+        } ifelse
     } ifelse
     end
 } //.xpostsys /.defop get exec
