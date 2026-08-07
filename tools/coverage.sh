@@ -141,11 +141,15 @@ fi
 : > "$work/zero"
 : > "$work/branches"
 
+refused=0
+objects=0
 while read -r gcda; do
     primary=$(basename "$gcda" .gcda)
     case $primary in *.c) ;; *) continue ;; esac
+    objects=$((objects + 1))
 
-    ( cd "$work" && gcov -f -b -n "$gcda" ) > "$work/out" 2>/dev/null || continue
+    ( cd "$work" && gcov -f -b -n "$gcda" ) > "$work/out" 2>/dev/null || {
+        refused=$((refused + 1)); continue; }
 
     # Per-file totals come from the "File '...'" blocks. Only this build's own
     # sources count: a header's numbers differ per translation unit, and the
@@ -242,6 +246,19 @@ while read -r gcda; do
         }
     ' "$work/out"
 done < "$work/gcda"
+
+# gcov refusing an object is passed over above, so that one unreadable
+# object does not cost the rest of the report -- and a gcov that refuses
+# every object costs the report nothing visible at all: the tables come
+# out empty, the two headline numbers are printed from an awk block that
+# says nothing when it has no lines, and what is written reads like a
+# report rather than like a measurement of nothing.
+if [ ! -s "$work/files" ]; then
+    echo "coverage.sh: gcov read none of the $objects objects this run" >&2
+    echo "coverage.sh: produced ($refused refused). No report written --" >&2
+    echo "coverage.sh: every table below would be empty and say so nowhere." >&2
+    exit 1
+fi
 
 sort -u "$work/files" > "$work/files.u"
 sort -u "$work/zero" > "$work/zero.u"

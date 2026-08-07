@@ -26,6 +26,17 @@ fi
 work=$(mktemp -d)
 devices=$DEVICE_FLEET_LIFETIME
 fail=0
+ran=0
+
+# A roster that skipped from end to end leaves the loop having asked
+# nothing and every verdict untaken, which reads exactly as a roster
+# that answered. The floor is the roster less what a build may not have
+# the library for.
+floor=0
+for dev in $devices; do
+    case " $DEVICE_FLEET_OPTIONAL " in *" $dev "*) continue ;; esac
+    floor=$((floor + 1))
+done
 
 for dev in $devices; do
     out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
@@ -33,6 +44,7 @@ for dev in $devices; do
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
     esac
+    ran=$((ran + 1))
     if [ "$st" -ne 0 ]; then
         echo "FAIL $dev: the interpreter exited with status $st"
         printf '%s\n' "$out" | tail -3
@@ -47,9 +59,15 @@ for dev in $devices; do
 done
 
 rm -rf "$work"
+if [ "$ran" -lt "$floor" ]; then
+    echo "FAILURES: $ran of the roster's devices answered, and $floor of them"
+    echo "      are made without an optional library; the rest said they were"
+    echo "      not built in, which is a build to fix rather than a run to pass"
+    exit 1
+fi
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a caught setpagedevice failure did not leave the device painting"
     exit 1
 fi
-echo "SUCCESS"
+echo "SUCCESS ($ran devices)"
 exit 0

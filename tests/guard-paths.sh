@@ -149,6 +149,22 @@ guard_mirror_tree() {
         echo "FAILURES: could not mirror the source tree under $1"
         exit 1
     fi
+    # Counts in against counts out. The pass above is what puts the tree
+    # in the mirror, and one that stopped partway leaves a subset there:
+    # every guard then scans less than the tree while reporting on the
+    # tree, and their scan loops pass over a file that is not there
+    # rather than saying so. Two files being readable is no evidence
+    # about the several hundred beside them, which is the shape the
+    # guards themselves are written against.
+    gm_in=$(grep -c . "$work/gm-list")
+    gm_out=$( ( cd "$mirror" && find data src tests -type f -print ) \
+              2>/dev/null | grep -c . )
+    if [ "$gm_in" -eq 0 ] || [ "$gm_out" -ne "$gm_in" ]; then
+        echo "FAILURES: $gm_out of $gm_in files reached the mirror of $1;"
+        echo "      a guard reading it would scan part of the tree and"
+        echo "      report on the whole of it"
+        exit 1
+    fi
 }
 
 # Read C sources as C rather than as text: every named file is emitted as

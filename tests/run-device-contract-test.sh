@@ -63,9 +63,19 @@ done
 # headless devices above
 if command -v xvfb-run >/dev/null 2>&1; then
     out=$(xvfb-run -a "$xpost" -q $ns -d xcb "$script" </dev/null 2>&1)
+    st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP xcb (not built in)" ;;
         *)
+            # This device's teardown runs after the program has printed
+            # its verdict -- it holds a display connection, a window, a
+            # pixmap and a graphics context -- so what the run said and
+            # how it ended are two answers and a pass needs both.
+            if [ "$st" -ne 0 ]; then
+                echo "FAIL xcb: the interpreter exited with status $st"
+                printf '%s\n' "$out" | sed 's/^/      /'
+                fail=1
+            fi
             if verdict_ok "$out" "xcb"; then
                 echo "OK   xcb"
             else

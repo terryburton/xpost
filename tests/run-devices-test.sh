@@ -51,6 +51,18 @@ for dev in $DEVICE_FLEET_ALL; do
 done
 
 fail=0
+ran=0
+
+# This wrapper's whole claim is that every device in the roster renders,
+# and a device that is not built in skips. A roster that skipped from
+# end to end renders nothing, leaves nothing to weigh and reports the
+# claim kept. The floor is the roster less what a build may not have the
+# library for.
+floor=0
+for dev in $DEVICE_FLEET_ALL; do
+    case " $DEVICE_FLEET_OPTIONAL " in *" $dev "*) continue ;; esac
+    floor=$((floor + 1))
+done
 
 run_dev() {   # $1=device
     dev=$1
@@ -76,6 +88,7 @@ run_dev() {   # $1=device
 for dev in $file_devices; do
     run_dev "$dev"; rc=$?
     [ "$rc" -eq 2 ] && continue
+    ran=$((ran + 1))
     if [ "$rc" -ne 0 ]; then fail=1; continue; fi
     if [ -f "$out" ]; then sz=$(wc -c < "$out"); else sz=0; fi
     if [ "${sz:-0}" -le 0 ]; then
@@ -88,14 +101,21 @@ done
 for dev in $buf_devices; do
     run_dev "$dev"; rc=$?
     [ "$rc" -eq 2 ] && continue
+    ran=$((ran + 1))
     if [ "$rc" -ne 0 ]; then fail=1; continue; fi
     echo "OK   $dev (rendered, leaves no file)"
 done
 
 rm -rf "$work"
+if [ "$ran" -lt "$floor" ]; then
+    echo "FAILURES: $ran of the roster rendered and $floor of it is made"
+    echo "      without an optional library; the rest said they were not"
+    echo "      built in, which is a build to fix rather than a run to pass"
+    exit 1
+fi
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: at least one device did not render"
     exit 1
 fi
-echo "SUCCESS"
+echo "SUCCESS ($ran devices)"
 exit 0

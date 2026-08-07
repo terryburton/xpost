@@ -119,8 +119,9 @@ guard_require_file "$fleet" "the device roster"
   for v in $DEVICE_FLEET_ALL; do echo "all $v"; done
   for v in $DEVICE_FLEET_LIFETIME; do echo "lifetime $v"; done
   for v in $DEVICE_FLEET_MARKING; do echo "marking $v"; done
+  for v in $DEVICE_FLEET_OPTIONAL; do echo "optional $v"; done
 ) > "$work/fleet" 2>/dev/null
-for set in all lifetime marking; do
+for set in all lifetime marking optional; do
     awk -v s="$set" '$1 == s { print $2 }' "$work/fleet" | sort -u \
         > "$work/fleet-$set"
     if [ ! -s "$work/fleet-$set" ]; then
@@ -138,7 +139,7 @@ cmp -s "$work/fleet-all" "$work/headless" ||
 
 # A subset names members of the roster. One that names something else is
 # a device nothing makes, run nowhere and reported as covered.
-for set in lifetime marking; do
+for set in lifetime marking optional; do
     stray=$(comm -23 "$work/fleet-$set" "$work/fleet-all")
     if [ -n "$stray" ]; then
         echo "FAIL: DEVICE_FLEET_$(echo "$set" | tr a-z A-Z) names devices the roster does not:"

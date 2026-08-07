@@ -112,17 +112,31 @@ if [ "$seen" -eq 0 ]; then
 fi
 
 # ---- C may not write them either ----
+#
+# This half looks for something that must not be there, so it agrees
+# with a directory holding nothing exactly as it agrees with a clean
+# one: an unmatched glob leaves the loop unentered and the rule reads as
+# kept. The sources it opened are counted for that reason, and a count
+# near zero is the scan reading the wrong tree.
+ncsrc=0
 for f in "$src"/src/lib/*.c; do
+    [ -f "$f" ] || continue
+    ncsrc=$((ncsrc + 1))
     if grep -n 'xpost_dict_put' "$f" \
        | grep -q 'nameclipregion\|nameclipsource\|nameclipcache'; then
         echo "WRITE OUTSIDE THE WRITER: $(basename "$f") puts a clip slot"
         fail=1
     fi
 done
+if [ "$ncsrc" -lt 40 ]; then
+    echo "FAILURES: the C scan read $ncsrc sources under $src/src/lib,"
+    echo "      which is not that directory; it holds some fifty"
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the clip is written somewhere other than .setclipregion"
     exit 1
 fi
-echo "SUCCESS: $seen clip slot references, all reads"
+echo "SUCCESS: $seen clip slot references, all reads ($ncsrc C sources read)"
 exit 0

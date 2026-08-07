@@ -291,8 +291,14 @@ nk=$(grep -aoE '/Kids *\[[^]]*\]' "$mppdf" | head -1 | grep -oE '[0-9]+ 0 R' | w
 # the second page references both separations; the first only its own
 grep -aq '/CS0 \[/Separation /Ink1 /DeviceCMYK' "$mppdf" || { echo "FAIL: no Ink1 colour space"; exit 1; }
 grep -aq '/CS1 \[/Separation /Ink2 /DeviceCMYK' "$mppdf" || { echo "FAIL: no Ink2 colour space on the later page"; exit 1; }
-# Ink1's function object is written once though two pages reach it
-[ "$(grep -ac '/Separation /Ink1 /DeviceCMYK [0-9]* 0 obj' "$mppdf")" -le 1 ] || true
+# Ink1's function object is written once though two pages reach it: the
+# colour space names the tint transform indirectly, so both references
+# naming one object is what says the object was written once. Counted as
+# distinct references rather than as a bound on how many there are, so a
+# pattern that has stopped matching gives none and fails here.
+nfn=$(grep -aoE '/Separation /Ink1 /DeviceCMYK [0-9]+ 0 R' "$mppdf" \
+      | grep -oE '[0-9]+ 0 R$' | sort -u | wc -l | tr -d ' ')
+[ "$nfn" = 1 ] || { echo "FAIL: Ink1's pages name $nfn tint transforms, want 1"; exit 1; }
 echo "multi-page single-file PDF OK"
 
 # a program's redefinition of fill must not capture the machinery's

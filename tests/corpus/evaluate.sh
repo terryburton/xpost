@@ -117,14 +117,44 @@ evaluate_one() {
             fi
             exit 0
         fi
+        # A program declared to differ from itself is declared, and
+        # nothing measured it: the label goes beside its numbers on the
+        # strength of the entry alone, and an entry whose reason has
+        # lapsed goes on excusing whatever difference turns up next. So
+        # it is rendered a second time and the two runs are held against
+        # each other.
+        if [ -f "$here/$corpus/nondeterministic" ] &&
+           grep -qxF "$b" "$here/$corpus/nondeterministic"; then
+            timeout 960 "$XPOST" -d $dev -o "$work/y_%d.$dev" "$src" \
+                    </dev/null >/dev/null 2>&1
+            same=1
+            j=1
+            while [ "$j" -le "$nx" ]; do
+                cmp -s "$work/x_$j.$dev" "$work/y_$j.$dev" || { same=0; break; }
+                j=$((j+1))
+            done
+            [ "$same" = 1 ] &&
+                echo "  $b  DECLARED NONDETERMINISTIC AND IS NOT: its two runs agree"
+        fi
+
         i=1
         compared=0
-        while [ "$i" -le "$ng" ]; do
+        # The pages either engine drew, rather than the pages one of
+        # them did. A bound taken from the reference never reaches a
+        # page xpost drew and the reference did not, and a page lost by
+        # the side the bound comes from shortens the walk instead of
+        # appearing in it -- an absence that removes its own evidence.
+        np=$ng
+        [ "$nx" -gt "$np" ] && np=$nx
+        while [ "$i" -le "$np" ]; do
             gp="$work/g_$i.$dev"; xp="$work/x_$i.$dev"
             # a program that stops partway leaves the pages after it
             # unwritten, and each of those is an absence of its own:
             # keyed by its page, so the corpus declares it by the page
             [ -f "$xp" ] || { echo "  $b p$i  no xpost page"
+                              printf '%s p%s\n' "$b" "$i" >> "$work.miss"
+                              i=$((i+1)); continue; }
+            [ -f "$gp" ] || { echo "  $b p$i  no reference page"
                               printf '%s p%s\n' "$b" "$i" >> "$work.miss"
                               i=$((i+1)); continue; }
             if [ "$dev" = pbm ]; then
@@ -183,9 +213,11 @@ evaluate_corpus() {
     held=0
     nondet=
     : > "$cwork/list"
+    : > "$cwork/all"
     for p in "$@"; do
         [ -f "$p" ] || continue
         b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
+        printf '%s\n' "$b" >> "$cwork/all"
         # a corpus may list basenames (one per line) in a "heldout" file:
         # the programs it holds out of the run, each recorded there with
         # the reason it is held. The reason is the entry's whole value --
@@ -284,6 +316,22 @@ evaluate_corpus() {
         lapsed=$((lapsed + 1))
     done < "$cwork/declared"
 
+    # The registers, against the corpus they describe. An entry naming a
+    # program that is not there excuses nothing and measures nothing,
+    # and the reason written beside it is read as a known cost by
+    # whoever finds it: a name that has outlived its program keeps a
+    # question closed that nothing is asking any more.
+    stale=0
+    for reg in heldout nondeterministic; do
+        [ -f "$dir/$reg" ] || continue
+        while read -r u; do
+            case $u in ''|'#'*) continue ;; esac
+            grep -qxF "$u" "$cwork/all" && continue
+            echo "  $u  named in $corpus/$reg and not in the corpus"
+            stale=$((stale + 1))
+        done < "$dir/$reg"
+    done
+
     note=
     [ "$held" = 0 ] || note=", $held held out"
     [ -z "$nondet" ] || note="$note, nondeterministic:$nondet"
@@ -293,6 +341,8 @@ evaluate_corpus() {
     note="$note, $pages pages compared"
     if [ "$seen" != "$n" ]; then
         echo "$corpus: NOT EVALUATED -- $seen of $n programs reported$note"
+    elif [ "$stale" != 0 ]; then
+        echo "$corpus: REGISTER NAMES NOTHING -- $stale entries name no program of this corpus; $n programs evaluated$note"
     elif [ "$undeclared" != 0 ] || [ "$lapsed" != 0 ]; then
         echo "$corpus: NO-PAGE SET DIFFERS -- $undeclared undeclared, $lapsed lapsed; $n programs evaluated$note"
     else

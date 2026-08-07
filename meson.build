@@ -505,7 +505,31 @@ endif
 #   ninja -C build full         every cost               -- the tree's own suite
 #   ninja -C build corpus       the corpus, all costs    -- with programs fetched
 #   ninja -C build vendor       the vendor suite         -- with its checkout
-#   meson test -C build         everything, as before
+#   ninja -C build everything   all of the above         -- and nothing skipped
+#   meson test -C build         every test, as before
+#
+# `full` is not a verdict on the tree, and reading it as one is the
+# mistake this rung exists to stop. It is every test the tree runs out of
+# itself, which is every test but the ones that need something given to
+# them: the corpus and the consumer suite are outside it by the argument
+# above, and a green `full` says nothing whatever about either. Both find
+# faults `full` cannot -- a corpus program is a page of real PostScript
+# and the suite's own tests are not -- so a round of work that ends on a
+# green `full` has been measured against the part of the instrument that
+# was pointing at it.
+#
+# `everything` is the rung that is a verdict. It selects the whole of the
+# build's tests, and it refuses to pass while any of them merely skipped:
+# a skip is how a test says it was given nothing to work on, and the
+# summary reports no failures either way, so a rung claiming everything
+# ran has to read the run's record and hold itself to it. Where a machine
+# genuinely cannot supply one -- the adobe corpus has no download, and a
+# consumer checkout is a checkout -- XPOST_ALLOW_SKIP names it for that
+# run and the verdict line says what the run does not speak for. The
+# excuse lives in the invocation rather than in the tree, so there is no
+# register of permitted absences to go on excusing something after it
+# stops being absent, and a name excused that turns out to have run fails
+# the run in its own right.
 #
 # What the cheap rung does not answer is the memacct question. Two of
 # the five tests that ask it are in the quick profile, and both weigh
@@ -547,7 +571,7 @@ cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
 
 run_profile = find_program('tests/run-profile.sh')
-foreach profile : [ 'quick', 'full', 'corpus', 'vendor' ]
+foreach profile : [ 'quick', 'full', 'corpus', 'vendor', 'everything' ]
   run_target(profile, command: [ run_profile, profile ])
 endforeach
 
