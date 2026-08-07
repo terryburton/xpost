@@ -121,6 +121,7 @@ evaluate_corpus() {
     # corpus lists as too slow for the per-file timeout.
     n=0
     held=0
+    nondet=
     : > "$cwork/list"
     for p in "$@"; do
         [ -f "$p" ] || continue
@@ -132,6 +133,21 @@ evaluate_corpus() {
             echo "  $b  held out (see $corpus/slow)"
             held=$((held + 1))
             continue
+        fi
+        # a corpus may also list basenames in a "nondeterministic" file:
+        # programs whose own output differs between two runs of the same
+        # build, so a difference against anything says nothing about the
+        # renderer. They are evaluated and labelled by default, since the
+        # rest of what they exercise is still worth running; SKIP_NONDET=1
+        # holds them out for a comparison that needs every difference to
+        # mean something.
+        if [ -f "$dir/nondeterministic" ] && grep -qxF "$b" "$dir/nondeterministic"; then
+            if [ "${SKIP_NONDET:-0}" != 0 ]; then
+                echo "  $b  held out (see $corpus/nondeterministic)"
+                held=$((held + 1))
+                continue
+            fi
+            nondet="$nondet $b"
         fi
         n=$((n + 1))
         printf '%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$cwork/$n" >> "$cwork/list"
@@ -150,6 +166,12 @@ evaluate_corpus() {
     while read -r c && read -r b && read -r p && read -r d; do
         if [ -s "$d.out" ]; then
             cat "$d.out"
+            # a program that differs from itself between two runs differs
+            # from anything, so say so beside its numbers rather than
+            # leaving them to be read as the renderer's doing
+            case " $nondet " in
+                *" $b "*) echo "  $b  nondeterministic: its own two runs differ (see $corpus/nondeterministic)";;
+            esac
             seen=$((seen + 1))
         else
             echo "  $b  NOT EVALUATED (no report)"
@@ -157,6 +179,7 @@ evaluate_corpus() {
     done < "$cwork/list"
     note=
     [ "$held" = 0 ] || note=", $held held out"
+    [ -z "$nondet" ] || note="$note, nondeterministic:$nondet"
     if [ "$seen" = "$n" ]; then
         echo "$corpus: $n programs evaluated$note"
     else
