@@ -877,6 +877,23 @@ test('gc-marking',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a run is told when a collection cannot mark its roots. Such a
+# collection returns before its sweep and reclaims nothing, and the next
+# one refuses in the same place, so a run whose safe points discard the
+# answer allocates on until the entity numbers run out and reports that
+# against whichever operator was allocating at the time.
+gc_mark_failure_exe = executable('gc_mark_failure_test',
+  'tests/gc_mark_failure_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('gc-mark-failure',
+  gc_mark_failure_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # How much of an allocation a save's backup says is in use. The extent
 # is what the collector reads an allocation's contents by, so a backup
 # that records the block's capacity instead has the collector reading

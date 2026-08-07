@@ -687,8 +687,9 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             /* anchor the current element (not just the tail) so an unrooted
                anonymous procedure is not swept while its last element runs */
             EVALARRAY_ROOT_CURRENT();
-            if (ctx->lo->garbage_collect_is_installed)
-                (void)ctx->lo->garbage_collect(ctx->lo, 1, 1);
+            if (ctx->lo->garbage_collect_is_installed
+                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+                return VMerror;
             EVALARRAY_RECHECK_BASES();
         }
 
@@ -1912,12 +1913,27 @@ ctxswitch:
     {
         /* safe point: between evaluation steps every live object is
            reachable from the stacks, so a requested collection cannot
-           sweep an operator's C-held intermediates */
+           sweep an operator's C-held intermediates.
+
+           A collection that cannot mark its roots returns before its
+           sweep, so it reclaims nothing, and the next one refuses in the
+           same place: reclamation is over for the rest of the run. The
+           run is told so here. PLRM 8.2 gives VMerror for an error in
+           the virtual memory machinery, naming an internal error in the
+           interpreter among its causes, and a marker that cannot read
+           the root set is one. Carrying on instead spends fresh entity
+           numbers until they run out, and reports that against whichever
+           operator was allocating at the time. */
         if (ctx->lo->garbage_collect_pending)
         {
             ctx->lo->garbage_collect_pending = 0;
-            if (ctx->lo->garbage_collect_is_installed)
-                (void)ctx->lo->garbage_collect(ctx->lo, 1, 1);
+            if (ctx->lo->garbage_collect_is_installed
+                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+            {
+                XPOST_LOG_ERR("collection abandoned before its sweep");
+                _onerror(ctx, VMerror);
+                continue;
+            }
         }
         if (_interrupt_pending)
         {

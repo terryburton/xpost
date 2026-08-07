@@ -51,9 +51,15 @@
  * For a global vm, collect() calls itself recursively upon each
  * associated local vm, with dosweep = 0, markall = 1.
  *
- * returns size collected or -1 if error occured.
+ * returns size collected or -1 if error occured. A collection that
+ * cannot mark its roots returns before its sweep and reclaims nothing,
+ * and the next one refuses in the same place, so a caller that reads
+ * the answer is the only thing between that and a run whose memory
+ * management has silently stopped.
  */
-int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall);
+XPOST_MUST_CHECK int xpost_garbage_collect(Xpost_Memory_File *mem,
+                                           int dosweep,
+                                           int markall);
 
 /*
  * The environment-gated collector diagnostics (xpost_garbage_diag.c):

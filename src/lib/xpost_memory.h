@@ -283,9 +283,9 @@ typedef struct Xpost_Memory_File
                             want of entity numbers rather than for want
                             of memory, which is the difference between
                             limitcheck and VMerror */
-    int (*garbage_collect)(struct Xpost_Memory_File *mem,
-                           int dosweep,
-                           int markall);
+    XPOST_MUST_CHECK int (*garbage_collect)(struct Xpost_Memory_File *mem,
+                                            int dosweep,
+                                            int markall);
     int interpreter_cid_get_context_is_installed;
     struct _Xpost_Context *(*interpreter_cid_get_context)(unsigned int cid);
     int (*interpreter_get_initializing)(void);
