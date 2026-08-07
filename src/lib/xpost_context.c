@@ -46,6 +46,7 @@
 
 #include "xpost.h"
 #include "xpost_log.h"
+#include "xpost_private.h" /* XPOST_REFUSAL_IMPOSSIBLE */
 #include "xpost_compat.h" /* xpost_mkstemp */
 #include "xpost_object.h"
 #include "xpost_memory.h"
@@ -456,9 +457,17 @@ unsigned int xpost_context_fork3(Xpost_Context *ctx,
     newctx->id = newcid;
     newctx->state = C_IDLE;
     newctx->lo = ctx->lo;
-    xpost_context_append_ctxlist(newctx->lo, newcid);
+    /* The list is what the collector walks to find the contexts a memory
+       file serves, and it holds MAXCONTEXT entries. One entry is added
+       per context and none is ever taken out, so the list is full only
+       when MAXCONTEXT contexts exist -- and the cid allocation above,
+       whose refusal is answered, is the same bound taken from the other
+       side: it hands out a cid only for a context table slot that is
+       free. A context that reached here has its slot, so the list has
+       its entry. */
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_context_append_ctxlist(newctx->lo, newcid));
     newctx->gl = ctx->gl;
-    xpost_context_append_ctxlist(newctx->gl, newcid);
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_context_append_ctxlist(newctx->gl, newcid));
 
     newctx->os = makestack(newctx->lo);
     newctx->es = makestack(newctx->lo);
