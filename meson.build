@@ -636,6 +636,25 @@ test('free-list-admission',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The capacity a dictionary reports, against the header field that
+# carries it. A capacity asked for above that field's width is a request
+# only the library makes -- `dict` refuses one before any dictionary is
+# built -- and a capacity stored wider than its field reads back as a
+# far smaller number. It has to be read from an empty dictionary: the
+# first entry raises a capacity the dictionary has outgrown to the size
+# of its table, which would cover a truncated one.
+dict_capacity_field_exe = executable('dict_capacity_field_test',
+  'tests/dict_capacity_field_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('dict-capacity-field',
+  dict_capacity_field_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Stack-layer bounds discipline: a bottom-up index is answered by
 # choosing a segment and then a slot within it, and the two boundaries
 # that meet there -- the index one segment long, which is the second
