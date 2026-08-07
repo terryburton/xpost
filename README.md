@@ -92,7 +92,13 @@ cannot quietly settle into the quick profile.
 There are two cost profiles and three cost tags because nothing the
 tree runs out of itself is `veryslow` -- the tag is carried by two of
 the corpora -- so a selection stopping at the top of `slow` and one
-going past it name the same tests.
+going past it name the same tests. `quick` is also the profile without
+a leak checker in it: the three tests that run one are all `slow`,
+because the checker's cost here is interpreter start-up rather than the
+workload. What survives `quick` is what leaves every assertion true --
+memory held past its last use, a read outside the object it belongs to
+that hands back a plausible value -- which is why the run before a
+commit is `full`.
 
 The differential corpus under `tests/corpus` is part of the suite; it
 is fetched on demand and skips until you populate it (see

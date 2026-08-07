@@ -394,8 +394,11 @@ endif
 #             tests/corpus, which skips until they are
 #   vendor    a downstream consumer's own test suite, run out of a
 #             checkout of its own, which skips until there is one
-#   memacct   the three that weigh the process, and so cannot answer
-#             under an allocator that quarantines or shadows
+#   memacct   the five that read the memory a run holds rather than
+#             the answers it gives -- two weighing the process at the
+#             end of it, three running it under a leak checker -- and so
+#             cannot answer under an allocator that quarantines or
+#             shadows
 #
 # The corpus and the vendor suite are the two that need something this
 # tree does not carry, and the cost profiles below leave both out
@@ -443,6 +446,25 @@ endif
 #   ninja -C build corpus       the corpus, all costs    -- with programs fetched
 #   ninja -C build vendor       the vendor suite         -- with its checkout
 #   meson test -C build         everything, as before
+#
+# What the cheap rung does not answer is the memacct question. Two of
+# the five tests that ask it are in the quick profile, and both weigh
+# the process once it has finished; the three that run the interpreter
+# under a leak checker are all slow, and none of them can be made cheap.
+# The checker's cost here is start-up and not workload -- the
+# interpreter reads its whole start-up program before a test's first
+# line, which takes about seven seconds under the checker against a
+# quarter of a second without it -- so a leak-checking test cannot come
+# in under the fast boundary, and one that dropped the graphics language
+# to squeeze under it would be a narrower instrument bought with the
+# coverage it gave up.
+#
+# So quick is blind to the faults that leave every assertion true:
+# memory held past its last use, and a read outside the object it
+# belongs to that hands back a plausible value. Its tests read what the
+# interpreter computes; only the checker reads what it touches. That is
+# what the full profile adds beyond the tests it takes longer over, and
+# it is the reason to run it before a commit.
 #
 # Each target goes through tests/run-profile.sh, which is where the
 # profiles are spelt and which checks the selection before running it.
