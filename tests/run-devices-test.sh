@@ -4,17 +4,24 @@
 # -d null, which never loads the graphics/device stack, so a device that
 # fails to initialise or emit a page is invisible to it.
 #
+# This is where "every" is spelt: the roster in tests/device-fleet.sh,
+# which check-device-roster.sh holds to the interpreter's maker table.
+# The cross-product wrappers run representative subsets of it, so a
+# device that leaves one of those is still rendered here.
+#
 # Two device classes:
 #   file  - writes a raster/vector page to the -o path; must emit bytes.
-#   buf   - an in-memory buffer device (surfaced through the library API,
-#           not a file); the CLI cannot capture its buffer, so we require
-#           only that the page renders to completion with no error. This
+#   buf   - leaves nothing at that path: the two whose raster is a buffer
+#           the library hands back rather than a file, which the CLI
+#           cannot capture, and the two that paint nothing at all. Each
+#           is required only to render to completion with no error, which
 #           still exercises the full graphics + device init and fillrect
-#           path, which is what a device regression breaks.
+#           path -- what a device regression breaks.
 #
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
+. "$(dirname "$0")/device-fleet.sh"
 
 # Reach the interpreter's data directory, which lives outside any sandbox
 # root. When this build has a file-access sandbox, disable it for the test;
@@ -31,8 +38,16 @@ work=$(mktemp -d)
 prog="$work/page.ps"
 printf 'newpath 10 10 moveto 90 90 lineto stroke showpage\n' > "$prog"
 
-file_devices='pgm ppm png pdfwrite'
-buf_devices='bgr raster'
+# the devices that leave nothing at the -o path, and everything else in
+# the roster
+buf_devices='bgr raster null bbox'
+file_devices=
+for dev in $DEVICE_FLEET_ALL; do
+    case " $buf_devices " in
+        *" $dev "*) continue ;;
+    esac
+    file_devices="$file_devices $dev"
+done
 
 fail=0
 
@@ -68,7 +83,7 @@ for dev in $buf_devices; do
     run_dev "$dev"; rc=$?
     [ "$rc" -eq 2 ] && continue
     if [ "$rc" -ne 0 ]; then fail=1; continue; fi
-    echo "OK   $dev (rendered, in-memory buffer device)"
+    echo "OK   $dev (rendered, leaves no file)"
 done
 
 rm -rf "$work"

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Meson test wrapper: every painting operator through every device that
-# can run without a display.
+# Meson test wrapper: every painting operator through the marking roster
+# of tests/device-fleet.sh, one device per marking implementation.
 #
 # A device implements some methods and inherits the rest. Which it must
 # implement itself depends on how it keeps its raster, and a device that
@@ -16,6 +16,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 # an absolute path may begin with a drive letter as well as a slash;
 # prepending the working directory to one of those makes every
 # invocation a path that does not exist
@@ -28,8 +29,9 @@ trap 'rm -rf "$work"' EXIT
 # The window devices need a display and the Windows ones another platform;
 # everything else renders headless. The raster device is named once per
 # pixel format, since each keeps its buffer differently.
-devices="null pgm ppm pbm tiff bbox png pngalpha jpeg pdfwrite svgwrite dscwrite
-         bgr raster raster:rgb raster:argb raster:bgr raster:bgra"
+# the marking roster, and the raster device once per pixel format,
+# since each keeps its buffer differently
+devices="$DEVICE_FLEET_MARKING raster:rgb raster:argb raster:bgr raster:bgra"
 
 fail=0
 ran=0

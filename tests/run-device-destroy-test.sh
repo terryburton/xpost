@@ -1,6 +1,8 @@
 #!/bin/sh
 # Meson test wrapper: run the device-teardown discipline check
-# (device_destroy_test.ps) against every built device. The test Destroys
+# (device_destroy_test.ps) against the lifetime roster of
+# tests/device-fleet.sh, one device per release implementation. The
+# test Destroys
 # the live device twice and job-end teardown makes a third call: each
 # must be a no-op after the first, per the device contract. The window
 # devices have the most to release twice: xcb a display connection, a
@@ -15,6 +17,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -23,7 +26,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+devices=$DEVICE_FLEET_LIFETIME
 fail=0
 
 for dev in $devices; do

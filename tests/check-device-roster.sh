@@ -12,10 +12,10 @@
 # defaults to the running one, so on those five every setpagedevice
 # raised rangecheck and the page could not even be resized.
 #
-# The device test wrappers carry rosters of their own, which is how a
-# whole device came to be built, selectable and never once exercised.
-# They are held to naming every device the interpreter can make, bar the
-# platform exclusions declared below.
+# The fourth is tests/device-fleet.sh, the roster the test wrappers run.
+# It is held to naming every device the interpreter can make, bar the
+# platform exclusions declared below, and its cross-product subsets are
+# held to naming only members of it.
 #
 # Sources are read by name rather than by scanning a directory: a built
 # tree leaves object files beside them whose debug information matches
@@ -96,50 +96,73 @@ cmp -s "$work/pagedevice" "$work/maker" ||
     report_diff "page-device" "$work/pagedevice" "$work/maker" \
         "data/init.ps .devicemakers against src/lib/xpost_interpreter.c"
 
-# The wrappers that run a workload once per device. Each names its own
-# set; every device the interpreter can make must appear in it, so a new
-# device cannot be added and left unexercised.
+# The fourth spelling: the roster the test wrappers run. It used to be a
+# list per wrapper, which is how a whole device came to be built,
+# selectable and never once exercised; it is one file now, and this is
+# what holds it to the maker table.
 #
-# Excluded, with reasons rather than by omission:
-#   gdi, gl  the Windows window devices: only the teardown wrapper runs
-#            them, and only where the platform can open a window, so the
-#            other two wrappers have nothing to run.
-exclude='gdi gl'
+# Excluded from the roster, with reasons rather than by omission:
+#   gdi, gl  the Windows window devices: they need a platform that can
+#            open a window, so the wrappers reach them by name where the
+#            platform provides one rather than through the roster.
+#   xcb      the X11 window device: it needs a display, and the wrappers
+#            that can conjure a virtual one run it by name.
+exclude='gdi gl xcb'
 
-for w in run-device-contract-test.sh run-device-destroy-test.sh \
-         run-device-features-test.sh; do
-    wrapper="$src/tests/$w"
-    guard_require_file "$wrapper" "the device wrapper $w"
-    # the names in the devices= assignment, plus any device named
-    # literally on a command line elsewhere in the wrapper (the window
-    # device runs under its own display)
-    { awk '
-        /devices=/ && !in_a {
-            sub(/^.*devices=/, "")
-            q = substr($0, 1, 1)
-            if (q == "\"" || q == "'\''") { $0 = substr($0, 2); in_a = 1 }
-            else { print; next }
-        }
-        in_a {
-            i = index($0, q)
-            if (i > 0) { print substr($0, 1, i - 1); in_a = 0 }
-            else print
-        }' "$wrapper"
-      sed -n 's/.*-d \([a-z0-9]*\).*/\1/p' "$wrapper"
-    } | tr ' \n' '\n\n' | sed 's/:.*//' | grep -v '^$' | sort -u > "$work/w"
-    for dev in $(cat "$work/maker"); do
-        case " $exclude " in *" $dev "*) continue ;; esac
-        if ! grep -qx "$dev" "$work/w"; then
-            echo "FAIL: $w never runs the $dev device"
-            fail=1
-        fi
-    done
+fleet="$src/tests/device-fleet.sh"
+guard_require_file "$fleet" "the device roster"
+
+# The roster is three shell assignments, so read them by running the file
+# rather than by matching its text: a continued list, a comment or a
+# respelling then reads the same here as it does in a wrapper.
+( . "$fleet"
+  for v in $DEVICE_FLEET_ALL; do echo "all $v"; done
+  for v in $DEVICE_FLEET_LIFETIME; do echo "lifetime $v"; done
+  for v in $DEVICE_FLEET_MARKING; do echo "marking $v"; done
+) > "$work/fleet" 2>/dev/null
+for set in all lifetime marking; do
+    awk -v s="$set" '$1 == s { print $2 }' "$work/fleet" | sort -u \
+        > "$work/fleet-$set"
+    if [ ! -s "$work/fleet-$set" ]; then
+        echo "FAILURES: DEVICE_FLEET_$(echo "$set" | tr a-z A-Z) is empty or unset"
+        echo "      in tests/device-fleet.sh"
+        exit 1
+    fi
 done
+
+grep -vx -e gdi -e gl -e xcb "$work/maker" > "$work/headless"
+cmp -s "$work/fleet-all" "$work/headless" ||
+    report_diff "device-fleet" "$work/fleet-all" "$work/headless" \
+        "tests/device-fleet.sh DEVICE_FLEET_ALL against src/lib/xpost_interpreter.c,\
+ less $exclude"
+
+# A subset names members of the roster. One that names something else is
+# a device nothing makes, run nowhere and reported as covered.
+for set in lifetime marking; do
+    stray=$(comm -23 "$work/fleet-$set" "$work/fleet-all")
+    if [ -n "$stray" ]; then
+        echo "FAIL: DEVICE_FLEET_$(echo "$set" | tr a-z A-Z) names devices the roster does not:"
+        printf '%s\n' "$stray" | sed 's/^/      /'
+        fail=1
+    fi
+done
+
+# The subsets leave devices out, so something has to run the whole
+# roster. That is the smoke wrapper, and it has to reach it through the
+# roster rather than through a list of its own.
+smoke="$src/tests/run-devices-test.sh"
+guard_require_file "$smoke" "the device smoke wrapper"
+if ! grep -q 'DEVICE_FLEET_ALL' "$smoke"; then
+    echo "FAIL: run-devices-test.sh does not render the whole roster;"
+    echo "      the devices the cross-product subsets leave out are then"
+    echo "      run nowhere"
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the device rosters disagree"
     exit 1
 fi
 
-echo "SUCCESS ($(wc -l < "$work/maker") devices, one roster in three files)"
+echo "SUCCESS ($(wc -l < "$work/maker") devices, one roster in four files)"
 exit 0

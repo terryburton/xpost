@@ -1,6 +1,6 @@
 #!/bin/sh
-# Meson test wrapper: run the quit check (quit_run_test.ps) against every
-# built device.
+# Meson test wrapper: run the quit check (quit_run_test.ps) against the
+# lifetime roster of tests/device-fleet.sh.
 #
 # quit ends the run, and what a run does after it has ended is the
 # device's teardown. A device whose Destroy is a PostScript procedure is
@@ -16,6 +16,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -24,7 +25,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+devices=$DEVICE_FLEET_LIFETIME
 fail=0
 ran=0
 

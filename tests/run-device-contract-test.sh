@@ -1,6 +1,7 @@
 #!/bin/sh
 # Meson test wrapper: run the device-method contract check
-# (device_contract_test.ps) against every headless-capable built device.
+# (device_contract_test.ps) against the marking roster of
+# tests/device-fleet.sh, one device per marking implementation.
 # The test feeds each device method its boundary inputs (degenerate,
 # inverted, fractional, out-of-range) and requires no errors and an
 # emitted page; on a device that reports its own pixels back it also
@@ -20,6 +21,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # devices whose GetPix reports back what a marking method wrote
 readback_min=8
@@ -32,7 +34,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+devices=$DEVICE_FLEET_MARKING
 fail=0
 
 for dev in $devices; do

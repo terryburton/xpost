@@ -65,6 +65,7 @@ tests/corpus/run-corpus-test.sh \
 tests/counttomark_test.ps \
 tests/dct_truncated_test.ps \
 tests/dev_rect_test.c \
+tests/device-fleet.sh \
 tests/device_contract_test.ps \
 tests/device_destroy_test.ps \
 tests/device_features_test.ps \

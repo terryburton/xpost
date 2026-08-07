@@ -1,7 +1,8 @@
 #!/bin/sh
 # Meson test wrapper: a restore back past a setpagedevice makes the retired
 # device current again, and painting on it must not follow its released
-# buffer (device_restore_retired_test.ps), run against every built device.
+# buffer (device_restore_retired_test.ps), run against the lifetime
+# roster of tests/device-fleet.sh.
 #
 # The devices that keep their raster in a malloc'd buffer are the ones that
 # can follow a cleared handle here; the rest are run because the rule is the
@@ -13,6 +14,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -21,7 +23,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+devices=$DEVICE_FLEET_LIFETIME
 fail=0
 
 for dev in $devices; do

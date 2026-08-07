@@ -1,7 +1,7 @@
 #!/bin/sh
 # Meson test wrapper: GetPix on a destroyed device must answer rather than
 # follow the released buffer handle (device_getpix_destroyed_test.ps), run
-# against every built device.
+# against the lifetime roster of tests/device-fleet.sh.
 #
 # The devices that keep their raster in a malloc'd buffer are the ones that
 # can follow a cleared handle; the devices that hold theirs as PostScript
@@ -14,6 +14,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -22,7 +23,7 @@ else
 fi
 
 work=$(mktemp -d)
-devices='pgm ppm pbm tiff null bbox raster bgr png pngalpha pdfwrite svgwrite dscwrite jpeg'
+devices=$DEVICE_FLEET_LIFETIME
 fail=0
 
 for dev in $devices; do
