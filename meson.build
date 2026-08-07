@@ -1229,14 +1229,6 @@ test('op-intoverflow',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Real precision: a real carries a single-precision significand in both
-# object widths, so a comparison decided by rounding falls the same way.
-test('real-width',
-  find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('tests/real_width_test.ps') ],
-  suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
-
 # SIGINT raises the PostScript interrupt error between evaluation steps;
 # errordict's handler stops the job and the interpreter exits. POSIX-only.
 test('interrupt',

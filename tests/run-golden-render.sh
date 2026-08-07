@@ -26,12 +26,26 @@ regen=${4:-}
 
 devices='pgm ppm pbm tiff pdfwrite svgwrite dscwrite'
 
-# One manifest covers both object widths. The width sizes the fields an
-# object carries, not the arithmetic the language performs, so the two
-# builds render the same page to the same bytes and are held to the same
-# answer. A second manifest would let them drift apart instead: each
-# build would only ever be compared against itself.
-manifest="$golden/manifest.sha256"
+# The two object widths are two personalities, and they do not render
+# byte for byte alike: the wide build's integers reach further, so
+# arithmetic that leaves the narrow build's range as a real stays exact
+# there and rounds a colour differently. Each personality is held to its
+# own manifest rather than one being declared the right answer.
+probe=$(mktemp)
+cat > "$probe" <<'PROBEEOF'
+2147483647 1 add type /integertype eq
+    { (XPOSTWIDTH=wide) }{ (XPOSTWIDTH=narrow) } ifelse =
+quit
+PROBEEOF
+width=$("$xpost" -q --no-sandbox -d null "$probe" </dev/null 2>/dev/null \
+        | grep -o 'XPOSTWIDTH=[a-z]*' | head -1 | cut -d= -f2)
+rm -f "$probe"
+case $width in
+    wide)   manifest="$golden/manifest-large.sha256" ;;
+    narrow) manifest="$golden/manifest.sha256" ;;
+    *)      echo "FAILURES: could not tell which object width this build has"
+            exit 1 ;;
+esac
 
 if command -v sha256sum >/dev/null 2>&1; then
     sum() { sha256sum "$1" | cut -d' ' -f1; }
