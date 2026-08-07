@@ -145,6 +145,64 @@ hitlineto 0 eq
 hitifelse 0 eq
     (arc reached a program's definition of ifelse) want
 
+% ---------------------------------------------------------------------- text
+%
+% The text machinery paints text of its own and takes glyph outlines of its
+% own: cshow measures each character by showing it on the null device, and
+% the route an outline font takes builds its glyphs with charpath and
+% strokes the result. Both call the operator by name, and the promotion
+% sweep freezes those names where they stand -- but the sweep reaches a
+% procedure only through the dictionaries it walks, and these procedures
+% live in the private helper namespace rather than in systemdict, which is
+% where check-wrapped-bind.sh looks. A helper reaching the operator some
+% way the sweep cannot substitute -- a name built at run time, a name held
+% as data -- passes that check and is a program's redefinition running
+% inside an operator the program called by an entirely different name. So
+% the calls are made here with the names defined over them.
+
+/Times-Roman findfont dup length dict copy begin
+    /PaintType 2 def
+    /StrokeWidth 30 def
+    currentdict
+end
+/OpRefOutline exch definefont pop
+
+/hitshow 0 def
+/hitcharpath 0 def
+/ncshow 0 def
+/penx 0 def
+
+/show
+    { /hitshow hitshow 1 add store
+      systemdict /show get exec } bind def
+/charpath
+    { /hitcharpath hitcharpath 1 add store
+      systemdict /charpath get exec } bind def
+
+gsave
+    /Helvetica findfont 12 scalefont setfont
+    0 0 systemdict /moveto get exec
+    { pop pop pop /ncshow ncshow 1 add store } (AB) cshow
+
+    /OpRefOutline findfont 12 scalefont setfont
+    newpath 0 0 systemdict /moveto get exec
+    (A) systemdict /show get exec
+    currentpoint pop /penx exch store
+grestore
+
+currentdict /show undef
+currentdict /charpath undef
+
+ncshow 2 eq
+    (cshow did not call the procedure once per character) want
+penx 0 gt
+    (an outline font's show did not advance the pen) want
+
+hitshow 0 eq
+    (the text machinery reached a program's definition of show) want
+hitcharpath 0 eq
+    (the text machinery reached a program's definition of charpath) want
+
 % ------------------------------------------------------------------- verdict
 
 failures 0 eq { (SUCCESS) = } { (FAILURES) = } ifelse
