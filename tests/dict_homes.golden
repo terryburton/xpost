@@ -10,6 +10,11 @@
 # hodgman-sutherland, /.xpost by the nine device class dictionaries --
 # so they registered members that do not exist while the ones that do
 # went unheld.
+#
+# A name here is also one the PostScript defines, not one a comment about
+# it spells. /h was registered against the line of data/init.ps that
+# writes an imaginary helper to show what the helper-call idiom looks
+# like; nothing has ever defined a member of that name.
 .gscratch /.pfdict
 .gscratch /strokedict
 .internaldict /.fillpoly
@@ -75,7 +80,6 @@
 .xpostsys /.finalize
 .xpostsys /.fontsubstitutions
 .xpostsys /gstatecopy
-.xpostsys /h
 .xpostsys /.hairext
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror

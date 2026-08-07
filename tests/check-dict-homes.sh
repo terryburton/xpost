@@ -21,6 +21,16 @@
 # were fiction on that account. A name ends where PostScript ends one --
 # at whitespace or a delimiter -- so that is what is required here.
 #
+# Where the pair is found matters as much. The sources were read as text,
+# so a comment counted: the register carried .xpostsys /h, which nothing
+# has ever defined, and was answered by the line of data/init.ps that
+# writes `.xpostsys /h { ... } put` while explaining what the helper-call
+# idiom looks like. An entry satisfied that way holds nothing to
+# anything, and any name a comment happens to spell can be registered
+# without a member behind it. So the sources are read as PostScript: a
+# `%` inside a string is not a comment and is neutralised first, and what
+# follows any other `%` is not part of the program.
+#
 #   $1  path to the source tree root
 set -u
 src=${1:?usage: check-dict-homes.sh <srcroot>}
@@ -34,6 +44,19 @@ guard_workdir
 trap 'rm -rf "$work"' EXIT
 fail=0
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
+
+# ---- the sources, as PostScript rather than as text ----
+# A `%` inside a string is not a comment, so those are neutralised before
+# comments are stripped; otherwise a line mentioning (%stdout) loses its
+# tail and a real definition on it goes unseen.
+for f in "$src"/data/*.ps; do
+    tr -d "$cr" < "$f" | sed 's|(%[^)]*)|(STR)|g; s|%.*||'
+done > "$work/code"
+if [ ! -s "$work/code" ]; then
+    echo "FAILURES: no PostScript found under $src/data; every member would"
+    echo "      be reported missing from a tree this check cannot read"
+    exit 1
+fi
 
 # ---- the graphics state template, and every slot in it ----
 #
@@ -136,7 +159,7 @@ while read -r home name extra; do
             # dot most of them carry -- are matched as themselves.
             pat=$(printf '%s' "$name" | sed 's/[].[^$*\\+?(){}|/]/\\&/g')
             if ! grep -qE "(\\$home|${home#.}) $pat([][(){}<>/%[:space:]]|\$)" \
-                 "$src"/data/*.ps; then
+                 "$work/code"; then
                 echo "MISSING member: $home $name (relocated or removed from data/*.ps)"
                 fail=1
             fi
