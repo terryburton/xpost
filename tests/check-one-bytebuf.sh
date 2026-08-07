@@ -46,20 +46,42 @@ if [ -n "$hits" ]; then
     fail=1
 fi
 
-# the byte-stream builders grow nothing of their own: every reallocation
-# left in them sizes an array of typed elements
+# the byte-stream builders reach the shared buffer
 for f in xpost_op_font.c xpost_dev_generic.c xpost_file.c; do
     if ! grep -q '#include "xpost_strbuf.h"' "$lib/$f"; then
         echo "check-one-bytebuf: $f does not reach the shared byte buffer"
         fail=1
     fi
-    hits=$(grep -n 'realloc(' "$lib/$f" | grep -v 'sizeof' | grep -v 'write_capacity' || true)
-    if [ -n "$hits" ]; then
-        echo "check-one-bytebuf: $f grows a byte buffer of its own:"
-        printf '%s\n' "$hits"
-        fail=1
-    fi
 done
+
+# and nothing grows one of its own. The scan is the whole library and the
+# programs, not the three builders alone: a second grow loop is a second
+# grow loop wherever it lands, and the file it lands in is the one nobody
+# thought to name here.
+#
+# What is left out is not a byte buffer.
+#   *sizeof              an array of typed elements
+#   xpost_free_realloc   the virtual memory allocator's own growth, which
+#                        moves objects inside the memory file rather than
+#                        bytes inside a buffer
+#   xpost_memory.c       the memory file itself, the allocation every
+#                        object in virtual memory lives inside
+#   xpost_compat.c       the glob() shim's result block. It is not a byte
+#                        stream: it ends holding a pointer table as well
+#                        as the names, and the caller frees the whole
+#                        thing through globfree, so the buffer it hands
+#                        back cannot be a structure with a lifetime of
+#                        its own
+hits=$(grep -n 'realloc(' "$lib"/*.c "$src"/src/bin/*.c 2>/dev/null \
+       | grep -v 'sizeof' | grep -v 'write_capacity' \
+       | grep -v 'xpost_free_realloc' \
+       | grep -v 'xpost_memory\.c:' \
+       | grep -v 'xpost_compat\.c:' || true)
+if [ -n "$hits" ]; then
+    echo "check-one-bytebuf: a byte buffer is grown outside xpost_strbuf.h:"
+    printf '%s\n' "$hits"
+    fail=1
+fi
 
 # nobody reads the answer as a success flag
 hits=$(grep -rnE 'if \(!(xpost_strbuf_|xpost_dev_pdf_append)' "$lib" 2>/dev/null || true)
