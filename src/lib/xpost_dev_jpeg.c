@@ -178,8 +178,8 @@ int _create_cont(Xpost_Context *ctx,
     //printf("create_cont\n");
 
     /* create a string to contain device data structure */
-    ret = xpost_dev_private_cons(ctx, devdic, namePrivate, &privatestr,
-                                 sizeof(PrivateData));
+    ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
+                            XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
 

@@ -85,11 +85,6 @@ xpost_dev_jpeg_options_set
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
 xpost_dev_png_options_set
-xpost_dev_private_block
-xpost_dev_private_block_of
-xpost_dev_private_cons
-xpost_dev_private_release_entity
-xpost_dev_private_release_memory_file
 xpost_device_get_filename
 xpost_device_retire_restored
 xpost_dict_capacity_memory
@@ -199,6 +194,11 @@ xpost_get_usertime_ms
 xpost_getenv
 xpost_glob
 xpost_glob_free
+xpost_handle_block
+xpost_handle_block_of
+xpost_handle_cons
+xpost_handle_release_entity
+xpost_handle_release_memory_file
 xpost_init
 xpost_int_cons
 xpost_interpreter_cid_get_context

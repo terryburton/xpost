@@ -56,7 +56,7 @@
 #include "xpost_save.h"
 #include "xpost_name.h"
 #include "xpost_file.h"
-#include "xpost_dev_private.h"
+#include "xpost_handle.h"
 
 //#include "xpost_interpreter.h"
 #include "xpost_garbage.h"
@@ -842,11 +842,11 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
                list, since the release writes through that same word. */
             if (mem->table.tab[i].tag == filetype)
                 xpost_file_release_entity(mem, i);
-            /* a device's private state is likewise an entity in here and
-               a block outside, and this is the last reach anything has
-               to either */
-            if (mem->table.tab[i].tag & XPOST_MEMORY_TABLE_TAG_DEVICE_PRIVATE)
-                xpost_dev_private_release_entity(mem, i);
+            /* a handle is likewise an entity in here and a block
+               outside, and this is the last reach anything has to
+               either */
+            if (mem->table.tab[i].tag & XPOST_MEMORY_TABLE_TAG_HANDLE)
+                xpost_handle_release_entity(mem, i);
             mem->table.tab[i].tag = 0;
             b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;

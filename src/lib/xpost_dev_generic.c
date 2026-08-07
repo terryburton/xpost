@@ -3016,8 +3016,8 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     a.seps = NULL;
     a.nseps = 0;
     a.sepcap = 0;
-    ret = xpost_dev_private_cons(ctx, devdic, namepdfPrivate, &priv,
-                                 sizeof(a));
+    ret = xpost_handle_cons(ctx, devdic, namepdfPrivate, &priv,
+                            XPOST_HANDLE_DEVICE, sizeof(a));
     if (ret)
     {
         xpost_strbuf_free(&a.content);
