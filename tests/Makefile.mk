@@ -61,6 +61,7 @@ tests/colorspace_matrix_test.ps \
 tests/colour_range_test.ps \
 tests/colour_sampling_test.ps \
 tests/composite_limit_test.ps \
+tests/context_jobs_test.c \
 tests/context_reuse_test.c \
 tests/corpus/.gitignore \
 tests/corpus/README.md \

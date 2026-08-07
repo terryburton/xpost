@@ -968,6 +968,23 @@ test('job-snapshot-balance',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: a context serves job after job under either
+# snapshot setting. Every other test that reuses a context turns
+# snapshots off, and every test that leaves them on runs a single job,
+# so what a second job sees is the one thing neither setting was run
+# against.
+context_jobs_exe = executable('context_jobs_test',
+  'tests/context_jobs_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('context-jobs',
+  context_jobs_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The matrix operators store their six numbers in one bulk write, so the
 # copy-on-write done per element elsewhere is done once by hand here. A
 # write that goes in over a backup the memory file declined is one restore

@@ -2709,6 +2709,37 @@ static int _showpage_semantic(Xpost_Context *ctx)
     return semantic.int_.val;
 }
 
+/* Load the language into the context, so that a bracket taken after
+   this point encloses a program and nothing else.
+
+   The load runs once in the life of a context. What makes it idempotent
+   -- the latch the start procedures read -- is virtual memory, and what
+   it leaves behind is not: the operator table it fills is outside the
+   memory files, and the window it opens on systemdict closes on a
+   one-shot held in the context. A bracket taken over the load therefore
+   rewinds the half that is in virtual memory and leaves the half that is
+   not, and the job after it finds neither a language nor a context that
+   can load one again.
+
+   Whether the load succeeded is read from the context afterwards rather
+   than from this run: the procedure reports nothing, and the start
+   procedure the caller's own run begins with meets the same failure and
+   reports it there. */
+static void _load_language(Xpost_Context *ctx)
+{
+    unsigned int base = xpost_stack_count(ctx->lo, ctx->es);
+
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
+    push_start_proc(ctx, ctx->skip_graphics ? "loadlanguagenographics"
+                                            : "loadlanguage");
+    ctx->quit = 0;
+    ctx->state = C_RUN;
+    mainloop(ctx);
+
+    while (xpost_stack_count(ctx->lo, ctx->es) > (int)base)
+        xpost_stack_pop(ctx->lo, ctx->es);
+}
+
 /* Rewind virtual memory to the snapshots this call took at its start.
    Only to a snapshot it took: a save level is the substack its records
    go on, and that substack is an allocation the memory file can refuse;
@@ -2857,12 +2888,24 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
        call -- it hands control back at each showpage and ends on a later
        call, which is where its virtual memory stops changing -- so no
        bracket is taken over it, rather than a save level being pushed
-       that this call has nothing to do with. */
+       that this call has nothing to do with.
+
+       What the bracket encloses is the program. The language is loaded
+       before it is taken, so that rewinding to it rewinds what the job
+       wrote rather than what the context is made of; a context whose
+       language did not load takes no bracket at all, and its run reports
+       the failure the way a run on its own does. */
     if (ctx->job_snapshots
         && _showpage_semantic(ctx) != XPOST_SHOWPAGE_RETURN)
     {
-        gsav = xpost_save_create_snapshot_object(ctx->gl);
-        lsav = xpost_save_create_snapshot_object(ctx->lo);
+        if (!ctx->sysdict_load_done)
+            _load_language(ctx);
+
+        if (ctx->sysdict_load_done)
+        {
+            gsav = xpost_save_create_snapshot_object(ctx->gl);
+            lsav = xpost_save_create_snapshot_object(ctx->lo);
+        }
     }
 
     /* Run! */
