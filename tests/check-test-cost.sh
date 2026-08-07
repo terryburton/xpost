@@ -39,10 +39,10 @@
 #   that selects on it. A third is a second list of what is slow, and
 #   the two would agree until they did not, after which the wrong one is
 #   the one nothing runs. Looked for by the one name that means nothing
-#   else -- "slow" is an ordinary English word and the corpus has a file
-#   called it -- across the three directories a second list could live
-#   in. The documentation says what the profiles are and is not a second
-#   list: a name in prose selects nothing.
+#   else -- "slow" is an ordinary English word and turns up in prose
+#   wherever a cost is being described -- across the three directories a
+#   second list could live in. The documentation says what the profiles
+#   are and is not a second list: a name in prose selects nothing.
 #
 # and one that would make the profiles mean nothing:
 #

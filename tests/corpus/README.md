@@ -28,8 +28,9 @@ program -- a rendering difference is a lead, not a failure (see
 Evaluation, below).
 
 Each corpus closes with a count of the programs it evaluated and the ones
-it held out, and a program the run named and did not reach is reported as
-one and fails the test. The corpora are evaluated at once, one test each,
+it held out -- a corpus names those in a `heldout` file, one basename per
+line, each with the reason it is not run -- and a program the run named
+and did not reach is reported as one and fails the test. The corpora are evaluated at once, one test each,
 so a run that quietly did a fraction of the work would otherwise report
 the same success as one that did all of it.
 

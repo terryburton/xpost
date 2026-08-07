@@ -167,14 +167,14 @@ evaluate_corpus() {
     for p in "$@"; do
         [ -f "$p" ] || continue
         b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
-        # a corpus may list basenames (one per line) in a "slow" file:
+        # a corpus may list basenames (one per line) in a "heldout" file:
         # the programs it holds out of the run, each recorded there with
         # the reason it is held. The reason is the entry's whole value --
         # a name in this list is a program nothing measures again until
         # someone reads why it is there -- so the file carries it and
         # this only reads the names
-        if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
-            echo "  $b  held out (see $corpus/slow)"
+        if [ -f "$dir/heldout" ] && grep -qxF "$b" "$dir/heldout"; then
+            echo "  $b  held out (see $corpus/heldout)"
             held=$((held + 1))
             continue
         fi

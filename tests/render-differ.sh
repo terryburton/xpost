@@ -492,13 +492,13 @@ else
         for p in "$d"*.ps "$d"*.eps; do
             [ -f "$p" ] || continue
             b=$(basename_of "$p")
-            # a corpus also says which of its programs render correctly
-            # but too slowly to fit a per-file timeout. Sweeping a corpus
-            # takes that as read; naming one of them does not, since
-            # naming it is asking for it and the limit is the caller's to
-            # raise.
-            if [ -f "$d/slow" ] && grep -qxF "$b" "$d/slow"; then
-                held="$held $c/$b(slow)"
+            # a corpus also says which of its programs it holds out of a
+            # sweep, and why -- too slow for a per-file timeout, or past
+            # a limit of the build. Sweeping a corpus takes that as read;
+            # naming one of them does not, since naming it is asking for
+            # it and the reason it is held may be the caller's to lift.
+            if [ -f "$d/heldout" ] && grep -qxF "$b" "$d/heldout"; then
+                held="$held $c/$b(held out)"
                 continue
             fi
             add_program "$c" "$b" "$p"

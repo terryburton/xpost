@@ -63,8 +63,8 @@ tests/corpus/.gitignore \
 tests/corpus/README.md \
 tests/corpus/bwipp/nondeterministic \
 tests/corpus/bwipp/nopage \
+tests/corpus/casselman/heldout \
 tests/corpus/casselman/nopage \
-tests/corpus/casselman/slow \
 tests/corpus/evaluate.sh \
 tests/corpus/fetch.sh \
 tests/corpus/ghostscript/nondeterministic \
