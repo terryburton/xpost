@@ -11,7 +11,7 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 tmp=${TMPDIR:-/tmp}/errfmt-$$
-trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps "$tmp".badreport.ps' 0
+trap 'rm -f "$tmp".err.ps "$tmp".ok.ps "$tmp".caught.ps "$tmp".cascade.ps "$tmp".badreport.ps "$tmp".vmerror.ps' 0
 
 # 1. a top-level undefined error: the error line (with its trailing space)
 #    and then the flush notice
@@ -69,5 +69,22 @@ printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -Fq '%%[ Report incomplete: reporting this error raised another ]%%' || exit 1
 printf '%s\n' "$out" | grep -Fq '%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%' || exit 1
 [ "$rc" -ne 0 ] || exit 1
+
+# 7. the standard report of a VMerror finishes. That error records no
+#    stack snapshots (PLRM 8.2: its default handler, alone among them,
+#    does not snapshot the stacks), so it is the one error whose report
+#    has nothing to print under the stack headings -- and a report that
+#    prints a heading anyway raises inside itself and stops, which the
+#    case above cannot tell apart from a handler the program broke on
+#    purpose. Asked of the standard handler, so it is the shipped
+#    report being held to finishing, and asked by name, so the error is
+#    the one under test rather than whichever one the run happens to
+#    reach.
+printf '(cmd) /VMerror signalerror\n' > "$tmp".vmerror.ps
+out=$("$xpost" -q --no-sandbox -d null "$tmp".vmerror.ps </dev/null 2>&1)
+printf '%s\n' "$out"
+printf '%s\n' "$out" | grep -Fq '%%[ Error: VMerror; OffendingCommand: cmd ]%%' || exit 1
+printf '%s\n' "$out" | grep -Fq '%%[ Report incomplete' && exit 1
+printf '%s\n' "$out" | grep -Fq '%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%' || exit 1
 
 exit 0

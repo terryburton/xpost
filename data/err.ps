@@ -151,13 +151,27 @@ errordict begin
                         errorinfo ==
                     } if
                 } if
+                % A snapshot entry is present and null wherever the error
+                % recorded no stack: $error defines all three, .error
+                % skips the whole snapshot for VMerror (PLRM 8.2: the
+                % default handler for that error, alone among them, does
+                % not snapshot the stacks) and leaves an individual entry
+                % null where the stack was too deep for its array. So the
+                % value is what says whether there is a stack to print;
+                % the key is there either way, and a heading printed on
+                % the strength of the key alone is followed by a
+                % typecheck that ends the report.
                 currentdict /ostack known {
-                    (Stack:\n) print
-                    ostack { == } forall
+                    ostack null ne {
+                        (Stack:\n) print
+                        ostack { == } forall
+                    } if
                 } if
                 currentdict /estack known {
-                    (ExecStack:\n) print
-                    estack { == } forall
+                    estack null ne {
+                        (ExecStack:\n) print
+                        estack { == } forall
+                    } if
                 } if
                 flush
                 % the context belongs to the error just reported
