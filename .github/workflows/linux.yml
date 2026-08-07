@@ -40,8 +40,20 @@ jobs:
           [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
           echo "$face -> $file"
         done
+    # -Werror=unused-result is promoted here rather than in meson.build,
+    # so that it is an error on the platform the tree has actually been
+    # read against and stays a warning everywhere else. The attribute it
+    # answers is XPOST_MUST_CHECK, which the interpreter puts on the
+    # functions whose refusal a caller has to read; but the same
+    # attribute is on a set of libc declarations that each C library
+    # chooses for itself, so the calls this fires on are not the same set
+    # on the msys2 and osx runners as they are here. Those legs already
+    # report it -- it is in -Wall, which strict_warnings takes -- so a
+    # platform whose libc marks something this one does not says so in
+    # its log, and the promotion follows a leg that has been seen clean
+    # rather than being made on its behalf.
     - name: meson
-      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} builddir
+      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} -Dc_args=-Werror=unused-result builddir
     - name: ninja
       run: ninja -C builddir
     - name: meson test

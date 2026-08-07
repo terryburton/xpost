@@ -574,7 +574,12 @@ int main(int argc, char *argv[])
 
     XPOST_LOG_INFO("defs=%p", (void*)defs);
     if (defs){
-        xpost_add_definitions(ctx, num_defs, defs);
+        /* the program is about to run against these definitions; one that
+           could not be stored is a name the program will find undefined,
+           and the report belongs here rather than wherever it is first
+           looked up */
+        if (!xpost_add_definitions(ctx, num_defs, defs))
+            fprintf(stderr, "%s: cannot record the -D definitions\n", filename);
         for (i = 0; i < num_defs; ++i)
         {
             free(defs[i]);
@@ -589,7 +594,12 @@ int main(int argc, char *argv[])
     {
         for (i = 0; i < num_incs; i++)
         {
-            xpost_add_resource_dir(ctx, incs[i]);
+            /* a directory that did not reach the search path is one no
+               resource will ever be found under, and the run's only
+               symptom is the lookup that comes up empty much later */
+            if (!xpost_add_resource_dir(ctx, incs[i]))
+                fprintf(stderr, "%s: cannot add resource directory %s\n",
+                        filename, incs[i]);
             /* resource files are read from beneath this directory */
             xpost_path_permit_read(incs[i]);
             free(incs[i]);

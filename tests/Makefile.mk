@@ -132,6 +132,7 @@ tests/gc_diagnostics_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
 tests/gc_mark_failure_test.c \
+tests/job_snapshot_balance_test.c \
 tests/gc_marking_test.c \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
@@ -152,6 +153,7 @@ tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/lsan.supp \
 tests/mask_cache_range_test.ps \
+tests/matrix_backup_test.c \
 tests/memory_bounds_test.c \
 tests/must_check.golden \
 tests/namespace_test.ps \

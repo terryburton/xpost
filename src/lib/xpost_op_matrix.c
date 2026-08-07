@@ -133,6 +133,7 @@ int _xmat2psmat(Xpost_Context *ctx,
     Xpost_Object arr[6];
     Xpost_Memory_File *mem;
     unsigned int ent;
+    int ret;
 
     /* the bulk write below stores six objects at once; a destination shorter
        than six would overrun its storage in the arena (PLRM: rangecheck) */
@@ -157,8 +158,13 @@ int _xmat2psmat(Xpost_Context *ctx,
     /* Back the array up for save/restore before the bulk write, the way
        xpost_array_put does per element. Without this a matrix modified inside a
        save -- the CTM, under scale/concat/rotate -- is not reverted by the
-       matching restore, so a transform set inside a save leaks past it. */
-    (void)xpost_save_cow(mem, arraytype, psm.comp_.sz, ent);
+       matching restore, so a transform set inside a save leaks past it.
+       The backup is an allocation the memory file can refuse, and a write
+       that goes in over a refused backup is one restore has no record of:
+       the refusal is the operator's answer, not something to write past. */
+    ret = xpost_save_cow(mem, arraytype, psm.comp_.sz, ent);
+    if (ret)
+        return ret;
     if (!xpost_memory_put(mem, ent, 0, sizeof arr, arr))
         return rangecheck;
     return 0;

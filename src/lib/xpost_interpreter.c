@@ -2661,6 +2661,7 @@ static void _close_run_input(Xpost_Context *ctx)
 
 XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type, const void *inputptr, size_t set_size)
 {
+    Xpost_Object gsav = null;
     Xpost_Object lsav = null;
     int llev = 0;
     unsigned int vs;
@@ -2762,7 +2763,7 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
 
     if (ctx->job_snapshots)
     {
-        (void) xpost_save_create_snapshot_object(ctx->gl);
+        gsav = xpost_save_create_snapshot_object(ctx->gl);
         lsav = xpost_save_create_snapshot_object(ctx->lo);
     }
 
@@ -2866,7 +2867,14 @@ run:
 	}
     }
 
-    if (ctx->job_snapshots)
+    /* Rewind global VM only to a snapshot this run took. A save level is
+       the substack its records go on, and that substack is an allocation
+       the memory file can refuse; the refusal is answered with a null,
+       and a run that pushed no level and rewinds anyway pops whichever
+       level it finds -- one belonging to whatever put it there, whose
+       records are then played back over VM that has moved on since. The
+       local snapshot below is read the same way. */
+    if (xpost_object_get_type(gsav) == savetype)
         xpost_save_restore_snapshot(ctx->gl);
     vs = xpost_memory_save_stack_adr(ctx->lo);
     if (xpost_object_get_type(lsav) == savetype)

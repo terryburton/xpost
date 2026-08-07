@@ -48,6 +48,17 @@ clear
     (join on an unscheduled context reports rather than hanging) assert
 clear
 
+% the operands handed to a forked context are the ones above a mark, so a
+% stack without one has no count to hand over: the operand on top is not
+% the count, and the slots below the bottom of the stack are not operands
+{ 5 { } fork } /unmatchedmark (fork without a mark is unmatchedmark) erris
+{ { } fork } /unmatchedmark (fork of a bare stack is unmatchedmark) erris
+clear
+
+% an empty mark hands over nothing and still forks
+{ mark { } fork detach } completes (fork of an empty mark succeeds) assert
+clear
+
 % join and detach type-check their operand
 { 42 join } /typecheck (join of a non-context is typecheck) erris
 { (str) detach } /typecheck (detach of a non-context is typecheck) erris

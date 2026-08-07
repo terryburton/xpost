@@ -668,7 +668,20 @@ int grok(Xpost_Context *ctx,
                     //xpost_operator_exec(ctx, xpost_operator_cons(ctx, "load", NULL,0,0).mark_.padw);
                     if (DEBUGLOAD)
                         printf("\ntoken: loading immediate name %s\n", s);
-                    xpost_op_any_load(ctx, xpost_object_cvx(xpost_name_cons(ctx, s)));
+                    /* PLRM 3.12.2: the scanner substitutes the value the
+                       name has on the dictionary stack, and where it
+                       cannot find the name an undefined error occurs. A
+                       lookup that fails pushes nothing, so reading a
+                       value regardless takes the operand beneath instead
+                       -- the token becomes whatever the program last left
+                       on the stack, with nothing said. The same load in
+                       the binary-token path below is read this way. */
+                    {
+                        int lret = xpost_op_any_load(ctx,
+                                xpost_object_cvx(xpost_name_cons(ctx, s)));
+                        if (lret)
+                            return lret;
+                    }
                     ret = xpost_stack_pop(ctx->lo, ctx->os);
                     if (DEBUGLOAD)
                         xpost_object_dump(ret);
