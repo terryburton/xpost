@@ -38,6 +38,7 @@
 
 #include "xpost.h"
 #include "xpost_log.h"
+#include "xpost_private.h" /* XPOST_REFUSAL_IMPOSSIBLE */
 #include "xpost_memory.h"
 #include "xpost_object.h"
 #include "xpost_stack.h"
@@ -71,8 +72,20 @@ int xpost_op_currentcontext (Xpost_Context *ctx)
 static
 int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
 {
-    int cid, n;
+    int cid, n, ret;
     Xpost_Context *newctx;
+
+    /* How many operands go to the new context is a question only a mark
+       answers, and it is asked before anything is created so that a
+       stack without one costs nothing. counttomark pushes no count when
+       it finds no mark, so reading one regardless takes whatever operand
+       is on top as the number of slots to hand over -- and the transfer
+       then reads that many below the bottom of the stack and copies what
+       it finds there into the new context. */
+    ret = xpost_op_counttomark(ctx);
+    if (ret)
+        return ret;
+    n = xpost_stack_pop(ctx->lo, ctx->os).int_.val;
 
     cid = xpost_context_fork3(ctx,
                               ctx->xpost_interpreter_cid_init,
@@ -89,13 +102,14 @@ int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
     if (!newctx)
         return unregistered;
 
-    (void)xpost_op_counttomark(ctx);
-    n = xpost_stack_pop(ctx->lo, ctx->os).int_.val;
     /* copy n objects to new context's operand stack */
     while (n--)
         xpost_stack_push(newctx->lo, newctx->os,
                          xpost_stack_topdown_fetch(ctx->lo, ctx->os, n));
-    (void)xpost_op_cleartomark(ctx);
+    /* the mark counttomark found is still beneath the operands it
+       counted: nothing above has been removed since, so the clear
+       reaches it */
+    XPOST_REFUSAL_IMPOSSIBLE(xpost_op_cleartomark(ctx));
 
     xpost_stack_push(newctx->lo, newctx->es, xpost_operator_cons(newctx, "_i_am_zombie_", NULL,0));
     xpost_stack_push(newctx->lo, newctx->es, proc);
