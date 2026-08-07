@@ -143,6 +143,7 @@ tests/large_object_test.ps \
 tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/lsan.supp \
+tests/mask_cache_range_test.ps \
 tests/memory_bounds_test.c \
 tests/must_check.golden \
 tests/namespace_test.ps \

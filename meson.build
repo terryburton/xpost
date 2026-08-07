@@ -1226,6 +1226,15 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A captured glyph mask is copied into the cache at the dimensions its
+# dictionary states, so dimensions the coverage bytes do not hold are a
+# rangecheck rather than a copy past them.
+test('mask-cache-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/mask_cache_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # .swap exchanges two elements by index, and an index outside the array
 # names an element of whatever else the backing entity holds, so it is a
 # rangecheck at both ends.
