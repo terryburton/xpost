@@ -398,7 +398,7 @@ endif
 #             under an allocator that quarantines or shadows
 #
 # The corpus and the vendor suite are the two that need something this
-# tree does not carry, and the three cost profiles below leave both out
+# tree does not carry, and the cost profiles below leave both out
 # for the same reason: a profile that reports one skip on the machines
 # without them and none on the machines with them says something
 # different on each, and the one it says nothing about is the run that
@@ -413,12 +413,17 @@ endif
 # The upper boundary is where the measurement has its one large gap: the
 # whole suite runs in a smooth tail up to twenty-two seconds and then
 # jumps by a factor of four to two runs measured in minutes. Both of
-# those are corpora, so no interpreter test is veryslow today and the
-# profiles that differ only by it select the same set; the tag is what
-# keeps a four-minute run out of them the moment one appears.
+# those are corpora, so nothing the tree runs out of itself is veryslow,
+# and there is no test to promote into the band -- the tail below it has
+# no gap at all. The tag is still what keeps a four-minute run out of
+# the cheaper selections the moment one appears, and it already selects
+# on the other axis, where the two expensive corpora carry it and the
+# two cheap ones do not. What it cannot do is divide the profiles: a
+# range drawn at the top of the slow band and a range drawn above it
+# hold the same tests, so there is one profile over them and not two.
 #
 # The lower boundary has no gap to sit in -- the tail is dense -- so it
-# is set by what the tag is worth: fifteen of the interpreter's tests
+# is set by what the tag is worth: sixteen of the interpreter's tests
 # take five seconds or more, which is eight in a hundred of them and
 # half of what the suite costs. Below five seconds a tag would name
 # many tests and save little.
@@ -434,8 +439,7 @@ endif
 # do not.
 #
 #   ninja -C build quick        cost fast                -- while editing
-#   ninja -C build check        + cost slow              -- before a commit
-#   ninja -C build full         + cost veryslow          -- the tree's own suite
+#   ninja -C build full         every cost               -- the tree's own suite
 #   ninja -C build corpus       the corpus, all costs    -- with programs fetched
 #   ninja -C build vendor       the vendor suite         -- with its checkout
 #   meson test -C build         everything, as before
@@ -461,7 +465,7 @@ cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
 
 run_profile = find_program('tests/run-profile.sh')
-foreach profile : [ 'quick', 'check', 'full', 'corpus', 'vendor' ]
+foreach profile : [ 'quick', 'full', 'corpus', 'vendor' ]
   run_target(profile, command: [ run_profile, profile ])
 endforeach
 

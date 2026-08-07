@@ -60,12 +60,11 @@ To run the test suite:
   meson test -C builddir
 ```
 
-That runs all of it. Five profiles select less, from the one you can
+That runs all of it. Four profiles select less, from the one you can
 afford between edits to the one that leaves nothing out:
 ```
   ninja -C builddir quick     the fast tests             -- while editing
-  ninja -C builddir check     + the slow ones            -- before a commit
-  ninja -C builddir full      + the very slow ones       -- the tree's own suite
+  ninja -C builddir full      every cost                 -- before a commit
   ninja -C builddir corpus    the differential corpus
   ninja -C builddir vendor    a downstream consumer's suite
 ```
@@ -89,6 +88,11 @@ test listing and refuses unless the filter selects exactly that.
 Every test declares its cost where it is registered in `meson.build`,
 and `check-test-cost` fails if one does not, so a slow test added later
 cannot quietly settle into the quick profile.
+
+There are two cost profiles and three cost tags because nothing the
+tree runs out of itself is `veryslow` -- the tag is carried by two of
+the corpora -- so a selection stopping at the top of `slow` and one
+going past it name the same tests.
 
 The differential corpus under `tests/corpus` is part of the suite; it
 is fetched on demand and skips until you populate it (see

@@ -37,7 +37,7 @@
 #          large-object report over small-object numbers, which is the shape
 #          of mistake this whole script exists to refuse.
 #   $2     test profile to measure (default: full). One of the profiles
-#          tests/run-profile.sh spells: quick, check, full, corpus.
+#          tests/run-profile.sh spells: quick, full, corpus.
 #   $3...  further arguments for meson test (--num-processes, -v, ...)
 #
 # Requires gcov (part of gcc). Nothing else.
