@@ -2168,8 +2168,9 @@ test('stencil-mask-size',
 # Differential corpus: render whatever real-program corpora the developer has
 # fetched (tests/corpus/fetch.sh) through xpost and Ghostscript and report the
 # per-page difference. Skips when no corpus is present or the reference tools
-# are absent, so it is never a build-time dependency; fails only when xpost
-# crashes or hangs on a program.
+# are absent, so it is never a build-time dependency; fails when xpost crashes
+# or hangs on a program, and when a corpus was named and only part of it
+# evaluated.
 # One test per corpus, so that meson overlaps them instead of running them end
 # to end; each skips on its own when its corpus has not been fetched.
 #

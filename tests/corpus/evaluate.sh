@@ -9,10 +9,20 @@
 #   evaluate.sh ghostscript     evaluate one
 #   XPOST=/path/to/xpost evaluate.sh    use a specific build
 #
+# The corpora are meant to be evaluated at once: the build registers one
+# test per corpus so that they overlap. So nothing written here may sit
+# at a path a second run would arrive at as well. A run makes a working
+# directory of its own under .work, each corpus takes a directory under
+# that, and each program a numbered directory under that -- three levels
+# because all three names repeat. Two corpora both number their programs
+# from one, and a corpus evaluated twice at once is two runs of the same
+# name; sharing any of it means one program's renders standing where
+# another's are read, a list truncated while it is being walked, and a
+# report that is neither run's.
+#
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../.." && pwd)
-work="$here/.work"
 XPOST=${XPOST:-"$root/build/src/bin/xpost"}
 GS=${GS:-gs}
 jobs=${CORPUS_JOBS:-$(nproc 2>/dev/null || echo 4)}
@@ -42,7 +52,7 @@ evaluate_one() {
     b=$2
     p=$3
     work=$4
-    mkdir -p "$work"
+    mkdir -p "$work" || return
     (
         dev=$(device_for "$corpus" "$b")
         gsdev=${dev}raw
@@ -104,12 +114,14 @@ evaluate_corpus() {
         return
     fi
     echo "=== $corpus"
-    mkdir -p "$work"
+    cwork="$work/$corpus"
+    mkdir -p "$cwork" || return
 
     # Name the programs to render, in order, and hold out the ones the
     # corpus lists as too slow for the per-file timeout.
     n=0
-    : > "$work/list"
+    held=0
+    : > "$cwork/list"
     for p in "$@"; do
         [ -f "$p" ] || continue
         b=$(basename "$p" | sed 's/\.[Pp][Ss]$//;s/\.[Ee][Pp][Ss]$//')
@@ -117,30 +129,61 @@ evaluate_corpus() {
         # that render correctly but too slowly to fit the per-file timeout, held
         # out until the underlying performance work lands
         if [ -f "$dir/slow" ] && grep -qxF "$b" "$dir/slow"; then
-            echo "  $b  held out (see $corpus/slow)"; continue
+            echo "  $b  held out (see $corpus/slow)"
+            held=$((held + 1))
+            continue
         fi
         n=$((n + 1))
-        printf '%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$work/$n" >> "$work/list"
-        printf '%s\n' "$work/$n.out" >> "$work/order"
+        printf '%s\n%s\n%s\n%s\n' "$corpus" "$b" "$p" "$cwork/$n" >> "$cwork/list"
     done
     [ "$n" = 0 ] && return
 
     # Render them concurrently -- each engine run is a separate process over
     # its own directory -- then report in the order they were named, so the
-    # output does not depend on which finished first.
-    xargs -P "$jobs" -n4 "$0" --one < "$work/list" >/dev/null 2>&1
-    while read -r f; do
-        [ -f "$f" ] && cat "$f"
-    done < "$work/order"
-    rm -f "$work/list" "$work/order"
+    # output does not depend on which finished first. The list is what said
+    # which programs those were, so walking it again is what reports them,
+    # and a program whose report is not there is named as one rather than
+    # passed over: a run that evaluates a fraction of a corpus and says
+    # nothing about the rest agrees with whatever the rest would have said.
+    xargs -P "$jobs" -n4 "$0" --one < "$cwork/list" >/dev/null 2>&1
+    seen=0
+    while read -r c && read -r b && read -r p && read -r d; do
+        if [ -s "$d.out" ]; then
+            cat "$d.out"
+            seen=$((seen + 1))
+        else
+            echo "  $b  NOT EVALUATED (no report)"
+        fi
+    done < "$cwork/list"
+    note=
+    [ "$held" = 0 ] || note=", $held held out"
+    if [ "$seen" = "$n" ]; then
+        echo "$corpus: $n programs evaluated$note"
+    else
+        echo "$corpus: NOT EVALUATED -- $seen of $n programs reported$note"
+    fi
+    rm -rf "$cwork"
 }
 
-# the per-program entry point xargs re-invokes this script through
+# the per-program entry point xargs re-invokes this script through. It is
+# told the directory to work in, so it makes none of its own and this has
+# to come before the run's directory is made.
 if [ "${1:-}" = "--one" ]; then
     shift
     evaluate_one "$@"
     exit 0
 fi
+
+mkdir -p "$here/.work" 2>/dev/null
+work=$(mktemp -d "$here/.work/run.XXXXXX" 2>/dev/null) || work=
+if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
+    echo "evaluate: could not make a working directory under $here/.work" >&2
+    exit 1
+fi
+# and taken away however the run ends: a signal reaches the trap below,
+# which exits, which reaches the one on EXIT.
+trap 'rm -rf "$work"' EXIT
+trap 'exit 1' INT TERM HUP
 
 for name in ${*:-ghostscript casselman bwipp adobe}; do
     evaluate_corpus "$name"

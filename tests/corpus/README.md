@@ -23,9 +23,15 @@ The build wires the evaluation in as a test, so once a corpus is fetched
 
 renders it and reports the per-page difference; a plain `meson test`
 runs it as part of the suite. It skips when no corpus is present or the
-comparison tools are absent, and fails only when xpost crashes or hangs
-on a program -- a rendering difference is a lead, not a failure (see
+comparison tools are absent, and fails when xpost crashes or hangs on a
+program -- a rendering difference is a lead, not a failure (see
 Evaluation, below).
+
+Each corpus closes with a count of the programs it evaluated and the ones
+it held out, and a program the run named and did not reach is reported as
+one and fails the test. The corpora are evaluated at once, one test each,
+so a run that quietly did a fraction of the work would otherwise report
+the same success as one that did all of it.
 
 The corpora
 -----------
