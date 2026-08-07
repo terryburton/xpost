@@ -2141,6 +2141,18 @@ test('privatedict-install',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The array a wrapped operator copies its operands into lives under a key
+# in privatedict, which a program reaches with a plain put. It is read
+# against local memory and bounded by its declared size, so a global one
+# stored there would be read at a different local object of a different
+# size and written past. The array is required to be local, and one that
+# is not is rebuilt.
+test('wrapsave-bank',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/wrapsave_bank_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache's byte parameters are program data, and the per-glyph
 # ceiling is the only size gate an entry passes into the store: both are
 # held to the largest cache the implementation offers, substituted for a
