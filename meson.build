@@ -741,6 +741,22 @@ test('free-list-recovery',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What the free list costs to allocate out of. Releasing a great many
+# composites of one size and then allocating smaller ones is the shape
+# an ordinary job makes between pages, and it is the shape in which a
+# search that reads a bucket to the end charges the request for
+# everything the job has already released. That cost grows for as long
+# as a job runs, so nothing short measures it; the interpreter counts
+# the entries an allocation examines, and the assertion is that count,
+# held both to a ceiling and to being the same after four times as much
+# was released.
+test('free-scan',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/free_scan_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The capacity a dictionary reports, against the header field that
 # carries it. A capacity asked for above that field's width is a request
 # only the library makes -- `dict` refuses one before any dictionary is

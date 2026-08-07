@@ -1,0 +1,98 @@
+% What an allocation costs, run through `xpost -q --no-sandbox -d null`
+% by run-ps-test.sh.
+%
+% A composite released goes onto a free list bucketed by its size, and
+% an allocation looks there before taking fresh memory. The pattern this
+% test is about is the one an ordinary job makes between pages: release
+% a great many composites of one size, then allocate smaller ones. The
+% smaller request finds nothing in its own size class and reaches the
+% class the released ones landed in, every entry of which is far larger
+% than it asked for and none of which is an exact fit.
+%
+% Nothing about that request says how far into a bucket it should look,
+% and a search that reads to the end of the chain costs what the job has
+% already released rather than what it is asking for. That is the shape
+% to hold the allocator away from: it grows for as long as a job runs,
+% so a short run measures it as free, and by the time it is not free the
+% job is the only thing that can show it.
+%
+% So the assertion is a count of entries examined and not a time: the
+% interpreter carries the count itself, and a bound stated in entries
+% survives a loaded machine, which a bound stated in seconds does not.
+% The two arms release four times as much between them, and the cost of
+% allocating afterwards must be the same in both -- that is the whole
+% property, and it is what the count can say and a wall clock cannot.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.vmfreescan 1183615869 internaldict /.vmfreescan get def
+
+/DICTS 10000 def
+/MORE 40000 def
+/ALLOCS 2000 def
+
+% The ceiling an allocation is held to: the allocator looks at no more
+% than eight entries in each of sixteen size classes, so a hundred and
+% twenty-eight entries is the most any one allocation can examine
+% whatever the free list holds. The arms below come nowhere near it --
+% they read a handful of entries in the one class that has any -- and
+% the point of stating the structural ceiling rather than the observed
+% figure is that a search let off its bound again lands orders of
+% magnitude above this, not just above what was measured.
+/CEILING 128 def
+
+% Build n one-entry dictionaries held from one array, then drop the
+% array and collect, so that every one of them is on the free list and
+% nothing else refers to it.
+/release { % int  .  -
+    /n exch def
+    /hold n array def
+    0 1 n 1 sub { hold exch 1 dict put } for
+    /hold null store
+    2 vmreclaim
+} def
+
+% Allocate ALLOCS one-element arrays, held so that none of them is
+% reclaimed while the rest are being made, and answer the number of
+% free-list entries the allocator examined doing it.
+/measure { % -  .  int
+    /kept ALLOCS array def
+    .vmfreescan pop
+    0 1 ALLOCS 1 sub { kept exch 1 array put } for
+    .vmfreescan pop
+    exch sub
+    /kept null store
+} def
+
+DICTS release
+/deltasmall measure def
+
+MORE release
+/deltalarge measure def
+
+% A hook stuck at one number would satisfy every bound below by saying
+% nothing, so require first that it moved.
+deltasmall 0 gt
+    (the allocator reports the entries it examined) assert
+
+deltasmall ALLOCS CEILING mul le
+    (allocating over a released volume stays within the bound) assert
+
+deltalarge ALLOCS CEILING mul le
+    (and stays within it over four times the released volume) assert
+
+% The property itself: four times as much released, and the allocations
+% afterwards cost the same. Doubling is the headroom, and an unbounded
+% search misses it by four orders of magnitude rather than by a factor.
+deltalarge deltasmall 2 mul le
+    (the cost of allocating does not follow the volume released) assert
+
+checks 4 eq (every check was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse

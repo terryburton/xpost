@@ -95,6 +95,29 @@ typedef enum
  */
 #define XPOST_FREE_NBUCKETS 16
 
+/**
+ * How many entries an allocation may examine in any one bucket.
+ *
+ * A bucket's chain is as long as the job's history of releasing that
+ * size class, so a walk to the end of one costs what the job has
+ * already freed rather than what the request asks for -- a cost that
+ * grows for as long as the job runs, and is invisible to anything
+ * short. What the walk is looking for does not need the whole chain:
+ * a bucket above the request's own holds nothing smaller than the
+ * request, so its first entries already serve, and within the
+ * request's own bucket the sizes span a single power of two, so a
+ * close fit is near the head if it is there at all. Examining a fixed
+ * number of entries therefore keeps near-exact recycling while
+ * bounding an allocation at #XPOST_FREE_SCAN_LIMIT times
+ * #XPOST_FREE_NBUCKETS entries however much has been released.
+ *
+ * The cost of the bound is that a fit lying deeper in the request's
+ * own bucket is passed over: the allocation takes a larger entry from
+ * a higher bucket, or a fresh one, and the byte waste is reclaimable
+ * by a later collection.
+ */
+#define XPOST_FREE_SCAN_LIMIT 8
+
 static inline unsigned int
 xpost_free_bucket_for_size(unsigned int sz)
 {
