@@ -289,4 +289,5 @@ tests/verdict.sh \
 tests/vm_test.ps \
 tests/wrapped_bind.golden \
 tests/wrapped_bind_test.ps \
+tests/wrapped_save_test.ps \
 tests/xpost_test.h

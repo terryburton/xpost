@@ -1235,6 +1235,15 @@ test('array-swap-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Releasing a wrapped call clears the saved-operand array back to the
+# mark its run began at, bounded by what that array holds rather than by
+# the size the interpreter's own array is built at.
+test('wrapped-save',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/wrapped_save_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.
