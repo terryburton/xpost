@@ -49,6 +49,14 @@
 #   gate that reports success over work it did not do says nothing about
 #   the work it did not do.
 #
+# A fourth shape is not vacuous at all, which is what makes it worse: a
+# verdict that is entirely true about code nobody is asking about. The
+# suite runs the checkout's monolith, a file generated from its sources,
+# and one that predates them is loaded as readily as one that does not.
+# So the monolith is held to being no older than what it is generated
+# from, and what generated it -- when, and from which revision -- is
+# printed beside the verdict.
+#
 # The consumer's suite ships a shim that stands in for the Level 2
 # resource operators on interpreters that lack them, guarded by a probe
 # for a private name that this interpreter used to carry beside its own
@@ -128,6 +136,42 @@ if [ ! -x "$xpost" ]; then
     exit 1
 fi
 
+# The monolith is generated from the checkout's sources, and nothing on
+# either side notices one that predates them. The suite loads it, the
+# encoders in it are the ones built last time, and every verdict is
+# about those -- read, inevitably, as a verdict about the sources on
+# disk. It is wrong in both directions at once: an edit that broke an
+# encoder passes, and an edit that fixed one fails, each as convincingly
+# as the truth. Ruling that out has already cost a bisect of this
+# interpreter across four of its own commits, for a regression that was
+# never in it.
+#
+# This fails rather than skips. A checkout whose monolith is out of date
+# is present, runnable, and one command away from being right, which is
+# not the absent tool the skips above are for. The command is named and
+# not run: building someone else's tree as a side effect of a test here
+# would be this gate deciding what that tree should contain.
+stale=$(
+    find "$bwipp/src" \
+         \( -name '*.ps.src' -o -name 'ps.head' -o -name '*.upr' \) \
+         -newer "$mono" 2>/dev/null
+    find "$bwipp/CHANGES" -newer "$mono" 2>/dev/null
+)
+if [ -n "$stale" ]; then
+    echo "FAILURES: the monolith is older than what it is generated from:"
+    printf '%s\n' "$stale" | LC_ALL=C sort | while IFS= read -r f; do
+        case $f in
+            "$bwipp"/*) echo "      ${f#"$bwipp"/} is newer" ;;
+            *)          echo "      $f is newer" ;;
+        esac
+    done
+    echo "      $mono"
+    echo "      would run the encoders built before those edits, so the"
+    echo "      verdict would be about code that is no longer there."
+    echo "      Rebuild it with: make -C $bwipp"
+    exit 1
+fi
+
 XPOST_DATA_DIR=${XPOST_DATA_DIR:-$src/data}
 export XPOST_DATA_DIR
 if [ ! -s "$XPOST_DATA_DIR/init.ps" ]; then
@@ -204,7 +248,30 @@ if [ -n "${BWIPP_JOBS:-}" ]; then
     export JOBS
 fi
 
-echo "vendor-bwipp: $listed test files from $bwipp"
+# What produced the verdict, said before it is given. The check above
+# settles that the monolith is not older than its sources; it cannot say
+# which sources, because a checkout is edited between builds and a
+# monolith built from work that is not committed anywhere is the
+# ordinary case while an encoder is being written. So the two facts that
+# identify it are printed -- when it was generated, and what the
+# checkout's revision is -- and a run's report can be traced to them
+# afterwards, which is what the bisect above had no way to do.
+#
+# Both are decoration on the run, not conditions of it: a checkout that
+# is not a repository, or a date this shell cannot format, leaves a
+# gap in the line and nothing else.
+when=$(date -r "$mono" '+%Y-%m-%d %H:%M' 2>/dev/null) ||
+    when=$(LC_ALL=C ls -l "$mono" | awk '{ print $6, $7, $8 }')
+rev=$(git --no-optional-locks -C "$bwipp" rev-parse --short HEAD 2>/dev/null) || rev=
+n=$(git --no-optional-locks -C "$bwipp" status --porcelain -- src 2>/dev/null |
+    grep -c .) || n=0
+edited=
+if [ "$n" -gt 0 ]; then
+    edited=" plus $n uncommitted source edit(s)"
+fi
+
+echo "vendor-bwipp: $listed test files from $bwipp${rev:+ at $rev}$edited"
+echo "vendor-bwipp: through $mono, generated ${when:-at an unknown time}"
 out=$(cd "$root" && "$root/tests/xpost_tests/run" 2>&1)
 status=$?
 printf '%s\n' "$out"
