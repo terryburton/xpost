@@ -412,6 +412,24 @@ rf.g closefile
 <~87cURD]hD=6i~> (Hello CID) eq (a base-85 literal decodes) assert
 <~z~> <00000000> eq (z abbreviates four zero bytes) assert
 
+% --- immediately evaluated names (PLRM 3.12.2): the scanner looks the
+% name up on the dictionary stack and substitutes its value, and where
+% it cannot find the name an undefined error occurs. A lookup that fails
+% leaves nothing to substitute, so the value beneath on the operand stack
+% is what the token would otherwise become -- silently, and differently
+% depending on what the program last left there ---
+/imm.defined 42 def
+(//imm.defined) token (a defined immediate name scans) assert
+42 eq (an immediate name scans as the value it names) assert
+pop
+
+1234567  % what a lookup that pushed nothing would take instead
+{ (//imm.undefined) token } stopped
+    (an immediate name with no definition raises) assert
+$error /errorname get /undefined eq
+    (an immediate name with no definition raises undefined) assert
+clear
+
 % --- clipsave and cliprestore stack the clip region alone ---
 gsave
 newpath 10 10 moveto 50 10 lineto 50 50 lineto 10 50 lineto closepath clip
