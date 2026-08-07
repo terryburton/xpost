@@ -56,6 +56,17 @@
 # define XPOST_MUST_CHECK
 #endif
 
+/* Marks a function that stays out of line at every call site. Link-time
+   optimization inlines a small cross-unit function wherever it is
+   called, and the growth that costs the unit is taken out of the budget
+   the interpreter's own hot accessors are inlined from; a function
+   called from every device method is over that line. */
+#if defined(__GNUC__) || defined(__clang__)
+# define XPOST_NOINLINE __attribute__((noinline))
+#else
+# define XPOST_NOINLINE
+#endif
+
 /* Consumes the answer of an XPOST_MUST_CHECK function at a site where
    the refusal it reports cannot arise -- an index the line above just
    read from, a resource the caller has already established. Naming the

@@ -172,13 +172,8 @@ int _create_cont(Xpost_Context *ctx,
     int ret;
 
     /* create a string to contain device data structure */
-    privatestr = xpost_string_cons(ctx, sizeof(PrivateData), NULL);
-    if (xpost_object_get_type(privatestr) == invalidtype)
-    {
-        XPOST_LOG_ERR("cannot allocat private data structure");
-        return unregistered;
-    }
-    ret = xpost_dict_put(ctx, devdic, namePrivate, privatestr);
+    ret = xpost_dev_private_cons(ctx, devdic, namePrivate, &privatestr,
+                                 sizeof(PrivateData));
     if (ret)
         return ret;
 

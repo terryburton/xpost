@@ -1260,6 +1260,16 @@ test('path-bounds',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a device instance dictionary holds under /Private is a handle on a
+# block of state outside virtual memory, so a value of the program's own
+# -- or a copy of a genuine handle -- names no block and is reported
+# rather than followed.
+test('device-private',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/device_private_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A screening device's threshold cell is addressed by two dimensions
 # carried beside it in the device dictionary, so a pair of dimensions
 # the cell does not hold leaves the fill unscreened rather than reading

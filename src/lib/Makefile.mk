@@ -17,6 +17,7 @@ src/lib/xpost_dev_bgr.c \
 src/lib/xpost_dev_generic.c \
 src/lib/xpost_dev_jpeg.c \
 src/lib/xpost_dev_png.c \
+src/lib/xpost_dev_private.c \
 src/lib/xpost_dev_raster.c \
 src/lib/xpost_dict.c \
 src/lib/xpost_error.c \
@@ -61,6 +62,7 @@ src/lib/xpost_dev_bgr.h \
 src/lib/xpost_dev_generic.h \
 src/lib/xpost_dev_jpeg.h \
 src/lib/xpost_dev_png.h \
+src/lib/xpost_dev_private.h \
 src/lib/xpost_dev_raster.h \
 src/lib/xpost_dict.h \
 src/lib/xpost_error.h \
