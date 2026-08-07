@@ -1,0 +1,122 @@
+% Relocation underneath the interpreter's fused operators.
+%
+% Executing a procedure resolves the array's storage to a pointer once
+% and then reads its elements directly. Some of the operators fused into
+% that loop allocate -- a def can grow the dictionary it writes, an array
+% store can copy the array its save level owes a copy of -- and an
+% allocation can extend the memory file, which moves everything in it.
+% The resolved pointer is therefore re-derived whenever a base has moved,
+% and the check names both memory files, because either can be the one
+% that moved.
+%
+% The global half of that check is the reason this file exists. Global VM
+% is never collected, but it still grows, so the base it is reached
+% through still moves -- and nothing else in the suite makes it move
+% while a fused operator is running. An ordinary program does not: a
+% memory file's capacity is extended geometrically, so the extensions are
+% few and land where they land. The moment is therefore built rather than
+% waited for. The global file is filled to within less than the size of
+% the next dictionary table it will be asked for, and the dictionary is
+% then grown from inside a procedure through the fused def: the growth
+% allocates that table, the allocation extends the file, and the
+% procedure that asked for it is itself in global VM, so the elements
+% after the def are read through a pointer the extension invalidated.
+%
+% The construction is not assumed to have worked. Between filling the
+% file and running the procedure nothing else allocates in global VM, and
+% the dictionary having grown and the file having been extended are both
+% read back afterwards -- a run in which neither happened proves nothing
+% about the check and says so.
+%
+% Run under XPOST_GROW_MOVES=1 by run-reloc-stress-test.sh, where every
+% extension copies the file to fresh memory and releases the old, so a
+% pointer held across one reads memory that has been handed back.
+%
+% What is read afterwards is not only the dictionary's contents: the
+% elements of the procedure that follow the def are arithmetic with a
+% known answer, so a procedure read through a stale pointer is a wrong
+% answer here and not only a crash somewhere.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% what is left in the global file before it must be extended again
+/gslack { globalvmstatus 3 -1 roll pop exch sub } bind def
+
+/nkey 1200 def
+/prefill 950 def
+/margin 32768 def
+
+% named here so that nothing between filling the global file and running
+% the procedure has to make a name, which would allocate in global VM
+/tailok true def
+/allok true def
+/putok true def
+/capbefore 0 def
+/slackbefore 0 def
+
+% --- a fused def whose dictionary grows in global VM ---
+
+true setglobal
+
+% every name the run defines, made before the file is filled: after that
+% point the dictionary's own growth has to be the allocation that reaches
+% the end of the file, and nothing else may reach it first
+/NAMES nkey array def
+0 1 nkey 1 sub { dup 20 string cvs cvn NAMES 3 1 roll put } for
+
+% carry the dictionary to just below the size at which it next grows,
+% through the operator rather than through the fused path
+/GD 1 dict def
+0 1 prefill 1 sub { NAMES exch get 1 GD 3 1 roll put } for
+GD length prefill eq (the dictionary takes the entries put in it) assert
+
+GD begin
+/fill { NAMES { 1 def 3 4 add 7 ne { /tailok false store } if } forall } bind def
+end
+
+% fill the global file to within less than the table the dictionary's
+% next growth asks for, in steps far smaller than that margin so that no
+% step of the filling reaches the end itself
+{ gslack margin lt { exit } if 8192 string pop } loop
+/slackbefore gslack store
+/capbefore GD maxlength store
+
+GD begin fill end
+
+false setglobal
+
+slackbefore margin lt
+    (the global file was filled to within a table of its end) assert
+GD maxlength capbefore gt
+    (the dictionary grew while the fused def was running) assert
+gslack slackbefore gt
+    (the global file was extended while the fused def was running) assert
+
+GD length nkey 1 add eq
+    (the dictionary holds every key defined through the fused path) assert
+tailok
+    (the elements after a fused def are read from the relocated procedure)
+    assert
+NAMES { GD exch get 1 ne { /allok false store } if } forall
+allok (every key defined through the fused path answers its value) assert
+
+% --- a fused array store whose copy-on-write moves the local file ---
+%
+% An array store allocates only where the save level owes a copy of the
+% array, which is what the save below arranges. It is not restored: the
+% copies are the point, and a restore would revert the record of what
+% this file found.
+
+/LARR 40 array def
+0 1 39 { LARR exch 8000 array put } for
+/ltouch { 0 1 39 { LARR exch get 0 42 put 0 pop } for } bind def
+save pop
+ltouch
+0 1 39 { LARR exch get 0 get 42 ne { /putok false store } if } for
+putok (every fused array store survives the copy its save forces) assert
+
+count 0 eq (the operand stack is left as it was found) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

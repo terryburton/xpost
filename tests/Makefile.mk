@@ -197,6 +197,7 @@ tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
+tests/reloc_fused_test.ps \
 tests/reloc_stress_test.ps \
 tests/render-differ.sh \
 tests/render_classes_test.ps \

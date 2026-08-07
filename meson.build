@@ -2086,6 +2086,25 @@ test('reloc-stress',
   suite: cost_fast,
   timeout: 120)
 
+# The same forced relocation, underneath the operators fused into the
+# procedure-execution loop. That loop resolves the running array's
+# storage to a pointer once and re-derives it whenever a memory file has
+# moved; a fused def can grow the dictionary it writes and a fused array
+# store can copy the array a save owes a copy of, and either allocation
+# can extend the file. The global half of the check is what this adds:
+# global VM is never collected but still grows, and nothing else in the
+# suite moves it while a fused operator runs. The test fills the global
+# file to within less than the dictionary table its next growth asks for,
+# then grows that dictionary from inside a procedure that is itself in
+# global VM, and reads back that both the growth and the extension
+# happened.
+test('reloc-fused',
+  find_program('tests/run-reloc-stress-test.sh'),
+  args: [ xpost_exe, files('tests/reloc_fused_test.ps'), 'null' ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The library's exported symbol set is a register, not a side effect. A
 # declaration interposed between `static` and a function silently gives it
 # external linkage; the compiler reports only a useless-storage-class note.
