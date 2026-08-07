@@ -5,13 +5,18 @@
 #     comparison tools it needs (Ghostscript, ImageMagick compare) are absent. The corpus
 #     is thus never a build-time dependency -- populate it with fetch.sh to make
 #     this test do its work.
-#   - FAIL (exit 1) when xpost crashes or hangs on a corpus program, or when
-#     the evaluation did not reach every program it named. A rendering
+#   - FAIL (exit 1) when xpost crashes or hangs on a corpus program, when the
+#     evaluation did not reach every program it named, or when what drew no
+#     page is not what the corpus declares draws none. A rendering
 #     difference is a lead, not a verdict (see README.md), so it is reported
 #     but does not fail the test; a signal death or a timeout is an
 #     unambiguous regression and does, and so is a corpus only part of which
 #     was evaluated -- a gate that reports success over work it did not do
-#     says nothing about the work it did not do.
+#     says nothing about the work it did not do. Reaching a program is not
+#     the same as rendering one, and the count of programs evaluated cannot
+#     tell the two apart: a run in which every program failed reaches all of
+#     them. So the pages that were never drawn are held to a declared set as
+#     well, and a run that compared nothing has nothing declaring it may.
 #   - PASS (exit 0) otherwise, with the per-page differences left in the log for
 #     inspection (meson test corpus -v, or meson-logs/testlog.txt).
 #   $1  path to the built xpost binary (optional; evaluate.sh finds one itself)
@@ -49,4 +54,6 @@ printf '%s\n' "$out" | grep -Eq 'XPOST (CRASHED|TIMED OUT)' && {
     echo "corpus: xpost crashed or hung on a program -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'NOT EVALUATED' && {
     echo "corpus: part of the corpus was never evaluated -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'NO-PAGE SET DIFFERS' && {
+    echo "corpus: what drew no page is not what the corpus declares -- see above"; exit 1; }
 exit 0

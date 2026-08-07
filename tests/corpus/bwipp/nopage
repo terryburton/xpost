@@ -1,0 +1,22 @@
+# What this corpus draws no page for. One entry per line -- a basename
+# for a program that produces no page at all, a basename and " pN" for
+# one page of a program that produces others -- each with the reason it
+# draws nothing.
+#
+# A run compares the pages both engines drew, so anything that draws
+# none is outside the comparison and the run answers nothing about it.
+# Saying so here in advance is what keeps that from passing for a
+# result: the count of programs a corpus evaluated is honest and says
+# only that they were reached, so a run in which every program failed
+# reports exactly what a run in which every one rendered reports. An
+# absence nobody declared fails the corpus for that reason. So does a
+# declared absence that turns out to have rendered -- the entry's reason
+# has lapsed, and the line is left telling its next reader something
+# untrue.
+#
+# dimensions -- a library rather than a drawing. It defines a
+#               barcodewidth procedure over the barcode resource and
+#               ends there; the call that would use it is written out
+#               as a comment, and the file names showpage nowhere. Both
+#               engines run it to the end and neither writes a page.
+dimensions

@@ -1,0 +1,22 @@
+# What this corpus draws no page for. One entry per line -- a basename
+# for a program that produces no page at all, a basename and " pN" for
+# one page of a program that produces others -- each with the reason it
+# draws nothing.
+#
+# A run compares the pages both engines drew, so anything that draws
+# none is outside the comparison and the run answers nothing about it.
+# Saying so here in advance is what keeps that from passing for a
+# result: the count of programs a corpus evaluated is honest and says
+# only that they were reached, so a run in which every program failed
+# reports exactly what a run in which every one rendered reports. An
+# absence nobody declared fails the corpus for that reason. So does a
+# declared absence that turns out to have rendered -- the entry's reason
+# has lapsed, and the line is left telling its next reader something
+# untrue.
+#
+# ridt91 -- draws its logo and stops without asking for the page: the
+#           file's one showpage is commented out, below the restore that
+#           ends it, and nothing else emits one. Neither engine writes a
+#           page, so there is no comparison to make and nothing missing
+#           from either side of it.
+ridt91

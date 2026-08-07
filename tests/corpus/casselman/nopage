@@ -1,0 +1,33 @@
+# What this corpus draws no page for. One entry per line -- a basename
+# for a program that produces no page at all, a basename and " pN" for
+# one page of a program that produces others -- each with the reason it
+# draws nothing.
+#
+# A run compares the pages both engines drew, so anything that draws
+# none is outside the comparison and the run answers nothing about it.
+# Saying so here in advance is what keeps that from passing for a
+# result: the count of programs a corpus evaluated is honest and says
+# only that they were reached, so a run in which every program failed
+# reports exactly what a run in which every one rendered reports. An
+# absence nobody declared fails the corpus for that reason. So does a
+# declared absence that turns out to have rendered -- the entry's reason
+# has lapsed, and the line is left telling its next reader something
+# untrue.
+#
+# ch10 p12, p13 -- the chapter's twelfth page raises a limitcheck out of
+#                  stroke. The error is not caught, so the job stops
+#                  there and the rest of the file is flushed unread,
+#                  leaving the last two of the reference's thirteen
+#                  pages unwritten. The eleven before them are drawn and
+#                  compared as usual, which is why this is two pages
+#                  named here rather than the whole program.
+#
+#                  Both pages are held rather than the program because
+#                  that is what the state is: page twelve is where the
+#                  stroke is and page thirteen is only downstream of it,
+#                  and an entry for ch10 as a whole would stop reporting
+#                  the eleven that do render. Both come back the moment
+#                  the limit stroke runs into is lifted, and the entries
+#                  fail the corpus when they do.
+ch10 p12
+ch10 p13

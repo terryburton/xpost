@@ -53,6 +53,12 @@ evaluate_one() {
     p=$3
     work=$4
     mkdir -p "$work" || return
+    # Beside the report, what this program produced no page for and how
+    # many pages it did get compared. The reader below holds both
+    # against what the corpus declares, and it reads these rather than
+    # the report, so that the wording of a line is not also a protocol.
+    : > "$work.miss"
+    echo 0 > "$work.cmp"
     (
         dev=$(device_for "$corpus" "$b")
         gsdev=${dev}raw
@@ -94,12 +100,32 @@ evaluate_one() {
         fi
         ng=$(ls "$work"/g_*.$dev 2>/dev/null | wc -l)
         nx=$(ls "$work"/x_*.$dev 2>/dev/null | wc -l)
-        if [ "$ng" = 0 ]; then echo "  $b  reference produced no page"; exit 0; fi
-        if [ "$nx" = 0 ]; then echo "  $b  XPOST FAILED${xerr:+: $xerr}"; exit 0; fi
+        # A program either engine drew nothing for is compared not at
+        # all, so a run of them answers none of what it was asked. Record
+        # the absence under the program's name for the reader to hold
+        # against what the corpus declares; which engine came up empty
+        # is the reason for it, and reasons live in that file.
+        if [ "$nx" = 0 ] || [ "$ng" = 0 ]; then
+            printf '%s\n' "$b" >> "$work.miss"
+            if [ "$nx" = 0 ] && [ "$ng" = 0 ]; then
+                echo "  $b  no page from either engine"
+            elif [ "$nx" = 0 ]; then
+                echo "  $b  XPOST FAILED${xerr:+: $xerr}"
+            else
+                echo "  $b  reference produced no page ($nx from xpost)"
+            fi
+            exit 0
+        fi
         i=1
+        compared=0
         while [ "$i" -le "$ng" ]; do
             gp="$work/g_$i.$dev"; xp="$work/x_$i.$dev"
-            [ -f "$xp" ] || { echo "  $b p$i  no xpost page"; i=$((i+1)); continue; }
+            # a program that stops partway leaves the pages after it
+            # unwritten, and each of those is an absence of its own:
+            # keyed by its page, so the corpus declares it by the page
+            [ -f "$xp" ] || { echo "  $b p$i  no xpost page"
+                              printf '%s p%s\n' "$b" "$i" >> "$work.miss"
+                              i=$((i+1)); continue; }
             if [ "$dev" = pbm ]; then
                 convert "$gp" -resize 12.5% "$work/a.png" 2>/dev/null
                 convert "$xp" -resize 12.5% "$work/b.png" 2>/dev/null
@@ -110,8 +136,10 @@ evaluate_one() {
                 m=$(compare -metric AE -fuzz 5% "$gp" "$xp" null: 2>&1 | grep -oE '^[0-9]+')
                 printf "  %-16s p%-2s  AE %s\n" "$b" "$i" "${m:-?}"
             fi
+            compared=$((compared + 1))
             i=$((i+1))
         done
+        printf '%s\n' "$compared" > "$work.cmp"
     ) > "$work.out"
     rm -rf "$work"
 }
@@ -179,9 +207,15 @@ evaluate_corpus() {
     # nothing about the rest agrees with whatever the rest would have said.
     xargs -P "$jobs" -n4 "$0" --one < "$cwork/list" >/dev/null 2>&1
     seen=0
+    pages=0
+    : > "$cwork/missing"
+    : > "$cwork/ran"
     while read -r c && read -r b && read -r p && read -r d; do
         if [ -s "$d.out" ]; then
             cat "$d.out"
+            [ -f "$d.miss" ] && cat "$d.miss" >> "$cwork/missing"
+            [ -s "$d.cmp" ] && pages=$((pages + $(cat "$d.cmp")))
+            printf '%s\n' "$b" >> "$cwork/ran"
             # a program that differs from itself between two runs differs
             # from anything, so say so beside its numbers rather than
             # leaving them to be read as the renderer's doing
@@ -193,13 +227,57 @@ evaluate_corpus() {
             echo "  $b  NOT EVALUATED (no report)"
         fi
     done < "$cwork/list"
+
+    # What produced no page, against what the corpus says produces none.
+    # A program neither engine drew is compared not at all, and so is a
+    # page of one that stopped before reaching it; either way the run
+    # answers nothing about it, so the corpus has to have said so first,
+    # in a "nopage" file that names it and records why. An entry is a
+    # basename for a whole program, or a basename and " pN" for one page
+    # of it -- the keys the evaluator wrote above.
+    #
+    # The comparison runs both ways, because both directions are news. An
+    # absence nobody declared is a run comparing less than it was asked
+    # to and reporting as though it had: the count of programs evaluated
+    # is honest and says nothing about whether any of them drew, so a
+    # corpus in which everything failed reads exactly like one in which
+    # everything worked. A declared absence that turns out to have
+    # rendered is the other way round -- the entry's reason has lapsed,
+    # and the line is now telling its next reader something untrue.
+    : > "$cwork/declared"
+    if [ -f "$dir/nopage" ]; then
+        sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+            "$dir/nopage" | grep -v '^$' > "$cwork/declared"
+    fi
+    undeclared=0
+    lapsed=0
+    while read -r u; do
+        grep -qxF "$u" "$cwork/declared" && continue
+        echo "  $u  no page, and $corpus/nopage does not say it makes none"
+        undeclared=$((undeclared + 1))
+    done < "$cwork/missing"
+    while read -r u; do
+        # an entry for a program this run did not render -- held out, or
+        # not fetched -- is not one this run can speak to either way
+        grep -qxF "${u%% *}" "$cwork/ran" || continue
+        grep -qxF "$u" "$cwork/missing" && continue
+        echo "  $u  declared in $corpus/nopage as making no page, but it rendered"
+        lapsed=$((lapsed + 1))
+    done < "$cwork/declared"
+
     note=
     [ "$held" = 0 ] || note=", $held held out"
     [ -z "$nondet" ] || note="$note, nondeterministic:$nondet"
-    if [ "$seen" = "$n" ]; then
-        echo "$corpus: $n programs evaluated$note"
-    else
+    # the count of programs is what was reached; the count of pages is
+    # what was actually compared, which is the number a run that reached
+    # everything and drew nothing cannot inflate
+    note="$note, $pages pages compared"
+    if [ "$seen" != "$n" ]; then
         echo "$corpus: NOT EVALUATED -- $seen of $n programs reported$note"
+    elif [ "$undeclared" != 0 ] || [ "$lapsed" != 0 ]; then
+        echo "$corpus: NO-PAGE SET DIFFERS -- $undeclared undeclared, $lapsed lapsed; $n programs evaluated$note"
+    else
+        echo "$corpus: $n programs evaluated$note"
     fi
     rm -rf "$cwork"
 }

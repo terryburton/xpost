@@ -33,6 +33,20 @@ one and fails the test. The corpora are evaluated at once, one test each,
 so a run that quietly did a fraction of the work would otherwise report
 the same success as one that did all of it.
 
+Reaching a program is not the same as rendering one, so the count closes
+with the number of pages actually compared, and what drew no page is
+held to a declared set. A corpus names in a `nopage` file every program
+that produces no page and every page of a program that produces some,
+each with the reason -- a basename on its own line for a whole program,
+a basename and ` pN` for a single page. A run that draws nothing
+otherwise reports exactly what a run that drew everything reports: it
+reached every program either way. Both directions fail the test. An
+absence nobody declared is the corpus quietly comparing less than it was
+asked to; a declared absence that rendered is an entry whose reason has
+lapsed, and a file saying something untrue about what it holds is worse
+than no file, because it is read as a known cost and stops anyone
+looking.
+
 The corpora
 -----------
 
