@@ -1785,13 +1785,24 @@ test('op-loop-depth',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A JPEG stream that stops early, or was never a JPEG, must end the decode
-# rather than leave it waiting for input that will never come.
+# rather than leave it waiting for input that will never come; and a marker
+# whose payload the decoder does not read is stepped over rather than parsed.
 test('dct-truncated',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/dct_truncated_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,
   timeout: 60)
+
+# The other end of the same library: a page it will not compress. Its fatal
+# condition ends the process unless the handler installed over it does not
+# return, so a page of no height has to come back as a PostScript error the
+# program catches, with the interpreter still running afterwards.
+test('jpeg-refusal',
+  find_program('tests/run-jpeg-refusal-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # The interpreter's own debugging printers, which live in the private
 # dictionary and which nothing in ordinary use reaches: they walk the memory

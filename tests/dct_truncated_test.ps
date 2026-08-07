@@ -9,6 +9,13 @@
 % A program reads image data it did not write -- an embedded stream in a
 % document -- so a stream that stops early is ordinary input, not an
 % attack, and it has to be reported rather than waited on.
+%
+% A JPEG stream also carries markers whose payload the decoder does not
+% read: a comment, an application block it knows nothing about. Those are
+% stepped over at the source rather than parsed, and a decode that failed
+% to step over one would read the payload as though it were the stream.
+% The last part of this test makes that visible by hiding an end-of-image
+% marker inside a comment in an image that decodes.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
@@ -47,6 +54,61 @@ clear
     rounds 1000 ge { exit } if } loop
 } stopped not (reading a truncated stream to its end terminates) assert
 rounds 1000 lt (the read to exhaustion ends rather than repeating) assert
+clear
+
+% bytes that are no marker, sitting between two that are: the decoder
+% steps past them and says so, and the stream still ends
+{ <FFD841424344FFD9> reads 0 eq
+    (a stream with bytes between its markers yields no scanlines) assert }
+stopped { (FAIL: reading a stream with stray bytes errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+% a comment marker whose payload is entirely present, and one whose
+% payload the stream ends in the middle of: stepping over either has to
+% leave the decode able to finish rather than waiting on the rest
+{ <FFD8FFFE0008010203040506FFD9> reads 0 eq
+    (a stream whose comment is complete yields no scanlines) assert }
+stopped { (FAIL: reading a stream with a comment errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+{ <FFD8FFFE00200102> reads 0 eq
+    (a stream cut off inside a comment yields no scanlines) assert }
+stopped { (FAIL: reading a stream cut off in a comment errored) print (\n) print
+          /failcount failcount 1 add store } if
+clear
+
+% An image that does decode, with a comment spliced in ahead of
+% everything the decoder reads. The comment's payload is three
+% end-of-image markers, so a decode that read the payload instead of
+% stepping over it would stop at the first of them with no picture; the
+% picture is the assertion.
+/scratch (dct_scratch) def
+/f scratch (w) file def
+/e f << /Columns 16 /Rows 16 /Colors 1 >> /DCTEncode filter def
+/data 256 string def
+0 1 255 { dup dup 16 mod exch 16 idiv add 8 mul data 3 1 roll put } for
+e data writestring e closefile f closefile
+
+/jpg scratch (r) file 8192 string readstring pop def
+/plain 256 string def
+jpg /DCTDecode filter plain readstring pop pop
+scratch deletefile
+
+% start of image, comment marker, its declared length, its payload
+/comment <FFFE0008FFD9FFD9FFD9> def
+/spliced jpg length comment length add string def
+spliced 0 jpg 0 2 getinterval putinterval
+spliced 2 comment putinterval
+spliced 2 comment length add jpg 2 jpg length 2 sub getinterval putinterval
+
+/hidden 256 string def
+/decoded spliced /DCTDecode filter hidden readstring pop def
+decoded length 256 eq
+    (an image behind a comment decodes to its whole raster) assert
+decoded plain eq
+    (a comment ahead of the image changes none of its samples) assert
 clear
 
 % the interpreter is still usable afterwards

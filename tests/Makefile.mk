@@ -220,6 +220,7 @@ tests/run-filenameforall-large-test.sh \
 tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
+tests/run-jpeg-refusal-test.sh \
 tests/run-leak-test.sh \
 tests/run-interrupt-test.sh \
 tests/run-multipage-test.sh \
