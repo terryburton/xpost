@@ -67,7 +67,20 @@ evaluate_one() {
         fi
         "$GS" -q -sDEVICE=$gsdev -sPAPERSIZE=letter -r72 -dNOSAFER \
               -dBATCH -dNOPAUSE -o "$work/g_%d.$dev" "$src" >/dev/null 2>&1
-        timeout 240 "$XPOST" -d $dev -o "$work/x_%d.$dev" "$src" \
+        # The budget separates a program that is slow from one that will
+        # never finish, and it is spent on a machine this evaluator is
+        # itself loading: every corpus renders its programs several at a
+        # time and several corpora run at once, so a program can be
+        # sharing a core with a handful of its own kind before the rest
+        # of the suite is counted. The longest program here takes about
+        # a minute alone, seventy-five seconds with the whole suite
+        # beside it, and a hundred and sixty on a machine already busy
+        # with other work -- and it has still been killed at four
+        # minutes on a busier one than any of those. A gate that fails
+        # for the machine's reasons rather than the renderer's teaches
+        # its reader to discount it, so the budget is four times the
+        # point at which that happened.
+        timeout 960 "$XPOST" -d $dev -o "$work/x_%d.$dev" "$src" \
                 </dev/null >"$work/xlog" 2>&1
         xstatus=$?
         xerr=$(grep -m1 -oE 'Error: [a-zA-Z.]+' "$work/xlog" | sed 's/Error: //')
