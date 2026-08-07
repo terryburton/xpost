@@ -2670,6 +2670,48 @@ static void push_start_proc(Xpost_Context *ctx, const char *name)
                                         xpost_name_cons(ctx, name))));
 }
 
+/* What showpage does at the end of a page, as the context was created
+   with. Read from systemdict, which is what device.ps reads it from and
+   what the run is measured against when it ends. */
+static int _showpage_semantic(Xpost_Context *ctx)
+{
+    Xpost_Object semantic = xpost_dict_get(ctx,
+                  xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
+                  xpost_name_cons(ctx, "ShowpageSemantics"));
+
+    return semantic.int_.val;
+}
+
+/* Rewind virtual memory to the snapshots this call took at its start.
+   Only to a snapshot it took: a save level is the substack its records
+   go on, and that substack is an allocation the memory file can refuse;
+   the refusal is answered with a null, and a run that pushed no level
+   and rewinds anyway pops whichever level it finds -- one belonging to
+   whatever put it there, whose records are then played back over VM that
+   has moved on since. The local snapshot is read the same way. */
+static void _rewind_job_snapshots(Xpost_Context *ctx,
+                                  Xpost_Object gsav,
+                                  Xpost_Object lsav)
+{
+    if (xpost_object_get_type(gsav) == savetype)
+        xpost_save_restore_snapshot(ctx->gl);
+    if (xpost_object_get_type(lsav) == savetype)
+    {
+        unsigned int vs = xpost_memory_save_stack_adr(ctx->lo);
+        integer llev;
+
+        /* the depth is counted, the level recorded: comparing them in
+           the wider signed type keeps a depth that came back short of
+           the level below it rather than above it */
+        for ( llev = xpost_stack_count(ctx->lo, vs);
+                llev > (integer)lsav.save_.lev;
+                llev-- )
+        {
+            xpost_save_restore_snapshot(ctx->lo);
+        }
+    }
+}
+
 /* Close the file a run wrapped around the program it was given. A run
    that reads its program to the end closes it there; one that stops
    before the end -- at its quit operator, or on an error that unwinds
@@ -2688,14 +2730,11 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
 {
     Xpost_Object gsav = null;
     Xpost_Object lsav = null;
-    int llev = 0;
-    unsigned int vs;
     const char *ps_str = NULL;
     const char *ps_file = NULL;
     const FILE *ps_file_ptr = NULL;
     int ret;
     Xpost_Object device;
-    Xpost_Object semantic;
 
     switch(input_type)
     {
@@ -2786,7 +2825,14 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
             push_start_proc(ctx, ctx->skip_graphics ? "startstdinnographics" : "startstdin");
     }
 
-    if (ctx->job_snapshots)
+    /* The bracket is this call's: it is taken here and rewound before
+       this call returns. A job under XPOST_SHOWPAGE_RETURN is not one
+       call -- it hands control back at each showpage and ends on a later
+       call, which is where its virtual memory stops changing -- so no
+       bracket is taken over it, rather than a save level being pushed
+       that this call has nothing to do with. */
+    if (ctx->job_snapshots
+        && _showpage_semantic(ctx) != XPOST_SHOWPAGE_RETURN)
     {
         gsav = xpost_save_create_snapshot_object(ctx->gl);
         lsav = xpost_save_create_snapshot_object(ctx->lo);
@@ -2798,10 +2844,7 @@ run:
     ctx->state = C_RUN;
     ret = mainloop(ctx);
 
-    semantic = xpost_dict_get(ctx,
-                  xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
-                  xpost_name_cons(ctx, "ShowpageSemantics"));
-    if (semantic.int_.val == XPOST_SHOWPAGE_RETURN)
+    if (_showpage_semantic(ctx) == XPOST_SHOWPAGE_RETURN)
     {
         if (ret == 1)
             return XPOST_RUN_YIELDED;
@@ -2827,6 +2870,7 @@ run:
                         xpost_stack_pop(ctx->lo, ctx->es));
         }
 
+        _rewind_job_snapshots(ctx, gsav, lsav);
         _close_run_input(ctx);
         return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
     }
@@ -2892,29 +2936,7 @@ run:
 	}
     }
 
-    /* Rewind global VM only to a snapshot this run took. A save level is
-       the substack its records go on, and that substack is an allocation
-       the memory file can refuse; the refusal is answered with a null,
-       and a run that pushed no level and rewinds anyway pops whichever
-       level it finds -- one belonging to whatever put it there, whose
-       records are then played back over VM that has moved on since. The
-       local snapshot below is read the same way. */
-    if (xpost_object_get_type(gsav) == savetype)
-        xpost_save_restore_snapshot(ctx->gl);
-    vs = xpost_memory_save_stack_adr(ctx->lo);
-    if (xpost_object_get_type(lsav) == savetype)
-    {
-        /* the depth is counted, the level recorded: comparing them in
-           the wider signed type keeps a depth that came back short of
-           the level below it rather than above it */
-        for ( llev = xpost_stack_count(ctx->lo, vs);
-                llev > (integer)lsav.save_.lev;
-                llev-- )
-        {
-            xpost_save_restore_snapshot(ctx->lo);
-        }
-    }
-
+    _rewind_job_snapshots(ctx, gsav, lsav);
     _close_run_input(ctx);
     return ctx->run_uncaught ? XPOST_RUN_ERRORED : XPOST_RUN_COMPLETE;
 }
