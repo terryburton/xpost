@@ -14,17 +14,11 @@ prog=$2
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 
+# The interpreter is left running: whether it started is answered by the
+# loop below, which waits for it to say so and reports if it never does.
+# A status read here would be the status of backgrounding it, which is
+# always zero.
 "$xpost" -q -d null "$prog" </dev/null >"$out" 2>&1 &
-
-status=$?
-
-if [ "$status" -ne 0 ]; then
-
-    echo "FAILURES: the interpreter exited with status $status"
-
-    exit 1
-
-fi
 pid=$!
 
 # wait for the program to announce it is inside the loop
@@ -48,7 +42,16 @@ if kill -0 "$pid" 2>/dev/null; then
     kill -9 "$pid"
     echo "FAIL: still running after SIGINT"; cat "$out"; exit 1
 fi
+# the status the interpreter left, which is where it is knowable: a
+# status read at the point of backgrounding it is the status of
+# backgrounding, and is always zero. The interpreter unwound the job and
+# left of its own accord, so it left the way a finished job leaves.
 wait "$pid" 2>/dev/null
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "FAIL: the interpreter exited with status $status after SIGINT"
+    cat "$out"; exit 1
+fi
 
 # stop unwound the job: nothing after the loop may have run
 if grep -q AFTER "$out"; then
