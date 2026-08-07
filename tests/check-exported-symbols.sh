@@ -39,6 +39,19 @@
 # symbol nor refuse it. What holds the device set itself is
 # tests/check-device-roster.sh, which reads the sources.
 #
+# A build instrumented for coverage links the profiling runtime into the
+# library, and that runtime's own exports -- the __gcov_ counters and the
+# path mangler beside them -- come out of nm along with the interface.
+# They are the compiler's, not this project's: nothing here can rename
+# them, and six of them begin with two underscores, so the reserved-name
+# rule refuses a coverage build outright and the register comparison
+# refuses it a second time. An instrumented library is therefore read
+# with those names taken out. The condition is the runtime's own
+# presence -- a library with no __gcov_ symbol in it is not instrumented
+# and nothing is taken out of it, so an ordinary build is read exactly as
+# strictly as before. Any other name the runtime contributes is left in
+# and fails here, which names the cause rather than hiding it.
+#
 # The comparison is a set comparison, so it is done in one collation --
 # the C one, which is also the one a POSIX default environment sorts in.
 # Sorting the register in the author's locale and comparing it without
@@ -89,6 +102,13 @@ if [ ! -s "$work/raw" ] && command -v objdump >/dev/null 2>&1; then
 fi
 
 grep -v '\.' "$work/raw" | sort -u > "$work/have"
+
+# the profiling runtime's exports, present only when the library carries
+# the runtime at all
+if grep -q '^__gcov_' "$work/have"; then
+    grep -vE '^(__gcov_|mangle_path$)' "$work/have" > "$work/have.t"
+    mv "$work/have.t" "$work/have"
+fi
 
 if [ ! -s "$work/have" ]; then
     case $lib in
