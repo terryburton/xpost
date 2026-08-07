@@ -63,6 +63,23 @@ jobs:
           -Db_lundef=false
     - name: build
       run: ninja -C builddir
+    # What this lane rests on is that the build carries the runtimes it
+    # asked for, and nothing in the run says whether it does. A suite
+    # that passes says the tree works; it says that just as loudly on a
+    # build with no sanitizer in it, and the count of leak reports below
+    # is zero on a clean run and zero on a run that could not have
+    # reported one. So the binary is asked, before the suite is.
+    - name: the sanitizer is in the build
+      run: |
+        for rt in asan ubsan; do
+          ldd builddir/src/bin/xpost 2>/dev/null | grep -q "$rt" ||
+          nm builddir/src/bin/xpost 2>/dev/null | grep -q "__${rt}_" || {
+            echo "builddir/src/bin/xpost carries no $rt runtime;"
+            echo "this lane would run the suite with nothing watching it"
+            exit 1
+          }
+          echo "$rt: present"
+        done
     - name: test
       env:
         # Leak detection is off here and checked by the job below: what
@@ -104,6 +121,23 @@ jobs:
       run: |
         meson setup builddir -Db_sanitize=address -Db_lundef=false
         ninja -C builddir
+    # What this lane rests on is that the build carries the runtimes it
+    # asked for, and nothing in the run says whether it does. A suite
+    # that passes says the tree works; it says that just as loudly on a
+    # build with no sanitizer in it, and the count of leak reports below
+    # is zero on a clean run and zero on a run that could not have
+    # reported one. So the binary is asked, before the suite is.
+    - name: the sanitizer is in the build
+      run: |
+        for rt in asan; do
+          ldd builddir/src/bin/xpost 2>/dev/null | grep -q "$rt" ||
+          nm builddir/src/bin/xpost 2>/dev/null | grep -q "__${rt}_" || {
+            echo "builddir/src/bin/xpost carries no $rt runtime;"
+            echo "this lane would run the suite with nothing watching it"
+            exit 1
+          }
+          echo "$rt: present"
+        done
     # Each process that leaks writes its report to a file of its own,
     # and the count is the number of those files. It is not read out of
     # the run's log, because most of the suite's wrappers run the
@@ -194,8 +228,7 @@ jobs:
     - name: test under memcheck
       run: |
         meson test -C builddir --print-errorlogs \
-          --wrapper='valgrind --error-exitcode=9 --leak-check=full \
-                     --errors-for-leak-kinds=definite --track-origins=yes' \
+          --wrapper='valgrind --error-exitcode=9 --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes' \
           --timeout-multiplier 20
 
   gcc-analyzer:
@@ -283,14 +316,33 @@ jobs:
     # --check-level=exhaustive costs time and finds the paths a normal
     # run gives up on. missingInclude is suppressed because the system
     # headers are not what is being checked.
+    #
+    # Every verdict below is the absence of a pattern in the log, so the
+    # run that wrote the log has to be held to having happened. Given a
+    # path it cannot open, cppcheck writes an empty log and exits 1 --
+    # the complaint goes to its standard output, not into the log -- and
+    # a job reading only the log then finds no findings and passes over
+    # nothing checked. So its status is read, and so is the number of
+    # files it opened: a run that reached a fraction of the tree leaves
+    # a log as clean as one that reached all of it. The floor is well
+    # under the fifty-seven sources there are, because what it is for is
+    # the difference between most of them and none.
     - name: run
       run: |
+        set -o pipefail
         cppcheck --enable=all --force --inline-suppr \
           --check-level=exhaustive \
           --suppress=missingIncludeSystem \
           --suppress=unusedFunction \
           --template='{file}:{line}: {severity}: {id}: {message}' \
-          -I src/lib src/lib src/bin 2>cppcheck.log || true
+          -I src/lib src/lib src/bin 2>cppcheck.log | tee cppcheck.progress
+        echo '--- sources checked ---'
+        checked=$(grep -c '^Checking .* \.\.\.$' cppcheck.progress)
+        echo "$checked"
+        [ "$checked" -ge 40 ] || {
+          echo "cppcheck opened $checked sources; the tree has far more"
+          exit 1
+        }
         echo '--- findings by severity and id ---'
         sed -E 's/^[^ ]+ //; s/:.*$//' cppcheck.log | sort | uniq -c | sort -rn | head -30
         echo '--- errors only ---'
@@ -336,12 +388,22 @@ jobs:
         sudo apt install -y build-essential libpng-dev libjpeg-dev \
           libfreetype6-dev libfontconfig1-dev meson ninja-build \
           clang clang-tools
+    # This one counts rather than blocks, so --status-bugs is what is
+    # swallowed. It reports a bug and a build that fell over through the
+    # same status, though, and the count below reads the same either way:
+    # no reports is what a clean tree and an empty one both look like. So
+    # the build is read from what it produced instead.
     - name: run
       run: |
         scan-build -o plist --status-bugs \
           sh -c 'meson setup builddir && ninja -C builddir' || true
+        test -x builddir/src/bin/xpost || {
+          echo 'the analysed build produced no interpreter, so the count'
+          echo 'below is a count over a build that did not happen'
+          exit 1
+        }
         echo '--- reports ---'
-        find plist -name '*.html' | wc -l
+        find plist -name '*.html' 2>/dev/null | wc -l
     - uses: actions/upload-artifact@v4
       with:
         name: scan-build
