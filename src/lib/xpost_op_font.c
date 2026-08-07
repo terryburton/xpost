@@ -4458,13 +4458,16 @@ int _cachestatus(Xpost_Context *ctx)
 }
 
 /* num  .setcachelimit  -
-   the byte ceiling above which a glyph renders uncached */
+   the byte ceiling above which a glyph renders uncached
+
+   A ceiling outside the range the store offers is substituted by the
+   nearest one it does, which the setter does, and is not an error here:
+   the operator raises stackunderflow and typecheck and nothing besides
+   (PLRM 8.2). */
 static
 int _setcachelimit(Xpost_Context *ctx, Xpost_Object n)
 {
     (void)ctx;
-    if (n.int_.val < 0)
-        return rangecheck;
     xpost_font_cache_setlimit((long)n.int_.val);
     return 0;
 }
