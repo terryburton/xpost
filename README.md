@@ -60,19 +60,20 @@ To run the test suite:
   meson test -C builddir
 ```
 
-That runs all of it. Four profiles select less, from the one you can
+That runs all of it. Five profiles select less, from the one you can
 afford between edits to the one that leaves nothing out:
 ```
-  ninja -C builddir quick     the fast tests, no corpus  -- while editing
+  ninja -C builddir quick     the fast tests             -- while editing
   ninja -C builddir check     + the slow ones            -- before a commit
-  ninja -C builddir full      + the very slow ones       -- the whole suite
+  ninja -C builddir full      + the very slow ones       -- the tree's own suite
   ninja -C builddir corpus    the differential corpus
+  ninja -C builddir vendor    a downstream consumer's suite
 ```
 
 They are meson suite selections, and the suites are two independent
-axes: what a test is about (`xpost`, `corpus`, `memacct`) and what it
-costs (`fast`, `slow`, `veryslow`). Either can be named without the
-other, so any crossing is available by hand -- the corpora that run
+axes: what a test is about (`xpost`, `corpus`, `vendor`, `memacct`) and
+what it costs (`fast`, `slow`, `veryslow`). Either can be named without
+the other, so any crossing is available by hand -- the corpora that run
 quickly, without the ones that take minutes, being the useful one:
 ```
   meson test -C builddir --suite corpus --no-suite veryslow
@@ -92,6 +93,14 @@ cannot quietly settle into the quick profile.
 The differential corpus under `tests/corpus` is part of the suite; it
 is fetched on demand and skips until you populate it (see
 `tests/corpus/README.md`).
+
+The `vendor` profile runs the test suite of a downstream consumer,
+Barcode Writer in Pure PostScript, out of a checkout of its own. It is
+large real-world PostScript and it exercises the language the way a
+program does rather than the way a conformance test does. Point
+`BWIPP_DIR` at the checkout, build its monolithic `barcode.ps`, and the
+profile runs it; without one it skips, so it is never a build
+dependency.
 
 You can install Xpost in another location:
 ```

@@ -388,11 +388,21 @@ endif
 # either without naming the other.
 #
 # What a test is about
-#   xpost     the interpreter's own suite: everything but the corpus
+#   xpost     the interpreter's own suite: everything the tree can run
+#             out of itself
 #   corpus    the differential run over real programs fetched into
 #             tests/corpus, which skips until they are
+#   vendor    a downstream consumer's own test suite, run out of a
+#             checkout of its own, which skips until there is one
 #   memacct   the three that weigh the process, and so cannot answer
 #             under an allocator that quarantines or shadows
+#
+# The corpus and the vendor suite are the two that need something this
+# tree does not carry, and the three cost profiles below leave both out
+# for the same reason: a profile that reports one skip on the machines
+# without them and none on the machines with them says something
+# different on each, and the one it says nothing about is the run that
+# did less work.
 #
 # What a test costs, read off its own run time with the suite run one
 # test at a time on an otherwise idle machine.
@@ -423,10 +433,11 @@ endif
 # corpus programs that run quickly are reachable without the ones that
 # do not.
 #
-#   ninja -C build quick        cost fast, no corpus     -- while editing
+#   ninja -C build quick        cost fast                -- while editing
 #   ninja -C build check        + cost slow              -- before a commit
-#   ninja -C build full         + cost veryslow          -- every test but the corpus
+#   ninja -C build full         + cost veryslow          -- the tree's own suite
 #   ninja -C build corpus       the corpus, all costs    -- with programs fetched
+#   ninja -C build vendor       the vendor suite         -- with its checkout
 #   meson test -C build         everything, as before
 #
 # Each target goes through tests/run-profile.sh, which is where the
@@ -450,7 +461,7 @@ cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
 
 run_profile = find_program('tests/run-profile.sh')
-foreach profile : [ 'quick', 'check', 'full', 'corpus' ]
+foreach profile : [ 'quick', 'check', 'full', 'corpus', 'vendor' ]
   run_target(profile, command: [ run_profile, profile ])
 endforeach
 
@@ -2321,6 +2332,31 @@ foreach corpus : [ [ 'ghostscript', 'slow' ],
     suite: [ 'corpus', corpus[1] ],
     timeout: 1800)
 endforeach
+
+# A downstream consumer's own suite: Barcode Writer in Pure PostScript,
+# a hundred and thirty programs of real-world PostScript run to verdicts
+# their author wrote, out of a checkout kept beside this one. Skips when
+# there is no checkout or it has not been built, so it is never a
+# build-time dependency; fails on a test the consumer's suite failed and
+# on a test file that reached no verdict at all.
+#
+# It is in a suite of its own for the reason the corpus is: it needs
+# something this tree does not carry, so on most machines it is a skip,
+# and a skip inside a cost profile makes that profile say one thing here
+# and another there. It also runs its files several at a time, as the
+# corpus evaluator does, so it wants the machine rather than a share of
+# it.
+#
+# The cost is the wall time of the whole thing, its own parallelism
+# included, which is how the corpora above are costed too: thirty-eight
+# seconds over four processes on the machine this was measured on, about
+# two minutes of processor time spread over whatever the machine has.
+test('vendor-bwipp',
+  find_program('tests/run-vendor-bwipp.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: [ 'vendor', 'slow' ],
+  timeout: 1800)
 
 # Binary tokens (PLRM 3.14): the conformance corpus against a golden
 # record generated from the reference interpreter, which revalidates

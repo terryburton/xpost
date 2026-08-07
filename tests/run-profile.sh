@@ -24,13 +24,13 @@
 # used twice. That is the whole of the protection: an inert filter is
 # inert in one of them and not the other.
 #
-#   $1        profile: quick, check, full or corpus
+#   $1        profile: quick, check, full, corpus or vendor
 #   $2...     further arguments for meson test (-v, --num-processes, ...)
 #
 # The build directory is MESON_BUILD_ROOT where meson set it (this runs
 # as a build target), and the working directory otherwise.
 set -u
-profile=${1:?usage: run-profile.sh <quick|check|full|corpus> [meson test args...]}
+profile=${1:?usage: run-profile.sh <quick|check|full|corpus|vendor> [meson test args...]}
 shift
 build=${MESON_BUILD_ROOT:-$PWD}
 
@@ -41,23 +41,34 @@ fi
 
 # What the profile selects, as a filter and as a predicate over the
 # suites a test carries. `fast`, `slow` and `veryslow` are the cost
-# axis and `corpus` is one value of the other, so every profile is a
-# cost range with or without the corpus.
+# axis, `corpus` and `vendor` are two values of the other, and the three
+# cost profiles are cost ranges over what is left when those two are
+# taken out.
+#
+# The two are taken out by name rather than left to the cost axis to
+# exclude. Both need something the tree does not carry -- a fetched
+# corpus, a checkout of a consumer -- so both skip on most machines, and
+# a cost profile that reports a skip here and none there is a profile
+# that means two things. Naming them also keeps the exclusion from
+# resting on what cost they happen to be tagged with today.
 case $profile in
-    quick)  filter='--suite fast --no-suite corpus'
-            want='fast'; without='corpus'
-            what='the fast tests, no corpus' ;;
-    check)  filter='--suite fast --suite slow --no-suite corpus'
-            want='fast slow'; without='corpus'
-            what='the fast and slow tests, no corpus' ;;
-    full)   filter='--no-suite corpus'
-            want='fast slow veryslow'; without='corpus'
-            what='every test but the corpus' ;;
+    quick)  filter='--suite fast --no-suite corpus --no-suite vendor'
+            want='fast'; without='corpus vendor'
+            what='the fast tests, no corpus or vendor suite' ;;
+    check)  filter='--suite fast --suite slow --no-suite corpus --no-suite vendor'
+            want='fast slow'; without='corpus vendor'
+            what='the fast and slow tests, no corpus or vendor suite' ;;
+    full)   filter='--no-suite corpus --no-suite vendor'
+            want='fast slow veryslow'; without='corpus vendor'
+            what='every test the tree runs out of itself' ;;
     corpus) filter='--suite corpus'
             want='corpus'; without=''
             what='the differential corpus' ;;
+    vendor) filter='--suite vendor'
+            want='vendor'; without=''
+            what='the downstream consumer suite' ;;
     *)      echo "FAILURES: no such profile: $profile"
-            echo "      one of quick, check, full, corpus"
+            echo "      one of quick, check, full, corpus, vendor"
             exit 1 ;;
 esac
 

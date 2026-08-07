@@ -240,6 +240,7 @@ tests/run-statementedit-test.sh \
 tests/run-strict-ps-test.sh \
 tests/run-svg-test.sh \
 tests/run-vecout-gc-test.sh \
+tests/run-vendor-bwipp.sh \
 tests/run_input_close_test.c \
 tests/run_status_test.c \
 tests/sandbox_test.c \
