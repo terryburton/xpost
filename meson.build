@@ -586,6 +586,25 @@ test('string-bounds',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Memory-layer bounds discipline: the pair every composite reads and
+# writes its storage through refuses a slot outside the allocation, and
+# refuses it without copying -- read back from the neighbour and from
+# the destination of the refused read, since a return value nobody looks
+# at is served equally by a function that refused and one that did not.
+# The bound is taken in a width wider than the index, so a slot number
+# whose product wraps back inside the allocation is refused too.
+memory_bounds_exe = executable('memory_bounds_test',
+  'tests/memory_bounds_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('memory-bounds',
+  memory_bounds_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The editing streams open a temporary file before the text they are asked
 # for is known to be acceptable, so a refusal is the only thing that can
 # close it: a request refused for nesting depth must leave no descriptor
