@@ -31,6 +31,10 @@
     stopped not { m.w m.f note } if
     clear
 } def
+/holds { % bool (what) (filter)  -  the property is true of the filter
+    /m.f exch def /m.w exch def
+    not { m.w m.f note } if
+} def
 
 % each decoding filter with a source it can actually decode
 /cases [
@@ -61,6 +65,24 @@ cases {
         (a zero-length read) fn refuses
     { src fn cvn filter (x) writestring }
         (writing to an input filter) fn refuses
+} forall
+
+% flushfile on an input file reads and discards characters until the end
+% of the data, and leaves the file open (PLRM 8.2). Reaching the end is
+% a different piece of work in each filter -- one decodes its way there,
+% one already holds the whole stream -- so what answers for it is the
+% filter's own, and each has to be asked. Half a family answering is how
+% an operator comes to have two implementations, one of them reached and
+% one of them not.
+cases {
+    aload pop /src exch def /fn exch def
+    /m.d src fn cvn filter def
+    m.d flushfile
+    m.d 8 string readstring exch pop not
+        (flushfile leaves it at end of data) fn holds
+    m.d status
+        (flushfile leaves it open) fn holds
+    m.d closefile
 } forall
 
 % each encoding filter, through the operators an output file takes

@@ -63,6 +63,7 @@ f closefile
 /f nm (r) file def
 f flushfile
 f 4 string readstring exch pop not (flushfile leaves an input file at its end) assert
+f status (flushfile leaves an input file open) assert
 f closefile
 
 % --- resetfile never raises an error, whatever it is given (PLRM 8.2) ---
