@@ -69,18 +69,33 @@ matrix currentmatrix /save1 exch def
 save1 setmatrix matrix currentmatrix 0 get save1 0 get (currentmatrix restored) assertnear
 
 % --- setlinecap / setlinejoin: 0..2 only ---
+% PLRM names a set of three integers for each and makes anything else a
+% rangecheck: a value outside the set is refused rather than folded into
+% it, and the parameter goes on holding what it held.
 0 setlinecap currentlinecap 0 eq (setlinecap 0) assert
 2 setlinecap currentlinecap 2 eq (setlinecap 2) assert
 { 3 setlinecap }  /rangecheck (setlinecap 3 is rangecheck) erris
 { -1 setlinecap } /rangecheck (setlinecap -1 is rangecheck) erris
+currentlinecap 2 eq (a refused cap leaves the parameter alone) assert
 1 setlinejoin currentlinejoin 1 eq (setlinejoin 1) assert
-{ 3 setlinejoin } /rangecheck (setlinejoin 3 is rangecheck) erris
+2 setlinejoin currentlinejoin 2 eq (setlinejoin 2) assert
+{ 3 setlinejoin }  /rangecheck (setlinejoin 3 is rangecheck) erris
+{ -1 setlinejoin } /rangecheck (setlinejoin -1 is rangecheck) erris
+currentlinejoin 2 eq (a refused join leaves the parameter alone) assert
 
 % --- setmiterlimit: >= 1 ---
+% PLRM: the limit must be a number greater than or equal to 1, and
+% anything below is a rangecheck. A negative limit is below 1 like any
+% other number below 1, so it is refused rather than read as its
+% magnitude.
 10 setmiterlimit currentmiterlimit 10 sub abs 1e-3 lt (setmiterlimit 10) assert
 1 setmiterlimit currentmiterlimit 1 sub abs 1e-3 lt (setmiterlimit 1 is the boundary) assert
-{ 0.5 setmiterlimit } /rangecheck (setmiterlimit below 1 is rangecheck) erris
-{ 0 setmiterlimit }   /rangecheck (setmiterlimit 0 is rangecheck) erris
+{ 0.5 setmiterlimit }   /rangecheck (setmiterlimit below 1 is rangecheck) erris
+{ 0.999 setmiterlimit } /rangecheck (setmiterlimit just below 1 is rangecheck) erris
+{ 0 setmiterlimit }     /rangecheck (setmiterlimit 0 is rangecheck) erris
+{ -3 setmiterlimit }    /rangecheck (a negative miter limit is rangecheck) erris
+currentmiterlimit 1 sub abs 1e-3 lt
+    (a refused miter limit leaves the parameter alone) assert
 
 % --- setlinewidth / setflat round-trips ---
 3.5 setlinewidth currentlinewidth 3.5 sub abs 1e-3 lt (setlinewidth) assert
