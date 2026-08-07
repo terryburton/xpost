@@ -87,6 +87,27 @@ cases {
     e closefile o closefile
 } forall
 
+% ------------------------------------------- pushback under the scanner
+% A token ends at the delimiter following it, and that delimiter is the
+% start of the next token, so it goes back on the stream it came from.
+% The filter machinery holds one character of pushback for the codings
+% that read through it; a reusable stream holds its data itself and so
+% has to take a character back for itself. A stream that could not would
+% swallow every delimiter it read, which reads as a shorter program
+% rather than as an error.
+/rs (12[34]) << >> /ReusableStreamDecode filter def
+/toks 8 array def
+/ntok 0 def
+{ rs token not { exit } if
+  toks ntok 3 -1 roll put
+  /ntok ntok 1 add store
+  ntok 8 ge { exit } if } loop
+ntok 4 eq (a delimiter ending a token goes back on the stream) assert
+ntok 4 eq {
+    toks 0 get 12 eq (the number before the delimiter reads whole) assert
+    toks 2 get 34 eq (the number after it reads whole) assert
+} if
+
 % ------------------------------------------- the parameters a filter needs
 % A filter given its parameters in a dictionary has to be told when the
 % dictionary does not carry them. Defaulted, SubFileDecode reaches its
