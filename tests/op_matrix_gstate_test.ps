@@ -6,6 +6,8 @@
 %     six-element array raised no error and read out of bounds; PLRM: rangecheck
 %   - setlinecap/setlinejoin outside 0..2, and setmiterlimit below 1, were
 %     accepted silently; PLRM: rangecheck
+%   - setflat kept a number outside 0.2 to 100 as given; PLRM substitutes the
+%     nearest value in the range and raises nothing
 %   - rotate built its matrix through a truncated RAD_PER_DEG
 
 /failcount 0 def
@@ -100,6 +102,24 @@ currentmiterlimit 1 sub abs 1e-3 lt
 % --- setlinewidth / setflat round-trips ---
 3.5 setlinewidth currentlinewidth 3.5 sub abs 1e-3 lt (setlinewidth) assert
 0.8 setflat currentflat 0.8 sub abs 1e-3 lt (setflat) assert
+
+% --- setflat substitutes rather than refuses (PLRM) ---
+% The flatness parameter's acceptable range is 0.2 to 100, and a number
+% outside it is replaced by the nearest valid one with no error raised
+% -- the opposite posture to the miter limit's above, and the reason
+% each of these has to be read from its own entry. currentflat answers
+% with what was stored, so these ask what the parameter holds rather
+% than whether the call survived: a negative flatness clamps to the
+% bottom of the range, which is neither the number itself nor its
+% magnitude.
+100 setflat currentflat 100.0 sub abs 1e-3 lt (setflat 100 is the upper bound) assert
+0.2 setflat currentflat 0.2 sub abs 1e-3 lt (setflat 0.2 is the lower bound) assert
+1000 setflat currentflat 100.0 sub abs 1e-3 lt (setflat clamps above the range) assert
+0.05 setflat currentflat 0.2 sub abs 1e-3 lt (setflat clamps below the range) assert
+0 setflat currentflat 0.2 sub abs 1e-3 lt (setflat clamps zero into the range) assert
+-5 setflat currentflat 0.2 sub abs 1e-3 lt
+    (a negative flatness clamps, and does not become its magnitude) assert
+1 setflat
 
 % --- setdash validates the dash pattern (PLRM) ---
 { [1 -2] 0 setdash } /rangecheck (setdash: a negative element is rangecheck) erris

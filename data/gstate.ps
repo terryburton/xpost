@@ -1183,9 +1183,16 @@ setglobal
 
 % Graphics State Operators -- Device Dependent
 
+% num  setflat  -
+% The flatness parameter is an error tolerance in device pixels, and
+% PLRM gives it an acceptable range of 0.2 to 100: a number outside
+% that range is replaced by the nearest value inside it, with no error
+% raised, so a negative or an enormous tolerance names a valid one
+% rather than being refused. The substitution happens here because what
+% the parameter holds is the substituted value -- that is the number
+% currentflat answers with.
 /setflat [ /numbertype ] {
-    /CONSTRAINFLATNESS where{
-        pop dup 100 gt{pop 100}if dup .2 lt{pop .2}if } if
+    dup 0.2 lt { pop 0.2 }{ dup 100 gt { pop 100 } if } ifelse
     graphicsdict /currgstate get exch cvr /flat exch put
 } //.xpostsys /.defop get exec
 

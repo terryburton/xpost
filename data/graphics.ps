@@ -14,8 +14,6 @@ true setglobal
 % -- the caller unlocked it -- and the finalizer relocks it.
 systemdict begin
 
-    %/CONSTRAINFLATNESS null def
-
     % graphicsdict holds the live per-render graphics state -- currgstate and
     % the gstack of local gstate copies -- so it and its accessors stay in
     % local VM. Being local they cannot be anchored in systemdict, which is
