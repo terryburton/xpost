@@ -2060,6 +2060,15 @@ test('filenameforall-large',
   suite: cost_slow,
   timeout: 120)
 
+# An encoded number string is decoded into an array made while the string
+# is being read, and making it grows -- and so moves -- the memory file:
+# the bytes are reached through the string's entity each time round.
+test('numstring-decode',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/numstring_decode_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The font cache parameter operators: cachestatus reports what setcachelimit
 # and setcacheparams set, within whatever range the implementation achieves.
 test('op-fontcache',

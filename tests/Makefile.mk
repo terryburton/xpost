@@ -151,6 +151,7 @@ tests/must_check.golden \
 tests/namespace_test.ps \
 tests/narrow_cursors.golden \
 tests/nographics_test.ps \
+tests/numstring_decode_test.ps \
 tests/op_bind_test.ps \
 tests/op_bytesavailable_test.ps \
 tests/op_closed_read_test.ps \
