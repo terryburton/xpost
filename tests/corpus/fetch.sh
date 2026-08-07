@@ -9,8 +9,18 @@
 #   fetch.sh ghostscript     just one
 #   BWIPP=/path/to/checkout fetch.sh bwipp
 #
+# Best-effort is about which corpora are obtainable, not about whether
+# the caller is told. A program that did not arrive is counted and the
+# script ends non-zero, because the alternative is a populated corpus
+# that is quietly one program short: the run then evaluates what is
+# there, reports what it evaluated, and the missing program is a
+# question nobody knows went unasked. What a failed download left behind
+# is removed for the same reason -- an interrupted transfer leaves a
+# partial file and a refused one can leave an empty file, and either
+# reads as a program of the corpus.
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+missing=0
 
 get() {   # url outfile
     if command -v curl >/dev/null 2>&1; then
@@ -28,7 +38,11 @@ fetch_ghostscript() {
     for f in alphabet.ps colorcir.ps doretree.ps escher.ps golfer.eps \
              grayalph.ps ridt91.eps snowflak.ps spots.ps tiger.eps \
              vasarely.ps waterfal.ps; do
-        get "$base/$f" "$d/$f" && echo "  ghostscript/$f" || echo "  MISS ghostscript/$f"
+        if get "$base/$f" "$d/$f" && [ -s "$d/$f" ]; then
+            echo "  ghostscript/$f"
+        else
+            echo "  MISS ghostscript/$f"; rm -f "$d/$f"; missing=$((missing + 1))
+        fi
     done
 }
 
@@ -37,8 +51,12 @@ fetch_casselman() {
     d="$here/casselman"; mkdir -p "$d"
     n=1
     while [ "$n" -le 15 ]; do
-        get "$base/ch$n.ps" "$d/ch$n.ps" && echo "  casselman/ch$n.ps" \
-            || { echo "  MISS casselman/ch$n.ps"; rm -f "$d/ch$n.ps"; }
+        if get "$base/ch$n.ps" "$d/ch$n.ps" && [ -s "$d/ch$n.ps" ]; then
+            echo "  casselman/ch$n.ps"
+        else
+            echo "  MISS casselman/ch$n.ps"; rm -f "$d/ch$n.ps"
+            missing=$((missing + 1))
+        fi
         n=$((n + 1))
     done
 }
@@ -59,9 +77,18 @@ fetch_bwipp() {
         return
     fi
     d="$here/bwipp"; mkdir -p "$d"
-    cp "$mono" "$d/prelude" && echo "  bwipp/prelude ($(basename "$(dirname "$mono")")/barcode.ps)"
+    if cp "$mono" "$d/prelude" && [ -s "$d/prelude" ]; then
+        echo "  bwipp/prelude ($(basename "$(dirname "$mono")")/barcode.ps)"
+    else
+        echo "  MISS bwipp/prelude"; rm -f "$d/prelude"; missing=$((missing + 1))
+    fi
     for f in "$ex"/*.ps; do
-        cp "$f" "$d/" && echo "  bwipp/$(basename "$f")"
+        b=$(basename "$f")
+        if cp "$f" "$d/$b" && [ -s "$d/$b" ]; then
+            echo "  bwipp/$b"
+        else
+            echo "  MISS bwipp/$b"; rm -f "$d/$b"; missing=$((missing + 1))
+        fi
     done
 }
 
@@ -77,6 +104,12 @@ for name in ${*:-ghostscript casselman bwipp adobe}; do
         casselman)   fetch_casselman;;
         bwipp)       fetch_bwipp;;
         adobe)       fetch_adobe;;
-        *)           echo "  unknown corpus: $name" >&2;;
+        *)           echo "  unknown corpus: $name" >&2; missing=$((missing + 1));;
     esac
 done
+
+if [ "$missing" -ne 0 ]; then
+    echo "fetch: $missing program(s) did not arrive; the corpora above are"
+    echo "fetch: short by that many and a run over them will not say so" >&2
+    exit 1
+fi
