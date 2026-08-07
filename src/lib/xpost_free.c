@@ -34,6 +34,7 @@
 #endif
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -299,13 +300,21 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
     for (b = xpost_free_bucket_for_size(sz); b < XPOST_FREE_NBUCKETS; b++)
     {
         unsigned int best = 0, bestz = 0, bestsz = 0;
+        unsigned int seen = 0;
 
         z = headz + b * sizeof(unsigned int);
         memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
-        while (e) /* e is not zero */
+        while (e && seen < XPOST_FREE_SCAN_LIMIT) /* e is not zero */
         {
             unsigned int tsz;
             unsigned int ta;
+
+            ++seen;
+            /* saturating, so a count this large cannot present itself
+               as a small one to whatever is reading it */
+            if (mem->free_scan < (unsigned int)INT_MAX)
+                ++mem->free_scan;
+
             /* The links live inside the freed entities' data, where a stale
                write can turn one into an arbitrary number. Handing out an
                entity that is not actually free aliases two owners onto one
@@ -339,12 +348,15 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 return 0;
             }
 
-            /* best fit within the request's own bucket: entity numbers
-               are a fixed budget, so near-exact recycling matters more
-               than the walk. An exact fit ends the search; any fit from
-               a higher bucket is taken as-is (the byte waste is
-               reclaimable by a later collection, a consumed entity
-               number is not). */
+            /* Best fit among the entries this bucket is allowed to
+               offer: entity numbers are a fixed budget, so near-exact
+               recycling matters more than the byte waste an oversized
+               entry leaves, which a later collection reclaims. An
+               exact fit ends the search outright; otherwise the
+               closest of the first XPOST_FREE_SCAN_LIMIT entries is
+               taken, and the rest of the chain -- whose length is the
+               job's release history rather than anything about this
+               request -- is left unwalked. */
             if (tsz >= sz && (best == 0 || tsz < bestsz))
             {
                 best = e;

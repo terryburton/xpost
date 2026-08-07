@@ -120,6 +120,24 @@ int vmentcount (Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .vmfreescan  local global
+   The number of free-list entries the allocator has examined in each
+   memory file, saturating rather than wrapping. What an allocation
+   costs is this number and not the bytes it asks for, so it is the
+   measure of whether the cost of allocating tracks the allocations a
+   job makes or the memory it has already released. */
+static
+int vmfreescan (Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->lo->free_scan)))
+        return stackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->gl->free_scan)))
+        return stackoverflow;
+    return 0;
+}
+
 static
 int globalvmstatus (Xpost_Context *ctx)
 {
@@ -156,6 +174,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "globalvmstatus", (Xpost_Op_Func)globalvmstatus, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmentcount", (Xpost_Op_Func)vmentcount, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmfreescan", (Xpost_Op_Func)vmfreescan, 0);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);

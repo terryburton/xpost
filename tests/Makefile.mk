@@ -115,6 +115,7 @@ tests/font_type1_sparse_subrs_test.ps \
 tests/forall_large_test.ps \
 tests/free_list_admission_test.c \
 tests/free_list_recovery_test.c \
+tests/free_scan_test.ps \
 tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \
 tests/gc_clip_region_test.ps \

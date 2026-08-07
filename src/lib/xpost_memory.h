@@ -231,6 +231,20 @@ typedef struct Xpost_Memory_File
                                      here for the next save to reuse instead of
                                      leaking it (see xpost_save.c). */
 
+    unsigned int free_scan; /**< free-list entries the allocator has
+                                  examined over the life of this memory
+                                  file. An allocation looks at a bounded
+                                  number of entries in each size class it
+                                  tries, so this rises with the number of
+                                  allocations a job makes and not with the
+                                  memory it has already released; a count
+                                  that tracks the latter is the shape
+                                  xpost_free.c's scan bound exists to
+                                  prevent, and this is what reads it. The
+                                  count saturates rather than wrapping, so
+                                  a large number cannot present itself as
+                                  a small one. */
+
     int period;
     int threshold;
     int free_list_alloc_is_installed;

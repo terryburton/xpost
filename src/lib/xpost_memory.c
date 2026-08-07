@@ -157,6 +157,8 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     mem->interpreter_get_initializing = xpost_interpreter_get_initializing;
     mem->interpreter_set_initializing = xpost_interpreter_set_initializing;
 
+    mem->free_scan = 0;
+
     if(fname)
     {
         strncpy(mem->fname, fname, sizeof(mem->fname));
