@@ -694,8 +694,6 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             EVALARRAY_RECHECK_BASES();
         }
 
-
-
         if (abase)
             b = abase[off];
         else
@@ -2284,6 +2282,12 @@ void loadinitps(Xpost_Context *ctx)
                      xpost_object_cvx(xpost_string_cons(ctx, n, buf)));
 
     ctx->quit = 0;
+    /* mainloop answers noerror, a yield, or that the context did not
+       validate. The context was built and every part of it checked
+       before this is reached, which is what the assertion above reads;
+       and a yield is the returntocaller operator's answer, which only
+       showpage under return semantics reaches and init.ps paints no
+       page. Running the start-up file leaves noerror the only answer. */
     mainloop(ctx);
 }
 
