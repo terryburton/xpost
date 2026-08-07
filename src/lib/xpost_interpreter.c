@@ -886,11 +886,13 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                         Xpost_Object tmp_[32];
                         integer n = n_.int_.val;
                         integer j = xpost_op_roll_shift(n, j_.int_.val);
-                        integer k;
+                        integer k, held;
                         Xpost_Object *top_ = os_top->data + ot - 3;
-                        for (k = 0; k < n; k++)
-                            tmp_[k] = top_[-xpost_op_roll_source(k, n, j)];
-                        for (k = 0; k < n; k++)
+                        /* the writeback covers exactly what the lift
+                           put in the holder */
+                        for (held = 0; held < n; held++)
+                            tmp_[held] = top_[-xpost_op_roll_source(held, n, j)];
+                        for (k = 0; k < held; k++)
                             top_[-k] = tmp_[k];
                         os_top->top -= 2;
                         goto next_element;
