@@ -46,7 +46,17 @@ done
     exit 77; }
 
 out=$("$here/evaluate.sh" $corpus 2>&1)
+st=$?
 printf '%s\n' "$out"
+# The evaluator's own status, before anything is read out of what it
+# printed. Every verdict below is a pattern looked for in that text, and
+# an evaluator that fell over prints little or nothing: no pattern is
+# found, and the run that did none of the work tells the same story as
+# the run that did all of it.
+if [ "$st" -ne 0 ]; then
+    echo "corpus: the evaluator exited with status $st -- see above"
+    exit 1
+fi
 # The evaluator skips the lot when a tool it needs is not there, saying so
 # and exiting zero. Taken as a pass, that has a run which did nothing tell
 # the same story as a run which did everything.
@@ -58,13 +68,27 @@ printf '%s\n' "$out" | grep -q 'NOT EVALUATED' && {
     echo "corpus: part of the corpus was never evaluated -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'NO-PAGE SET DIFFERS' && {
     echo "corpus: what drew no page is not what the corpus declares -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'REGISTER NAMES NOTHING' && {
+    echo "corpus: a register names a program the corpus does not hold -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'DECLARED NONDETERMINISTIC AND IS NOT' && {
+    echo "corpus: a program declared to differ from itself does not -- see above"; exit 1; }
+# What the evaluator says it did, read as numbers rather than as the
+# presence of a sentence. A corpus every program of which is held out
+# prints its held-out lines and no summary at all; a corpus that reached
+# its programs and drew nothing prints a summary whose page count is
+# zero. Both are runs that compared nothing, and a gate reading only for
+# the sentence passes them both.
+#
 # A corpus whose prelude is populated rather than committed, and has not
 # been populated, is passed over by the evaluator: with nothing to
 # prepend there is nothing to compare. That is a corpus not fetched, so
-# it reports as a skip here. Taken as a pass it would be the very thing
-# the page count guards against one level down -- a run that compared
-# nothing telling the same story as a run that compared everything.
-printf '%s\n' "$out" | grep -q 'programs evaluated' || {
+# it reports as a skip here rather than as either.
+if ! printf '%s\n' "$out" | grep -q 'programs evaluated'; then
     printf '%s\n' "$out" | grep -q 'prelude absent -- skipped' && {
-        echo "corpus: ${corpus:-a corpus} has no prelude to run with -- skipping"; exit 77; }; }
+        echo "corpus: ${corpus:-a corpus} has no prelude to run with -- skipping"; exit 77; }
+    echo "corpus: the evaluator reported on no corpus at all -- see above"
+    exit 1
+fi
+printf '%s\n' "$out" | grep -q ', 0 pages compared' && {
+    echo "corpus: a corpus compared no pages, so nothing was measured -- see above"; exit 1; }
 exit 0
