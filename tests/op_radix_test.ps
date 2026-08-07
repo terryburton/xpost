@@ -34,4 +34,28 @@ wideint {
 { $error /errorname get /limitcheck eq }{ false } ifelse
 (binary radix beyond the width is limitcheck) assert
 
+% cvi and cvr scan a radix numeral of their own, so the numeral has to reach
+% the same width there as it does in the scanner above. Each arm below names a
+% numeral wider than 31 bits, which is what says the numeral was read in the
+% integer's field and not in whatever C type the conversion had to hand.
+%
+% COMPLIANCE: PLRM cvi reads a string operand "as if by token", so a radix
+% numeral that fills the integer's field should reach cvi with the value token
+% gives it -- 16#FFFFFFFF is -1 in the narrower build. It is carried through a
+% real instead, so it arrives unsigned and too large for the field, and the
+% narrower build answers rangecheck where token answers -1. What is asserted
+% here is the width the numeral is read in, which is the same either way.
+(16#7FFFFFFF) cvi 2147483647 eq (cvi reads a radix numeral) assert
+wideint {
+    (16#FFFFFFFF) cvi 4294967295 eq (cvi reads a radix numeral past 31 bits) assert
+}{
+    % the narrower build's real is a single-precision one, which holds no
+    % two adjacent values this large apart; the numeral is therefore weighed
+    % against the boundary it has to have crossed rather than for equality,
+    % and a conversion that refused it altogether fails here too
+    { (16#FFFFFFFF) cvr } stopped
+    { false }{ 2147483648.0 gt } ifelse
+    (cvr reads a radix numeral past 31 bits) assert
+} ifelse
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

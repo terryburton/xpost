@@ -287,12 +287,15 @@ int _string_to_number(const char *t,
     base = strtol(t, &end, 10);
     if (end != t && *end == '#' && base >= 2 && base <= 36)
     {
-        long v;
+        /* the numeral is read into a field that spans the integer's, so
+           what it converts to is decided by the integer's range below and
+           not by the width of whichever C type the conversion returns */
+        long long v;
         const char *p = end + 1;
         if (_num_token_end(*p))
             return typecheck;
         errno = 0;
-        v = strtol(p, &end, (int)base);
+        v = strtoll(p, &end, (int)base);
         if (!_num_token_end(*end))
             return typecheck;
         if (errno == ERANGE)
