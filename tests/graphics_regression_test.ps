@@ -1181,6 +1181,36 @@ basefont null ne {
     2 24 moveto /zero glyphshow
     wantsnap snapshot snapeq (glyphshow paints the named glyph) assert
     currentpoint pop wantcp sub abs 0.01 le (glyphshow advances by the glyph width) assert
+
+    % A name the face's own name table does not carry. A font program
+    % need not name its glyphs at all, and a subset one usually does
+    % not, so a name that misses there is resolved to the character it
+    % stands for and taken through the face's character map instead.
+    % Three spellings reach the same glyph: the character's code in the
+    % two forms document producers write it in, and the standard name
+    % for the character itself, which is the route a face carrying no
+    % names at all leaves for every glyph in it.
+    erasepage
+    2 24 moveto (A) show
+    /wantsnap snapshot def
+    erasepage
+    2 24 moveto /uni0041 glyphshow
+    wantsnap snapshot snapeq (a glyph named by its code paints it) assert
+    erasepage
+    2 24 moveto /u0041 glyphshow
+    wantsnap snapshot snapeq (the shorter spelling of the code paints it) assert
+    erasepage
+    2 24 moveto /A glyphshow
+    wantsnap snapshot snapeq (the standard name paints the same glyph) assert
+
+    % a name that stands for nothing reaches no glyph, and says so
+    % rather than painting whatever the resolution happened to land on
+    /nameless false def
+    erasepage
+    { 2 24 moveto /notaglyphname glyphshow } stopped
+        { /nameless true store clear }
+        { /nameless wantsnap snapshot snapeq not store } ifelse
+    nameless (a name that stands for nothing reaches no glyph) assert
 } if
 
 % Type 42: a TrueType program supplied through /sfnts renders
@@ -1414,10 +1444,10 @@ FontDirectory /SubsetT42Test known {
     /CIDSystemInfo << /Registry (T) /Ordering (T) /Supplement 0 >> def
     /FontMatrix [1 0 0 1 0 0] def
     /FontType 42 def
-    /CIDCount 3 def
+    /CIDCount 4 def
     /GDBytes 1 def
-    /CIDMap <000102> def
-    /GlyphDirectory 3 dict dup begin
+    /CIDMap <00010203> def
+    /GlyphDirectory 4 dict dup begin
         1 <00010064000002BC025800030000331121116402580258FDA800> def
         2 <00010064000002BC02580002000033010164012C012C0258FDA8> def
     end def
@@ -1429,6 +1459,16 @@ FontDirectory /SubsetT42Test known {
     erasepage
     10 16 moveto <00010002> show
     countink 100 ge (an incremental descendant paints its delivered glyphs) assert
+    % A directory that grows between shows: the descendant is assembled
+    % again around the outline delivered since, and the face it had --
+    % along with the program that face was reading -- is given up. The
+    % third outline is the lens, so what says the reassembly happened is
+    % a glyph on the page that the first assembly had nothing to draw.
+    /TestCIDInc /CIDFont findresource /GlyphDirectory get
+        3 <00010064006402BC02BC00030000010001000064012C012CFED400640258FDA800C8> put
+    erasepage
+    10 16 moveto <0003> show
+    countink 20 ge (a glyph delivered after the first show paints) assert
     % the show variants advance one number per glyph, not per byte
     /TestT0 findfont 20 scalefont setfont
     erasepage
