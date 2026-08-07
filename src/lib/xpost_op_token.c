@@ -1400,6 +1400,13 @@ int Ftoken(Xpost_Context *ctx,
     Xpost_Object t;
     int ret;
 
+    /* scanning a token consumes characters of the file, so the access
+       attribute the file object carries governs it as it governs read
+       (PLRM 3.8.2). The attribute belongs to the object rather than to
+       the stream, so it is asked before the stream's state is. */
+    if (!xpost_object_is_readable(ctx, F))
+        return invalidaccess;
+
     xpost_stack_push(ctx->lo, ctx->hold, F);
 
     if (!xpost_file_get_status(ctx->lo, F))

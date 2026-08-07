@@ -910,13 +910,18 @@ int xpost_op_file_readline (Xpost_Context *ctx,
 }
 
 /* file  bytesavailable  int
-   return number of bytes available to read or -1 if not known */
+   return number of bytes available to read or -1 if not known.
+   The count is a count of what a read would deliver, so the access
+   attribute that governs reading governs asking for it too (PLRM
+   3.8.2). */
 static
 int xpost_op_file_bytesavailable (Xpost_Context *ctx,
                                   Xpost_Object F)
 {
     int bytes;
     int ret;
+    if (!xpost_object_is_readable(ctx, F))
+        return invalidaccess;
     ret = xpost_file_get_bytes_available(ctx->lo, F, &bytes);
     if (ret)
         return ret;

@@ -79,6 +79,28 @@ f closefile
 { f read } /invalidaccess (a file opened w refuses a read) erris
 f closefile
 
+% --- and it governs every operator that takes the file's characters ---
+% read, readstring, readhexstring, readline and token all consume
+% characters from the stream, and bytesavailable reports how many a read
+% would find there, so a file opened for writing refuses each of them.
+% The refusal has to come before the stream is touched: one that scanned
+% first would leave the file in error, and the closefile that followed
+% would raise ioerror on a file nothing had read.
+/f nm (w) file def
+{ f 4 string readstring }    /invalidaccess (a file opened w refuses readstring) erris
+{ f 4 string readhexstring } /invalidaccess (a file opened w refuses readhexstring) erris
+{ f 4 string readline }      /invalidaccess (a file opened w refuses readline) erris
+{ f token }                  /invalidaccess (a file opened w refuses token) erris
+{ f bytesavailable }         /invalidaccess (a file opened w refuses bytesavailable) erris
+{ f closefile } stopped not (the refusals leave the stream fit to close) assert
+
+% while a readable file answers each of them
+/f nm (w) file def f (42 ) writestring f closefile
+/f nm (r) file def
+f bytesavailable 3 eq (a file opened r reports its bytes available) assert
+f token { 42 eq }{ false } ifelse (a file opened r yields a token) assert
+f closefile
+
 % --- executing a file reads it, so the attribute governs that too ---
 % PLRM 3.8.2: accessing a file object in a way its access attribute forbids
 % is an invalidaccess. Execution reads the file, one token at a time, so a
