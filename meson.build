@@ -616,6 +616,26 @@ test('memory-bounds',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What the free list takes in and hands back out. Its links live inside
+# the freed entities' data, so an entity of no size has nowhere to carry
+# one and would be linked through the next allocation's first word --
+# and a link a stale write has turned into an arbitrary number names a
+# table slot the walk must not read. Neither case can be presented from
+# PostScript, and neither refusal is legible in a return value: the
+# first is read off the neighbour's bytes and off the list, the second
+# off the entity the walk declines to hand out.
+free_list_admission_exe = executable('free_list_admission_test',
+  'tests/free_list_admission_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('free-list-admission',
+  free_list_admission_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Stack-layer bounds discipline: a bottom-up index is answered by
 # choosing a segment and then a slot within it, and the two boundaries
 # that meet there -- the index one segment long, which is the second
