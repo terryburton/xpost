@@ -694,7 +694,16 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
             EVALARRAY_RECHECK_BASES();
         }
 
-
+        /* likewise a push the stack would not take: a fused procedure
+           runs its elements without returning to the interpreter loop,
+           so the refusal is read here too rather than waiting for the
+           procedure to finish */
+        if (ctx->lo->push_refused)
+        {
+            ctx->lo->push_refused = 0;
+            XPOST_LOG_ERR("a stack would not take a pushed object");
+            return VMerror;
+        }
 
         if (abase)
             b = abase[off];
@@ -1936,6 +1945,18 @@ ctxswitch:
                 continue;
             }
         }
+        /* a push the stack would not take, made somewhere other than
+           inside an operator -- the dispatch answers for those itself.
+           The object is on no stack and the step that pushed it carried
+           on as though it were, so the run is told before the next step
+           reads a stack it is not the depth of. */
+        if (ctx->lo->push_refused)
+        {
+            ctx->lo->push_refused = 0;
+            XPOST_LOG_ERR("a stack would not take a pushed object");
+            _onerror(ctx, VMerror);
+            continue;
+        }
         if (_interrupt_pending)
         {
             /* an external interrupt request lands between operations */
@@ -2284,6 +2305,12 @@ void loadinitps(Xpost_Context *ctx)
                      xpost_object_cvx(xpost_string_cons(ctx, n, buf)));
 
     ctx->quit = 0;
+    /* mainloop answers noerror, a yield, or that the context did not
+       validate. The context was built and every part of it checked
+       before this is reached, which is what the assertion above reads;
+       and a yield is the returntocaller operator's answer, which only
+       showpage under return semantics reaches and init.ps paints no
+       page. Running the start-up file leaves noerror the only answer. */
     mainloop(ctx);
 }
 

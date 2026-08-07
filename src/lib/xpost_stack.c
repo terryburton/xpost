@@ -149,7 +149,18 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
             stadr = (unsigned char *)s - mem->base;
             ret = xpost_stack_init(mem, &newst);
             if (!ret)
+            {
+                /* the object is on no stack and the caller is several
+                   hundred sites that do not carry the answer back; the
+                   memory file holds the refusal until the dispatch or
+                   the interpreter's safe point reads it. A declined
+                   segment is the virtual memory machinery refusing, which
+                   PLRM 8.2 gives VMerror for -- unlike a push of an
+                   object that was never made, below, which says nothing
+                   about memory and is left to say nothing here. */
+                mem->push_refused = 1;
                 return 0;
+            }
             s = xpost_stack_at(mem, stadr);
             root = xpost_stack_at(mem, stackadr);
             s->nextseg = newst;

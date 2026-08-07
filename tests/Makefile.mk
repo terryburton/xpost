@@ -211,6 +211,7 @@ tests/op_userparams_test.ps \
 tests/op_vm_param_test.ps \
 tests/op_vmreclaim_test.ps \
 tests/op_wrapsig_test.ps \
+tests/operator_install_refusal_test.c \
 tests/outline_font_test.ps \
 tests/page_cover_test.ps \
 tests/page_semantics_test.c \
@@ -290,6 +291,7 @@ tests/showop_matrix_test.ps \
 tests/single_instance_test.c \
 tests/stack_bounds_test.c \
 tests/stack_peek_bound_test.c \
+tests/stack_push_refusal_test.c \
 tests/startup_surface_api_test.c \
 tests/startup_surface_test.ps \
 tests/stencil_mask_size_test.ps \

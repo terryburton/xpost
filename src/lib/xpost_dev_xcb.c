@@ -103,6 +103,11 @@ int _event_handler(Xpost_Context *ctx,
         switch(event->response_type & ~0x80)
         {
             case XCB_EXPOSE:
+                /* the only answer _flush has other than success is for a
+                   /Private it cannot read, and this frame read the same
+                   one from the same dictionary above. Polling for an
+                   event runs no PostScript and allocates nothing, so
+                   what was there then is there now. */
                 _flush(ctx, devdic);
                 break;
             default:

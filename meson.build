@@ -984,6 +984,40 @@ test('matrix-backup',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A stack grows in segments, and linking a fresh one is an allocation a
+# full memory file declines. The push then puts its object nowhere, and
+# an operator that answers noerror over it reports work it did not do:
+# the operand stack is one shorter than the operator believes and nothing
+# about the stack says why.
+stack_push_refusal_exe = executable('stack_push_refusal_test',
+  'tests/stack_push_refusal_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('stack-push-refusal',
+  stack_push_refusal_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Registering an operator reads its name out of the operator table,
+# indexing it by the number the operator object carries. What cons answers
+# when it refuses carries zero instead, and entry zero is pop: a refused
+# registration replaces pop with the thing cons would not make, and the
+# store succeeds because pop is already there.
+operator_install_refusal_exe = executable('operator_install_refusal_test',
+  'tests/operator_install_refusal_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('operator-install-refusal',
+  operator_install_refusal_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # How much of an allocation a save's backup says is in use. The extent
 # is what the collector reads an allocation's contents by, so a backup
 # that records the block's capacity instead has the collector reading
