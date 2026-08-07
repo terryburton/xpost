@@ -1,7 +1,9 @@
-% exit must terminate every PLRM looping context -- for (integer and real),
-% repeat, loop, forall over array/dict/string, and filenameforall -- and must
-% unwind only the innermost loop. Run through `xpost -q --no-sandbox -d null`
-% by run-ps-test.sh: prints SUCCESS iff every assertion holds.
+% exit must terminate every PLRM looping context -- cshow, filenameforall,
+% for (integer and real), forall over array/dict/string, kshow, loop,
+% pathforall, repeat and resourceforall, the whole list of PLRM 8.2 -- and
+% must unwind only the innermost loop. Run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
 %
 % filenameforall is the load-bearing case: its loop frame historically lacked
 % the sentinel that exit searches the exec stack for, so an exit inside its
@@ -57,6 +59,63 @@ mkpath { pop pop /n n 1 add def exit } { pop pop exit }
        { 6 { pop } repeat exit } { exit } pathforall
 n 1 eq (exit terminates pathforall) assert
 countdictstack depth eq (exit from pathforall leaves the dictionary stack alone) assert
+
+% --- kshow and cshow ---
+% Each compiles its walk into one flattened program and runs that, so the
+% frame exit unwinds to is not the frame of any loop the walk itself takes:
+% it has to be put around the program deliberately.
+/Courier findfont 12 scalefont setfont
+
+/n 0 def
+newpath 50 50 moveto
+{ pop pop /n n 1 add def } (ABCD) kshow
+n 3 eq (kshow calls its procedure between every pair of characters) assert
+
+/n 0 def /depth countdictstack def
+newpath 50 50 moveto
+{ pop pop /n n 1 add def exit } (ABCD) kshow
+n 1 eq (exit terminates kshow) assert
+countdictstack depth eq (exit from kshow leaves the dictionary stack alone) assert
+
+/outer 0 def
+3 { /outer outer 1 add def
+    newpath 50 50 moveto { pop pop exit } (ABCD) kshow } repeat
+outer 3 eq (exit from kshow spares the enclosing loop) assert
+
+/n 0 def
+newpath 50 50 moveto
+{ pop pop pop /n n 1 add def } (ABCD) cshow
+n 4 eq (cshow calls its procedure once per character) assert
+
+/n 0 def /depth countdictstack def
+newpath 50 50 moveto
+{ pop pop pop /n n 1 add def exit } (ABCD) cshow
+n 1 eq (exit terminates cshow) assert
+countdictstack depth eq (exit from cshow leaves the dictionary stack alone) assert
+
+/outer 0 def
+3 { /outer outer 1 add def
+    newpath 50 50 moveto { pop pop pop exit } (ABCD) cshow } repeat
+outer 3 eq (exit from cshow spares the enclosing loop) assert
+
+% --- resourceforall ---
+% It enumerates with forall, whose frame exit already finds, and it ends its
+% own dictionary after the walk rather than around each call, so the depth
+% comes back by itself. Category is a category of every implementation, so
+% the walk is guaranteed something to call the procedure with.
+/n 0 def
+(*) { pop /n n 1 add store } 100 string /Category resourceforall
+n 0 gt (resourceforall visits the instances of a populated category) assert
+
+/n 0 def /depth countdictstack def
+(*) { pop /n n 1 add store exit } 100 string /Category resourceforall
+n 1 eq (exit terminates resourceforall) assert
+countdictstack depth eq (exit from resourceforall leaves the dictionary stack alone) assert
+
+/outer 0 def
+3 { /outer outer 1 add store
+    (*) { pop exit } 100 string /Category resourceforall } repeat
+outer 3 eq (exit from resourceforall spares the enclosing loop) assert
 
 % --- exit unwinds only the innermost loop ---
 /inner 0 def /outer 0 def

@@ -515,6 +515,15 @@ setglobal
 % leavings preserved -- every compiled operand is pushed just before
 % its consumer. The helper procedures embed at scan time as arrays,
 % which the programs push and exec as data.
+%
+% cshow is a looping context (PLRM 8.2), so the procedure may end the
+% walk with exit, and exit unwinds the execution stack to the frame of
+% the operator that runs the procedure repeatedly. A flattened program
+% has no such frame of its own, so each walk runs as the body of a loop
+% that its own end leaves: an exit from the procedure reaches the same
+% frame and abandons the rest of the walk, and the private dict is
+% already ended by then, so there is nothing of cshow's own left for the
+% exit to strand.
 /cshow [ /proctype /stringtype ] {
     /cshow //.xpostsys /.needfont get exec
     graphicsdict /currgstate get /currfont get
@@ -550,7 +559,7 @@ setglobal
         } loop
         ] cvx
         end
-        exec
+        { exec exit } loop
     }{
         20 dict begin
         /fnt exch def /str exch def /proc exch def
@@ -576,7 +585,7 @@ setglobal
         } loop
         ] cvx
         end
-        exec
+        { exec exit } loop
     } ifelse
     }{
         10 dict begin
@@ -593,7 +602,7 @@ setglobal
         } for
         ] cvx
         end
-        exec
+        { exec exit } loop
     } ifelse
 } //.xpostsys /.defop get exec
 

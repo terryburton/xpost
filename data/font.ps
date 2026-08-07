@@ -889,6 +889,15 @@ setglobal
     % dictionaries, and whatever it leaves on the operand stack stays --
     % every compiled operand is pushed just before its consumer, so the
     % procedure's leavings never shift one.
+    %
+    % kshow is a looping context (PLRM 8.2), so the kerning procedure may
+    % end the walk with exit, and exit unwinds the execution stack to the
+    % frame of the operator that runs the procedure repeatedly. One
+    % flattened program has no such frame of its own, so the program runs
+    % as the body of a loop that its own end leaves: an exit from the
+    % kerning procedure reaches the same frame and abandons the rest of
+    % the walk, and the dictionary is already ended by then, so there is
+    % nothing of kshow's own left for the exit to strand.
     8 dict begin
         /str exch def /proc exch def
         /exe /exec load def
@@ -910,7 +919,7 @@ setglobal
         } if
         ] cvx
     end
-    exec
+    { exec exit } loop
 } //.xpostsys /.defop get exec
 
 %   name  glyphshow  -
