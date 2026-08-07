@@ -15,6 +15,7 @@ EXTRA_DIST += \
 tests/Makefile.mk \
 tests/access_test.ps \
 tests/api_definitions_test.c \
+tests/array_swap_range_test.ps \
 tests/bbox_test.ps \
 tests/binary_token_test.expected \
 tests/binary_token_test.ps \
@@ -133,6 +134,7 @@ tests/graphicsdict_slots.golden \
 tests/gstate_matrix_test.ps \
 tests/gstate_object_test.ps \
 tests/guard-paths.sh \
+tests/halftone_cell_test.ps \
 tests/halftone_matrix_test.ps \
 tests/image_matrix_test.ps \
 tests/internal_debug_ops_test.ps \
@@ -142,6 +144,7 @@ tests/large_object_test.ps \
 tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/lsan.supp \
+tests/mask_cache_range_test.ps \
 tests/memory_bounds_test.c \
 tests/must_check.golden \
 tests/namespace_test.ps \
@@ -288,4 +291,5 @@ tests/verdict.sh \
 tests/vm_test.ps \
 tests/wrapped_bind.golden \
 tests/wrapped_bind_test.ps \
+tests/wrapped_save_test.ps \
 tests/xpost_test.h

@@ -3430,7 +3430,13 @@ int _maskcacheput(Xpost_Context *ctx,
     DNUM("advy", advy);
 #undef DGET
 #undef DNUM
-    if (w <= 0 || h <= 0 || (unsigned int)(w * h) > buf.comp_.sz)
+    /* the mask is read as h rows of w coverage bytes out of buf, and
+       the dimensions come out of a dictionary a program can build, so
+       buf has to hold that many bytes; the row count is compared
+       against the length divided by the row width, which holds for
+       every pair of dimensions rather than only those whose product
+       fits the type a multiplication would form it in */
+    if (w <= 0 || h <= 0 || (unsigned int)h > buf.comp_.sz / (unsigned int)w)
         return rangecheck;
     if (!_mask_key(ctx, key, mat, &k2, m))
         return 0;

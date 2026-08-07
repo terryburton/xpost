@@ -1,0 +1,74 @@
+%!
+% A captured glyph mask is handed to the cache in a dictionary: buf
+% holds the coverage bytes, and w and h say how the cache is to read
+% them -- h rows of w bytes, copied whole into the cache's own store.
+% The dictionary is data a program can build, so buf has to hold that
+% many bytes before any of them is copied, and the check has to hold
+% for every pair of dimensions a dictionary can carry, including the
+% pairs whose product is larger than the type a multiplication would
+% form it in. A mask whose dimensions overrun its bytes is a
+% rangecheck, and the operator must still be there afterwards.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/mput id /.maskcacheput get def
+/cstat id /.cachestatus get def
+
+% buflen w h  .  a capture dictionary that is otherwise sound
+/cap {
+  /hh exch def
+  /ww exch def
+  <<
+    /buf 3 -1 roll string /mat [ 1 0 0 1 0 0 ] /key 1
+    /w ww /h hh /bx0 0 /by0 0 /ox 0 /oy 0 /advx 0 /advy 0
+  >>
+} def
+
+% dict label  .  -   put it in the cache; expect rangecheck
+/expectrange {
+  /label exch def
+  /d0 countdictstack def
+  { mput } stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  exch
+  { dup (rangecheck) eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% --- the dimensions read the coverage bytes ---
+16 8 8 cap (a mask wider than its bytes) expectrange
+16 4 8 cap (a mask taller than its bytes) expectrange
+% the pair whose product leaves the type it would be formed in: eight
+% bytes of coverage read as four thousand million
+8 65536 65536 cap (a mask of unformable extent) expectrange
+% and neither dimension counts backwards
+64 -1 8 cap (a mask of negative width) expectrange
+64 8 0 cap (a mask of no rows) expectrange
+
+% --- a mask its bytes do hold still reaches the cache ---
+% the cache reports the bytes it holds, and a sound capture adds its
+% own to them
+cstat 7 array astore /before exch def
+/d 64 8 8 cap def
+{ d mput } stopped
+{ /fails fails 1 add def
+  (FAIL: a sound capture raised ) print
+  $error /errorname get 128 string cvs note }
+{ cstat 7 array astore /after exch def
+  /grew false def
+  0 1 6 { /i exch def
+    after i get before i get gt { /grew true def } if } for
+  grew
+  { (ok   a sound capture still reaches the cache) note }
+  { /fails fails 1 add def
+    (FAIL: a sound capture cached nothing) note } ifelse } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit

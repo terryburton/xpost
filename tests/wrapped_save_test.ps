@@ -1,0 +1,76 @@
+%!
+% A PostScript-implemented operator saves the operands its call runs on
+% into one array, .wrapsave, held in the interpreter's private
+% dictionary; element zero of that array is the mark the next call
+% saves above, and releasing a call clears the array back down to the
+% mark its own run began at. Both the array and the mark are ordinary
+% PostScript objects a program can reach, so the clear is bounded by
+% what the array actually holds: a shorter array, or a mark past its
+% end, clears no further than the array itself.
+%
+% The canaries below are ordinary definitions made before the call. A
+% clear that ran past the array would take them with it, so requiring
+% them afterwards is what says the clear stayed inside.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/wrap id /.wrapop get def
+
+% substitute a save array far shorter than the one the interpreter
+% builds; the canaries are made straight after it, so they are what a
+% clear running past its end reaches first
+.privatedict /.wrapsave 8 array put
+
+/canary1 [ 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 ] def
+/canary2 [ 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 ] def
+/canary3 (a string that must still read back whole) def
+
+% and a mark that names an element well past the array's end
+.privatedict /.wrapsave get 0 1 put
+
+/shortop dup { .privatedict /.wrapsave get 0 512 put } wrap def
+1 2 3 shortop
+pop pop pop
+
+% name first  .  -   the canary must still be there and still read back
+/whole {
+  /first exch def
+  /nm exch def
+  userdict nm known
+  { userdict nm get dup type /arraytype eq
+    { dup length 16 eq exch 0 get first eq and }
+    { pop false } ifelse
+    { (ok   ) print nm 40 string cvs print ( is whole) note }
+    { /fails fails 1 add def
+      (FAIL: ) print nm 40 string cvs print ( was overwritten) note } ifelse }
+  { /fails fails 1 add def
+    (FAIL: ) print nm 40 string cvs print ( is gone) note } ifelse
+} def
+
+/canary1 1 whole
+/canary2 17 whole
+
+userdict /canary3 known
+{ userdict /canary3 get (a string that must still read back whole) eq
+  { (ok   canary3 is whole) note }
+  { /fails fails 1 add def (FAIL: canary3 was overwritten) note } ifelse }
+{ /fails fails 1 add def (FAIL: canary3 is gone) note } ifelse
+
+% the wrapping still works: an operator made this way runs its
+% procedure on the operands the call was given, and leaves its result
+.privatedict /.wrapsave undef
+/addop dup { add } wrap def
+{ 20 22 addop } stopped
+{ /fails fails 1 add def
+  (FAIL: a wrapped operator raised ) print
+  $error /errorname get 128 string cvs note }
+{ dup 42 eq
+  { pop (ok   a wrapped operator still runs its procedure) note }
+  { /fails fails 1 add def
+    (FAIL: a wrapped operator answered ) print 20 string cvs note }
+  ifelse } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit

@@ -855,9 +855,23 @@ Xpost_Object _wrapped_save_operands(Xpost_Context *ctx)
 void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run)
 {
     Xpost_Object *data;
+    unsigned int slots;
     int base, top, i;
 
     if (xpost_object_get_type(run) != arraytype)
+        return;
+    /* The mark this clears back to is element zero of the array the
+       copies live in, which is an ordinary array in a dictionary and
+       so holds whatever a program last put there. It is bounded by
+       what the array behind this run actually holds, not by the size
+       the interpreter's own array is built at: a shorter one would
+       otherwise be cleared past its end, over whatever the memory
+       file holds next. */
+    if (!xpost_memory_table_get_size(ctx->lo, xpost_object_get_ent(run),
+                                     &slots))
+        return;
+    slots /= (unsigned int)sizeof(Xpost_Object);
+    if (slots < 1)
         return;
     data = xpost_ent_ptr_checked(ctx->lo, xpost_object_get_ent(run));
     if (!data)
@@ -866,7 +880,7 @@ void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run)
         return;
     base = (int)run.comp_.off;
     top = (int)data[0].int_.val;
-    if ((base < 1) || (top > XPOST_WRAPPED_SAVE_SLOTS))
+    if ((base < 1) || (top > (int)slots))
         return;
     /* everything from this run up belongs to the calls this one
        enclosed: they are over too, whether or not each got to release

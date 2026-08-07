@@ -1226,6 +1226,43 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A screening device's threshold cell is addressed by two dimensions
+# carried beside it in the device dictionary, so a pair of dimensions
+# the cell does not hold leaves the fill unscreened rather than reading
+# past the cell.
+test('halftone-cell',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/halftone_cell_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# A captured glyph mask is copied into the cache at the dimensions its
+# dictionary states, so dimensions the coverage bytes do not hold are a
+# rangecheck rather than a copy past them.
+test('mask-cache-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/mask_cache_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# .swap exchanges two elements by index, and an index outside the array
+# names an element of whatever else the backing entity holds, so it is a
+# rangecheck at both ends.
+test('array-swap-range',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/array_swap_range_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Releasing a wrapped call clears the saved-operand array back to the
+# mark its run began at, bounded by what that array holds rather than by
+# the size the interpreter's own array is built at.
+test('wrapped-save',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/wrapped_save_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # SVG device: render fills, strokes and glyph outlines through
 # setpagedevice and require the document's structural landmarks,
 # including resolution-independent point sizing.

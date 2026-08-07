@@ -276,6 +276,14 @@ int _array_swap(Xpost_Context *ctx,
     Xpost_Object a_i, a_j;
     int ret;
 
+    /* both indices name elements of the array on both sides: the
+       element accessors bound an index against the entity behind the
+       array rather than against the array's own extent, so an index
+       outside it reaches an element of whatever else the entity holds
+       -- the elements a subarray was cut from, among them */
+    if (i.int_.val < 0 || i.int_.val >= (integer)a.comp_.sz
+     || j.int_.val < 0 || j.int_.val >= (integer)a.comp_.sz)
+        return rangecheck;
     a_i = xpost_array_get(ctx, a, i.int_.val);
     a_j = xpost_array_get(ctx, a, j.int_.val);
     ret = xpost_array_put(ctx, a, i.int_.val, a_j);

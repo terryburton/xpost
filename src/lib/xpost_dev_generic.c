@@ -1299,7 +1299,13 @@ _ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
         return NULL;
     *w = wo.int_.val;
     *h = ho.int_.val;
-    if (*w < 1 || *h < 1 || (unsigned int)(*w * *h) > c.comp_.sz)
+    /* the cell is addressed as h rows of w thresholds, and the
+       dimensions come out of a dictionary a program can build, so the
+       cell has to hold that many bytes; the row count is compared
+       against the length divided by the row width, which holds for
+       every pair of dimensions rather than only those whose product
+       fits the type a multiplication would form it in */
+    if (*w < 1 || *h < 1 || (unsigned int)*h > c.comp_.sz / (unsigned int)*w)
         return NULL;
     return (const unsigned char *)xpost_string_get_pointer(ctx, c);
 }
@@ -2272,8 +2278,10 @@ int _blitrow(Xpost_Context *ctx,
        mask range pairs -- and the native count indexes the entries of
        the baked colour table, whose length is checked against it. Both
        are bounded by what those tables hold before anything reads
-       through them. */
-    if (ncomp < 1 || ncomp > 4 || nat < 1 || nat > 3)
+       through them. The row index multiplies the mask's row stride to
+       reach the bits for its row, so it counts forward from the first
+       of them. */
+    if (ncomp < 1 || ncomp > 4 || nat < 1 || nat > 3 || y < 0)
         return rangecheck;
     GETR(xoff); GETR(xscale); GETR(yoff); GETR(yscale);
     GETR(cx0); GETR(cy0); GETR(cx1); GETR(cy1);
@@ -2312,8 +2320,12 @@ int _blitrow(Xpost_Context *ctx,
     if (!have_planes)
     {
         bufo = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "buf"));
+        /* the interleaved row holds ncomp samples per pixel, compared
+           against the row width by division: the width is the caller's
+           and its product with the component count need not fit the
+           type the samples are indexed with */
         if (xpost_object_get_type(bufo) != stringtype
-         || bufo.comp_.sz < (unsigned int)(w * ncomp))
+         || bufo.comp_.sz / (unsigned int)ncomp < (unsigned int)w)
             return rangecheck;
         buf = (unsigned char *)xpost_string_get_pointer(ctx, bufo);
     }
@@ -2363,7 +2375,13 @@ int _blitrow(Xpost_Context *ctx,
         if (xpost_object_get_type(o) != integertype)
             return typecheck;
         mrowb = o.int_.val;
-        if (mbitso.comp_.sz < (unsigned int)((y + 1) * mrowb))
+        /* the mask holds one row of mrowb bytes per sample row and the
+           row index selects among them, so the bits through row y must
+           be there; the stride is compared against the length divided
+           by the row count, which holds for every stride rather than
+           only those whose product with the count fits the type */
+        if (mrowb < 0
+         || (unsigned int)mrowb > mbitso.comp_.sz / ((unsigned int)y + 1))
             return rangecheck;
         mbits = (unsigned char *)xpost_string_get_pointer(ctx, mbitso);
     }
@@ -2437,7 +2455,7 @@ int _blitrow(Xpost_Context *ctx,
                 }
             }
             else if (xpost_object_get_type(po) == stringtype
-                  && po.comp_.sz >= (unsigned int)(w * ncomp))
+                  && po.comp_.sz / (unsigned int)ncomp >= (unsigned int)w)
             {
                 prevsamp = (unsigned char *)xpost_string_get_pointer(ctx, po);
                 prevok = 1;
