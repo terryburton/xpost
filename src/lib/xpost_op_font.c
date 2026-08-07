@@ -62,16 +62,70 @@
 #include "xpost_op_font.h"
 #include "xpost_dev_generic.h" /* pdfwrite accumulator access for glyph outlines */
 #include "xpost_dev_driver.h" /* the device grid the clip region's bounds sit on */
+#include "xpost_handle.h" /* the handle a font dictionary names its face by */
 
 /*
  * FIXME: check if we can factorize show, ashow and kshow a bit.
  * These codes seem quite similar
  */
 
+/* What a font dictionary's /Private names: the face its font program
+   was opened as. The face is held for the process, outside virtual
+   memory, so what the dictionary carries under that key is a handle on
+   the block holding it rather than the block itself -- a font
+   dictionary is an ordinary dictionary and what it holds under any key
+   is whatever was last stored there. */
 typedef struct fontdata
 {
     void *face;
 } fontdata;
+
+/* The block a font dictionary's /Private names, or NULL where the value
+   there is not a handle on one. A font dictionary is copied --
+   scalefont and makefont copy one, and a re-encoded copy of a findfont
+   dictionary shares its face -- so a handle names its block whichever
+   dictionary presents it. */
+static XPOST_NOINLINE fontdata *_font_data(Xpost_Context *ctx,
+                                           Xpost_Object fontdict)
+{
+    return (fontdata *)xpost_handle_block(ctx,
+               xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private")),
+               XPOST_HANDLE_FONT, sizeof(fontdata));
+}
+
+/* Give a font dictionary a face, releasing the face it holds. The
+   dictionary keeps the block it was issued, so the copies of it sharing
+   that face reach the new one; a dictionary holding a handle issued
+   elsewhere is issued one of its own and leaves the other face to the
+   dictionary it belongs to. */
+static int _font_data_set(Xpost_Context *ctx,
+                          Xpost_Object fontdict,
+                          void *face)
+{
+    Xpost_Object key = xpost_name_cons(ctx, "Private");
+    Xpost_Object anchor;
+    fontdata *fd;
+    int ret;
+
+    fd = (fontdata *)xpost_handle_block_of(ctx,
+             xpost_dict_get(ctx, fontdict, key), fontdict,
+             XPOST_HANDLE_FONT, sizeof(fontdata));
+    if (!fd)
+    {
+        ret = xpost_handle_cons(ctx, fontdict, key, &anchor,
+                                XPOST_HANDLE_FONT, sizeof(fontdata));
+        if (ret)
+            return ret;
+        fd = (fontdata *)xpost_handle_block(ctx, anchor, XPOST_HANDLE_FONT,
+                                            sizeof(fontdata));
+        if (!fd)
+            return VMerror;
+    }
+    else if (fd->face)
+        xpost_font_face_free(fd->face);
+    fd->face = face;
+    return 0;
+}
 
 /* One pixel-row band of the clip region: the columns [lo, hi) of row
    band the region covers. This is the region as .regionmeet resolves
@@ -722,7 +776,6 @@ int _findfont(Xpost_Context *ctx,
 #ifdef HAVE_FREETYPE2
     Xpost_Object fontstr;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
     char *fname;
     Xpost_Object fontbbox;
@@ -739,13 +792,6 @@ int _findfont(Xpost_Context *ctx,
     fname = xpost_string_allocate_cstring(ctx, fontstr);
 
     fontdict = xpost_dict_cons (ctx, 10);
-    privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
-    if (ret)
-    {
-        free(fname);
-        return ret;
-    }
     ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "FontName"), fontname);
     if (ret)
     {
@@ -1040,12 +1086,11 @@ have_charstrings: ;
         }
     }
 
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof data, &data))
+    ret = _font_data_set(ctx, fontdict, data.face);
+    if (ret)
     {
         free(fname);
-        return VMerror;
+        return ret;
     }
     xpost_stack_push(ctx->lo, ctx->os, fontdict);
     free(fname);
@@ -1068,7 +1113,6 @@ int _loadfont42(Xpost_Context *ctx,
 {
 #ifdef HAVE_FREETYPE2
     Xpost_Object sfnts;
-    Xpost_Object privatestr;
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
@@ -1120,12 +1164,7 @@ int _loadfont42(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof data, &data))
-        return VMerror;
-    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = _font_data_set(ctx, fontdict, data.face);
     if (ret)
         return ret;
     return 0;
@@ -2369,8 +2408,8 @@ int _show(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     char *cstr;
     real xpos, ypos;
     char *ch;
@@ -2401,17 +2440,13 @@ int _show(Xpost_Context *ctx,
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     XPOST_LOG_INFO("loaded font data from dict");
 
@@ -2468,8 +2503,8 @@ int _glyphshow_common(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     real xpos, ypos;
     Xpost_Object devdic;
     Xpost_Object putpix;
@@ -2493,17 +2528,13 @@ int _glyphshow_common(Xpost_Context *ctx,
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
 
     ret = _get_current_point(ctx, gs, &xpos, &ypos);
@@ -2643,7 +2674,7 @@ int _loadcidfont0(Xpost_Context *ctx,
                   Xpost_Object fontdict)
 {
 #ifdef HAVE_FREETYPE2
-    Xpost_Object gdata, fdarray, privatestr, fontbbox;
+    Xpost_Object gdata, fdarray, fontbbox;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
     Xpost_String_Buffer buf;
@@ -2777,19 +2808,6 @@ int _loadcidfont0(Xpost_Context *ctx,
     }
     xpost_strbuf_free(&buf);
 
-    /* a rebuilt descendant releases its previous face */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == stringtype)
-    {
-        /* a read that refuses leaves data untouched, and releasing off
-           an uninitialised struct is worse than leaking the old face */
-        if (xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                             xpost_object_get_ent(privatestr), 0,
-                             sizeof data, &data)
-         && data.face)
-            xpost_font_face_free(data.face);
-    }
-
     data.face = xpost_font_face_new_from_memory(whole, wlen);
     if (data.face == NULL)
     {
@@ -2808,12 +2826,7 @@ int _loadcidfont0(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof data, &data))
-        return VMerror;
-    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = _font_data_set(ctx, fontdict, data.face);
     if (ret)
         return ret;
     return 0;
@@ -2868,7 +2881,7 @@ int _loadfont1(Xpost_Context *ctx,
                Xpost_Object csflat)
 {
 #ifdef HAVE_FREETYPE2
-    Xpost_Object priv, privatestr, fontbbox, subrs;
+    Xpost_Object priv, fontbbox, subrs;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
     Xpost_String_Buffer hdr, sec;
@@ -3040,12 +3053,7 @@ int _loadfont1(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof data, &data))
-        return VMerror;
-    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = _font_data_set(ctx, fontdict, data.face);
     if (ret)
         return ret;
     ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, ".emunits"),
@@ -3468,7 +3476,6 @@ int _loadcidfont2(Xpost_Context *ctx,
 {
 #ifdef HAVE_FREETYPE2
     Xpost_Object sfnts;
-    Xpost_Object privatestr;
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
@@ -3676,19 +3683,6 @@ int _loadcidfont2(Xpost_Context *ctx,
     if (maxpoff && maxpoff + 6 <= outtotal)
         _sfnt_put16(out + maxpoff + 4, nglyphs);
 
-    /* replace any previous face: the directory grows between shows */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == stringtype)
-    {
-        /* a read that refuses leaves data untouched, and releasing off
-           an uninitialised struct is worse than leaking the old face */
-        if (xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                             xpost_object_get_ent(privatestr), 0,
-                             sizeof data, &data)
-         && data.face)
-            xpost_font_face_free(data.face);
-    }
-
     data.face = xpost_font_face_new_from_memory(out, outtotal);
     if (data.face == NULL)
     {
@@ -3707,12 +3701,7 @@ int _loadcidfont2(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    privatestr = xpost_string_cons(ctx, sizeof data, NULL);
-    if (!xpost_memory_put(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0,
-                          sizeof data, &data))
-        return VMerror;
-    ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "Private"), privatestr);
+    ret = _font_data_set(ctx, fontdict, data.face);
     if (ret)
         return ret;
     return 0;
@@ -3734,8 +3723,8 @@ int _ashow(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     char *cstr;
     real xpos, ypos;
     char *ch;
@@ -3766,17 +3755,13 @@ int _ashow(Xpost_Context *ctx,
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     XPOST_LOG_INFO("loaded font data from dict");
 
@@ -3832,8 +3817,8 @@ int _widthshow(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     char *cstr;
     real xpos, ypos;
     char *ch;
@@ -3864,17 +3849,13 @@ int _widthshow(Xpost_Context *ctx,
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     XPOST_LOG_INFO("loaded font data from dict");
 
@@ -3935,8 +3916,8 @@ int _awidthshow(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     char *cstr;
     real xpos, ypos;
     char *ch;
@@ -3967,17 +3948,13 @@ int _awidthshow(Xpost_Context *ctx,
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
     /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     XPOST_LOG_INFO("loaded font data from dict");
 
@@ -4035,8 +4012,8 @@ int _stringwidth(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     char *cstr;
     real xpos = 0, ypos = 0;
     char *ch;
@@ -4057,17 +4034,13 @@ int _stringwidth(Xpost_Context *ctx,
     XPOST_LOG_INFO("loaded graphicsdict, graphics state, and current font");
 
     /* get the font data from the font dict */
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
@@ -4268,8 +4241,8 @@ int _stringoutline(Xpost_Context *ctx,
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object fontdict;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     Xpost_Object encoding;
     Xpost_Object charstrings;
     char *cstr;
@@ -4287,17 +4260,13 @@ int _stringoutline(Xpost_Context *ctx,
     if (xpost_object_get_type(fontdict) == invalidtype)
         return invalidfont;
 
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
     encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
@@ -4370,8 +4339,8 @@ int _glyphoutline_common(Xpost_Context *ctx,
     Xpost_Object gs;
     Xpost_Object fontdict;
     Xpost_Object devdic;
-    Xpost_Object privatestr;
     struct fontdata data;
+    fontdata *fd;
     textstate ts;
     outlinecollect oc;
     Xpost_Object arr;
@@ -4389,17 +4358,13 @@ int _glyphoutline_common(Xpost_Context *ctx,
     devdic = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "device"));
     ts = _text_state_get(ctx, gs, fontdict, devdic);
 
-    privatestr = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Private"));
-    if (xpost_object_get_type(privatestr) == invalidtype)
-        return invalidfont;
-    if (!xpost_memory_get(xpost_context_select_memory(ctx, privatestr),
-                          xpost_object_get_ent(privatestr), 0, sizeof data,
-                          &data)
-     || data.face == NULL)
+    fd = _font_data(ctx, fontdict);
+    if (!fd || fd->face == NULL)
     {
         XPOST_LOG_ERR("face is NULL");
         return invalidfont;
     }
+    data = *fd;
     _face_setup(ctx, gs, fontdict, data.face);
 
     memset(&oc, 0, sizeof oc);

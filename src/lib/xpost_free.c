@@ -43,7 +43,7 @@
 #include "xpost_memory.h" /* Xpost_Memory_File */
 #include "xpost_object.h" /* Xpost_Object */
 #include "xpost_file.h" /* Xpost_File: what a file entity holds */
-#include "xpost_dev_private.h" /* what a device private entity holds */
+#include "xpost_handle.h" /* what a handle entity holds */
 #include "xpost_free.h"
 
 /*
@@ -209,10 +209,10 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
             return -1;
         }
     }
-    /* a device's private state is an entity in here and a block
-       outside, and the entity is on its way to the free list */
-    if (tab->tab[rent].tag & XPOST_MEMORY_TABLE_TAG_DEVICE_PRIVATE)
-        xpost_dev_private_release_entity(mem, ent);
+    /* a handle is an entity in here and a block outside, and the
+       entity is on its way to the free list */
+    if (tab->tab[rent].tag & XPOST_MEMORY_TABLE_TAG_HANDLE)
+        xpost_handle_release_entity(mem, ent);
     tab->tab[rent].tag = 0;
 
     z = xpost_memory_free_lists_adr(mem);

@@ -56,7 +56,7 @@
 
 #include "xpost_context.h"
 #include "xpost_file.h"
-#include "xpost_dev_private.h"
+#include "xpost_handle.h"
 
 /* initialize the context list
    special entity in the mfile */
@@ -379,8 +379,8 @@ void xpost_context_exit(Xpost_Context *ctx)
     /* the same for what a device held outside virtual memory: the
        entities carrying the handles go with the memory file, and the
        blocks they name would be left behind */
-    xpost_dev_private_release_memory_file(ctx->lo);
-    xpost_dev_private_release_memory_file(ctx->gl);
+    xpost_handle_release_memory_file(ctx->lo);
+    xpost_handle_release_memory_file(ctx->gl);
 
     free(ctx->namecache_gen);
     free(ctx->namecache_val);
