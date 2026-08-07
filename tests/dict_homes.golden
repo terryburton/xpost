@@ -1,8 +1,15 @@
 # Private-namespace members and their homes, one "DICT /name" per line.
-# The dict-homes test asserts every pair still appears in data/*.ps: a
-# member may gain company but may not move home or vanish. A feature
-# that adds a member appends it here in the same commit, so the file
-# is the running register of where interpreter machinery lives.
+# The dict-homes test holds the file in both directions: every name here
+# must still be where it says in data/*.ps, and every member those
+# sources define must be named here. A member may not move home, vanish,
+# or arrive unregistered. A feature that adds one registers it in the
+# same commit, so the file is the running register of where interpreter
+# machinery lives.
+#
+# The "entries" line counts the member lines that follow. Nothing else
+# would stop the list being emptied: with nothing registered there is
+# nothing to look for, and both directions would agree over two empty
+# sets.
 #
 # A name here is the whole name. Five entries were once prefixes of a
 # longer name and were satisfied by it -- /DATA by DATA_DIR, /GRAPHICS by
@@ -11,97 +18,293 @@
 # so they registered members that do not exist while the ones that do
 # went unheld.
 #
-# A name here is also one the PostScript defines, not one a comment about
-# it spells. /h was registered against the line of data/init.ps that
-# writes an imaginary helper to show what the helper-call idiom looks
-# like; nothing has ever defined a member of that name.
+# A name here is also one the PostScript defines, not one a comment or a
+# printed message about it spells. /h was registered against the line of
+# data/init.ps that writes an imaginary helper to show what the
+# helper-call idiom looks like; nothing has ever defined a member of that
+# name.
+#
+# More members are registered than the sources are read as defining. One
+# defined in C, one a running procedure computes, and the device class
+# dictionaries a loop copies into their home are written down nowhere a
+# scan can read as a definition, so they are held by the first direction
+# alone.
+entries 283
+
+.gscratch /.lresources
 .gscratch /.pfdict
+.gscratch /.stencilcache
 .gscratch /strokedict
+.internaldict /.=stringproc
 .internaldict /.fillpoly
 .internaldict /.fillrectgray
+.internaldict /.sysdictrelock
 .internaldict /GRAPHICS_LOADED
 .internaldict /QUIET
-.internaldict /.=stringproc
-.internaldict /.sysdictrelock
 .internaldict /USEDRAWLINE
-.privatedict /DATA_DIR
+.privatedict /.DEVICEproc
+.privatedict /.completedevice
 .privatedict /.error
 .privatedict /.graphicsdict
+.privatedict /.graphicsdictproc
+.privatedict /.gscratchdict
+.privatedict /.gscratchproc
 .privatedict /.gstatetemplate
 .privatedict /.hairhw
 .privatedict /.hairrect
 .privatedict /.imginterp
+.privatedict /.resourcepath
+.privatedict /.wrappedprocs
+.privatedict /DATA_DIR
+.privatedict /newDSCWRITEdevice
+.privatedict /newPBMIMAGEdevice
+.privatedict /newPDFWRITEdevice
+.privatedict /newPGMIMAGEdevice
+.privatedict /newPPMIMAGEdevice
+.privatedict /newSVGWRITEdevice
+.privatedict /newTIFFIMAGEdevice
+.privatedict /newbboxdevice
 .privatedict /newnulldevice
-.gscratch /.stencilcache
 # the device class dictionaries, one per PostScript-implemented device
 .privatedict /.xpost_BBOX
+.privatedict /.xpost_DSCWRITE
 .privatedict /.xpost_NULLDEV
+.privatedict /.xpost_PBMIMAGE
+.privatedict /.xpost_PDFWRITE
 .privatedict /.xpost_PGMIMAGE
 .privatedict /.xpost_PPMIMAGE
-.privatedict /.xpost_PBMIMAGE
-.privatedict /.xpost_TIFFIMAGE
-.privatedict /.xpost_PDFWRITE
-.privatedict /.xpost_DSCWRITE
 .privatedict /.xpost_SVGWRITE
+.privatedict /.xpost_TIFFIMAGE
+.xpostsys /.applytransfer
+.xpostsys /.argok
+.xpostsys /.axialsh
+.xpostsys /.bez1
 .xpostsys /.bindone
 .xpostsys /.bindscope
 .xpostsys /.bindscoped
+.xpostsys /.boundatdef
+.xpostsys /.buildkeys
+.xpostsys /.bytecmap
 .xpostsys /.c01
 .xpostsys /.c255
+.xpostsys /.callout
 .xpostsys /.catinstances
-.xpostsys /.clipspans
-.xpostsys /.setclipregion
-.xpostsys /.clipregionpoly
+.xpostsys /.charpathoutline
+.xpostsys /.charpathstroked
+.xpostsys /.checkargs
+.xpostsys /.cidface
+.xpostsys /.cieabcrgb
+.xpostsys /.ciearpgb
+.xpostsys /.cieclamp
+.xpostsys /.cieclampcomps
+.xpostsys /.ciecomps
+.xpostsys /.cieconv
+.xpostsys /.ciedefgrgb
+.xpostsys /.ciedefrgb
+.xpostsys /.ciefams
+.xpostsys /.cielmnxyzrgb
+.xpostsys /.cierange
+.xpostsys /.cierangekeys
+.xpostsys /.ciergb
+.xpostsys /.cietblpos
+.xpostsys /.cietblval
+.xpostsys /.ciexyzrgb
+.xpostsys /.classcopydict
+.xpostsys /.clipbig
 .xpostsys /.clipmeet
 .xpostsys /.clipmeetparts
+.xpostsys /.clippartsmeet
+.xpostsys /.clipregionpath
+.xpostsys /.clipregionpoly
+.xpostsys /.clipspans
+.xpostsys /.clipstoreparts
 .xpostsys /.cliptile
 .xpostsys /.cliptilerows
-.xpostsys /.fillparts
-.xpostsys /ColorConversion
+.xpostsys /.cmapnext
+.xpostsys /.cmapwalk
+.xpostsys /.coabsent
+.xpostsys /.cobeginall
+.xpostsys /.collectproc
+.xpostsys /.conothing
+.xpostsys /.corestore
+.xpostsys /.cosave
+.xpostsys /.costop
+.xpostsys /.csalt
+.xpostsys /.cshmeasure
+.xpostsys /.cshsetfont
 .xpostsys /.csinitcolor
-.xpostsys /cpath
-.xpostsys /crossdashbound
-.xpostsys /currentcolordict
-.xpostsys /dashdict
-.xpostsys /dashpath
+.xpostsys /.cskeys
+.xpostsys /.csreckeys
+.xpostsys /.csspot
+.xpostsys /.csvalidate
+.xpostsys /.ctchannel
+.xpostsys /.ctkeys
+.xpostsys /.cunit
+.xpostsys /.decode
 .xpostsys /.defcategory
-.xpostsys /despike
+.xpostsys /.defop
+.xpostsys /.defopin
 .xpostsys /.devicemakers
 .xpostsys /.devpathforall
+.xpostsys /.devres-to-points
 .xpostsys /.devsendclip
 .xpostsys /.devtakespath
 .xpostsys /.dir
-.xpostsys /doclip
-.xpostsys /dolinejoin
-.xpostsys /dopending
-.xpostsys /doprompt
-.xpostsys /evaluate
+.xpostsys /.docap
+.xpostsys /.dsunwind
+.xpostsys /.eospanparts
+.xpostsys /.eospantile
+.xpostsys /.execformbox
+.xpostsys /.execformdirect
 .xpostsys /.fill
+.xpostsys /.fillparts
 .xpostsys /.finalize
+.xpostsys /.fmapdesc
+.xpostsys /.fmapnext
+.xpostsys /.fneval
+.xpostsys /.fneval2
+.xpostsys /.fnsh
 .xpostsys /.fontsubstitutions
-.xpostsys /gstatecopy
+.xpostsys /.gcd
+.xpostsys /.glyphbytes
+.xpostsys /.glyphcharpath
+.xpostsys /.glyphkey
+.xpostsys /.gmid
+.xpostsys /.gsetcolor
+.xpostsys /.gsunwind
+.xpostsys /.gtri
 .xpostsys /.hairext
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror
-.xpostsys /hodgman-sutherland
+.xpostsys /.ht5component
+.xpostsys /.htnum
+.xpostsys /.htreadthresholds
+.xpostsys /.htrequire
+.xpostsys /.htvalidate
 .xpostsys /.identdecode
+.xpostsys /.idxconv
 .xpostsys /.imagepaint
 .xpostsys /.imagepaintm
 .xpostsys /.imagetype3
 .xpostsys /.imagetype4
 .xpostsys /.imgsource
-.xpostsys /initial_ipos
+.xpostsys /.initdevicegstate
+.xpostsys /.installcolorscreen
+.xpostsys /.installcolorscreenbody
+.xpostsys /.installscreen
+.xpostsys /.installscreenbody
+.xpostsys /.installscreencell
 .xpostsys /.instof
 .xpostsys /.intest
+.xpostsys /.isupmat
 .xpostsys /.it1row
 .xpostsys /.it2row
-.xpostsys /loadgraphics
+.xpostsys /.linstof
 .xpostsys /.loadmodule
-.xpostsys /magang
+.xpostsys /.loadresource
+.xpostsys /.makerasterclass
+.xpostsys /.maskcapture
 .xpostsys /.mcscale
+.xpostsys /.meshsh
 .xpostsys /.min
-.xpostsys /minlinewidth
+.xpostsys /.mrdbits
+.xpostsys /.mrdbyte
+.xpostsys /.mrdcolor
+.xpostsys /.mrddec
+.xpostsys /.mrdflag
+.xpostsys /.mrdpt
+.xpostsys /.mrdvertex
+.xpostsys /.mustbe
 .xpostsys /.ncomponents
+.xpostsys /.needfont
+.xpostsys /.needpoint
+.xpostsys /.num2str
+.xpostsys /.opsigs
+.xpostsys /.outlinepath
+.xpostsys /.pagefilename
+.xpostsys /.pagepause
+.xpostsys /.pagestate
+.xpostsys /.patchpaint
+.xpostsys /.patchsh
+.xpostsys /.patternactive
+.xpostsys /.patternclip
+.xpostsys /.patterneofill
+.xpostsys /.patternfill
+.xpostsys /.patternink
+.xpostsys /.patterntile
+.xpostsys /.pcallout
+.xpostsys /.pexec
+.xpostsys /.pgridmap
+.xpostsys /.pmix
+.xpostsys /.polybounds
+.xpostsys /.polytopath
+.xpostsys /.radialsh
+.xpostsys /.rasterproto
+.xpostsys /.recordcolorscreen
+.xpostsys /.rect1
+.xpostsys /.refreshscreencell
+.xpostsys /.resources
+.xpostsys /.rownorm
+.xpostsys /.runbuild
+.xpostsys /.runbuildbody
+.xpostsys /.sampleat
+.xpostsys /.samplecolortransfer
+.xpostsys /.samplecolortransferbody
+.xpostsys /.samplespot
+.xpostsys /.samplespotbody
+.xpostsys /.sampletransfer
+.xpostsys /.sampletransferbody
+.xpostsys /.screenlattice
+.xpostsys /.sepconv
+.xpostsys /.setclipregion
+.xpostsys /.shcolor
+.xpostsys /.showclip
+.xpostsys /.showfmap
+.xpostsys /.showoutline
+.xpostsys /.showroute
+.xpostsys /.showtype0
+.xpostsys /.spacecomps
+.xpostsys /.spreadgrayscreen
+.xpostsys /.sskeys
+.xpostsys /.ssreckeys
+.xpostsys /.stencilmask
+.xpostsys /.stencilruns
+.xpostsys /.strcat
+.xpostsys /.t3build
+.xpostsys /.t3capkeys
+.xpostsys /.tintsclamp
+.xpostsys /.tskeys
+.xpostsys /.uparams
+.xpostsys /.upathargs
+.xpostsys /.upathcheck
+.xpostsys /.upathops
+.xpostsys /.upathopset
+.xpostsys /.vecout
+.xpostsys /.wcmatch
+.xpostsys /.withspace
+.xpostsys /.withspacebody
+.xpostsys /.wrapwithsig
+.xpostsys /.zeros
+.xpostsys /ColorConversion
+.xpostsys /CopypageSemanticsDict
+.xpostsys /ShowpageSemanticsDict
+.xpostsys /cpath
+.xpostsys /crossdashbound
+.xpostsys /currentcolordict
+.xpostsys /dashdict
+.xpostsys /dashpath
+.xpostsys /despike
+.xpostsys /doclip
+.xpostsys /dolinejoin
+.xpostsys /dopending
+.xpostsys /doprompt
+.xpostsys /evaluate
+.xpostsys /gstatecopy
+.xpostsys /hodgman-sutherland
+.xpostsys /initial_ipos
+.xpostsys /loadgraphics
+.xpostsys /magang
+.xpostsys /minlinewidth
 .xpostsys /normclipwind
 .xpostsys /p2abc
 .xpostsys /pause
@@ -110,61 +313,9 @@
 .xpostsys /qsort
 .xpostsys /ravec
 .xpostsys /rect
-.xpostsys /.resources
-.xpostsys /.rownorm
-.xpostsys /.sampleat
 .xpostsys /setcolordict
-.xpostsys /ShowpageSemanticsDict
-.xpostsys /.spacecomps
-.xpostsys /.stencilmask
-.xpostsys /.stencilruns
-.xpostsys /.strcat
-.xpostsys /.wcmatch
 .xpostsys /xpost
-.xpostsys /.applytransfer
-.xpostsys /.spreadgrayscreen
-.xpostsys /.samplespot
-.xpostsys /.gcd
-.xpostsys /.screenlattice
-.xpostsys /.installscreencell
-.xpostsys /.refreshscreencell
-.xpostsys /.ht5component
-.xpostsys /.htreadthresholds
-.xpostsys /.pagefilename
-.xpostsys /.patternactive
-.xpostsys /.patternfill
-.xpostsys /.patterneofill
-.xpostsys /.fneval
-.xpostsys /.fneval2
-.xpostsys /.gtri
-.xpostsys /.zeros
-.xpostsys /.num2str
-.xpostsys /.devres-to-points
-.xpostsys /.rasterproto
-.xpostsys /.makerasterclass
-.xpostsys /.upathops
-.xpostsys /.upathargs
-.xpostsys /.isupmat
-.xpostsys /.execformdirect
-.xpostsys /.execformbox
-.xpostsys /.callout
-.xpostsys /.cskeys
-.xpostsys /.withspace
-.xpostsys /.withspacebody
-.xpostsys /.csalt
-.xpostsys /.idxconv
-.xpostsys /.sepconv
-.xpostsys /.cieconv
-.xpostsys /.buildkeys
-.xpostsys /.t3capkeys
-.xpostsys /.runbuildbody
-.xpostsys /.tskeys
-.xpostsys /.sampletransferbody
-.xpostsys /.sskeys
-.xpostsys /.samplespotbody
-.xpostsys /.ssreckeys
-.xpostsys /.installscreen
-.xpostsys /.installscreenbody
+
 # Graphics-state template slots (data/gstate.ps). The list is the whole
 # of the template: a slot the template declares and this list does not
 # fails the check, so a new slot is declared here in the commit that adds
