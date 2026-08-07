@@ -3,7 +3,9 @@
 # they belong to others, or are generated (see README.md). The small
 # per-corpus prelude that lets a corpus run (e.g. ghostscript/prelude)
 # is committed; a large generated one (bwipp/prelude, the barcode
-# resource) is not.
+# resource) is not, and the file that declares it fetched
+# (bwipp/prelude.fetched) is committed in its place, so that a corpus
+# waiting for its prelude is read as unfetched rather than as broken.
 */*.ps
 */*.eps
 */*.ppm

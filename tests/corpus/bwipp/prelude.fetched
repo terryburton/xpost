@@ -1,0 +1,19 @@
+# This corpus's prelude is populated, not committed. Its programs draw
+# barcodes and assume the barcode resource is already loaded, so the
+# monolithic resource is copied in as bwipp/prelude and prepended to
+# every program of the corpus; it is generated and large, so it is kept
+# out of the tree like the programs it serves.
+#
+# This file is what says so. A prelude that is part of the tree is
+# there in every checkout, so its absence is a broken tree and the
+# programs failing for want of it is the report; a prelude that is
+# fetched is absent wherever the corpus has not been fetched, and the
+# corpus is skipped instead. The evaluator tells the two apart by this
+# file, so it belongs beside a prelude that fetch.sh writes and nowhere
+# else.
+#
+# What is left below is what the evaluator prints when the prelude is
+# missing, so it is addressed to whoever finds the corpus skipped.
+bwipp/prelude is the monolithic barcode resource of a BWIPP checkout.
+Build the monolithic resource there, then populate the corpus with it:
+    BWIPP=/path/to/postscriptbarcode tests/corpus/fetch.sh bwipp

@@ -1,9 +1,10 @@
 #!/bin/sh
 # Render each corpus through xpost and Ghostscript and report the
 # per-page difference. A corpus whose directory is absent or empty is
-# skipped, so this is never a build dependency. Ghostscript is used as
-# the differential reference; read the difference as a lead, not a
-# verdict (see README.md).
+# skipped, as is one whose programs need a prelude that is populated
+# rather than committed and has not been, so this is never a build
+# dependency. Ghostscript is used as the differential reference; read
+# the difference as a lead, not a verdict (see README.md).
 #
 #   evaluate.sh                 evaluate every corpus present
 #   evaluate.sh ghostscript     evaluate one
@@ -152,6 +153,24 @@ evaluate_corpus() {
     for p in "$@"; do [ -f "$p" ] && have=1; done
     if [ "$have" = 0 ]; then
         echo "$corpus: absent -- skipped (fetch.sh $corpus)"
+        return
+    fi
+    # A corpus whose programs assume a prelude cannot run without one:
+    # with nothing prepended, every program of it fails and the run
+    # compares no page at all. Where the prelude is committed that is a
+    # broken tree, and the programs failing is the report of it. Where
+    # the prelude is populated alongside the programs -- generated and
+    # large, and so kept out of the tree as they are -- its absence
+    # means only that the corpus is half fetched, which is a skip. The
+    # two cases look alike from the missing file, so the corpus says
+    # which it is: a committed "prelude.fetched" beside the prelude
+    # declares that the prelude is populated rather than committed, and
+    # says how to obtain it. A corpus without that file is one whose
+    # prelude is part of the tree, and its absence is not skipped over.
+    if [ -f "$dir/prelude.fetched" ] && [ ! -s "$dir/prelude" ]; then
+        echo "$corpus: prelude absent -- skipped ($corpus/prelude is not committed)"
+        grep -v '^[[:space:]]*#' "$dir/prelude.fetched" \
+            | grep -v '^[[:space:]]*$' | sed 's/^/  /'
         return
     fi
     echo "=== $corpus"

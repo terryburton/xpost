@@ -107,6 +107,17 @@ to *both* engines, so the compared input stays identical and the shim
 is not itself under test. A small prelude that is ours (ghostscript's)
 is committed; a large generated one (bwipp's barcode resource) is not.
 
+A corpus that needs a prelude and has not got one cannot run: nothing
+is prepended, every program of it fails, and the run compares no page.
+Which of two things that is depends on where the prelude comes from. A
+committed prelude is in every checkout, so its absence is a broken tree
+and the programs failing for want of it is the report. A prelude that
+is fetched is absent wherever the corpus has not been fetched, and the
+corpus is skipped -- named, with what the prelude is and how to obtain
+it -- rather than run into a wall of failures. The corpus says which it
+has by a `prelude.fetched` file beside the prelude, committed where the
+prelude is not, whose text is what the skip prints.
+
 Evaluation
 ----------
 

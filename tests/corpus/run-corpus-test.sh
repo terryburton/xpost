@@ -1,10 +1,12 @@
 #!/bin/sh
 # Meson wrapper for the differential corpus. It runs evaluate.sh over whatever
 # corpora have been fetched into place and reports:
-#   - SKIP (exit 77) when there is nothing to run: no corpus is present, or the
-#     comparison tools it needs (Ghostscript, ImageMagick compare) are absent. The corpus
-#     is thus never a build-time dependency -- populate it with fetch.sh to make
-#     this test do its work.
+#   - SKIP (exit 77) when there is nothing to run: no corpus is present, the
+#     comparison tools it needs (Ghostscript, ImageMagick compare) are absent,
+#     or a corpus is present without the prelude its programs need and that
+#     prelude is one fetch.sh populates rather than one the tree carries. The
+#     corpus is thus never a build-time dependency -- populate it with fetch.sh
+#     to make this test do its work.
 #   - FAIL (exit 1) when xpost crashes or hangs on a corpus program, when the
 #     evaluation did not reach every program it named, or when what drew no
 #     page is not what the corpus declares draws none. A rendering
@@ -56,4 +58,13 @@ printf '%s\n' "$out" | grep -q 'NOT EVALUATED' && {
     echo "corpus: part of the corpus was never evaluated -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'NO-PAGE SET DIFFERS' && {
     echo "corpus: what drew no page is not what the corpus declares -- see above"; exit 1; }
+# A corpus whose prelude is populated rather than committed, and has not
+# been populated, is passed over by the evaluator: with nothing to
+# prepend there is nothing to compare. That is a corpus not fetched, so
+# it reports as a skip here. Taken as a pass it would be the very thing
+# the page count guards against one level down -- a run that compared
+# nothing telling the same story as a run that compared everything.
+printf '%s\n' "$out" | grep -q 'programs evaluated' || {
+    printf '%s\n' "$out" | grep -q 'prelude absent -- skipped' && {
+        echo "corpus: ${corpus:-a corpus} has no prelude to run with -- skipping"; exit 77; }; }
 exit 0
