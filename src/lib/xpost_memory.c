@@ -516,8 +516,22 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     memset(xpost_vm_ptr(mem, mem->used), 0, mem->max - mem->used);
     if (getenv("XPOST_GROW_MOVES"))
     {
-        /* debug: force every grow to relocate, so a stale pointer into
-           the old buffer is a use-after-free that ASan reports */
+        /* Force every grow to relocate, so that a pointer taken into the
+           old buffer is a use-after-free a sanitizer reports rather than
+           a read of stale bytes that usually looks right.
+
+           Unlike the collector's quarantine, this is not compiled behind
+           WANT_DEBUG_HOOKS. It takes nothing away: both branches grow
+           the file, the interpreter computes the same answers either way
+           -- the same run reports the same virtual memory under the
+           variable and without it -- and neither leaves the caller with
+           less than it asked for. What it changes is which correct way
+           the buffer is grown, which makes a defect elsewhere visible
+           without being one. And tests/run-reloc-stress-test.sh runs
+           under it in the ordinary suite: compiled out of the build
+           everyone builds, the tree's standing stress for stale virtual
+           memory pointers would stop running while still reporting
+           success. */
         tmp = malloc(sz);
         if (tmp != NULL)
         {

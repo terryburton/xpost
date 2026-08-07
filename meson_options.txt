@@ -5,6 +5,12 @@ option('doc',
   description: 'uild documentation with Doxygen'
 )
 
+option('debug-hooks',
+  type: 'boolean',
+  value: false,
+  description: 'compile in the switches that take a guarantee away from a run'
+)
+
 option('large-object',
   type: 'boolean',
   value: false,

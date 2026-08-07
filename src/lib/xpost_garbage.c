@@ -599,11 +599,26 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
     unsigned int i;
     unsigned int sz = 0;
 
-    /* diagnostic quarantine: sweep nothing, so freed entities are never
-       reused; distinguishes stale-holder-of-recycled-entity bugs (which
-       vanish) from in-place corruption (which persists) */
+#ifdef WANT_DEBUG_HOOKS
+    /* Quarantine: sweep nothing, so a freed entity is never handed out
+       again. What that separates is a holder of a recycled entity, whose
+       symptom goes away when nothing is recycled, from corruption in
+       place, whose symptom does not.
+
+       It is compiled in only for a build configured to want it
+       (-Ddebug-hooks=true, --enable-debug-hooks), because the switch is
+       read from the environment and the environment belongs to the host,
+       not to the library. Reclamation is the whole of what a collector
+       promises its host; a shipped library that could be told from a
+       variable not to reclaim would let whoever can set one in the
+       process turn a long-running embedding into unbounded growth, with
+       nothing in the run saying so. A variable may configure a run --
+       where the data is, how loud the log is, how often to collect --
+       and it may ask for a diagnostic that only reports, as the ones
+       below do. Taking a guarantee away is a build's decision. */
     if (getenv("XPOST_GC_NO_REUSE"))
         return 0;
+#endif
 
     z = xpost_memory_free_lists_adr(mem); /* address of the free list heads */
 

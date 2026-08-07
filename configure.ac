@@ -64,6 +64,21 @@ else
    AC_DEFINE([_DEBUG], [1], [Define to 1 if debug mode is wanted])
 fi
 
+AC_ARG_ENABLE([debug-hooks],
+   [AS_HELP_STRING([--enable-debug-hooks], [enable the switches that take a guarantee away from a run @<:@default=no@:>@])],
+   [
+    if test "x${enableval}" = "xyes" ; then
+       enable_debug_hooks="yes"
+    else
+       enable_debug_hooks="no"
+    fi
+   ],
+   [enable_debug_hooks="no"])
+
+if test "x${enable_debug_hooks}" = "xyes" ; then
+   AC_DEFINE([WANT_DEBUG_HOOKS], [1], [Define to 1 if the debugging switches are wanted])
+fi
+
 AC_ARG_ENABLE([large-object],
    [AS_HELP_STRING([--enable-large-object], [enable use of large object @<:@default=no@:>@])],
    [

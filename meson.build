@@ -261,6 +261,17 @@ if get_option('large-object')
   config_h.set('WANT_LARGE_OBJECT', 1)
 endif
 
+# The switches an investigation turns on to take a guarantee away from a
+# run -- the collector's reuse, for one -- so that what depends on it
+# shows itself. They are read from the environment, which is the host's
+# and not the library's, so they are compiled in only when a build asks
+# for them: a shipped library that reads them lets whoever can set a
+# variable in the process decide, for instance, whether the collector
+# collects. Configure with -Ddebug-hooks=true to investigate.
+if get_option('debug-hooks')
+  config_h.set('WANT_DEBUG_HOOKS', 1)
+endif
+
 zlib_dep = dependency('zlib', required: false)
 if zlib_dep.found()
   config_h.set('HAVE_ZLIB', 1)
@@ -1767,13 +1778,17 @@ test('check-error-names',
   suite: cost_fast,
   args: [ xpost_exe, meson.current_source_dir() ])
 
-# Nothing in the environment ends the process. The library is embedded, so
-# an error belongs to the run that caused it and not to the host holding
-# it; and stop with no enclosing stopped context is specified behaviour
-# (PLRM 8.2: a message and a quit), reached through the one part of a job
-# that lies outside every stopped context. Held from both sides: the run
-# is made to take that path under the variables and without them, and the
-# sources are read for an ending a getenv decides.
+# Nothing in the environment ends the process or takes a guarantee away
+# from a run. The library is embedded, so an error belongs to the run that
+# caused it and not to the host holding it; and stop with no enclosing
+# stopped context is specified behaviour (PLRM 8.2: a message and a quit),
+# reached through the one part of a job that lies outside every stopped
+# context. Held from both sides: the run is made to take that path under
+# the variables and without them, and the sources are read for an ending a
+# getenv decides. The collector's reclamation is held the same way, off a
+# run that allocates far more than it keeps -- a variable that could stop
+# a sweep reclaiming is unbounded growth in a long-running host, so it is
+# compiled in only for a build that asks for it.
 test('check-env-traps',
   find_program('tests/check-env-traps.sh'),
   suite: cost_fast,
