@@ -111,7 +111,6 @@ tests/gc_diagnostics_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
 tests/gc_marking_test.c \
-tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
 tests/graphics_regression_test.ps \
@@ -193,6 +192,7 @@ tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
+tests/real_width_test.ps \
 tests/reloc_stress_test.ps \
 tests/render-differ.sh \
 tests/render_classes_test.ps \

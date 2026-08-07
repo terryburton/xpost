@@ -199,16 +199,28 @@ typedef unsigned int word;      /* 2x small size */
  typedef unsigned long long dword;    /* 2x small size */
  typedef long long integer;           /* 2x small size */
 # endif
-typedef double real;            /* 2x small size */
 typedef dword addr;             /* 2x small size (via dword) */
 #else
 typedef unsigned char byte;  /* assumed 8-bit */
 typedef unsigned short word; /* assumed 16-bit */
 typedef unsigned int dword;  /* assumed 32-bit */
 typedef int integer;         /* assumed 32-bit */
-typedef float real;          /* assumed IEEE 754 32-bit floating-point */
 typedef dword addr;
 #endif
+
+/* The object width sizes the fields that reach memory -- how many
+   elements a composite may hold and how far its entity number may
+   count -- so it stands outside this type. A real is the arithmetic
+   the language performs, and that is the same language in both
+   builds: PLRM Appendix B.1 states its real limits from IEEE 754
+   single precision, the arc-splitting tolerance in the path code is
+   set from a single-precision ulp, and a binary object sequence
+   carries a real in four bytes. Widening it here would leave the two
+   builds rounding differently, and a program whose branch turns on a
+   rounded comparison -- a symbol-shape ratio that ties, a running
+   cost that reaches a whole number from below -- would take different
+   branches in each. */
+typedef float real;          /* IEEE 754 32-bit floating-point */
 
 #define XPOST_OBJECT_TAG_EXTRA_BITS_SIZE  (sizeof(word)*8 - XPOST_OBJECT_TAG_DATA_EXTRA_BITS)
             /**< for extending the ent field for composite objects */
