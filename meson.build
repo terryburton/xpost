@@ -645,6 +645,24 @@ if host_machine.system() != 'windows'
     env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 endif
 
+# What a collection decides about one allocation: kept while a stack
+# refers to it, handed back once none does. Every other test of the
+# collector reads a total, which any allocation's fate moves, so a
+# collector reading a stack one slot past its elements -- and so keeping
+# whatever the program last finished with -- is invisible to all of
+# them.
+gc_marking_exe = executable('gc_marking_test',
+  'tests/gc_marking_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('gc-marking',
+  gc_marking_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The editing streams open a temporary file before the text they are asked
 # for is known to be acceptable, so a refusal is the only thing that can
 # close it: a request refused for nesting depth must leave no descriptor
