@@ -18,6 +18,13 @@
 # it cannot go stale, and a body that starts reaching a new name fails at
 # once. Checked by tests/check-wrapped-bind.sh.
 #
-# The list is empty: every standard operator reaches every other one as an
-# operator. An entry appearing here again is a body that was bound before
-# the promotion could reach it.
+# The bodies checked are both kinds systemdict publishes: the promoted
+# operators, whose procedures the promotion filed aside, and the names
+# that stay procedures -- the ones the language does not make operators
+# and the ones this interpreter adds. A body of the second kind reaches
+# systemdict without passing the promotion, so nothing else would notice
+# a bind at its definition.
+#
+# The list is empty: every operator body reaches every operator it calls
+# as an operator. An entry appearing here again is a body that was bound
+# before the promotion could reach it.

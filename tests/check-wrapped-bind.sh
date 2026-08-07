@@ -14,8 +14,8 @@
 # definition, before any of these names answered with an operator: bind
 # makes what it binds read-only and then ignores a read-only array, so
 # that body keeps the names it had and no later sweep can finish it. Those
-# are the entries listed in the golden file, each one a standard operator
-# reaching another by name. The list only shrinks: an entry that has since
+# are the entries listed in the golden file, each one an operator body
+# reaching an operator by name. The list only shrinks: an entry that has since
 # been frozen is a failure too, so it cannot go stale, and a body that
 # starts reaching a new name fails immediately.
 #
@@ -41,9 +41,19 @@ guard_workdir
 trap 'rm -rf "$work"' EXIT
 cr=$(printf '\r')   # tolerate CRLF line endings (Windows checkouts)
 
-# Walk every promoted operator's procedure and report each executable name
-# in it that the dictionary stack answers with an operator. Every mention
-# of a procedure-valued name goes through load: a bare mention is a call.
+# Walk every operator body systemdict publishes and report each executable
+# name in it that the dictionary stack answers with an operator. Every
+# mention of a procedure-valued name goes through load: a bare mention is
+# a call.
+#
+# Two populations, because a body reaches systemdict two ways. The
+# promoted ones are operator objects now, so their procedures are read out
+# of .wrappedprocs, where the promotion filed them. The rest are still
+# procedures in systemdict itself -- the names the language does not make
+# operators, and the ones this interpreter adds -- and they are walked
+# where they sit. A body in either set that was bound at its definition
+# keeps the names it had, and walking only the first set left the second
+# unchecked.
 cat > "$work/probe.ps" <<'PSEOF'
 /walk { % array depth operator  .  -
     3 dict begin
@@ -75,6 +85,13 @@ cat > "$work/probe.ps" <<'PSEOF'
 { /n n 1 add store
   dup .privatedict /.wrappedprocs get exch get exch 24 exch walk } forall
 (promoted ) print n 20 string cvs print (\n) print
+
+/m 0 def
+[ systemdict { pop } forall ]
+{ dup systemdict exch get
+  dup xcheck 1 index type /arraytype eq 2 index type /packedarraytype eq or and
+  { /m m 1 add store exch 24 exch walk }{ pop pop } ifelse } forall
+(unpromoted ) print m 20 string cvs print (\n) print
 PSEOF
 
 XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
@@ -83,6 +100,14 @@ XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
 n=$(sed -n 's|^promoted ||p' "$work/out" | head -1)
 if [ -z "${n:-}" ] || [ "$n" -lt 100 ]; then
     echo "FAILURES: the interpreter reported ${n:-no} promoted operators; the walk is unusable"
+    exit 1
+fi
+
+# A second population that walked nothing would be a check reporting on
+# the first alone, which is the state this replaced.
+m=$(sed -n 's|^unpromoted ||p' "$work/out" | head -1)
+if [ -z "${m:-}" ] || [ "$m" -lt 10 ]; then
+    echo "FAILURES: the interpreter reported ${m:-no} unpromoted bodies in systemdict; the walk is unusable"
     exit 1
 fi
 
@@ -114,5 +139,5 @@ if [ -s "$work/gone" ]; then
 fi
 
 [ "$fail" = 0 ] || exit 1
-echo "SUCCESS ($n promoted operators, $(wc -l < "$work/have" | tr -d ' ') declared dynamic references)"
+echo "SUCCESS ($n promoted and $m unpromoted operator bodies, $(wc -l < "$work/have" | tr -d ' ') declared dynamic references)"
 exit 0

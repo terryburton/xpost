@@ -1265,6 +1265,11 @@ setglobal
 % Route document metadata to a device that can carry it (the pdfwrite
 % device collects DOCINFO into its trailer); every other mark type,
 % and marks on devices without metadata, are consumed without effect.
+% The body is bound by the sweep that runs once graphics has loaded,
+% not here: DEVICE is not yet an operator at this point, and a bind
+% here would leave the name loose and the body read-only, so the sweep
+% could never come back for it and a program redefining DEVICE would
+% reach inside this one.
 /pdfmark {
     counttomark 0 gt {
         dup /DOCINFO eq DEVICE /.docinfo known and {
@@ -1275,7 +1280,7 @@ setglobal
         } if
     } if
     cleartomark
-} bind def
+} def
 
 %   /fontname size  selectfont  -
 % /fontname matrix  selectfont  -
