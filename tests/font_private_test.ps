@@ -1,0 +1,272 @@
+%!
+% A font's face is FreeType state held outside virtual memory, and the
+% text operators reach it through what the font dictionary holds under
+% /Private. A font dictionary is an ordinary dictionary -- a program
+% builds one, copies one, and puts what it likes into either -- so the
+% value there is a handle on a block this interpreter issued, resolved
+% against the record of what was issued. A handle naming no block, and a
+% copy of a genuine handle, are refused rather than followed.
+%
+% What a font's handle binds to is the block it names and nothing else.
+% A font dictionary is legitimately copied: scalefont and makefont copy
+% one, and a re-encoded copy of a findfont dictionary shares its face, so
+% one face is reached through many dictionaries and a handle presented by
+% a dictionary other than the one it was issued to is ordinary. Releasing
+% that face is not ordinary, and a loader rebuilding a face releases the
+% previous one only through the dictionary it was issued to.
+%
+% Every text operator resolves the handle the same way, so all of them
+% are driven here. The controls carry as much of the weight as the
+% refusals: refusing every handle would satisfy the refusals on its own,
+% so a face loads, marks the page, measures a string, gives its outlines
+% back, and goes on working through a re-encoded copy and a scaled copy.
+% The re-encoded copy is held to the page a plain font renders the glyph
+% its Encoding names on, so a copy that quietly showed nothing, or showed
+% the wrong glyph, does not pass.
+
+/faildict 1 dict def
+faildict /n 0 put
+/note { print (\n) print } def
+/require { % bool (label)  .  -
+    exch { (ok   ) print print (\n) print }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% proc want label  .  -    run proc; require the named error, and leave
+% the stacks as they were found
+/expecterr {
+    /label exch def
+    /want exch def
+    /d0 countdictstack def
+    /c0 count 1 sub def
+    stopped
+    /caught exch def
+    /got caught { $error /errorname get 128 string cvs }{ (none) } ifelse def
+    countdictstack d0 sub { end } repeat
+    count c0 sub dup 0 gt { { pop } repeat }{ pop } ifelse
+    caught
+    { got want eq
+      { (ok   ) print label note }
+      { faildict /n 2 copy get 1 add put
+        (FAIL: ) print label print ( raised ) print got note } ifelse }
+    { faildict /n 2 copy get 1 add put
+      (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+/joinlabel { % (a) (b)  .  (ab)
+    2 dict begin
+    /b exch def /a exch def
+    a length b length add string
+    dup 0 a putinterval
+    dup a length b putinterval
+    end
+} bind def
+
+/id 1183615869 internaldict def
+/gshow    id /.glyphshow get def
+/gshowidx id /.glyphshowidx get def
+/goutline id /.glyphoutline get def
+/goutlidx id /.glyphoutlineidx get def
+/soutline id /.stringoutline get def
+/cid0     id /.loadcidfont0 get def
+
+% --- a page to mark -----------------------------------------------------
+
+/DEV 140 48 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 48 ] def
+    /FillPoly id /.fillpoly get def
+    /FillRect id /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+% how many pixels of the page the last render darkened, and the page
+% itself, taken while the render that made it is still on the device
+/ink { 0 DEV /ImgData get { { 128 lt { 1 add } if } forall } forall } bind def
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/samepage { % snap snap  .  bool
+    2 dict begin
+    /q exch def /p exch def
+    /ok p length q length eq def
+    ok { 0 1 p length 1 sub { dup p exch get exch q exch get ne
+                              { /ok false def } if } for } if
+    ok
+    end
+} bind def
+/blank { initgraphics erasepage 0 setgray } bind def
+
+% --- the dictionaries under test ----------------------------------------
+
+/Base /Times-Roman findfont def
+
+% a handle of the program's own: a string it filled itself
+/forgery 8 string def
+0 1 7 { forgery exch 16#41 put } for
+/Forged Base dup length dict copy def
+Forged /Private forgery put
+/ForgedFont /FontPrivateForged Forged definefont def
+
+% a copy of a genuine handle carries the same bytes and is not the same
+% string, so it names the block no more than the forgery does
+/Copied Base dup length dict copy def
+Copied /Private Base /Private get dup length string copy put
+/CopiedFont /FontPrivateCopied Copied definefont def
+
+% --- every text operator refuses a handle it did not issue ---------------
+
+/refuseall { % fontdict (what)  .  -
+    /what exch def
+    /fd exch def
+    { fd setfont 4 8 moveto (Ab) show }
+      (invalidfont) (show through ) what joinlabel expecterr
+    { fd setfont 4 8 moveto 1 0 (Ab) ashow }
+      (invalidfont) (ashow through ) what joinlabel expecterr
+    { fd setfont 4 8 moveto 1 0 8#040 (Ab) widthshow }
+      (invalidfont) (widthshow through ) what joinlabel expecterr
+    { fd setfont 4 8 moveto 1 0 8#040 1 0 (Ab) awidthshow }
+      (invalidfont) (awidthshow through ) what joinlabel expecterr
+    { fd setfont (Ab) stringwidth }
+      (invalidfont) (stringwidth through ) what joinlabel expecterr
+    { fd setfont 4 8 moveto /A gshow }
+      (invalidfont) (.glyphshow through ) what joinlabel expecterr
+    { fd setfont 4 8 moveto 36 gshowidx }
+      (invalidfont) (.glyphshowidx through ) what joinlabel expecterr
+    { fd setfont /A goutline }
+      (invalidfont) (.glyphoutline through ) what joinlabel expecterr
+    { fd setfont 36 goutlidx }
+      (invalidfont) (.glyphoutlineidx through ) what joinlabel expecterr
+    { fd setfont (Ab) soutline }
+      (invalidfont) (.stringoutline through ) what joinlabel expecterr
+} def
+
+ForgedFont (a handle of the program's own) refuseall
+CopiedFont (a copy of a genuine handle) refuseall
+
+% a loader rebuilding a face releases the previous one, and reaches it
+% the same way
+{ << /GlyphData (abcd) /FDArray [ 3 dict ] /Private forgery >> cid0 }
+  (invalidfont) (a rebuild releasing a handle of the program's own) expecterr
+{ << /GlyphData (abcd) /FDArray [ 3 dict ]
+     /Private Base /Private get dup length string copy >> cid0 }
+  (invalidfont) (a rebuild releasing a copy of a genuine handle) expecterr
+
+% --- a face still loads and still marks the page ------------------------
+
+blank
+Base 30 scalefont setfont
+4 8 moveto (Ab) show
+/baseink ink def
+baseink 0 gt (a font loads and marks the page) require
+
+blank
+Base 30 scalefont setfont
+4 8 moveto /A gshow
+ink 0 gt (.glyphshow marks the page) require
+
+Base 30 scalefont setfont
+(Ab) stringwidth pop
+/basewidth exch def
+basewidth 0 gt (stringwidth measures the string against the face) require
+
+Base 30 scalefont setfont
+(Ab) soutline
+dup length 0 gt (.stringoutline gives the glyph outlines back) require
+pop
+
+% --- a copy of a font dictionary shares its face ------------------------
+
+% the pages a plain font renders the two glyphs on, to hold a re-encoded
+% copy to
+blank
+Base 30 scalefont setfont
+4 8 moveto (A) show
+/pageA snap def
+blank
+Base 30 scalefont setfont
+4 8 moveto (B) show
+/pageB snap def
+pageA pageB samepage not (the two glyphs render differently) require
+
+% a re-encoded copy of a findfont dictionary is the ordinary way to build
+% a font, and it carries the handle its parent was issued
+/Reenc Base dup length 2 add dict copy def
+Reenc /Encoding Base /Encoding get 256 array copy put
+Reenc /Encoding get 65 /B put
+/ReencFont /FontPrivateReenc Reenc definefont def
+
+blank
+/FontPrivateReenc findfont 30 scalefont setfont
+4 8 moveto (A) show
+/pageR snap def
+pageR pageB samepage
+  (a re-encoded copy of a findfont dictionary shows the glyph its Encoding names)
+  require
+
+% scalefont and makefont copy the dictionary too
+blank
+Base 60 scalefont setfont
+4 4 moveto (Ab) show
+ink baseink gt (a scaled copy of a font marks more of the page) require
+
+Base 30 scalefont [ 1 0 0 1 0 0 ] makefont setfont
+(Ab) stringwidth pop basewidth eq
+  (a copy through makefont measures the same string the same) require
+
+% --- a borrowed handle is not released -----------------------------------
+
+% a loader gives the dictionary it is called on a face, releasing the
+% face that dictionary holds. A dictionary holding a handle issued
+% elsewhere holds no face of its own, so it is issued one and the face
+% it borrowed is left to the dictionary it belongs to.
+%
+% The reachable case is a load that fails: the release comes after the
+% new face is built, so a loader that got nowhere released nothing.
+{ << /GlyphData (abcd) /FDArray [ 3 dict ] /Private Base /Private get >> cid0 }
+  stopped pop
+blank
+Base 30 scalefont setfont
+4 8 moveto (A) show
+snap pageA samepage
+  (a rebuild that failed left the borrowed face alone) require
+
+% and the case where the load succeeds, which needs a font program to
+% load: a Type 42 font carries one in /sfnts
+/tt null def
+[ /DejaVuSans /LiberationSans /NotoSans /FreeSerif /Arial /Helvetica /Times-Roman ]
+{ findfont dup /FontType get 42 eq { /tt exch def exit }{ pop } ifelse } forall
+
+tt null eq {
+    (skip no Type 42 face on this host: a load that succeeds is not reached)
+      note
+}{
+    blank
+    tt 30 scalefont setfont
+    4 8 moveto (A) show
+    /pageT snap def
+
+    % a dictionary of the program's own, carrying a font program to load
+    % and a handle it was not issued
+    /Borrow << /FontType 42
+               /FontMatrix tt /FontMatrix get
+               /Encoding tt /Encoding get
+               /sfnts tt /sfnts get
+               /Private tt /Private get >> def
+    Borrow id /.loadfont42 get exec
+
+    Borrow /Private get tt /Private get ne
+      (a loader issues a borrowing dictionary a handle of its own) require
+
+    blank
+    tt 30 scalefont setfont
+    4 8 moveto (A) show
+    snap pageT samepage
+      (a load through a borrowed handle left the lending face alone) require
+} ifelse
+
+faildict /n get 0 eq
+    { (SUCCESS) = }
+    { (FAILURES: ) print faildict /n get 20 string cvs note } ifelse
+quit

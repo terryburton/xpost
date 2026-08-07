@@ -113,6 +113,7 @@ tests/filter_source_life_test.ps \
 tests/font_bigbuf_test.ps \
 tests/font_directory_test.ps \
 tests/font_leak_test.ps \
+tests/font_private_test.ps \
 tests/font_type1_noaccess_test.ps \
 tests/font_type1_sparse_subrs_test.ps \
 tests/forall_large_test.ps \
