@@ -930,6 +930,22 @@ test('gc-mark-failure',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The global save level a snapshotting job takes at its start and rewinds
+# to at its end. The level is a substack the memory file can decline to
+# allocate, and a job that rewinds without having taken one pops whichever
+# level it finds -- reverting its owner's objects out from under it.
+job_snapshot_balance_exe = executable('job_snapshot_balance_test',
+  'tests/job_snapshot_balance_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('job-snapshot-balance',
+  job_snapshot_balance_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # How much of an allocation a save's backup says is in use. The extent
 # is what the collector reads an allocation's contents by, so a backup
 # that records the block's capacity instead has the collector reading

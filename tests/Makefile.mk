@@ -132,6 +132,7 @@ tests/gc_diagnostics_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
 tests/gc_mark_failure_test.c \
+tests/job_snapshot_balance_test.c \
 tests/gc_marking_test.c \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
