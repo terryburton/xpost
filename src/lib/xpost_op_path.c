@@ -42,6 +42,7 @@
 
 #include "xpost.h"
 #include "xpost_log.h"
+#include "xpost_private.h" /* XPOST_REFUSAL_IMPOSSIBLE */
 #include "xpost_main.h"
 #include "xpost_memory.h"
 #include "xpost_object.h"
@@ -1017,7 +1018,12 @@ int _fillpolyargs(Xpost_Context *ctx)
     p = xpost_string_get_pointer(ctx, path);
     {
         unsigned int adr;
-        xpost_memory_table_get_addr(ctx->lo, xpost_object_get_ent(backing), &adr);
+        /* backing's entity was allocated in this same memory file two
+           statements above and the allocation was checked; an entity
+           number stays within the table once the table has reached it */
+        XPOST_REFUSAL_IMPOSSIBLE(
+            xpost_memory_table_get_addr(ctx->lo,
+                                        xpost_object_get_ent(backing), &adr));
         bk = (Xpost_Object *)xpost_vm_ptr(ctx->lo, adr);
     }
 
