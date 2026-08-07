@@ -1,0 +1,84 @@
+%!
+% The blit's dictionary is data, and the counts it carries index fixed
+% tables inside the operator: one plane pointer, one decode table, one
+% decoded sample and one mask range pair per component, and the entries
+% of the baked colour table per native byte. A dictionary is reachable
+% from a program, so a count outside what those tables hold has to be
+% reported rather than followed: it is a rangecheck, and the operator
+% must still be there afterwards.
+%
+% Each case below hands .blitrow a dictionary that is well formed apart
+% from one count, and requires that error. A count of zero is the case
+% that leaves every per-component table empty while the row is still
+% blitted from it.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/blit id /.blitrow get def
+
+/lut 256 string def
+/dl 256 string def
+
+% width and component count  .  a blit dictionary that is otherwise sound
+/bd {
+  /nc exch def
+  /nn exch def
+  <<
+    /devw 4 /devh 4 /nat nn /w 1 /ncomp nc /y 0
+    /packed false /cmyk false
+    /xoff 0 /xscale 1 /yoff 0 /yscale 1
+    /cx0 0 /cy0 0 /cx1 4 /cy1 4
+    /rows [ 4 string 4 string 4 string 4 string ]
+    /lut lut
+  >>
+} def
+
+% dict label  .  -   run the blit; expect rangecheck
+/expectrange {
+  /label exch def
+  /d0 countdictstack def
+  { blit } stopped
+  dup { $error /errorname get 128 string cvs }{ (none) } ifelse
+  countdictstack d0 sub { end } repeat
+  exch
+  { dup (rangecheck) eq
+    { pop (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print note } ifelse }
+  { pop /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+} def
+
+% --- planar sources: the plane pointer table ---
+% bufs supplies one row buffer per component, so a count of zero fills
+% none of them and a count above four has none to fill
+1 0 bd dup /bufs [ (a) ] put (planar blit of no components) expectrange
+1 5 bd dup /bufs [ (a) (a) (a) (a) (a) ] put
+  (planar blit of five components) expectrange
+
+% --- interleaved source: the decode tables and the sample vector ---
+1 0 bd dup /buf 8 string put (interleaved blit of no components) expectrange
+1 5 bd dup /buf 8 string put dup /lut undef
+  dup /dluts [ dl dl dl dl dl ] put dup /tlut 256 string put
+  (interleaved blit of five components) expectrange
+
+% --- the baked colour table is indexed by the native byte count ---
+% its length is checked against that count, so a count of zero passes a
+% table of no entries to a read of one
+0 1 bd dup /buf 8 string put dup /lut () put
+  (blit into no native bytes) expectrange
+4 1 bd dup /buf 8 string put (blit into four native bytes) expectrange
+
+% the operator still answers a sound dictionary
+/d 1 1 bd def
+d /buf 8 string put
+{ d blit } stopped
+{ /fails fails 1 add def
+  (FAIL: a sound dictionary raised ) print
+  $error /errorname get 128 string cvs note }
+{ (ok   a sound dictionary still blits) note } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit

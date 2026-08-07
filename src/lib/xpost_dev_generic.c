@@ -2178,6 +2178,14 @@ int _blitrow(Xpost_Context *ctx,
 
     GETI(devw); GETI(devh); GETI(nat); GETI(w); GETI(ncomp); GETI(y);
     GETB(packed); GETB(cmyk);
+    /* The component count indexes the per-component tables -- the plane
+       pointers, the decode tables, the decoded sample vector and the
+       mask range pairs -- and the native count indexes the entries of
+       the baked colour table, whose length is checked against it. Both
+       are bounded by what those tables hold before anything reads
+       through them. */
+    if (ncomp < 1 || ncomp > 4 || nat < 1 || nat > 3)
+        return rangecheck;
     GETR(xoff); GETR(xscale); GETR(yoff); GETR(yscale);
     GETR(cx0); GETR(cy0); GETR(cx1); GETR(cy1);
 #undef GETI
@@ -2198,7 +2206,7 @@ int _blitrow(Xpost_Context *ctx,
         Xpost_Object bufso = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "bufs"));
         if (xpost_object_get_type(bufso) == arraytype)
         {
-            if (bufso.comp_.sz < (unsigned int)ncomp || ncomp > 4)
+            if (bufso.comp_.sz < (unsigned int)ncomp)
                 return rangecheck;
             for (c = 0; c < ncomp; c++)
             {
