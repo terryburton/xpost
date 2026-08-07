@@ -7,6 +7,14 @@
 % reported rather than followed: it is a rangecheck, and the operator
 % must still be there afterwards.
 %
+% The same holds for the counts that walk the caller's own strings: the
+% row width counts samples along the sample row, and the row index and
+% the mask stride together name the mask bits for the row. Each is
+% checked against the string it walks, and the check has to hold for
+% every count a dictionary can carry -- including the pairs whose
+% product is larger than the type an index is formed in, which is where
+% a check written as a multiplication stops saying anything.
+%
 % Each case below hands .blitrow a dictionary that is well formed apart
 % from one count, and requires that error. A count of zero is the case
 % that leaves every per-component table empty while the row is still
@@ -71,6 +79,31 @@
   (blit into no native bytes) expectrange
 4 1 bd dup /buf 8 string put (blit into four native bytes) expectrange
 
+% --- the row width walks the sample row ---
+% the row holds ncomp samples per pixel, so a width the row cannot
+% carry is refused -- including one whose product with the component
+% count is too large for the type the samples are indexed with
+1 4 bd dup /buf 8 string put dup /lut undef
+  dup /dluts [ dl dl dl dl ] put dup /tlut 256 string put
+  dup /w 1073741824 put
+  (blit of a row wider than its samples) expectrange
+1 1 bd dup /buf 8 string put dup /w -1 put
+  (blit of a row of negative width) expectrange
+
+% --- the row index and the mask stride walk the mask bits ---
+% the mask holds one row of mrowb bytes per sample row, and the bits
+% for row y are read from y * mrowb: a negative row index reads before
+% the mask, and a stride the mask cannot carry reads past it
+1 1 bd dup /buf 8 string put dup /devh 8 put
+  dup /rows [ 4 string 4 string 4 string 4 string
+              4 string 4 string 4 string 4 string ] put
+  dup /cy1 8 put dup /yoff 4 put
+  dup /mbits 8 string put dup /mrowb 1 put dup /y -1 put
+  (blit of a row before the mask) expectrange
+1 1 bd dup /buf 8 string put
+  dup /mbits 8 string put dup /mrowb 2000000000 put
+  (blit through a mask stride the mask cannot hold) expectrange
+
 % the operator still answers a sound dictionary
 /d 1 1 bd def
 d /buf 8 string put
@@ -79,6 +112,28 @@ d /buf 8 string put
   (FAIL: a sound dictionary raised ) print
   $error /errorname get 128 string cvs note }
 { (ok   a sound dictionary still blits) note } ifelse
+
+% and a sound masked blit still reaches the raster: one row of mask
+% bytes per sample row, the row index inside them, a clear bit over the
+% pixel -- and the pixel takes the colour the table names
+/white 256 string def
+0 1 255 { white exch 255 put } for
+/md 1 1 bd def
+md /w 4 put
+md /buf 4 string put
+md /lut white put
+md /mbits 4 string put
+md /mrowb 1 put
+md /y 1 put
+md /yoff 0 put
+{ md blit } stopped
+{ /fails fails 1 add def
+  (FAIL: a sound masked dictionary raised ) print
+  $error /errorname get 128 string cvs note }
+{ md /rows get 1 get 0 get 255 eq
+  { (ok   a sound masked blit still paints) note }
+  { /fails fails 1 add def
+    (FAIL: a sound masked blit painted nothing) note } ifelse } ifelse
 
 fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
 quit
