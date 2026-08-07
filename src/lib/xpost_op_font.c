@@ -1259,9 +1259,13 @@ int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
         n += (int)(sl.comp_.sz / 5);
     }
     /* an empty region resolves to no bands at all, and covers no pixel */
-    b = n ? malloc((size_t)n * sizeof *b) : NULL;
-    if (n && !b)
-        return -1;
+    b = NULL;
+    if (n)
+    {
+        b = malloc((size_t)n * sizeof *b);
+        if (!b)
+            return -1;
+    }
     at = 0;
     for (k = 0; k < nslice; k++)
     {
@@ -1269,7 +1273,9 @@ int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
         int m = (int)(sl.comp_.sz / 5);
 
         /* the table was sized by a first pass over the same array, and
-           the write stays inside what that pass counted */
+           the write stays inside what that pass counted; the count the
+           region is described by is what this pass wrote, so no band
+           beyond it is ever read */
         for (i = 0; i < m && at < n; i++)
         {
             Xpost_Object p0 = xpost_array_get(ctx, sl, 5 * i);
@@ -1293,16 +1299,16 @@ int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
             at++;
         }
     }
-    if (n > 1)
-        qsort(b, (size_t)n, sizeof *b, _band_comp);
+    if (at > 1)
+        qsort(b, (size_t)at, sizeof *b, _band_comp);
     free(_clip_memo.band);
     _clip_memo.serial = serial;
     _clip_memo.ent = xpost_object_get_ent(spans);
     _clip_memo.off = spans.comp_.off;
     _clip_memo.sz = spans.comp_.sz;
     _clip_memo.band = b;
-    _clip_memo.n = n;
-    return n;
+    _clip_memo.n = at;
+    return at;
 }
 
 /* The pixels the clip region covers, as the glyph raster route meets
