@@ -4,28 +4,4 @@
 # worse than no entry at all -- it is read as a known cost and stops
 # anyone looking.
 #
-# ch8  -- does not finish on a narrow-object build. Its shfill figures are
-#         finely-tessellated 3-D meshes painted a triangle at a time
-#         through a DeviceN colour reduction in PostScript, and doing so
-#         holds enough composites live at once to exhaust the 524,287
-#         entity numbers a narrow object's 19-bit ent field can name. The
-#         run stops about seven seconds in, having written eight of the
-#         file's twelve pages, under a VMerror out of setcolor that no
-#         stopped context can catch.
-#
-#         That is a limit of the narrow build, not of the renderer and
-#         not of its speed: a large-object build, whose ent field is 31
-#         bits, renders all twelve pages correctly in about 170 seconds,
-#         well inside the per-file budget. So there is nothing here
-#         waiting on a mesh rasterizer, and the entry stays only until
-#         the entity-number cap is addressed.
-#
-#         It is held out rather than run and reported because the manner
-#         of the failure is not something to depend on. The evaluator
-#         carries on past a program that dies under a PostScript error,
-#         counting the pages it could not compare, but a signal death
-#         fails the corpus outright -- and an allocator that has run out
-#         of entity numbers is not a thing to promise which of the two it
-#         will do. A gate that passes only while a known defect keeps
-#         failing politely is not reporting on the renderer.
-ch8
+# Nothing is held out.
