@@ -7,13 +7,36 @@
  * scanned as a PostScript token, so what the program finds is an object
  * of the type the text spells, not a string of it. A key given without a
  * value is defined as null.
+ *
+ * The data directory is derived from where the library itself was loaded
+ * from, so what the library answers there is a fact about the directories
+ * around the build and not about the library. An uninstalled build has
+ * nothing at either place the library looks, and a test that only asked
+ * for a non-null answer was answered instead by whatever a neighbour had
+ * left beside the build directory -- a pass it had not earned, and a
+ * failure that meant nothing. So the precondition is made here rather
+ * than hoped for, and only what was made here is taken away again.
  */
 
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "xpost.h"
 
 #include "xpost_test.h"
+
+/* the Windows CRT mkdir takes no mode argument */
+#ifdef _WIN32
+# define test_mkdir(p) mkdir(p)
+#else
+# define test_mkdir(p) mkdir((p), 0700)
+#endif
 
 static char out_buf[512];
 static size_t out_len = 0;
@@ -50,6 +73,11 @@ int main(void)
     char *defs[5];
 
     Xpost_Context *ctx;
+    const char *lib;
+    char share_parent[1024];
+    char share_dir[1024];
+    int made_parent = 0;
+    int made_share = 0;
 
     if (!xpost_init())
     {
@@ -58,8 +86,42 @@ int main(void)
     }
 
     /* the library reports where it and its data live */
-    check(xpost_lib_dir_get() != NULL, "the library reports its own directory");
+    lib = xpost_lib_dir_get();
+    check(lib != NULL && lib[0] != '\0',
+          "the library reports its own directory");
+
+    /* The data directory is the first of <libdir>/../share/xpost and the
+       source tree three levels above the library that resolves, and it is
+       worked out once, when the library is initialised. So make the first
+       of those -- inside the build tree, where nothing else looks -- and
+       take the library round again: the answer then rests on a directory
+       this test put there, not on one that happened to be beside the
+       build. mkdir failing because the directory is already there is the
+       installed case and is not this test's to undo, so only a directory
+       this test created is removed. */
+    if (lib && lib[0] != '\0')
+    {
+        snprintf(share_parent, sizeof share_parent, "%s/../share", lib);
+        snprintf(share_dir, sizeof share_dir, "%s/../share/xpost", lib);
+        made_parent = (test_mkdir(share_parent) == 0);
+        errno = 0;
+        made_share = (test_mkdir(share_dir) == 0);
+        if (!made_share && errno != EEXIST)
+            report_failure("could not make %s, so the data directory the "
+                           "library looks for is not there to be found",
+                           share_dir);
+        xpost_quit();
+        if (!xpost_init())
+        {
+            report_failure("xpost_init after making the data directory");
+            return verdict();
+        }
+    }
     check(xpost_data_dir_get() != NULL, "the library reports its data directory");
+    if (made_share)
+        rmdir(share_dir);
+    if (made_parent)
+        rmdir(share_parent);
 
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
