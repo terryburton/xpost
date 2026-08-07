@@ -23,6 +23,7 @@ tests/blit_access_test.ps \
 tests/callback_reentry_test.ps \
 tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
+tests/check-device-destroy.sh \
 tests/check-device-roster.sh \
 tests/check-device-skeleton.sh \
 tests/check-dict-homes.sh \
@@ -67,6 +68,7 @@ tests/dct_truncated_test.ps \
 tests/dev_rect_test.c \
 tests/device-fleet.sh \
 tests/device_contract_test.ps \
+tests/device_destroy.golden \
 tests/device_destroy_test.ps \
 tests/device_features_test.ps \
 tests/device_getpix_destroyed_test.ps \

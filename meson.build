@@ -2226,6 +2226,16 @@ test('check-device-skeleton',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# Destroy is idempotent. A device is retired at setpagedevice, at job end
+# and by a restore past the change that installed it, so every Destroy
+# clears the handles it releases and stores the private struct back --
+# checked over a population derived from the method tables and the classes
+# rather than listed, so a device added later joins it that day.
+test('check-device-destroy',
+  find_program('tests/check-device-destroy.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
 # and the .devicemakers dictionary name the same devices -- and the test

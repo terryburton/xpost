@@ -1,0 +1,77 @@
+# The device Destroy methods that release memory held outside virtual
+# memory, and which tests/check-device-destroy.sh therefore holds to
+# clearing each handle they release and storing the private struct back.
+#
+# A device is retired more than once as a matter of course: setpagedevice
+# retires the outgoing one, the interpreter's shutdown retires the current
+# one, and the device is an element of the graphics state, so a restore
+# past a setpagedevice makes a retired device current again. Every one of
+# those paths runs the same method on the same instance, which is why
+# src/lib/xpost_dev_driver.h makes Destroy idempotent: it clears each
+# resource handle in the private struct and stores the struct back, so a
+# repeated Destroy is a no-op rather than a double free.
+#
+# A line is "<route> <file> <function>". The route is how the check
+# reached it, and is derived rather than chosen:
+#
+#   table  the function the Destroy slot of a device method table names.
+#          A compiled device may not install a method slot outside its
+#          table -- tests/check-device-skeleton.sh refuses that -- so the
+#          tables are the whole of this route.
+#   class  the function behind an operator that a PostScript device
+#          class calls from its /Destroy body.
+#
+# A class dictionary that is a copy of another's is not a line of its own,
+# because the copy carries the original's Destroy: the DSC writer is such
+# a copy of the PDF writer, and tests/check-vecbase.sh holds it to staying
+# one.
+
+entries 7
+
+# ---- the compiled devices ----
+
+table src/lib/xpost_dev_bgr.c _destroy
+table src/lib/xpost_dev_jpeg.c _destroy
+table src/lib/xpost_dev_png.c _destroy
+table src/lib/xpost_dev_raster.c _destroy
+table src/lib/xpost_dev_win32.c _destroy
+table src/lib/xpost_dev_xcb.c _destroy
+
+# ---- the vector writers, which release through an operator ----
+#
+# The PDF and SVG classes keep their page content in a malloc'd
+# accumulator rather than in PostScript objects, and give it up through
+# .pdffree. The same function is the release the interpreter performs on
+# a retired PostScript device, where no procedure can be run.
+
+class src/lib/xpost_dev_generic.c _pdffree
+
+# ---- the classes with nothing to release ----
+#
+# A device class whose raster is PostScript objects holds nothing outside
+# virtual memory: the collector owns every byte of it, and the right
+# Destroy is the bare pop that drops the instance and returns. Those
+# classes are exempt from everything above, and are counted here so that a
+# new one cannot join them without saying so.
+#
+#   data/bboxdev.ps   accumulates a bounding box in the instance; marks no
+#                     pixels and allocates nothing.
+#   data/image.ps     the base class every raster class derives from: its
+#                     rows are PostScript strings under /ImgData.
+#   data/nulldev.ps   the minimal conforming device; it holds no state at
+#                     all.
+
+exemptions 3
+
+exempt data/bboxdev.ps
+exempt data/image.ps
+exempt data/nulldev.ps
+
+# ---- and the count that is not a dial ----
+#
+# The number of Destroys that release a handle and leave it in the private
+# struct, or clear one and do not store the struct back. It is zero, and
+# the check refuses any other value: raising it would record a double free
+# rather than remove one.
+
+unsafe 0
