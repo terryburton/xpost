@@ -122,13 +122,24 @@ currentmiterlimit 1 sub abs 1e-3 lt
 1 setflat
 
 % --- setdash validates the dash pattern (PLRM) ---
+% The elements must be nonnegative numbers and not all zero, so a
+% negative element is refused rather than read as a length. The offset
+% is a separate operand under no such rule: it is a phase into the
+% pattern, a negative one names the phase that far before the pattern's
+% start, and it comes back from currentdash as it was given. Where a
+% negative offset puts the ink is asserted in the graphics regression
+% test, which can see the stroke.
+[3 2] 1 setdash
 { [1 -2] 0 setdash } /rangecheck (setdash: a negative element is rangecheck) erris
 { [0 0] 0 setdash }  /rangecheck (setdash: an all-zero array is rangecheck) erris
 { [0] 0 setdash }    /rangecheck (setdash: a single zero is rangecheck) erris
+currentdash exch length 2 eq exch 1.0 sub abs 1e-3 lt and
+    (a refused pattern leaves the parameter alone) assert
 { [0 1] 0 setdash } stopped not (setdash: one positive element is accepted) assert
 { [] 0 setdash } stopped not (setdash: an empty array is accepted) assert
-{ [1 2] -5 setdash } stopped not (setdash: a negative offset is accepted) assert
 [3 2] 1 setdash currentdash exch pop 1.0 sub abs 1e-3 lt (setdash offset roundtrips) assert
+[1 2] -5 setdash currentdash exch pop -5.0 sub abs 1e-3 lt
+    (a negative dash offset is reported as it was set) assert
 [] 0 setdash
 
 % --- gsave/grestore restores a parameter ---

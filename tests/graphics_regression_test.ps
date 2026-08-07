@@ -2273,6 +2273,36 @@ currentlinewidth -5 eq (a negative width is reported as it was set) assert
  5 setlinewidth 15 12.4 instroke eq
     (a width and its negation cover the same pixels) assert
 1 setlinewidth
+
+% PLRM setdash's offset is a phase into the dash pattern, not a distance
+% measured forward from the path, and the pattern repeats: an offset and
+% the same offset a whole number of cycles away are the same phase, so a
+% negative one names the phase that far before the pattern begins. It is
+% neither refused nor read as its magnitude, and what it produces when
+% it is used as given is a first dash longer than the pattern names --
+% a plausible dashed line rather than a failure -- so these ask where
+% the ink landed.
+newpath 10 10 moveto 40 10 lineto
+% [2 1] repeats every 3 units, so -1 is the phase 2 gives. Half a unit
+% along the path is inside the dash at phase 0 and inside the leading
+% gap at phase 2; a unit further on and both phases are painting, so
+% this is the distance that separates them.
+[2 1] 0 setdash 10.5 10 instroke (a dash begins at phase 0) assert
+[2 1] 2 setdash 10.5 10 instroke not (phase 2 begins in the gap) assert
+[2 1] -1 setdash 10.5 10 instroke not
+    (a negative offset is the phase one cycle further on) assert
+[2 1] -4 setdash 10.5 10 instroke not
+    (and the same phase another cycle back) assert
+% An odd-length array only returns a dash to a dash after two passes, so
+% [3] repeats every 6 units rather than 3 and -3 is the phase 3 gives.
+% Carried back by the sum of the elements instead of by the cycle it
+% would paint the dash where the gap belongs, which is what the first of
+% these catches; the second holds the dash that follows.
+[3] 3 setdash 10.5 10 instroke not (an odd-length pattern at phase 3 starts in the gap) assert
+[3] -3 setdash 10.5 10 instroke not
+    (a negative offset is carried back by the whole cycle) assert
+[3] -3 setdash 13.5 10 instroke (and the dash follows that gap) assert
+[] 0 setdash
 5 2 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }
 inufill (inufill inside the triangle) assert
 2 7 { 0 0 8 8 setbbox 0 0 moveto 8 0 lineto 8 8 lineto closepath }

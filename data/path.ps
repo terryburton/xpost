@@ -272,6 +272,21 @@ end
     /parity 0 def
 
     dasharray length 0 ne {
+        % The offset is a phase, not a distance measured forward from
+        % the path's start: the pattern repeats, so an offset and the
+        % same offset a whole number of cycles away name the same
+        % phase, and a negative one names the phase that many units
+        % before the pattern's beginning. One cycle is the sum of the
+        % elements, doubled when the array holds an odd number of them,
+        % since the alternation only returns a dash to a dash after two
+        % passes. Reducing the offset into a single cycle first is what
+        % lets the walk below start from it: the walk only ever
+        % subtracts, so it leaves a negative offset where it found it,
+        % and a large one costs an element's step for every cycle.
+        /period 0 dasharray { add } forall
+            dasharray length 2 mod 0 ne { 2 mul } if def
+        /pos pos dup period div dup truncate
+            2 copy lt { 1 sub } if exch pop period mul sub def
         //.xpostsys /initial_ipos get exec
 
         .pathempty not {
