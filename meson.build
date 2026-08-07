@@ -2020,6 +2020,24 @@ test('golden-render',
   suite: cost_fast,
   timeout: 300)
 
+# The other half of that: the manifest above compares one run against a
+# record, so it assumes what it never checks -- that a device renders the
+# same bytes on two runs of one tree. tests/render-differ.sh renders any
+# programs through two of this interpreter's own trees at once and reports
+# what moved between them, which is the question a change asks and cannot
+# answer from its diff; pointed at one tree twice, the answer is known in
+# advance and holds the determinism the manifest rests on. It also keeps
+# the instrument itself in working order, which is why it is registered
+# rather than left to be rebuilt from nothing by whoever next needs it.
+# Naming programs is what the harness takes; the corpus is its default,
+# and reaching that is `tests/render-differ.sh <before> <after>`.
+test('render-differ',
+  find_program('tests/run-render-differ-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir(),
+          files('tests/golden_page.ps') ],
+  suite: cost_fast,
+  timeout: 300)
+
 # Device method contract, safety tier: every built device must accept the
 # boundary inputs its methods can legally receive (degenerate, inverted,
 # fractional, out-of-range rectangles, pixels and lines) without error and

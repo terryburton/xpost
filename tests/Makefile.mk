@@ -192,6 +192,7 @@ tests/pdf_bigfill_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
 tests/reloc_stress_test.ps \
+tests/render-differ.sh \
 tests/render_classes_test.ps \
 tests/resource_load_test.c \
 tests/resource_matrix_test.ps \
@@ -230,6 +231,7 @@ tests/run-ps-test.sh \
 tests/run-raster-formats-test.sh \
 tests/run-refusing-target-test.sh \
 tests/run-reloc-stress-test.sh \
+tests/run-render-differ-test.sh \
 tests/run-setpagedevice-failure-test.sh \
 tests/run-statementedit-test.sh \
 tests/run-strict-ps-test.sh \
