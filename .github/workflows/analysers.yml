@@ -30,7 +30,15 @@ on:
 jobs:
 
   sanitizers:
-    name: address, leak and undefined behaviour
+    strategy:
+      matrix:
+        object: [small, large]
+    # Both object widths, because the width is a type's width. A shift is
+    # the clearest case: what counts as shifting the whole field, and
+    # what a right shift brings down into it, are answers about how wide
+    # the integer is, so one width can execute a shift the other cannot
+    # reach and each has undefined counts the other has not.
+    name: address and undefined behaviour - ${{ matrix.object }}-object
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
@@ -59,6 +67,7 @@ jobs:
     - name: setup
       run: |
         meson setup builddir \
+          -Dlarge-object=${{ matrix.object == 'large' }} \
           -Db_sanitize=address,undefined \
           -Db_lundef=false
     - name: build
@@ -86,14 +95,26 @@ jobs:
         # blocks is a memory-safety error or undefined behaviour, which
         # the tree is clean of, so this job is green from its first run
         # and a regression is what turns it red.
+        #
+        # halt_on_error is what makes the second half of that true. The
+        # undefined behaviour sanitizer recovers by default: it prints
+        # the diagnostic and lets the program carry on, so the process
+        # exits zero, the test that ran passes, and the finding reaches
+        # nobody but a reader of the log beside a green tick. Meson's own
+        # default for a test is halt_on_error=1, and an env block here
+        # replaces that default wholesale rather than adding to it, so
+        # the setting holds only by being stated.
         ASAN_OPTIONS: detect_leaks=0:abort_on_error=0
-        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       # memacct weighs the process, which a sanitizer's shadow maps and
       # quarantine necessarily perturb, and one of its tests runs a leak
       # checker of its own.
+      #
+      # No --timeout-multiplier: meson.build scales the limits itself
+      # where the build is sanitized, so they arrive scaled and a
+      # multiplier here would multiply what was multiplied.
       run: |
-        meson test -C builddir --print-errorlogs \
-          --no-suite memacct --timeout-multiplier 5
+        meson test -C builddir --print-errorlogs --no-suite memacct
 
   leaks:
     name: leak check
@@ -177,8 +198,7 @@ jobs:
         LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
       run: |
         mkdir -p leak-logs
-        meson test -C builddir --print-errorlogs --no-suite memacct \
-          --timeout-multiplier 5
+        meson test -C builddir --print-errorlogs --no-suite memacct
         echo '--- processes reporting a leak ---'
         leaks=$(grep -l 'LeakSanitizer: detected' leak-logs/* 2>/dev/null \
           | wc -l)
