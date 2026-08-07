@@ -244,6 +244,27 @@ S O differs 0 eq (the composite appends what the simple font appends) check
 3 -1 roll near exch 3 -1 roll near and
 (charpath leaves the pen where the simple font's does) check
 
+% --- the walk handed to a procedure ----------------------------------
+% cshow calls the procedure once per decoded character with three
+% operands -- the code, and the width of the glyph the CMap selected --
+% and runs it with a font current that reaches that same glyph through
+% the code's own byte (PLRM 8.2). So a procedure that takes all three
+% and shows the byte back paints what the walk itself paints, and comes
+% back with the stacks as it found them.
+/p.name (cshow:) def
+initgraphics
+cidfnt
+/cs.n 0 def
+count /cs.d0 exch def
+{ /cs.n cs.n 1 add store pop pop pop } CODES cshow
+count cs.d0 eq (a procedure that takes its three operands leaves the stack alone) check
+cs.n 2 eq (the procedure ran once per decoded character) check
+/S { cidfnt newpath 10 20 moveto CODES show } greysnap def
+/C { cidfnt newpath 10 20 moveto
+     { pop pop 1 string dup 0 4 -1 roll put show } CODES cshow } greysnap def
+C inkof 0 gt (the glyph the procedure showed marks the page) check
+C S differs 0 eq (and is the glyph the walk paints) check
+
 count 0 eq (the suite leaves the operand stack empty) check
 faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
 quit
