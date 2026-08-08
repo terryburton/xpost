@@ -361,12 +361,22 @@ else
     ])
     config_h.set10('HAVE_STDIO_EXT_H', true)
   elif cc.has_function('fpurge', prefix: '#include <stdio.h>')
-    if not cc.compiles(
-      '''
-      #include <stdio.h>
-      int main() { int i = fpurge(NULL); return 0; }
-      ''')
-      config_h.set10('HAVE_NO_FPURGE_SGN', true)
+    # Whether <stdio.h> declares it, asked at the feature-test level the
+    # library is compiled at rather than the bare one a check defaults to,
+    # because that level is what withholds the declaration on the
+    # platforms this branch is reached on. The answer decides whether
+    # xpost_compat_posix.c supplies a prototype of its own: where the
+    # header declares it, a second prototype says the same thing twice,
+    # which this build treats as an error.
+    #
+    # Asking whether the declaration exists, and not what it returns:
+    # a call written to take a return value compiles wherever the name is
+    # undeclared, warning rather than failing, so a check of the return
+    # type cannot tell a function returning int from one that was never
+    # declared -- and undeclared is the case the prototype is for.
+    if cc.has_header_symbol('stdio.h', 'fpurge',
+      args: [ '-D_XOPEN_SOURCE=700' ])
+      config_h.set10('HAVE_FPURGE_DECL', true)
     endif
   else
     error('__fpurge() or fpurge() are mandatory on UNIX')
