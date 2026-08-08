@@ -361,12 +361,22 @@ else
     ])
     config_h.set10('HAVE_STDIO_EXT_H', true)
   elif cc.has_function('fpurge', prefix: '#include <stdio.h>')
-    if not cc.compiles(
-      '''
-      #include <stdio.h>
-      int main() { int i = fpurge(NULL); return 0; }
-      ''')
-      config_h.set10('HAVE_NO_FPURGE_SGN', true)
+    # Whether <stdio.h> declares it, asked at the feature-test level the
+    # library is compiled at rather than the bare one a check defaults to,
+    # because that level is what withholds the declaration on the
+    # platforms this branch is reached on. The answer decides whether
+    # xpost_compat_posix.c supplies a prototype of its own: where the
+    # header declares it, a second prototype says the same thing twice,
+    # which this build treats as an error.
+    #
+    # Asking whether the declaration exists, and not what it returns:
+    # a call written to take a return value compiles wherever the name is
+    # undeclared, warning rather than failing, so a check of the return
+    # type cannot tell a function returning int from one that was never
+    # declared -- and undeclared is the case the prototype is for.
+    if cc.has_header_symbol('stdio.h', 'fpurge',
+      args: [ '-D_XOPEN_SOURCE=700' ])
+      config_h.set10('HAVE_FPURGE_DECL', true)
     endif
   else
     error('__fpurge() or fpurge() are mandatory on UNIX')
@@ -631,11 +641,33 @@ endif
 # Formatted rather than compared: the option reads as a string in the
 # meson this tree requires and as a list in later ones, and the formatted
 # form carries the sanitizer names either way.
+#
+# A plain build is on the same footing for a different reason. What a
+# second buys there is whatever the machine has left, and a gate is run
+# on a machine that is doing other things: measured across this suite at
+# one process per core, then again with the cores subscribed twice over,
+# every test took between one and a half and four times as long, and the
+# longest of them went from seventeen seconds to sixty-six. It survived
+# because it carries a limit of its own. The tests leaning on the
+# thirty-second default have no such margin, and the one that comes
+# closest to it has been seen to reach it.
+#
+# So every test is held to the same rule instead: at least twenty times
+# what it was measured to cost, taking the worse of the two object
+# widths. Nine tests cost three seconds or more and say so where they are
+# registered; the rest cost under three, and the multiplier here carries
+# them from the default's thirty seconds to sixty. Twenty times is above
+# the worst slowdown measured here by a factor of five, and above the one
+# that produced the timeout this answers by a factor of four.
 san = '@0@'.format(get_option('b_sanitize'))
 if not san.contains('none')
   add_test_setup('sanitized',
     timeout_multiplier: 10,
     env: [ 'RENDER_TIMEOUT=2400' ],
+    is_default: true)
+else
+  add_test_setup('loaded',
+    timeout_multiplier: 2,
     is_default: true)
 endif
 
@@ -736,7 +768,8 @@ test('gc-pressure',
   find_program('tests/run-gc-pressure-test.sh'),
   args: [ run_status_exe, context_reuse_exe ],
   suite: cost_fast + ['memacct'],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # Embedding contract: a run closes the file it wrapped around the program
 # however the run ended, so a context serving many failing jobs does not
@@ -1268,7 +1301,8 @@ test('empty-clip',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/empty_clip_test.ps') ],
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # Text meets the clip region too. A glyph reaches the page as a raster
 # plotted straight through the device's pixel methods, never through the
@@ -1292,7 +1326,8 @@ test('show-pattern',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/show_pattern_test.ps') ],
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # An outline font's glyphs are its character outlines stroked with
 # StrokeWidth, not the filled coverage the glyph raster route plots, so
@@ -1334,7 +1369,7 @@ test('graphics-regression',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/graphics_regression_test.ps') ],
   suite: cost_slow,
-  timeout: 120,
+  timeout: 180,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Render classes: Type 3 and composite fonts, the shading types, tiling and
@@ -1358,7 +1393,8 @@ test('raster-formats',
   find_program('tests/run-raster-formats-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # Every painting operator through every device that runs without a display.
 # Which methods a device must implement itself depends on how it keeps its
@@ -1417,7 +1453,8 @@ test('pdf-consumer',
   find_program('tests/run-pdf-consumer-test.sh'),
   args: [ xpost_exe ],
   suite: cost_slow,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # PDF content appends under memory pressure: a FillPoly whose content
 # append fails must raise rather than leave a truncated page that
@@ -2193,7 +2230,8 @@ test('check-error-names',
 test('check-env-traps',
   find_program('tests/check-env-traps.sh'),
   suite: cost_fast,
-  args: [ xpost_exe, meson.current_source_dir() ])
+  args: [ xpost_exe, meson.current_source_dir() ],
+  timeout: 120)
 
 # The binary form of the error report, which has to be checked on the
 # bytes rather than from inside the interpreter.
@@ -2350,7 +2388,8 @@ test('op-dictstack',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/op_dictstack_test.ps') ],
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # The loop operators resume through continuations whose state sits on the
 # execution stack, which is held in segments. Each has a fast path for a frame
@@ -2398,7 +2437,8 @@ test('statementedit',
   find_program('tests/run-statementedit-test.sh'),
   args: [ xpost_exe ],
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
 
 # The collector's own diagnostics, which no ordinary run reaches: an
 # independent reachability verifier and the cross-bank scan that holds global
@@ -2657,6 +2697,15 @@ test('check-test-quality',
 # slowly fills with minute-long checks is a profile nobody runs.
 test('check-test-cost',
   find_program('tests/check-test-cost.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast)
+
+# Every configuration raises the time limit off meson's default. A test
+# killed by a clock reports the same red as one that found a defect, and
+# the tree's own measurements put the default within a small multiple of
+# what several tests cost.
+test('check-test-timeouts',
+  find_program('tests/check-test-timeouts.sh'),
   args: [ meson.current_source_dir() ],
   suite: cost_fast)
 
@@ -3002,7 +3051,8 @@ test('error-format',
 test('fopen-funnel',
   find_program('tests/check-fopen-funnel.sh'),
   suite: cost_fast,
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir() ],
+  timeout: 120)
 
 # Device-driver skeleton: the compiled-buffer device fleet reaches its
 # private struct, operand folding and FillRect extent arithmetic through

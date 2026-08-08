@@ -71,8 +71,14 @@
 char *realpath(const char *restrict file_name, char *restrict resolved_name);
 #endif
 
-// This prototype isn't visible under OS X
+// This prototype isn't visible where <stdio.h> withholds it at the
+// feature-test level this builds with, which is what the configuration
+// asks about. Where the header does declare it, redeclaring it here
+// would say the same thing twice; where __fpurge stands in for it below,
+// it is not called at all.
+#if !defined(HAVE_STDIO_EXT_H) && !defined(HAVE_FPURGE_DECL)
 int fpurge(FILE *);
+#endif
 
 #include "xpost.h"
 #include "xpost_compat.h"

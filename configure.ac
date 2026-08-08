@@ -391,6 +391,17 @@ fpurge(NULL);
       if test "x${have_fpurge}" = "xno" ; then
          AC_MSG_ERROR([__fpurge() or fpurge() function are mandatory, exiting...])
       fi
+
+      # Whether <stdio.h> declares it, which decides whether
+      # xpost_compat_posix.c supplies a prototype of its own. A second
+      # prototype alongside the header's says the same thing twice, and
+      # one that disagrees with it about the return type does not compile
+      # at all.
+      AC_CHECK_DECL([fpurge],
+         [AC_DEFINE([HAVE_FPURGE_DECL], [1],
+                    [Define to 1 if stdio.h declares fpurge])],
+         [],
+         [[#include <stdio.h>]])
    fi
 fi
 
