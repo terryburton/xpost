@@ -37,6 +37,7 @@
 
 #include <assert.h>
 #include <ctype.h> /* isdigit, isxdigit, isspace */
+#include <limits.h>
 #include <math.h> /* sqrt */
 #include <stdio.h>
 #include <string.h>
@@ -237,6 +238,27 @@ Xpost_Object _encoded_name(Xpost_Context *ctx,
     return invalid;
 }
 
+/* A number a program supplies, quantized into the 16.16 fixed-point form
+   the face's own transforms and advances are held in. A PostScript number
+   reaches far past that form, and a value the field cannot hold has no
+   fixed-point answer at all: what it would be given is one of the field's
+   own values, which some other number also has. The caller is told so
+   instead, and does without the fixed-point form rather than sharing one. */
+static int
+_fixed16(double v, long *out)
+{
+    /* one past the largest magnitude the field holds. The largest itself
+       is not always a value a double names exactly; one past it is a power
+       of two and always is. */
+    const double lim = (double)LONG_MAX + 1.0;
+    double f = v * 65536.0;
+
+    if (!(f >= -lim && f < lim))
+        return 0;
+    *out = (long)f;
+    return 1;
+}
+
 /* A /Metrics entry for this glyph name overrides its width (PLRM 5.9.2):
    a number is a new x width, a two-element array carries the width in its
    second element, a four-element array carries the width vector in its
@@ -285,8 +307,11 @@ int _metrics_advance(Xpost_Context *ctx,
     }
     else
         return 0;
-    *ax = (long)((ts->cdmat[0] * wx + ts->cdmat[2] * wy) * 65536.0);
-    *ay = (long)(-(ts->cdmat[1] * wx + ts->cdmat[3] * wy) * 65536.0);
+    /* a width the fixed-point form does not hold is no override: the
+       face's own advance stands rather than a value the form substitutes */
+    if (!_fixed16(ts->cdmat[0] * wx + ts->cdmat[2] * wy, ax)
+     || !_fixed16(-(ts->cdmat[1] * wx + ts->cdmat[3] * wy), ay))
+        return 0;
     return 1;
 }
 
@@ -3302,9 +3327,20 @@ refuse:
    glyph cache; the raster is a coverage mask captured from the build
    procedure's marks. */
 
+/* The cache holds a caller's number for a mask beside the transform it
+   was rendered under, and answers a lookup that matches both. So the
+   field the number is carried in spans the integer object's: a field
+   narrower than that would carry two integers to one number, and the
+   entry filed under one would be answered to the other. `long` is the
+   integer's width on some platforms and half of it on others, which is
+   why it is not the field. */
+typedef char xpost_mask_key_spans_the_integer[
+    sizeof(unsigned long long) >= sizeof(dword)
+    && sizeof(dword) == sizeof(integer) ? 1 : -1];
+
 static int
 _mask_key(Xpost_Context *ctx, Xpost_Object key,
-          Xpost_Object mat, unsigned long *k2, long m[4])
+          Xpost_Object mat, unsigned long long *k2, long m[4])
 {
     int i;
 
@@ -3314,7 +3350,7 @@ _mask_key(Xpost_Context *ctx, Xpost_Object key,
        knows nor needs to know which. */
     if (xpost_object_get_type(key) != integertype)
         return 0;
-    *k2 = (unsigned long)key.int_.val;
+    *k2 = (unsigned long long)(dword)key.int_.val;
     if (xpost_object_get_type(mat) != arraytype || mat.comp_.sz != 6)
         return 0;
     for (i = 0; i < 4; i++)
@@ -3324,7 +3360,8 @@ _mask_key(Xpost_Context *ctx, Xpost_Object key,
                  : xpost_object_get_type(el) == integertype ? (double)el.int_.val
                  : 0.0;
 
-        m[i] = (long)(v * 0x10000L);
+        if (!_fixed16(v, &m[i]))
+            return 0;
     }
     return 1;
 }
@@ -3350,7 +3387,7 @@ int _maskcachehit(Xpost_Context *ctx,
 {
     Xpost_Object userdict, gd, gs, devdic, putpix, o;
     textstate ts;
-    unsigned long k2;
+    unsigned long long k2;
     long m[4];
     unsigned char *bits;
     int rows, width, pitch, left, top;
@@ -3441,8 +3478,9 @@ int _maskcacheput(Xpost_Context *ctx,
                 Xpost_Object dict)
 {
     Xpost_Object o, buf, mat, key;
-    unsigned long k2;
+    unsigned long long k2;
     long m[4];
+    long qax, qay;
     int w, h, bx0, by0, left, top;
     double ox, oy, advx, advy;
     unsigned char *bytes;
@@ -3472,13 +3510,17 @@ int _maskcacheput(Xpost_Context *ctx,
         return rangecheck;
     if (!_mask_key(ctx, key, mat, &k2, m))
         return 0;
+    /* the advances are filed in the same fixed-point form and come out of
+       the same dictionary, so a pair the form does not hold leaves the
+       mask unfiled rather than filed against advances it does not have */
+    if (!_fixed16(advx, &qax) || !_fixed16(advy, &qay))
+        return 0;
     bytes = (unsigned char *)xpost_string_get_pointer(ctx, buf);
     left = bx0 - (int)floor(ox + 0.5);
     top = (int)floor(oy + 0.5) - by0;
     (void)xpost_mask_cache_insert(NULL, k2, m, 0,
                                        bytes, h, w, w, left, top,
-                                       (long)(advx * 65536.0),
-                                       (long)(advy * 65536.0));
+                                       qax, qay);
     return 0;
 }
 

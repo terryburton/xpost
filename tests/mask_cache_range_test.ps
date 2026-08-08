@@ -70,5 +70,65 @@ cstat 7 array astore /before exch def
   { /fails fails 1 add def
     (FAIL: a sound capture cached nothing) note } ifelse } ifelse
 
+% --- what the cache tells one entry from another by ---
+% An entry belongs to one mask under one transform, and the cache is
+% asked for it by the two together: the caller's own number for the
+% mask, and the transform quantized into a fixed-point field. Two
+% entries filed under one number and different transforms are two
+% entries, and each transform has to reach its own.
+%
+% A transform past what the fixed-point field carries has no place in
+% it. Keyed anyway, several such transforms arrive at one key and each
+% is served whichever of their rasters was filed first, which is the
+% wrong mask rather than a slow one. So the pair below straddles the
+% field's own boundary -- about 1.4e14 where the field is sixty-four
+% bits and about 3.3e4 where it is thirty-two, so the second pair is
+% outside it at either width -- and each transform must reach the entry
+% it filed, or reach none.
+/mhit id /.maskcachehit get def
+/require { % bool label  .  -
+    exch { (ok   ) print note }
+         { /fails fails 1 add def (FAIL: ) print note } ifelse
+} def
+/file { % mat key advance  .  -   file a one-pixel mask under mat and key
+    3 dict begin /a exch def /k exch def /m exch def
+    << /buf (\377) /w 1 /h 1 /bx0 0 /by0 0 /ox 0 /oy 0
+       /advx a /advy 0.0 /mat m /key k >> mput
+    end
+} bind def
+/ask { % mat key  .  advance | null
+    10 10 4 2 roll [ 0 0 140 48 ] mhit
+    { pop }{ null } ifelse
+} bind def
+
+% inside the field: two transforms, two entries, each reached by its own
+[ 1.0e14 0 0 1.0e14 0 0 ] 11 33.0 file
+[ 1.2e14 0 0 1.2e14 0 0 ] 11 44.0 file
+[ 1.0e14 0 0 1.0e14 0 0 ] 11 ask 33.0 eq
+    (a transform inside the fixed-point field reaches its own entry) require
+[ 1.2e14 0 0 1.2e14 0 0 ] 11 ask 44.0 eq
+    (and so does the other one filed beside it) require
+
+% outside it: whatever is filed, neither transform may reach the other's
+[ 2.0e14 0 0 2.0e14 0 0 ] 12 55.0 file
+[ 3.0e14 0 0 3.0e14 0 0 ] 12 66.0 file
+[ 2.0e14 0 0 2.0e14 0 0 ] 12 ask dup null eq exch 55.0 eq or
+    (a transform outside the field reaches no other transform's entry) require
+[ 3.0e14 0 0 3.0e14 0 0 ] 12 ask dup null eq exch 66.0 eq or
+    (nor does the other one filed beside it) require
+
+% the caller's number for a mask is an integer object, so it is carried
+% in the integer's own field: two integers that differ only above the
+% width a C long has on some platforms are two numbers here too. Only a
+% build whose integer is wider than that can say so.
+2147483648 type /integertype eq {
+    [ 1 0 0 1 0 0 ] 4294967297 77.0 file
+    [ 1 0 0 1 0 0 ] 1 88.0 file
+    [ 1 0 0 1 0 0 ] 4294967297 ask 77.0 eq
+        (a mask number past thirty-two bits is not the number below it) require
+    [ 1 0 0 1 0 0 ] 1 ask 88.0 eq
+        (nor is the number below it that one) require
+} if
+
 fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
 quit
