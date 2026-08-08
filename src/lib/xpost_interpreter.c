@@ -91,6 +91,20 @@ static int _initializing = 1;  /* garbage collect does not run while _initializi
                                   which would create a circular dependency. */
 
 int eval(Xpost_Context *ctx);
+
+/* What mainloop answers, named so that no two of them are the same
+   number. A yield is a program's own doing -- the returntocaller
+   operator, which showpage reaches under the returning semantics -- and
+   a context that did not validate is the opposite of that: nothing ran
+   and nothing can. Reported as a yield it hands the caller a context to
+   resume, which validates no better on the next call and answers the
+   same way, so an embedder driving a run to its end never reaches one.
+   The failure is negative because every error number the interpreter
+   carries is positive, and one of them stands where a yield stands. */
+#define XPOST_MAINLOOP_DONE     0
+#define XPOST_MAINLOOP_YIELDED  1
+#define XPOST_MAINLOOP_INVALID (-1)
+
 int mainloop(Xpost_Context *ctx);
 void init(void);
 void xit(void);
@@ -1898,7 +1912,7 @@ Xpost_Context *_switch_context(Xpost_Context *ctx)
 /*
    the big main central interpreter loop.
    processes return codes from eval().
-   0 indicate noerror
+   The answer is one of XPOST_MAINLOOP_DONE, _YIELDED or _INVALID.
    yieldtocaller indicates `showpage` has been called using SHOWPAGE_RETURN semantics.
    ioblock indicates a blocked io operation.
    contextswitch indicates the `yield` operator has been called.
@@ -1917,7 +1931,7 @@ ctxswitch:
        validate them once when a context becomes current rather than
        before every evaluation step */
     if (!validate_context(ctx))
-        return unregistered;
+        return XPOST_MAINLOOP_INVALID;
 
     while(!ctx->quit)
     {
@@ -1978,7 +1992,7 @@ ctxswitch:
             switch (ret)
             {
             case yieldtocaller:
-                return 1;
+                return XPOST_MAINLOOP_YIELDED;
             case ioblock:
                 ctx->state = C_IOBLOCK; /* fallthrough */
             case contextswitch:
@@ -1988,7 +2002,7 @@ ctxswitch:
             }
     }
 
-    return 0;
+    return XPOST_MAINLOOP_DONE;
 }
 
 
@@ -2305,12 +2319,13 @@ void loadinitps(Xpost_Context *ctx)
                      xpost_object_cvx(xpost_string_cons(ctx, n, buf)));
 
     ctx->quit = 0;
-    /* mainloop answers noerror, a yield, or that the context did not
-       validate. The context was built and every part of it checked
-       before this is reached, which is what the assertion above reads;
-       and a yield is the returntocaller operator's answer, which only
-       showpage under return semantics reaches and init.ps paints no
-       page. Running the start-up file leaves noerror the only answer. */
+    /* mainloop answers that it is done, that it yielded, or that the
+       context did not validate. The context was built and every part of
+       it checked before this is reached, which is what the assertion
+       above reads; and a yield is the returntocaller operator's answer,
+       which only showpage under return semantics reaches and init.ps
+       paints no page. Running the start-up file leaves done the only
+       answer. */
     mainloop(ctx);
 }
 
@@ -2734,7 +2749,11 @@ static void _load_language(Xpost_Context *ctx)
                                             : "loadlanguage");
     ctx->quit = 0;
     ctx->state = C_RUN;
-    mainloop(ctx);
+    /* whether the language stands is read from the context afterwards,
+       which is the answer the caller acts on; this one says only how
+       the load's own run ended */
+    if (mainloop(ctx) != XPOST_MAINLOOP_DONE)
+        XPOST_LOG_ERR("the language load did not run to its end");
 
     while (xpost_stack_count(ctx->lo, ctx->es) > (int)base)
         xpost_stack_pop(ctx->lo, ctx->es);
@@ -2914,9 +2933,22 @@ run:
     ctx->state = C_RUN;
     ret = mainloop(ctx);
 
+    /* A context that did not validate has no run to report on, and
+       nothing below may be asked of it: the memory it failed to answer
+       for is where the page semantics are read from, where the device
+       stands and where the snapshot records live. So this is read before
+       any of them, and the run gives back the file it wrapped around the
+       program and nothing else. */
+    if (ret == XPOST_MAINLOOP_INVALID)
+    {
+        XPOST_LOG_ERR("the context did not validate; the run is abandoned");
+        _close_run_input(ctx);
+        return XPOST_RUN_FAILED;
+    }
+
     if (_showpage_semantic(ctx) == XPOST_SHOWPAGE_RETURN)
     {
-        if (ret == 1)
+        if (ret == XPOST_MAINLOOP_YIELDED)
             return XPOST_RUN_YIELDED;
 
         /* the run stops at its quit operator, leaving the frames
@@ -2962,9 +2994,15 @@ run:
         xpost_stack_push(ctx->lo, ctx->es, device);
 
         ctx->quit = 0;
-        mainloop(ctx);
-
-        device = xpost_stack_pop(ctx->lo, ctx->os);
+        /* the device this leaves on the operand stack is the procedure's
+           answer, so a run that did not reach its end has not left one */
+        if (mainloop(ctx) == XPOST_MAINLOOP_DONE)
+            device = xpost_stack_pop(ctx->lo, ctx->os);
+        else
+        {
+            XPOST_LOG_ERR("the device procedure did not run to its end");
+            device = null;
+        }
     }
     if (xpost_object_get_type(device) == dicttype)
     {
@@ -3002,7 +3040,8 @@ run:
 	    xpost_stack_push(ctx->lo, ctx->es, Destroy);
 
 	    ctx->quit = 0;
-	    mainloop(ctx);
+	    if (mainloop(ctx) != XPOST_MAINLOOP_DONE)
+	        XPOST_LOG_ERR("the device's Destroy did not run to its end");
 	}
     }
 

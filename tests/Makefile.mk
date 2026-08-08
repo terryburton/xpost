@@ -231,6 +231,7 @@ tests/render_classes_test.ps \
 tests/resource_load_test.c \
 tests/resource_matrix_test.ps \
 tests/roll_test.ps \
+tests/run_invalid_context_test.c \
 tests/run-append-fail-test.sh \
 tests/run-bbox-test.sh \
 tests/run-bintok-test.sh \

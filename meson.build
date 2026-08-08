@@ -985,6 +985,22 @@ test('context-jobs',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Embedding contract: the central loop's three answers -- done, yielded,
+# and a context that would not validate -- travel as one integer, so a
+# caller telling a yield from a refusal depends on no two of them being
+# the same number.
+run_invalid_context_exe = executable('run_invalid_context_test',
+  'tests/run_invalid_context_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('run-invalid-context',
+  run_invalid_context_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The matrix operators store their six numbers in one bulk write, so the
 # copy-on-write done per element elsewhere is done once by hand here. A
 # write that goes in over a backup the memory file declined is one restore
