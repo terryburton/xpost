@@ -34,28 +34,37 @@ wideint {
 { $error /errorname get /limitcheck eq }{ false } ifelse
 (binary radix beyond the width is limitcheck) assert
 
-% cvi and cvr scan a radix numeral of their own, so the numeral has to reach
-% the same width there as it does in the scanner above. Each arm below names a
-% numeral wider than 31 bits, which is what says the numeral was read in the
-% integer's field and not in whatever C type the conversion had to hand.
-%
-% COMPLIANCE: PLRM cvi reads a string operand "as if by token", so a radix
-% numeral that fills the integer's field should reach cvi with the value token
-% gives it -- 16#FFFFFFFF is -1 in the narrower build. It is carried through a
-% real instead, so it arrives unsigned and too large for the field, and the
-% narrower build answers rangecheck where token answers -1. What is asserted
-% here is the width the numeral is read in, which is the same either way.
+% cvi and cvr scan a radix numeral of their own, and PLRM 8.2 has each read a
+% string operand as if by token, so the numeral has to reach the same width
+% and become the same number there as it does in the scanner above. Each arm
+% below names a numeral wider than 31 bits, which is what says the numeral was
+% read in the integer's field and not in whatever C type the conversion had to
+% hand, and names it at the top of that field, which is what says the field
+% was read unsigned and the integer taken from its bit pattern.
 (16#7FFFFFFF) cvi 2147483647 eq (cvi reads a radix numeral) assert
 wideint {
     (16#FFFFFFFF) cvi 4294967295 eq (cvi reads a radix numeral past 31 bits) assert
+    (16#FFFFFFFFFFFFFFFF) cvi -1 eq (cvi reads an all-ones radix as token does) assert
+    (16#8000000000000000) cvi -9223372036854775807 1 sub eq
+        (cvi reads a sign-bit radix as token does) assert
+    (16#FFFFFFFFFFFFFFFF) cvr -1.0 eq (cvr reads an all-ones radix as token does) assert
 }{
-    % the narrower build's real is a single-precision one, which holds no
-    % two adjacent values this large apart; the numeral is therefore weighed
-    % against the boundary it has to have crossed rather than for equality,
-    % and a conversion that refused it altogether fails here too
-    { (16#FFFFFFFF) cvr } stopped
-    { false }{ 2147483648.0 gt } ifelse
-    (cvr reads a radix numeral past 31 bits) assert
+    (16#FFFFFFFF) cvi -1 eq (cvi reads an all-ones radix as token does) assert
+    (16#80000000) cvi -2147483648 eq (cvi reads a sign-bit radix as token does) assert
+    (16#FFFFFFFF) cvr -1.0 eq (cvr reads an all-ones radix as token does) assert
 } ifelse
+% and a numeral past the integer's field is the limitcheck token raises there
+{ wideint { (16#1FFFFFFFFFFFFFFFF) }{ (16#1FFFFFFFF) } ifelse cvi } stopped
+{ $error /errorname get /limitcheck eq }{ false } ifelse
+(cvi refuses a radix numeral past the width as token does) assert
+{ wideint { (16#1FFFFFFFFFFFFFFFF) }{ (16#1FFFFFFFF) } ifelse cvr } stopped
+{ $error /errorname get /limitcheck eq }{ false } ifelse
+(cvr refuses a radix numeral past the width as token does) assert
+% the digits are unsigned, so a sign is not part of the numeral: the scanner
+% reads those characters as a name, and cvi reads a string that is not a
+% numeral as a typecheck
+{ (16#-1) cvi } stopped
+{ $error /errorname get /typecheck eq }{ false } ifelse
+(a signed radix numeral is not a numeral) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
