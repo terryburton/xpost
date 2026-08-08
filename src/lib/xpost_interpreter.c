@@ -2557,6 +2557,21 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 
     xpost_interpreter_set_initializing(0);
 
+    /* a push the stacks would not take, made while the interpreter was
+       being brought up. The safe points that read this record are inside
+       the loop a program runs in, and nothing has run one yet, so a
+       refusal recorded here would keep until the first program and be
+       reported against it. That program's stacks are short by an object
+       it never pushed, and the context it was handed is one whose
+       startup did not finish. Both memory files are read: names intern
+       into global VM, so a refusal is recordable on either. */
+    if (xpost_ctx->lo->push_refused || xpost_ctx->gl->push_refused)
+    {
+        XPOST_LOG_ERR("a stack would not take a pushed object while the "
+                      "interpreter was starting");
+        return NULL;
+    }
+
     return xpost_ctx;
 }
 

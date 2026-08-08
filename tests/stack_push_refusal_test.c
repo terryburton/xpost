@@ -155,6 +155,44 @@ static void push_result(int refused)
     xpost_destroy(ctx);
 }
 
+/* A context handed back carries no refusal that nothing has read.
+ *
+ * The record is read at the interpreter's safe points and by the operator
+ * dispatch, both of which are inside the loop a program runs in. Startup
+ * pushes before any of that exists, so a refusal recorded while the
+ * interpreter is coming up waits until the first program runs and is then
+ * reported against it -- an error raised against a program whose only
+ * involvement was being first, on stacks that are short by an object it
+ * never pushed. So creation answers for its own pushes: a context that
+ * comes back is one whose startup left neither memory file with a refusal
+ * outstanding, and a startup that could not push answers NULL instead.
+ *
+ * Both files, because names intern into global VM and the name machinery
+ * pushes there, so either can carry the record.
+ */
+static void creation_leaves_no_refusal(void)
+{
+    Xpost_Context *ctx;
+
+    ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
+                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
+                       XPOST_USE_SIZE, 100, 100);
+    if (!ctx)
+    {
+        report_failure("xpost_create");
+        return;
+    }
+
+    if (ctx->lo->push_refused)
+        report_failure("a context was handed back with a refused push "
+                       "outstanding in local memory");
+    if (ctx->gl->push_refused)
+        report_failure("a context was handed back with a refused push "
+                       "outstanding in global memory");
+
+    xpost_destroy(ctx);
+}
+
 int main(void)
 {
     if (!xpost_init())
@@ -165,6 +203,7 @@ int main(void)
 
     push_result(0);
     push_result(1);
+    creation_leaves_no_refusal();
 
     xpost_quit();
 
