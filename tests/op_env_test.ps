@@ -50,6 +50,20 @@
 (XPOST_TEST_EMPTY) getenv length 0 eq
     (the empty value reads back empty) assert
 
+% --- a long value is as long as it was set ---
+% A value comes back from the environment as a C string, and the string
+% object it becomes records its length in a field narrower than a C
+% string's on the smaller of the two object widths. So the length is
+% checked against the value that was set rather than assumed: a value
+% wrapped into that field would read back short here.
+/env.big 20000 string def
+0 1 env.big length 1 sub { env.big exch 120 put } for
+(XPOST_TEST_LONG) env.big putenv
+(XPOST_TEST_LONG) getenv length 20000 eq
+    (a long value reads back at the length it was set) assert
+(XPOST_TEST_LONG) getenv env.big eq
+    (and reads back as the value it was set to) assert
+
 % --- the operands are strings ---
 { 42 getenv } /typecheck (getenv refuses a number) erris
 { (XPOST_TEST_VAR) 42 putenv } /typecheck (putenv refuses a number value) erris

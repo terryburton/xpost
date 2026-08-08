@@ -215,7 +215,18 @@ int Sgetenv(Xpost_Context *ctx,
     if (r)
     {
         Xpost_Object strobj;
-        strobj = xpost_string_cons(ctx, strlen(r), r);
+        size_t n = strlen(r);
+        /* the environment's values are the environment's own length, and
+           a string object records its length in a field narrower than
+           that on some builds: a value the field cannot count is refused
+           rather than answered as the length it wrapped to */
+        if (n > (size_t)XPOST_OBJECT_COMP_MAX_SZ) /* the sz field is full */
+        {
+            free(str);
+            free(r);
+            return limitcheck;
+        }
+        strobj = xpost_string_cons(ctx, (unsigned int)n, r);
         if (xpost_object_get_type(strobj) == nulltype){
 	    free(str);
 	    free(r);

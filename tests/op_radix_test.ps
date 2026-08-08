@@ -67,4 +67,68 @@ wideint {
 { $error /errorname get /typecheck eq }{ false } ifelse
 (a signed radix numeral is not a numeral) assert
 
+% PLRM 3.2 admits a base of 2 through 36 and digits ranging from 0 to
+% base - 1, and nothing else is a radix number. A token that is not a
+% number is a name (PLRM 3.2, "Names"), so text failing either condition
+% leaves the scanner a name -- not a number read from the part of it that
+% did parse, and not an error. limitcheck belongs to the one condition
+% PLRM states it for: a number past the implementation limit for integers.
+
+% run a procedure and answer what it produced, as a value the numeral's
+% two readers can be compared on: the integer itself, the string (name)
+% where the text is a name rather than a number, or the raised error's
+% name. The three are of three types, so no answer can be mistaken for
+% another. The operand stack is left as it was found.
+/outcome { % proc -> int | (name) | /errorname
+    /P exch def
+    mark
+    { P exec } stopped { $error /errorname get } if
+    /R exch def
+    cleartomark
+    R
+} bind def
+/tokans { % string -> int | (name) | /errorname
+    /Sx exch def
+    { Sx token { exch pop dup type /integertype ne { pop (name) } if }
+                { (notoken) } ifelse } outcome
+} bind def
+/cvians { % string -> int | (name) | /errorname
+    /Sx exch def
+    { Sx cvi } outcome
+    dup type /nametype eq { dup /typecheck eq { pop (name) } if } if
+} bind def
+
+(2#9) tokans (name) eq (a digit outside base 2 leaves a name) assert
+(16#g) tokans (name) eq (a digit outside base 16 leaves a name) assert
+(16#fg) tokans (name) eq (a trailing digit outside the base leaves a name) assert
+(16#0x10) tokans (name) eq (a C hexadecimal prefix is not a radix numeral) assert
+(2#0b1) tokans (name) eq (a C binary prefix is not a radix numeral) assert
+(40#11) tokans (name) eq (a base above 36 leaves a name) assert
+(1#0) tokans (name) eq (a base below 2 leaves a name) assert
+(0#0) tokans (name) eq (base zero leaves a name) assert
+(37#z) tokans (name) eq (base 37 leaves a name) assert
+% the name is the whole token, spelled as it was written
+(2#9) token pop exch pop dup type /nametype eq exch 8 string cvs (2#9) eq and
+    (the name is the token that was not a number) assert
+% and the bases either side of it are radix numbers still
+(2#1) tokans 1 eq (base 2 is a radix number) assert
+(36#z) tokans 35 eq (base 36 is a radix number) assert
+
+% token and cvi read a numeral by the same rules (PLRM 8.2 has cvi read
+% its string operand as if by token), so no numeral may be a number to
+% one and something else to the other. Stated over the cases either
+% reading turns on, so a change to one that the other does not follow
+% fails here rather than passing quietly.
+/agree { % string -> -
+    dup dup tokans exch cvians eq
+    { pop }
+    { (FAIL: token and cvi disagree on ) print print (\n) print
+      /failcount failcount 1 add store } ifelse
+} bind def
+[ (2#9) (16#g) (16#fg) (16#0x10) (2#0b1) (40#11) (1#0) (0#0) (37#z)
+  (16#-1) (16#) (2#1) (36#z) (8#1777) (16#7FFFFFFF) (10#99)
+  wideint { (16#FFFFFFFFFFFFFFFF) (16#1FFFFFFFFFFFFFFFF) }
+          { (16#FFFFFFFF) (16#1FFFFFFFF) } ifelse
+] { agree } forall
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

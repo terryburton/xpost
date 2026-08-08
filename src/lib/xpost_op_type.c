@@ -58,6 +58,7 @@
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
 #include "xpost_op_type.h"
+#include "xpost_op_token.h"
 
 /* any  type  name
    return type of any as a nametype object */
@@ -285,7 +286,6 @@ int _string_to_number(const char *t,
                       int *isint)
 {
     char *end;
-    long base;
     double num;
 
     *isint = 0;
@@ -295,38 +295,28 @@ int _string_to_number(const char *t,
         || *t == '\r' || *t == '\f')
         t++;
 
-    /* radix numeral, e.g. 16#ff */
-    errno = 0;
-    base = strtol(t, &end, 10);
-    if (end != t && *end == '#' && base >= 2 && base <= 36)
+    /* radix numeral, e.g. 16#ff, read by the scanner's own reader so that
+       a numeral is the same numeral to token and to cvi. Text the reader
+       refuses is not a radix numeral, and falls through to the decimal
+       forms below, which end in the typecheck a name earns */
     {
-        /* PLRM 3.2: a radix numeral is unsigned, so it is read unsigned
-           into a field that spans the integer's and the whole of that
-           field is available to it */
-        unsigned long long v;
-        const char *p = end + 1;
-        /* the digits are alphanumeric and nothing else, so a sign here is
-           not part of the numeral: the scanner reads the characters as a
-           name, and an unsigned conversion would read the sign as a
-           negation and make a numeral of them */
-        if (!isalnum((unsigned char)*p))
-            return typecheck;
-        errno = 0;
-        v = strtoull(p, &end, (int)base);
-        if (!_num_token_end(*end))
-            return typecheck;
-        if (errno == ERANGE)
-            return limitcheck;
-        /* it becomes the integer of the same twos-complement representation,
-           so it must fit the integer's own field; one that exceeds that field
-           is the limitcheck PLRM 3.2 names, neither narrowed to fit nor
-           carried out as a real */
-        if (v > (unsigned long long)(dword)~(dword)0)
-            return limitcheck;
-        *isint = 1;
-        *ival = (integer)(dword)v;
-        *out = (double)*ival;
-        return 0;
+        const char *rend;
+        integer rnum = 0;
+        int rret = xpost_scanner_radix_number(t, &rend, &rnum);
+
+        if (rret >= 0)
+        {
+            /* the numeral ends where the scanner's token would end;
+               anything else is a name */
+            if (!_num_token_end(*rend))
+                return typecheck;
+            if (rret != 0)
+                return rret;
+            *isint = 1;
+            *ival = rnum;
+            *out = (double)*ival;
+            return 0;
+        }
     }
 
     errno = 0;
