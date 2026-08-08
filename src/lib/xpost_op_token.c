@@ -218,6 +218,79 @@ typedef char xpost_scan_field_spans_the_integer[
     && sizeof(unsigned long long) >= sizeof(dword)
     && sizeof(dword) == sizeof(integer) ? 1 : -1];
 
+/* the value a character carries as a digit of the given base, or -1 for
+   a character that is not one of that base's digits */
+static
+int radix_digit(int c,
+                unsigned long base)
+{
+    unsigned long d;
+
+    if (c >= '0' && c <= '9')
+        d = (unsigned long)(c - '0');
+    else if (c >= 'A' && c <= 'Z')
+        d = (unsigned long)(c - 'A') + 10;
+    else if (c >= 'a' && c <= 'z')
+        d = (unsigned long)(c - 'a') + 10;
+    else
+        return -1;
+    return d < base ? (int)d : -1;
+}
+
+int xpost_scanner_radix_number(const char *s,
+                               const char **end,
+                               integer *out)
+{
+    const unsigned long long limit = (unsigned long long)(dword)~(dword)0;
+    unsigned long base = 0;
+    unsigned long long num = 0;
+    const char *p = s;
+    int over = 0;
+    int ndigits = 0;
+    int d;
+
+    *end = s;
+    if (!(*p >= '0' && *p <= '9'))
+        return -1;
+    /* the base is the decimal 2 to 36 the syntax allows and nothing
+       wider, so it is bounded below rather than by the field it is read
+       into: once it is past 36 no further digit can bring it back */
+    while (*p >= '0' && *p <= '9')
+    {
+        base = base > 36 ? 37 : base * 10 + (unsigned long)(*p - '0');
+        p++;
+    }
+    if (*p != '#' || base < 2 || base > 36)
+        return -1;
+    p++;
+
+    /* PLRM 3.2: a radix number is unsigned, so it is read unsigned and
+       the whole of the integer's field is available to it. Every digit is
+       read before the number is judged, so the end is past the whole of
+       the numeral either way and a caller can tell a numeral too large
+       from text that stops being a numeral partway */
+    while ((d = radix_digit((unsigned char)*p, base)) >= 0)
+    {
+        if (over || num > (limit - (unsigned long long)d) / base)
+            over = 1;
+        else
+            num = num * base + (unsigned long long)d;
+        ++ndigits;
+        p++;
+    }
+    if (ndigits == 0)
+        return -1;
+    *end = p;
+    /* it becomes the integer of the same twos-complement representation,
+       so it must fit the integer's own field; one that exceeds that field
+       is a limitcheck, neither narrowed to fit nor promoted to a real the
+       way an over-range decimal integer is */
+    if (over)
+        return limitcheck;
+    *out = (integer)(dword)num;
+    return 0;
+}
+
 static
 int grok(Xpost_Context *ctx,
          char *s,
@@ -283,37 +356,21 @@ int grok(Xpost_Context *ctx,
 
     else if (fsm_check(s, ns, fsm_rad, accept_rad))
     {
-        /* the base is the decimal 2 to 36 the syntax allows and nothing
-           wider, so it is bounded below rather than by the field it is
-           read into: a numeral too large for that field saturates, and
-           saturation fails the same bound */
-        unsigned long base;
-        unsigned long long num;
-        base = strtoul(s, &s, 10);
-        if ((base > 36) || (base < 2))
-        {
-            XPOST_LOG_ERR("bad radix");
-            return limitcheck;
-        }
-        errno = 0;
-        /* PLRM 3.2: a radix number is unsigned, so it is read unsigned and
-           the whole of the integer's field is available to it */
-        num = strtoull(s + 1, NULL, base);
-        if (errno == ERANGE)
-        {
-            XPOST_LOG_ERR("radixnumber out of range");
-            return limitcheck;
-        }
-        /* it becomes the integer of the same twos-complement representation,
-           so it must fit the integer's own field; one that exceeds that field
-           is a limitcheck, neither narrowed to fit nor promoted to a real the
-           way an over-range decimal integer is */
-        if (num > (unsigned long long)(dword)~(dword)0)
+        const char *rend;
+        integer rnum = 0;
+        int rret = xpost_scanner_radix_number(s, &rend, &rnum);
+
+        /* PLRM 3.2 admits a base of 2 through 36 and digits ranging from
+           0 to base-1. Text failing either is not a radix number, and a
+           token that cannot be interpreted as a number is a name */
+        if (rret < 0 || *rend != '\0')
+            goto not_a_number;
+        if (rret != 0)
         {
             XPOST_LOG_ERR("radixnumber exceeds integer width");
-            return limitcheck;
+            return rret;
         }
-        *retval = xpost_int_cons((integer)(dword)num);
+        *retval = xpost_int_cons(rnum);
         return 0;
     }
 
