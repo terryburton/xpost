@@ -459,6 +459,10 @@ endif
 #             end of it, three running it under a leak checker -- and so
 #             cannot answer under an allocator that quarantines or
 #             shadows
+#   vmlimit   the two that run the interpreter under an address-space
+#             limit tight enough to deny an accumulator its next
+#             doubling, and so cannot answer in a build whose runtime
+#             reserves an address space larger than the limit
 #
 # The corpus and the vendor suite are the two that need something this
 # tree does not carry, and the cost profiles below leave both out
@@ -531,9 +535,9 @@ endif
 # stops being absent, and a name excused that turns out to have run fails
 # the run in its own right.
 #
-# The memacct suite is outside every profile in a build whose sanitizer
-# displaces the heap, and is the one exclusion that is neither a cost nor
-# something a machine has to supply. Two of those five weigh the process
+# The memacct and vmlimit suites are outside every profile in a build
+# whose sanitizer carries a runtime, and are the exclusions that are
+# neither a cost nor something a machine has to supply. Two of those five weigh the process
 # through getrusage and three run it under valgrind, so a runtime that
 # holds freed memory in quarantine and maps shadow memory of its own
 # leaves them nothing to measure and all five fail. A developer running
@@ -552,6 +556,17 @@ endif
 # selects them again with nothing in the tree edited. The other direction
 # is checked too: where the heap is left alone, a profile over their costs
 # that selects none of them fails rather than running quietly without them.
+#
+# vmlimit is the same argument over a different property of the same
+# runtimes. Those two tests impose an address-space limit of two hundred
+# megabytes so that the accumulator they are about cannot grow past it,
+# and a sanitizer that maps shadow memory reserves far more than that
+# before the interpreter reaches its first line -- the process does not
+# start, the wrapper says so and skips, and `everything` then has to be
+# told to excuse it on every run. It is read off `b_sanitize` for the
+# same reason and in the same place, and `undefined` is again the
+# exception: it instruments arithmetic and casts, reserves nothing, and
+# both tests pass under it.
 #
 # What the cheap rung does not answer is the memacct question. Two of
 # the five tests that ask it are in the quick profile, and both weigh
@@ -1411,7 +1426,7 @@ test('pdf-append-fail',
   find_program('tests/run-append-fail-test.sh'),
   args: [ xpost_exe, files('tests/pdf_append_fail_test.ps'), 'pdfwrite' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_fast + ['vmlimit'],
   timeout: 120)
 
 # The same append-completeness contract on the svgwrite device, whose
@@ -1420,7 +1435,7 @@ test('svg-append-fail',
   find_program('tests/run-append-fail-test.sh'),
   args: [ xpost_exe, files('tests/svg_append_fail_test.ps'), 'svgwrite' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_fast + ['vmlimit'],
   timeout: 120)
 
 # Access attributes in the device blitters: painting into a raster row a

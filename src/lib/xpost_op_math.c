@@ -377,15 +377,21 @@ int Rlog(Xpost_Context *ctx,
 }
 
 /* -  rand  int
-   generate pseudo-random integer */
+   generate pseudo-random integer.
+
+   The answer is assembled from the low sixteen bits of two successive
+   states and is held to 0 through 2^31-1, which is the range PLRM 8.2
+   states whatever the integer's width. The state itself advances in its
+   own field: a field of any width carries the same low bits forward, so
+   the sequence this returns is the one sequence at every width. */
 static
 int Zrand(Xpost_Context *ctx)
 {
     unsigned x;
     ctx->rand_next = ctx->rand_next * 1103515245 + 12345;
-    x = ctx->rand_next << 16;
+    x = (unsigned)ctx->rand_next << 16;
     ctx->rand_next = ctx->rand_next * 1103515245 + 12345;
-    x |= ctx->rand_next & 0xffff;
+    x |= (unsigned)ctx->rand_next & 0xffff;
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(x & 0x7fffffff)))
         return stackoverflow;
     return 0;
@@ -397,16 +403,20 @@ static
 int Isrand(Xpost_Context *ctx,
            Xpost_Object seed)
 {
-    ctx->rand_next = seed.int_.val;
+    ctx->rand_next = (dword)seed.int_.val;
     return 0;
 }
 
 /* -  rrand  int
-   return random number seed */
+   return random number seed.
+
+   The state is the integer of the same twos-complement representation, so
+   the seed srand was given is the integer this answers with. */
 static
 int Zrrand(Xpost_Context *ctx)
 {
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->rand_next)))
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((integer)ctx->rand_next)))
         return stackoverflow;
     return 0;
 }

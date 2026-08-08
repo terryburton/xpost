@@ -990,15 +990,34 @@ int xpost_op_file_status (Xpost_Context *ctx,
     return 0;
 }
 
+/* A quantity the file system reports, as the integer object that carries
+   it. The file system counts in its own width and the object counts in
+   the integer's, and the two are not the same width everywhere: a count
+   past what the integer holds has no integer to be reported as, and the
+   integer it would be narrowed to is a different count -- a length of
+   three thousand million bytes narrows to a negative length. So it is
+   refused rather than reported. */
+static
+int _as_integer(long v, integer *out)
+{
+    *out = (integer)v;
+    return (long)*out == v;
+}
+
 /* string  status  pages bytes referred created true | false
    report on a named file: its block count, size, and access and modification
-   times if it exists and the sandbox permits it, otherwise false */
+   times if it exists and the sandbox permits it, otherwise false.
+
+   PLRM 8.2 has bytes be the file's length and has larger times mean later
+   ones, so each of the four is refused rather than narrowed: a narrowed
+   length is not the length, and narrowed times do not keep their order. */
 static
 int xpost_op_string_status (Xpost_Context *ctx,
                             Xpost_Object S)
 {
     char *sbuf;
     long pages, bytes, referred, created;
+    integer ipages, ibytes, ireferred, icreated;
     int exists;
 
     sbuf = xpost_string_allocate_cstring(ctx, S);
@@ -1008,10 +1027,15 @@ int xpost_op_string_status (Xpost_Context *ctx,
     free(sbuf);
     if (exists)
     {
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pages));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(bytes));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(referred));
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(created));
+        if (!_as_integer(pages, &ipages)
+         || !_as_integer(bytes, &ibytes)
+         || !_as_integer(referred, &ireferred)
+         || !_as_integer(created, &icreated))
+            return limitcheck;
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ipages));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ibytes));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ireferred));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(icreated));
     }
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(exists));
     return 0;
@@ -1236,13 +1260,18 @@ int xpost_op_fileposition (Xpost_Context *ctx,
                            Xpost_Object F)
 {
     long pos;
+    integer ipos;
     if (!xpost_file_get_status(ctx->lo, F))
         return ioerror;
     pos = xpost_file_tell(xpost_file_get_file_pointer(ctx->lo, F));
     if (pos == -1)
         return ioerror;
-    else
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pos));
+    /* PLRM 8.2 has the result be a nonnegative count of bytes from the
+       start of the file, which a position past the integer's width has no
+       way to be: narrowed, it comes back as a position further back */
+    if (!_as_integer(pos, &ipos))
+        return limitcheck;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ipos));
     return 0;
 }
 

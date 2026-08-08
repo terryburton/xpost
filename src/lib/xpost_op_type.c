@@ -36,6 +36,7 @@
 #include <stddef.h>
 
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
@@ -269,14 +270,26 @@ int _num_token_end(char c)
    from the string with the scanner's token semantics -- leading
    white space skipped, the token must be a complete numeral, and
    whatever follows its end is ignored; returns 0 on success or an
-   error code */
+   error code.
+
+   A radix numeral denotes the integer of the same twos-complement
+   representation (PLRM 3.2), which is a value no real carries: the top
+   of the integer's field is a negative integer and a positive real of
+   that magnitude both, and a numeral read into a real arrives as the
+   second. So it is answered in the integer's own field, in *ival with
+   *isint set, and the other forms are answered in *out as before. */
 static
 int _string_to_number(const char *t,
-                      double *out)
+                      double *out,
+                      integer *ival,
+                      int *isint)
 {
     char *end;
     long base;
     double num;
+
+    *isint = 0;
+    *ival = 0;
 
     while (*t == ' ' || *t == '\t' || *t == '\n'
         || *t == '\r' || *t == '\f')
@@ -287,20 +300,32 @@ int _string_to_number(const char *t,
     base = strtol(t, &end, 10);
     if (end != t && *end == '#' && base >= 2 && base <= 36)
     {
-        /* the numeral is read into a field that spans the integer's, so
-           what it converts to is decided by the integer's range below and
-           not by the width of whichever C type the conversion returns */
-        long long v;
+        /* PLRM 3.2: a radix numeral is unsigned, so it is read unsigned
+           into a field that spans the integer's and the whole of that
+           field is available to it */
+        unsigned long long v;
         const char *p = end + 1;
-        if (_num_token_end(*p))
+        /* the digits are alphanumeric and nothing else, so a sign here is
+           not part of the numeral: the scanner reads the characters as a
+           name, and an unsigned conversion would read the sign as a
+           negation and make a numeral of them */
+        if (!isalnum((unsigned char)*p))
             return typecheck;
         errno = 0;
-        v = strtoll(p, &end, (int)base);
+        v = strtoull(p, &end, (int)base);
         if (!_num_token_end(*end))
             return typecheck;
         if (errno == ERANGE)
             return limitcheck;
-        *out = (double)v;
+        /* it becomes the integer of the same twos-complement representation,
+           so it must fit the integer's own field; one that exceeds that field
+           is the limitcheck PLRM 3.2 names, neither narrowed to fit nor
+           carried out as a real */
+        if (v > (unsigned long long)(dword)~(dword)0)
+            return limitcheck;
+        *isint = 1;
+        *ival = (integer)(dword)v;
+        *out = (double)*ival;
         return 0;
     }
 
@@ -331,13 +356,21 @@ int Scvi(Xpost_Context *ctx,
          Xpost_Object s)
 {
     double dbl;
+    integer ival;
+    int isint;
     int ret;
     char *t = xpost_string_allocate_cstring(ctx, s);
 
-    ret = _string_to_number(t, &dbl);
+    ret = _string_to_number(t, &dbl, &ival, &isint);
     free(t);
     if (ret)
         return ret;
+    /* a numeral already in the integer's field is the integer it denotes */
+    if (isint)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ival));
+        return 0;
+    }
     /* a numeral that does not fit the integer type is rangecheck (PLRM cvi) */
     if (dbl >= XPOST_INTEGER_HI_D + 1.0 || dbl <= XPOST_INTEGER_LO_D - 1.0)
         return rangecheck;
@@ -391,15 +424,20 @@ int Scvr(Xpost_Context *ctx,
          Xpost_Object str)
 {
     double num;
+    integer ival;
+    int isint;
     int ret;
     char *s = xpost_string_allocate_cstring(ctx, str);
 
-    ret = _string_to_number(s, &num);
+    ret = _string_to_number(s, &num, &ival, &isint);
     free(s);
     if (ret)
         return ret;
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)num));
+    /* the integer a radix numeral denotes, converted (PLRM cvr), rather
+       than the magnitude its unsigned reading has */
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_real_cons(isint ? (real)ival : (real)num));
     return 0;
 }
 

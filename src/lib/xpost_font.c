@@ -85,7 +85,7 @@ static FT_Library _xpost_font_ft_library = NULL;
 typedef struct Xpost_Glyph_Entry
 {
     const void *k1;            /* face, or the procedure font's key */
-    unsigned long k2;          /* glyph index or character selector */
+    unsigned long long k2;     /* glyph index or character selector */
     long m[4];                 /* the 16.16 transform in force */
     long size;                 /* the base size the face serves */
     unsigned char *bits;
@@ -117,16 +117,16 @@ static int gcache_nstate = 0;
 static const Xpost_Glyph_Entry *gcache_serving = NULL;
 
 static unsigned int
-gcache_hashkey(const void *k1, unsigned long k2, const long m[4], long size)
+gcache_hashkey(const void *k1, unsigned long long k2, const long m[4], long size)
 {
-    unsigned long h = (unsigned long)(size_t)k1;
+    unsigned long long h = (unsigned long long)(size_t)k1;
 
     h = h * 31 + k2;
-    h = h * 31 + (unsigned long)m[0];
-    h = h * 31 + (unsigned long)m[1];
-    h = h * 31 + (unsigned long)m[2];
-    h = h * 31 + (unsigned long)m[3];
-    h = h * 31 + (unsigned long)size;
+    h = h * 31 + (unsigned long long)m[0];
+    h = h * 31 + (unsigned long long)m[1];
+    h = h * 31 + (unsigned long long)m[2];
+    h = h * 31 + (unsigned long long)m[3];
+    h = h * 31 + (unsigned long long)size;
     return (unsigned int)(h % GCACHE_BUCKETS);
 }
 
@@ -173,7 +173,7 @@ gcache_state_get(const void *face, long m[4], long *size)
 }
 
 static Xpost_Glyph_Entry *
-gcache_find(const void *k1, unsigned long k2, const long m[4], long size)
+gcache_find(const void *k1, unsigned long long k2, const long m[4], long size)
 {
     Xpost_Glyph_Entry *e;
 
@@ -223,7 +223,7 @@ gcache_drop(Xpost_Glyph_Entry *e)
 }
 
 static Xpost_Glyph_Entry *
-gcache_insert(const void *k1, unsigned long k2, const long m[4], long size,
+gcache_insert(const void *k1, unsigned long long k2, const long m[4], long size,
               const unsigned char *bits, int rows, int width, int pitch,
               char pixel_mode, int left, int top,
               long advance_x, long advance_y)
@@ -330,7 +330,7 @@ xpost_font_cache_setparams(long bmax, long lower, long upper)
 }
 
 int
-xpost_mask_cache_lookup(const void *k1, unsigned long k2,
+xpost_mask_cache_lookup(const void *k1, unsigned long long k2,
                              const long m[4], long size,
                              unsigned char **bits, int *rows, int *width,
                              int *pitch, int *left, int *top,
@@ -349,7 +349,7 @@ xpost_mask_cache_lookup(const void *k1, unsigned long k2,
 }
 
 int
-xpost_mask_cache_insert(const void *k1, unsigned long k2,
+xpost_mask_cache_insert(const void *k1, unsigned long long k2,
                              const long m[4], long size,
                              const unsigned char *bits, int rows, int width,
                              int pitch, int left, int top,

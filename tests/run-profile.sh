@@ -34,15 +34,19 @@
 # never in the tree, and is held from both ends: a name it excuses that
 # turns out to have run is an excuse that has lapsed and fails too.
 #
-# The memacct tests are the one case that is neither. They weigh the
-# memory a run holds rather than the answers it gives, so a build whose
-# sanitizer holds freed memory in quarantine and carries shadow maps of
-# its own leaves them nothing to measure and all five fail. That is not
-# something the run was given nothing to work on -- a skip would say
-# that, and would then have to be excused every time -- and it is not a
-# fault in the tree either. It is a property of the build, recorded in
-# the build directory, which is why it is read off the build and why no
-# profile selects them where it holds. Never selected is what keeps them
+# The memacct and vmlimit tests are the cases that are neither. The
+# memacct five weigh the memory a run holds rather than the answers it
+# gives, so a build whose sanitizer holds freed memory in quarantine and
+# carries shadow maps of its own leaves them nothing to measure and all
+# five fail. The vmlimit two run the interpreter under an address-space
+# limit tight enough to deny an accumulator its next doubling, and a
+# runtime that reserves an address space larger than that limit stops the
+# process from starting at all, which the wrapper reports as a skip.
+# Neither is something the run was given nothing to work on -- a skip
+# would say that, and would then have to be excused every time -- and
+# neither is a fault in the tree. Both are properties of the build,
+# recorded in the build directory, which is why they are read off the
+# build and why no profile selects those tests where they hold. Never selected is what keeps them
 # from being silently absent: they leave the count the profile reports,
 # every profile says so in its verdict, and `everything` says in its own
 # terms that the run does not speak for them. A declared list in the tree
@@ -113,15 +117,20 @@ case $profile in
             exit 1 ;;
 esac
 
-# Whether this build displaces the measurement the memacct tests take.
-# Two of them weigh the process through getrusage and three run it under
-# valgrind, so what puts the measurement out of reach is a runtime that
-# intercepts the allocator or maps shadow memory of its own: the address,
-# leak, memory and thread sanitizers do, and valgrind will not run over
-# any of them either. `undefined` does neither -- it instruments
-# arithmetic and casts and leaves the heap where it was -- and all five
-# pass under it, so it is the one sanitizer they are still answerable in
-# and it is not read as displacing them.
+# Whether this build carries a sanitizer runtime, which is what puts
+# both the memacct measurement and the vmlimit limit out of reach.
+#
+# Two memacct tests weigh the process through getrusage and three run it
+# under valgrind, so what puts that measurement out of reach is a runtime
+# that intercepts the allocator or maps shadow memory of its own: the
+# address, leak, memory and thread sanitizers do, and valgrind will not
+# run over any of them either. The vmlimit two impose an address-space
+# limit of two hundred megabytes, which the same runtimes reserve past
+# before the interpreter reaches its first line. `undefined` does none of
+# it -- it instruments arithmetic and casts, leaves the heap where it was
+# and reserves nothing -- and all seven pass under it, so it is the one
+# sanitizer they are still answerable in and it is not read as displacing
+# them.
 #
 # The value is taken from between "value" and "section" in the
 # introspection, which is where the choices list -- which always names
@@ -145,13 +154,13 @@ if [ -z "$sanval" ]; then
     # them from a build that could have run them is the silence the whole
     # of this wrapper exists to prevent.
     echo "profile $profile: could not read b_sanitize from $build, so the"
-    echo "      memacct tests are selected; they cannot pass under a"
-    echo "      sanitizer that displaces the heap"
+    echo "      memacct and vmlimit tests are selected; they cannot pass"
+    echo "      under a sanitizer that carries a runtime"
 elif printf '%s\n' "$sanval" | tr -c 'a-z' ' ' | tr ' ' '\n' |
      grep -vx '' | grep -vx none | grep -qvx undefined; then
     displaces=yes
-    filter="$filter --no-suite memacct"
-    without="$without memacct"
+    filter="$filter --no-suite memacct --no-suite vmlimit"
+    without="$without memacct vmlimit"
 fi
 
 work=$(mktemp -d 2>/dev/null) || work=
@@ -223,23 +232,25 @@ fi
 selected=$(wc -l < "$work/want")
 echo "profile $profile: $what -- $selected of $(wc -l < "$work/all") tests"
 
-# How many tests weigh a run's memory: in the build, and in what this
+# How many tests carry a named suite: in the build, and in what this
 # profile selected. Both are counted off the listing rather than from a
 # number written here, so neither can drift from what the tree carries,
 # and both read the suite field rather than the line, so a test whose
 # name happens to say memacct is not one of them.
-count_memacct() {
-    awk '{
+count_suite() {
+    awk -v want="$2" '{
         i = index($0, " / ")
         if (i == 0) next
         suites = substr($0, 1, i - 1)
         sub(/^[^:]*:/, "", suites)
         n = split(suites, s, "+")
-        for (j = 1; j <= n; j++) if (s[j] == "memacct") { c++; break }
+        for (j = 1; j <= n; j++) if (s[j] == want) { c++; break }
     } END { print c + 0 }' "$1"
 }
-nmemacct=$(count_memacct "$work/all")
-nmemacct_sel=$(count_memacct "$work/want")
+nmemacct=$(count_suite "$work/all" memacct)
+nmemacct_sel=$(count_suite "$work/want" memacct)
+nvmlimit=$(count_suite "$work/all" vmlimit)
+nvmlimit_sel=$(count_suite "$work/want" vmlimit)
 
 # Said only by the profiles that would otherwise hold them: the corpus
 # and the consumer suite never carry the tag, so an exclusion notice
@@ -247,9 +258,11 @@ nmemacct_sel=$(count_memacct "$work/want")
 case $profile in
   quick|full|everything)
     if [ "$displaces" = yes ]; then
-        echo "profile $profile: this build's sanitizer displaces the heap, so the"
+        echo "profile $profile: this build carries a sanitizer runtime, so the"
         echo "      $nmemacct memacct test(s) are outside it -- they weigh the memory a"
-        echo "      run holds, which a quarantine and shadow maps put out of reach"
+        echo "      run holds, which a quarantine and shadow maps put out of reach --"
+        echo "      and so are the $nvmlimit vmlimit test(s), whose address-space limit"
+        echo "      the same runtime reserves past before the interpreter starts"
     elif [ "$nmemacct" -gt 0 ] && [ "$nmemacct_sel" -eq 0 ]; then
         # The other side of the same claim. Where the heap is left alone
         # the five are answerable and a profile over their costs has to
@@ -260,6 +273,13 @@ case $profile in
         echo "      memacct test(s) in a build that leaves the heap alone,"
         echo "      so the tests that weigh a run's memory would go unrun"
         echo "      with nothing in the verdict saying so"
+        exit 1
+    elif [ "$nvmlimit" -gt 0 ] && [ "$nvmlimit_sel" -eq 0 ]; then
+        # The same claim about the other exclusion.
+        echo "FAILURES: the $profile profile selects none of the $nvmlimit"
+        echo "      vmlimit test(s) in a build that reserves no address space"
+        echo "      of its own, so the tests that run under an address-space"
+        echo "      limit would go unrun with nothing in the verdict saying so"
         exit 1
     fi ;;
 esac
@@ -365,6 +385,8 @@ if [ "$profile" = everything ]; then
     if [ "$displaces" = yes ]; then
         echo "profile everything: this run does not speak for the $nmemacct memacct"
         echo "      test(s) -- this build's sanitizer displaces the memory they weigh"
+        echo "profile everything: nor for the $nvmlimit vmlimit test(s) -- the same"
+        echo "      runtime reserves past the address-space limit they impose"
     fi
 fi
 

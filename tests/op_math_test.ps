@@ -7,6 +7,8 @@
 %   - RAD_PER_DEG is M_PI/180, so atan/sin/cos hit the PLRM examples
 %   - bitshift moves a bit pattern: the fill is 0 both ways and a count
 %     that reaches the integer's width leaves nothing
+%   - rand answers within the range PLRM states, and the state rrand reports
+%     is an integer srand takes back whole
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
@@ -138,5 +140,32 @@ intmin -1 mul 0 gt (INT_MIN -1 mul is the positive product) assert
 { rand type /integertype eq } immediateok (rand result is consumable in its own procedure) assert
 { rand 0 ge } immediateok (rand yields a nonnegative integer) assert
 { 42 srand rrand 42 eq } immediateok (rrand result is consumable in its own procedure) assert
+
+% --- the generator's state is an integer (PLRM 8.2 rand, srand, rrand) ---
+% rand answers in 0 to 2^31-1 whatever the integer's width. srand takes any
+% integer value as the seed and rrand reports the state as an integer that
+% may be presented to srand to put the generator back where it stood, so a
+% seed has to come back out of rrand as the integer that went in and the
+% sequence has to resume from it. That holds only while the state is at
+% least as wide as the integer: a seed the state cannot hold comes back as
+% a different integer, and the widest and narrowest integers are the seeds
+% that say so.
+/maxint 1 { dup 2 mul dup type /integertype eq { exch pop }{ pop exit } ifelse } loop
+        dup 1 sub add def
+/minint maxint neg 1 sub def
+rand 0 ge (rand is nonnegative) assert
+rand 2147483647 le (rand stops below two to the thirty-first) assert
+0 srand rrand 0 eq (a zero seed comes back) assert
+-1 srand rrand -1 eq (a negative seed comes back negative) assert
+12345 srand rrand 12345 eq (a seed comes back as itself) assert
+maxint srand rrand maxint eq (the widest seed comes back whole) assert
+minint srand rrand minint eq (the narrowest seed comes back whole) assert
+% a state read part way through the sequence resumes it where it was read
+7 srand rand pop rand pop
+/held rrand def
+/next1 rand def
+/next2 rand def
+held srand rand next1 eq (a restored state resumes the sequence) assert
+rand next2 eq (and carries on through it) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
