@@ -665,6 +665,26 @@ setglobal
     quit
 } def
 
+% Load the language and lock the interpreter down, and run no program.
+% Each start procedure above begins by doing this, and both halves are
+% idempotent, so one that has already run here repeats nothing. It is
+% separated out for a caller that has to have the language standing
+% before the run begins rather than as its first act: the load happens
+% once in the life of a context and leaves state behind it that virtual
+% memory does not hold, so it is not something a run can be made to do
+% again. Failure is left unreported here -- the start procedure that
+% follows meets it too, and reports it there as it does on its own.
+/loadlanguage {
+    { //.xpostsys /loadgraphics get exec
+      //.xpostsys /.finalize get exec } stopped pop
+    quit
+} def
+
+/loadlanguagenographics {
+    { //.xpostsys /.finalize get exec } stopped pop
+    quit
+} def
+
 /prompt [ ] {
     (PS) print
     count dup 0 eq { pop } { (<) print //=print exec } ifelse
@@ -715,7 +735,8 @@ setglobal
 % them among systemdict's names. They bind with the rest of privatedict in
 % .finalize, before any program can shadow the operator names they call.
 [ /start /startstdin /startfilename /startfile
-  /startstdinnographics /startfilenamenographics /startfilenographics ]
+  /startstdinnographics /startfilenamenographics /startfilenographics
+  /loadlanguage /loadlanguagenographics ]
 { dup systemdict exch known
     { dup dup systemdict exch get .privatedict 3 1 roll put systemdict exch undef }
     { pop } ifelse

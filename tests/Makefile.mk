@@ -61,6 +61,7 @@ tests/colorspace_matrix_test.ps \
 tests/colour_range_test.ps \
 tests/colour_sampling_test.ps \
 tests/composite_limit_test.ps \
+tests/context_jobs_test.c \
 tests/context_reuse_test.c \
 tests/corpus/.gitignore \
 tests/corpus/README.md \
@@ -230,6 +231,7 @@ tests/render_classes_test.ps \
 tests/resource_load_test.c \
 tests/resource_matrix_test.ps \
 tests/roll_test.ps \
+tests/run_invalid_context_test.c \
 tests/run-append-fail-test.sh \
 tests/run-bbox-test.sh \
 tests/run-bintok-test.sh \
