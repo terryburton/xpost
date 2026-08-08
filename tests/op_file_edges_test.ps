@@ -5,6 +5,35 @@
 % The happy paths are covered elsewhere; this pins the boundaries: empty
 % operands, end of data, closed files, files that do not exist, and the
 % operators whose result on a filter differs from a positionable disk file.
+%
+% One boundary is stated here and tested by reproduction rather than by
+% this file: a length or a position the integer object cannot carry.
+% status and fileposition weigh the quantity the file system reports
+% against the integer that has to report it and raise limitcheck where it
+% will not fit, and the quantities below are all small enough to fit, so
+% only the near side of that bound is asserted here. To see the far side,
+% on a build with the narrower integer:
+%
+%     truncate -s 3G f
+%     xpost -q --no-sandbox -d null -   <<'EOF'
+%     { (f) status } stopped { $error /errorname get == } if
+%     /h (f) (r) file def
+%     h 2147483647 setfileposition h read pop pop
+%     { h fileposition } stopped { $error /errorname get == } if
+%     EOF
+%
+% Both report limitcheck there, and both report the quantity on a build
+% whose integer reaches that far.
+%
+% It is not automated because the far side exists only where the file
+% system's own count is wider than the integer object's. The quantities
+% arrive from the file system as C longs, so where a long is the width of
+% the integer -- which is every Windows build, and every build with the
+% wider integer object -- the value is already narrowed before the check
+% sees it and the check cannot fire. The only lane that would pay for the
+% file is the lane that would learn nothing from it: a three-gigabyte file
+% is a sparse file and costs nothing on the file systems where the check
+% can fire, and is three gigabytes written on the one where it cannot.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
