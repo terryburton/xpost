@@ -1,0 +1,132 @@
+% The glyph cache's key, run through `xpost -d null` by run-ps-test.sh:
+% prints SUCCESS iff every assertion holds.
+%
+% The cache remembers a glyph under an integer made from the font's
+% serial and the character code. The serial lives in the font dictionary
+% under .fontid, and a font dictionary is the program's: definefont
+% stamps a serial only where there is none, and nothing stops a program
+% writing its own there, writing something that is not a serial at all,
+% or removing it. So the key is made from whatever is there, and what is
+% there may be no key at all -- a serial far enough out that the pair
+% leaves the integer range arrives as a real, and the narrower of the two
+% object widths leaves it sooner.
+%
+% A glyph whose font has no key builds direct. Two things are asserted
+% about that, because either alone would admit a wrong fix: the glyph is
+% drawn, and it is drawn from its own outline rather than from whatever
+% mask a serial reduced into range happened to land on.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- a raster to draw into and read back ---
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/snap { % - . [rows]
+    [ 0 1 63 { DEV /ImgData get exch get dup length string copy } for ]
+} bind def
+/same { % [rows] [rows] . bool
+    /gk.b exch def /gk.a exch def
+    true 0 1 63 {
+        /gk.i exch def
+        gk.a gk.i get gk.b gk.i get eq and
+    } for
+} bind def
+/ink { % [rows] . n
+    0 exch { { 128 lt { 1 add } if } forall } forall
+} bind def
+% what the cache is holding: the entry count cachestatus reports
+/csize { cachestatus 7 array astore 4 get } bind def
+
+% --- Type 3 fonts: a glyph whose size is the font's, so two fonts can
+%     be told apart by what they draw ---
+/mkfont { % size id . font
+    /gk.id exch def /gk.sz exch def
+    8 dict dup begin
+        /FontType 3 def
+        /FontMatrix [0.001 0 0 0.001 0 0] def
+        /FontBBox [0 0 1000 1000] def
+        /Encoding 256 array def
+        0 1 255 { Encoding exch /.notdef put } for
+        Encoding 65 /A put
+        /gk.side gk.sz def
+        /CharProcs 2 dict def
+        CharProcs /A {
+            gk.side 50 add 0  0 0 gk.side gk.side setcachedevice
+            0 0 gk.side gk.side rectfill
+        } put
+        CharProcs /.notdef { 0 0 setcharwidth } put
+        /BuildChar { exch begin
+            Encoding exch get CharProcs exch get exec
+        end } def
+        gk.id null ne { /.fontid gk.id def } if
+    end
+} bind def
+
+/draw { % font . [rows]
+    1 setgray 0 0 64 64 rectfill 0 setgray
+    30 scalefont setfont
+    2 4 moveto (A) show
+    snap
+} bind def
+
+% The serial that overflows is the one just past the width the build has:
+% the pair is the serial times 256 with the code beside it, so the first
+% serial that cannot be paired is the integer range shifted down 8 bits.
+/wideint 2147483648 type /integertype eq def
+/bigid wideint { 36028797018963968 }{ 8388608 } ifelse def
+
+/base0 csize def
+/rbig 700 null mkfont /GKbig exch definefont draw def
+/rsmall 300 null mkfont /GKsmall exch definefont draw def
+/basecached csize def
+
+% The two shapes have to be distinguishable, or nothing below says
+% anything: a comparison that cannot tell them apart passes whatever the
+% cache serves.
+rbig ink 0 gt (a glyph with a serial the cache can key leaves ink) assert
+rsmall ink 0 gt (the second shape leaves ink too) assert
+rbig rsmall same not (the two shapes are told apart) assert
+basecached base0 gt (a font the cache can key fills the cache) assert
+
+% --- a serial the pair cannot be made from ---
+/rhostile 300 bigid mkfont /GKhostile exch definefont draw def
+rhostile rsmall same
+    (a glyph whose serial overflows the key is drawn from its own outline) assert
+rhostile rbig same not
+    (it is not drawn from the mask a reduced serial would have found) assert
+csize basecached eq
+    (a glyph with no key files nothing in the cache) assert
+
+% --- the other shapes .fontid can take ---
+/rreal 300 1.5 mkfont /GKreal exch definefont draw def
+rreal rsmall same (a serial that is a real is not a key) assert
+/rstr 300 (x) mkfont /GKstr exch definefont draw def
+rstr rsmall same (a serial that is a string is not a key) assert
+/rname 300 /x mkfont /GKname exch definefont draw def
+rname rsmall same (a serial that is a name is not a key) assert
+/GKgone 300 null mkfont /GKgone exch definefont def
+GKgone /.fontid undef
+/rgone GKgone draw def
+rgone rsmall same (a font with no serial at all is not a key) assert
+csize basecached eq
+    (none of them files anything in the cache) assert
+
+faildict /n get 0 eq { (SUCCESS) = } { (FAILURES: ) print faildict /n get = } ifelse

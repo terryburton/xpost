@@ -207,12 +207,31 @@ currentglobal true setglobal
 } put
 setglobal
 
-% -  .glyphkey  int
+% -  .glyphkey  int true
+%                   false
 % What the mask cache is asked to remember a glyph by: the font's serial,
 % stamped by definefont, with the character code beside it. Any other
 % caller names its masks its own way; the cache does not interpret this.
+%
+% The serial is whatever the font dictionary carries under .fontid, and a
+% font dictionary is the program's to write: definefont stamps a serial
+% only where there is none, and nothing stops a program putting its own
+% there or taking it away. So a serial that is not an integer, or one far
+% enough out that the pair leaves the integer range and arrives as a real,
+% is a serial this key cannot be made from, and that is answered rather
+% than carried into the cache. The pair is injective over every integer
+% serial, so two fonts never share a key; there is no reduction into range
+% here, because a key collision is a glyph drawn from another font's mask.
 .xpostsys /.glyphkey {
-    font /.fontid get 256 mul code 255 and add
+    font /.fontid known {
+        font /.fontid get
+        dup type /integertype eq {
+            256 mul dup type /integertype eq {
+                code 255 and add
+                dup type /integertype eq { true }{ pop false } ifelse
+            }{ pop false } ifelse
+        }{ pop false } ifelse
+    }{ false } ifelse
 } bind put
 
 % wx wy llx lly urx ury  .maskcapture  -
@@ -318,14 +337,19 @@ currentglobal true setglobal
     /clipok .cliprect {
         4 array astore /cliparr exch def true
     }{ false } ifelse def
+    % the key names the entry for the rest of this build, so it is taken
+    % once here: a glyph whose font carries no key the cache can be asked
+    % for builds direct, as one outside the clip does
+    /keyok //.xpostsys /.glyphkey get exec
+        { /gkey exch def true }{ false } ifelse def
     % A captured mask is coverage, replayed in the one colour the
     % raster route reads out of the graphics state, so a pattern
     % cannot come through it. The build runs direct instead, where its
     % own marks go through the ordinary fill and the pattern's paint
     % is tiled over them.
-    /maskok clipok //.xpostsys /.patternink get exec not and def
+    /maskok clipok keyok and //.xpostsys /.patternink get exec not and def
     maskok
-    { devx devy devmat //.xpostsys /.glyphkey get exec cliparr .maskcachehit }
+    { devx devy devmat gkey cliparr .maskcachehit }
     { false } ifelse
     {
         /ya exch def /xa exch def
@@ -365,13 +389,13 @@ currentglobal true setglobal
                 /ox cap /ox get /oy cap /oy get
                 /advx cap /advx get
                 /advy cap /advy get
-                /mat devmat /key //.xpostsys /.glyphkey get exec
+                /mat devmat /key gkey
             >> .maskcacheput
         } if
         grestore
         cap null ne {
             maskok
-            { devx devy devmat //.xpostsys /.glyphkey get exec cliparr .maskcachehit }
+            { devx devy devmat gkey cliparr .maskcachehit }
             { false } ifelse
             {
                 /ya exch def /xa exch def

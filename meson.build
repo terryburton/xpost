@@ -1523,6 +1523,18 @@ test('font-private',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The glyph cache is keyed by the serial a font dictionary carries, and
+# that dictionary is the program's to write: a serial that is not an
+# integer, or one whose pair with the character code leaves the integer
+# range, is no key at all. A glyph whose font has no key builds direct --
+# drawn, and drawn from its own outline rather than from the mask a
+# serial reduced into range would have found.
+test('font-glyphkey',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_glyphkey_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A screening device's threshold cell is addressed by two dimensions
 # carried beside it in the device dictionary, so a pair of dimensions
 # the cell does not hold leaves the fill unscreened rather than reading
