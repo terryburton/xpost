@@ -106,15 +106,20 @@ jobs:
         # the setting holds only by being stated.
         ASAN_OPTIONS: detect_leaks=0:abort_on_error=0
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      # memacct weighs the process, which a sanitizer's shadow maps and
-      # quarantine necessarily perturb, and one of its tests runs a leak
-      # checker of its own.
+      # Through the profile wrapper, which reads off the build which
+      # tests this build can answer for: memacct weighs the process,
+      # which a sanitizer's shadow maps and quarantine necessarily
+      # perturb, and vmlimit runs under an address-space limit the same
+      # runtime reserves past. Naming either here would be a second copy
+      # of that knowledge, and a copy that stops agreeing with the tree
+      # is how a suite quietly runs less than it says.
       #
       # No --timeout-multiplier: meson.build scales the limits itself
       # where the build is sanitized, so they arrive scaled and a
       # multiplier here would multiply what was multiplied.
       run: |
-        meson test -C builddir --print-errorlogs --no-suite memacct
+        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh full \
+          --print-errorlogs
 
   leaks:
     name: leak check
@@ -198,7 +203,8 @@ jobs:
         LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
       run: |
         mkdir -p leak-logs
-        meson test -C builddir --print-errorlogs --no-suite memacct
+        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh full \
+          --print-errorlogs
         echo '--- processes reporting a leak ---'
         leaks=$(grep -l 'LeakSanitizer: detected' leak-logs/* 2>/dev/null \
           | wc -l)
