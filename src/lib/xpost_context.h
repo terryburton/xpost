@@ -211,7 +211,11 @@ struct _Xpost_Context {
     unsigned int id; /**< cid for this context */
 
     unsigned int os, es, ds, hold; /**< stack addresses in local VM */
-    unsigned long rand_next; /**< random number seed */
+    /** The random number generator's state (PLRM 8.2 rand, srand, rrand).
+        rrand reports it as an integer and srand takes one back, so it is
+        the integer's own width: a state narrower than that would report a
+        seed as something other than the seed it was given. */
+    dword rand_next;
     unsigned int vmmode; /**< allocating in GLOBAL or LOCAL */
 
     /** The two font directories, so setglobal can rebind the name
