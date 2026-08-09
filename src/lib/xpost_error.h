@@ -41,6 +41,8 @@
 #ifndef XPOST_ERROR_H
 #define XPOST_ERROR_H
 
+#include "xpost.h"  /* XPAPI, for the array declared below */
+
 /*
    X-Macro utilities
    For a commentary on these macros, see my answer to this SO question
@@ -115,7 +117,13 @@ enum err { ERRORS(AS_BARE) };
 /**
  * @brief Printable string representations of Error codes.
  */
-extern const char *errorname[] /*= { ERRORS(AS_STR) }*/;
+/* Data crossing a library boundary needs the same decoration its
+   functions do: a consumer on Windows reaches an array in a DLL through
+   an import reference, and one declared without it has no symbol the
+   linker can resolve. The header carrying that decoration is included
+   above, so every translation unit reading this one sees the same
+   declaration whatever else it includes. */
+XPAPI extern const char *errorname[] /*= { ERRORS(AS_STR) }*/;
 /* puts(errorname[(enum err)limitcheck]); */
 
 /**

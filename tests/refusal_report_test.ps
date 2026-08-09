@@ -41,28 +41,30 @@ bind def
 { 65536 string pop } stopped { /narrow true store } if
 clear
 
-<< /PageSize [30000 8] >> setpagedevice
-0.5 setlinewidth
-newpath 0 1 moveto
-0 1 15000 { dup 2 mul exch 2 mod 0 eq { 7 } { 1 } ifelse lineto } for
-
-/refused false def
-{ stroke } stopped { /refused true store } if
-/why refused { $error /errorname get } { null } ifelse def
-
+% The painting is only done where the refusal can be reached. The entity
+% table is the wider one on a build whose length field is wider, and a
+% path of this size does not exhaust it there, so the work would cost
+% what it costs and settle nothing.
 narrow
-{ refused
-  { why /limitcheck
-    (a path too large to describe reaches the program as a limit) is }
-  { (a path this large was described after all -- the test no longer
-     reaches the refusal it is about) fail }
-  ifelse }
-{ refused
-  { why /limitcheck
-    (a path too large to describe reaches the program as a limit) is }
-  { (# the entity table here is large enough to describe this path:
-     the refusal under test is not reached\n) print flush }
-  ifelse }
+{
+    << /PageSize [30000 8] >> setpagedevice
+    0.5 setlinewidth
+    newpath 0 1 moveto
+    0 1 15000 { dup 2 mul exch 2 mod 0 eq { 7 } { 1 } ifelse lineto } for
+
+    /refused false def
+    { stroke } stopped { /refused true store } if
+    /why refused { $error /errorname get } { null } ifelse def
+
+    refused
+    { why /limitcheck
+      (a path too large to describe reaches the program as a limit) is }
+    { (a path this large was described after all -- the test no longer
+       reaches the refusal it is about) fail }
+    ifelse
+}
+{ (# the entity table here is large enough to describe this path:
+   the refusal under test is not reached\n) print flush }
 ifelse
 clear
 

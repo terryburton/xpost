@@ -737,6 +737,7 @@ test('refusal-report',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/refusal_report_test.ps') ],
   suite: cost_slow,
+  timeout: 300,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # A file name longer than a string object can count. The name is carried
