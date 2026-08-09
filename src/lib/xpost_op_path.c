@@ -141,6 +141,13 @@ static unsigned int _arcto_cont_opcode;
 #define PATH_CMD_CURVE 2
 #define PATH_CMD_CLOSE 3
 
+/* The command byte of an element. The path is held in a char string,
+   whose signedness is the platform's, so the byte is read as the
+   unsigned value it is: every command is a small non-negative number,
+   and a byte that is not one of them must compare above the last rather
+   than below the first on one platform and above it on another. */
+#define PATH_CMD(p, o) ((unsigned char)(p)[(o)])
+
 static unsigned int
 _path_get_u32(const char *p, unsigned int off)
 {
@@ -246,7 +253,7 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
     {
         unsigned int esz;
 
-        if (p[o] < PATH_CMD_MOVE || p[o] > PATH_CMD_CLOSE)
+        if (PATH_CMD(p, o) > PATH_CMD_CLOSE)
             return 0;
         esz = _path_elem_size(p[o]);
         if (esz > used - o)   /* the element must fit the declared content */
@@ -1984,7 +1991,7 @@ int _flattenpath (Xpost_Context *ctx)
        rather than rebuild an identical copy */
     for (o = PATH_HDR; o < used; o += esz)
     {
-        if (p[o] < PATH_CMD_MOVE || p[o] > PATH_CMD_CLOSE)
+        if (PATH_CMD(p, o) > PATH_CMD_CLOSE)
             return unregistered;
         esz = _path_elem_size(p[o]);
         if (esz > used - o)
