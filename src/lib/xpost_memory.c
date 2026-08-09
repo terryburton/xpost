@@ -768,17 +768,29 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
                 limitcheck, ent, XPOST_OBJECT_COMP_MAX_ENT);
         return 0;
     }
-    ++mem->table.nextent;
-
     if (!xpost_memory_file_alloc(mem, sz, &adr))
     {
         XPOST_LOG_ERR("%d unable to allocate entity data storage", VMerror);
         return 0;
     }
 
+    /* The slot is filled before it is counted. Everything that walks the
+       table walks the slots below the count, reading each one's fields,
+       so a slot the count reaches holds what those readers read: the
+       storage the table is kept in is not cleared when it grows, and a
+       slot counted before it was written holds whatever the allocator
+       handed back.
+
+       Counting it after also keeps the grow below on the one path that
+       needs it. The table is grown when the count reaches its capacity,
+       and a request that gave up between the two left the count raised
+       and the grow unreached, so the next slot to be handed out was one
+       past the end of the table. */
     mem->table.tab[ent].adr = adr;
     mem->table.tab[ent].sz = sz;
     mem->table.tab[ent].tag = tag;
+    mem->table.tab[ent].mark = 0;
+    ++mem->table.nextent;
 
     if (mem->table.nextent == mem->table.max)
     {
