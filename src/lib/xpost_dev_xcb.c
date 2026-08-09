@@ -194,6 +194,10 @@ int _create_cont(Xpost_Context *ctx,
         return unregistered;
     }
 
+    /* the screen the connection named. The walk below stops at it, and
+       runs out instead where the server has no such screen; nothing is
+       read through the answer until it is one. */
+    private.scr = NULL;
     iter = xcb_setup_roots_iterator(xcb_get_setup(private.c));
     for (; iter.rem; --scrno, xcb_screen_next(&iter))
     {
@@ -202,6 +206,12 @@ int _create_cont(Xpost_Context *ctx,
             private.scr = iter.data;
             break;
         }
+    }
+    if (!private.scr)
+    {
+        XPOST_LOG_ERR("the display names a screen the server does not have");
+        xcb_disconnect(private.c);
+        return unregistered;
     }
 
     geom = xcb_get_geometry_reply(private.c, xcb_get_geometry(private.c, private.scr->root), 0);
