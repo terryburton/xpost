@@ -48,10 +48,21 @@ for dev in $devices; do
     verdict_ok "$out" "$dev" || fail=1
 done
 
-# The window device needs a display. Where one can be conjured, it is
-# held to the same set: it keeps its own drawable and so carries the same
-# risk of inheriting a method that reaches for a raster it does not have.
-if command -v xvfb-run >/dev/null 2>&1; then
+# The window device needs two things this interpreter may not have: the
+# device itself, which is built only where the X libraries were found,
+# and a display to open. Both are asked for. The interpreter answers the
+# first by listing what it does have when handed a name it does not, so
+# the list is read rather than the build guessed at.
+has_xcb=no
+"$xpost" -q --no-sandbox -d '' /dev/null </dev/null 2>&1 |
+    grep -qx '[[:space:]]*xcb' && has_xcb=yes
+
+# Where one can be conjured, the window device is held to the same set:
+# it keeps its own drawable and so carries the same risk of inheriting a
+# method that reaches for a raster it does not have.
+if [ "$has_xcb" = no ]; then
+    echo "note: this interpreter has no window device, it was not tried"
+elif command -v xvfb-run >/dev/null 2>&1; then
     out=$(xvfb-run -a "$xpost" -q --no-sandbox -d xcb "$script" </dev/null 2>&1)
     status=$?
     ran=$((ran + 1))

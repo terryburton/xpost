@@ -13,30 +13,43 @@ on:
 jobs:
   test:
     strategy:
+      # one run reports every lane: a red lane hides the others otherwise,
+      # and a backlog is then found one failure per run
+      fail-fast: false
       matrix:
         config:
           # qpdf, which the pdf-consumer test hands the written document
-          # to, is built for the 64-bit environment and not for the 32-bit
-          # one, so the structural reading is made on mingw64 and the
-          # 32-bit lane says in its log that it is not making it. Which
-          # lanes carry the reader is named here rather than inferred, so
-          # that the step below can hold each one to its own answer.
+          # to, is installed on one lane only, so the structural reading
+          # is made on mingw64 and the other lane says in its log that it
+          # is not making it. Which lanes carry the reader is named here
+          # rather than inferred, so that the step below can hold each one
+          # to its own answer.
           #
-          # The base 35 fonts are packaged for the same environments, so
-          # the 64-bit lane installs them and the 32-bit lane resolves the
-          # standard names against the faces the host itself carries,
-          # which fontconfig reads on this platform. Both lanes are held
-          # to resolving them either way: the tests run on both, and a
-          # name that reaches no face raises invalidfont wherever it is
-          # named.
-          - msystem: mingw32
+          # The base 35 fonts are packaged for one environment, so that
+          # lane installs them and the other resolves the standard names
+          # against the faces the host itself carries, which fontconfig
+          # reads on this platform. Both lanes are held to resolving them
+          # either way: the tests run on both, and a name that reaches no
+          # face raises invalidfont wherever it is named.
+          #
+          # Both lanes are mingw64. The lane without the reader and the
+          # fonts was mingw32 until MSYS2 stopped packaging fontconfig
+          # for it -- clang32 is empty too, so no 32-bit environment
+          # there can build this, and the pointer-and-long widths a
+          # 32-bit build would have exercised are not covered on this
+          # platform. It is not ucrt64 either: resetfile discards a
+          # stream's read-ahead through fflush, which the MSVCRT runtime
+          # these lanes build against does and the UCRT does not.
+          - lane: bare
+            msystem: mingw64
             reader: none
-            install: base-devel git mingw-w64-i686-toolchain mingw-w64-i686-libjpeg-turbo mingw-w64-i686-libpng mingw-w64-i686-freetype mingw-w64-i686-fontconfig mingw-w64-i686-meson mingw-w64-i686-ninja
-          - msystem: mingw64
+            install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja
+          - lane: full
+            msystem: mingw64
             reader: qpdf
             install: base-devel git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libpng mingw-w64-x86_64-freetype mingw-w64-x86_64-fontconfig mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-qpdf mingw-w64-x86_64-gsfonts
         object: [small, large]
-    name: msys2 - ${{ matrix.config.msystem }} - ${{ matrix.object }}-object
+    name: msys2 - ${{ matrix.config.msystem }} ${{ matrix.config.lane }} - ${{ matrix.object }}-object
     runs-on: windows-latest
     defaults:
       run:

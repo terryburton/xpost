@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     strategy:
+      # one run reports every lane: a red lane hides the others otherwise,
+      # and a backlog is then found one failure per run
+      fail-fast: false
       matrix:
         object: [small, large]
     name: osx - ${{ matrix.object }}-object

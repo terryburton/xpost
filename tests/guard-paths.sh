@@ -126,7 +126,7 @@ guard_mirror_tree() {
     done
     set +f
     eval "( cd \"\$1\" && find data src tests $gm_prune -type f -print )" \
-        2>/dev/null > "$work/gm-list"
+        2>"$work/gm-err" > "$work/gm-list"
     # The directories, and the files a single pass will not reach: an
     # empty one has no line to be read and so is never opened.
     while read -r gm_rel; do
@@ -147,6 +147,14 @@ guard_mirror_tree() {
     done
     if [ ! -r "$mirror/data/init.ps" ] || [ ! -r "$mirror/tests/guard-paths.sh" ]; then
         echo "FAILURES: could not mirror the source tree under $1"
+        echo "      files listed: $(wc -l < "$work/gm-list" 2>/dev/null)"
+        if [ -s "$work/gm-err" ]; then
+            echo "      the walk wrote:"
+            sed 's/^/        /' "$work/gm-err"
+        fi
+        for gm_w in data/init.ps tests/guard-paths.sh; do
+            [ -r "$mirror/$gm_w" ] || echo "      absent from the mirror: $gm_w"
+        done
         exit 1
     fi
     # Counts in against counts out. The pass above is what puts the tree

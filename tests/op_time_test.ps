@@ -45,8 +45,13 @@ usertime u1 sub 0 gt (usertime advances while the interpreter executes) assert
 
 % --- the interpreter has been executing for all the real time it has
 %     used, so the time it reports using is no more than the real time
-%     that has passed since the run began ---
-usertime u0 sub realtime r0 sub le
+%     that has passed since the run began.
+%
+%     Both clocks are read as whole milliseconds and counted from
+%     origins of their own, so each delta is a difference of two
+%     truncations and the pair can disagree by one millisecond without
+%     either being wrong. The comparison allows that much. ---
+usertime u0 sub realtime r0 sub 1 add le
     (the time used is within the real time that passed) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
