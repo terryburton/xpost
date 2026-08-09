@@ -586,6 +586,8 @@ int _fillpoly(Xpost_Context *ctx,
 
         points = malloc((poly.comp_.sz //+ 1
                     ) * sizeof *points);
+        if (!points)
+            return VMerror;
         for (i = 0; i < poly.comp_.sz; i++)
         {
             Xpost_Object pair;

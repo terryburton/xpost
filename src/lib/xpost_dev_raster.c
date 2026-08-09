@@ -243,7 +243,14 @@ int _create_cont(Xpost_Context *ctx,
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+    {
+        /* the record is the only thing that would have named the
+           buffer, and it is not going to. A buffer the caller supplied
+           is the caller's, and is left alone. */
+        if (private.bufowned)
+            free(private.buf);
         return VMerror;
+    }
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);

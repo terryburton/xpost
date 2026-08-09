@@ -156,12 +156,20 @@ int _create_cont(Xpost_Context *ctx,
     {
         /* allocate buffer header and array */
         private.buf = malloc(sizeof(Xpost_Bgr_Buffer) + sizeof(Xpost_Bgr_Pixel)*width*height);
+        if (!private.buf)
+            return VMerror;
         private.bufowned = 1;
     }
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+    {
+        /* the record is the only thing that would have named the
+           buffer, and it is not going to */
+        if (private.bufowned)
+            free(private.buf);
         return VMerror;
+    }
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);

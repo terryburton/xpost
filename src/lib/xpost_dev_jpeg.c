@@ -232,7 +232,12 @@ int _create_cont(Xpost_Context *ctx,
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
+    {
+        /* the record is the only thing that would have named the buffer
+           or the open file, and it is not going to */
+        free(private.buf);
+        goto close_file;
+    }
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);

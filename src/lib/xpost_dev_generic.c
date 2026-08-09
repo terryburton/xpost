@@ -3345,7 +3345,19 @@ static int _pdfregsep(Xpost_Context *ctx,
         /* the grown array must reach /Private even if a copy below
            fails: the old block is gone */
         if (!_pdf_acc_put(ctx, priv, &a))
+        {
+            /* nothing names the grown block, and what the record still
+               names was released by the growth: give the block up and
+               leave the record naming an empty list rather than storage
+               that is gone */
+            free(a.seps);
+            a.seps = NULL;
+            a.nseps = 0;
+            a.sepcap = 0;
+            if (!_pdf_acc_put(ctx, priv, &a))
+                XPOST_LOG_ERR("cannot record the emptied separation list");
             return VMerror;
+        }
     }
     s = &a.seps[a.nseps];
     s->name = _pdf_sep_strdup(ctx, name);
