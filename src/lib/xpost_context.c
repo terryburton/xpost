@@ -306,6 +306,8 @@ int xpost_context_init(Xpost_Context *ctx,
     if (!ret)
         return 0;
     ctx->state = C_IDLE;
+    ctx->nest_depth = 0;
+    ctx->callback_error = 0;
 
     ret = initlocal(ctx, xpost_interpreter_cid_get_context, 
             xpost_interpreter_get_initializing, xpost_interpreter_set_initializing, 
@@ -456,6 +458,8 @@ unsigned int xpost_context_fork3(Xpost_Context *ctx,
     *newctx = *ctx; // struct copy for defaults
     newctx->id = newcid;
     newctx->state = C_IDLE;
+    newctx->nest_depth = 0;
+    newctx->callback_error = 0;
     newctx->lo = ctx->lo;
     /* The list is what the collector walks to find the contexts a memory
        file serves, and it holds MAXCONTEXT entries. One entry is added

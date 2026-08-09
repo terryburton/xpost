@@ -226,6 +226,18 @@ struct _Xpost_Context {
     unsigned int state;  /**< process state: running, blocked, iowait */
     unsigned int quit;  /**< if 1 cause mainloop() to return, if 0 keep looping */
 
+    /** How many evaluations are nested inside operators of this
+        context's run. A filter reading from a procedure data source
+        runs that procedure from inside the read, and the procedure may
+        read a filter of its own, so the depth is the program's to
+        choose and is bounded rather than trusted. */
+    unsigned int nest_depth;
+
+    /** The error a procedure backing a stream failed with, waiting for
+        the operator that was reaching through that stream to answer for
+        it. Zero when there is none. */
+    unsigned int callback_error;
+
     Xpost_Object event_handler;
     Xpost_Object window_device;
 

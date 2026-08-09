@@ -1135,6 +1135,16 @@ int xpost_operator_exec(Xpost_Context *ctx,
     }
     if (ret)
         return ret;
+    /* A stream backed by a procedure answers a read with end of data and
+       a write with a refusal, and carries the reason on the context.
+       The failure belongs to the operator that reached through the
+       stream, which is this one: the procedure ran inside this call. */
+    if (ctx->callback_error)
+    {
+        ret = (int)ctx->callback_error;
+        ctx->callback_error = 0;
+        return ret;
+    }
     /* An operator that pushed its result onto a stack that would not take
        it has finished without producing what it answers for. The push
        sites do not carry that back -- there are several hundred of them

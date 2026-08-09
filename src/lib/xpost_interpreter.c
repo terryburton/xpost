@@ -2005,6 +2005,155 @@ ctxswitch:
     return XPOST_MAINLOOP_DONE;
 }
 
+/* How deep a program may drive the nesting. Each level holds a C frame
+   of this function and of whichever operator called in, so the bound is
+   the C stack's, not the execution stack's, and it is set well below
+   what the smallest stack the interpreter is built for can carry. */
+#define XPOST_NEST_MAX 64
+
+/* the error a procedure run from inside an operator failed with, named
+   by the errorname the error machinery recorded */
+static unsigned int _nested_error(Xpost_Context *ctx)
+{
+    Xpost_Object sd, ed, en;
+    char *nm;
+    unsigned int i;
+    unsigned int ret = ioerror;
+
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    ed = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "$error"));
+    if (xpost_object_get_type(ed) != dicttype)
+        return ret;
+    en = xpost_dict_get(ctx, ed, xpost_name_cons(ctx, "errorname"));
+    if (xpost_object_get_type(en) != nametype)
+        return ret;
+    nm = xpost_string_allocate_cstring(ctx, xpost_name_get_string(ctx, en));
+    if (!nm)
+        return ret;
+    for (i = 0; i <= (unsigned int)unknownerror; i++)
+        if (strcmp(nm, errorname[i]) == 0)
+        {
+            ret = i;
+            break;
+        }
+    free(nm);
+    return ret;
+}
+
+int xpost_interpreter_run_nested(Xpost_Context *ctx, Xpost_Object P)
+{
+    int base;
+    Xpost_Object saved;
+    Xpost_Object caught;
+    Xpost_Object held[XPOST_OPERATOR_MAX_SIG];
+    int held_n;
+    int i;
+    int ret = 0;
+
+    if (ctx->nest_depth >= XPOST_NEST_MAX)
+        return execstackoverflow;
+
+    base = xpost_stack_count(ctx->lo, ctx->es);
+
+    /* The procedure runs under two frames the ordinary machinery reads.
+
+       The boundary marks where a failure belongs: above it the failure
+       is the procedure's, and an error restores the operand stack to
+       what the procedure found (PLRM 3.11.1).
+
+       The false beneath it is a stopped context, the same frame the
+       stopped operator leaves. It bounds the unwinding of an error the
+       procedure does not catch to this call, while the operator that
+       made the call is still on the C stack with its own answer to
+       push. The failure reaches the program as that operator's. */
+    if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, calloutdone)))
+        return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_bool_cons(0)))
+    {
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
+        return execstackoverflow;
+    }
+    if (!xpost_stack_push(ctx->lo, ctx->es, P))
+    {
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
+        return execstackoverflow;
+    }
+
+    /* The hold stack holds the operands of the operator that called in,
+       for the error machinery to give back if that operator fails. The
+       procedure about to run reaches operators of its own, and each of
+       them loads the hold stack with its own operands, so the caller's
+       would be gone by the time they were wanted. They are kept here
+       and put back, rather than the caller being told they are lost:
+       the operator that called in is exactly the one an error in the
+       procedure is going to be raised against. */
+    {
+        Xpost_Stack *h = xpost_stack_at(ctx->lo, ctx->hold);
+        held_n = (int)h->top;
+        if (held_n > (int)(sizeof held / sizeof *held))
+            held_n = (int)(sizeof held / sizeof *held);
+        for (i = 0; i < held_n; i++)
+            held[i] = h->data[i];
+    }
+
+    saved = ctx->currentobject;
+    ++ctx->nest_depth;
+    while (xpost_stack_count(ctx->lo, ctx->es) > base && !ctx->quit)
+    {
+        if (ctx->lo->garbage_collect_pending)
+        {
+            ctx->lo->garbage_collect_pending = 0;
+            if (ctx->lo->garbage_collect_is_installed
+                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+            {
+                XPOST_LOG_ERR("collection abandoned before its sweep");
+                _onerror(ctx, VMerror);
+                continue;
+            }
+        }
+        ret = eval(ctx);
+        if (ret)
+        {
+            /* the run itself is ending, or moving to another context:
+               neither is this procedure's to answer, so it goes back to
+               the interpreter that can */
+            if (ret == yieldtocaller || ret == contextswitch
+                || ret == ioblock)
+                break;
+            _onerror(ctx, ret);
+            ret = 0;
+        }
+    }
+    --ctx->nest_depth;
+    ctx->currentobject = saved;
+    {
+        Xpost_Stack *h = xpost_stack_at(ctx->lo, ctx->hold);
+        h->prevseg = ctx->hold;
+        for (i = 0; i < held_n; i++)
+            h->data[i] = held[i];
+        h->top = (unsigned int)held_n;
+    }
+
+    if (ret || ctx->quit)
+    {
+        /* the run was cut short with the frames still standing */
+        while (xpost_stack_count(ctx->lo, ctx->es) > base)
+            (void)xpost_stack_pop(ctx->lo, ctx->es);
+        return ret;
+    }
+
+    /* the stopped context has answered by now, whether the procedure
+       ran to its end or an error unwound to it */
+    caught = xpost_stack_pop(ctx->lo, ctx->os);
+    if (xpost_object_get_type(caught) != booleantype)
+        return ioerror;
+    if (caught.int_.val)
+        return (int)_nested_error(ctx);
+    return 0;
+}
+
+
 
 
 
