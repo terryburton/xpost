@@ -2470,6 +2470,26 @@ test('vecout-gc',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# No repeatable operation may spend global memory each time it runs: global
+# memory is never collected, so such an allocation is spent for the life of
+# the context. The workload carries its own positive control, so a
+# measurement that has gone blind fails rather than reporting everything
+# clean.
+test('global-vm-invariant',
+  find_program('tests/run-global-vm-invariant-test.sh'),
+  args: [ xpost_exe, files('tests/global_vm_invariant_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Global memory is never collected, so a writer that builds its across-page
+# bookkeeping per document spends it for good; one document per job must cost
+# a bounded amount.
+test('pdf-global-vm',
+  find_program('tests/run-pdf-global-vm-test.sh'),
+  args: [ xpost_exe, files('tests/pdf_global_vm_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A destination that cannot be positioned still gets a whole document: the
 # cross-reference offsets come from the count of bytes the writer has put
 # out, not from asking the file where it is.

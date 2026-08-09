@@ -155,9 +155,6 @@
                         dup /sepsdone 0 put
                         dup /headered false put
                         dup /np 0 put
-                        dup /off 256 dict put
-                        dup /pobj 64 dict put
-                        dup /sobj 16 dict put
                         % the name this document answers for, copied where the
                         % record itself lives so a global dictionary holds no
                         % local value
@@ -217,6 +214,15 @@
         .xpostsys /.vecout get /single false put
         .xpostsys /.vecout get /ready false put
         .xpostsys /.vecout get /docid 0 put
+        % the maps a document fills in belong to the record rather than to any
+        % one document: each is keyed by a counter the document restarts from
+        % zero, so a document writes every entry it later reads and what an
+        % earlier one left above that count is never consulted. They are made
+        % with the record because global memory is not collected, so a
+        % container made per document would be spent for good.
+        .xpostsys /.vecout get /off 256 dict put
+        .xpostsys /.vecout get /pobj 64 dict put
+        .xpostsys /.vecout get /sobj 16 dict put
     setglobal
 
     % append a string to the content accumulator (held outside VM via /Private)

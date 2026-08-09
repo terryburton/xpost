@@ -1,0 +1,129 @@
+% A repeatable operation must not spend global memory each time it runs.
+%
+% Global memory is never collected: the collector returns early for it, so
+% whatever a job puts there is spent for the life of the context. That is
+% sound for machinery built once at load and for values that must outlive a
+% job's save/restore, and it is a leak for anything a job allocates per
+% operation. A context that serves one job per request -- an embedder's
+% worker -- pays for such an allocation until it is restarted.
+%
+% Each exercise below is an operation the language repeats. The test runs
+% each one, discards a warmup so one-off costs (a face cached on first use,
+% a record built on first demand) are not counted, then measures what the
+% steady state costs per iteration.
+%
+% The verdict is the wrapper's: this program reports one line per exercise
+% and counts nothing itself. A running total kept here could not be trusted,
+% because an exercise wrapping save around its work reverts local memory and
+% would take the total with it.
+%
+% An exercise that fails to run is reported as such rather than as clean: an
+% operation that errors allocates nothing and would otherwise read as a pass.
+
+/warm 6 def
+/runs 30 def
+/bound 512 def          % bytes per iteration; generous against counters and
+                        % names, far below a container made per iteration
+
+/globalused { globalvmstatus pop exch pop } bind def
+
+% proc  .  ran cost    run an exercise and report what a repeat of it costs
+/gauge {
+    /.ex exch def
+    /.ran true def
+    0 1 warm 1 sub {
+        pop mark { .ex } stopped { /.ran false def } if cleartomark
+    } for
+    globalused /.g0 exch def
+    0 1 runs 1 sub {
+        pop mark { .ex } stopped { /.ran false def } if cleartomark
+    } for
+    globalused .g0 sub runs idiv
+    .ran exch
+} bind def
+
+% name proc  .  -
+/measure {
+    gauge /.per exch def /.ran exch def
+    (  ) print
+    .ran not
+        { (DIDNOTRUN ) print }
+        { .per bound ge { (OVER ) print }{ (ok ) print } ifelse } ifelse
+    print (: ) print .per 20 string cvs print ( B/iteration\n) print
+} bind def
+
+% ---------------------------------------------------------------- exercises
+
+% composite allocation in the default (local) arena
+(local dict/array/string) { 64 dict pop 64 array pop 64 string pop } measure
+
+% the save/restore a job wraps around its work
+(save/restore) { save 32 dict pop restore } measure
+
+% names, which are interned
+(name lookup) { /Helvetica type pop } measure
+
+% dictionary stack traffic
+(dict begin/end) { 8 dict begin currentdict pop end } measure
+
+% graphics state
+(gsave/grestore) { gsave 2 setlinewidth grestore } measure
+(gstate alloc/copy) { gsave gstate currentgstate pop grestore } measure
+
+% path construction and consumption
+(path build/clear) { newpath 0 0 moveto 10 10 lineto 20 0 lineto closepath newpath } measure
+
+% colour
+(setgray/setrgb) { 0.5 setgray 0.1 0.2 0.3 setrgbcolor } measure
+
+% device install and retire, per device
+(device: null) { << /OutputDevice /null >> setpagedevice } measure
+(device: bbox) {
+    << /OutputDevice /bbox /HWResolution [72 72] >> setpagedevice
+    << /OutputDevice /null >> setpagedevice
+} measure
+
+% the vector writers, whose across-page bookkeeping belongs to their shared
+% record rather than to each document
+(device: pdfwrite) {
+    << /OutputDevice /pdfwrite /PageSize [200 200] >> setpagedevice
+    0 0 moveto 20 0 rlineto 0 20 rlineto closepath fill showpage
+    << /OutputDevice /null >> setpagedevice
+} measure
+
+% filters
+(filter: ASCIIHexDecode) {
+    (48656c6c6f>) /ASCIIHexDecode filter dup 32 string readstring pop pop closefile
+} measure
+(filter: FlateDecode) {
+    (789c0b492d2e0100045d01c1>) /ASCIIHexDecode filter /FlateDecode filter
+    dup 32 string readstring pop pop closefile
+} measure
+
+% resource machinery, which files instances where they must outlive a job
+(resource define/undef) {
+    /Xpost.Probe 3 dict /ProcSet defineresource pop
+    /Xpost.Probe /ProcSet undefineresource
+} measure
+(resource findresource) {
+    /Xpost.Keep 3 dict /ProcSet defineresource pop
+    /Xpost.Keep /ProcSet findresource pop
+} measure
+
+% images
+(image) {
+    gsave 8 8 scale
+    << /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8
+       /Decode [0 1] /ImageMatrix [2 0 0 -2 0 2]
+       /DataSource <00ff00ff> >> image
+    grestore
+} measure
+
+% error handling, which builds an error record
+(stopped/error) { mark { 1 0 div } stopped pop cleartomark } measure
+
+% ----------------------------------------------------------------- control
+% The measurement must be able to see a global allocation, or a blind
+% instrument would report every exercise above as clean. The wrapper requires
+% this one to come back OVER.
+(CONTROL) { true setglobal 64 dict pop false setglobal } measure

@@ -1,0 +1,37 @@
+% Installing and retiring the paginated PDF writer repeatedly must not spend
+% global memory per document.
+%
+% Global memory is never collected, so a container made for each document is
+% spent for good: a context that renders one document per job grows without
+% bound. The writer's across-page maps therefore belong to the shared record,
+% made once with it, and a document restarts the counters that key them
+% instead of replacing them.
+%
+% The output file comes from the command line, so stdout carries only the
+% verdict. The bound is generous against the fixed per-document cost (the name
+% string and the counters) and far below what a fresh set of maps costs.
+
+/globalused { globalvmstatus pop exch pop } bind def
+
+/cycle {
+    << /OutputDevice /pdfwrite /PageSize [200 200] >> setpagedevice
+    0 0 moveto 50 0 rlineto 0 50 rlineto closepath fill
+    showpage
+    % retiring the writer finalises the document, so the next install starts a
+    % new one and builds a new device
+    << /OutputDevice /null >> setpagedevice
+} bind def
+
+% the first documents pay one-off costs -- the writer's own load, the shared
+% record, the maps themselves -- which are not per-document
+0 1 9 { pop cycle } for
+
+globalused
+0 1 49 { pop cycle } for
+globalused exch sub 50 div
+
+dup (  global memory per document: ) print 20 string cvs print ( bytes\n) print
+1024 lt
+{ (SUCCESS\n) print }
+{ (FAIL: a document spends global memory that is never reclaimed\n) print }
+ifelse

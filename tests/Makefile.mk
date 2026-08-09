@@ -132,6 +132,7 @@ tests/fused_equivalence_test.ps \
 tests/gc_clip_region_test.ps \
 tests/gc_deep_chain_test.ps \
 tests/gc_diagnostics_test.ps \
+tests/global_vm_invariant_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
 tests/gc_mark_failure_test.c \
@@ -223,6 +224,7 @@ tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
+tests/pdf_global_vm_test.ps \
 tests/pdf_pipe_test.ps \
 tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
@@ -262,7 +264,9 @@ tests/run-interrupt-test.sh \
 tests/run-multipage-test.sh \
 tests/run-nographics-test.sh \
 tests/run-page-cover-test.sh \
+tests/run-global-vm-invariant-test.sh \
 tests/run-pdf-consumer-test.sh \
+tests/run-pdf-global-vm-test.sh \
 tests/run-pdf-pipe-test.sh \
 tests/run-pdf-test.sh \
 tests/run-pngalpha-test.sh \
