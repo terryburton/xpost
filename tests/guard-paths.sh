@@ -138,7 +138,11 @@ guard_mirror_tree() {
     # process for each file. A tree of a few hundred files costs a few
     # hundred processes that way, which on a platform where starting one
     # is expensive took this longer than the guard that called it.
-    ( cd "$1" && xargs awk -v dir="$mirror" '
+    # LC_ALL=C: the tree holds files that are not text, and an awk that
+    # decodes its input as characters stops at the first byte that is not
+    # one -- taking with it every file it had not reached yet. The copy
+    # wants bytes anyway, since what it removes is a byte.
+    ( cd "$1" && LC_ALL=C xargs awk -v dir="$mirror" '
         FNR == 1 { if (gm_out != "") close(gm_out); gm_out = dir "/" FILENAME }
         { gsub(/\r/, ""); print > gm_out }
       ' < "$work/gm-list" )

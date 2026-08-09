@@ -5633,7 +5633,26 @@ int xpost_file_open(Xpost_Memory_File *mem,
 #ifdef DEBUG_FILE
         printf("fopen\n");
 #endif
-        fp = xpost_diskfile_fopen(fn, mode, 0, &ret);
+        {
+            /* A file is a sequence of bytes (PLRM 3.8), so it is opened
+               as one. Where the C library distinguishes a text stream it
+               rewrites line endings on the way through and reads a
+               particular byte as the end of the data, which would make
+               the bytes a program wrote differ from the bytes it reads
+               back. The letter has no effect where there is no
+               distinction. */
+            char fmode[4];
+            size_t mi = 0;
+
+            while (mode[mi] && mi < sizeof fmode - 2)
+            {
+                fmode[mi] = mode[mi];
+                mi++;
+            }
+            fmode[mi++] = 'b';
+            fmode[mi] = '\0';
+            fp = xpost_diskfile_fopen(fn, fmode, 0, &ret);
+        }
         if (fp == NULL)
             return ret;
         ret = _file_adopt_stream(mem, fp, access, &f);
