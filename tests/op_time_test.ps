@@ -47,11 +47,16 @@ usertime u1 sub 0 gt (usertime advances while the interpreter executes) assert
 %     used, so the time it reports using is no more than the real time
 %     that has passed since the run began.
 %
-%     Both clocks are read as whole milliseconds and counted from
-%     origins of their own, so each delta is a difference of two
-%     truncations and the pair can disagree by one millisecond without
-%     either being wrong. The comparison allows that much. ---
-usertime u0 sub realtime r0 sub 1 add le
+%     The allowance is what the two clocks' resolutions come to. Both
+%     are read as whole milliseconds from origins of their own, so each
+%     delta is a difference of two truncations; and the clock counting
+%     execution is not everywhere kept to the millisecond -- a system
+%     that charges execution by the scheduling tick credits the whole
+%     tick it was running at the end of, so a short interval can be
+%     credited a tick it did not entirely spend. A tick is some tens of
+%     milliseconds where it is longest. ---
+/slack 40 def
+usertime u0 sub realtime r0 sub slack add le
     (the time used is within the real time that passed) assert
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

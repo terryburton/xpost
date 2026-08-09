@@ -51,7 +51,37 @@
 
 static long long _xpost_time_freq;
 static long long _xpost_time_start;
+/* the execution the process had already had when the interpreter
+   started. usertime counts from there, so that it answers what this
+   interpreter has done rather than what the process did before it. */
+static long long _xpost_cpu_start;
 static BCRYPT_ALG_HANDLE _xpost_bcrypt_provider;
+
+/* The execution the process has had, in milliseconds: the time it spent
+   running its own instructions and the time the system spent running on
+   its behalf, which together are what it has consumed. Both are counted
+   in hundreds of nanoseconds. */
+static long long
+_xpost_cpu_ms(void)
+{
+    FILETIME created;
+    FILETIME exited;
+    FILETIME kernel;
+    FILETIME user;
+    ULARGE_INTEGER k;
+    ULARGE_INTEGER u;
+
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited,
+                         &kernel, &user))
+        return 0;
+
+    k.LowPart = kernel.dwLowDateTime;
+    k.HighPart = kernel.dwHighDateTime;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
+
+    return (long long)((k.QuadPart + u.QuadPart) / 10000ULL);
+}
 
 static int
 _xpost_mkstemp_fill(char *template)
@@ -112,6 +142,7 @@ xpost_compat_init(void)
     QueryPerformanceCounter(&count);
     _xpost_time_freq = (long long)freq.QuadPart;
     _xpost_time_start = (long long)count.QuadPart;
+    _xpost_cpu_start = _xpost_cpu_ms();
 
     return 1;
 }
@@ -139,12 +170,11 @@ xpost_fpurge(FILE *f)
     fflush(f);
 }
 
-/* The clock's origin is arbitrary (PLRM 8.2 realtime), and both clocks
-   take the interpreter's own start for it. Counting one from there and
-   the other from the counter's own zero divides by the frequency at two
-   different points, so the two disagreed by the millisecond each
-   truncated away and an interval measured on one could come out longer
-   than the same interval measured on the other. */
+/* The clock's origin is arbitrary (PLRM 8.2 realtime), and it takes the
+   interpreter's own start for it. Counting from there rather than from
+   the counter's own zero divides by the frequency once, so an interval
+   is not lengthened or shortened by the millisecond a second division
+   would truncate away. */
 long long
 xpost_get_realtime_ms(void)
 {
@@ -154,13 +184,20 @@ xpost_get_realtime_ms(void)
     return ((count.QuadPart - _xpost_time_start) * 1000LL) / _xpost_time_freq;
 }
 
+/* PLRM 8.2 usertime counts the execution the interpreter has done, one
+   for every millisecond of it, which is the processor time the process
+   has been given and not the time that has passed. */
 long long
 xpost_get_usertime_ms(void)
 {
-    LARGE_INTEGER count;
+    long long now = _xpost_cpu_ms();
 
-    QueryPerformanceCounter(&count);
-    return ((count.QuadPart - _xpost_time_start) * 1000LL) / _xpost_time_freq;
+    /* the clock counts up from the interpreter's start, so a reading
+       below that start is no reading at all */
+    if (now < _xpost_cpu_start)
+        return 0;
+
+    return now - _xpost_cpu_start;
 }
 
 int

@@ -60,8 +60,11 @@
 #endif
 
 #if defined(__APPLE__) && defined(__MACH__)
-# include <mach/mach_time.h> /* mach_absolute_time */
+# include <mach/mach_time.h> /* mach_absolute_time, mach_timebase_info */
 #endif
+
+#include <sys/time.h> /* getrusage */
+#include <sys/resource.h> /* getrusage, RUSAGE_SELF */
 
 // This prototype isn't visible under cygwin, which has the function but
 // does not declare it at the feature-test level this builds with. Every
@@ -91,12 +94,39 @@ int fpurge(FILE *);
 
 #if defined(__APPLE__) && defined(__MACH__)
 static unsigned long long _xpost_time_start;
+/* the counter counts in units of its own, and says what they are in
+   nanoseconds as a ratio. The ratio is not one to one on every
+   processor, so a count read as though it were nanoseconds is a count
+   read in the wrong unit. */
+static mach_timebase_info_data_t _xpost_time_base;
 #elif HAVE_CLOCK_GETTIME
 static clockid_t _xpost_time_clock_id = 0;
 static struct timespec _xpost_time_start;
 #else
 static time_t _xpost_time_start = 0;
 #endif
+
+/* the execution the process had already had when the interpreter
+   started. usertime counts from there, so that it answers what this
+   interpreter has done rather than what the process did before it. */
+static unsigned long long _xpost_cpu_start = 0;
+
+/* The execution the process has had, in milliseconds: the time it spent
+   running its own instructions and the time the system spent running on
+   its behalf, which together are what it has consumed. */
+static unsigned long long
+_xpost_cpu_ms(void)
+{
+    struct rusage ru;
+
+    if (getrusage(RUSAGE_SELF, &ru) != 0)
+        return 0;
+
+    return (unsigned long long)ru.ru_utime.tv_sec * 1000ULL
+         + (unsigned long long)ru.ru_utime.tv_usec / 1000ULL
+         + (unsigned long long)ru.ru_stime.tv_sec * 1000ULL
+         + (unsigned long long)ru.ru_stime.tv_usec / 1000ULL;
+}
 
 /*============================================================================*
  *                                 Global                                     *
@@ -105,7 +135,17 @@ static time_t _xpost_time_start = 0;
 int
 xpost_compat_init(void)
 {
+    _xpost_cpu_start = _xpost_cpu_ms();
+
 #if defined(__APPLE__) && defined(__MACH__)
+    /* a ratio of one to one until the system says otherwise, so that a
+       counter whose unit cannot be asked for is still read in some
+       unit rather than divided by nothing */
+    _xpost_time_base.numer = 1;
+    _xpost_time_base.denom = 1;
+    (void)mach_timebase_info(&_xpost_time_base);
+    if (_xpost_time_base.denom == 0)
+        _xpost_time_base.denom = 1;
     _xpost_time_start = mach_absolute_time();
 #elif HAVE_CLOCK_GETTIME
 # ifdef HAVE_CLOCK_MONOTONIC
@@ -158,7 +198,10 @@ long long
 xpost_get_realtime_ms(void)
 {
 #if defined(__APPLE__) && defined(__MACH__)
-    return (long long)(mach_absolute_time() / 1000000ULL);
+    unsigned long long ticks = mach_absolute_time() - _xpost_time_start;
+
+    return (long long)(ticks * _xpost_time_base.numer
+                       / _xpost_time_base.denom / 1000000ULL);
 #elif HAVE_CLOCK_GETTIME
     struct timespec t;
 
@@ -181,25 +224,15 @@ xpost_get_realtime_ms(void)
 long long
 xpost_get_usertime_ms(void)
 {
-#if defined(__APPLE__) && defined(__MACH__)
-    return  (long long)(mach_absolute_time() - _xpost_time_start) / 1000000LL;
-#elif HAVE_CLOCK_GETTIME
-    struct timespec t;
+    unsigned long long now = _xpost_cpu_ms();
 
-    if (!clock_gettime(_xpost_time_clock_id, &t))
-        return (long long)(t.tv_sec - _xpost_time_start.tv_sec) * 1000 + (long long)(t.tv_nsec - _xpost_time_start.tv_nsec) / 1000000LL;
-    /* very unlikely */
-    else
-        return 0;
-#else
-    time_t t;
-
-    t = time(NULL);
-    if (t == ((time_t) -1))
+    /* the clock counts up from the interpreter's start, so a reading
+       below that start is no reading at all rather than a count that
+       wrapped past every value there is */
+    if (now < _xpost_cpu_start)
         return 0;
 
-    return (t - _xpost_time_start) * 1000;
-#endif
+    return (long long)(now - _xpost_cpu_start);
 }
 
 int

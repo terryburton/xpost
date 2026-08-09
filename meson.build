@@ -758,6 +758,24 @@ test('name-length',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# PLRM 8.2 gives the two clocks different jobs: realtime counts in real
+# time independently of the interpreter's execution, and usertime counts
+# the execution the interpreter has done. An interval spent asleep shows
+# on the first and not the second, which is what tells them apart -- a
+# clock reading the same as realtime is not usertime whatever it is
+# called. Driven through the library rather than a program, because the
+# idle interval has to be arranged from outside the interpreter.
+clock_exe = executable('clock_test',
+  'tests/clock_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('clock',
+  clock_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: showpage and copypage both end a page, so both must
 # take the page semantics the embedder selected rather than announcing the
 # page and reading the line editor regardless.

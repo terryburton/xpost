@@ -45,6 +45,8 @@
 
 #include <stdio.h> /* FILE */
 
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
+
 #ifdef _MSC_VER
 
 # include <float.h>
@@ -110,21 +112,24 @@ void echooff(FILE *f);
 void xpost_fpurge(FILE *f);
 
 /**
- * @brief return the number of milliseconds, whatever the stating time is.
+ * @brief return the real time that has passed since the interpreter
+ * started, in milliseconds, whether or not the interpreter was running
+ * in it.
  *
  * @return The number of milliseconds.
  *
- * @note The returned value is platform dependant.
+ * @note The rate at which it changes is platform dependant.
  */
-long long xpost_get_realtime_ms(void);
+XPOST_TEST_VISIBLE long long xpost_get_realtime_ms(void);
 
 /**
- * @brief return the number of milliseconds since the Postscript
- * interpreter has started.
+ * @brief return the execution the process has had since the interpreter
+ * started, in milliseconds: the processor time it was given, not the
+ * time that has passed.
  *
  * @return The number of milliseconds.
  */
-long long xpost_get_usertime_ms(void);
+XPOST_TEST_VISIBLE long long xpost_get_usertime_ms(void);
 
 int xpost_isatty(int fd);
 
