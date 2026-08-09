@@ -110,6 +110,7 @@ tests/file_lifetime_test.ps \
 tests/filenameforall_large_test.ps \
 tests/filter_abandon_test.ps \
 tests/filter_close_eod_test.ps \
+tests/filter_conformance_test.ps \
 tests/filter_encode_pad_test.ps \
 tests/filter_eod_test.ps \
 tests/filter_leak_test.ps \
@@ -131,14 +132,13 @@ tests/function_matrix_test.ps \
 tests/fused_equivalence_test.ps \
 tests/gc_clip_region_test.ps \
 tests/gc_deep_chain_test.ps \
-tests/filter_conformance_test.ps \
 tests/gc_diagnostics_test.ps \
-tests/global_vm_invariant_test.ps \
 tests/gc_large_dict_pressure_test.ps \
 tests/gc_large_dict_test.ps \
 tests/gc_mark_failure_test.c \
 tests/job_snapshot_balance_test.c \
 tests/gc_marking_test.c \
+tests/global_vm_invariant_test.ps \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
@@ -309,6 +309,7 @@ tests/stencil_mask_size_test.ps \
 tests/strbuf_test.c \
 tests/stream_exec_test.ps \
 tests/string_bounds_test.c \
+tests/subinterval_retention_test.ps \
 tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
 tests/trapping_test.ps \

@@ -1,0 +1,81 @@
+% What a subinterval keeps alive, run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% How this is measured. The used figure vmstatus reports does not fall when
+% memory is reclaimed, so comparing it before and after a collection says
+% nothing -- a run that reclaims everything and a run that reclaims nothing
+% report the same number. Reclamation shows as reuse instead: drop the
+% object, collect, allocate the same shape again, and see whether the second
+% allocation costs anything. Nothing means the first was recovered and handed
+% back; full price means it was not.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
+/used { vmstatus pop exch pop } bind def
+
+% --- a composite nothing refers to is reclaimed and reused ----------------
+
+/a 60000 array def
+/a null def
+1 vmreclaim
+/mark1 used def
+/b 60000 array def
+1 vmreclaim
+used mark1 sub /arraycost exch def
+/b null def
+1 vmreclaim
+arraycost 1000 lt (an unreferenced array is reclaimed and its space reused) assert
+
+/s 60000 string def
+/s null def
+1 vmreclaim
+/mark2 used def
+/t 60000 string def
+1 vmreclaim
+used mark2 sub /stringcost exch def
+/t null def
+1 vmreclaim
+stringcost 1000 lt (an unreferenced string is reclaimed and its space reused) assert
+
+% --- a subinterval keeps its own contents readable ------------------------
+% Whatever the collector does with the rest, the window itself must survive
+% and still read the elements it was cut from.
+
+/host 600 array def
+0 1 599 { dup host 3 1 roll put } for
+/win host 100 42 getinterval def
+win length 42 eq (a subinterval reports its own length) assert
+win 0 get 100 eq (a subinterval reads the element it starts at) assert
+win 41 get 141 eq (a subinterval reads its last element) assert
+/host null def
+1 vmreclaim
+win 0 get 100 eq (a subinterval still reads after its host is dropped) assert
+win 41 get 141 eq (a subinterval still reads its last element after that) assert
+
+/shost 600 string def
+/swin shost 100 42 getinterval def
+swin length 42 eq (a string subinterval reports its own length) assert
+/shost null def
+1 vmreclaim
+swin length 42 eq (a string subinterval survives its host being dropped) assert
+
+% -------------------------------------------------------------------------
+% KNOWN DEVIATION (TODO, not asserted): a subinterval holds its whole backing
+% composite alive, not just the elements it spans.
+% Measured by the reuse method above: with a 42-element window kept out of a
+% 60000-element array and every other reference dropped, the next
+% 60000-element array costs the full 960000 bytes rather than nothing. A
+% 42-byte window out of a 60000-byte string likewise leaves the next such
+% string costing full price. Dropping the window as well as the host reclaims
+% everything, so the window is what holds it.
+% An Adobe interpreter reclaims all but the window: "the only live reference
+% is to a 42-element subinterval near the middle of the original large array;
+% an Adobe PostScript interpreter ... will in fact reclaim all of the array
+% except those 42 elements, on the next collection."
+% The PLRM does not require this, so the retention is not a conformance
+% failure; it is recorded because a program that slices a small window out of
+% a large buffer and keeps the window keeps the buffer, which in a context
+% that serves many jobs reads as a leak. Asserting the present behaviour
+% would freeze it, so it is written down for the collector work instead.
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

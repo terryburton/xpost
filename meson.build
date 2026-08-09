@@ -2470,6 +2470,14 @@ test('vecout-gc',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a subinterval keeps alive. Measured by reuse, since the used figure
+# vmstatus reports does not fall when memory is reclaimed.
+test('subinterval-retention',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/subinterval_retention_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The filter and scanner behaviours a program packaged as a ProcSet depends
 # on: a string, a file or a procedure as a data source, an encoding filter
 # that flushes its end-of-data when closed, a procedure still readable when
