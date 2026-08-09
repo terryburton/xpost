@@ -2470,6 +2470,17 @@ test('vecout-gc',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The filter and scanner behaviours a program packaged as a ProcSet depends
+# on: a string, a file or a procedure as a data source, an encoding filter
+# that flushes its end-of-data when closed, a procedure still readable when
+# packed or read-only, gcheck, and a token that leaves the file where the next
+# raw read expects it.
+test('filter-conformance',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_conformance_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # No repeatable operation may spend global memory each time it runs: global
 # memory is never collected, so such an allocation is spent for the life of
 # the context. The workload carries its own positive control, so a

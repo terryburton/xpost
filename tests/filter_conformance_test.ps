@@ -1,0 +1,123 @@
+% Filter and scanner behaviours that a program packaging itself as a ProcSet
+% relies on (PLRM 3.8.4, 3.13), run through `xpost -d null` by run-ps-test.sh:
+% prints SUCCESS iff every assertion holds.
+%
+% These are the behaviours an extensible-filter or binary-IO library depends
+% on: that a data source may be a string, a file or a procedure; that an
+% encoding filter flushes and writes its end-of-data when closed; that a
+% procedure handed round as data is still readable when packed or read-only;
+% that gcheck answers where an object lives; and that a token read from a file
+% leaves the file where the next raw read expects it.
+%
+% Two divergences from Adobe are recorded at the foot of this file rather than
+% asserted, so that neither is frozen in as though it were correct.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
+/erris { 3 dict begin /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse tag assert clear end } def
+
+% --- data sources: a filter takes a string, a file, or a procedure ---------
+
+/hex (48656c6c6f>) def       % the ASCIIHex of (Hello) with its EOD
+
+/fromstring 16 string def
+hex /ASCIIHexDecode filter fromstring readstring pop
+(Hello) eq (a string serves as a data source) assert
+
+% a procedure source returns strings until it returns a zero-length one
+/srcdone false def
+/src { srcdone { () }{ /srcdone true store hex } ifelse } def
+/fromproc 16 string def
+/src load /ASCIIHexDecode filter fromproc readstring pop
+(Hello) eq (a procedure serves as a data source) assert
+
+% --- an encoding filter flushes and writes its EOD when it is closed ------
+% A library that closes an encoding filter and then reads back what it wrote
+% gets nothing, or a truncated stream, from an interpreter that does not.
+
+/TMP (filter_conf_tmp.txt) def
+/w TMP (w) file def
+/enc w /ASCIIHexEncode filter def
+enc (Hi) writestring
+enc closefile
+w closefile
+/r TMP (r) file def
+/back 64 string def
+r back readstring pop /encoded exch def
+r closefile
+encoded (4869>) eq (an encoding filter flushes and writes EOD on closefile) assert
+
+% --- a token read from a file leaves the file positioned after it ---------
+% A library that reads a count with token and then reads that many raw bytes
+% from the same file depends on this. The delimiter that ends the token is
+% consumed with it, which is what Adobe does.
+
+/w2 TMP (w) file def
+w2 (42 abcdefgh) writestring
+w2 closefile
+/r2 TMP (r) file def
+r2 token pop pop                      % the 42
+/rest 9 string def
+r2 rest readstring pop /remaining exch def
+r2 closefile
+remaining (abcdefgh) eq (token leaves the file just past the token) assert
+
+mark { TMP deletefile } stopped { } if cleartomark
+
+% --- a procedure handed round as data stays readable ----------------------
+% Staged-programming libraries are handed procedures that may be packed or
+% read-only and must be able to read them without modifying them.
+
+currentpacking true setpacking
+/pk { 1 2 add } cvlit def
+setpacking
+pk type /packedarraytype eq (a packed procedure reports packedarraytype) assert
+/n 0 def
+pk { pop /n n 1 add store } forall
+n 3 eq (forall walks a packed procedure) assert
+mark { pk 0 2 getinterval pop } stopped not exch cleartomark
+    (getinterval reads a packed procedure) assert
+{ pk 0 /x put } /invalidaccess (a packed procedure refuses put) erris
+
+/ro { 1 2 add } cvlit readonly def
+/m 0 def
+ro { pop /m m 1 add store } forall
+m 3 eq (forall walks a read-only procedure) assert
+{ ro 0 /x put } /invalidaccess (a read-only procedure refuses put) erris
+
+% --- gcheck reports which memory an object was allocated in ---------------
+% A library that must decide whether its queue may outlive a restore asks
+% this before it allocates.
+
+3 dict gcheck not (gcheck is false for a local object) assert
+currentglobal true setglobal
+/gd 3 dict def
+setglobal
+gd gcheck (gcheck is true for a global object) assert
+
+% -------------------------------------------------------------------------
+% KNOWN DEVIATION (TODO, not asserted): a procedure data source is drained
+% in full when the filter is made, not called as the filter wants data.
+% PLRM 3.13: "If a procedure is a data source, the filter calls it whenever
+% it needs to obtain input data." Adobe calls it no times before the first
+% byte is read and once during the read; xpost calls it to exhaustion first
+% (data/init.ps .collectproc), concatenates the result and hands the whole
+% string to the C filter. Two consequences a library meets: a source reading
+% from another file has consumed all of it before the filter is used, and a
+% source yielding more than 1048576 bytes raises limitcheck.
+% Recorded for the filter work rather than tested, since asserting either the
+% call count or the cap would freeze the deviation.
+%
+% KNOWN DEVIATION (TODO, not asserted): an encoding filter cannot be made
+% with a procedure as its data target.
+% PLRM 3.13 gives a target procedure its own contract -- the filter pushes a
+% string and a boolean and expects a writeable string back. xpost's /filter
+% wrapper takes any executable array operand for a data *source* and drains
+% it, so making an encoding filter over a target procedure runs that
+% procedure with the wrong stack:
+%     /tgt { pop pop tbuf } def  /tgt load /ASCIIHexEncode filter
+%         => stackunderflow, for ASCIIHexEncode, NullEncode and FlateEncode
+% Adobe constructs all three. Recorded rather than tested for the same reason.
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
