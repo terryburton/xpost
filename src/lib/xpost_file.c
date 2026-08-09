@@ -1906,11 +1906,18 @@ Xpost_Object xpost_file_cons_proctarget(Xpost_Context *ctx, Xpost_Object proc)
    procedure it calls and the string that procedure last gave back, and
    both are ordinary objects living in a C struct. Every other kind of
    file holds none, and says so with a count of zero. */
+static Xpost_Object _file_object_of_entity(unsigned int ent);
+
 static Xpost_ProcFile *_proc_stream_at(Xpost_Memory_File *mem, unsigned int ent)
 {
     Xpost_File *f;
 
-    if (!xpost_memory_get(mem, ent, 0, sizeof f, &f) || !f)
+    /* A file entity holds the pointer to its stream. An entity of any
+       other type holds bytes that are not one. Callers include the
+       collector, which arrives by walking entities rather than by
+       naming a file. */
+    f = xpost_file_get_file_pointer(mem, _file_object_of_entity(ent));
+    if (!f)
         return NULL;
     if (f->methods != &procsrc_methods && f->methods != &proctgt_methods)
         return NULL;
