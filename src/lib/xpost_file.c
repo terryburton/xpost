@@ -5778,6 +5778,39 @@ void xpost_file_hand_over(Xpost_Memory_File *mem, Xpost_Object f)
         fp->owned = 1;
 }
 
+/* Give up what a stream holds beside the struct itself, so that the
+   struct can go.
+
+   Two paths free a stream struct -- closing the object that names it,
+   and releasing the stream a filter above it was the last to hold --
+   and a kind of stream that owns memory has to be answered on both. It
+   says so here once rather than at each of them, and clears what it
+   gave up, so arriving twice costs nothing. */
+static void _file_release_owned(Xpost_File *f)
+{
+    /* a stream backed by a procedure holds the strings that call
+       answered with while a nested one was still being read */
+    if (f->methods == &procsrc_methods || f->methods == &proctgt_methods)
+    {
+        Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+
+        free(pf->pending);
+        pf->pending = NULL;
+        pf->npending = 0;
+        pf->cpending = 0;
+    }
+    /* a reusable stream holds its source's bytes in a buffer of its own */
+    if (f->methods == &rsd_methods)
+    {
+        Xpost_RsdFile *rf = (Xpost_RsdFile *)f;
+
+        free(rf->data);
+        rf->data = NULL;
+        rf->len = 0;
+        rf->pos = 0;
+    }
+}
+
 /* Give up this filter's claim on the stream beneath it, and free that stream
    once nothing holds it any longer. A stream the machinery made for this
    filter alone has no other route to a close, so it is closed here -- and
@@ -5806,6 +5839,7 @@ static void _release_underlying(Xpost_Memory_File *mem, Xpost_File *f)
            this stream again through a pointer to freed memory and
            dispatches a close on it. */
         _file_forget_entity(mem, under);
+        _file_release_owned(under);
         free(under);
     }
 }
@@ -5832,29 +5866,8 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
            closed whether or not those bytes arrived (PLRM 3.8), and the
            loss is reported once it has. */
         lost = xpost_file_close(fp) != 0;
-        /* a stream backed by a procedure holds the strings that call
-           answered with while a nested one was still being read; they go
-           when the stream does */
-        if (fp->methods == &procsrc_methods || fp->methods == &proctgt_methods)
-        {
-            Xpost_ProcFile *pfr = (Xpost_ProcFile *)fp;
-
-            free(pfr->pending);
-            pfr->pending = NULL;
-            pfr->npending = 0;
-            pfr->cpending = 0;
-        }
-        /* a reusable stream holds its source's bytes in a buffer of its
-           own, which goes when the stream does */
-        if (fp->methods == &rsd_methods)
-        {
-            Xpost_RsdFile *rf = (Xpost_RsdFile *)fp;
-
-            free(rf->data);
-            rf->data = NULL;
-            rf->len = 0;
-            rf->pos = 0;
-        }
+        /* what the stream holds goes when the stream does */
+        _file_release_owned(fp);
         fp->closed = 1;
         _release_underlying(mem, fp);
         /* the close method released the stream's own resources; the object's
