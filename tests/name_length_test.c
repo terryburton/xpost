@@ -47,15 +47,20 @@
 #define FITS    ((size_t)XPOST_OBJECT_COMP_MAX_SZ)
 #define OVERRUN ((size_t)XPOST_OBJECT_COMP_MAX_SZ + 1)
 
-/* whether a name that passes the field is one this test will build. The
+/* Whether a name that passes the field is one this test will build. The
    narrow field is sixteen bits and a name past it is 64 kilobytes; the
-   large-object field is thirty-two and a name past it is four gigabytes,
-   which is not a thing to allocate to make a point about a boundary. */
-#define REACHABLE (FITS <= (size_t)16 * 1024 * 1024)
+   large-object field is thirty-two and a name past it is four
+   gigabytes, which is not a thing to allocate to make a point about a
+   boundary. The two are told apart before compiling rather than after,
+   so the arm that does not apply is not built at all. */
 
 /* A name of exactly len characters whose leading characters are the path
    of a file that exists. Under the defect the interpreter opened that
-   file; the name as given names nothing. */
+   file; the name as given names nothing.
+
+   Only the narrow build asks for one, so on the other build this is not
+   compiled rather than compiled and left uncalled. */
+#ifndef WANT_LARGE_OBJECT
 static char *decoy_name(const char *decoy, size_t len)
 {
     size_t n = strlen(decoy);
@@ -71,13 +76,16 @@ static char *decoy_name(const char *decoy, size_t len)
     s[len] = '\0';
     return s;
 }
+#endif
 
 int main(void)
 {
     Xpost_Context *ctx;
     Xpost_Run_Status st;
     const char *decoy = "xpost_name_length_decoy.ps";
+#ifndef WANT_LARGE_OBJECT
     char *name;
+#endif
     FILE *fp;
 
     /* the file the shortened name would reach. It writes nothing and
@@ -108,7 +116,7 @@ int main(void)
     }
     xpost_job_snapshots_set(ctx, 0);
 
-    if (REACHABLE)
+#ifndef WANT_LARGE_OBJECT
     {
         /* a name one character past what the field counts */
         name = decoy_name(decoy, OVERRUN);
@@ -135,12 +143,11 @@ int main(void)
             free(name);
         }
     }
-    else
-    {
-        printf("# the length field counts to %llu here: a name that passes"
-               " it is larger than this test will build\n",
-               (unsigned long long)FITS);
-    }
+#else
+    printf("# the length field counts to %llu here: a name that passes"
+           " it is larger than this test will build\n",
+           (unsigned long long)FITS);
+#endif
 
     /* the name of a file that does exist still runs */
     st = xpost_run(ctx, XPOST_INPUT_FILENAME, decoy, 0);

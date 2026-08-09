@@ -141,6 +141,7 @@ esac
 # sanitizer this tree has not met is read as displacing rather than as
 # harmless.
 displaces=no
+displacer=''
 sanval=$(meson introspect "$build" --buildoptions 2>/dev/null | tr '{' '\n' |
     awk '/"name": "b_sanitize"/ {
              i = index($0, "\"value\":")
@@ -159,8 +160,31 @@ if [ -z "$sanval" ]; then
 elif printf '%s\n' "$sanval" | tr -c 'a-z' ' ' | tr ' ' '\n' |
      grep -vx '' | grep -vx none | grep -qvx undefined; then
     displaces=yes
+    displacer='this build carries a sanitizer runtime'
     filter="$filter --no-suite memacct --no-suite vmlimit"
     without="$without memacct vmlimit"
+fi
+
+# A memory checker run as a wrapper displaces the same two measurements
+# as a sanitizer built into the binary, and for the same reasons: it
+# intercepts the allocator, so the memacct five weigh its arena rather
+# than the interpreter's -- and it does not return memory to the system,
+# so a context that has been destroyed cannot leave the process any
+# smaller -- and it reserves an address space past the limit the vmlimit
+# two impose. It is not recorded in the build, since it is not part of
+# it: it arrives on this run's own command line, which is where it is
+# read from.
+if [ "$displaces" = no ]; then
+    for arg in "$@"; do
+        case $arg in
+            *valgrind*)
+                displaces=yes
+                displacer='this run is wrapped in a memory checker'
+                filter="$filter --no-suite memacct --no-suite vmlimit"
+                without="$without memacct vmlimit"
+                break ;;
+        esac
+    done
 fi
 
 work=$(mktemp -d 2>/dev/null) || work=
@@ -258,11 +282,12 @@ nvmlimit_sel=$(count_suite "$work/want" vmlimit)
 case $profile in
   quick|full|everything)
     if [ "$displaces" = yes ]; then
-        echo "profile $profile: this build carries a sanitizer runtime, so the"
+        echo "profile $profile: $displacer, so the"
         echo "      $nmemacct memacct test(s) are outside it -- they weigh the memory a"
-        echo "      run holds, which a quarantine and shadow maps put out of reach --"
-        echo "      and so are the $nvmlimit vmlimit test(s), whose address-space limit"
-        echo "      the same runtime reserves past before the interpreter starts"
+        echo "      run holds, which a runtime that keeps what it is given and"
+        echo "      maps memory of its own puts out of reach -- and so are the"
+        echo "      $nvmlimit vmlimit test(s), whose address-space limit the same"
+        echo "      runtime reserves past before the interpreter starts"
     elif [ "$nmemacct" -gt 0 ] && [ "$nmemacct_sel" -eq 0 ]; then
         # The other side of the same claim. Where the heap is left alone
         # the five are answerable and a profile over their costs has to
@@ -290,19 +315,38 @@ esac
 # count sees the same number whether the tests ran or not. The record
 # says per test which it was.
 #
-# It is removed first, because a record left by an earlier run is a
-# record of some other selection: read after a run that never started,
-# it answers for tests this one did not touch.
-record="$build/meson-logs/testlog.json"
-rm -f "$record"
+# The record is removed first, because one left by an earlier run is a
+# record of some other selection: read after a run that never started, it
+# answers for tests this one did not touch.
+#
+# What it is called is meson's to choose. A plain run leaves testlog.json
+# and a run under a wrapper leaves a name carrying the wrapper's, so
+# rather than predict which, every record is cleared and the one the run
+# leaves is the one read. A wrapper this has not met is then read the
+# same as none.
+logdir="$build/meson-logs"
+for old in "$logdir"/testlog*.json; do
+    [ -f "$old" ] && rm -f "$old"
+done
 
 # shellcheck disable=SC2086
 meson test -C "$build" $filter "$@"
 status=$?
 
-if [ ! -f "$record" ]; then
+record=''
+for left in "$logdir"/testlog*.json; do
+    [ -f "$left" ] || continue
+    if [ -n "$record" ]; then
+        echo "FAILURES: the $profile profile left more than one record in"
+        echo "      $logdir, so which run each answers for cannot be told"
+        exit 1
+    fi
+    record=$left
+done
+
+if [ -z "$record" ]; then
     echo "FAILURES: the $profile profile ran nothing -- meson wrote no record"
-    echo "      at $record"
+    echo "      in $logdir"
     exit 1
 fi
 

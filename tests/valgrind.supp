@@ -1,0 +1,46 @@
+# Allocations memcheck reaches through this tree but which this tree
+# does not own. The same two libraries are named to LeakSanitizer in
+# tests/lsan.supp, for the same reason.
+#
+# The font configuration library builds a process-wide cache the first
+# time a font is asked for and holds it until the process ends, by its
+# own design; the XML parser it reads its configuration files with is
+# reached only from there. Neither allocation belongs to a context, so
+# neither is freed when one ends, and neither grows with the work a
+# process does. They are named here so that the leaks the tree does own
+# are what the job reports.
+{
+   the font configuration library's process-wide cache
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,possible
+   ...
+   obj:*/libfontconfig.so*
+}
+{
+   the XML parser that library reads its configuration with
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,possible
+   ...
+   obj:*/libexpat.so*
+}
+
+# The shell each script-driven test is run by. meson applies the wrapper
+# to the whole test command, and most of this suite's tests are a shell
+# script that starts the interpreter, so the process memcheck watches is
+# the shell. What it holds when it exits is the shell's own and is named
+# here; the interpreter it started is a child, and memcheck does not
+# follow one by default.
+{
+   the shell a test is run by, not the tree
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,possible
+   ...
+   obj:*/dash
+}
+{
+   the shell a test is run by, not the tree (bash)
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,possible
+   ...
+   obj:*/bash
+}

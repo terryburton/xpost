@@ -254,10 +254,18 @@ jobs:
         ninja -C builddir
     # meson's own wrapper, so every test runs under it rather than a
     # hand-picked few.
+    #
+    # Through the profile wrapper, as the sanitizer lanes are, and for
+    # the same reason: it reads which tests a run can answer for rather
+    # than being told. A memory checker displaces the memacct weighings
+    # and the vmlimit limit exactly as a sanitizer runtime does, and
+    # naming those suites here would be a second copy of knowledge the
+    # wrapper already holds.
     - name: test under memcheck
       run: |
-        meson test -C builddir --print-errorlogs \
-          --wrapper='valgrind --error-exitcode=9 --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes' \
+        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh full \
+          --print-errorlogs \
+          --wrapper="valgrind --error-exitcode=9 --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes --suppressions=$PWD/tests/valgrind.supp" \
           --timeout-multiplier 20
 
   gcc-analyzer:
