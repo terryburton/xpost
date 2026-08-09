@@ -148,8 +148,9 @@ fi
 # The list above is what is known today; a name nobody thought of still
 # has to end in fopen to be one, so an identifier that does and does not
 # belong to the funnel is refused as well.
-known='xpost_diskfile_fopen xpost_diskfile_fopen_beneath xpost_raw_fopen
-       xpost_confined_fopen'
+# One line: the value reaches awk through -v, and an awk that takes the
+# assignment as a string literal will not have a newline inside one.
+known='xpost_diskfile_fopen xpost_diskfile_fopen_beneath xpost_raw_fopen xpost_confined_fopen'
 awk -F: -v known="$known" '
     BEGIN { split(known, k, /[ \n]+/); for (i in k) if (k[i] != "") ok[k[i]] = 1 }
     {

@@ -89,7 +89,10 @@ fi
 
 if [ "$regen" = "--regen" ]; then
     mkdir -p "$golden"
-    cp "$out_manifest" "$manifest"
+    {
+        echo "# platform $(uname -s 2>/dev/null)-$(uname -m 2>/dev/null)"
+        cat "$out_manifest"
+    } > "$manifest"
     echo "regenerated $manifest:"
     cat "$manifest"
     rm -rf "$work"
@@ -116,16 +119,62 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
+# Which devices are held to the byte.
+#
+# The raster devices are: every byte of a raster is this interpreter's
+# own arithmetic, and it comes out the same wherever that arithmetic
+# runs -- measured, not assumed.
+#
+# The vector writers are held to the byte only where the manifest was
+# made. What they write is text, and two parts of it are the platform's
+# rather than this interpreter's: a number is rendered to digits by the
+# C library, and a compressed stream is packed by whatever zlib is
+# linked. Both produce output that is correct and not identical. Holding
+# them to the byte elsewhere reports a drift on every run and teaches a
+# reader to discount the report; leaving them out entirely gives up a
+# gate that does catch drift where it is meaningful. So they are
+# compared where the comparison means something and named where it does
+# not.
+platform=$(uname -s 2>/dev/null)-$(uname -m 2>/dev/null)
+reference=$(sed -n 's/^# platform //p' "$manifest" 2>/dev/null)
+if [ -n "$reference" ] && [ "$platform" != "$reference" ]; then
+    byte_exact_only_raster=1
+else
+    byte_exact_only_raster=0
+fi
+
 # compare per device so a mismatch names its device
 while read -r want dev; do
+    case $dev in
+        pdfwrite|svgwrite|dscwrite)
+            if [ "$byte_exact_only_raster" = 1 ]; then
+                echo "NOTE $dev: not held to the byte on $platform;"
+                echo "     the manifest was made on $reference, and what this"
+                echo "     writer emits is partly the platform's own"
+                continue
+            fi ;;
+    esac
     got=$(grep " $dev\$" "$out_manifest" | cut -d' ' -f1)
     if [ "$got" != "$want" ]; then
         echo "FAIL $dev: rendered bytes differ from the golden manifest"
+        # A hash says only that two byte strings differ. Show where the
+        # rendered one parts from what a reader of this report can see,
+        # so a drift in how a number is written is told apart from a
+        # drift in what was drawn.
+        rendered="$work/golden.$dev"
+        if [ -r "$rendered" ]; then
+            echo "     bytes: $(LC_ALL=C wc -c < "$rendered" 2>/dev/null), and it opens:"
+            LC_ALL=C dd if="$rendered" bs=1 count=160 2>/dev/null \
+                | LC_ALL=C tr -c '[:print:]' '.' | sed 's/^/       /'
+            echo ""
+        fi
         fail=1
     else
         echo "OK   $dev"
     fi
-done < "$manifest"
+done <<EOF
+$(grep -v '^#' "$manifest")
+EOF
 
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then

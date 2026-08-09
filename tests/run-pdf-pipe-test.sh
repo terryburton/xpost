@@ -18,6 +18,15 @@ script=$2
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 
+# A shell that emulates named pipes for its own programs can make one
+# that a native program cannot open: mkfifo succeeding says the shell has
+# them, not that the interpreter under test can be handed one.
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "SKIP: the named pipes here are the shell's, not the platform's"
+        exit 77 ;;
+esac
+
 fifo=$dir/pipe.pdf
 mkfifo "$fifo" || { echo "SKIP: no named pipe support"; exit 77; }
 
@@ -31,17 +40,22 @@ wait "$drain"
 
 verdict_run "$status" "$out" "the interpreter" || exit 1
 
-head -c 8 "$dir/frompipe.pdf" | grep -q '%PDF-1' || {
+head -c 8 "$dir/frompipe.pdf" | LC_ALL=C grep -q '%PDF-1' || {
     echo "FAIL: no PDF header -- nothing reached the pipe"
     exit 1
 }
-tail -c 16 "$dir/frompipe.pdf" | grep -q '%%EOF' || {
+tail -c 16 "$dir/frompipe.pdf" | LC_ALL=C grep -q '%%EOF' || {
     echo "FAIL: no EOF trailer -- the document was cut short"
     exit 1
 }
 
-# the offset the trailer points at must be where the table really starts
-xoff=$(tr -d '\000' < "$dir/frompipe.pdf" | sed -n '/^startxref$/{n;p;}' | tail -1)
+# The offset the trailer points at must be where the table really starts.
+# A document holds bytes that are not text, and the tools reading it here
+# are told to work in bytes: one that decodes its input as characters
+# stops at the first byte that is not one, and reports nothing found
+# rather than saying why.
+xoff=$(LC_ALL=C tr -d '\000' < "$dir/frompipe.pdf" \
+    | LC_ALL=C sed -n '/^startxref$/{n;p;}' | tail -1)
 case "$xoff" in
     ''|*[!0-9]*) echo "FAIL: no startxref offset in the trailer"; exit 1 ;;
 esac

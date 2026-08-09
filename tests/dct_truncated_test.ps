@@ -91,7 +91,11 @@ clear
 0 1 255 { dup dup 16 mod exch 16 idiv add 8 mul data 3 1 roll put } for
 e data writestring e closefile f closefile
 
-/jpg scratch (r) file 8192 string readstring pop def
+% the file is closed before it is deleted: a platform may hold a name
+% that something still has open, and the delete is then refused
+/jf scratch (r) file def
+/jpg jf 8192 string readstring pop def
+jf closefile
 /plain 256 string def
 jpg /DCTDecode filter plain readstring pop pop
 scratch deletefile

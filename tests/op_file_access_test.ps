@@ -33,6 +33,15 @@
 
 /nm (faccess.scratch) def
 
+/del { % (label) . -    delete the scratch file, saying which delete it was
+    /del.at exch def
+    { nm deletefile } stopped {
+        (FAIL: deletefile refused at ) print del.at print (\n) print flush
+        /failcount failcount 1 add store
+    } if
+} bind def
+
+
 % --- w creates and truncates ---
 /f nm (w) file def f (AB) writestring f closefile
 nm slurp (AB) eq (w writes the file) assert
@@ -42,12 +51,12 @@ nm slurp (Z) eq (w truncates an existing file) assert
 % --- a appends to an existing file ---
 /f nm (a) file def f (YX) writestring f closefile
 nm slurp (ZYX) eq (a appends to an existing file) assert
-nm deletefile
+(after the append cases) del
 /f nm (a) file def f (Q) writestring f closefile
 nm slurp (Q) eq (a creates a file that does not exist) assert
 
 % --- r+ reads and writes an existing file ---
-nm deletefile
+(before the r+ cases) del
 /f nm (w) file def f (abcd) writestring f closefile
 /f nm (r+) file def
 f 2 string readstring pop (ab) eq (r+ reads) assert
@@ -111,21 +120,32 @@ f closefile
 /f nm (a) file def
 { f cvx exec } /invalidaccess (a file opened a refuses to be executed) erris
 f closefile
-% a filter carries the attribute of the direction it codes in
-/f nm (w) file /ASCIIHexEncode filter def
+% a filter carries the attribute of the direction it codes in. The file
+% under it is the program's, not the filter's, so closing the filter
+% leaves it open and the program closes it: a platform that holds a name
+% while a file on it is open refuses to delete it otherwise.
+/uf nm (w) file def
+/f uf /ASCIIHexEncode filter def
 { f cvx exec } /invalidaccess (an encoding filter refuses to be executed) erris
 f closefile
+uf closefile
 % while every readable one runs as before, to the end of the file
-nm deletefile
+(before the execution cases) del
 /f nm (w) file def f (/f.ran f.ran 1 add def\n) writestring f closefile
 /f.ran 0 def
-nm (r) file cvx exec
+% Each is closed if executing it did not: a platform may hold a name
+% that something still has open, and the delete below is then refused.
+/x nm (r) file def x cvx exec
 f.ran 1 eq (a file opened r executes) assert
-nm (r+) file cvx exec
+x status { x closefile } if
+/x nm (r+) file def x cvx exec
 f.ran 2 eq (a file opened r+ executes) assert
-nm (w+) file dup (/f.ran f.ran 1 add def\n) writestring
-    dup 0 setfileposition cvx exec
+x status { x closefile } if
+/x nm (w+) file def
+x (/f.ran f.ran 1 add def\n) writestring
+x 0 setfileposition x cvx exec
 f.ran 3 eq (a file opened w+ executes) assert
+x status { x closefile } if
 
 % --- an access string outside the table is invalidfileaccess ---
 { nm (q) file } /invalidfileaccess (an unknown access string is refused) erris
@@ -136,6 +156,6 @@ f.ran 3 eq (a file opened w+ executes) assert
 { (faccess_absent.scratch) (r) file } /undefinedfilename
     (r on a file that does not exist is undefinedfilename) erris
 
-nm deletefile
+(at the end) del
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

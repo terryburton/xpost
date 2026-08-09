@@ -101,20 +101,27 @@ cstat 7 array astore /before exch def
     { pop }{ null } ifelse
 } bind def
 
+% The field is the face's own 16.16 form, held in the C type the font
+% library gives it, whose width is the platform's: a value inside the
+% field where that type is 64 bits is outside it where it is 32. So the
+% values below are chosen against the narrower of the two -- well inside
+% it for the entries that must each be reached, and past what either can
+% hold for the ones that must not be.
+
 % inside the field: two transforms, two entries, each reached by its own
-[ 1.0e14 0 0 1.0e14 0 0 ] 11 33.0 file
-[ 1.2e14 0 0 1.2e14 0 0 ] 11 44.0 file
-[ 1.0e14 0 0 1.0e14 0 0 ] 11 ask 33.0 eq
+[ 1.0 0 0 1.0 0 0 ] 11 33.0 file
+[ 1.2 0 0 1.2 0 0 ] 11 44.0 file
+[ 1.0 0 0 1.0 0 0 ] 11 ask 33.0 eq
     (a transform inside the fixed-point field reaches its own entry) require
-[ 1.2e14 0 0 1.2e14 0 0 ] 11 ask 44.0 eq
+[ 1.2 0 0 1.2 0 0 ] 11 ask 44.0 eq
     (and so does the other one filed beside it) require
 
 % outside it: whatever is filed, neither transform may reach the other's
-[ 2.0e14 0 0 2.0e14 0 0 ] 12 55.0 file
-[ 3.0e14 0 0 3.0e14 0 0 ] 12 66.0 file
-[ 2.0e14 0 0 2.0e14 0 0 ] 12 ask dup null eq exch 55.0 eq or
+[ 2.0e15 0 0 2.0e15 0 0 ] 12 55.0 file
+[ 3.0e15 0 0 3.0e15 0 0 ] 12 66.0 file
+[ 2.0e15 0 0 2.0e15 0 0 ] 12 ask dup null eq exch 55.0 eq or
     (a transform outside the field reaches no other transform's entry) require
-[ 3.0e14 0 0 3.0e14 0 0 ] 12 ask dup null eq exch 66.0 eq or
+[ 3.0e15 0 0 3.0e15 0 0 ] 12 ask dup null eq exch 66.0 eq or
     (nor does the other one filed beside it) require
 
 % the caller's number for a mask is an integer object, so it is carried

@@ -101,6 +101,15 @@ if [ ! -s "$work/raw" ] && command -v objdump >/dev/null 2>&1; then
                table && /\+base\[/ { print $NF }' > "$work/raw"
 fi
 
+# a Mach-O image: the nm there has neither of those options, lists a
+# defined symbol under -U, and writes a C name with the underscore the
+# ABI puts in front of it
+if [ ! -s "$work/raw" ]; then
+    nm -gU "$lib" 2>/dev/null | tr -d '\r' \
+        | awk 'NF == 3 && $2 !~ /^[a-z]$/ { sub(/^_/, "", $3); print $3 }' \
+        > "$work/raw"
+fi
+
 grep -v '\.' "$work/raw" | sort -u > "$work/have"
 
 # the profiling runtime's exports, present only when the library carries
