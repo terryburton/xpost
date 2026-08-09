@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 284
+entries 290
 
 .gscratch /.lresources
 .gscratch /.pfdict
@@ -77,6 +77,7 @@ entries 284
 .xpostsys /.applytransfer
 .xpostsys /.argok
 .xpostsys /.axialsh
+.xpostsys /.beginpage
 .xpostsys /.bez1
 .xpostsys /.bindone
 .xpostsys /.bindscope
@@ -91,6 +92,7 @@ entries 284
 .xpostsys /.charpathoutline
 .xpostsys /.charpathstroked
 .xpostsys /.checkargs
+.xpostsys /.checkpagehandlers
 .xpostsys /.cidface
 .xpostsys /.cieabcrgb
 .xpostsys /.ciearpgb
@@ -151,6 +153,7 @@ entries 284
 .xpostsys /.dir
 .xpostsys /.docap
 .xpostsys /.dsunwind
+.xpostsys /.endpage
 .xpostsys /.eospanparts
 .xpostsys /.eospantile
 .xpostsys /.execformbox
@@ -223,6 +226,8 @@ entries 284
 .xpostsys /.opsigs
 .xpostsys /.outlinepath
 .xpostsys /.pagefilename
+.xpostsys /.pagehandler
+.xpostsys /.pageno
 .xpostsys /.pagepause
 .xpostsys /.pagestate
 .xpostsys /.patchpaint
@@ -258,6 +263,7 @@ entries 284
 .xpostsys /.screenlattice
 .xpostsys /.sepconv
 .xpostsys /.setclipregion
+.xpostsys /.setpageno
 .xpostsys /.shcolor
 .xpostsys /.showclip
 .xpostsys /.showfmap

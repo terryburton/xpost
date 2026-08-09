@@ -2478,6 +2478,15 @@ test('subinterval-retention',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The page device's BeginPage and EndPage handlers: when each is called, the
+# page count each is given, the reason code EndPage is told, the boolean it
+# answers with, and what happens when a handler misbehaves.
+test('page-handlers',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/page_handlers_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The filter and scanner behaviours a program packaged as a ProcSet depends
 # on: a string, a file or a procedure as a data source, an encoding filter
 # that flushes its end-of-data when closed, a procedure still readable when

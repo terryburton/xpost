@@ -268,6 +268,18 @@ Level 2 operators
  [X] setpagedevice (OutputDevice, PageSize, HWResolution, OutputFile,
      PageOffset; other keys reach the device as features)
  [X] currentpagedevice
+ [X] BeginPage, EndPage (called with the count of pages the device has
+     transmitted, EndPage also with the reason -- 0 showpage, 1 copypage,
+     2 the device going away -- and its boolean decides whether the page
+     is transmitted. A handler that is not executable is refused by
+     setpagedevice; one that answers with anything but a single boolean
+     is a typecheck. A failing handler is let out of showpage and
+     copypage, where a program can catch it, but not out of a device
+     handover, which would leave the device impossible to replace.
+     copypage ends a page with reason 1 and does not count it, as the
+     operator descriptions have it; the reference interpreter collapses
+     copypage into showpage, reason 0 and counted, as a LanguageLevel 3
+     interpreter may)
  [X] xshow
  [X] yshow
  [X] xyshow
@@ -289,11 +301,21 @@ Level 2 operators
  [X] makepattern (every tile repaints its cell; text through a CMap
      composite under a pattern colour paints the underlying colour)
  [X] setpattern
- [X] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
+ [/] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
      Flate, LZW, CCITTFax, DCT, ReusableStream; encode filters:
-     ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT)
+     ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT.
+     A data source may be a string, a file or a procedure, but a
+     procedure is run to exhaustion when the filter is made rather than
+     as the filter wants data, which also holds it to a megabyte; a
+     procedure is not accepted as a data target at all)
  [X] defineresource, findresource, resourcestatus, resourceforall,
-     undefineresource
+     undefineresource (an instance is held to the type its category
+     takes and left read-only, as the language requires)
+ [ ] resource discovery by filename (no GenericResourceDir or
+     GenericResourcePathSep system parameter, and a category
+     implementation dictionary carries no ResourceFileName, so a program
+     cannot ask where a resource would be installed or found. Instances
+     reach the interpreter through its own search path instead)
  [X] Trapping procedure set: settrapparams, currenttrapparams, settrapzone
      (parameters recorded and queryable; no traps are generated, as the
      language leaves in-RIP trapping device-dependent)

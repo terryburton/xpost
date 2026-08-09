@@ -1,0 +1,204 @@
+% BeginPage and EndPage (PLRM 6.2.6), run through `xpost -d null` by
+% run-ps-test.sh: prints SUCCESS iff every assertion holds.
+%
+% A page device may carry a procedure to run at the start of each page and
+% one to run at the end. The interpreter calls them, hands them the count of
+% pages the device has transmitted, tells the end procedure why the page is
+% ending, and obeys the boolean it returns.
+%
+% The counts are what a program imposing several virtual pages onto one sheet
+% reads to decide where the next one goes, and the reason code is how it
+% learns the device is going away and it must flush what it has gathered.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
+/erris { 3 dict begin /tag exch def /want exch def
+    stopped { $error /errorname get want eq }{ false } ifelse tag assert clear end } def
+
+% the handlers record what they were given; store reaches userdict from
+% inside them, and nothing here wraps save around a page
+/bcount 0 def /ecount 0 def
+/bpages 20 array def /epages 20 array def /ereasons 20 array def
+/reset { /bcount 0 store /ecount 0 store } bind def
+/BP { bpages bcount 3 -1 roll put /bcount bcount 1 add store } bind def
+/EP { ereasons ecount 3 -1 roll put epages ecount 3 -1 roll put
+      /ecount ecount 1 add store } bind def
+
+% --- setpagedevice calls BeginPage, and the count starts at zero ---------
+reset
+<< /OutputDevice /null /BeginPage { BP } /EndPage { EP true } >> setpagedevice
+bcount 1 eq (setpagedevice calls BeginPage) assert
+bpages 0 get 0 eq (the first BeginPage is given page 0) assert
+ecount 0 eq (setpagedevice does not call EndPage for a device just installed) assert
+
+% --- showpage ends one page and begins the next -------------------------
+reset
+showpage
+ecount 1 eq (showpage calls EndPage) assert
+epages 0 get 0 eq (EndPage is given the count not including this page) assert
+ereasons 0 get 0 eq (showpage gives EndPage reason 0) assert
+bcount 1 eq (showpage calls BeginPage for the next page) assert
+bpages 0 get 1 eq (the next BeginPage is given the incremented count) assert
+
+reset
+showpage
+epages 0 get 1 eq (the second showpage sees the count risen) assert
+bpages 0 get 2 eq (and hands the next page the count after it) assert
+
+% --- copypage ends a page without counting it ---------------------------
+reset
+copypage
+ecount 1 eq (copypage calls EndPage) assert
+ereasons 0 get 1 eq (copypage gives EndPage reason 1) assert
+bcount 1 eq (copypage calls BeginPage) assert
+bpages 0 get 2 eq (copypage does not advance the page count) assert
+
+% --- deactivating the device ends its last page with reason 2 -----------
+reset
+<< /OutputDevice /null >> setpagedevice
+ecount 1 eq (a page device change calls the outgoing EndPage) assert
+ereasons 0 get 2 eq (deactivation gives EndPage reason 2) assert
+
+% --- the count restarts for a newly activated device --------------------
+reset
+<< /OutputDevice /null /BeginPage { BP } /EndPage { EP true } >> setpagedevice
+bpages 0 get 0 eq (a newly activated device starts its count at zero) assert
+reset
+showpage
+epages 0 get 0 eq (and counts its own pages from zero) assert
+
+% --- a request merges into what the device already carries --------------
+% A setpagedevice that does not mention a handler keeps the one in force, so
+% the only way back to a device carrying none is to change OutputDevice,
+% which starts from that device's own defaults.
+reset
+<< /OutputDevice /null >> setpagedevice
+bcount 1 eq (a merging request keeps the handler already installed) assert
+
+% --- the handlers are optional -----------------------------------------
+reset
+<< /OutputDevice /bbox /HWResolution [72 72] >> setpagedevice
+bcount 0 eq (changing OutputDevice drops the handlers with the old device) assert
+mark { showpage copypage } stopped not exch cleartomark
+    (a device with no handlers still shows pages) assert
+
+% --- bad handlers are refused, and refused cleanly ----------------------
+% Each case starts from a device carrying no handlers, since a request merges
+% into what the device already has. No mark is used to catch anything here:
+% one of these handlers clears the operand stack, which would take a mark
+% with it, so every verdict is left in a name.
+/cerr null def
+/runcatch { /cerr null store stopped { $error /errorname get /cerr exch store } if } bind def
+/fresh { << /OutputDevice /bbox /HWResolution [72 72] >> setpagedevice } bind def
+
+% A handler that is not executable cannot be run; the interpreter says so
+% when it is offered, rather than at the page boundary where finding out
+% would leave the page half made.
+fresh
+{ << /OutputDevice /null /BeginPage 42 >> setpagedevice } runcatch
+cerr /typecheck eq (a non-procedure BeginPage is refused) assert
+fresh
+{ << /OutputDevice /null /EndPage (nope) >> setpagedevice } runcatch
+cerr /typecheck eq (a non-procedure EndPage is refused) assert
+
+% An EndPage that answers with something other than a boolean, or with
+% nothing, or with more than one thing, has not answered the question.
+fresh
+<< /OutputDevice /null /EndPage { pop pop 7 } >> setpagedevice
+{ showpage } runcatch
+cerr /typecheck eq (an EndPage returning a non-boolean is a typecheck) assert
+fresh
+<< /OutputDevice /null /EndPage { pop pop } >> setpagedevice
+{ showpage } runcatch
+cerr /typecheck eq (an EndPage returning nothing is a typecheck) assert
+
+% A handler that empties the stack must not take the interpreter with it.
+/survived false def
+fresh
+<< /OutputDevice /null /BeginPage { pop clear } /EndPage { pop pop true } >> setpagedevice
+{ showpage /survived true store } stopped pop
+survived (a BeginPage that clears the stack does not break showpage) assert
+
+% A device that cannot be replaced would be worse than a handler that fails,
+% so a failing handler does not stop the handover.
+/replaced false def
+fresh
+<< /OutputDevice /null /EndPage { pop pop } >> setpagedevice
+{ fresh /replaced true store } stopped pop
+replaced (a device whose EndPage fails can still be replaced) assert
+
+
+% --- what the boolean actually decides ----------------------------------
+% Under the default showpage semantics the device's own page number advances
+% only when a page is transmitted, so it says whether the answer was obeyed.
+/devpageno { DEVICE /pagenumber 2 copy known { get }{ pop pop 0 } ifelse } bind def
+fresh
+<< /OutputDevice /null /EndPage { pop pop true } >> setpagedevice
+/n0 devpageno def
+showpage
+devpageno n0 gt (EndPage answering true transmits the page) assert
+fresh
+<< /OutputDevice /null /EndPage { pop pop false } >> setpagedevice
+/n1 devpageno def
+showpage
+devpageno n1 eq (EndPage answering false does not transmit the page) assert
+% and the page is still counted, so the next page knows where it is
+reset
+<< /OutputDevice /null /BeginPage { BP } /EndPage { EP false } >> setpagedevice
+reset
+showpage
+bpages 0 get 1 eq (a page not transmitted is still counted) assert
+
+% --- the count is not rewound by the save a job wraps round a page -------
+reset
+fresh
+<< /OutputDevice /null /BeginPage { BP } /EndPage { EP true } >> setpagedevice
+save showpage restore
+% the recorder is in local memory and the restore rewinds it, so the count
+% is read from the page that follows rather than from what was recorded
+reset
+showpage
+epages 0 get 1 eq (a page shown inside save and restore still counts) assert
+bpages 0 get 2 eq (and the page after it carries on from there) assert
+
+% --- a handler that fails is not swallowed by showpage -------------------
+% setpagedevice calls BeginPage as its last action, so a handler that fails
+% fails there, and the failure is the handler's own rather than something
+% the interpreter invented
+fresh
+{ << /OutputDevice /null /BeginPage { pop 1 0 div pop } >> setpagedevice } runcatch
+cerr /undefinedresult eq (a BeginPage that fails reports its own error) assert
+
+% --- a handler that shows a page does not run away ----------------------
+% Nothing forbids it, and it must not take the interpreter down; the flag
+% stops the recursion after one turn.
+/again true def
+/deep false def
+fresh
+<< /OutputDevice /null
+   /BeginPage { pop again { /again false store showpage /deep true store } if }
+   /EndPage { pop pop true } >> setpagedevice
+{ showpage } stopped pop
+deep (a BeginPage may itself show a page) assert
+
+fresh
+<< /OutputDevice /null >> setpagedevice
+
+% -------------------------------------------------------------------------
+% ADJUDICATED against Adobe, and two answers differ on purpose.
+%
+% copypage. Adobe ends the page with reason 0 and counts it, exactly as
+% showpage does, because PLRM 6.2.6 says the distinction between the two
+% "exists only in LanguageLevel 2; in LanguageLevel 3, the effects of
+% copypage on the device are the same as those of showpage". The operator
+% descriptions are explicit the other way -- reason 1 during copypage, and a
+% count of "the number of executions of showpage (but not copypage)" -- and
+% that is what is implemented above and asserted here. A program that reads
+% the reason to tell the two apart is served by this and not by the
+% collapsed form.
+%
+% An EndPage that answers with nothing is /undefined on Adobe and /typecheck
+% here. Neither is specified. The answer says what was wrong with the
+% answer, which is the more useful of the two.
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

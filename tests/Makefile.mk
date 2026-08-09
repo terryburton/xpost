@@ -219,6 +219,7 @@ tests/op_wrapsig_test.ps \
 tests/operator_install_refusal_test.c \
 tests/outline_font_test.ps \
 tests/page_cover_test.ps \
+tests/page_handlers_test.ps \
 tests/page_semantics_test.c \
 tests/path_bounds_test.ps \
 tests/path_confine_test.c \
