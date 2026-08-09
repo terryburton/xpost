@@ -96,28 +96,8 @@ currentglobal true setglobal
 setglobal
 gd gcheck (gcheck is true for a global object) assert
 
-% -------------------------------------------------------------------------
-% KNOWN DEVIATION (TODO, not asserted): a procedure data source is drained
-% in full when the filter is made, not called as the filter wants data.
-% PLRM 3.13: "If a procedure is a data source, the filter calls it whenever
-% it needs to obtain input data." Adobe calls it no times before the first
-% byte is read and once during the read; xpost calls it to exhaustion first
-% (data/init.ps .collectproc), concatenates the result and hands the whole
-% string to the C filter. Two consequences a library meets: a source reading
-% from another file has consumed all of it before the filter is used, and a
-% source yielding more than 1048576 bytes raises limitcheck.
-% Recorded for the filter work rather than tested, since asserting either the
-% call count or the cap would freeze the deviation.
-%
-% KNOWN DEVIATION (TODO, not asserted): an encoding filter cannot be made
-% with a procedure as its data target.
-% PLRM 3.13 gives a target procedure its own contract -- the filter pushes a
-% string and a boolean and expects a writeable string back. xpost's /filter
-% wrapper takes any executable array operand for a data *source* and drains
-% it, so making an encoding filter over a target procedure runs that
-% procedure with the wrong stack:
-%     /tgt { pop pop tbuf } def  /tgt load /ASCIIHexEncode filter
-%         => stackunderflow, for ASCIIHexEncode, NullEncode and FlateEncode
-% Adobe constructs all three. Recorded rather than tested for the same reason.
+% A procedure standing as a data source or target is exercised in
+% tests/filter_proc_test.ps, which holds the calls to the contract PLRM
+% 3.13.1 states for them.
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

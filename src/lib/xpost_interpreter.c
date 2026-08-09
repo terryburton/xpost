@@ -2007,8 +2007,16 @@ ctxswitch:
 
 /* How deep a program may drive the nesting. Each level holds a C frame
    of this function and of whichever operator called in, so the bound is
-   the C stack's, not the execution stack's, and it is set well below
-   what the smallest stack the interpreter is built for can carry. */
+   the C stack's, and it is set well below what the smallest stack the
+   interpreter is built for can carry.
+
+   Reaching it is limitcheck and not execstackoverflow. The execution
+   stack is not what runs out: a level of nesting spends three entries of
+   it against a ceiling of XPOST_EXEC_STACK_LIMIT, so a program told its
+   execution stack had grown too large (PLRM 8.2, which points at the
+   limit on the size of that stack) could read countexecstack and find
+   it all but empty. What has been reached is an implementation limit of
+   this interpreter's own, which is what limitcheck is for. */
 #define XPOST_NEST_MAX 64
 
 /* the error a procedure run from inside an operator failed with, named
@@ -2051,7 +2059,7 @@ int xpost_interpreter_run_nested(Xpost_Context *ctx, Xpost_Object P)
     int ret = 0;
 
     if (ctx->nest_depth >= XPOST_NEST_MAX)
-        return execstackoverflow;
+        return limitcheck;
 
     base = xpost_stack_count(ctx->lo, ctx->es);
 

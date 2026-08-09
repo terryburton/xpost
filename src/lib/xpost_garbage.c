@@ -347,6 +347,23 @@ int _xpost_garbage_mark_reach(Xpost_Context *ctx,
                && !(fm->table.tab[fent].mark
                     & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK))
         {
+            int nheld, h;
+
+            /* a stream whose bytes a procedure supplies or disposes of
+               holds that procedure, and the strings it has exchanged
+               with it, in the struct rather than in virtual memory:
+               nothing else names any of them, so the sweep would take
+               them out from under a filter still reading or writing */
+            nheld = xpost_file_held_count(fm, fent);
+            for (h = 0; h < nheld; h++)
+            {
+                Xpost_Object held = xpost_file_held_object(fm, fent, h);
+
+                if (!_xpost_garbage_mark_reach(ctx,
+                        xpost_context_select_memory(ctx, held),
+                        held, markall))
+                    return 0;
+            }
             if (!_xpost_garbage_mark_ent(fm, fent))
                 break;
             fent = xpost_file_underlying_entity(fm, fent);

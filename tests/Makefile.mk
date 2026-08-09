@@ -116,6 +116,7 @@ tests/filter_eod_test.ps \
 tests/filter_leak_test.ps \
 tests/filter_matrix_test.ps \
 tests/filter_predictor_test.ps \
+tests/filter_proc_test.ps \
 tests/filter_source_life_test.ps \
 tests/font_bigbuf_test.ps \
 tests/font_directory_test.ps \

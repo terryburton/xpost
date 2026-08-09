@@ -67,6 +67,8 @@
 #include "xpost_error.h"  /* file functions may throw errors */
 #include "xpost_file.h"  /* double-check prototypes */
 #include "xpost_strbuf.h"  /* a rereadable file captures its source in one */
+#include "xpost_string.h"  /* a procedure stream hands over its bytes in one */
+#include "xpost_interpreter.h"  /* a procedure stream runs the procedure */
 
 /* --- file-access sandbox -------------------------------------------------
    A process-wide, one-way latch. Before engaging, disk access is
@@ -1483,6 +1485,441 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         return invalid;
     }
     return f;
+}
+
+/* Record a failed callback so the operator that was reaching through
+   this stream answers for it. A stream can only say end of data or
+   refusal; the error itself is carried here. */
+static int
+_proc_failed(Xpost_ProcFile *pf, int err)
+{
+    if (err && !pf->ctx->callback_error)
+        pf->ctx->callback_error = (unsigned int)err;
+    return err;
+}
+
+/* Ask the procedure for its next string, with whatever the caller wants
+   it called with already pushed. The answer is left on the operand
+   stack. */
+static int
+_proc_call(Xpost_ProcFile *pf, int refuse_reentry)
+{
+    int ret;
+
+    if (pf->methods.closed)
+        return ioerror;
+    /* A target procedure that writes to the stream it is the target of
+       is asking it to dispose of bytes it is in the middle of being
+       asked to dispose of. There is nothing to answer with: the string
+       the waiting call must give back is the one this call would have to
+       return first. PLRM 8.2 gives ioerror for an output error, and a
+       stream that cannot be written because writing it is what is
+       already happening is one. A source is under no such difficulty --
+       the bytes a nested read takes are bytes the stream has -- and is
+       allowed to nest. */
+    if (refuse_reentry && pf->running)
+        return ioerror;
+    pf->running = 1;
+    ret = xpost_interpreter_run_nested(pf->ctx, pf->proc);
+    pf->running = 0;
+    return ret;
+}
+
+/* Keep a string until the buffer in front of it has been read out. */
+static int
+_proc_queue(Xpost_ProcFile *pf, Xpost_Object s)
+{
+    if (pf->npending == pf->cpending)
+    {
+        int want = pf->cpending ? pf->cpending * 2 : 4;
+        Xpost_Object *grown = realloc(pf->pending, (size_t)want * sizeof *grown);
+
+        if (!grown)
+            return VMerror;
+        pf->pending = grown;
+        pf->cpending = want;
+    }
+    pf->pending[pf->npending++] = s;
+    return 0;
+}
+
+/* Take up the string that has waited longest. */
+static void
+_proc_dequeue(Xpost_ProcFile *pf)
+{
+    int i;
+
+    pf->buf = pf->pending[0];
+    pf->pos = 0;
+    for (i = 1; i < pf->npending; i++)
+        pf->pending[i - 1] = pf->pending[i];
+    --pf->npending;
+}
+
+/* Take the string the procedure answered with. A procedure that
+   answered with something else, or with nothing, has not met the
+   contract, and the read or write that called it fails. */
+static int
+_proc_take_string(Xpost_ProcFile *pf, Xpost_Object *out)
+{
+    Xpost_Object s;
+
+    if (xpost_stack_count(pf->ctx->lo, pf->ctx->os) < 1)
+        return stackunderflow;
+    s = xpost_stack_pop(pf->ctx->lo, pf->ctx->os);
+    if (xpost_object_get_type(s) != stringtype)
+        return typecheck;
+    *out = s;
+    return 0;
+}
+
+/* refill from the source procedure; 0 once buf holds bytes to hand out,
+   and the source is at its end when it answers with none */
+static int
+_procsrc_refill(Xpost_ProcFile *pf)
+{
+    int ret;
+    Xpost_Object s;
+
+    ret = _proc_call(pf, 0);
+    if (ret)
+        return ret;
+    ret = _proc_take_string(pf, &s);
+    if (ret)
+        return ret;
+    if (!xpost_object_is_readable(pf->ctx, s))
+        return invalidaccess;
+    if (s.comp_.sz == 0)
+    {
+        /* the end of the data, once whatever is already waiting has
+           been read out */
+        pf->eod = 1;
+        return 0;
+    }
+    /* the procedure may have read this stream while it was running, and
+       been served from a buffer that still has bytes left: this string
+       goes behind that one rather than over it */
+    if (pf->pos < pf->buf.comp_.sz || pf->npending)
+        return _proc_queue(pf, s);
+    pf->buf = s;
+    pf->pos = 0;
+    return 0;
+}
+
+static int
+procsrc_readch(Xpost_File *f)
+{
+    Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+    integer c;
+
+    /* Each source of bytes is tested on every pass. Asking the procedure
+       for more data runs the program, and the program may read this same
+       stream from inside that call, leaving a pushback byte, a
+       part-read buffer or a queued string. Each of those precedes what
+       a later call supplies. */
+    for (;;)
+    {
+        if (pf->pushback >= 0)
+        {
+            c = pf->pushback;
+            pf->pushback = -1;
+            return (int)c;
+        }
+        if (pf->pos < pf->buf.comp_.sz)
+        {
+            /* the string is read one byte at a time rather than through
+               a pointer taken once: the procedure that returned it runs
+               the interpreter, and a collection between two of its calls
+               may move the string it gave back */
+            if (xpost_string_get(pf->ctx, pf->buf, (integer)pf->pos, &c) != 0)
+                return EOF;
+            pf->pos++;
+            return c & 0xff;
+        }
+        /* whatever is waiting comes before anything the procedure has
+           still to say, and before the end of the data: a string the
+           source answered with is data it supplied */
+        if (pf->npending)
+        {
+            _proc_dequeue(pf);
+            continue;
+        }
+        if (pf->eod || pf->methods.closed)
+            return EOF;
+        if (_proc_failed(pf, _procsrc_refill(pf)) != 0)
+            return EOF;
+    }
+}
+
+static int
+procsrc_writech(Xpost_File *f, int c)
+{
+    (void)f;
+    (void)c;
+    return EOF;
+}
+
+/* Hand the target procedure what has accumulated, and take the string
+   it gives back to fill next. more says whether the filter has further
+   data to write (PLRM 3.13.1): false is the last call, made as the
+   filter closes, and its answer is dropped. */
+static int
+_proctgt_dispose(Xpost_ProcFile *pf, int more)
+{
+    Xpost_Object arg;
+    Xpost_Object s;
+    int ret;
+
+    /* what the procedure is shown is the part of its own string the
+       filter filled, which is that string or the front of it */
+    if (pf->started)
+    {
+        arg = pf->buf;
+        arg.comp_.sz = (word)pf->pos;
+    }
+    else
+    {
+        arg = xpost_string_cons(pf->ctx, 0, NULL);
+        if (xpost_object_get_type(arg) != stringtype)
+            return VMerror;
+    }
+    if (!xpost_stack_push(pf->ctx->lo, pf->ctx->os, arg))
+        return stackoverflow;
+    if (!xpost_stack_push(pf->ctx->lo, pf->ctx->os,
+                          xpost_bool_cons(more ? 1 : 0)))
+        return stackoverflow;
+    ret = _proc_call(pf, 1);
+    if (ret)
+        return ret;
+    ret = _proc_take_string(pf, &s);
+    if (ret)
+        return ret;
+    if (!more)
+    {
+        /* the last answer is not written into, so nothing is asked of
+           it: any string will do, and the filter merely drops it */
+        pf->eod = 1;
+        return 0;
+    }
+    if (!xpost_object_is_writeable(pf->ctx, s))
+        return invalidaccess;
+    if (s.comp_.sz == 0)
+        return ioerror;
+    pf->buf = s;
+    pf->pos = 0;
+    pf->started = 1;
+    return 0;
+}
+
+static int
+procsrc_close(Xpost_File *f)
+{
+    Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+
+    pf->methods.closed = 1;
+    pf->eod = 1;
+    return 0;
+}
+
+static int
+proctgt_writech(Xpost_File *f, int c)
+{
+    Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+
+    if (pf->methods.closed || pf->eod)
+        return EOF;
+    if (!pf->started || pf->pos >= pf->buf.comp_.sz)
+    {
+        if (_proc_failed(pf, _proctgt_dispose(pf, 1)) != 0)
+            return EOF;
+    }
+    if (xpost_string_put(pf->ctx, pf->buf, (integer)pf->pos, c & 0xff) != 0)
+        return EOF;
+    pf->pos++;
+    return c & 0xff;
+}
+
+static int
+proctgt_readch(Xpost_File *f)
+{
+    (void)f;
+    return EOF;
+}
+
+/* The close is where the target procedure is told the data has ended,
+   which is the one call it is promised beyond the ones its own buffer
+   filling asks for. A target already at its end is not told twice. */
+static int
+proctgt_close(Xpost_File *f)
+{
+    Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+    int ret = 0;
+
+    if (!pf->methods.closed && !pf->eod)
+        ret = _proc_failed(pf, _proctgt_dispose(pf, 0));
+    pf->methods.closed = 1;
+    pf->eod = 1;
+    return ret ? EOF : 0;
+}
+
+/* Whatever the filter above has buffered reaches the procedure through
+   the close; a flush of its own has nothing to push further, since the
+   procedure is handed data as soon as its string is full. */
+static int
+proctgt_flush(Xpost_File *f)
+{
+    (void)f;
+    return 0;
+}
+
+static void
+proc_purge(Xpost_File *f)
+{
+    (void)f;
+}
+
+/* Give a byte back. A source is read through by codings that decide a
+   byte is not theirs only after taking it, and the byte may be the last
+   of the string the procedure gave, so it is held here rather than
+   pushed back into that string: by the time it comes back the procedure
+   may already have been asked for the next one. */
+static int
+procsrc_unreadch(Xpost_File *f, int c)
+{
+    Xpost_ProcFile *pf = (Xpost_ProcFile *)f;
+
+    if (pf->pushback >= 0)
+        return EOF;
+    pf->pushback = c & 0xff;
+    return c & 0xff;
+}
+
+static int
+proc_unreadch(Xpost_File *f, int c)
+{
+    (void)f;
+    (void)c;
+    return EOF;
+}
+
+/* A procedure supplies or consumes a stream of bytes and answers no
+   question about a position in it. */
+static long
+proc_tell(Xpost_File *f)
+{
+    (void)f;
+    return -1;
+}
+
+static int
+proc_seek(Xpost_File *f, long pos)
+{
+    (void)f;
+    (void)pos;
+    return EOF;
+}
+
+static struct Xpost_File_Methods procsrc_methods =
+{
+    procsrc_readch, procsrc_writech, procsrc_close, proctgt_flush,
+    proc_purge, procsrc_unreadch, proc_tell, proc_seek
+};
+
+static struct Xpost_File_Methods proctgt_methods =
+{
+    proctgt_readch, proctgt_writech, proctgt_close, proctgt_flush,
+    proc_purge, proc_unreadch, proc_tell, proc_seek
+};
+
+static Xpost_Object
+_proc_stream_cons(Xpost_Context *ctx, Xpost_Object proc,
+                  Xpost_File_Methods *methods)
+{
+    Xpost_Object f;
+    unsigned int ent;
+    Xpost_File *mf;
+    Xpost_ProcFile *pf;
+
+    pf = malloc(sizeof *pf);
+    if (!pf)
+        return invalid;
+    _plain_file_init(&pf->methods, methods);
+    pf->ctx = ctx;
+    pf->proc = proc;
+    pf->buf = null;
+    pf->pos = 0;
+    pf->pushback = -1;
+    pf->eod = 0;
+    pf->started = 0;
+    pf->running = 0;
+    pf->pending = NULL;
+    pf->npending = 0;
+    pf->cpending = 0;
+    mf = (Xpost_File *)pf;
+
+    f.tag = filetype;
+    if (!xpost_memory_table_alloc(ctx->lo, sizeof mf, filetype, &ent))
+    {
+        XPOST_LOG_ERR("cannot allocate file record");
+        free(pf);
+        return invalid;
+    }
+    _file_bind_entity(ctx->lo, ent, mf);
+    f.mark_.padw = ent;
+    if (!xpost_memory_put(ctx->lo, f.mark_.padw, 0, sizeof mf, &mf))
+    {
+        XPOST_LOG_ERR("cannot save file pointer in VM");
+        _file_retire_stamp(ctx->lo, ent);
+        free(pf);
+        return invalid;
+    }
+    return f;
+}
+
+Xpost_Object xpost_file_cons_procsource(Xpost_Context *ctx, Xpost_Object proc)
+{
+    return _proc_stream_cons(ctx, proc, &procsrc_methods);
+}
+
+Xpost_Object xpost_file_cons_proctarget(Xpost_Context *ctx, Xpost_Object proc)
+{
+    return _proc_stream_cons(ctx, proc, &proctgt_methods);
+}
+
+/* What the collector cannot see of a file: a procedure stream holds the
+   procedure it calls and the string that procedure last gave back, and
+   both are ordinary objects living in a C struct. Every other kind of
+   file holds none, and says so with a count of zero. */
+static Xpost_ProcFile *_proc_stream_at(Xpost_Memory_File *mem, unsigned int ent)
+{
+    Xpost_File *f;
+
+    if (!xpost_memory_get(mem, ent, 0, sizeof f, &f) || !f)
+        return NULL;
+    if (f->methods != &procsrc_methods && f->methods != &proctgt_methods)
+        return NULL;
+    return (Xpost_ProcFile *)f;
+}
+
+int xpost_file_held_count(Xpost_Memory_File *mem, unsigned int ent)
+{
+    Xpost_ProcFile *pf = _proc_stream_at(mem, ent);
+
+    return pf ? 2 + pf->npending : 0;
+}
+
+Xpost_Object xpost_file_held_object(Xpost_Memory_File *mem, unsigned int ent,
+                                    int i)
+{
+    Xpost_ProcFile *pf = _proc_stream_at(mem, ent);
+
+    if (!pf || i < 0 || i >= 2 + pf->npending)
+        return null;
+    if (i == 0)
+        return pf->proc;
+    if (i == 1)
+        return pf->buf;
+    return pf->pending[i - 2];
 }
 
 /* ASCIIHexDecode filter: hexadecimal digit pairs to bytes, whitespace
@@ -5353,6 +5790,18 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
            closed whether or not those bytes arrived (PLRM 3.8), and the
            loss is reported once it has. */
         lost = xpost_file_close(fp) != 0;
+        /* a stream backed by a procedure holds the strings that call
+           answered with while a nested one was still being read; they go
+           when the stream does */
+        if (fp->methods == &procsrc_methods || fp->methods == &proctgt_methods)
+        {
+            Xpost_ProcFile *pfr = (Xpost_ProcFile *)fp;
+
+            free(pfr->pending);
+            pfr->pending = NULL;
+            pfr->npending = 0;
+            pfr->cpending = 0;
+        }
         /* a reusable stream holds its source's bytes in a buffer of its
            own, which goes when the stream does */
         if (fp->methods == &rsd_methods)

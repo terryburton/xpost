@@ -143,11 +143,15 @@ xpost_file_cons_filter_predictor
 xpost_file_cons_filter_rle
 xpost_file_cons_filter_rsd
 xpost_file_cons_filter_subfile
+xpost_file_cons_procsource
+xpost_file_cons_proctarget
 xpost_file_cons_readstring
 xpost_file_get_bytes_available
 xpost_file_get_file_pointer
 xpost_file_get_status
 xpost_file_hand_over
+xpost_file_held_count
+xpost_file_held_object
 xpost_file_object_close
 xpost_file_object_close_at_eod
 xpost_file_open
@@ -206,6 +210,7 @@ xpost_interpreter_cid_get_context
 xpost_interpreter_exit
 xpost_interpreter_get_initializing
 xpost_interpreter_init
+xpost_interpreter_run_nested
 xpost_interpreter_set_initializing
 xpost_interrupt
 xpost_isatty

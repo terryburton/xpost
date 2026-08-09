@@ -106,26 +106,19 @@ void xpost_interpreter_exit(Xpost_Interpreter *itp);
  * @brief Run a procedure to completion and return, so a C caller
  *        reaches a procedure of the program's as an ordinary call.
  *
- * The interpreter normally runs procedures by leaving them on the
- * execution stack and returning, which suits an operator whose work is
- * over. It does not suit one that needs the procedure's answer to
- * carry on -- a filter refilling from its data source has bytes to
- * decode the moment the source procedure returns, and no way to be
- * re-entered where it left off. This runs the procedure on the same
- * stacks the surrounding run uses, stepping the evaluator until the
- * execution stack falls back to the depth it started at.
+ * The procedure runs on the stacks of the surrounding run, stepping the
+ * evaluator until the execution stack falls back to the depth it
+ * started at. Callers are operators that need the procedure's answer
+ * to finish their own work, such as a filter refilling from a data
+ * source.
  *
- * An error inside the procedure is raised here rather than returned:
- * returned, it would be raised against whichever operator called in,
- * and that operator's arguments, not the procedure's, would be the
- * ones given back (PLRM 3.11.1). The procedure runs under the
- * boundary an operator leaves beneath a call back into the program's
- * own code, so an error in it belongs to it.
+ * An error inside the procedure is raised here. It runs under the
+ * boundary an operator leaves beneath a call into the program's own
+ * code, so the operands restored are the procedure's rather than those
+ * of the operator that called in (PLRM 3.11.1).
  *
- * The nesting is bounded: the procedure may reach this again, and the
- * depth it reaches is the program's to choose, so a program that
- * chooses one deeper than the C stack can carry is told
- * execstackoverflow instead of ending the process.
+ * The nesting is bounded. The depth is the program's to choose, and one
+ * past what the C stack carries is limitcheck.
  *
  * @return 0, or the error the run could not handle.
  */

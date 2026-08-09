@@ -28,7 +28,6 @@
 ashow       postscript
 awidthshow  postscript
 breakhere   c
-filter      postscript
 findfont    postscript
 setfont     postscript
 show        postscript

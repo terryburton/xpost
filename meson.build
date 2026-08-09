@@ -2498,6 +2498,21 @@ test('filter-conformance',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A filter's data source or target may be a procedure the filter calls as
+# it needs data or needs to dispose of it (PLRM 3.13.1), so the program
+# supplying or consuming the bytes runs while the filter runs. What that
+# asks of the interpreter is that it be re-entered from inside an
+# operator: the calls must happen when the data is wanted and not before,
+# carry what the specification says they carry, leave the program able to
+# do anything a program may do while one is running -- read another
+# filter, save and restore, be collected -- and let a failure in one
+# reach the program as the failure of the operator that read or wrote.
+test('filter-proc',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_proc_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # No repeatable operation may spend global memory each time it runs: global
 # memory is never collected, so such an allocation is spent for the life of
 # the context. The workload carries its own positive control, so a

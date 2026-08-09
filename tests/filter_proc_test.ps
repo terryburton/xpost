@@ -1,0 +1,341 @@
+%!PS
+% Procedure data sources and targets (PLRM 3.13.1).
+%
+% A filter's data source or target may be a procedure rather than a file
+% or a string. The filter calls it as it needs data or needs to be rid of
+% data, so the program supplying or consuming the bytes runs while the
+% filter runs, and neither the amount of data nor the work the procedure
+% does to produce it is settled when the filter is built.
+%
+% That is what this file is for: not that the bytes come out right, which
+% the string and file sources establish for every coding, but that the
+% calls happen when the specification says they happen, carry what it
+% says they carry, and leave the program able to do anything a program
+% may do while one is running.
+%
+% How many times a coding asks its source for a buffer is the coding's
+% own business -- one that reads ahead to recognise its end-of-data
+% marker asks once more than one that does not -- so what is asserted
+% here is that a source is asked when the data is wanted and not before,
+% never a particular count.
+
+/failures 0 def
+/fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
+bind def
+/pr { dup type /stringtype eq { print } { 40 string cvs print } ifelse } bind def
+/is { % got want name
+    3 1 roll 2 copy eq
+    { pop pop pop }
+    { ( [got ) print 3 -1 roll pr ( want ) print exch pr (] ) print fail }
+    ifelse
+} bind def
+/istrue { true exch is } bind def
+
+% ---------------------------------------------------------------- source
+
+% A source is not called at all by the act of building the filter.
+/calls 0 def
+/src { /calls calls 1 add store (616263) } bind def
+/f { src } /ASCIIHexDecode filter def
+calls 0 (a source is not called before the filter is read) is
+f closefile
+
+% Reading one byte does not drain the source: it is asked for what that
+% byte needs, and the buffers past it are still unasked for.
+/pieces [ (41424344) (45464748) () ] def
+/n 0 def
+/calls 0 def
+/src2 { /calls calls 1 add store
+        pieces n get /n n 1 add store } bind def
+/f2 { src2 } /ASCIIHexDecode filter def
+f2 read pop pop
+calls pieces length lt (a read asks for what it needs, not for all of it) istrue
+f2 closefile
+
+% Read to the end and the whole of the data arrives, in order, across the
+% boundary between one buffer and the next.
+/n 0 def
+/calls 0 def
+/f3 { src2 } /ASCIIHexDecode filter def
+f3 100 string readstring pop (ABCDEFGH) (a source's buffers join up) is
+f3 closefile
+
+% A source that answers with a zero-length string ends the data there,
+% and is not asked again once it has.
+/n 0 def
+/calls 0 def
+/f4 { src2 } /ASCIIHexDecode filter def
+f4 100 string readstring pop pop
+/after calls def
+f4 read { pop false } { true } ifelse
+(a read past the end reports the end) istrue
+calls after (a source is not called again after it ends) is
+f4 closefile
+
+% There is no cap on how much a source may supply: this delivers more
+% bytes than a single string can hold, so the data cannot have been
+% gathered into one before being decoded.
+/blk 512 string def
+0 1 511 { blk exch 65 put } for
+/left 200 def
+/bulk { left 0 gt { /left left 1 sub store blk } { () } ifelse } bind def
+/fbig { bulk } /ASCIIHexDecode filter def
+/tot 0 def
+{ fbig 8192 string readstring exch length tot add /tot exch store
+  not { exit } if } loop
+fbig closefile
+tot 51200 (a source may supply more bytes than a string can hold) is
+
+% The procedure runs on the interpreter's own stacks, so it may do
+% anything a procedure may do -- including read a filter of its own while
+% the filter that called it waits on the answer.
+/nest_n 0 def
+/nest [ (414243) () ] def
+/nsrc { nest nest_n get /nest_n nest_n 1 add store } bind def
+/nested () def
+/outer_n 0 def
+/outer [ (3132) () ] def
+/osrc {
+    outer_n 0 eq {
+        /nf { nsrc } /ASCIIHexDecode filter def
+        nf 10 string readstring pop /nested exch store
+        nf closefile
+    } if
+    outer outer_n get /outer_n outer_n 1 add store
+} bind def
+/fo { osrc } /ASCIIHexDecode filter def
+fo 10 string readstring pop (12) (a filter read inside a source works) is
+fo closefile
+nested (ABC) (the filter read inside the source read its own data) is
+
+% save and restore inside a source procedure
+/svmark 1 def
+/ssrc_n 0 def
+/ssrc [ (4142) () ] def
+/ssrc_p { save
+          /svmark 2 def
+          restore
+          ssrc ssrc_n get /ssrc_n ssrc_n 1 add store } bind def
+/fs { ssrc_p } /ASCIIHexDecode filter def
+fs 10 string readstring pop (AB) (save and restore inside a source) is
+fs closefile
+svmark 1 (a restore inside a source took effect) is
+
+% An error inside a source procedure reaches the program reading the
+% filter; the read does not quietly report end of data instead.
+/esrc { 1 0 div } bind def
+/fe { esrc } /ASCIIHexDecode filter def
+{ fe 4 string readstring } stopped
+{ $error /errorname get /undefinedresult (an error in a source is raised) is }
+{ (an error in a source was swallowed) fail } ifelse
+clear
+
+% A source that answers with something other than a readable string has
+% not met the contract, and the read says so rather than carrying on.
+/tsrc { 42 } bind def
+/ft { tsrc } /ASCIIHexDecode filter def
+{ ft 4 string readstring } stopped
+{ } { (a non-string from a source was accepted) fail } ifelse
+clear
+
+% ---------------------------------------------------------------- target
+
+% A target is not called at all by the act of building the filter.
+/tcalls 0 def
+/tbuf 8 string def
+/targ { pop pop /tcalls tcalls 1 add store tbuf } bind def
+/g { targ } /NullEncode filter def
+tcalls 0 (a target is not called before the filter is written) is
+g (x) writestring
+tcalls 0 gt (the first write asks the target for a buffer) istrue
+g closefile
+
+% What a target is handed, in order: an empty string and true to be asked
+% for its first buffer, the filled buffer and true whenever it fills, and
+% whatever is left and false as the filter closes.
+/seen 16 array def
+/sn 0 def
+/rec { seen sn 3 -1 roll put /sn sn 1 add store } bind def
+/tbuf2 4 string def
+/targ2 { exch dup length string copy rec rec tbuf2 } bind def
+/g2 { targ2 } /NullEncode filter def
+g2 (abcdefghij) writestring
+g2 closefile
+sn 8 (a target is called four times for ten bytes of four) is
+seen 0 get () (the first call carries an empty string) is
+seen 1 get true (the first call carries true) is
+seen 2 get (abcd) (a full buffer is handed over) is
+seen 3 get true (a full buffer carries true) is
+seen 4 get (efgh) (the next full buffer is handed over) is
+seen 6 get (ij) (what is left is handed over at the close) is
+seen 7 get false (the closing call carries false) is
+
+% What a target is handed is what the coding produced, not what was
+% written to the filter.
+/hex () def
+/hbuf 64 string def
+/htarg {
+    pop
+    dup length 0 ne
+    { hex length 0 eq { dup dup length string copy /hex exch store } if } if
+    pop hbuf
+} bind def
+/g3 { htarg } /ASCIIHexEncode filter def
+g3 (AB) writestring
+g3 closefile
+hex 0 4 getinterval (4142) (a target is handed the encoded bytes) is
+
+% A target is told the data has ended exactly once, however many times
+% the filter is closed.
+/fincalls 0 def
+/fbuf 8 string def
+/ftarg { false eq { /fincalls fincalls 1 add store } if pop fbuf } bind def
+/g4 { ftarg } /NullEncode filter def
+g4 (z) writestring
+g4 closefile
+g4 closefile
+fincalls 1 (a target is told the data ended once) is
+
+% A target that answers with a zero-length buffer leaves the filter with
+% nowhere to write, which is an error rather than a silent stall.
+/zbuf 0 string def
+/ztarg { pop pop zbuf } bind def
+/g5 { ztarg } /NullEncode filter def
+{ g5 (abc) writestring g5 closefile } stopped
+{ } { (a zero-length target buffer was accepted) fail } ifelse
+clear
+
+% An error inside a target procedure reaches the program writing.
+/etarg { pop pop 1 0 div } bind def
+/g6 { etarg } /NullEncode filter def
+{ g6 (abc) writestring g6 closefile } stopped
+{ } { (an error in a target was swallowed) fail } ifelse
+clear
+
+% ------------------------------------------------------- other operand forms
+
+% A procedure stands where a file stands, in every form of the operator
+% that takes a data source.
+/dn 0 def
+/dpieces [ (4142) () ] def
+/dsrc { dpieces dn get /dn dn 1 add store } bind def
+/fdict { dsrc } 8 dict /ASCIIHexDecode filter def
+fdict 10 string readstring pop (AB) (the dictionary form takes a procedure) is
+fdict closefile
+
+/sn 0 def
+/spieces [ (hello world) () ] def
+/ssrc2 { spieces sn get /sn sn 1 add store } bind def
+/fsub { ssrc2 } 5 () /SubFileDecode filter def
+fsub 10 string readstring pop (hello) (the subfile form takes a procedure) is
+fsub closefile
+
+% ------------------------------------------------------------ collection
+
+% The procedure, and the string it last answered with, live in the
+% filter's own record rather than in virtual memory. A collection while
+% the filter is part-read must not take either away.
+/gn 0 def
+/gpieces [ (41424344) (45464748) () ] def
+/gsrc { gpieces gn get /gn gn 1 add store } bind def
+/fg { gsrc } /ASCIIHexDecode filter def
+fg read pop pop
+0 1 400 { pop 300 string pop } for
+2 vmreclaim
+fg 20 string readstring pop (BCDEFGH)
+(a collection leaves a part-read source able to go on) is
+fg closefile
+
+% ------------------------------------------------------------- re-entry
+
+% A source procedure may read the very stream it supplies. The nested
+% read is served first, so the string the outer call answers with arrives
+% while the buffer it would become still has bytes to hand over: it waits
+% behind that buffer rather than replacing it, and no byte is lost.
+% Here the second call's string decodes to CD, the nested read takes the
+% C, and the outer read then sees the D before the AB of the first call's
+% string.
+/bn 0 def
+/binner (unset) def
+/BP {
+    /bn bn 1 add store
+    bn 1 eq { /binner fB 1 string readstring pop store (4142) }
+    { bn 2 eq { (4344) } { () } ifelse } ifelse
+} bind def
+/fB { BP } /ASCIIHexDecode filter def
+fB 10 string readstring pop (DAB) (a source may read its own stream) is
+binner (C) (the nested read was served first) is
+bn 3 (the source was called three times) is
+fB closefile
+
+% The same holds when the cycle runs through two streams.
+/cna 0 def /cnb 0 def
+/cinner (unset) def
+/CPA {
+    /cna cna 1 add store
+    cna 1 eq { /cinner fCB 1 string readstring pop store (4142) }
+    { cna 2 eq { (4344) } { () } ifelse } ifelse
+} bind def
+/CPB {
+    /cnb cnb 1 add store
+    cnb 1 eq { fCA 1 string readstring pop pop (4546) } { () } ifelse
+} bind def
+/fCA { CPA } /ASCIIHexDecode filter def
+/fCB { CPB } /ASCIIHexDecode filter def
+fCA 10 string readstring pop (DAB) (two sources may read each other) is
+cinner (E) (the read across the cycle was served) is
+fCA closefile
+fCB closefile
+
+% Nested deeper, what the strings a source answers with amount to is one
+% stream of bytes, and every byte of it reaches whichever read asked for
+% it, once, in the order the stream has them. Here the source re-enters
+% three times before answering; the strings are taken up innermost
+% first, so the stream is KL IJ EF AB, and the three nested reads take
+% the K, the L and the I before the outer read sees the rest.
+/qn 0 def
+/dlog 64 string def
+/dln 0 def
+/rec1 { dlog dln 3 -1 roll put /dln dln 1 add store } bind def
+/recs { dup { rec1 } forall } bind def          % str -> str, recording it
+/QP {
+    /qn qn 1 add store
+    qn 1 eq { fQ 1 string readstring pop recs pop (4142) }
+    { qn 2 eq { fQ 1 string readstring pop recs pop (4546) }
+      { qn 3 eq { fQ 1 string readstring pop recs pop (494a) }
+        { qn 4 eq { (4b4c) } { () } ifelse } ifelse } ifelse } ifelse
+} bind def
+/fQ { QP } /ASCIIHexDecode filter def
+fQ 20 string readstring pop recs pop
+dlog 0 dln getinterval (KLIJEFAB)
+(a re-entrant source loses and repeats no byte) is
+qn 5 (a source answering four times is asked once more for the end) is
+fQ closefile
+
+% A source that reads its own stream and never stops is bounded by the
+% depth the interpreter will nest to, not by the end of the C stack. The
+% limit reached is one of this interpreter's own and not the size of the
+% execution stack, which such a run leaves all but empty.
+/rf null def
+/rsrc { rf 1 string readstring pop } bind def
+/rf { rsrc } /ASCIIHexDecode filter store
+{ rf 4 string readstring } stopped
+{ $error /errorname get /limitcheck
+  (unbounded re-entry in a source is an implementation limit) is }
+{ (unbounded re-entry in a source was not stopped) fail } ifelse
+clear
+
+% A target procedure has no such freedom: writing to the stream it is the
+% target of asks it to dispose of bytes it is already disposing of, and
+% the string the waiting call must give back is the one this call would
+% have to return first.
+/en 0 def
+/ebuf 8 string def
+/EP { pop pop /en en 1 add store
+      en 1 eq { fE (zz) writestring } if ebuf } bind def
+/fE { EP } /ASCIIHexEncode filter def
+{ fE (Hi) writestring fE closefile } stopped
+{ } { (a target wrote to its own stream) fail } ifelse
+clear
+
+failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse

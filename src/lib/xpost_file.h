@@ -150,6 +150,52 @@ typedef struct Xpost_MemoryFile
     size_t write_capacity;
 } Xpost_MemoryFile;
 
+/* A stream whose bytes are a procedure's to supply or to dispose of
+   (PLRM 3.13.1). It is a stream and not a filter: the filter layered
+   over it decodes or encodes as it always did, and reads or writes
+   through the one pointer it holds either way, so no coding knows a
+   procedure is down there.
+
+   The procedure runs on the stacks of the run that is reading or
+   writing, from inside the read or the write. That is what makes the
+   supply incremental: a source is asked for the next buffer at the
+   moment the filter runs out of the last one, so a program can compute
+   its data as the filter consumes it, and neither the length of the
+   data nor the time the procedure takes to produce it is bounded here.
+
+   The procedure and the string it last returned are objects held in a C
+   struct, which the collector does not walk. Both are named to it
+   instead, through the file entity that holds this struct. */
+typedef struct Xpost_ProcFile
+{
+    Xpost_File methods;
+    Xpost_Context *ctx;
+    Xpost_Object proc;
+    Xpost_Object buf;  /* the string the procedure last gave back */
+    unsigned int pos;  /* how much of buf has been handed over or filled */
+    int pushback;      /* a byte handed over and given back, held apart
+                          from buf: what gives it back may do so after
+                          the procedure has been asked for the next
+                          string, and buf is that string by then */
+    int eod;           /* a source that answered with no bytes, or a
+                          target already told the data had ended */
+    int started;       /* a target that has been asked for its first
+                          buffer: the empty first call is made once */
+    int running;       /* the procedure is on the stack now */
+    /* Strings a call answered with while a nested call was still holding
+       bytes of an earlier one. A source procedure may read the very
+       stream it supplies (PLRM 3.13.1 forbids nothing of the sort), and
+       the nested read is served first, so the string the outer call
+       answers with arrives while the buffer it would become still has
+       bytes to hand over. It waits here and is taken up in turn, rather
+       than replacing a buffer that is still being read. The depth of
+       the nesting bounds how many can be waiting. */
+    Xpost_Object *pending;
+    int npending;
+    int cpending;
+} Xpost_ProcFile;
+
+
 /* interface fgetc
    in preparation for more elaborate cross-platform non-blocking mechanisms
 cf. http://stackoverflow.com/questions/20428616/how-to-handle-window-events-while-waiting-for-terminal-input
@@ -219,6 +265,45 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem, /*@NULL@*/ const FILE *fp,
  * pointer and size.
  */
 Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem, const unsigned char *ptr, unsigned int len);
+
+/**
+ * @brief Construct a readable stream whose bytes a procedure supplies.
+ *
+ * The procedure is called whenever the stream runs out of bytes to hand
+ * over, and answers with a string holding the next of them; a string of
+ * no bytes ends the data (PLRM 3.13.1). It is called from inside the
+ * read, so a filter layered over this reads the data as the program
+ * computes it, however much of it there turns out to be.
+ */
+Xpost_Object xpost_file_cons_procsource(Xpost_Context *ctx, Xpost_Object proc);
+
+/**
+ * @brief Construct a writeable stream whose bytes a procedure disposes
+ * of.
+ *
+ * The procedure is called with a string and a boolean, and answers with
+ * the string the stream is to fill next (PLRM 3.13.1): with an empty
+ * string and true to be asked for the first buffer, with the filled
+ * buffer and true whenever it is full, and with whatever is left and
+ * false as the stream closes.
+ */
+Xpost_Object xpost_file_cons_proctarget(Xpost_Context *ctx, Xpost_Object proc);
+
+/**
+ * @brief How many objects a file holds outside virtual memory.
+ *
+ * A procedure stream holds the procedure it calls, the string that
+ * procedure last answered with, and any strings waiting behind that one,
+ * all in a C struct the collector does not walk; every other kind of
+ * file holds no object at all.
+ */
+int xpost_file_held_count(Xpost_Memory_File *mem, unsigned int ent);
+
+/**
+ * @brief One of the objects a file holds outside virtual memory.
+ */
+Xpost_Object xpost_file_held_object(Xpost_Memory_File *mem, unsigned int ent,
+                                    int i);
 
 /**
  * @brief Hand a synthesised stream to the filter that will wrap it.

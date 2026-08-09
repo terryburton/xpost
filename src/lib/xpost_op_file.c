@@ -1710,6 +1710,94 @@ Xpost_Object _string_source(Xpost_Context *ctx, Xpost_Object S)
     return F;
 }
 
+/* The procedure forms of filter: the procedure becomes a stream, which
+   the filter machinery then runs over exactly as it runs over a file.
+   Which kind of stream is the filter's to say, not the procedure's -- a
+   procedure standing where an encode filter's data goes is a target and
+   one standing where a decode filter's data comes from is a source --
+   and the filter's name is what says so. As with the string forms, no
+   program object names the stream, so it is handed to the filter built
+   over it, which closes and releases it along with itself. */
+static int _filter_name_encodes(Xpost_Context *ctx, Xpost_Object name)
+{
+    Xpost_Object namestr;
+    char *cname;
+    size_t len;
+    int enc;
+
+    namestr = xpost_name_get_string(ctx, name);
+    cname = xpost_string_allocate_cstring(ctx, namestr);
+    if (!cname)
+        return 0;
+    len = strlen(cname);
+    enc = len > 6 && strcmp(cname + len - 6, "Encode") == 0;
+    free(cname);
+    return enc;
+}
+
+static
+Xpost_Object _proc_stream(Xpost_Context *ctx, Xpost_Object P, Xpost_Object name)
+{
+    Xpost_Object F;
+    int enc = _filter_name_encodes(ctx, name);
+
+    F = enc ? xpost_file_cons_proctarget(ctx, P)
+            : xpost_file_cons_procsource(ctx, P);
+    if (xpost_object_get_type(F) == filetype)
+    {
+        F.tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
+        F.tag |= ((enc ? XPOST_OBJECT_TAG_ACCESS_FILE_WRITE
+                       : XPOST_OBJECT_TAG_ACCESS_FILE_READ)
+                  << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+        xpost_file_hand_over(ctx->lo, F);
+    }
+    return F;
+}
+
+static
+int xpost_op_proc_filter (Xpost_Context *ctx,
+                          Xpost_Object P,
+                          Xpost_Object name)
+{
+    Xpost_Object F = _proc_stream(ctx, P, name);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter(ctx, F, name);
+}
+
+static
+int xpost_op_proc_filter_dict (Xpost_Context *ctx,
+                               Xpost_Object P,
+                               Xpost_Object dict,
+                               Xpost_Object name)
+{
+    Xpost_Object F = _proc_stream(ctx, P, name);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_dict(ctx, F, dict, name);
+}
+
+static
+int xpost_op_proc_filter_int (Xpost_Context *ctx,
+                              Xpost_Object P,
+                              Xpost_Object rec,
+                              Xpost_Object name)
+{
+    Xpost_Object F = _proc_stream(ctx, P, name);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_int(ctx, F, rec, name);
+}
+
+static
+int xpost_op_proc_filter_subfile (Xpost_Context *ctx,
+                                  Xpost_Object P,
+                                  Xpost_Object count,
+                                  Xpost_Object eod,
+                                  Xpost_Object name)
+{
+    Xpost_Object F = _proc_stream(ctx, P, name);
+    if (xpost_object_get_type(F) != filetype) return VMerror;
+    return xpost_op_file_filter_subfile(ctx, F, count, eod, name);
+}
+
 static
 int xpost_op_string_filter (Xpost_Context *ctx,
                             Xpost_Object S,
@@ -1853,6 +1941,22 @@ int xpost_oper_init_file_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter_dict, 3,
             stringtype, dicttype, nametype);
     INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_proc_filter_subfile, 4,
+            proctype, integertype, stringtype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_proc_filter_dict, 3,
+            proctype, dicttype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_proc_filter_int, 3,
+            proctype, integertype, nametype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_proc_filter, 2,
+            proctype, nametype);
+    INSTALL;
+    /* last of all: this pattern is the tail of the subfile forms of every
+       other kind of source -- their EOD string and the filter name -- so
+       a four-operand call would match it before reaching the form it was
+       written as, whatever that form's source is */
     op = xpost_operator_cons(ctx, "filter", (Xpost_Op_Func)xpost_op_string_filter, 2,
             stringtype, nametype);
     INSTALL;

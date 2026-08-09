@@ -301,13 +301,12 @@ Level 2 operators
  [X] makepattern (every tile repaints its cell; text through a CMap
      composite under a pattern colour paints the underlying colour)
  [X] setpattern
- [/] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
+ [X] filter (decode filters: ASCIIHex, ASCII85, SubFile, RunLength,
      Flate, LZW, CCITTFax, DCT, ReusableStream; encode filters:
      ASCIIHex, ASCII85, Null, RunLength, Flate, LZW, CCITTFax, DCT.
-     A data source may be a string, a file or a procedure, but a
-     procedure is run to exhaustion when the filter is made rather than
-     as the filter wants data, which also holds it to a megabyte; a
-     procedure is not accepted as a data target at all)
+     A data source or target may be a string, a file or a procedure,
+     and a procedure is called as the filter wants data or needs to be
+     rid of it)
  [X] defineresource, findresource, resourcestatus, resourceforall,
      undefineresource (an instance is held to the type its category
      takes and left read-only, as the language requires)
@@ -422,9 +421,14 @@ Typical output devices
 Known behavioural deviations
 ----------------------------
 
- [X] filter  a procedure data source is read eagerly -- run to end-of-data when
-     the filter is created, not as it is read -- and only in the two-operand
-     form; a procedure that never ends is bounded by limitcheck.
+ [X] filter  a procedure that is the data target of a filter may not write to
+     that same filter: the string the waiting call must give back is the one
+     this call would have to return first, so the write is an ioerror. A data
+     source is under no such restriction and may read the stream it supplies.
+ [X] filter  a data source procedure that re-enters its own stream more than
+     two levels deep still delivers every byte it supplied, once, in the order
+     the stream has them, where some interpreters drop or repeat bytes past
+     that depth and do not agree with each other on which.
  [X] SubFileDecode  a zero count with an empty EOD string passes zero bytes
      (PLRM), where some interpreters read to end-of-file.
  [X] ]  a construction closed over more objects than an array can hold is
