@@ -116,6 +116,7 @@ tests/filter_eod_test.ps \
 tests/filter_leak_test.ps \
 tests/filter_matrix_test.ps \
 tests/filter_predictor_test.ps \
+tests/fillpoly_arity_test.ps \
 tests/filter_proc_test.ps \
 tests/filter_source_life_test.ps \
 tests/font_bigbuf_test.ps \
@@ -233,6 +234,7 @@ tests/pdf_pipe_test.ps \
 tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
+tests/refusal_report_test.ps \
 tests/reloc_fused_test.ps \
 tests/reloc_stress_test.ps \
 tests/render-differ.sh \

@@ -1,0 +1,52 @@
+%!PS
+% The colour a polygon fill paints in, when the caller did not supply it.
+%
+% .fillpoly states two operands -- the polygon and the device -- and then
+% takes the colour from under them: one component or three, according to
+% what the device paints in. The signature cannot say how many, because
+% the answer is the device's and not the call's, so the operator counts
+% them itself.
+%
+% Taken unasked, they were whatever the stack had; from a stack with
+% nothing on it they were the object that means there was nothing, and
+% the fill painted a colour the program never named without saying so.
+% PLRM 8.2 has stackunderflow for operands an operator needs and has not
+% been given, and that is what a call missing its colour must arrive as.
+
+/failures 0 def
+/fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
+bind def
+/pr { dup type /stringtype eq { print } { 40 string cvs print } ifelse } bind def
+/is { % got want name
+    3 1 roll 2 copy eq
+    { pop pop pop }
+    { exch ( [got ) print pr ( want ) print pr (] ) print fail }
+    ifelse
+} bind def
+
+/fillpoly 1183615869 internaldict /.fillpoly get def
+/square [ 0 0  4 0  4 4  0 4 ] def
+
+% the colour is there: the fill is made
+/err null def
+clear
+0 square DEVICE { fillpoly } stopped { /err $error /errorname get store } if
+clear
+err null (a fill given its colour is made) is
+
+% the colour is not there: the fill says so rather than painting one it
+% was never given
+/err null def
+clear
+square DEVICE { fillpoly } stopped { /err $error /errorname get store } if
+clear
+err /stackunderflow (a fill not given its colour is a stackunderflow) is
+
+% the interpreter is still usable afterwards
+/alive false def
+clear
+0 square DEVICE { fillpoly } stopped not { /alive true store } if
+clear
+alive true (a refused fill leaves the interpreter usable) is
+
+failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse

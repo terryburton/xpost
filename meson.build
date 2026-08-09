@@ -717,6 +717,28 @@ test('run-status',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The colour a polygon fill paints in sits under the two operands its
+# signature states, one component or three according to the device, so
+# the operator counts them itself. Taken unasked from a stack that had
+# none, they were the object that means there was nothing, and the fill
+# painted a colour the program never named without saying so.
+test('fillpoly-arity',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/fillpoly_arity_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# A construction refused for want of entity numbers answers with no
+# object, which is a null. Machinery that tested the answer against
+# invalidtype did not recognise the refusal, carried the null on and put
+# into it, so what reached the program was an access fault against a
+# private operator instead of the implementation limit actually reached.
+test('refusal-report',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/refusal_report_test.ps') ],
+  suite: cost_slow,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A file name longer than a string object can count. The name is carried
 # to the operator that opens it as a string, and a string counts its
 # length in a field narrower than a path may be: a name the field could

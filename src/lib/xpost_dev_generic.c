@@ -591,21 +591,33 @@ int _fillpoly(Xpost_Context *ctx,
     //width = xpost_dict_get(ctx, devdic, namewidth).int_.val;
     colorspace = xpost_dict_get(ctx, devdic, namenativecolorspace);
     if (xpost_dict_compare_objects(ctx, colorspace, nameDeviceGray) == 0)
-    {
         ncomp = 1;
-        comp1 = xpost_stack_pop(ctx->lo, ctx->os);
-    }
     else if (xpost_dict_compare_objects(ctx, colorspace, nameDeviceRGB) == 0)
-    {
         ncomp = 3;
-        comp3 = xpost_stack_pop(ctx->lo, ctx->os);
-        comp2 = xpost_stack_pop(ctx->lo, ctx->os);
-        comp1 = xpost_stack_pop(ctx->lo, ctx->os);
-    }
     else
     {
         XPOST_LOG_ERR("unimplemented device color space");
         return unregistered;
+    }
+
+    /* The colour this fill paints in is on the operand stack under the
+       two operands the signature states, one component or three
+       according to what the device paints in, and the signature cannot
+       say so: how many there are is the device's answer and not the
+       call's. So they are counted here. Popping them unasked took
+       whatever the stack had -- or, from an empty stack, the object that
+       means there was nothing -- and painted a colour the program never
+       named, in silence. The operands an operator needs and has not
+       been given are a stackunderflow (PLRM 8.2). */
+    if (xpost_stack_count(ctx->lo, ctx->os) < ncomp)
+        return stackunderflow;
+    if (ncomp == 1)
+        comp1 = xpost_stack_pop(ctx->lo, ctx->os);
+    else
+    {
+        comp3 = xpost_stack_pop(ctx->lo, ctx->os);
+        comp2 = xpost_stack_pop(ctx->lo, ctx->os);
+        comp1 = xpost_stack_pop(ctx->lo, ctx->os);
     }
 
     {
@@ -806,7 +818,11 @@ int _rspans_poly_cons(Xpost_Context *ctx,
     int i, ret;
 
     result = xpost_array_cons(ctx, 5 * nout);
-    if (xpost_object_get_type(result) == invalidtype)
+    /* a construction that was refused answers with no object, which is a
+       null and not an invalid: test for the type wanted rather than for
+       one of the ways of not having it, or the refusal is carried on
+       with and reported as whatever the next operation makes of it */
+    if (xpost_object_get_type(result) != arraytype)
         return VMerror;
     for (i = 0; i < nout; i++)
     {
@@ -818,7 +834,7 @@ int _rspans_poly_cons(Xpost_Context *ctx,
         {
             Xpost_Object pair = xpost_array_cons(ctx, 2);
 
-            if (xpost_object_get_type(pair) == invalidtype)
+            if (xpost_object_get_type(pair) != arraytype)
                 return VMerror;
             ret = xpost_array_put(ctx, pair, 0,
                 xpost_real_cons(xsel[k] ? out[i].hi : out[i].lo));
@@ -1243,7 +1259,7 @@ int _pathspanparts(Xpost_Context *ctx,
     }
 
     parts = xpost_array_cons(ctx, nparts);
-    if (xpost_object_get_type(parts) == invalidtype)
+    if (xpost_object_get_type(parts) != arraytype)
     {
         free(rsp);
         return VMerror;

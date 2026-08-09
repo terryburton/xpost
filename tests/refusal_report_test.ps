@@ -1,0 +1,69 @@
+%!PS
+% What an allocation refused for want of entity numbers is reported as.
+%
+% A construction that cannot be made answers with no object, and no
+% object is a null. Machinery that tested the answer against invalidtype
+% instead did not recognise the refusal, carried the null on, and put
+% into it -- so what reached the program was invalidaccess against a
+% private operator: an access fault the program never committed, naming
+% something it never called, in place of the implementation limit that
+% had actually been reached.
+%
+% PLRM 8.2 has limitcheck for an implementation limit, and the entity
+% numbers an interpreter has to hand are one. That is what a path too
+% large to describe must arrive as.
+%
+% The path here is drawn wide and dense on purpose: the region it encloses
+% needs more rectangles than one polygon array holds, so the painter takes
+% the route that builds a part per band, and it is that route which runs
+% the interpreter out of entity numbers.
+
+/failures 0 def
+/fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
+bind def
+/pr { dup type /stringtype eq { print } { 40 string cvs print } ifelse } bind def
+/is { % got want name
+    3 1 roll 2 copy eq
+    { pop pop pop }
+    { exch ( [got ) print pr ( want ) print pr (] ) print fail }
+    ifelse
+} bind def
+
+% Which build this is, asked of the interpreter rather than assumed: a
+% string longer than the narrow length field counts is refused there and
+% made here. The entity table is the wider one on the same builds, and a
+% path of this size does not exhaust it, so the refusal under test is not
+% reached and there is nothing here to assert.
+% asked before the painting, because asking raises an error of its own on
+% the build where the answer is yes, and that would replace the record of
+% the refusal this test is about
+/narrow false def
+{ 65536 string pop } stopped { /narrow true store } if
+clear
+
+<< /PageSize [30000 8] >> setpagedevice
+0.5 setlinewidth
+newpath 0 1 moveto
+0 1 15000 { dup 2 mul exch 2 mod 0 eq { 7 } { 1 } ifelse lineto } for
+
+/refused false def
+{ stroke } stopped { /refused true store } if
+/why refused { $error /errorname get } { null } ifelse def
+
+narrow
+{ refused
+  { why /limitcheck
+    (a path too large to describe reaches the program as a limit) is }
+  { (a path this large was described after all -- the test no longer
+     reaches the refusal it is about) fail }
+  ifelse }
+{ refused
+  { why /limitcheck
+    (a path too large to describe reaches the program as a limit) is }
+  { (# the entity table here is large enough to describe this path:
+     the refusal under test is not reached\n) print flush }
+  ifelse }
+ifelse
+clear
+
+failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse
