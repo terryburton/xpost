@@ -2298,10 +2298,25 @@ int setlocalconfig(Xpost_Context *ctx,
 
     devstr = strdup(device); /*  Parse device string for mode selector "dev:mode" */
     if ((subdevice=strchr(devstr, ':'))) {
+        Xpost_Object subobj;
+
         *subdevice++ = '\0';
+        /* the mode selector becomes a string, which counts its length in
+           a field narrower than the selector may be */
+        if (strlen(subdevice) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        {
+            ret = limitcheck;
+            goto done;
+        }
+        subobj = xpost_string_cons(ctx, (unsigned int)strlen(subdevice),
+                                   subdevice);
+        if (xpost_object_get_type(subobj) != stringtype)
+        {
+            ret = VMerror;
+            goto done;
+        }
         ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SUBDEVICE"),
-                             xpost_object_cvlit(xpost_string_cons(ctx,
-                                     strlen(subdevice), subdevice)));
+                             xpost_object_cvlit(subobj));
         if (ret)
             goto done;
     }
@@ -2334,6 +2349,15 @@ int setlocalconfig(Xpost_Context *ctx,
                                   + 2 * strlen(device_strings[i][2])
                                   + strlen(device_strings[i][0]) + 1,
                                   NULL);
+    /* the template is written straight into the string's storage, so a
+       construction that was refused would be written through the pointer
+       a refusal answers with */
+    if (xpost_object_get_type(newdevstr) != stringtype
+        || !xpost_string_get_pointer(ctx, newdevstr))
+    {
+        ret = VMerror;
+        goto done;
+    }
     sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
             device_strings[i][1], dimensions, device_strings[i][2],
             device_strings[i][2], device_strings[i][0]);
@@ -2351,10 +2375,25 @@ int setlocalconfig(Xpost_Context *ctx,
 
     if (outfile)
     {
+        Xpost_Object outobj;
+
+        /* the output file name becomes a string, which counts its length
+           in a field narrower than a path may be: a name the field cannot
+           count would be written to under the name it wrapped to */
+        if (strlen(outfile) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        {
+            ret = limitcheck;
+            goto done;
+        }
+        outobj = xpost_string_cons(ctx, (unsigned int)strlen(outfile), outfile);
+        if (xpost_object_get_type(outobj) != stringtype)
+        {
+            ret = VMerror;
+            goto done;
+        }
         ret = xpost_dict_put(ctx, sd,
                              xpost_name_cons(ctx, "OutputFileName"),
-                             xpost_object_cvlit(xpost_string_cons(ctx,
-                                     strlen(outfile), outfile)));
+                             xpost_object_cvlit(outobj));
         if (ret)
             goto done;
     }
@@ -2742,9 +2781,14 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 static
 int get_token(Xpost_Context *ctx, char *str, Xpost_Object *out)
 {
-    Xpost_Object s = xpost_string_cons(ctx, strlen(str), str);
+    Xpost_Object s;
     int ret;
 
+    /* the text to scan becomes a string, which counts its length in a
+       field narrower than the text may be */
+    if (strlen(str) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        return limitcheck;
+    s = xpost_string_cons(ctx, (unsigned int)strlen(str), str);
     if (xpost_object_get_type(s) != stringtype)
         return VMerror;
     if (!xpost_stack_push(ctx->lo, ctx->os, s))
@@ -2831,13 +2875,23 @@ XPAPI int xpost_add_resource_dir(Xpost_Context *ctx, const char *dir)
        hold a global object). They are data, not a procedure, so make them
        literal -- an executable array would be run, not read, when the path is
        evaluated. */
+    /* the directory becomes a string, which counts its length in a field
+       narrower than a path may be */
+    if (strlen(dir) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+    {
+        XPOST_LOG_ERR("resource directory longer than a string can count");
+        return 0;
+    }
     vmmode = ctx->vmmode;
     ctx->vmmode = GLOBAL;
     str = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)strlen(dir),
                                                (char *)dir));
     newrp = xpost_object_cvlit(xpost_array_cons(ctx, n + 1));
-    if (xpost_object_get_type(str) == invalidtype ||
-        xpost_object_get_type(newrp) == invalidtype)
+    /* a refused construction answers with no object, which is a null and
+       not an invalid: test for the type wanted rather than for one of
+       the ways of not having it */
+    if (xpost_object_get_type(str) != stringtype ||
+        xpost_object_get_type(newrp) != arraytype)
     {
         ctx->vmmode = vmmode;
         return 0;
@@ -3044,8 +3098,27 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
        The interactive (tty) session always loads graphics. */
     if (ps_file)
     {
-        /*printf("ps_file\n"); */
-        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(xpost_string_cons(ctx, strlen(ps_file), ps_file)));
+        /* The name has to survive becoming a string object, which counts
+           its length in a field narrower than a path may be. A name the
+           field cannot count would be answered as the length it wrapped
+           to, and the shortened name is the one that would be opened --
+           a different file from the one asked for, chosen by whoever
+           supplied the name. Refuse it here, where the caller can still
+           be told which of its calls failed. */
+        Xpost_Object nameobj;
+
+        if (strlen(ps_file) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        {
+            XPOST_LOG_ERR("file name longer than a string can count");
+            return XPOST_RUN_FAILED;
+        }
+        nameobj = xpost_string_cons(ctx, (unsigned int)strlen(ps_file), ps_file);
+        if (xpost_object_get_type(nameobj) != stringtype)
+        {
+            XPOST_LOG_ERR("cannot make a string of the file name");
+            return XPOST_RUN_FAILED;
+        }
+        xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvlit(nameobj));
         push_start_proc(ctx, ctx->skip_graphics ? "startfilenamenographics" : "startfilename");
     }
     else if (ps_file_ptr)

@@ -162,6 +162,7 @@ tests/mask_cache_range_test.ps \
 tests/matrix_backup_test.c \
 tests/memory_bounds_test.c \
 tests/must_check.golden \
+tests/name_length_test.c \
 tests/namespace_test.ps \
 tests/narrow_cursors.golden \
 tests/nographics_test.ps \

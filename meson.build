@@ -717,6 +717,24 @@ test('run-status',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A file name longer than a string object can count. The name is carried
+# to the operator that opens it as a string, and a string counts its
+# length in a field narrower than a path may be: a name the field could
+# not count was recorded as the length it wrapped to, and the shortened
+# name was the one opened -- a different file from the one asked for,
+# chosen by whoever supplied the name. Driven through the embedding call,
+# since a name this long cannot be passed as an argument everywhere.
+name_length_exe = executable('name_length_test',
+  'tests/name_length_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('name-length',
+  name_length_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: showpage and copypage both end a page, so both must
 # take the page semantics the embedder selected rather than announcing the
 # page and reading the line editor regardless.

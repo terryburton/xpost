@@ -998,10 +998,10 @@ int xpost_op_file_status (Xpost_Context *ctx,
    three thousand million bytes narrows to a negative length. So it is
    refused rather than reported. */
 static
-int _as_integer(long v, integer *out)
+int _as_integer(long long v, integer *out)
 {
     *out = (integer)v;
-    return (long)*out == v;
+    return (long long)*out == v;
 }
 
 /* string  status  pages bytes referred created true | false
@@ -1016,7 +1016,7 @@ int xpost_op_string_status (Xpost_Context *ctx,
                             Xpost_Object S)
 {
     char *sbuf;
-    long pages, bytes, referred, created;
+    long long pages, bytes, referred, created;
     integer ipages, ibytes, ireferred, icreated;
     int exists;
 
@@ -1259,7 +1259,7 @@ static
 int xpost_op_fileposition (Xpost_Context *ctx,
                            Xpost_Object F)
 {
-    long pos;
+    long long pos;
     integer ipos;
     if (!xpost_file_get_status(ctx->lo, F))
         return ioerror;

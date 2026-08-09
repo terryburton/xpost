@@ -533,8 +533,8 @@ xpost_diskfile_readable(const char *path)
    otherwise. bytes is the size; pages is an implementation-defined block count;
    referred and created are the access and modification times in seconds. */
 int
-xpost_diskfile_stat(const char *path, long *pages, long *bytes,
-                    long *referred, long *created)
+xpost_diskfile_stat(const char *path, long long *pages, long long *bytes,
+                    long long *referred, long long *created)
 {
     struct stat st;
 
@@ -542,10 +542,16 @@ xpost_diskfile_stat(const char *path, long *pages, long *bytes,
         return 0;
     if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
         return 0;
-    *bytes = (long)st.st_size;
-    *pages = (long)((st.st_size + 1023) / 1024);
-    *referred = (long)st.st_atime;
-    *created = (long)st.st_mtime;
+    /* The file system counts a size in its own width, which is not long
+       everywhere: long is 32 bits on LLP64, so narrowing here would spend
+       the quantity before whoever weighs it against the integer that must
+       carry it ever sees it, and the check would be given a number that
+       had already wrapped. Carry the full width out instead and let that
+       check do the weighing. */
+    *bytes = (long long)st.st_size;
+    *pages = (long long)((st.st_size + 1023) / 1024);
+    *referred = (long long)st.st_atime;
+    *created = (long long)st.st_mtime;
     return 1;
 }
 
@@ -859,24 +865,34 @@ disk_unreadch(Xpost_File *file, int c)
     return ungetc(c, df->file);
 }
 
-static long
+/* the stdio call that counts a position in the file system's own width
+   rather than in long's */
+#ifdef _WIN32
+# define XPOST_FTELL(f)      _ftelli64(f)
+# define XPOST_FSEEK(f, o)   _fseeki64((f), (o), SEEK_SET)
+#else
+# define XPOST_FTELL(f)      ftello(f)
+# define XPOST_FSEEK(f, o)   fseeko((f), (off_t)(o), SEEK_SET)
+#endif
+
+static long long
 disk_tell(Xpost_File *file)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
     if (!df->file)
         return -1;
-    return ftell(df->file);
+    return (long long)XPOST_FTELL(df->file);
 }
 
 static int
-disk_seek(Xpost_File *file, long offset)
+disk_seek(Xpost_File *file, long long offset)
 {
     Xpost_DiskFile *df = (Xpost_DiskFile*) file;
 
     if (!df->file)
         return -1;
-    return fseek(df->file, offset, SEEK_SET);
+    return XPOST_FSEEK(df->file, offset);
 }
 
 struct Xpost_File_Methods disk_methods =
@@ -1021,23 +1037,23 @@ memory_unreadch(Xpost_File *f, int c)
     return 0;
 }
 
-static long
+static long long
 memory_tell(Xpost_File *f)
 {
     Xpost_MemoryFile *mf = (Xpost_MemoryFile *)f;
 
-    return mf->read_next;
+    return (long long)mf->read_next;
 }
 
 static int
-memory_seek(Xpost_File *f, long pos)
+memory_seek(Xpost_File *f, long long pos)
 {
     Xpost_MemoryFile *mf = (Xpost_MemoryFile *)f;
 
-    if (pos > (ssize_t)mf->read_limit)
+    if (pos < 0 || (unsigned long long)pos > (unsigned long long)mf->read_limit)
         return EOF;
 
-    mf->read_next = pos;
+    mf->read_next = (size_t)pos;
     return 0;
 }
 
@@ -1263,8 +1279,8 @@ a85_unreadch(Xpost_File *f, int c)
 /* the draining and positioning methods shared by every decode filter
    (see filter_flush and filter_tell) */
 static int filter_flush(Xpost_File *f);
-static long filter_tell(Xpost_File *f);
-static int filter_seek(Xpost_File *f, long offset);
+static long long filter_tell(Xpost_File *f);
+static int filter_seek(Xpost_File *f, long long offset);
 
 struct Xpost_File_Methods a85_methods =
 {
@@ -1804,7 +1820,7 @@ proc_unreadch(Xpost_File *f, int c)
 
 /* A procedure supplies or consumes a stream of bytes and answers no
    question about a position in it. */
-static long
+static long long
 proc_tell(Xpost_File *f)
 {
     (void)f;
@@ -1812,7 +1828,7 @@ proc_tell(Xpost_File *f)
 }
 
 static int
-proc_seek(Xpost_File *f, long pos)
+proc_seek(Xpost_File *f, long long pos)
 {
     (void)f;
     (void)pos;
@@ -2573,7 +2589,7 @@ filter_unreadch(Xpost_File *f, int c)
    relation to a position in anything underneath it, and cannot be
    repositioned; report it as unpositionable, which fileposition and
    setfileposition raise ioerror for (PLRM 8.2). */
-static long
+static long long
 filter_tell(Xpost_File *f)
 {
     (void)f;
@@ -2581,7 +2597,7 @@ filter_tell(Xpost_File *f)
 }
 
 static int
-filter_seek(Xpost_File *f, long offset)
+filter_seek(Xpost_File *f, long long offset)
 {
     (void)f;
     (void)offset;
@@ -5012,20 +5028,20 @@ rsd_purge(Xpost_File *f)
     ff->pos = 0;
 }
 
-static long
+static long long
 rsd_tell(Xpost_File *f)
 {
     Xpost_RsdFile *ff = (Xpost_RsdFile *)f;
 
-    return (long)ff->pos;
+    return (long long)ff->pos;
 }
 
 static int
-rsd_seek(Xpost_File *f, long offset)
+rsd_seek(Xpost_File *f, long long offset)
 {
     Xpost_RsdFile *ff = (Xpost_RsdFile *)f;
 
-    if (offset < 0 || (size_t)offset > ff->len)
+    if (offset < 0 || (unsigned long long)offset > (unsigned long long)ff->len)
         return -1;
     ff->pos = (size_t)offset;
     return 0;

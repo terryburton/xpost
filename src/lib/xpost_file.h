@@ -86,8 +86,14 @@ typedef struct Xpost_File_Methods
     int (*flush)(Xpost_File*);
     void (*purge)(Xpost_File*);
     int (*unreadch)(Xpost_File*, int);
-    long (*tell)(Xpost_File*);
-    int (*seek)(Xpost_File*, long);
+    /* A position in a stream is counted in the width the stream itself
+       counts in, which is not long everywhere -- long is 32 bits on
+       LLP64. Narrowing here would spend a position past two gigabytes
+       before whoever weighs it against the integer that must carry it
+       ever saw it, and that check would be handed a number that had
+       already wrapped, so it could not refuse what it exists to refuse. */
+    long long (*tell)(Xpost_File*);
+    int (*seek)(Xpost_File*, long long);
 } Xpost_File_Methods;
 
 /* A filter holds the stream it decodes from (or encodes to) as a plain
@@ -241,13 +247,13 @@ int xpost_file_ungetc(Xpost_File *in, int c)
 }
 
 static inline
-long xpost_file_tell(Xpost_File *f)
+long long xpost_file_tell(Xpost_File *f)
 {
     return f->methods->tell(f);
 }
 
 static inline
-int xpost_file_seek(Xpost_File *f, long offset)
+int xpost_file_seek(Xpost_File *f, long long offset)
 {
     return f->methods->seek(f, offset);
 }
@@ -476,6 +482,7 @@ int xpost_file_write_byte(Xpost_Memory_File *mem, Xpost_Object f, Xpost_Object b
  */
 
 
-int xpost_diskfile_stat(const char *path, long *pages, long *bytes, long *referred, long *created);
+int xpost_diskfile_stat(const char *path, long long *pages, long long *bytes,
+                        long long *referred, long long *created);
 
 #endif

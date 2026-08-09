@@ -57,6 +57,20 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
     Xpost_Object o;
     int ret;
 
+    /* A string object counts its length in comp_.sz, which is narrower
+       than this argument on the narrow build. Sizes past what that field
+       counts are refused: the answer is no string, which callers read as
+       a refusal. A caller that has its own length to answer for tests
+       the size before reaching here and says limitcheck. */
+#ifndef WANT_LARGE_OBJECT
+    /* the field is as wide as this argument on the large-object build */
+    if (sz > XPOST_OBJECT_COMP_MAX_SZ)
+    {
+        XPOST_LOG_ERR("string of %u exceeds the length a string can count", sz);
+        return null;
+    }
+#endif
+
     //xpost_memory_table_alloc(mem, (sz/sizeof(int) + 1)*sizeof(int), 0, &ent);
     if (!xpost_memory_table_alloc(mem,
                                   ((sz + sizeof(Xpost_Object) /*- 1*/) / sizeof(Xpost_Object))*sizeof(Xpost_Object),
