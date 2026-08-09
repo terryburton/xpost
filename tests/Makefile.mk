@@ -223,6 +223,7 @@ tests/path_confine_test.c \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
+tests/pdf_pipe_test.ps \
 tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
@@ -262,6 +263,7 @@ tests/run-multipage-test.sh \
 tests/run-nographics-test.sh \
 tests/run-page-cover-test.sh \
 tests/run-pdf-consumer-test.sh \
+tests/run-pdf-pipe-test.sh \
 tests/run-pdf-test.sh \
 tests/run-pngalpha-test.sh \
 tests/run-ppm-test.sh \

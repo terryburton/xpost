@@ -149,6 +149,7 @@
                         % between two pieces of output still reaches it.
                         dup .privatedict exch /.vecoutfile exch put
                         //.xpostsys /.vecout get dup /F 4 -1 roll put
+                        dup /bytepos 0 put
                         dup /single true put
                         dup /nextobj 3 put
                         dup /sepsdone 0 put
@@ -224,8 +225,13 @@
     } bind
 
     % append a string to the paginated single-file output (its open file lives
-    % in the shared record); byte offsets are read back with fileposition
+    % in the shared record) and carry the count of bytes emitted so far, which
+    % is where the cross-reference offsets come from. The count is kept here
+    % rather than asked of the file because a stream that cannot be positioned
+    % answers no offset, and the document is the same either way.
     /.vw { % str  .  -
+        dup length //.xpostsys /.vecout get dup /bytepos get
+        3 -1 roll add /bytepos exch put
         //.xpostsys /.vecout get /F get exch writestring
     } bind
     % write a byte offset as a 10-digit zero-padded field. How many zeros
@@ -245,7 +251,7 @@
     % record the file's current byte offset as object n's position
     /.recordoff { % n  .  -
         //.xpostsys /.vecout get /off get exch
-        //.xpostsys /.vecout get /F get fileposition put
+        //.xpostsys /.vecout get /bytepos get put
     } bind
 
     % append a number in PDF syntax (integer, or two decimals; never
@@ -950,7 +956,7 @@
 
         % cross-reference table and trailer
         /maxobj //.xpostsys /.vecout get /nextobj get 1 sub def
-        /xoff //.xpostsys /.vecout get /F get fileposition def
+        /xoff //.xpostsys /.vecout get /bytepos get def
         (xref\n0 ) .vw maxobj 1 add 20 string cvs .vw (\n0000000000 65535 f \n) .vw
         1 1 maxobj {
             //.xpostsys /.vecout get /off get exch get .vwoff ( 00000 n \n) .vw

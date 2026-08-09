@@ -2470,6 +2470,15 @@ test('vecout-gc',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A destination that cannot be positioned still gets a whole document: the
+# cross-reference offsets come from the count of bytes the writer has put
+# out, not from asking the file where it is.
+test('pdf-pipe',
+  find_program('tests/run-pdf-pipe-test.sh'),
+  args: [ xpost_exe, files('tests/pdf_pipe_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The file operator's access strings (PLRM 3.8.1, Table 3.5): all six of
 # r/w/a with and without +, the access attribute each confers, and the
 # refusal of an access string outside the table.
