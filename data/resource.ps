@@ -16,9 +16,10 @@ true setglobal
 
 .xpostsys /.resources 32 dict put
 //.xpostsys /.resources get /Category 32 dict put
-% the Generic category implementation: programs copy it to seed their
-% own categories, so it need only exist and name itself
-//.xpostsys /.resources get /Category get /Generic << /Category /Generic >> put
+% /Category is itself one of the categories it lists: PLRM Table 3.9 calls it
+% recursive, so it carries an implementation dictionary of its own alongside
+% the ones it holds for everything else
+//.xpostsys /.resources get /Category get /Category << /Category /Category >> put
 
 % A category is two things made together: a table of its own instances,
 % and an implementation dictionary registered as an instance of
@@ -51,11 +52,46 @@ true setglobal
 } bind put
 
 % the standard regular categories exist from the start, empty until
-% instances are defined into them
+% instances are defined into them. /Generic is among them: a program
+% copies its implementation dictionary to seed a category of its own
+% (PLRM 3.9.3), and it is a category in its own right, taking instances
+% of any type, so it is made the same way as the rest rather than
+% written straight into the /Category table with no instances of its own
+% /IODevice is among them and stays empty: PLRM 3.8.5 has resourceforall over
+% it enumerate the device parameter sets setdevparams and currentdevparams
+% reach, and this interpreter has none to report. The category exists so a
+% program asking after a device is told there is no such instance rather than
+% that there is no such category.
 [ /Font /CIDFont /CMap /FontSet /Encoding /Form /Pattern /ProcSet
   /ColorSpace /Halftone /ColorRendering /IdiomSet /Filter
-  /ColorSpaceFamily /Emulator /ControlLanguage /Localization /PDL ]
+  /ColorSpaceFamily /Emulator /ControlLanguage /Localization /PDL
+  /Generic /IODevice ]
 { //.xpostsys /.defcategory get exec } forall
+
+% What each category takes, from PLRM Tables 3.7, 3.8 and 3.9. A category
+% named here constrains its instances to the one type; one absent from the
+% list -- /Generic -- takes any, which PLRM 3.9.3 states by noting that the
+% generic implementation dictionary carries no InstanceType entry.
+<< /Font /dicttype /CIDFont /dicttype /CMap /dicttype /FontSet /dicttype
+   /Encoding /arraytype /Form /dicttype /Pattern /dicttype /ProcSet /dicttype
+   /ColorSpace /arraytype /Halftone /dicttype /ColorRendering /dicttype
+   /IdiomSet /dicttype /ControlLanguage /dicttype /Localization /dicttype
+   /PDL /dicttype /Category /dicttype
+   /Filter /nametype /ColorSpaceFamily /nametype /Emulator /nametype
+   /IODevice /stringtype >>
+{
+    //.xpostsys /.resources get /Category get 3 -1 roll get
+    /InstanceType 3 -1 roll put
+} forall
+
+% category  .instancetype  name|null
+% The type a category holds its instances to, or null where it holds them
+% to none.
+.xpostsys /.instancetype {
+    //.xpostsys /.resources get /Category get exch 2 copy known {
+        get /InstanceType 2 copy known { get }{ pop pop null } ifelse
+    }{ pop pop null } ifelse
+} bind put
 
 % Directories searched, in order, when findresource misses in VM. Empty
 % by default; the host appends entries (xpost_add_resource_dir, -I).
@@ -93,8 +129,23 @@ setglobal
         2 index //.xpostsys /.catinstances get exec
     } if
     dup //.xpostsys /.instof get exec pop     % the category must exist either way
+    % PLRM 8.2: "Before defining the resource instance, defineresource
+    % verifies that the instance object is the correct type." A category
+    % holding its instances to no type takes any.
+    dup //.xpostsys /.instancetype get exec
+    dup null eq { pop }{
+        2 index type ne { /defineresource cvx /typecheck signalerror } if
+    } ifelse
     currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse
     2 index 2 index put exch pop
+    % PLRM 8.2: defineresource "makes the object read-only if its access is
+    % not already restricted", so what a category hands out cannot be altered
+    % behind the back of whoever holds it. Access belongs to composites, and a
+    % category constraining nothing takes instances of any type; an instance
+    % already executeonly or noaccess is left as it was found.
+    dup type /dicttype eq 1 index type /arraytype eq or
+    1 index type /stringtype eq or 1 index type /packedarraytype eq or
+    { dup wcheck { readonly } if } if
 } //.xpostsys /.defop get exec
 
 % key category  .loadresource  bool

@@ -56,15 +56,16 @@
     count h.c gt { count h.c sub { pop } repeat } if
     h.r not
 } def
-% Generic is the exception, and PLRM 3.9.2 says why: "The Category
-% category contains an instance named Generic, whose value is a
-% dictionary containing a generic resource implementation." It is the
-% prototype a program copies to define a category of its own, held as an
-% instance of Category, and not a category anything defines instances in.
+% Generic is held to the same rule as the rest. PLRM 3.9.2 says "The
+% Category category contains an instance named Generic, whose value is a
+% dictionary containing a generic resource implementation", which is the
+% prototype a program copies to define a category of its own; the table of
+% standard categories separately lists Generic as a category taking
+% instances of any type. It is both, so it needs both halves.
 (*)
 {
     cvn
-    dup /Generic eq { pop }{
+    {
     /ncat ncat 1 add store
     % the implementation dictionary names the category it implements
     dup dup /Category findresource /Category get ne
@@ -76,10 +77,79 @@
         { (FAIL: category has no instance table: ) print dup ==
           /badcat badcat 1 add store } if
     pop
-    } ifelse
+    } exec
 } 60 string /Category resourceforall
 ncat 10 gt (the categories are enumerable) assert
 badcat 0 eq (every category has both halves) assert
+
+% /Category lists itself among the categories: PLRM Table 3.9 calls the
+% Category resource recursive
+/okcat false def
+mark { /Category /Category findresource /Category get /Category eq /okcat exch store }
+stopped { } if cleartomark
+okcat (Category is a category in its own right) assert
+
+% PLRM Table 3.8 lists IODevice among the standard categories, and PLRM 3.8.5
+% has resourceforall over it enumerate the device parameter sets. There are
+% none here, so asking after one reports an absent instance rather than an
+% absent category.
+/okiod false def
+mark { (%os%) /IODevice resourcestatus { pop pop false }{ true } ifelse /okiod exch store }
+stopped { } if cleartomark
+okiod (IODevice is a category, empty of instances) assert
+
+% PLRM 8.2: "Before defining the resource instance, defineresource verifies
+% that the instance object is the correct type." The type each category holds
+% its instances to is PLRM Table 3.7's: Encoding and ColorSpace take arrays,
+% Font takes a dictionary.
+{ /Xp.E1 3 dict /Encoding defineresource }   /typecheck (a dict is not an Encoding) erris
+{ /Xp.C1 3 dict /ColorSpace defineresource } /typecheck (a dict is not a ColorSpace) erris
+{ /Xp.F1 [1 2 3] /Font defineresource }      /typecheck (an array is not a Font) erris
+/oktyped false def
+mark { /Xp.E2 [1 2 3] /Encoding defineresource pop
+       /Xp.E2 /Encoding findresource type /arraytype eq /oktyped exch store }
+stopped { } if cleartomark
+oktyped (an Encoding of the right type is accepted) assert
+
+% PLRM 8.2: defineresource "makes the object read-only if its access is not
+% already restricted", so neither the object handed to it nor the one
+% findresource gives back can be written through afterwards.
+/dro 3 dict def
+/Xp.RO dro /ProcSet defineresource pop
+/okdefro false def
+mark { dro /k 1 put } stopped { /okdefro true store } if cleartomark
+okdefro (the object defineresource took is read-only) assert
+/okfindro false def
+mark { /Xp.RO /ProcSet findresource /k 2 put } stopped { /okfindro true store } if cleartomark
+okfindro (the instance findresource returns is read-only) assert
+
+% Generic is a category in its own right, and its instances are of no
+% particular type: PLRM 3.9.3 notes its implementation dictionary has no
+% InstanceType entry, so "instances need not be of any particular type"
+/badgeneric 0 def
+[ 3 dict (a string) [1 2 3] 42 /aname ] {
+    mark exch { /Xp.Any exch /Generic defineresource pop
+                /Xp.Any /Generic findresource pop
+                /Xp.Any /Generic undefineresource }
+    stopped { /badgeneric badgeneric 1 add store } if cleartomark
+} forall
+badgeneric 0 eq (Generic takes an instance of any type) assert
+
+% and it is the prototype a program copies to make a category of its own,
+% the way PLRM 3.9.3 Example 3.7 does it
+/okwidget false def
+mark {
+    currentglobal true setglobal
+    /Generic /Category findresource
+    dup length 1 add dict copy
+    dup /InstanceType /dicttype put
+    /Xp.Widget exch /Category defineresource pop
+    setglobal
+    /Xp.W1 3 dict /Xp.Widget defineresource pop
+    /Xp.W1 /Xp.Widget findresource type /dicttype eq /okwidget exch store
+} stopped { } if
+cleartomark
+okwidget (a category copied from Generic holds instances) assert
 
 % the composite font machinery states the categories it keeps instances in
 /missingcidcat 0 def

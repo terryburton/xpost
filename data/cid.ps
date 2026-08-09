@@ -470,7 +470,14 @@ setglobal
 /composefont [ /anytype /anytype /arraytype ] {
     1 index type dup /nametype ne exch dup /stringtype ne exch /dicttype ne and and
         { /composefont cvx /typecheck signalerror } if
-    [ exch { dup type /nametype eq { /CIDFont findresource } if } forall ]
+    % Each descendant becomes the composite font's own working copy. A
+    % descendant arrives read-only, as defineresource and definefont both
+    % leave what they register, and the show machinery assembles its face
+    % into it on first use; the copy is where that face goes. The copy is
+    % shallow, so the glyph directory stays the one object the program adds
+    % to, and glyphs delivered after the font is composed still arrive.
+    [ exch { dup type /nametype eq { /CIDFont findresource } if
+             dup length 4 add dict copy } forall ]
     exch dup type /nametype eq { /CMap findresource } if
     exch
     8 dict begin
