@@ -356,6 +356,64 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Fill the buffer directly rather than through a loop over PutPix.
+
+   A device that does not offer this takes the base class's, which walks
+   the rectangle a pixel at a time and reaches the buffer through the
+   operator dispatch for each of them. Every page begins with an
+   erasepage over the whole of it, so that walk costs the page's own area
+   in dispatches before a program has drawn anything.
+
+   The rectangle is the contract's: an inclusive span, normalised and
+   clipped to the device by the shared helpers, so a rectangle given
+   inside out or reaching past an edge covers what the other devices
+   cover. */
+static
+int _fillrect(Xpost_Context *ctx,
+              Xpost_Object red,
+              Xpost_Object green,
+              Xpost_Object blue,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object w,
+              Xpost_Object h,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    Xpost_Jpeg_Pixel pixel;
+    int ix, iy, x0, y0, x1, y1;
+
+    pixel.red   = (unsigned char)xpost_dev_num_to_byte(red);
+    pixel.green = (unsigned char)xpost_dev_num_to_byte(green);
+    pixel.blue  = (unsigned char)xpost_dev_num_to_byte(blue);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    /* a released raster takes no marks */
+    if (!private.buf)
+        return 0;
+
+    xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
+                             xpost_object_number(w), xpost_object_number(h),
+                             &x0, &y0, &x1, &y1);
+    if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                             private.width, private.height))
+        return 0;
+
+    for (iy = y0; iy <= y1; iy++)
+    {
+        Xpost_Jpeg_Pixel *row = private.buf->data + (size_t)iy * private.width;
+
+        for (ix = x0; ix <= x1; ix++)
+            row[ix] = pixel;
+    }
+
+    return 0;
+}
+
 /* Read a pixel back in the device's stored channel scale, the same one
    PutPix writes. The class this device copies reads the base class's
    row array, which this device does not have, so the inherited method
@@ -571,6 +629,7 @@ int loadjpegdevicecont(Xpost_Context *ctx,
     {
         { "Create", "jpegCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
         { "PutPix", "jpegPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "FillRect", "jpegFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
         { "GetPix", "jpegGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
         { "BlendPix", "jpegBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
         { "Emit", "jpegEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
