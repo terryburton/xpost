@@ -56,6 +56,7 @@
 #include "xpost_dict.h" /* get/put values in dicts */
 #include "xpost_string.h" /* get/put values in strings */
 #include "xpost_array.h"
+#include "xpost_save.h" /* the copy a write takes for the save in force */
 #include "xpost_name.h" /* create names */
 #include "xpost_file.h" /* raster emission */
 
@@ -1190,18 +1191,73 @@ _ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
 }
 
 /* A raster row about to be written through a raw pointer must be
-   writable: the row strings are fetched from the device dictionary,
-   which a program can reach and restock, so a row may arrive carrying
-   the read-only (or tighter) attribute. The raw pointer bypasses the
-   checked string mutator, so the access check happens here, before the
-   pointer is taken. The packed-array row path inherits the same check
-   from the array mutator it writes through. */
+   writable: the rows are fetched from the device dictionary, which a
+   program can reach and restock, so a row may arrive carrying the
+   read-only (or tighter) attribute. The raw pointer bypasses the checked
+   mutator, so the access check happens here, before the pointer is
+   taken. */
 static int
 _row_writable(Xpost_Context *ctx, Xpost_Object row)
 {
     if (!xpost_object_is_writeable(ctx, row))
         return invalidaccess;
     return 0;
+}
+
+/* A pointer to a packed-array row's own elements, for a loop that
+   writes a run of them. The answers xpost_array_put works out per
+   element -- which memory file the array lives in, whether it may be
+   written, and whether a copy has yet been taken for the save in force
+   -- are the same answer for every element of one row, so they are
+   worked out here and the run written straight into memory afterwards.
+
+   Two conditions come with the pointer. The values written must be
+   simple: the mutator refuses a composite stored from local into global
+   VM, and that check is skipped here because a packed pixel is an
+   integer. And the loop must not allocate, since a collection would
+   move the memory file under the pointer.
+
+   Returns NULL and sets err when the row may not be written or does not
+   hold the elements it claims; err is 0 alongside a good pointer. */
+static Xpost_Object *
+_row_elements(Xpost_Context *ctx, Xpost_Object row, int *err)
+{
+    Xpost_Memory_File *mem;
+    unsigned int ent, adr, entsz;
+    int ret;
+
+    *err = 0;
+    ret = _row_writable(ctx, row);
+    if (ret)
+    {
+        *err = ret;
+        return NULL;
+    }
+    mem = xpost_context_select_memory(ctx, row);
+    ent = xpost_object_get_ent(row);
+    /* the copy that lets a restore revert these writes; it may move the
+       memory file, so the address is taken after it */
+    ret = xpost_save_cow(mem, arraytype, row.comp_.sz, ent);
+    if (ret)
+    {
+        *err = ret;
+        return NULL;
+    }
+    if (!xpost_memory_table_get_addr(mem, ent, &adr) ||
+        !xpost_memory_table_get_size(mem, ent, &entsz))
+    {
+        *err = VMerror;
+        return NULL;
+    }
+    /* the bound the element mutator applies, applied once for the run:
+       the view's last element has to lie inside the entity */
+    if ((unsigned long long)(row.comp_.off + row.comp_.sz) * sizeof(Xpost_Object)
+        > entsz)
+    {
+        *err = rangecheck;
+        return NULL;
+    }
+    return (Xpost_Object *)xpost_vm_ptr(mem, adr) + row.comp_.off;
 }
 
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
@@ -1440,17 +1496,20 @@ int _fillrectrgb(Xpost_Context *ctx,
     for (iy = iy0; iy <= iy1; iy++)
     {
         int cx0 = ix0, cx1 = ix1;
+        Xpost_Object *el;
+        Xpost_Object pix;
+
         row = xpost_array_get(ctx, imgdata, iy);
         if (xpost_object_get_type(row) != arraytype)
             return undefined;
         if (!xpost_dev_span_clip(&cx0, &cx1, row.comp_.sz))
             continue;
+        el = _row_elements(ctx, row, &ret);
+        if (!el)
+            return ret;
+        pix = xpost_int_cons(packed);
         for (ix = cx0; ix <= cx1; ix++)
-        {
-            ret = xpost_array_put(ctx, row, ix, xpost_int_cons(packed));
-            if (ret)
-                return ret;
-        }
+            el[ix] = pix;
     }
 
     return 0;
