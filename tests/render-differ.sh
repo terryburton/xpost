@@ -337,7 +337,13 @@ resolve_side() {        # <label> <spec>; sets side_data, side_bin, side_desc
     if [ -d "$_spec" ] && [ -f "$_spec/data/init.ps" ]; then
         side_data=$(CDPATH= cd -- "$_spec/data" && pwd)
         side_desc="tree $_spec"
-        if [ -x "$_spec/build/src/bin/xpost" ]; then
+        # A tree carries its own interpreter where it has built one, which
+        # is what lets two revisions be compared. An interpreter named
+        # outright is not that: it says which one to render with, and a
+        # build the tree happens to hold does not answer for it. Naming one
+        # and rendering with another is how a comparison comes to be about
+        # a binary nobody asked for, and it cannot be seen in the result.
+        if [ -z "${XPOST:-}" ] && [ -x "$_spec/build/src/bin/xpost" ]; then
             side_bin=$(CDPATH= cd -- "$_spec/build/src/bin" && pwd)/xpost
         fi
         return 0
