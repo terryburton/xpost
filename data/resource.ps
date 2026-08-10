@@ -15,6 +15,18 @@
 true setglobal
 
 .xpostsys /.resources 32 dict put
+
+% The font machinery caches, beside them and for the same reason: a face
+% is opened once and the objects synthesized from it -- the CharStrings
+% dictionary a Type 1 or CFF face publishes, the sfnts array a Type 42
+% one carries -- are shared by every font dictionary the name produces.
+% The cache's other half is the face itself, which the font library
+% holds and the collector knows nothing of, so the objects are kept here
+% where it does: a member of a namespace whose read-only seal is shallow
+% is still writable, and one made after that seal could not be added at
+% all. A face's entries share a dictionary of their own, so that a face
+% name is never a name in the namespace.
+.xpostsys /.facecache 32 dict put
 //.xpostsys /.resources get /Category 32 dict put
 % /Category is itself one of the categories it lists: PLRM Table 3.9 calls it
 % recursive, so it carries an implementation dictionary of its own alongside
