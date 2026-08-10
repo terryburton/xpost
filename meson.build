@@ -3001,11 +3001,18 @@ test('colour-range',
 # end, so marks made after the last one are a page it did not finish, an
 # erased page has nothing left to end, and a job that painted nothing has no
 # page. Each of those is a way to produce a page too many.
+# Its own limit rather than the configuration's: this asks every marking
+# device eight questions and calibrates each with two more, so it starts
+# the interpreter about ten times per device and its cost follows the
+# roster's length rather than the work of any one case. Measured at
+# twenty-six seconds run alone, and it has been killed at sixty on a
+# build running the suite beside it.
 test('job-page',
   find_program('tests/run-job-page-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast)
+  suite: cost_fast,
+  timeout: 300)
 
 # Where a number stops and a name starts. A sign and a decimal point begin
 # numbers and also make names, so the scanner decides between the two for
