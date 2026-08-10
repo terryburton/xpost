@@ -261,12 +261,43 @@ jobs:
     # and the vmlimit limit exactly as a sanitizer runtime does, and
     # naming those suites here would be a second copy of knowledge the
     # wrapper already holds.
+    # The checker follows the interpreter. meson's wrapper is applied to
+    # the whole test command, and most of this suite's tests are a shell
+    # script that starts the interpreter as a child, so without this the
+    # process being watched is the shell and the interpreter runs
+    # unwatched. The utilities those scripts also start are skipped by
+    # path: each has allocations of its own, and none of them is the
+    # tree's. The interpreter is not skipped -- it lives in the build
+    # directory, which no pattern here names.
+    #
+    # The checker writes to files of its own rather than to the process
+    # it watches. Some tests read back what the interpreter printed, and
+    # one of them requires a quiet run to write nothing at all, so a
+    # checker that announced itself on their stderr would be failing
+    # them for its own output. The reports are printed below when the
+    # run does not pass, and kept as an artifact either way.
     - name: test under memcheck
       run: |
+        mkdir -p vglogs
         MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh full \
           --print-errorlogs \
-          --wrapper="valgrind --error-exitcode=9 --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes --suppressions=$PWD/tests/valgrind.supp" \
-          --timeout-multiplier 20
+          --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
+          --timeout-multiplier 60 || {
+            # Selected on the count, not on the words: every report ends
+            # with a summary naming each kind, so a search for the words
+            # matches the reports that found nothing just as well as the
+            # ones that found something.
+            echo '--- what the checker reported ---'
+            grep -l 'ERROR SUMMARY: [1-9]' vglogs/*.log 2>/dev/null |
+              while read -r f; do echo "== $f"; cat "$f"; done
+            exit 1
+          }
+    - uses: actions/upload-artifact@v4
+      with:
+        name: memcheck-reports
+        path: vglogs
+        retention-days: 30
+      if: always()
 
   gcc-analyzer:
     strategy:
