@@ -277,9 +277,19 @@ jobs:
     # them for its own output. The reports are printed below when the
     # run does not pass, and kept as an artifact either way.
     - name: test under memcheck
+      #
+      # The fast tests, not every test. Two kinds of test cannot be run
+      # this way, and both carry the slow tag. One draws a path of
+      # fifteen thousand segments to reach an implementation limit: it
+      # costs five minutes on its own and tens of times that under a
+      # checker, which is a job that does not finish rather than a job
+      # that is slow. The other three run a checker themselves -- that is
+      # what they are for -- and a checker cannot run under a checker.
+      # What is left is the interpreter watched across the whole of the
+      # fast suite, which is what this lane never had before.
       run: |
         mkdir -p vglogs
-        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh full \
+        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh quick \
           --print-errorlogs \
           --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
           --timeout-multiplier 60 || {
@@ -556,3 +566,38 @@ jobs:
         path: unreachable.log
         retention-days: 30
       if: always()
+
+  # Thirty-two-bit pointers, which no other lane builds. mingw64 gives a
+  # 32-bit long beside 64-bit pointers, and that is what caught the last
+  # two width defects; what is missing everywhere else is a pointer and a
+  # size_t of four bytes, which is a different set of casts.
+  #
+  # A 32-bit userland rather than a multilib compiler, so the libraries
+  # the interpreter is built against are the same width as the
+  # interpreter, and every optional feature is available rather than
+  # configured off.
+  #
+  # The build only, for now. The suite does not pass here: four of its
+  # unit tests end in the C library's heap checks, which is a defect in
+  # the tree and not in this lane, and a lane that arrived red would be a
+  # lane nobody reads. The build is what catches a truncation or a format
+  # that only a narrow pointer reaches, and it is clean today; the suite
+  # belongs here as soon as the heap corruption is fixed.
+  ilp32:
+    name: 32-bit pointers
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: build in a 32-bit userland
+      run: |
+        docker run --rm --platform linux/386 \
+          -v "$PWD":/src:ro -v "$PWD/out32":/work \
+          i386/debian:bookworm bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq build-essential meson ninja-build pkg-config \
+              libpng-dev libjpeg-dev libfreetype-dev libfontconfig-dev
+            gcc -dumpmachine
+            meson setup /work/build /src
+            ninja -C /work/build'
