@@ -105,10 +105,6 @@ true setglobal
     }{ pop pop null } ifelse
 } bind put
 
-% Directories searched, in order, when findresource misses in VM. Empty
-% by default; the host appends entries (xpost_add_resource_dir, -I).
-.privatedict /.resourcepath [] put
-
 % category  .instof  instances
 .xpostsys /.instof {
     //.xpostsys /.resources get exch 2 copy known not {
@@ -171,7 +167,9 @@ setglobal
     /category exch def
     /key exch def
     /loaded false def
-    .privatedict /.resourcepath get {
+    % the directories searched, in order: what the run's host settled,
+    % empty until it names one (xpost_add_resource_dir, -I)
+    /.resourcepath //.xpostsys /.hostvalue get exec {
         % dir
         category 128 string cvs
         key 128 string cvs

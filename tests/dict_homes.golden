@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 301
+entries 300
 
 # Graphics-state template slots (data/gstate.ps). The list is the whole
 # fails the check, so a new slot is declared here in the commit that adds
@@ -59,9 +59,7 @@ entries 301
 .privatedict /.gstatetemplate
 .privatedict /.hairrect
 .privatedict /.imginterp
-.privatedict /.interactive
 .privatedict /.pagestate
-.privatedict /.resourcepath
 .privatedict /.wrappedprocs
 .privatedict /.xpost_BBOX
 .privatedict /.xpost_DSCWRITE
@@ -72,7 +70,6 @@ entries 301
 .privatedict /.xpost_PPMIMAGE
 .privatedict /.xpost_SVGWRITE
 .privatedict /.xpost_TIFFIMAGE
-.privatedict /DATA_DIR
 .privatedict /newDSCWRITEdevice
 .privatedict /newPBMIMAGEdevice
 .privatedict /newPDFWRITEdevice
@@ -166,6 +163,7 @@ entries 301
 .xpostsys /.eospantile
 .xpostsys /.execformbox
 .xpostsys /.execformdirect
+.xpostsys /.facecache
 .xpostsys /.fill
 .xpostsys /.fillparts
 .xpostsys /.fillsubjparts
@@ -187,6 +185,8 @@ entries 301
 .xpostsys /.gtri
 .xpostsys /.hairsegclip
 .xpostsys /.handlejoberror
+.xpostsys /.hostdict
+.xpostsys /.hostvalue
 .xpostsys /.ht5component
 .xpostsys /.htnum
 .xpostsys /.htreadthresholds
@@ -260,7 +260,6 @@ entries 301
 .xpostsys /.rect1
 .xpostsys /.refreshscreencell
 .xpostsys /.reportloadfailure
-.xpostsys /.facecache
 .xpostsys /.resources
 .xpostsys /.rownorm
 .xpostsys /.runbuild

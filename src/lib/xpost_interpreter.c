@@ -2480,9 +2480,14 @@ done:
 /*
    load init.ps (which also loads err.ps) while systemdict is writeable
    ignore invalidaccess errors.
+
+   The directory the boot files were found in is reported back in
+   datadir, empty where they were not found at all. It is one of the
+   things this run settles rather than something true of the build, so
+   the caller records it with the rest of them.
  */
 static
-void loadinitps(Xpost_Context *ctx)
+void loadinitps(Xpost_Context *ctx, char *datadir, size_t datadirsz)
 {
     char buf[1024];
     char path_init_ps[XPOST_PATH_MAX];
@@ -2492,6 +2497,7 @@ void loadinitps(Xpost_Context *ctx)
     int n;
 
     assert(ctx->gl->base);
+    datadir[0] = '\0';
     xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
 
 #define XPOST_PATH_INIT \
@@ -2560,6 +2566,7 @@ void loadinitps(Xpost_Context *ctx)
     path = path_init;
     while (*path++) if (*path == '\\') *path = '/';
 #endif
+    snprintf(datadir, datadirsz, "%s", path_init);
     n = snprintf(buf, sizeof(buf),
                  "(%s) (r) file cvx "
                  "/DATA_DIR (%s) def exec ", path_init_ps, path_init);
@@ -2577,6 +2584,127 @@ void loadinitps(Xpost_Context *ctx)
     mainloop(ctx);
 }
 
+
+/* What a run settles, and the whole of it.
+
+   The interpreter's dictionaries hold the language: the same names with
+   the same values however the interpreter was started. A few values are
+   not like that. The directory the boot files were found in, the
+   directories a resource search covers and whether there is a user at
+   the other end of standard input are decided afresh on every launch, by
+   the command line, the environment, the caller, or the state of the
+   process. Those live in a dictionary of their own -- .hostdict, a
+   member of the private global namespace -- so that whether a value is
+   the same for every run of this build is answered by which dictionary
+   holds it rather than by knowing what the name means.
+
+   Every name here is written on every launch and written from here. One
+   the host has nothing to say about is written as a null rather than
+   left out, so nothing a run reads under one of these names can have
+   been settled by anything other than this run.
+
+   tests/host_settings.golden registers the set, and
+   tests/check-host-settings.sh holds this table, the register and the
+   readers among the boot files to one another. */
+static const char *const host_settings[] =
+{
+    "DATA_DIR",
+    ".resourcepath",
+    ".interactive",
+    NULL
+};
+
+/* The dictionary those settings live in. The namespace holding it is
+   sealed read-only once the language is loaded, and the seal is shallow,
+   so writing into this member goes on working for as long as the context
+   does -- which is what lets a setting be written afresh for each run
+   rather than only at start-up. */
+static Xpost_Object _host_dict(Xpost_Context *ctx)
+{
+    if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
+        return null;
+    return xpost_dict_get(ctx, ctx->globalprivatedict,
+                          xpost_name_cons(ctx, ".hostdict"));
+}
+
+/* Write one setting, answering the refusal so the caller can report it:
+   a setting that did not go in is one whose reader answers with whatever
+   stood under the name before. */
+static int _host_put(Xpost_Context *ctx, const char *name, Xpost_Object value)
+{
+    Xpost_Object h = _host_dict(ctx);
+
+    if (xpost_object_get_type(h) != dicttype)
+        return undefined;
+    return xpost_dict_put(ctx, h, xpost_name_cons(ctx, name), value);
+}
+
+/* Settle what this run's host decides, once the language is in place to
+   be asked. The whole set is cleared first, so a name the branches below
+   have nothing to say about answers null for this run rather than with
+   whatever was under it.
+
+   What the settings are made of goes in global memory. They are settled
+   before the program runs and are read for the whole life of the
+   context, so they must outlive the restores that end a job; local
+   memory would revert them with the job that happened to be running. */
+static int _record_host_config(Xpost_Context *ctx, const char *datadir)
+{
+    unsigned int vmmode;
+    Xpost_Object o;
+    int ret;
+    int i;
+
+    for (i = 0; host_settings[i]; i++)
+        if ((ret = _host_put(ctx, host_settings[i], null)) != 0)
+            return ret;
+
+    vmmode = ctx->vmmode;
+    ctx->vmmode = GLOBAL;
+
+    ret = 0;
+    if (datadir && datadir[0])
+    {
+        /* the directory becomes a string, which counts its length in a
+           field narrower than a path may be */
+        if (strlen(datadir) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        {
+            ret = limitcheck;
+            goto done;
+        }
+        o = xpost_object_cvlit(xpost_string_cons(ctx,
+                                   (unsigned int)strlen(datadir), datadir));
+        if (xpost_object_get_type(o) != stringtype)
+        {
+            ret = VMerror;
+            goto done;
+        }
+        if ((ret = _host_put(ctx, "DATA_DIR", o)) != 0)
+            goto done;
+    }
+
+    /* The directories a resource search covers, empty until the host
+       names one. It is data rather than a procedure, so it is literal:
+       an executable array would be run instead of read when the path is
+       walked. */
+    o = xpost_object_cvlit(xpost_array_cons(ctx, 0));
+    if (xpost_object_get_type(o) != arraytype)
+    {
+        ret = VMerror;
+        goto done;
+    }
+    if ((ret = _host_put(ctx, ".resourcepath", o)) != 0)
+        goto done;
+
+    /* Whether there is a user at the other end of this run is settled
+       per run rather than per launch, by _record_session_kind; a launch
+       that never starts one answers as a run with nobody there. */
+    ret = _host_put(ctx, ".interactive", xpost_bool_cons(0));
+
+done:
+    ctx->vmmode = vmmode;
+    return ret;
+}
 
 /* Name the standard local dictionaries in systemdict. systemdict is global, so
    holding a reference to a local dictionary would be an invalidaccess; the PLRM
@@ -2669,6 +2797,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
                                   int height)
 {
     Xpost_Object sd, ud;
+    char datadir[XPOST_PATH_MAX];
     int ret;
     const char *outfile = NULL;
     const char *bufferin = NULL;
@@ -2778,7 +2907,21 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 
     xpost_stack_clear(xpost_ctx->lo, xpost_ctx->hold);
     xpost_interpreter_set_initializing(0);
-    loadinitps(xpost_ctx);
+    loadinitps(xpost_ctx, datadir, sizeof(datadir));
+
+    /* Settle what this run's host decides, in the one dictionary that
+       holds such things, now that the language is loaded and there is
+       somewhere to put them. Everything above this point is the language
+       being built and is the same for every run of this build; the
+       settings below it are this run's alone. A context whose settings
+       could not be recorded is not one to hand back: its readers would
+       answer with nothing, or with what some other run left. */
+    ret = _record_host_config(xpost_ctx, datadir);
+    if (ret)
+    {
+        XPOST_LOG_ERR("%s recording what this run settles", errorname[ret]);
+        return NULL;
+    }
 
     ret = copyudtosd(xpost_ctx, ud, sd);
     if (ret)
@@ -2916,17 +3059,18 @@ XPAPI int xpost_add_resource_dir(Xpost_Context *ctx, const char *dir)
         return 0;
 
     key = xpost_name_cons(ctx, ".resourcepath");
-    ud = ctx->privatedict;
+    ud = _host_dict(ctx);
+    if (xpost_object_get_type(ud) != dicttype)
+        return 0;
 
-    /* extend any array already in privatedict, else start empty */
+    /* extend the path this run has settled so far */
     rp = xpost_dict_get(ctx, ud, key);
     n = (xpost_object_get_type(rp) == arraytype) ? rp.comp_.sz : 0;
 
-    /* the resource path persists across restore, so its array and strings live
-       in global VM even though privatedict is local (a local dictionary may
-       hold a global object). They are data, not a procedure, so make them
-       literal -- an executable array would be run, not read, when the path is
-       evaluated. */
+    /* The settings a run makes are global, so the array and its strings
+       are made there too. They are data, not a procedure, so make them
+       literal -- an executable array would be run, not read, when the
+       path is evaluated. */
     /* the directory becomes a string, which counts its length in a field
        narrower than a path may be */
     if (strlen(dir) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
@@ -3003,17 +3147,14 @@ static void push_start_proc(Xpost_Context *ctx, const char *name)
    whatever the pipe was carrying, after and outside the program the run
    was asked for.
 
-   The answer goes in privatedict, alongside the start procedures that
-   read it and the rest of what the host settles before a run, and is
-   written afresh on each one so that no run inherits the answer of the
-   last. It is written before the job's snapshot is taken, so the job's
-   own rewind leaves it standing. */
+   The answer goes with the rest of what this run settles, and is written
+   afresh on each run so that no run inherits the answer of the last. It
+   is written before the job's snapshot is taken, so the job's own rewind
+   leaves it standing. */
 static void _record_session_kind(Xpost_Context *ctx)
 {
-    if (xpost_dict_put(ctx, ctx->privatedict,
-                       xpost_name_cons(ctx, ".interactive"),
-                       xpost_bool_cons(!ctx->batch
-                                       && xpost_isatty(fileno(stdin)))))
+    if (_host_put(ctx, ".interactive",
+                  xpost_bool_cons(!ctx->batch && xpost_isatty(fileno(stdin)))))
         XPOST_LOG_ERR("cannot record whether this run has a user");
 }
 

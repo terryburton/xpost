@@ -42,6 +42,7 @@ tests/check-filter-base.sh \
 tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
 tests/check-guard-paths.sh \
+tests/check-host-settings.sh \
 tests/check-must-check.sh \
 tests/check-name-registers.sh \
 tests/check-narrow-cursors.sh \
@@ -162,6 +163,7 @@ tests/gstate_object_test.ps \
 tests/guard-paths.sh \
 tests/halftone_cell_test.ps \
 tests/halftone_matrix_test.ps \
+tests/host_settings.golden \
 tests/image_matrix_test.ps \
 tests/internal_debug_ops_test.ps \
 tests/interrupt_test.ps \

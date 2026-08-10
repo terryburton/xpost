@@ -4,6 +4,11 @@
 # the suite's internal failcount reached zero.
 #   $1  path to the built xpost binary
 #   $2  path to test.ps
+#   $3  optional: a name=value definition to hand the suite, as any
+#       caller would hand one in. A suite that needs to know something
+#       about the run it is part of -- where it was started from, say --
+#       is told by whoever started it, since what the interpreter itself
+#       settled about the run is kept where a program cannot read it.
 #
 # Two things a test written for this harness has to get right, both of
 # which fail by reporting success rather than by reporting anything:
@@ -24,13 +29,21 @@
 set -u
 xpost=$1
 script=$2
+define=${3:-}
 . "$(dirname "$0")/verdict.sh"
 # these conformance tests exercise the interpreter's own file operations, so
 # run with the CLI file-access sandbox lifted
 # capture the interpreter's exit status as well as its output: a run that
 # reports SUCCESS and then dies during teardown -- a crash, an assertion,
 # a sanitizer abort -- must not be recorded as a pass
-out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
+# A definition is passed only when one was asked for: every other suite
+# here asserts that a program's own dictionary starts empty, and a
+# definition made for one of them would be the thing that filled it.
+if [ -n "$define" ]; then
+    out=$("$xpost" -q --no-sandbox -d null "-D$define" "$script" </dev/null 2>&1)
+else
+    out=$("$xpost" -q --no-sandbox -d null "$script" </dev/null 2>&1)
+fi
 status=$?
 printf '%s\n' "$out"
 if [ "$status" -ne 0 ]; then

@@ -698,9 +698,13 @@ endforeach
 # Core-interpreter conformance: run the PLRM operator-example suite through
 # the built interpreter and require its failcount to reach zero. The build-tree
 # binary is not installed, so point it at the source data via XPOST_DATA_DIR.
+# The suite reads one of its cases out of a file beside itself, and where the
+# interpreter booted from is one of the settings the run made rather than
+# anything a program may read, so the directory is handed in as a definition.
 test('interpreter',
   find_program('tests/run-ps-test.sh'),
-  args: [ xpost_exe, files('data/test.ps') ],
+  args: [ xpost_exe, files('data/test.ps'),
+          'DATADIR=(' + meson.current_source_dir() / 'data' + ')' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,
   timeout: 120)
@@ -3481,6 +3485,18 @@ test('opsigs-writer',
   find_program('tests/check-opsigs-writer.sh'),
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
+
+# The boundary between the language, which is the same for every run of
+# this build, and what a run settles for itself. A value taken from the
+# command line, the environment, the caller or the state of the process
+# lives in one dictionary of its own and is written there after the
+# language is in place; the register in tests/host_settings.golden is
+# held to the C table that writes them, to the readers among the boot
+# files, and to what a live startup settled from a known invocation.
+test('host-settings',
+  find_program('tests/check-host-settings.sh'),
+  suite: cost_fast,
+  args: [ xpost_exe, meson.current_source_dir() ])
 
 # The complement of dict-homes: that guards a registered member against
 # moving, this guards a reference against landing nowhere. Every bare

@@ -38,6 +38,46 @@ userdict /.xpostsys 400 dict put
 userdict /.xpostsys get .setglobalprivatedict
 setglobal
 
+% .hostdict -- what this run's host settles, and nothing else.
+%
+% The dictionaries around it hold the language: the same names with the
+% same values however the interpreter was started. A few values are not
+% like that -- the directory the boot files were found in, the
+% directories a resource search covers, whether there is a user at the
+% other end of standard input -- and they are decided afresh on every
+% launch by the command line, the environment, the caller, or the state
+% of the process. Keeping them here and nowhere else is what makes
+% "is this the same for every run of this build?" a question about which
+% dictionary a name is in, rather than one about what the name means.
+%
+% Every member is written by the host (xpost_interpreter.c,
+% _record_host_config and _record_session_kind), from the one table
+% there, once the language is in place; a setting the host has nothing
+% to say about is written as a null rather than left out. So nothing a
+% run reads here was settled by anything but this run.
+%
+% Global, with the namespace holding it. A setting is made before the
+% program runs and read for the whole life of the context, so it has to
+% outlive the restores that end a job; local memory would revert it with
+% whichever job happened to be running.
+currentglobal true setglobal
+.xpostsys /.hostdict 16 dict put
+
+% /key  .hostvalue  value
+% What the host settled for this run under key. Every setting a run has
+% is written before a program runs, so a key that is not here is one no
+% run settles: the caller is asking for something that was never a
+% setting, and is told so where it asked instead of carrying a null off
+% somewhere else. A setting the host said nothing about answers null,
+% which is a value and reads as one.
+.xpostsys /.hostvalue {
+    //.xpostsys /.hostdict get exch 2 copy known
+        { get }
+        { exch pop cvx /undefined signalerror }
+    ifelse
+} bind put
+setglobal
+
 currentglobal true setglobal
 % The operands each operator takes. The definitions fill this through
 % .defop, so the statement sits beside the body it describes; lockdown
@@ -107,17 +147,14 @@ setglobal
 currentglobal false setglobal
 256 dict .setprivatedict
 setglobal
-% .interactive -- whether this run has a user at the other end of it. The C
-% writes it before each run and the start procedure over a named program reads
-% it to decide whether to offer the interactive executive once the program has
-% ended; false here is what a run gets when nothing said otherwise, so a run
-% ends where its program ends unless someone is there to type at it.
-.privatedict /.interactive false put
-% DATA_DIR, the directory the interpreter loads its .ps modules from, is set by
-% the bootstrap into userdict before this file runs. Move it into privatedict so
-% it does not sit among the program's names; the loader reaches it there.
+% DATA_DIR, the directory this run found its boot files in, is handed in by the
+% bootstrap through userdict -- the only dictionary there is that early. Seed
+% the run's settings with it here, so the loader below can find the rest of the
+% modules, and drop the handover so it does not sit among the program's names.
+% The host writes it again, with everything else it settles, once the language
+% is in place; the copy is global because the settings are.
 userdict /DATA_DIR known {
-    .privatedict /DATA_DIR userdict /DATA_DIR get put
+    .xpostsys /.hostdict get /DATA_DIR userdict /DATA_DIR get dup length string copy put
     userdict /DATA_DIR undef
 } if
 % .gscratch returns the local scratch dictionary the machinery mutates each
@@ -263,7 +300,8 @@ setglobal
 % the machinery. In .xpostsys like every other helper, and global with it.
 currentglobal true setglobal
 .xpostsys /.loadmodule { % (/name.ps)  .  -
-    .privatedict /DATA_DIR get exch //.xpostsys /.strcat get exec run
+    /DATA_DIR //.xpostsys /.hostvalue get exec
+    exch //.xpostsys /.strcat get exec run
 } bind put
 setglobal
 
@@ -329,7 +367,8 @@ setglobal
 %def
 
 %(EXE_DIR =) print EXE_DIR print (\n) print
-//.internaldict /QUIET known { }{ (DATA_DIR =) print .privatedict /DATA_DIR get print (\n) print } ifelse
+//.internaldict /QUIET known { }{ (DATA_DIR =) print
+    /DATA_DIR //.xpostsys /.hostvalue get exec print (\n) print } ifelse
 
 %(1\n)print
 %/product (Xpost) def % now an operator in xpost_op_misc.c
@@ -664,7 +703,7 @@ setglobal
     } if
     {
         (r) file cvx exec        % (filename) has stayed on the stack
-        .privatedict /.interactive get { executive } if
+        /.interactive //.xpostsys /.hostvalue get exec { executive } if
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
@@ -724,7 +763,7 @@ setglobal
     } if
     {
         (r) file cvx exec        % (filename) has stayed on the stack
-        .privatedict /.interactive get { executive } if
+        /.interactive //.xpostsys /.hostvalue get exec { executive } if
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if

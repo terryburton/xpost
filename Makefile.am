@@ -83,7 +83,8 @@ endif
 XPOST_PS_CONFORMANCE = \
 	XPOST_DATA_DIR=$(top_srcdir)/data \
 	$(top_srcdir)/tests/run-ps-test.sh \
-	$(top_builddir)/src/bin/xpost$(EXEEXT) $(top_srcdir)/data/test.ps
+	$(top_builddir)/src/bin/xpost$(EXEEXT) $(top_srcdir)/data/test.ps \
+	'DATADIR=($(top_srcdir)/data)'
 
 # Bounding-box device: render a known fill through -d bbox and check the box.
 XPOST_BBOX_TEST = \

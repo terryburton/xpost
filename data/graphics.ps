@@ -1,12 +1,15 @@
 //.internaldict /QUIET known { }{ (loading graphics.ps...\n)print } ifelse
 
 % fallback definitions so this file can run standalone; in the normal flow
-% DATA_DIR lives in privatedict, so test for it there
-.privatedict /DATA_DIR known {}{
-    .privatedict /DATA_DIR {} put
+% DATA_DIR is one of the settings this run made, and a run that settled no
+% directory answers with the null every unsettled setting answers with
+/DATA_DIR //.xpostsys /.hostvalue get exec null eq {
+    currentglobal true setglobal
+    .xpostsys /.hostdict get /DATA_DIR {} put
+    setglobal
     /strcat{1 1 index length 1 sub getinterval}def
     /breakhere{}def
-}ifelse
+} if
 
 true setglobal
 % The language is defined into systemdict, its final home, rather than

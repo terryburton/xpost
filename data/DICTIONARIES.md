@@ -5,6 +5,34 @@ program's namespace and out of reach of tampering. Where a name lives is a
 deliberate choice along three axes: **which VM**, **visible or private**, and
 (for private things) **which private home**.
 
+## Axis 0 — the language, or what this run settled
+
+Before anything else: is the value the same for every run of this build, or did
+*this* launch decide it?
+
+Almost everything is the language — the same names with the same values however
+the interpreter was started. A handful of values are not. Where this run found
+its boot files, which directories a resource search covers, whether there is a
+user at the other end of standard input: each comes from the command line, the
+environment, the embedding caller, or the state of the process, and each is
+decided afresh on every launch.
+
+Those live in **`.hostdict`** and nowhere else (below). The interpreter writes
+every one of them itself, from one table in `xpost_interpreter.c`, *after* the
+language is in place — so a value that came from the invocation can never be
+mistaken for part of the language, and a language built once and reused cannot
+carry one launch's answer into the next. `tests/host_settings.golden` registers
+the set and `tests/check-host-settings.sh` holds the register, the C table, the
+readers among the boot files and a live startup to one another.
+
+A value the *load itself* consumes and nothing reads afterwards is not one of
+these, however it arrived. `QUIET` (the `-q` flag) guards the load-time progress
+messages and has no reader once loading is over; `GRAPHICS_LOAD_STOPPED` and
+`GRAPHICS_LOAD_DEPTH` are the graphics load's own bookkeeping, written and read
+inside it; the `newdefaultdevice` bootstrap string is run once while the device
+modules load and dropped from `systemdict` at lockdown. These are spent by the
+load that read them, and stay with the machinery that reads them.
+
 ## Axis 1 — VM (local vs global), decided by lifecycle
 
 - *static* — defined once during start-up, only read afterwards.
@@ -12,6 +40,9 @@ deliberate choice along three axes: **which VM**, **visible or private**, and
   graphics state, a device's page geometry).
 - *persistent* — accumulates deliberately and is meant to outlive a job
   (the resource tables, `globaldict`).
+- *per-run settled* — written by the host before a program runs and read for the
+  whole life of the context (`.hostdict`). Global, because a job's `restore` must
+  leave it standing.
 
 Static and persistent state may live in **global VM**. Per-render mutable state
 **must** live in **local VM**: `save`/`restore` bracket each job and revert local
@@ -138,6 +169,35 @@ the context and a second reading would have nowhere to define.
 | `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | the single private helper namespace. Reached by run-time `//.xpostsys /h get exec` (the mutually-recursive path/clip/image/graphics family + interpreter control `.finalize`/`loadgraphics`/`.loadmodule`/`.devicemakers`) and by baking `.xpostsys begin … //h exec` (the colour/shading/pattern/halftone/font-CID families) |
 | `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`/`GRAPHICS_LOAD_STOPPED`/`GRAPHICS_LOAD_DEPTH`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
 | `.xpostsys /.resources` | global | persistent | (member, writable) | the resource instance table; `defineresource` writes it; global-persistent per PLRM. A shallow read-only seal of `.xpostsys` correctly leaves this member writable |
+| `.xpostsys /.hostdict` | global | per-run settled | (member, writable) | **what this run settled, and nothing else** — see below. Writable for the same reason `.resources` is: the seal is shallow |
+
+#### `.hostdict` — what this run settled
+
+Everything above is the language. `.hostdict` is the one dictionary that is not:
+every member is a value *this* launch decided, and every member is written by the
+interpreter itself, from `host_settings[]` in `xpost_interpreter.c`, once the
+language is in place. A setting the host has nothing to say about is written as a
+**null** rather than left out, so a member can never be inherited from an earlier
+launch — or, when there is a pre-initialised virtual-memory image to load, from
+the machine that took it.
+
+| Member | Settled from |
+|---|---|
+| `DATA_DIR` | where this run found its boot files: `XPOST_DATA_DIR`, the shared library's own directory, the configured data directory, or a relative path from wherever the process started |
+| `.resourcepath` | `-I` and `xpost_add_resource_dir`, in the order given |
+| `.interactive` | whether the caller asked for a batch run, and whether standard input is a terminal; settled again for every run the context serves |
+
+The boot files read a setting through the accessor `.xpostsys /.hostvalue`, so a
+caller names the setting and not its home. A name that is not a setting is
+refused where it is asked for (`undefined`) rather than answered with a null the
+caller would carry off somewhere else; `check-host-settings.sh` makes such a
+caller unshippable in any case, by holding every name written beside `.hostdict`
+or `.hostvalue` to the register.
+
+`DATA_DIR` is seeded once by `init.ps`, off the handover the bootstrap makes
+through `userdict`, because the module loader needs it before the load is
+finished. The seed cannot outlive the load: the interpreter clears and rewrites
+the whole table afterwards, unconditionally.
 
 `.xpostsys` is global — a global `systemdict` procedure may freeze a `//`
 reference to it, and a global object may not reference a local one; local
@@ -186,10 +246,11 @@ machinery that is *both* local *and* private.
 | `.gscratchproc`, `.graphicsdictproc`, `.DEVICEproc` | static | the procedures the `.gscratch`, `graphicsdict` and `DEVICE` operators run; kept here because the operator table is outside the collector's view. Each takes its dictionary as a value rather than baking the name, which is what lets it be defined here — an immediately-evaluated reference would need the name on the dict stack, and `privatedict` is deliberately off it |
 | `.wrappedprocs` | static | the procedures behind every wrapped standard operator, for the same reason: the operator table cannot keep them alive. Each is in **global** VM — a local one would be freed by a `restore` past its creation with the table still pointing at it |
 | `.error` | mutable | the error hook `signalerror` runs; records into the local `$error` |
-| `.resourcepath` | static after host setup | resource search path; the host appends directories at start-up |
-| `.interactive` | rewritten per run | whether this run has a user at the other end of it; the C settles it before each run and `startfilename` reads it to decide whether to offer the executive once the program has ended |
-| `DATA_DIR` | static | the directory modules load from |
 | `start`, `startstdin`, `startfilename`, `startfile`, `…nographics` | static | the start procedures; the C fetches them through `ctx->privatedict` to prime a run |
+
+What this run settled is *not* here: `DATA_DIR`, `.resourcepath` and
+`.interactive` live in `.hostdict` (axis 0). `privatedict` holds local machinery,
+which is the same for every run.
 
 The wrapped-operator anchors that hold *global* objects stay in the global
 homes: `.=stringproc` is in `.internaldict` (the `=string` scratch is global).
@@ -201,6 +262,15 @@ homes: `.=stringproc` is in `.internaldict` (the `=string` scratch is global).
 | `execdict` | global | mutable (balanced) | the executive's dictionary; global because it is frozen into the now-global `executive`. Holds `execdepth`/`quitflag`, incremented and decremented in balance, not program data. The interactive `/start` also installs a transient `userdict /quit` shadow so `quit` exits the REPL cleanly rather than the process; it is not present in non-interactive runs |
 
 ## Adding a procedure, operator, or dictionary
+
+0. **Is it the language, or is it this run's?** If the value comes from the
+   command line, the environment, the embedding caller, or the state of the
+   process (a terminal, a file, a clock) — and anything reads it once the
+   language is loaded — it is a **setting**: register it in
+   `tests/host_settings.golden`, add it to `host_settings[]` in
+   `xpost_interpreter.c`, write it there, and read it through `.hostvalue`. It
+   belongs in no other dictionary. A value the load consumes and nothing reads
+   afterwards is not a setting and stays with the machinery that reads it.
 
 1. **Lifecycle → VM.** Anything written during a render, or that a program may
    change and expect `restore` to revert, is *per-render mutable* → it, and any

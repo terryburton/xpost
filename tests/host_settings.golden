@@ -1,0 +1,40 @@
+# The settings a run has: one name per line.
+#
+# The interpreter's dictionaries hold the language -- the same names with
+# the same values however the interpreter was started. These are the
+# values that are not like that. Each is decided afresh on every launch,
+# by the command line, the environment, the caller, or the state of the
+# process, and each lives in .hostdict, the one dictionary that holds
+# such things and nothing else.
+#
+# What the register is for is that the distinction stays a structural one
+# rather than a judgement made afresh for every name. A value that comes
+# from the invocation and is kept anywhere but here is one whose home
+# says it is part of the language; a name here that the interpreter does
+# not settle is a setting readers can ask for and never get.
+# check-host-settings.sh holds the register to the C table that writes
+# these, to the readers among the boot files, and to a live interpreter.
+#
+# The "entries" line counts the names that follow. Without it the list
+# could be emptied and go on agreeing with everything asked of it: with
+# nothing registered there is nothing to look for.
+#
+# A name is added here in the same commit that makes the interpreter
+# settle it, and removed in the one that stops.
+
+entries 3
+
+# where this run found its boot files: XPOST_DATA_DIR, the directory the
+# shared library sits in, the configured data directory, or a relative
+# path from wherever the process was started
+DATA_DIR
+
+# the directories a resource search covers when findresource misses in
+# virtual memory, in the order they are searched: -I, and the calls an
+# embedding caller makes to xpost_add_resource_dir
+.resourcepath
+
+# whether this run has a user at the other end of it: settled from
+# whether the caller asked for a batch run and from whether standard
+# input is a terminal, and settled again for every run the context serves
+.interactive

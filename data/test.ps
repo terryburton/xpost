@@ -706,12 +706,15 @@ abc
 (1:)= pstack
  check (abc) eq check
 
-.privatedict /DATA_DIR known {
-    .privatedict /DATA_DIR get (/readstring.ps) .testcat run
+% the directory this suite sits in, handed in by whoever ran it: where the
+% interpreter booted from is one of the run's own settings and is not a
+% program's to read
+/DATADIR where {
+    pop DATADIR (/readstring.ps) .testcat run
     (2:)= pstack
      not check 0 3 getinterval (abc) eq check
 }{
-    (readstring-from-file test skipped: no DATA_DIR)=
+    (readstring-from-file test skipped: no DATADIR was given)=
 } ifelse
 
 %renderbands
