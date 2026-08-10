@@ -34,6 +34,7 @@
 
 #include <stdio.h> /* snprintf */
 #include <limits.h>
+#include <stdint.h> /* SIZE_MAX: the width a buffer position is counted in */
 #include <stdlib.h> /* abs */
 #include <stddef.h>
 
@@ -90,40 +91,53 @@ static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
 
-int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t *bytes)
+int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
+                              size_t *bytes)
 {
     size_t pixels;
 
-    /* A page with no extent has no pixels rather than too many: it comes
-       to no bytes and is built, and whatever the device does with an
-       empty page it does on its own terms. A negative extent is not a
-       page at all, and the position of a pixel in one is not a number
-       the raster is indexed by. */
+    /* A buffer with no extent has no pixels rather than too many: it
+       comes to no bytes and is built, and whatever the device does with
+       an empty page it does on its own terms. A negative extent is not
+       an extent at all, and the position of a pixel in one is not a
+       number the raster is indexed by. */
     if (w < 0 || h < 0)
         return 0;
     if (w == 0 || h == 0)
     {
-        *bytes = 0;
+        *bytes = reserve;
         return 1;
     }
 
-    /* A device reaches a pixel by its position within the raster, and the
-       arithmetic that reaches a row is done in the width the interpreter
-       counts pixels in. A page with more pixels than that width counts is
-       one no device can reach the far end of, however much memory is to
-       hand, so it is refused here rather than allocated and then indexed
-       past. Refusing before allocating also keeps a page nobody can draw
-       from asking the system for the memory to hold it. */
-    if ((size_t)w > (size_t)INT_MAX / (size_t)h)
+    /* A device reaches a pixel by its position within the raster, and
+       that position is counted in the width the platform expresses the
+       size of a block of memory in. Three quantities have to fit that
+       width for the block to be one a device can hold and reach the far
+       end of: how many pixels there are, what they come to in bytes, and
+       what the caller will ask the allocator for. Each is checked by
+       division against what is left, so nothing is multiplied before it
+       is known to fit.
+
+       A block that fits is not a block the system will give, and the
+       refusal there is the allocator's to make. What is refused here is
+       the block whose far end has no address on this platform, which is
+       a limit of the implementation rather than of the machine and which
+       no amount of memory would lift. Refusing before allocating also
+       keeps a page nobody can reach from asking the system for the
+       memory to hold it. */
+    if ((size_t)w > SIZE_MAX / (size_t)h)
         return 0;
     pixels = (size_t)w * (size_t)h;
 
-    /* the bytes those pixels come to must also be a size this platform
-       can express, which is a separate question from how many there are */
-    if (pixel && pixels > (size_t)-1 / pixel)
+    /* the bytes those pixels come to are a separate question from how
+       many of them there are, and the space the caller keeps in front of
+       the raster is a third: a raster that fits on its own and not with
+       its header in front of it is one whose allocation size the caller
+       would form by wrapping */
+    if (pixel && pixels > (SIZE_MAX - reserve) / pixel)
         return 0;
 
-    *bytes = pixels * pixel;
+    *bytes = pixels * pixel + reserve;
     return 1;
 }
 

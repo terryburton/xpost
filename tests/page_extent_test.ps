@@ -1,31 +1,39 @@
-% A page with more pixels than a raster can be indexed by.
+% A page larger than the device can hold.
 %
-% A device reaches a pixel by its position within the raster, and the
-% arithmetic that reaches a row is done in the width the interpreter
-% counts pixels in. A page whose pixels outnumber what that width counts
-% cannot be addressed at all: the position of a pixel in its far half is
-% not a number that width holds, so it names somewhere else entirely.
+% A device that keeps its page as one block of memory reaches a pixel by
+% its position within that block, and that position is counted in the
+% width the platform expresses the size of a block in. So what a device
+% can hold is settled by two things and not one: whether the block's far
+% end has an address here at all, and whether the machine will give the
+% memory for it. The first is a limit of the implementation and no amount
+% of memory lifts it; the second is a limit of the machine and a larger
+% machine lifts it. PLRM 8.2 has a name for each -- limitcheck for the
+% first, VMerror for the second -- and a page that fails either is
+% refused before any of it is built.
 %
-% Such a page is refused. PLRM 8.2 has limitcheck for a limit of the
-% implementation rather than of the machine, and this is one: the memory
-% to hold the page is beside the point, since a device with the memory
-% still could not reach the whole of it. Refusing before allocating is
-% also what keeps a page nobody can draw from asking the system for the
-% memory to hold it.
+% Refusing before building is what keeps a page nobody can hold from
+% asking the system for the memory to hold it, and it is why the
+% interpreter is still standing afterwards. The page size is a program's
+% to choose, so this is reachable by any program, and an interpreter that
+% runs on afterwards is the point of the refusal: what follows must still
+% draw. PLRM 3.11 has the error machinery exist precisely so a program may
+% handle an error and continue, and a refusal a program cannot carry on
+% from is not an error but a stop.
 %
-% The page size is a program's to choose, so this is reachable by any
-% program, and an interpreter that ran on afterwards is the point of the
-% refusal: what follows must still draw.
+% What this holds is the refusal and the carrying on, which read the same
+% on every build. Which of the two limits a given page meets does not:
+% the ceiling a size expresses is the platform's own, and the same page
+% is past a narrow build's ceiling and inside a wide one's. That question
+% belongs to the arithmetic and is held there, against each platform's
+% own boundary, by tests/raster_extent_test.c. The page asked for below
+% is past every machine's memory and past a narrow build's ceiling
+% besides, so it is refused on all of them and costs nothing anywhere.
 
 /failures 0 def
 /fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
 bind def
 /assert { exch { pop }{ fail } ifelse } bind def
 
-% A square page whose side is under the largest length a device accepts,
-% and whose area is over the count a pixel's position is held in. Both
-% halves matter: a side small enough to look ordinary is what makes this
-% a limit of the area rather than of the dimension.
 % Asked of a device that keeps its raster as one block indexed by a
 % pixel's position. A device whose page is built some other way has no
 % such index and no such limit, and answers about a page this size on
@@ -35,17 +43,23 @@ bind def
 /indexed? DEVICE /ImgData known not
           DEVICE /VectorGlyphs known not and def
 
+% Two thousand million on a side. Nothing is allocated to find out: at
+% any pixel size at all the block runs past every machine's memory, and
+% the refusal is reached by arithmetic before the first byte is asked
+% for, so this costs the same as a page of no size whatever.
 /refused false def
 /why null def
-{ << /PageSize [65000 65000] >> setpagedevice } stopped
+{ << /PageSize [2000000000 2000000000] >> setpagedevice } stopped
 { /refused true store /why $error /errorname get store } if
 clear
 
 indexed?
 {
-    refused (a page too large to index is refused) assert
-    refused { why /limitcheck eq
-              (the refusal is a limit of the implementation) assert } if
+    refused (a page larger than the device can hold is refused) assert
+    refused
+    { why /VMerror eq  why /limitcheck eq  or
+      (the refusal names a limit of the machine or of the implementation)
+      assert } if
 }
 {
     (# this device does not index one block of pixels: a page of that size
@@ -56,9 +70,7 @@ indexed?
 % made of the page above: a device that refused it spent nothing, a
 % device that priced it refused before building any of it, and a device
 % that accepted it drew it. None of those is a reason the next job
-% cannot run, and an error a program cannot carry on from is not an
-% error but a stop -- PLRM 3.11 has the error machinery exist precisely
-% so a program may handle one and continue.
+% cannot run.
 /drew false def
 {
     << /PageSize [200 200] >> setpagedevice

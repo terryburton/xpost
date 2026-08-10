@@ -160,14 +160,17 @@ int _create_cont(Xpost_Context *ctx,
             size_t bytes;
 
             if (!xpost_device_raster_bytes(width, height,
-                                           sizeof(Xpost_Bgr_Pixel), &bytes))
+                                           sizeof(Xpost_Bgr_Pixel),
+                                           sizeof(Xpost_Bgr_Buffer), &bytes))
             {
-                XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a"
-                              " raster can be indexed by", limitcheck,
+                XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger"
+                              " than this platform addresses", limitcheck,
                               (int)width, (int)height);
                 return limitcheck;
             }
-            private.buf = malloc(sizeof(Xpost_Bgr_Buffer) + bytes);
+            /* the size covers header and raster both; the memory to
+               hold it is the machine's to give or refuse */
+            private.buf = malloc(bytes);
         }
         if (!private.buf)
             return VMerror;
@@ -248,7 +251,8 @@ int _blendpix(Xpost_Context *ctx,
         c = 255;
 
     {
-        Xpost_Bgr_Pixel *p = &private.buf->data[(size_t)iy * private.width + ix];
+        Xpost_Bgr_Pixel *p = &private.buf->data
+            [xpost_dev_raster_offset(ix, iy, private.width)];
 
         p->red = (unsigned char)_blendchannel(p->red, r, c);
         p->green = (unsigned char)_blendchannel(p->green, g, c);
@@ -299,7 +303,8 @@ int _putpix(Xpost_Context *ctx,
         pixel.blue = b;
         pixel.green = g;
         pixel.red = r;
-        private.buf->data[(size_t)iy * private.width + ix] = pixel;
+        private.buf->data[xpost_dev_raster_offset(ix, iy, private.width)]
+            = pixel;
     }
 
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -357,7 +362,8 @@ int _fillrect(Xpost_Context *ctx,
 
     for (iy = y0; iy <= y1; iy++)
     {
-        Xpost_Bgr_Pixel *row = private.buf->data + (size_t)iy * private.width;
+        Xpost_Bgr_Pixel *row = private.buf->data
+                             + xpost_dev_raster_offset(0, iy, private.width);
 
         for (ix = x0; ix <= x1; ix++)
             row[ix] = pixel;
@@ -395,7 +401,8 @@ int _getpix(Xpost_Context *ctx,
         (iy < 0) || (iy >= private.height))
         pixel.red = pixel.green = pixel.blue = 0;
     else
-        pixel = private.buf->data[(size_t)iy * private.width + ix];
+        pixel = private.buf->data
+            [xpost_dev_raster_offset(ix, iy, private.width)];
 
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));

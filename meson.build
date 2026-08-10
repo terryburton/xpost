@@ -3049,13 +3049,17 @@ test('c-held-objects',
 # Put to every marking device rather than to one: the limit belongs to the
 # arithmetic that reaches a pixel, so a device that keeps a raster some
 # other way is the control that shows the refusal is the index's and not
-# the interpreter's.
+# the interpreter's. What it holds is that the refusal happens, names one
+# of the two limits it can be, and leaves the interpreter able to draw;
+# which of the two a page meets is the platform's own answer and is held
+# against each platform's boundary by the raster-extent check. The page asked
+# for is past every machine's memory, so no device gets as far as asking
+# the system for any of it and the run costs what an empty page costs.
 test('page-extent',
   find_program('tests/run-page-extent-test.sh'),
   args: [ xpost_exe, files('tests/page_extent_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
-  timeout: 120)
+  suite: cost_fast)
 
 # The same refusal reached from the other side. Above, a program asks for
 # the page and catches what comes back; here the page comes from the
@@ -3580,6 +3584,26 @@ dev_rect_exe = executable('dev_rect_test',
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 test('dev-rect', dev_rect_exe, suite: cost_fast)
+
+# What a device that keeps its page as one block of memory can hold, and
+# where in that block a pixel sits. The two have to agree: every position
+# the row arithmetic can form for an extent the price accepted must land
+# inside the block that was priced, and a price widened without the
+# arithmetic behind it turns a clean refusal into a write past the end.
+# Held as arithmetic rather than through a device because the interesting
+# extents are the ones at the edge of what a size expresses, and a page
+# there runs to gigabytes: a run that allocated one would answer for a
+# single point on the one machine with the memory for it, where the
+# boundaries here are computed from the platform's own size and hold each
+# build to its own.
+raster_extent_exe = executable('raster_extent_test',
+  'tests/raster_extent_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('raster-extent', raster_extent_exe, suite: cost_fast)
 #if get_option('nls') == true
 #  subdir('po')
 #endif

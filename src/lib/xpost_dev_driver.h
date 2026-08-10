@@ -9,6 +9,7 @@
 #define XPOST_DEV_DRIVER_H
 
 #include <math.h> /* the device-space geometry below rounds by floor */
+#include <stddef.h> /* a buffer position is counted in the platform's size */
 
 /*
  * The output-device driver contract.
@@ -250,6 +251,42 @@ xpost_dev_rect_clip(int *x0, int *y0, int *x1, int *y1,
 {
     return xpost_dev_span_clip(x0, x1, width)
          & xpost_dev_span_clip(y0, y1, height);
+}
+
+/*
+ * Where a pixel sits in the block of memory a device is holding.
+ *
+ * Two extents are in play wherever a device reaches into its own
+ * memory, and they answer different questions. The page is what the
+ * program asked for: its extent comes from the page size and is what
+ * the marking operators are clipped against. The buffer is what is
+ * resident and being indexed: its extent is the block's own, and the
+ * arithmetic below is about that one. A device that holds its whole
+ * page at once gives the two the same numbers, which is every device
+ * here; they are still separate questions, and a position computed
+ * from the page's extent against a block holding something else
+ * reaches memory the block does not have.
+ *
+ * The position is counted in the width the platform expresses the size
+ * of a block in, not the width the interpreter counts pixels in. Those
+ * differ, and the smaller of them is the one an int holds: a block with
+ * more pixels than an int counts is a block a device can be given and
+ * would then reach past. So the count is taken in size_t throughout,
+ * and what a device can hold is settled by what it can allocate and
+ * address rather than by the range of a pixel coordinate.
+ */
+typedef size_t Xpost_Dev_Raster_Offset;
+
+/* The pixel at column @p x of row @p y of a buffer @p stride pixels
+   wide, as a count of pixels from the buffer's first. The coordinates
+   are the buffer's own, and the caller has already held them inside it
+   -- every marking method tests its operands against the extent before
+   reaching the memory, so this does not test them again. */
+static inline Xpost_Dev_Raster_Offset
+xpost_dev_raster_offset(int x, int y, int stride)
+{
+    return (Xpost_Dev_Raster_Offset)y * (Xpost_Dev_Raster_Offset)stride
+         + (Xpost_Dev_Raster_Offset)x;
 }
 
 /*

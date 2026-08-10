@@ -2,11 +2,10 @@
 # Meson test wrapper: run the page-extent check (page_extent_test.ps)
 # against the devices that mark a page.
 #
-# The question is what a device does with a page whose pixels outnumber
-# what a pixel's position is counted in, so it is put to devices that
-# have a raster to index. The null device draws nothing and the
-# bounding-box device keeps a box rather than pixels; neither has the
-# limit and neither is asked.
+# The question is what a device does with a page larger than it can
+# hold, so it is put to devices that have a raster to index. The null
+# device draws nothing and the bounding-box device keeps a box rather
+# than pixels; neither has the limit and neither is asked.
 #
 #   $1  path to the built xpost binary
 #   $2  path to page_extent_test.ps

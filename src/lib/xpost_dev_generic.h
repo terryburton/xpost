@@ -114,29 +114,45 @@ int xpost_dev_pdf_fmt_num(char *o, double v);
 void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
 
 /**
- * @brief report the bytes a raster of @p w by @p h pixels of @p pixel
- *        bytes each needs, or refuse a page this interpreter cannot address
+ * @brief report what to allocate for a raster of @p w by @p h pixels of
+ *        @p pixel bytes each, or refuse a buffer this platform cannot address
  *
- * Returns non-zero having written the byte count to @p bytes, or zero
- * having written nothing, in which case the caller answers limitcheck.
+ * Returns non-zero having written to @p bytes the whole size to ask the
+ * allocator for -- @p reserve bytes for whatever the caller keeps in
+ * front of the raster, such as its buffer header, plus the raster's own
+ * -- or zero having written nothing, in which case the caller answers
+ * limitcheck.
  *
- * A page of no extent is reported rather than refused: it comes to no
- * bytes and is built, and whatever a device makes of an empty page it
- * makes on its own terms. A negative extent is not a page and is refused
- * with the unaddressable ones.
+ * The extent asked about is the buffer's: the block that is to be
+ * resident and indexed, whose row width is what a pixel's position is
+ * computed against. Every device here holds its whole page in one such
+ * block, so it asks about the page's extent; the question is still the
+ * buffer's, and a device holding less of the page than that would ask
+ * about what it holds.
  *
- * A device indexes its raster by a pixel's position within it, and the
- * arithmetic that reaches a row is done in the width the interpreter
- * counts pixels in. A page whose pixels outnumber what that width counts
- * cannot be addressed however much memory is to hand, so it is refused
- * here rather than allocated and then indexed past: the caller answers
- * with limitcheck, which PLRM 8.2 gives for a limit of the implementation
- * rather than of the machine.
+ * A buffer of no extent is reported rather than refused: its raster
+ * comes to no bytes and the reserve is all there is to allocate, and
+ * whatever a device makes of an empty page it makes on its own terms. A
+ * negative extent is not an extent and is refused with the unaddressable
+ * ones.
  *
- * Refusing before allocating also keeps a page nobody can draw from
+ * A device reaches a pixel by its position within the buffer, counted in
+ * the width the platform expresses the size of a block of memory in. A
+ * buffer whose pixel count, byte count or allocation size runs past that
+ * width has no address for its far end however much memory is to hand,
+ * so it is refused here rather than allocated and then indexed past: the
+ * caller answers with limitcheck, which PLRM 8.2 gives for a limit of
+ * the implementation rather than of the machine. What the machine will
+ * actually give is the allocator's answer and not this one -- a size
+ * this reports is a size that can be expressed and addressed, not a size
+ * that is available -- and a caller whose allocation then fails answers
+ * VMerror.
+ *
+ * Refusing before allocating also keeps a page nobody can reach from
  * asking the system for the memory to hold it.
  */
-int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t *bytes);
+int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
+                              size_t *bytes);
 
 /**
  * @}

@@ -203,11 +203,11 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-    /* A pixel is reached by its position within the raster, so a page
-       whose pixels outnumber what that position is counted in cannot be
-       addressed at all. Held before the buffer is considered, and for a
-       buffer the caller supplied as much as for one of ours: the reach
-       is the device's arithmetic either way. */
+    /* A pixel is reached by its position within the raster, so a buffer
+       whose far end has no address on this platform cannot be indexed
+       whatever memory would be given for it. Held before the buffer is
+       considered, and for a buffer the caller supplied as much as for
+       one of ours: the reach is the device's arithmetic either way. */
     {
         size_t pixel;
 
@@ -219,10 +219,12 @@ int _create_cont(Xpost_Context *ctx,
             case BGRA: pixel = sizeof(Xpost_Raster_BGRA_Pixel); break;
             case BGR:  pixel = sizeof(Xpost_Raster_BGR_Pixel);  break;
         }
-        if (!xpost_device_raster_bytes(width, height, pixel, &bytes))
+        if (!xpost_device_raster_bytes(width, height, pixel,
+                                       sizeof(Xpost_Raster_Buffer), &bytes))
         {
-            XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a raster"
-                          " can be indexed by", limitcheck, width, height);
+            XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger than"
+                          " this platform addresses", limitcheck,
+                          width, height);
             return limitcheck;
         }
     }
@@ -238,8 +240,9 @@ int _create_cont(Xpost_Context *ctx,
     }
     else
     {
-        /* allocate buffer header and array */
-        private.buf = malloc(sizeof(Xpost_Raster_Buffer) + bytes);
+        /* allocate buffer header and array; the size covers both, and
+           the memory to hold it is the machine's to give or refuse */
+        private.buf = malloc(bytes);
         if (!private.buf)
             return VMerror;
         private.buf->height = height;
@@ -274,6 +277,7 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    Xpost_Dev_Raster_Offset off;
     int r, g, b, ix, iy;
 
     /* fold numbers per the driver contract */
@@ -292,11 +296,13 @@ int _putpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    /* check bounds */
-    if (ix < 0 || ix >= xpost_dict_get(ctx, devdic, namewidth).int_.val)
+    /* Held inside the buffer, and reached by a position within the same
+       buffer: the extent the record carries is the one the raster was
+       priced and allocated over, so the bound and the index are about
+       one block of memory rather than two. */
+    if (ix < 0 || ix >= private.width || iy < 0 || iy >= private.height)
         return 0;
-    if (iy < 0 || iy >= xpost_dict_get(ctx, devdic, nameheight).int_.val)
-        return 0;
+    off = xpost_dev_raster_offset(ix, iy, private.width);
 
     switch(private.pixelformat)
     {
@@ -308,7 +314,7 @@ int _putpix(Xpost_Context *ctx,
             pixel.green = g;
             pixel.red = r;
             pixel.alpha = 255;
-            ((Xpost_Raster_BGRA_Pixel*)private.buf->data)[iy * private.buf->width + ix] = pixel;
+            ((Xpost_Raster_BGRA_Pixel*)private.buf->data)[off] = pixel;
         }
         break;
         case BGR:
@@ -318,7 +324,7 @@ int _putpix(Xpost_Context *ctx,
             pixel.blue = b;
             pixel.green = g;
             pixel.red = r;
-            ((Xpost_Raster_BGR_Pixel*)private.buf->data)[iy * private.buf->width + ix] = pixel;
+            ((Xpost_Raster_BGR_Pixel*)private.buf->data)[off] = pixel;
         }
         break;
         case ARGB:
@@ -329,7 +335,7 @@ int _putpix(Xpost_Context *ctx,
             pixel.red = r;
             pixel.green = g;
             pixel.blue = b;
-            ((Xpost_Raster_ARGB_Pixel*)private.buf->data)[iy * private.buf->width + ix] = pixel;
+            ((Xpost_Raster_ARGB_Pixel*)private.buf->data)[off] = pixel;
         }
         break;
         case RGB:
@@ -339,7 +345,7 @@ int _putpix(Xpost_Context *ctx,
             pixel.red = r;
             pixel.green = g;
             pixel.blue = b;
-            ((Xpost_Raster_RGB_Pixel*)private.buf->data)[iy * private.buf->width + ix] = pixel;
+            ((Xpost_Raster_RGB_Pixel*)private.buf->data)[off] = pixel;
         }
         break;
     }
@@ -379,7 +385,8 @@ int _getpix(Xpost_Context *ctx,
     if (private.buf &&
         ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)
     {
-        int i = iy * private.buf->width + ix;
+        Xpost_Dev_Raster_Offset i =
+            xpost_dev_raster_offset(ix, iy, private.width);
 
         switch (private.pixelformat)
         {
@@ -452,6 +459,7 @@ int _blendpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    Xpost_Dev_Raster_Offset off;
     int r, g, b, c, ix, iy;
 
     r = xpost_dev_num_to_byte(red);
@@ -469,10 +477,9 @@ int _blendpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    if (ix < 0 || ix >= xpost_dict_get(ctx, devdic, namewidth).int_.val)
+    if (ix < 0 || ix >= private.width || iy < 0 || iy >= private.height)
         return 0;
-    if (iy < 0 || iy >= xpost_dict_get(ctx, devdic, nameheight).int_.val)
-        return 0;
+    off = xpost_dev_raster_offset(ix, iy, private.width);
 
     if (c <= 0)
         return 0;
@@ -486,8 +493,8 @@ int _blendpix(Xpost_Context *ctx,
     {
         case BGRA:
         {
-            Xpost_Raster_BGRA_Pixel *p = &((Xpost_Raster_BGRA_Pixel *)
-                private.buf->data)[iy * private.buf->width + ix];
+            Xpost_Raster_BGRA_Pixel *p =
+                &((Xpost_Raster_BGRA_Pixel *)private.buf->data)[off];
 
             p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
             p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
@@ -497,8 +504,8 @@ int _blendpix(Xpost_Context *ctx,
         break;
         case BGR:
         {
-            Xpost_Raster_BGR_Pixel *p = &((Xpost_Raster_BGR_Pixel *)
-                private.buf->data)[iy * private.buf->width + ix];
+            Xpost_Raster_BGR_Pixel *p =
+                &((Xpost_Raster_BGR_Pixel *)private.buf->data)[off];
 
             p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
             p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
@@ -507,8 +514,8 @@ int _blendpix(Xpost_Context *ctx,
         break;
         case ARGB:
         {
-            Xpost_Raster_ARGB_Pixel *p = &((Xpost_Raster_ARGB_Pixel *)
-                private.buf->data)[iy * private.buf->width + ix];
+            Xpost_Raster_ARGB_Pixel *p =
+                &((Xpost_Raster_ARGB_Pixel *)private.buf->data)[off];
 
             p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
             p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
@@ -518,8 +525,8 @@ int _blendpix(Xpost_Context *ctx,
         break;
         case RGB:
         {
-            Xpost_Raster_RGB_Pixel *p = &((Xpost_Raster_RGB_Pixel *)
-                private.buf->data)[iy * private.buf->width + ix];
+            Xpost_Raster_RGB_Pixel *p =
+                &((Xpost_Raster_RGB_Pixel *)private.buf->data)[off];
 
             p->red = (unsigned char)XPOST_RASTER_BLEND(p->red, r);
             p->green = (unsigned char)XPOST_RASTER_BLEND(p->green, g);
@@ -571,9 +578,9 @@ int _fillrect(Xpost_Context *ctx,
                              xpost_object_number(w), xpost_object_number(h),
                              &x0, &y0, &x1, &y1);
     if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
-                             private.buf->width, private.buf->height))
+                             private.width, private.height))
         return 0;
-    stride = private.buf->width;
+    stride = private.width;
 
 #define RASTER_FILLRECT(TYPE, SET) \
     do { \
@@ -581,7 +588,8 @@ int _fillrect(Xpost_Context *ctx,
         SET \
         for (iy = y0; iy <= y1; iy++) \
         { \
-            TYPE *row = (TYPE *)private.buf->data + (size_t)iy * stride; \
+            TYPE *row = (TYPE *)private.buf->data \
+                      + xpost_dev_raster_offset(0, iy, stride); \
             for (ix = x0; ix <= x1; ix++) \
                 row[ix] = pix; \
         } \

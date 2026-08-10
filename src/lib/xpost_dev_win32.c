@@ -215,16 +215,25 @@ int _create_cont(Xpost_Context *ctx,
     int ret;
 
     /* A pixel is reached by its position within the bitmap, so a page
-       whose pixels outnumber what that position is counted in cannot be
-       addressed at all, whatever memory the system would give for it.
-       Held before the window is made, so nothing is put on screen for a
-       page that is going to be refused. */
-    if (!xpost_device_raster_bytes(width, height, sizeof(unsigned int),
-                                   &bytes))
+       whose far end has no address on this platform cannot be reached at
+       all, whatever memory the system would give for it. The window
+       system is told the size of the bitmap it holds through a field
+       narrower than a size, which is a second thing the page has to fit
+       and a limit of what this device can be given rather than of what
+       it can compute. Both are held before the window is made, so
+       nothing is put on screen for a page that is going to be refused. */
     {
-        XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a raster"
-                      " can be indexed by", limitcheck, width, height);
-        return limitcheck;
+        size_t described = (size_t)(DWORD)-1;
+
+        if (!xpost_device_raster_bytes(width, height, sizeof(unsigned int),
+                                       0, &bytes)
+            || bytes > described)
+        {
+            XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger than"
+                          " this platform addresses", limitcheck,
+                          width, height);
+            return limitcheck;
+        }
     }
 
     /* create a string to contain device data structure */
@@ -393,8 +402,9 @@ int _create_cont(Xpost_Context *ctx,
         bitmap_info->bih.biWidth = width;
         bitmap_info->bih.biHeight = -height;
         bitmap_info->bih.biPlanes = 1;
-        bitmap_info->bih.biSizeImage =
-            (DWORD)((size_t)4 * (size_t)width * (size_t)height);
+        /* the bytes the raster comes to, which Create held against
+           what this field expresses before the window was made */
+        bitmap_info->bih.biSizeImage = (DWORD)bytes;
         bitmap_info->bih.biXPelsPerMeter = 0;
         bitmap_info->bih.biYPelsPerMeter = 0;
         bitmap_info->bih.biClrUsed = 0;
@@ -509,7 +519,8 @@ int _putpix(Xpost_Context *ctx,
         {
             HDC cdc;
 
-            rd->backend.gdi.buf[(size_t)iy * private.width + ix] =
+            rd->backend.gdi.buf
+                [xpost_dev_raster_offset(ix, iy, private.width)] =
                 r << 16 | g << 8 | b;
 
             cdc = CreateCompatibleDC(rd->dc);
@@ -556,7 +567,8 @@ int _getpix(Xpost_Context *ctx,
     if (rd && rd->backend_type == RENDER_BACKEND_GDI &&
         ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)
     {
-        unsigned int pix = rd->backend.gdi.buf[(size_t)iy * private.width + ix];
+        unsigned int pix = rd->backend.gdi.buf
+            [xpost_dev_raster_offset(ix, iy, private.width)];
 
         r = (pix >> 16) & 0xFF;
         g = (pix >> 8) & 0xFF;
@@ -622,7 +634,8 @@ int _drawline(Xpost_Context *ctx,
                 if (px < 0 || px >= private.width ||
                     py < 0 || py >= private.height)
                     continue;
-                rd->backend.gdi.buf[(size_t)py * private.width + px] =
+                rd->backend.gdi.buf
+                    [xpost_dev_raster_offset(px, py, private.width)] =
                     r << 16 | g << 8 | b;
                 if (!any)
                 {
@@ -717,7 +730,8 @@ int _fillrect(Xpost_Context *ctx,
             {
                 for (j = x0; j <= x1; j++)
                 {
-                    rd->backend.gdi.buf[(size_t)i * private.width + j] =
+                    rd->backend.gdi.buf
+                        [xpost_dev_raster_offset(j, i, private.width)] =
                         r << 16 | g << 8 | b;
                 }
             }

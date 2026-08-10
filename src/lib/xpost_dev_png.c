@@ -193,30 +193,37 @@ int _create_cont(Xpost_Context *ctx,
         size_t bytes;
 
         if (!xpost_device_raster_bytes(width, height,
-                                       sizeof(Xpost_Png_Pixel), &bytes))
+                                       sizeof(Xpost_Png_Pixel),
+                                       sizeof(Xpost_Png_Buffer), &bytes))
         {
-            XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a raster"
-                          " can be indexed by", limitcheck, width, height);
+            XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger than"
+                          " this platform addresses", limitcheck,
+                          width, height);
             return limitcheck;
         }
-        private.buf = malloc(sizeof(Xpost_Png_Buffer) + bytes);
+        private.buf = malloc(bytes);
     }
+    /* the size was one this platform expresses and addresses; whether
+       the memory for it is there is the machine's answer, and a page the
+       machine will not hold is a memory error rather than a limit of
+       this interpreter */
     if (!private.buf)
     {
         XPOST_LOG_ERR("cannot allocate buffer memory");
-        return unregistered;
+        return VMerror;
     }
 
     /* the page starts opaque white; the alpha device starts fully
        transparent, so only marks made by the job carry opacity and an
        erased page is see-through */
     {
-        size_t i;
+        Xpost_Dev_Raster_Offset i, n;
         Xpost_Png_Pixel init;
 
+        n = (Xpost_Dev_Raster_Offset)width * (Xpost_Dev_Raster_Offset)height;
         init.red = init.green = init.blue = 255;
         init.alpha = private.alpha ? 0 : 255;
-        for (i = 0; i < (size_t)width * height; i++)
+        for (i = 0; i < n; i++)
             private.buf->data[i] = init;
     }
 
@@ -274,7 +281,8 @@ int _putpix(Xpost_Context *ctx,
         pixel.green = g;
         pixel.red = r;
         pixel.alpha = 255;
-        private.buf->data[(size_t)iy * private.width + ix] = pixel;
+        private.buf->data[xpost_dev_raster_offset(ix, iy, private.width)]
+            = pixel;
     }
 
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -315,7 +323,8 @@ int _getpix(Xpost_Context *ctx,
         pixel.alpha = 0;
     }
     else
-        pixel = private.buf->data[(size_t)iy * private.width + ix];
+        pixel = private.buf->data
+            [xpost_dev_raster_offset(ix, iy, private.width)];
 
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));
@@ -377,7 +386,8 @@ int _blendpix(Xpost_Context *ctx,
         return 0;
 
     {
-        Xpost_Png_Pixel *p = &private.buf->data[(size_t)iy * private.width + ix];
+        Xpost_Png_Pixel *p = &private.buf->data
+            [xpost_dev_raster_offset(ix, iy, private.width)];
         int da = p->alpha;
         int oa = c + (da * (255 - c) + 127) / 255;
 
@@ -437,7 +447,8 @@ int _fillrect(Xpost_Context *ctx,
 
     for (iy = y0; iy <= y1; iy++)
     {
-        Xpost_Png_Pixel *row = private.buf->data + (size_t)iy * private.width;
+        Xpost_Png_Pixel *row = private.buf->data
+                             + xpost_dev_raster_offset(0, iy, private.width);
         for (ix = x0; ix <= x1; ix++)
             row[ix] = pixel;
     }
@@ -540,6 +551,9 @@ int _emit(Xpost_Context *ctx,
     num_passes = png_set_interlace_handling(png_ptr);
 #endif
 
+    /* a row at a time, stepping by the bytes one row of the buffer
+       holds: the step is counted in the width a size is expressed in,
+       which a row of a wide page runs past when counted in an int */
     for (pass = 0; pass < num_passes; pass++)
     {
         data = (unsigned char *)private.buf->data;
@@ -547,7 +561,8 @@ int _emit(Xpost_Context *ctx,
         {
             row_ptr = (png_bytep)data;
             png_write_rows(png_ptr, &row_ptr, 1);
-            data += 4 * private.width;
+            data += (Xpost_Dev_Raster_Offset)private.width
+                  * sizeof(Xpost_Png_Pixel);
         }
     }
 
@@ -569,7 +584,7 @@ int _erase(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int i;
+    Xpost_Dev_Raster_Offset i, n;
     Xpost_Png_Pixel init;
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
@@ -582,7 +597,9 @@ int _erase(Xpost_Context *ctx,
 
     init.red = init.green = init.blue = 255;
     init.alpha = 0;
-    for (i = 0; i < private.width * private.height; i++)
+    n = (Xpost_Dev_Raster_Offset)private.width
+      * (Xpost_Dev_Raster_Offset)private.height;
+    for (i = 0; i < n; i++)
         private.buf->data[i] = init;
 
     return 0;
