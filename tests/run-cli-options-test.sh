@@ -14,6 +14,10 @@
 # left out -- an assertion that a name is defined proves nothing unless
 # the same program finds it undefined when nothing defined it.
 #
+# -o names the file the run's output goes to, and in doing so says the
+# invocation is not a person at a keyboard. What that has to mean is
+# checked at the end: where the run ends.
+#
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
@@ -155,6 +159,141 @@ for opt in --define --include; do
     status=$?
     [ "$status" -eq 0 ] && note "$opt with no value was accepted"
 done
+
+# Where a run ends. A program named on the command line is a job, and
+# PLRM 3.7.7 ends a job where its program ends: the server "executes the
+# standard input file until it reaches end-of-file or an error occurs"
+# and then closes it. The interactive executive is a separate facility --
+# PLRM 2.4.4 has it entered by the executive operator, says it "is
+# intended solely for direct interaction with the user", and warns that a
+# program "will behave differently when sent through the interactive
+# executive than when executed directly by the PostScript interpreter".
+# So a run with nobody at a keyboard ends where its program ends, and a
+# program that neither calls quit nor fails is a program that ended.
+#
+# The assertion is not about the prompt. What the executive does before
+# printing PS> is read standard input and execute it: bytes a caller sent
+# for its own purposes are run as PostScript, after and outside the
+# program it asked for. So standard input carries a program that
+# announces itself here, and the announcement is what is looked for. A
+# prompt is easy to suppress while leaving the reading behind it intact,
+# and the reading is the half that does damage; the prompt is checked
+# too, and second.
+#
+# None of this is visible in the usual harness invocation. Standard input
+# at /dev/null reaches end-of-file immediately, so the executive exits
+# straight away with a zero status and a scripted run looks clean. It is
+# a pipe, or a terminal, that shows what is really happening, so the runs
+# below are given one or the other.
+printf '(program-ran) print flush\n' > "$work/noquit.ps"
+# and the same program leaving three objects behind it: an executive
+# counts what is on the operand stack into its prompt, so this one would
+# be answered with PS<3> rather than PS> and needs asking for separately
+printf '(program-ran) print flush\n1 2 3\n' > "$work/leftovers.ps"
+
+# $1 what to call it, $2 the program, $3... the options before it
+run_to_end() {
+    e_who=$1
+    e_prog=$2
+    shift 2
+    got=$(printf '(STDIN-EXECUTED) print flush\n' \
+          | "$xpost" -q --no-sandbox "$@" "$e_prog" 2>&1)
+    verdict_run "$?" "$got" "$e_who" || fail=1
+    # the program itself has to have run, or the two assertions that
+    # follow it are satisfied by an interpreter that did nothing at all
+    printf '%s\n' "$got" | grep -q 'program-ran' \
+        || note "$e_who did not run the program it was given"
+    printf '%s\n' "$got" | grep -q 'STDIN-EXECUTED' \
+        && note "$e_who executed what standard input carried after the program"
+}
+
+run_to_end "a run with an output file" "$work/noquit.ps" -d null -o "$work/end.null"
+printf '%s\n' "$got" | grep -qF 'PS>' \
+    && note "a run with an output file was left prompting for input"
+
+run_to_end "a run with an output file leaving a stack" \
+        "$work/leftovers.ps" -d null -o "$work/stack.null"
+printf '%s\n' "$got" | grep -qF 'PS<' \
+    && note "a run with an output file was left prompting over its stack"
+
+# and with no output file named: the executive is for a user, and a
+# standard input that is a pipe is not one. This is the same assertion
+# without the option, so that -o is what makes the interpreter certain
+# rather than what makes it careful.
+run_to_end "a run with no output file" "$work/noquit.ps" -d null
+printf '%s\n' "$got" | grep -qF 'PS>' \
+    && note "a run reading a pipe was left prompting for input"
+
+# The other direction, and the reason the three above are not simply an
+# interpreter with its executive removed. PLRM 2.4.4 gives a program one
+# way to ask for the executive -- the executive operator -- and asking
+# still works, output file and all. A caller that wants to be dropped
+# into a session after its program spells it in the language.
+printf '(program-ran) print flush\nexecutive\n' > "$work/asksexec.ps"
+got=$(printf '(STDIN-EXECUTED) print flush\n' \
+      | "$xpost" -q --no-sandbox -d null -o "$work/exec.null" \
+                 "$work/asksexec.ps" 2>&1)
+verdict_run "$?" "$got" "a run whose program asks for the executive" || fail=1
+printf '%s\n' "$got" | grep -q 'STDIN-EXECUTED' \
+    || note "a program that invoked executive was given no session"
+
+# And the case -o is really about, which needs a terminal to see. A pipe
+# on standard input is not a user by itself, so the runs above end where
+# their program ends whether -o was given or not, and every one of them
+# would go on passing if -o were dropped from the interpreter entirely.
+# What -o says is that the invocation is not interactive even where
+# somebody is sitting at a terminal -- there is a file to produce and a
+# caller waiting for it -- and only a terminal can be asked that.
+#
+# script(1) provides one. It is spelt two ways: `script -qec CMD FILE`,
+# which util-linux takes, and `script -q FILE CMD ARGS`, which the BSD
+# one macOS carries takes. Each is offered a child that reports whether
+# it was handed a terminal, and the reply -- not the exit status, which
+# not every version passes back -- is what says the form works here.
+# Where neither does, the two cases below are not asked and the run says
+# so; they are the only ones that cannot be asked without one.
+pty=none
+case $(script -qec 'test -t 0 && echo HAVE-TTY' /dev/null </dev/null 2>/dev/null) in
+    *HAVE-TTY*) pty=util ;;
+    *) case $(script -q /dev/null /bin/sh -c 'test -t 0 && echo HAVE-TTY' \
+              </dev/null 2>/dev/null) in
+           *HAVE-TTY*) pty=bsd ;;
+       esac ;;
+esac
+
+# What the terminal is fed is arithmetic rather than a message, because a
+# terminal echoes what is typed at it: a marker sent in would come back
+# in the output whether anything executed it or not, and the assertion
+# would hold over an interpreter that read the line and threw it away.
+# The sum is not in what was typed, so it is in the output only if
+# something ran it.
+printf '1966 1 add ==\n' > "$work/feed.ps"
+
+on_terminal() {  # $1 the command line to run with a terminal on stdin
+    case $pty in
+        util) script -qec "$1" /dev/null < "$work/feed.ps" 2>&1 ;;
+        bsd)  script -q /dev/null /bin/sh -c "$1" < "$work/feed.ps" 2>&1 ;;
+    esac
+}
+
+if [ "$pty" = none ]; then
+    echo "no terminal available: -o at a terminal not checked"
+else
+    # with -o: a file to produce, so the run ends with the program and
+    # what the terminal went on to send is never executed
+    got=$(on_terminal "'$xpost' -q --no-sandbox -d null -o '$work/tty.null' '$work/noquit.ps'")
+    printf '%s\n' "$got" | grep -q 'program-ran' \
+        || note "a run at a terminal with an output file did not run its program"
+    printf '%s\n' "$got" | grep -qF '1967' \
+        && note "a run at a terminal with an output file executed what was typed after its program"
+
+    # and without it, at the same terminal: the executive follows the
+    # program, which is what the option is turning off rather than what
+    # the interpreter has stopped doing
+    got=$(on_terminal "'$xpost' -q --no-sandbox -d null '$work/noquit.ps'")
+    printf '%s\n' "$got" | grep -qF '1967' \
+        || note "a run at a terminal with no output file offered no executive"
+fi
 
 [ "$fail" = 0 ] || { echo "FAILURES: the options above"; exit 1; }
 echo "SUCCESS"

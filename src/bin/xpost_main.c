@@ -169,7 +169,7 @@ _xpost_main_usage(const char *filename)
     printf("Usage: %s [options] [file.ps]\n\n", filename);
     printf("Postscript level 2 interpreter\n\n");
     printf("Options:\n");
-    printf("  -o, --output=[FILE]                output file\n");
+    printf("  -o, --output=[FILE]                output file; the run ends with the program\n");
     printf("  -d, --device=[STRING]              device name\n");
     printf("  -Dname=token, --define name=token  add definition to userdict\n");
     printf("  -I[DIR], --include [DIR]           add a resource search directory\n");
@@ -571,6 +571,17 @@ int main(int argc, char *argv[])
 
     if (no_graphics)
         xpost_skip_graphics_set(ctx, 1);
+
+    /* Naming the file the output goes to says what this invocation is:
+       something waiting for that file, not somebody at a keyboard. So the
+       run ends where the named program ends, which is where a job ends
+       (PLRM 3.7.7), and the interactive executive is never offered after
+       it -- an executive would read standard input and execute it, which
+       is a second program nobody asked to run. A program that does want a
+       session after itself asks for one the way the language provides,
+       with the executive operator. */
+    if (output_file)
+        xpost_batch_set(ctx, 1);
 
     XPOST_LOG_INFO("defs=%p", (void*)defs);
     if (defs){

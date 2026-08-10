@@ -66,6 +66,7 @@ xpost_array_get
 xpost_array_get_memory
 xpost_array_put
 xpost_array_put_memory
+xpost_batch_set
 xpost_bool_cons
 xpost_compat_init
 xpost_compat_quit

@@ -2978,6 +2978,33 @@ static void push_start_proc(Xpost_Context *ctx, const char *name)
                                         xpost_name_cons(ctx, name))));
 }
 
+/* Record whether this run has a user at the other end of it, which is
+   what the start procedure over a named program reads to decide whether
+   to offer the interactive executive once the program has ended.
+
+   Two things have to hold for it to be worth offering. The host must not
+   have said otherwise -- naming an output file says the invocation is
+   something waiting for that file rather than somebody typing -- and
+   standard input must be a terminal. The second is not politeness about
+   a prompt: the executive reads standard input and executes what it
+   finds there as PostScript (PLRM 2.4.4), so offering it to a pipe runs
+   whatever the pipe was carrying, after and outside the program the run
+   was asked for.
+
+   The answer goes in privatedict, alongside the start procedures that
+   read it and the rest of what the host settles before a run, and is
+   written afresh on each one so that no run inherits the answer of the
+   last. It is written before the job's snapshot is taken, so the job's
+   own rewind leaves it standing. */
+static void _record_session_kind(Xpost_Context *ctx)
+{
+    if (xpost_dict_put(ctx, ctx->privatedict,
+                       xpost_name_cons(ctx, ".interactive"),
+                       xpost_bool_cons(!ctx->batch
+                                       && xpost_isatty(fileno(stdin)))))
+        XPOST_LOG_ERR("cannot record whether this run has a user");
+}
+
 /* What showpage does at the end of a page, as the context was created
    with. Read from systemdict, which is what device.ps reads it from and
    what the run is measured against when it ends. */
@@ -3123,6 +3150,7 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
      */
     ctx->es_run_base = xpost_stack_count(ctx->lo, ctx->es);
     xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
+    _record_session_kind(ctx);
     /*
        if ps_file is NULL:
          if stdin is a tty
@@ -3131,7 +3159,10 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
            'startstdin' executes stdin but does not prompt
 
        if ps_file is not NULL:
-       'startfile' executes a named file wrapped in a stopped context with handleerror
+       'startfilename' executes a named file wrapped in a stopped context with
+       handleerror, and ends there. A named program is a job and a job ends where
+       its program ends (PLRM 3.7.7); the executive it offers afterwards when
+       this run has a user is the answer recorded just above.
     */
     /* with skip_graphics set, dispatch to the no-graphics start procedures,
        which run the interpreter lockdown without loading the graphics modules.
@@ -3344,6 +3375,13 @@ run:
 XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable)
 {
     ctx->skip_graphics = enable;
+}
+
+/* say whether this context serves an interactive user; a run over a
+   named program ends where the program ends either way once this is set */
+XPAPI void xpost_batch_set(Xpost_Context *ctx, int enable)
+{
+    ctx->batch = enable;
 }
 
 /* enable or disable per-job VM snapshots for a context */

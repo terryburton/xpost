@@ -332,6 +332,7 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->ds_over = 0;
     ctx->onerr_run = 0;
     ctx->skip_graphics = 0;
+    ctx->batch = 0;
     ctx->privatedict = null;
     ctx->globalprivatedict = null;
     ctx->executingarray = null;

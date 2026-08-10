@@ -305,6 +305,21 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx,
 XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable);
 
 /**
+ * @brief Declare that this context serves no interactive user.
+ *
+ * A program named to xpost_run() as XPOST_INPUT_FILENAME is a job, and a
+ * job ends where its program ends. When enabled, that is all a run does:
+ * the run returns when the named program returns, whatever standard
+ * input happens to be. Left disabled, a run over a named program offers
+ * the interactive executive after the program when standard input is a
+ * terminal, and returns as above when it is not.
+ *
+ * A program that wants a session after itself asks for one in the
+ * language, with the executive operator, which is unaffected either way.
+ */
+XPAPI void xpost_batch_set(Xpost_Context *ctx, int enable);
+
+/**
  * @brief Receives text output from the interpreter.
  *
  * @param user The pointer registered alongside the handler.

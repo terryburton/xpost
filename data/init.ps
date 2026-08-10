@@ -107,6 +107,12 @@ setglobal
 currentglobal false setglobal
 256 dict .setprivatedict
 setglobal
+% .interactive -- whether this run has a user at the other end of it. The C
+% writes it before each run and the start procedure over a named program reads
+% it to decide whether to offer the interactive executive once the program has
+% ended; false here is what a run gets when nothing said otherwise, so a run
+% ends where its program ends unless someone is there to type at it.
+.privatedict /.interactive false put
 % DATA_DIR, the directory the interpreter loads its .ps modules from, is set by
 % the bootstrap into userdict before this file runs. Move it into privatedict so
 % it does not sit among the program's names; the loader reaches it there.
@@ -587,6 +593,13 @@ setglobal
 } def
 
 % execute postscript program from a named file, and handle errors.
+%
+% The named program is a job and the job ends where the program ends (PLRM
+% 3.7.7). A run with a user at the other end of it is offered the interactive
+% executive first, which is a session and not part of the job: it reads
+% standard input and executes what it finds, so it is offered only where
+% standard input is somebody typing. The C settles that before the run and
+% leaves the answer in privatedict.
 /startfilename { % (filename)
     {
         //.xpostsys /loadgraphics get exec
@@ -597,7 +610,7 @@ setglobal
     } if
     {
         (r) file cvx exec        % (filename) has stayed on the stack
-        executive
+        .privatedict /.interactive get { executive } if
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
@@ -655,7 +668,7 @@ setglobal
     } if
     {
         (r) file cvx exec        % (filename) has stayed on the stack
-        executive
+        .privatedict /.interactive get { executive } if
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if

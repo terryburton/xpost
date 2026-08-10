@@ -396,6 +396,13 @@ struct _Xpost_Context {
                             never pays to load them, and the no-graphics lockdown
                             path is exercised */
 
+    int batch; /**< the host has said this invocation is not a session with a
+                    user: a run over a named program ends where the program
+                    ends, and control is never offered to the interactive
+                    executive. Left clear, a run over a named program offers
+                    the executive when standard input is a terminal and ends
+                    where the program ends when it is not */
+
     int job_snapshots; /**< take VM snapshots around each xpost_run job
                             (restored on the quit path); disable for a
                             persistent context serving many runs, where

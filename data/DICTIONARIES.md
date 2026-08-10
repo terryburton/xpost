@@ -184,6 +184,7 @@ machinery that is *both* local *and* private.
 | `.wrappedprocs` | static | the procedures behind every wrapped standard operator, for the same reason: the operator table cannot keep them alive. Each is in **global** VM — a local one would be freed by a `restore` past its creation with the table still pointing at it |
 | `.error` | mutable | the error hook `signalerror` runs; records into the local `$error` |
 | `.resourcepath` | static after host setup | resource search path; the host appends directories at start-up |
+| `.interactive` | rewritten per run | whether this run has a user at the other end of it; the C settles it before each run and `startfilename` reads it to decide whether to offer the executive once the program has ended |
 | `DATA_DIR` | static | the directory modules load from |
 | `start`, `startstdin`, `startfilename`, `startfile`, `…nographics` | static | the start procedures; the C fetches them through `ctx->privatedict` to prime a run |
 
