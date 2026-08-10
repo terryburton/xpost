@@ -163,7 +163,7 @@
         minx 10 eq maxx 30 eq and  miny 20 eq maxy 40 eq and  and
         { (bboxdev accumulate PASS)= }{ (bboxdev accumulate FAIL)= } ifelse
     end
-    dev dup /Emit get exec  % user space: y' = 100 - y -> BoundingBox 10 60 30 80
+    dev //.xpostsys /.transmitpage get exec  % user space: y' = 100 - y -> BoundingBox 10 60 30 80
 } if
 
 //.internaldict /QUIET known { }{ (eof bboxdev.ps\n)print } ifelse

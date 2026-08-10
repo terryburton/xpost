@@ -47,7 +47,6 @@
 #include "xpost_stack.h"  /* push results on stack */
 #include "xpost_context.h" /* state */
 #include "xpost_error.h"
-#include "xpost_file.h" /* the checked disk-file opener */
 #include "xpost_dict.h" /* get/put values in dicts */
 #include "xpost_string.h" /* get/put values in strings */
 #include "xpost_array.h"
@@ -55,7 +54,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call load operator for convenience */
-#include "xpost_dev_generic.h" /* get filename */
+#include "xpost_dev_generic.h" /* the page file opener */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_png.h" /* check prototypes */
 
@@ -70,6 +69,11 @@ typedef struct
     Xpost_Png_Pixel data[1];
 } Xpost_Png_Buffer;
 
+/* A PNG stream holds exactly one image, so the file and the writer that
+   fills it belong to the page and not to the device: both are made when
+   a page is emitted and finished before that emit returns. What the
+   instance keeps between pages is the raster and the two settings the
+   pages are written under. */
 typedef struct
 {
     int width;
@@ -77,12 +81,8 @@ typedef struct
     /*
      * add additional members to private struct
      */
-    FILE *f;
-    png_structp         png_ptr;
-    png_infop           info_ptr;
     Xpost_Png_Buffer *buf;
     unsigned int interlaced : 1;
-    unsigned int emitted : 1;
     unsigned int alpha : 1;
 } PrivateData;
 
@@ -139,13 +139,9 @@ int _create_cont(Xpost_Context *ctx,
     PrivateData private;
     Xpost_Object privatestr;
     Xpost_Object ud;
-    Xpost_Object compression_level_o;
     Xpost_Object interlaced_o;
-    char *filename;
-    png_color_8 sig_bit;
     integer width = w.int_.val;
     integer height = h.int_.val;
-    int compression_level;
     int ret;
     //printf("create_cont\n");
 
@@ -157,7 +153,6 @@ int _create_cont(Xpost_Context *ctx,
 
     private.width = width;
     private.height = height;
-    private.emitted = 0;
     {
         Xpost_Object alpha_o = xpost_dict_get(ctx, devdic,
                                               xpost_name_cons(ctx, "AlphaChannel"));
@@ -171,35 +166,9 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-    filename = xpost_device_get_filename(ctx, devdic);
-    if (!filename)
-    {
-        XPOST_LOG_ERR("cannot retrieve PNG file name");
-        return unregistered;
-    }
-
-    {
-        int err;
-        private.f = xpost_diskfile_fopen(filename, "wb", 0, &err);
-    }
-    free(filename);
-    if (!private.f)
-    {
-        XPOST_LOG_ERR("cannot retrieve PNG file name");
-        return unregistered;
-    }
-
     ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    compression_level_o = xpost_dict_get(ctx, ud,
-                                         xpost_name_cons(ctx, "png_compression_level"));
     interlaced_o = xpost_dict_get(ctx, ud,
                                   xpost_name_cons(ctx, "png_interlaced"));
-
-    if (xpost_object_get_type(compression_level_o) == invalidtype)
-        compression_level = 3;
-    else
-        compression_level = compression_level_o.int_.val;
-    XPOST_LOG_INFO("PNG compresion level: %d", compression_level);
 
     if (xpost_object_get_type(interlaced_o) == invalidtype)
         private.interlaced = PNG_INTERLACE_NONE;
@@ -218,18 +187,6 @@ int _create_cont(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("PNG interlacing: %s",
                    (private.interlaced == PNG_INTERLACE_ADAM7) ? "Adam7" : "none");
-    private.info_ptr = NULL;
-    private.png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING,
-                                              NULL, NULL, NULL);
-    if (!private.png_ptr)
-        goto close_file;
-
-    private.info_ptr = png_create_info_struct(private.png_ptr);
-    if (!private.info_ptr)
-        goto destroy_png;
-
-    if (setjmp(png_jmpbuf(private.png_ptr)))
-        goto destroy_info;
 
     /* allocate buffer header and array */
     private.buf = malloc(sizeof(Xpost_Png_Buffer) +
@@ -237,7 +194,7 @@ int _create_cont(Xpost_Context *ctx,
     if (!private.buf)
     {
         XPOST_LOG_ERR("cannot allocate buffer memory");
-        goto destroy_info;
+        return unregistered;
     }
 
     /* the page starts opaque white; the alpha device starts fully
@@ -253,52 +210,18 @@ int _create_cont(Xpost_Context *ctx,
             private.buf->data[i] = init;
     }
 
-	png_init_io(private.png_ptr, private.f);
-	png_set_IHDR(private.png_ptr, private.info_ptr,
-                 private.width, private.height, 8,
-                 private.alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
-                 private.interlaced,
-                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-
-    sig_bit.red = 8;
-    sig_bit.green = 8;
-    sig_bit.blue = 8;
-    sig_bit.alpha = 8;
-    png_set_sBIT(private.png_ptr, private.info_ptr, &sig_bit);
-
-    png_set_compression_level(private.png_ptr, compression_level);
-    png_write_info(private.png_ptr, private.info_ptr);
-    png_set_shift(private.png_ptr, &sig_bit);
-    png_set_packing(private.png_ptr);
-    if (!private.alpha)
-        /* rows carry a fourth byte per pixel; skip it when writing RGB */
-        png_set_filler(private.png_ptr, 0, PNG_FILLER_AFTER);
-
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
     {
         /* the record is the only thing that would have named the buffer,
-           the writer and the open file, and it is not going to: the
-           buffer is given up here and the rest by the unwind below,
-           which is the same way every other failure in this function
-           leaves. */
+           and it is not going to */
         free(private.buf);
-        goto destroy_info;
+        return unregistered;
     }
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
     return 0;
-
-  destroy_info:
-	png_destroy_info_struct(private.png_ptr, (png_infopp) & private.info_ptr);
-  destroy_png:
-	png_destroy_write_struct(&private.png_ptr,
-                             (private.info_ptr) ? (png_infopp)&private.info_ptr : NULL);
-  close_file:
-    fclose(private.f);
-
-    return unregistered;
 }
 
 static
@@ -512,14 +435,25 @@ int _fillrect(Xpost_Context *ctx,
     return 0;
 }
 
+/* Write the page: one PNG image, whole, into the file settled for this
+   page. The file and the writer are made here and finished here, so a
+   job's second page is a second file rather than an append to a stream
+   that holds one image. */
 static
 int _emit(Xpost_Context *ctx,
           Xpost_Object devdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
+    Xpost_Object ud;
+    Xpost_Object compression_level_o;
+    FILE *f;
+    png_structp png_ptr;
+    png_infop info_ptr = NULL;
+    png_color_8 sig_bit;
     unsigned char *data;
     png_bytep row_ptr;
+    int compression_level;
     int num_passes = 1;
     int pass;
     int y;
@@ -528,19 +462,72 @@ int _emit(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* a released instance has neither the raster to write nor the writer
-       to write it with, and png_jmpbuf would be the first to follow a
-       cleared handle; its output was finalised when it was released */
-    if (!private.buf || !private.png_ptr)
+    /* a released instance has no raster to write */
+    if (!private.buf)
         return 0;
 
-    /* libpng reports errors by longjmp: aim it at this call, not at
-       the long-gone frame that created the device */
-    if (setjmp(png_jmpbuf(private.png_ptr)))
+    f = xpost_device_page_open(ctx, devdic);
+    if (!f)
+    {
+        XPOST_LOG_ERR("cannot open the file this PNG page is written to");
         return ioerror;
+    }
+
+    ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
+    compression_level_o = xpost_dict_get(ctx, ud,
+                                         xpost_name_cons(ctx, "png_compression_level"));
+    if (xpost_object_get_type(compression_level_o) == invalidtype)
+        compression_level = 3;
+    else
+        compression_level = compression_level_o.int_.val;
+    XPOST_LOG_INFO("PNG compresion level: %d", compression_level);
+
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr)
+    {
+        xpost_device_page_close(f);
+        return VMerror;
+    }
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr)
+    {
+        png_destroy_write_struct(&png_ptr, NULL);
+        xpost_device_page_close(f);
+        return VMerror;
+    }
+
+    /* libpng reports errors by longjmp: aim it at this call, which is
+       also where everything it was given is released */
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        xpost_device_page_close(f);
+        return ioerror;
+    }
+
+    png_init_io(png_ptr, f);
+    png_set_IHDR(png_ptr, info_ptr,
+                 private.width, private.height, 8,
+                 private.alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
+                 private.interlaced,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    sig_bit.red = 8;
+    sig_bit.green = 8;
+    sig_bit.blue = 8;
+    sig_bit.alpha = 8;
+    png_set_sBIT(png_ptr, info_ptr, &sig_bit);
+
+    png_set_compression_level(png_ptr, compression_level);
+    png_write_info(png_ptr, info_ptr);
+    png_set_shift(png_ptr, &sig_bit);
+    png_set_packing(png_ptr);
+    if (!private.alpha)
+        /* rows carry a fourth byte per pixel; skip it when writing RGB */
+        png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
 
 #ifdef PNG_WRITE_INTERLACING_SUPPORTED
-    num_passes = png_set_interlace_handling(private.png_ptr);
+    num_passes = png_set_interlace_handling(png_ptr);
 #endif
 
     for (pass = 0; pass < num_passes; pass++)
@@ -549,14 +536,14 @@ int _emit(Xpost_Context *ctx,
         for (y = 0; y < private.height; y++)
         {
             row_ptr = (png_bytep)data;
-            png_write_rows(private.png_ptr, &row_ptr, 1);
+            png_write_rows(png_ptr, &row_ptr, 1);
             data += 4 * private.width;
         }
     }
 
-    private.emitted = 1;
-    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
+    png_write_end(png_ptr, info_ptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    xpost_device_page_close(f);
 
     /* pass data back to client application */
     xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data);
@@ -602,24 +589,11 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* the raster is all the instance holds: each page's file and writer
+       were finished as that page was written */
     free(private.buf);
     private.buf = NULL;
-    /* a device destroyed without a page emitted (an error ended the
-       job first) has no image to finalise, and libpng would reject the
-       trailer; aim its longjmp here either way, so a write error while
-       finalising cannot jump into the dead frame that created the
-       device */
-    if (private.png_ptr && setjmp(png_jmpbuf(private.png_ptr)) == 0)
-    {
-        if (private.emitted)
-            png_write_end(private.png_ptr, private.info_ptr);
-    }
-    png_destroy_write_struct(&private.png_ptr, (png_infopp) & private.info_ptr);
-    png_destroy_info_struct(private.png_ptr, (png_infopp) & private.info_ptr);
-    if (private.f)
-        fclose(private.f);
-    private.f = NULL;
-    /* store the cleared pointers back so a repeated destroy is a no-op */
+    /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
     return 0;

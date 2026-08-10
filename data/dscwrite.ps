@@ -38,9 +38,9 @@
 
 .xpost_DSCWRITE /.emitwhole { % IMAGE  .  -
 begin
-    % a %d in the output name is replaced with the page number, so each page
-    % lands in its own file
-    /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
+    % the name settled for this page, which a %d in the output name makes
+    % its own, so each page lands in its own file
+    /F .outputfile (w) file def
     /.w { F exch writestring } def
     /.wnum { % num  .  -   (two decimals at most, never exponential)
         //.xpostsys /.num2str get exec .w

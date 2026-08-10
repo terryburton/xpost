@@ -145,6 +145,58 @@ setglobal
     setglobal
 } bind put
 
+% name  .pagefilename  name'
+% substitute the page number for a %d marker in an output file name,
+% counting the pages transmitted; without the marker every page writes
+% the same file, last page standing
+currentglobal true setglobal
+% the page counter lives in a global dict so it survives the save/restore
+% a program wraps around each page (the separation-plate idiom); a counter
+% kept in the local device dictionary is rewound by restore, and every page
+% then reuses the same %d number
+.xpostsys /.pagestate 1 dict put
+.xpostsys /.pagefilename {
+    dup (%d) search {
+        exch pop
+        //.xpostsys /.pagestate get /.pageno 2 copy known { get }{ pop pop 1 } ifelse
+        dup 1 add //.xpostsys /.pagestate get exch /.pageno exch put
+        10 string cvs
+        //.xpostsys /.strcat get exec exch //.xpostsys /.strcat get exec
+        exch pop
+    }{
+        pop
+    } ifelse
+} bind put
+
+% dict  .transmitpage  -
+% Transmit one page through a device: settle the name this page's output
+% goes to, then run the device's Emit.
+%
+% The name is settled here, once, for every device there is. The template
+% is /OutputFileName -- the device's own, or the binding the host left on
+% the dictionary stack for a device made without one -- and a %d in it is
+% replaced with the page number, from the one counter .pagefilename keeps,
+% so every device numbers its pages alike. A device with no name at all
+% writes to the standard output, which is where a page goes when nobody
+% said where. What comes out is stored on the device as /.outputfile,
+% and that -- not the template -- is what an Emit opens.
+%
+% Settling the name belongs to the page and not to the device: a device
+% that settled it when it was made wrote every page of a job to the name
+% page one had, and a device written afterwards would have had to
+% remember not to. Every path that transmits a page comes through here,
+% so there is no way to write a page without one.
+.xpostsys /.transmitpage {
+    dup /OutputFileName 2 copy known
+        { get }
+        { pop pop /OutputFileName where { pop OutputFileName }{ (%stdout) } ifelse }
+    ifelse
+    //.xpostsys /.pagefilename get exec
+    1 index exch /.outputfile exch put
+    dup /Emit get exec
+} bind put
+setglobal
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device
@@ -224,30 +276,6 @@ DEVICE 1 1 .privatedict /.completedevice get exec
     1 { }
     2 { returntocaller }
 >> put
-
-% name  .pagefilename  name'
-% substitute the page number for a %d marker in an output file name,
-% counting pages in the device the caller has begun; without the
-% marker every page writes the same file, last page standing
-currentglobal true setglobal
-% the page counter lives in a global dict so it survives the save/restore
-% a program wraps around each page (the separation-plate idiom); a counter
-% kept in the local device dictionary is rewound by restore, and every page
-% then reuses the same %d number
-.xpostsys /.pagestate 1 dict put
-.xpostsys /.pagefilename {
-    dup (%d) search {
-        exch pop
-        //.xpostsys /.pagestate get /.pageno 2 copy known { get }{ pop pop 1 } ifelse
-        dup 1 add //.xpostsys /.pagestate get exch /.pageno exch put
-        10 string cvs
-        //.xpostsys /.strcat get exec exch //.xpostsys /.strcat get exec
-        exch pop
-    }{
-        pop
-    } ifelse
-} bind put
-setglobal
 
 % The page device's own handlers (PLRM 6.2.6). A page device may carry a
 % BeginPage procedure to run at the start of each page and an EndPage
@@ -372,7 +400,7 @@ setglobal
 
 /showpage [ ] {
     0 //.xpostsys /.endpage get exec {
-        DEVICE dup /Emit get exec
+        DEVICE //.xpostsys /.transmitpage get exec
         true //.xpostsys /.setpagesent get exec
         //.xpostsys /ShowpageSemanticsDict get ShowpageSemantics get exec
     } if
@@ -383,7 +411,7 @@ setglobal
 
 /copypage [ ] {
     1 //.xpostsys /.endpage get exec {
-        DEVICE dup /Emit get exec
+        DEVICE //.xpostsys /.transmitpage get exec
         true //.xpostsys /.setpagesent get exec
         flushpage
         //.xpostsys /CopypageSemanticsDict get ShowpageSemantics get exec
@@ -413,7 +441,7 @@ currentglobal true setglobal
     //.xpostsys /.pagesent get exec not
     //.xpostsys /.pagemarked get exec and {
         0 //.xpostsys /.endpage get exec {
-            DEVICE dup /Emit get exec
+            DEVICE //.xpostsys /.transmitpage get exec
             true //.xpostsys /.setpagesent get exec
         } if
     } if

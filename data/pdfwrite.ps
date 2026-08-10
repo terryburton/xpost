@@ -664,9 +664,9 @@
         /Chunks currentdict //.internaldict /.pdfchunks get exec def
         % deflate the content stream (falls back to uncompressed without zlib)
         Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
-        % a %d in the output name is replaced with the page number, so each
-        % page lands in its own file
-        /F /OutputFileName where { pop OutputFileName //.xpostsys /.pagefilename get exec (w) file }{ (%stdout) (w) file } ifelse def
+        % the name settled for this page, which a %d in the output name
+        % makes its own, so each page lands in its own file
+        /F .outputfile (w) file def
         /BytePos 0 def
 
         /hs height .pdfnumstr def

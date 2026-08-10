@@ -11,9 +11,11 @@
 % incumbent before the replacement exists leaves the graphics state naming a
 % device whose buffers are freed, and the next mark reads freed memory.
 %
-% The request below is well formed -- png is a device this interpreter can
-% select -- so it passes the roster check and reaches the maker, which then
-% fails because the output path names a directory that does not exist.
+% The request below is well formed -- pgm is a device every build of this
+% interpreter can select -- so it passes the roster check and reaches the
+% maker, which then fails because no raster can be built at the page size
+% asked for. A device is made before the incumbent is retired, so this is
+% the moment the incumbent has to survive.
 
 /getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
 
@@ -22,8 +24,8 @@
 % An operator that fails part way leaves its own working operands behind;
 % stopped reports the failure but does not rewind the stack, so the caught
 % branch clears what is left. Named definitions are untouched by clear.
-{ << /OutputDevice /png
-     /OutputFile (nosuchdir/nosuchfile.png) >> setpagedevice } stopped
+{ << /OutputDevice /pgm
+     /PageSize [-100 -100] >> setpagedevice } stopped
     { clear }
     { (FAILURE: the maker was expected to fail and did not) = quit }
 ifelse

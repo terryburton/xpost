@@ -23,22 +23,29 @@
 #    multi-showpage job to a fixed name yields a single N-page document, and the
 #    same job to a %d name yields N one-page files.
 #
-#  * The raster devices and SVG cannot hold more than one page in a file, so a
-#    %d gives a file per page and a fixed name keeps the last page (every page
-#    rewrites the one file). This is also what a single-page consumer -- which
-#    reads the file right after showpage -- depends on.
+#  * The raster devices, SVG, PNG and JPEG cannot hold more than one page in a
+#    file, so a %d gives a file per page and a fixed name keeps the last page
+#    (every page rewrites the one file). This is also what a single-page
+#    consumer -- which reads the file right after showpage -- depends on.
 #
-# The %d name is the only page-specific step in either shape; the open still
-# goes through the ordinary `file` operator, so a device under the file-access
-# sandbox is bound by the same rules a single-page write is.
+# The %d name is the only page-specific step in either shape, and it is taken
+# once for every device, in .transmitpage (data/device.ps), so the numbering a
+# compiled device produces is the numbering the PostScript devices produce. The
+# open still goes through the ordinary `file` operator for a device written in
+# PostScript, and through the one shared opener for a compiled one, so a device
+# under the file-access sandbox is bound by the same rules a single-page write
+# is either way.
 #
-# png and jpeg hold one image per file and open at device creation, so they do
-# not page; they are covered by the `devices` test.
+# The devices that hand their raster to the embedder rather than writing it --
+# raster and bgr -- leave nothing at the output path, and that is checked here
+# too: "no file" is their answer and not an omission. The devices that paint
+# nothing, null and bbox, are the `devices` test's.
 #
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # Reach the interpreter's data directory outside any sandbox root: disable the
 # file-access sandbox when this build has one (detected from the usage text),
@@ -66,7 +73,12 @@ pagedev="$work/pagesdev.ps"
 { printf '%s\n' '<< /PageSize [100 100] >> setpagedevice'; cat "$plain"; } > "$pagedev"
 
 # device:extension:paginated(1=one file holds all pages, 0=one page per file)
-devices='pgm:pgm:0 ppm:ppm:0 pbm:pbm:0 tiff:tiff:0 svgwrite:svg:0 pdfwrite:pdf:1 dscwrite:ps:1'
+devices='pgm:pgm:0 ppm:ppm:0 pbm:pbm:0 tiff:tiff:0 svgwrite:svg:0 pdfwrite:pdf:1
+         dscwrite:ps:1 png:png:0 pngalpha:png:0 jpeg:jpg:0'
+
+# the devices whose raster goes to the embedder, and which therefore write no
+# file whatever the output name says
+buffer_devices='raster bgr'
 
 fail=0
 
@@ -88,8 +100,14 @@ render() {   # $1=device $2=output-path ; returns 1 on skip/error
 sweep() {   # $1=job label ; renders $prog through every device and checks the shape
     job=$1
     ran=0
+    # The floor a sweep is held to: the roster less the members that need a
+    # library the build may not have, which are the only ones entitled to
+    # answer "wrong device".
     want=0
-    for de in $devices; do want=$((want + 1)); done
+    for de in $devices; do
+        case " $DEVICE_FLEET_OPTIONAL " in *" ${de%%:*} "*) continue ;; esac
+        want=$((want + 1))
+    done
     for de in $devices; do
         dev=${de%%:*}
         rest=${de#*:}
@@ -150,20 +168,45 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
         fi
     done
 
-    # None of these devices needs a library the build may not have, so
-    # "not built in" from any of them is a build to fix. A sweep that
-    # skipped from end to end renders nothing, compares nothing and
-    # leaves every verdict untaken, which is what a sweep that passed
-    # leaves too.
-    if [ "$ran" -ne "$want" ]; then
-        echo "FAIL ($job): $ran of $want devices rendered; the rest said they"
-        echo "     were not built in, and all of them are built from this tree"
+    # A sweep that skipped from end to end renders nothing, compares nothing
+    # and leaves every verdict untaken, which is what a sweep that passed
+    # leaves too. Everything but the optional members is built from this
+    # tree, so "not built in" from one of those is a build to fix.
+    if [ "$ran" -lt "$want" ]; then
+        echo "FAIL ($job): $ran devices rendered and at least $want are built"
+        echo "     from this tree; the rest said they were not built in"
         fail=1
     fi
 }
 
-prog=$plain;   sweep pages
-prog=$pagedev; sweep 'pages after setpagedevice'
+# The devices that own no file: a job of any length leaves nothing at the
+# output path, with a %d in it or without. Their raster goes to the
+# embedder, so this is their answer and not a page that went missing.
+buffersweep() {   # $1=job label
+    job=$1
+    for dev in $buffer_devices; do
+        for name in "$work/buf_%d.out" "$work/buf.out"; do
+            rm -f "$work"/buf*.out
+            err=$("$xpost" -q $ns -d "$dev" -o "$name" "$prog" </dev/null 2>&1)
+            status=$?
+            case "$err" in
+                *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
+            esac
+            verdict_run "$status" "$err" "$dev" || exit 1
+            left=$(ls "$work"/buf*.out 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$left" -ne 0 ]; then
+                echo "FAIL $dev ($job): wrote $left file(s) for a device that hands"
+                echo "     its raster to the embedder"
+                fail=1
+            fi
+        done
+        rm -f "$work"/buf*.out
+        [ "$fail" -eq 0 ] && echo "OK   $dev ($job: hands the raster over, writes no file)"
+    done
+}
+
+prog=$plain;   sweep pages;                       buffersweep pages
+prog=$pagedev; sweep 'pages after setpagedevice'; buffersweep 'pages after setpagedevice'
 
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then

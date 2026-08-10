@@ -1473,7 +1473,7 @@ currentglobal true setglobal
         stopped { } if cleartomark
         xmit {
             /DEVICE where { pop
-                DEVICE type /dicttype eq { DEVICE dup /Emit get exec } if
+                DEVICE type /dicttype eq { DEVICE //.xpostsys /.transmitpage get exec } if
             } if
         } if
         % requests merge with the accumulated parameters, except that

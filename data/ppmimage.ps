@@ -63,7 +63,7 @@
     /dev 40 20 newPPMIMAGEdevice def
     .5 .5 .5 1 1 38 17 dev dup /DrawLine get exec
     .5 .5 .5 9 14 3 3 dev dup /FillRect get exec
-    dev dup /Emit get exec
+    dev //.xpostsys /.transmitpage get exec
     pstack()=
 
 } if

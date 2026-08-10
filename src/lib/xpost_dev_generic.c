@@ -89,26 +89,53 @@ static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
 
-char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic)
+FILE *xpost_device_page_open(Xpost_Context *ctx, Xpost_Object devdic)
 {
-    Xpost_Object filenamestr;
+    Xpost_Object namestr;
     char *filename;
+    FILE *f;
+    int err;
 
-    filenamestr = xpost_dict_get(ctx, devdic,
-                                 xpost_name_cons(ctx, "OutputFileName"));
-    /* a device dict without a string OutputFileName -- e.g. after a program
-       switches devices with setpagedevice, which records the name in userdict
-       rather than the device dict -- must not be read as a string */
-    if (xpost_object_get_type(filenamestr) != stringtype)
+    /* The name settled for the page being written, which the page
+       machinery puts on the device before it runs Emit (.transmitpage,
+       data/device.ps). It is the name and not the template: the template
+       may carry a %d, and the page number that replaces it is the page's
+       to know, not the device's. A device that read the template instead
+       wrote every page of a job to one name. */
+    namestr = xpost_dict_get(ctx, devdic,
+                             xpost_name_cons(ctx, ".outputfile"));
+    if (xpost_object_get_type(namestr) != stringtype)
         return NULL;
-    filename = malloc(filenamestr.comp_.sz + 1);
-    if (filename)
-    {
-        memcpy(filename, xpost_string_get_pointer(ctx, filenamestr), filenamestr.comp_.sz);
-        filename[filenamestr.comp_.sz] = '\0';
-    }
 
-    return filename;
+    /* the standard output is where a page goes when nobody said where,
+       spelled as the file operator spells it */
+    if (namestr.comp_.sz == XPOST_DEV_STDOUT_LEN
+        && memcmp(xpost_string_get_pointer(ctx, namestr),
+                  XPOST_DEV_STDOUT_NAME, XPOST_DEV_STDOUT_LEN) == 0)
+        return stdout;
+
+    filename = malloc(namestr.comp_.sz + 1);
+    if (!filename)
+        return NULL;
+    memcpy(filename, xpost_string_get_pointer(ctx, namestr), namestr.comp_.sz);
+    filename[namestr.comp_.sz] = '\0';
+
+    f = xpost_diskfile_fopen(filename, "wb", 0, &err);
+    free(filename);
+
+    return f;
+}
+
+void xpost_device_page_close(FILE *f)
+{
+    if (!f)
+        return;
+    /* a standard stream outlives the page written through it: it is
+       flushed so the page is whole where it went, and left open */
+    if (f == stdout || f == stderr)
+        fflush(f);
+    else
+        fclose(f);
 }
 
 static

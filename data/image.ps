@@ -331,19 +331,13 @@ currentglobal true setglobal
 
     end } bind %FillPoly
 
-    % write the page: substitute the page number for a %d in the output
-    % name, then hand the rows to the class's .writepage
+    % write the page: open the name settled for this page and hand the
+    % rows to the class's .writepage
     /Emit { % IMAGE  .  -
     begin
-        /OutputFileName where { pop
-            ImgData
-            OutputFileName //.xpostsys /.pagefilename get exec (w) file
-            .writepage
-        }{
-            ImgData
-            (%stdout) (w) file
-            .writepage
-        } ifelse
+        ImgData
+        .outputfile (w) file
+        .writepage
     end } bind
 >> put
 

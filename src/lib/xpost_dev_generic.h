@@ -33,7 +33,7 @@
  * @brief This file provides utilify functions for all devices.
  *
  * This header provides utility functions for all devices.
- * It allows a device to specify a filename after creation.
+ * It opens and closes the file a device writes one page to.
  * And implements lower-level sorting and polygon filling
  * routines for speed.
  * @defgroup xpost_library Library functions
@@ -44,20 +44,36 @@
 #ifndef XPOST_DEV_GENERIC_H
 #define XPOST_DEV_GENERIC_H
 
+#include <stdio.h> /* FILE */
+
 #include "xpost_private.h" /* XPOST_MUST_CHECK */
 
-/**
- * @brief convenience function to retrieve filename associated with device
- *
- * returns malloc'ed string. caller must free.
- */
-char *xpost_device_get_filename(Xpost_Context *ctx, Xpost_Object devdic);
+/** the standard output, as the file operator names it */
+#define XPOST_DEV_STDOUT_NAME "%stdout"
+#define XPOST_DEV_STDOUT_LEN (sizeof(XPOST_DEV_STDOUT_NAME) - 1)
 
 /**
- * @brief convenience function to set the output filename associated with device
+ * @brief open the file the page being written goes to
  *
- * returns a postscript error code from xpost_error.h, 0 == noerror
+ * The one opener a compiled device writes a page through. The name is
+ * the one the page machinery settled on the device before running Emit,
+ * so the page number a %d in the output name asks for is already in it
+ * and every device numbers its pages alike. A device holds the stream
+ * no longer than the page: it opens here, is written, and is closed
+ * through xpost_device_page_close() before Emit returns.
+ *
+ * Returns NULL when the device carries no settled name or the name
+ * cannot be opened.
  */
+FILE *xpost_device_page_open(Xpost_Context *ctx, Xpost_Object devdic);
+
+/**
+ * @brief finish the file a page was written to
+ *
+ * Closes what xpost_device_page_open() opened. A standard stream is
+ * flushed and left open, since it outlives the page.
+ */
+void xpost_device_page_close(FILE *f);
 
 /**
  * @brief install operator .yxsort to improve performance of 'fill'

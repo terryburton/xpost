@@ -3271,6 +3271,17 @@ test('check-device-skeleton',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# The file a page is written to is named and opened when the page is
+# written. The page number a %d in the output name stands for belongs to
+# the page, so the name is settled once per page by the page machinery and
+# a device -- compiled or written in PostScript -- writes to what it was
+# handed. A device that settled the name when it was made wrote every page
+# of a job to the name page one had.
+test('check-page-output',
+  find_program('tests/check-page-output.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # Destroy is idempotent. A device is retired at setpagedevice, at job end
 # and by a restore past the change that installed it, so every Destroy
 # clears the handles it releases and stores the private struct back --

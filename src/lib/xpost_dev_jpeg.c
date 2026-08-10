@@ -52,7 +52,6 @@
 #include "xpost_stack.h"  /* push results on stack */
 #include "xpost_context.h" /* state */
 #include "xpost_error.h"
-#include "xpost_file.h" /* the checked disk-file opener */
 #include "xpost_dict.h" /* get/put values in dicts */
 #include "xpost_string.h" /* get/put values in strings */
 #include "xpost_array.h"
@@ -60,7 +59,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call load operator for convenience */
-#include "xpost_dev_generic.h" /* get filename */
+#include "xpost_dev_generic.h" /* the page file opener */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_jpeg.h" /* check prototypes */
 
@@ -82,6 +81,10 @@ typedef struct
     Xpost_Jpeg_Pixel data[1];
 } Xpost_Jpeg_Buffer;
 
+/* A JPEG stream holds exactly one image, so the file a page is
+   compressed into belongs to the page and not to the device: it is
+   opened when a page is emitted and closed before that emit returns.
+   What the instance keeps between pages is the raster. */
 typedef struct
 {
     int width;
@@ -89,7 +92,6 @@ typedef struct
     /*
      * add additional members to private struct
      */
-    FILE *f;
     Xpost_Jpeg_Buffer *buf;
 } PrivateData;
 
@@ -171,7 +173,6 @@ int _create_cont(Xpost_Context *ctx,
 {
     PrivateData private;
     Xpost_Object privatestr;
-    char *filename;
     integer width = w.int_.val;
     integer height = h.int_.val;
     int ret;
@@ -192,31 +193,13 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
-    filename = xpost_device_get_filename(ctx, devdic);
-    if (!filename)
-    {
-        XPOST_LOG_ERR("cannot retrieve JPEG file name");
-        return unregistered;
-    }
-
-    {
-        int err;
-        private.f = xpost_diskfile_fopen(filename, "wb", 0, &err);
-    }
-    free(filename);
-    if (!private.f)
-    {
-        XPOST_LOG_ERR("cannot retrieve JPEG file name");
-        return unregistered;
-    }
-
     /* allocate buffer header and array */
     private.buf = malloc(sizeof(Xpost_Jpeg_Buffer) +
                          sizeof(Xpost_Jpeg_Pixel) * width * height);
     if (!private.buf)
     {
         XPOST_LOG_ERR("cannot allocate buffer memory");
-        goto close_file;
+        return unregistered;
     }
 
     /* the page starts white; this format carries no transparency, so a
@@ -233,20 +216,15 @@ int _create_cont(Xpost_Context *ctx,
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
     {
-        /* the record is the only thing that would have named the buffer
-           or the open file, and it is not going to */
+        /* the record is the only thing that would have named the buffer,
+           and it is not going to */
         free(private.buf);
-        goto close_file;
+        return unregistered;
     }
 
     /* return device instance dictionary to ps */
     xpost_stack_push(ctx->lo, ctx->os, devdic);
     return 0;
-
-  close_file:
-    fclose(private.f);
-
-    return unregistered;
 }
 
 /* One channel of a coverage-weighted blend: the ground moved toward the
@@ -406,6 +384,10 @@ int _getpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* Write the page: one JPEG image, whole, into the file settled for this
+   page. The file is opened here and closed here, so a job's second page
+   is a second file rather than an append to a stream that holds one
+   image. */
 static
 int _emit(Xpost_Context *ctx,
           Xpost_Object devdic)
@@ -416,6 +398,7 @@ int _emit(Xpost_Context *ctx,
     Xpost_Object quality_o;
     Xpost_Object privatestr;
     PrivateData private;
+    FILE *f;
     unsigned char *data;
     JSAMPROW *jbuf;
     int quality;
@@ -424,11 +407,16 @@ int _emit(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* a released instance has neither the raster to compress nor the
-       stream to compress it into, and libjpeg would be handed both; its
-       output was finalised when it was released */
-    if (!private.buf || !private.f)
+    /* a released instance has no raster to compress */
+    if (!private.buf)
         return 0;
+
+    f = xpost_device_page_open(ctx, devdic);
+    if (!f)
+    {
+        XPOST_LOG_ERR("cannot open the file this JPEG page is written to");
+        return ioerror;
+    }
 
     ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
     quality_o = xpost_dict_get(ctx, ud, xpost_name_cons(ctx, "jpeg_quality"));
@@ -447,10 +435,11 @@ int _emit(Xpost_Context *ctx,
     if (setjmp(jerr.setjmp_buffer))
     {
         jpeg_destroy_compress(&cinfo);
+        xpost_device_page_close(f);
         return undefined;
     }
     jpeg_create_compress(&cinfo);
-    jpeg_stdio_dest(&cinfo, private.f);
+    jpeg_stdio_dest(&cinfo, f);
     cinfo.image_width = private.width;
     cinfo.image_height = private.height;
     cinfo.input_components = 3;
@@ -480,6 +469,7 @@ int _emit(Xpost_Context *ctx,
     }
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
+    xpost_device_page_close(f);
 
     /* pass data back to client application */
     xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data);
@@ -498,12 +488,11 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* the raster is all the instance holds: each page's file was closed
+       as that page was written */
     free(private.buf);
     private.buf = NULL;
-    if (private.f)
-        fclose(private.f);
-    private.f = NULL;
-    /* store the cleared pointers back so a repeated destroy is a no-op */
+    /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
     return 0;
