@@ -146,3 +146,38 @@ fleet_each() {
     rm -rf "$_fe_dir"
     return $_fe_rc
 }
+
+# fleet_hold_unasked EXPECTED
+#
+# Holds the devices that could not be asked against the ones the caller
+# is written for.
+#
+# A device establishes whether it can answer at all by being run, which
+# is what keeps the wrappers from carrying a list of names that drifts
+# from the interpreter. It also means a device that has stopped working
+# says the same thing as one that was never able to answer: both go
+# quiet, and a count of the rest still reads as a whole roster held. So
+# the reading is taken, but it is held to what the caller says it should
+# be -- a device that goes quiet and is not named here fails, and a
+# device named here that has started answering fails too, because the
+# reason written beside its name has stopped being true and the check it
+# was excused from is now one it could be held to.
+fleet_hold_unasked() {
+    _fh_want=$(printf '%s\n' $1 | grep . | sort | tr '\n' ' ')
+    _fh_got=$(printf '%s\n' $fleet_unasked_list | grep . | sort | tr '\n' ' ')
+    [ "$_fh_want" = "$_fh_got" ] && return 0
+
+    for _fh_d in $_fh_got; do
+        case " $_fh_want " in
+            *" $_fh_d "*) ;;
+            *) echo "FAILURES: $_fh_d could not be asked, and nothing here says it cannot answer" ;;
+        esac
+    done
+    for _fh_d in $_fh_want; do
+        case " $_fh_got " in
+            *" $_fh_d "*) ;;
+            *) echo "FAILURES: $_fh_d answered, and it is named here as a device that cannot" ;;
+        esac
+    done
+    return 1
+}

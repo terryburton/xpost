@@ -224,7 +224,15 @@ newpath 0 0 2 2 rectclip
     return 0
 }
 
+# The devices that cannot be read for a transmitted page of text, and
+# why. null paints nothing; raster and bgr keep their raster for whoever
+# embedded the interpreter instead of writing a file, so there is nothing
+# on disk to tell a page from none. bbox is not among them: it records
+# the extent a glyph covers, and that extent is what it is read for.
+CANNOT_ANSWER='null raster bgr'
+
 fleet_each one_device $DEVICE_FLEET_MARKING || fail=1
+fleet_hold_unasked "$CANNOT_ANSWER" || fail=1
 asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that

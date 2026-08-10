@@ -48,7 +48,13 @@ for dev in $DEVICE_FLEET_MARKING; do
     roster="$roster $dev"
 done
 
+# Every device with a raster to index answers this one: the roster above
+# has already set aside the two that keep no pixels, and what is left
+# reaches the limit the same way.
+CANNOT_ANSWER=''
+
 fleet_each one_device $roster || fail=1
+fleet_hold_unasked "$CANNOT_ANSWER" || fail=1
 asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that

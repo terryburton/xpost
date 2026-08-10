@@ -182,7 +182,15 @@ erasepage"
     return 0
 }
 
+# The devices that cannot be read for a transmitted page, and why. null
+# paints nothing and bbox keeps a box rather than pixels, so neither has
+# ink to read; raster and bgr keep their raster for whoever embedded the
+# interpreter instead of writing a file, so there is nothing on disk to
+# tell a page from none. Every other device must answer.
+CANNOT_ANSWER='null bbox raster bgr'
+
 fleet_each one_device $DEVICE_FLEET_MARKING || fail=1
+fleet_hold_unasked "$CANNOT_ANSWER" || fail=1
 asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that
