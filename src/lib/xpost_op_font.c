@@ -1591,6 +1591,56 @@ unsigned int _glyph_index_for_name(Xpost_Context *ctx,
     return gi;
 }
 
+/* Whether the half-open pixel box [x0,x1) x [y0,y1) meets the clip
+   region. PLRM 7.5.1 confines a painting operation to the pixels the
+   region covers, so a box meeting none of them covers no pixel and
+   leaves the page as it found it. An empty box meets nothing. */
+static
+int _clip_meets(const textstate *ts, int x0, int y0, int x1, int y1)
+{
+    int y;
+
+    if (x1 <= x0 || y1 <= y0)
+        return 0;
+    if (ts->clipkind == CLIP_ALL)
+        return 1;
+    if (x1 <= ts->cx0 || x0 >= ts->cx1 || y1 <= ts->cy0 || y0 >= ts->cy1)
+        return 0;
+    if (ts->clipkind == CLIP_BOX)
+        return 1;
+    for (y = y0 > ts->cy0 ? y0 : ts->cy0; y < y1 && y < ts->cy1; y++)
+    {
+        int run = _clip_band_row(ts, y);
+
+        for (; run < ts->nbands && ts->bands[run].band == y; run++)
+            if (ts->bands[run].lo < x1 && ts->bands[run].hi > x0)
+                return 1;
+    }
+    return 0;
+}
+
+/* Record that something has been painted on the current page.
+   The record is the one the page machinery keeps and the painting
+   operators write as they mark (data/device.ps), reached here through
+   the local machinery dictionary it is registered in. Text does not
+   pass a painting operator: a glyph's pixels go straight to the
+   device, so the routes below record what they left for themselves,
+   and a job that painted nothing but text still has a page to give
+   when it ends without asking for one.
+   An interpreter running without the page machinery has no record to
+   write and nothing to say about it. */
+static
+int _page_mark(Xpost_Context *ctx)
+{
+    Xpost_Object state = xpost_dict_get(ctx, ctx->privatedict,
+                                        xpost_name_cons(ctx, ".pagestate"));
+
+    if (xpost_object_get_type(state) != dicttype)
+        return 0;
+    return xpost_dict_put(ctx, state, xpost_name_cons(ctx, ".marked"),
+                          xpost_bool_cons(1));
+}
+
 #ifdef HAVE_FREETYPE2
 /* Prepare the shared face for use under the current graphics state.
    The font dictionary's FontMatrix carries the size (and any rotation,
@@ -1825,7 +1875,11 @@ int _device_color(Xpost_Context *ctx,
    PLRM 7.5.1 has every painting operation meet the region: the whole
    raster is rejected or accepted against the region's bounds first, so
    a glyph clear of the boundary costs the comparison and nothing more,
-   and only a glyph the boundary crosses is walked run by run. */
+   and only a glyph the boundary crosses is walked run by run.
+   inked is raised where a pixel is written and left alone otherwise,
+   so the caller learns whether this raster reached the page: a glyph
+   with no ink in it, and one the region keeps nothing of, leave the
+   page as they found it. */
 static
 void _draw_bitmap(Xpost_Context *ctx,
                   Xpost_Object devdic,
@@ -1842,7 +1896,8 @@ void _draw_bitmap(Xpost_Context *ctx,
                   Xpost_Object comp1,
                   Xpost_Object comp2,
                   Xpost_Object comp3,
-                  Xpost_Object comp4)
+                  Xpost_Object comp4,
+                  int *inked)
 {
     int i, j;
     const unsigned char *tmp;
@@ -1931,6 +1986,7 @@ void _draw_bitmap(Xpost_Context *ctx,
             }
             if (cov)
             {
+                *inked = 1;
                 switch (ncomp)
                 {
                     case 1:
@@ -2061,7 +2117,8 @@ int _show_char_outline(Xpost_Context *ctx,
                        Xpost_Object comp3,
                        Xpost_Object comp4,
                        long *advance_x,
-                       long *advance_y)
+                       long *advance_y,
+                       int *inked)
 {
     glyphfrag f;
     Xpost_Font_Outline_Sink sink;
@@ -2163,6 +2220,11 @@ int _show_char_outline(Xpost_Context *ctx,
             xpost_strbuf_free(&f.d);
             return 0;
         }
+        /* the contours are in the device's content, which is what this
+           device paints with; the region they are seen through is the
+           device's own to record beside them */
+        if (!f.oom)
+            *inked = 1;
     }
     xpost_strbuf_free(&f.d);
     return 1;
@@ -2184,7 +2246,8 @@ int _show_glyph(Xpost_Context *ctx,
                 Xpost_Object comp1,
                 Xpost_Object comp2,
                 Xpost_Object comp3,
-                Xpost_Object comp4)
+                Xpost_Object comp4,
+                int *inked)
 {
 #ifdef HAVE_FREETYPE2
     unsigned char *buffer;
@@ -2202,7 +2265,7 @@ int _show_glyph(Xpost_Context *ctx,
     {
         if (!_show_char_outline(ctx, devdic, ts, data.face, glyph_index,
                                 *xpos, *ypos, ncomp, comp1, comp2, comp3, comp4,
-                                &advance_x, &advance_y))
+                                &advance_x, &advance_y, inked))
             return 0;
     }
     else if (ts->extents
@@ -2214,10 +2277,18 @@ int _show_glyph(Xpost_Context *ctx,
            cost grows with the square of the resolution): the glyph
            contributes its ink box through the device's FillRect. The
            box is 26.6 glyph space, y-up around the pen; the device is
-           y-down. An empty box (a space) advances only. A glyph with
-           no outline takes the rendering path below instead. */
-        if (bx1 > bx0 && by1 > by0)
+           y-down. An empty box (a space) advances only, and so does one
+           the clip region keeps nothing of: what such a glyph leaves is
+           what a fill of its outline would leave there, which is
+           nothing. A glyph with no outline takes the rendering path
+           below instead. */
+        if (bx1 > bx0 && by1 > by0
+         && _clip_meets(ts, _clip_floor(*xpos + bx0 / 64.0),
+                            _clip_floor(*ypos - by1 / 64.0),
+                            _clip_ceil(*xpos + bx1 / 64.0),
+                            _clip_ceil(*ypos - by0 / 64.0)))
         {
+            *inked = 1;
             switch (ncomp)
             {
                 case 4:
@@ -2266,7 +2337,7 @@ int _show_glyph(Xpost_Context *ctx,
                      buffer, rows, width, pitch, pixel_mode,
                      (int)floor(*xpos + left + 0.5),
                      (int)floor(*ypos - top + 0.5),
-                     ncomp, comp1, comp2, comp3, comp4);
+                     ncomp, comp1, comp2, comp3, comp4, inked);
     }
     /* a /Metrics entry for this glyph overrides the face's advance */
     _metrics_advance(ctx, ts, glyphname, &advance_x, &advance_y);
@@ -2290,6 +2361,7 @@ int _show_glyph(Xpost_Context *ctx,
     (void)comp2;
     (void)comp3;
     (void)comp4;
+    (void)inked;
 #endif
     return 1;
 }
@@ -2310,7 +2382,8 @@ int _show_char(Xpost_Context *ctx,
                Xpost_Object comp1,
                Xpost_Object comp2,
                Xpost_Object comp3,
-               Xpost_Object comp4)
+               Xpost_Object comp4,
+               int *inked)
 {
     /* show does not kern: pair adjustment in PostScript is the
        program's business (kshow, ashow); the advance is the glyph
@@ -2320,7 +2393,7 @@ int _show_char(Xpost_Context *ctx,
                                                      data.face, ch);
     return _show_glyph(ctx, devdic, putpix, data, ts, xpos, ypos,
                        glyph_index, _encoded_name(ctx, ts->encoding, ch),
-                       ncomp, comp1, comp2, comp3, comp4);
+                       ncomp, comp1, comp2, comp3, comp4, inked);
 }
 
 static
@@ -2448,6 +2521,7 @@ int _show(Xpost_Context *ctx,
     Xpost_Object comp[4];
     Xpost_Object finalize;
     int painted = 1;
+    int inked = 0;
     int ret;
 
 
@@ -2507,7 +2581,7 @@ int _show(Xpost_Context *ctx,
     /* render text in char *cstr  with font data  at pen position xpos ypos */
     for (ch = cstr; *ch; ch++) {
         if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp[0], comp[1], comp[2], comp[3]))
+                ncomp, comp[0], comp[1], comp[2], comp[3], &inked))
         {
             painted = 0;
             break;
@@ -2516,6 +2590,11 @@ int _show(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the ink the glyphs left is a mark on the page; a string that
+       painted none -- an empty one, blanks, or text the clip keeps
+       nothing of -- leaves the page as it found it */
+    if (!ret && inked)
+        ret = _page_mark(ctx);
     /* the glyphs the string asked for are the font's to supply, and one
        it will not is that font failing the operator (PLRM 8.2 show) */
     if (!ret && !painted)
@@ -2551,6 +2630,7 @@ int _glyphshow_common(Xpost_Context *ctx,
     Xpost_Object finalize;
     unsigned int glyph_index;
     int painted;
+    int inked = 0;
     int ret;
 
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
@@ -2592,13 +2672,22 @@ int _glyphshow_common(Xpost_Context *ctx,
         : gid;
     painted = _show_glyph(ctx, devdic, putpix, data, &ts, &xpos, &ypos,
                           glyph_index, byname ? gname : invalid,
-                          ncomp, comp[0], comp[1], comp[2], comp[3]);
+                          ncomp, comp[0], comp[1], comp[2], comp[3], &inked);
 
     /* the point the operator reached is the point it leaves behind,
        whether or not the glyph was painted from it */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
     if (ret)
         return ret;
+    /* the ink the glyph left is a mark on the page; a glyph with no
+       ink in it, and one the clip keeps nothing of, leave the page as
+       they found it */
+    if (inked)
+    {
+        ret = _page_mark(ctx);
+        if (ret)
+            return ret;
+    }
     /* A glyph the face would not give up is nothing on the page and no
        advance over it. Selecting by index reaches the CIDFont's glyphs,
        and past them is out of range; selecting by name asks the font for
@@ -3137,6 +3226,7 @@ int _stencilaa(Xpost_Context *ctx,
     Xpost_Object userdict, gd, gs, devdic, putpix;
     Xpost_Object buf, mat, o;
     textstate ts;
+    int inked = 0;
     int w, h, ink, ncomp, interp = 0;
     Xpost_Object comp[4];
     double m[6];
@@ -3313,8 +3403,12 @@ int _stencilaa(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
     _draw_bitmap(ctx, devdic, putpix, &ts, cov, devh, devw, devw,
                  XPOST_FONT_PIXEL_MODE_GRAY, ix0, iy0,
-                 ncomp, comp[0], comp[1], comp[2], comp[3]);
+                 ncomp, comp[0], comp[1], comp[2], comp[3], &inked);
     free(cov);
+    /* the coverage went to the device rather than through a painting
+       operator, so what it left on the page is recorded here */
+    if (inked)
+        return _page_mark(ctx);
     return 0;
 refuse:
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
@@ -3393,6 +3487,7 @@ int _maskcachehit(Xpost_Context *ctx,
     int rows, width, pitch, left, top;
     long ax, ay;
     int ncomp;
+    int inked = 0;
     Xpost_Object comp[4];
     double dx, dy;
 
@@ -3461,7 +3556,11 @@ int _maskcachehit(Xpost_Context *ctx,
                  XPOST_FONT_PIXEL_MODE_GRAY,
                  (int)floor(dx + 0.5) + left,
                  (int)floor(dy + 0.5) - top,
-                 ncomp, comp[0], comp[1], comp[2], comp[3]);
+                 ncomp, comp[0], comp[1], comp[2], comp[3], &inked);
+    /* the mask went to the device rather than through a painting
+       operator, so what it left on the page is recorded here */
+    if (inked)
+        return _page_mark(ctx);
     return 0;
 refuse:
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
@@ -3801,6 +3900,7 @@ int _ashow(Xpost_Context *ctx,
     Xpost_Object comp[4];
     Xpost_Object finalize;
     int painted = 1;
+    int inked = 0;
     int ret;
 
 
@@ -3861,7 +3961,7 @@ int _ashow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp[0], comp[1], comp[2], comp[3]))
+                   ncomp, comp[0], comp[1], comp[2], comp[3], &inked))
         {
             painted = 0;
             break;
@@ -3872,6 +3972,11 @@ int _ashow(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the ink the glyphs left is a mark on the page; a string that
+       painted none -- an empty one, blanks, or text the clip keeps
+       nothing of -- leaves the page as it found it */
+    if (!ret && inked)
+        ret = _page_mark(ctx);
     /* the glyphs the string asked for are the font's to supply, and one
        it will not is that font failing the operator (PLRM 8.2 show) */
     if (!ret && !painted)
@@ -3904,6 +4009,7 @@ int _widthshow(Xpost_Context *ctx,
     Xpost_Object comp[4];
     Xpost_Object finalize;
     int painted = 1;
+    int inked = 0;
     int ret;
 
 
@@ -3964,7 +4070,7 @@ int _widthshow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                   ncomp, comp[0], comp[1], comp[2], comp[3]))
+                   ncomp, comp[0], comp[1], comp[2], comp[3], &inked))
         {
             painted = 0;
             break;
@@ -3978,6 +4084,11 @@ int _widthshow(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the ink the glyphs left is a mark on the page; a string that
+       painted none -- an empty one, blanks, or text the clip keeps
+       nothing of -- leaves the page as it found it */
+    if (!ret && inked)
+        ret = _page_mark(ctx);
     /* the glyphs the string asked for are the font's to supply, and one
        it will not is that font failing the operator (PLRM 8.2 show) */
     if (!ret && !painted)
@@ -4012,6 +4123,7 @@ int _awidthshow(Xpost_Context *ctx,
     Xpost_Object comp[4];
     Xpost_Object finalize;
     int painted = 1;
+    int inked = 0;
     int ret;
 
 
@@ -4072,7 +4184,7 @@ int _awidthshow(Xpost_Context *ctx,
     for (ch = cstr; *ch; ch++)
     {
         if (!_show_char(ctx, devdic, putpix, data, &ts, &xpos, &ypos, (unsigned char)*ch,
-                ncomp, comp[0], comp[1], comp[2], comp[3]))
+                ncomp, comp[0], comp[1], comp[2], comp[3], &inked))
         {
             painted = 0;
             break;
@@ -4088,6 +4200,11 @@ int _awidthshow(Xpost_Context *ctx,
 
     /* update current position in the graphics state */
     ret = _show_finalize_pos(ctx, finalize, xpos, ypos);
+    /* the ink the glyphs left is a mark on the page; a string that
+       painted none -- an empty one, blanks, or text the clip keeps
+       nothing of -- leaves the page as it found it */
+    if (!ret && inked)
+        ret = _page_mark(ctx);
     /* the glyphs the string asked for are the font's to supply, and one
        it will not is that font failing the operator (PLRM 8.2 show) */
     if (!ret && !painted)

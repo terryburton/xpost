@@ -3033,6 +3033,25 @@ test('page-extent',
   suite: cost_fast,
   timeout: 120)
 
+# The same question of a job whose marks are glyphs. Text does not reach the
+# page the way a path does: a glyph's pixels go straight to the device, or
+# its outline into the content a vector writer keeps, or its ink box to a
+# device that tracks extents, and none of those passes a painting operator.
+# So each route records what it left for itself, and each is a way for a file
+# of nothing but text to render blank. The converse is held on the same
+# terms: an empty string, a string of blanks, and text the clip keeps nothing
+# of have all painted nothing and leave no page to end.
+# Its own limit rather than the configuration's, for the reason above: this
+# asks every marking device six questions and calibrates each with three
+# more, so its cost follows the roster's length rather than the work of any
+# one case. Measured at sixteen seconds run alone.
+test('glyph-page',
+  find_program('tests/run-glyph-page-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # Where a number stops and a name starts. A sign and a decimal point begin
 # numbers and also make names, so the scanner decides between the two for
 # every token starting with one: PLRM 3.2 makes a token a number when it is

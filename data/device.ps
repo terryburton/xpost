@@ -320,6 +320,15 @@ currentglobal true setglobal
     //.xpostsys /.pagestate get exch /.marked exch put
 } bind put
 
+% The same record, reached from where the interpreter's own side reads
+% the local machinery. A rendered glyph's pixels are written to the
+% device by the text machinery rather than by a painting operator, so
+% that machinery records what it left under /.marked itself, and it
+% needs the dictionary the two accessors above read and write. The
+% dictionary is the one object shared, not a copy: what one side writes
+% is what the other reads.
+.privatedict /.pagestate //.xpostsys /.pagestate get put
+
 % -  .pagesent  bool
 .xpostsys /.pagesent {
     //.xpostsys /.pagestate get /.sent 2 copy known { get }{ pop pop false } ifelse
