@@ -29,6 +29,8 @@ tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
 tests/check-device-destroy.sh \
 tests/check-device-roster.sh \
+tests/check-c-held-objects.sh \
+tests/c_held_objects.register \
 tests/check-device-skeleton.sh \
 tests/check-dict-homes.sh \
 tests/check-dist-lists.sh \

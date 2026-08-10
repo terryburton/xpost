@@ -1,0 +1,7 @@
+# Objects held in a variable or structure of C, and how each is named to
+# the collector. See tests/check-c-held-objects.sh for the rule and for
+# what each way means.
+#
+# file:name                          how          where it is named
+xpost_op_path.c:_arc_start_proc      context      ctx->arcstartproc, which the context's root list declares
+xpost_op_path.c:_gstate_cache        reached      a slot of the graphics state, which privatedict holds

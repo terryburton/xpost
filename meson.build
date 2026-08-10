@@ -3035,6 +3035,17 @@ test('job-page',
 # beside the point, since a device with the memory could not reach all of
 # it. The page size is a program's to choose, so what follows the refusal
 # must still draw.
+# Every object held in a variable or a structure of C is named to the
+# collector. The collector reaches an object by walking objects, so one
+# held only in C is reached by nothing and the first collection takes it;
+# the holder then goes on using whatever the storage has become, which
+# surfaces far from the collection that caused it. The register says, for
+# each holder, what names it.
+test('c-held-objects',
+  find_program('tests/check-c-held-objects.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast)
+
 # Put to every marking device rather than to one: the limit belongs to the
 # arithmetic that reaches a pixel, so a device that keeps a raster some
 # other way is the control that shows the refusal is the index's and not
