@@ -132,7 +132,7 @@ currentglobal true setglobal
 % by name during graphics loading are seeded here first, before that pass.
 userdict /.internaldict 256 dict put
 [ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows
-  /.pdfinit /.pdfput /.flatecompress ]
+  /.pdfinit /.pdfput /.flatecompress /.vmreserve ]
 { dup systemdict exch get .internaldict 3 1 roll put } forall
 
 % int  internaldict  dict

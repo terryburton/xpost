@@ -3150,6 +3150,18 @@ test('setpagedevice-failure',
   suite: cost_slow,
   timeout: 300)
 
+# A page too large for the device to build must be refused without taking the
+# memory it would have needed, so that the job after it still draws. The page a
+# raster device builds out of the interpreter's virtual memory is global VM,
+# which nothing reclaims, so a device that allocated rows until the memory ran
+# out would keep every one of them and be unable to build anything afterwards.
+test('oversize-page',
+  find_program('tests/run-oversize-page-test.sh'),
+  args: [ xpost_exe, files('tests/oversize_page_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # Multi-page output: a save...showpage...restore job (the separation-plate
 # idiom, which rewinds local virtual memory between pages) must land each page
 # in its own file when the output name carries a %d, and keep only the last

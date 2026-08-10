@@ -36,6 +36,28 @@ currentglobal true setglobal
         % page buffer in global VM, which save/restore snapshots exempt,
         % so marks placed inside a save survive its restore
         currentglobal true setglobal
+        % Global VM is outside what save and restore reach (PLRM 3.7.2)
+        % and the collector does not sweep it, so nothing gives back what
+        % a raster takes.
+        % A page built row by row until the memory runs out therefore
+        % keeps every row it managed to allocate, and the interpreter
+        % returns from the VMerror smaller than it went in -- far enough
+        % smaller, on a page of any size, that the next ordinary page
+        % cannot be built either. So the raster is priced before any of
+        % it is built: the ImgData spine is one element per row, each row
+        % costs what .rowcost says, and the whole extent is asked for at
+        % once. A page this interpreter cannot hold is refused here,
+        % having taken nothing to be refused with.
+        height                      % spine elements
+        .rowcost                    % spine rowelements rowbytes
+        height mul                  % spine rowelements bytes
+        exch height mul             % spine bytes elements
+        3 -1 roll add               % bytes elements'
+        exch                        % elements' bytes
+        //.internaldict /.vmreserve get exec not {
+            setglobal end
+            /Create cvx /VMerror signalerror
+        } if
         /ImgData height array def
         0 1 height 1 sub {
             ImgData exch .rowalloc put

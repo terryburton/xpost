@@ -1,0 +1,105 @@
+% A page the device cannot build leaves the interpreter able to build the
+% next one. Run against a live device (-d <dev>) by
+% run-oversize-page-test.sh: prints SUCCESS iff every step holds.
+%
+% A page size is the program's own data, so a program may ask for one no
+% device can build, and PLRM 3.7.1 leaves VMerror an error like any
+% other: the program catches it and carries on. Carrying on means the
+% memory the refused page would have taken is still there for the page
+% after it.
+%
+% The devices asked the whole of this are the ones whose page is built
+% out of the interpreter's virtual memory -- they carry the array of row
+% storage, ImgData -- because they are the ones with virtual memory in
+% the page to lose. That storage is global VM, which save and restore are
+% defined not to reach (PLRM 3.7.2) and which the collector does not
+% sweep, so nothing gives back a row once it has been allocated. A device
+% that allocated rows one at a time until the memory ran out would keep
+% every row it had managed to allocate and come back from the error too
+% small to build anything. A device whose page is a buffer outside
+% virtual memory has no virtual memory in the page to give back and
+% answers for its buffer elsewhere; it still runs everything below that
+% does not depend on the page being virtual memory.
+%
+% The page asked for is 65535 by 65535, the largest page this interpreter
+% can name: a composite holds 65535 elements in the ordinary build, so no
+% row and no array of rows can be longer than that. At one byte a pixel
+% it comes to 4,294,836,225 bytes, and an object addresses its memory
+% file through an unsigned 32-bit offset, so the smallest raster that
+% page could possibly need already runs past the end of the file it would
+% have to live in. No build holds it and no host supplies it.
+%
+% What the refusal cost is counted in entities rather than in bytes.
+% Every row is one composite and so one entity, which makes the count the
+% direct measure of how much of the raster was built before the error;
+% and it is a number that survives the measurement, where the byte figure
+% vmstatus reports is a signed integer that a raster filling the address
+% space wraps right past.
+
+/failures 0 def
+/note { (FAIL: ) print print (\n) print /failures failures 1 add store } bind def
+/assert { % bool (what went wrong)  .  -
+    exch { pop }{ note } ifelse
+} bind def
+
+/getdevice { .privatedict /.graphicsdict get /currgstate get /device get } bind def
+/ents { 1183615869 internaldict /.vmentcount get exec exch pop } bind def
+
+% the components a device reports for one pixel, added up. Any change to
+% the page changes the sum, which is all this needs of it, and adding is
+% the one thing that reads the same for one component and for three.
+/pixsum { % x y  .  sum
+    getdevice dup /GetPix get exec
+    0 getdevice /.ncomp get { exch add } repeat
+} bind def
+
+/raster getdevice /ImgData known def
+/refused 0 def
+
+raster {
+    /e0 ents def
+    % An operator that fails part way leaves its own working operands
+    % behind; stopped reports the failure but does not rewind the stack.
+    { << /PageSize [65535 65535] >> setpagedevice } stopped
+        { clear }
+        { (the largest page this interpreter can name was built) note }
+    ifelse
+    /refused ents e0 sub def
+} if
+
+% Every device: an ordinary page, of the size and shape any job asks for,
+% must still be built and must still take a mark.
+/e1 ents def
+{ << /PageSize [200 200] >> setpagedevice } stopped
+    { clear (an ordinary page could not be built after the refused one) note }
+    {
+        newpath 0 setgray 0 0 200 100 rectfill
+
+        % Where the page is virtual memory it can be read back: the fill
+        % covers half of it, so a pixel from each half must differ.
+        raster {
+            100 50 pixsum  100 150 pixsum  ne
+                (the mark made after the refused page did not reach the page)
+            assert
+        } if
+
+        showpage
+    }
+ifelse
+/ordinary ents e1 sub def
+
+% The refused page has 65535 rows and the page that was built has 200, so
+% a refusal that began building costs entities by the thousand where the
+% ordinary page costs them by the hundred. Refusing the larger page for
+% less than building the smaller one is the whole of what "it took
+% nothing" means here, and it is a comparison between two things this run
+% measured rather than a figure written down in advance.
+raster {
+    refused ordinary lt
+        (the refused page allocated more than the page that was built)
+    assert
+} if
+
+count 0 eq (operand stack unbalanced) assert
+
+failures 0 eq { (SUCCESS) = }{ (FAILURES: ) print failures == } ifelse

@@ -34,6 +34,14 @@
     /.rowalloc { width array } bind
     /.rowsinit { ImgData //.internaldict /.zerorows get exec } bind
 
+    % what one .rowalloc costs the memory it allocates from, as the
+    % elements and the string bytes it takes: an array row is one element
+    % per pixel and no bytes. Create prices the whole raster from this
+    % before it builds any of it.
+    /.rowcost { % -  .  elements bytes
+        width 0
+    } bind
+
     % scale each component in [0,1] to a byte and pack; unpack to bytes
     /.packpix {
         .chan exch

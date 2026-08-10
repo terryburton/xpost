@@ -52,12 +52,13 @@ indexed?
    is its own question\n) print flush
 } ifelse
 
-% The interpreter carries on: the page was refused before anything was
-% built, so what follows is an ordinary job. Asked of the same devices,
-% for the same reason -- a device that answers such a page by trying to
-% build it out of virtual memory answers this question about what that
-% attempt cost, not about the refusal.
-indexed? {
+% The interpreter carries on. This is asked of every device, whatever it
+% made of the page above: a device that refused it spent nothing, a
+% device that priced it refused before building any of it, and a device
+% that accepted it drew it. None of those is a reason the next job
+% cannot run, and an error a program cannot carry on from is not an
+% error but a stop -- PLRM 3.11 has the error machinery exist precisely
+% so a program may handle one and continue.
 /drew false def
 {
     << /PageSize [200 200] >> setpagedevice
@@ -66,6 +67,5 @@ indexed? {
 } stopped { (a job after the refusal did not run) fail } if
 clear
 drew (a job after the refusal draws) assert
-} if
 
 failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse

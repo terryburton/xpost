@@ -33,6 +33,14 @@
     /.rowalloc { width string } bind
     /.rowsinit { } bind
 
+    % what one .rowalloc costs the memory it allocates from, as the
+    % elements and the string bytes it takes: a string row is one byte
+    % per pixel and no elements. Create prices the whole raster from this
+    % before it builds any of it.
+    /.rowcost { % -  .  elements bytes
+        0 width
+    } bind
+
     % scale a grey in [0,1] to the stored byte; a read is the byte
     /.packpix { .chan } bind
     /.unpackpix { } bind

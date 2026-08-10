@@ -138,6 +138,58 @@ int vmfreescan (Xpost_Context *ctx)
     return 0;
 }
 
+/* nobjects nbytes  .vmreserve  bool
+   Whether the virtual memory now being allocated from can take nobjects
+   more composite elements and nbytes more bytes of string storage,
+   having obtained the room for them.
+
+   A caller that allocates a large structure one piece at a time cannot
+   recover from running out partway: the pieces it has already taken are
+   reachable from nothing and the memory they occupy is not returned to
+   it, so the failure leaves the interpreter with less than it had
+   before. Pricing the whole structure and asking for it here moves that
+   failure to before the first piece. The file either has the room
+   already, or grows once to hold it, or answers false having changed
+   nothing -- a grow that cannot be satisfied leaves the existing mapping
+   in place -- so the caller's error costs no memory at all.
+
+   The counts arrive as reals because a structure large enough to be
+   worth refusing overflows a 32-bit integer. An object addresses its
+   memory file through an unsigned 32-bit offset, so a request past that
+   span cannot be met however much memory the host has, and is refused
+   without asking for it. */
+static
+int vmreserve (Xpost_Context *ctx, Xpost_Object nobjects, Xpost_Object nbytes)
+{
+    Xpost_Memory_File *mem;
+    double want;
+    int fits;
+
+    /* written as a failed lower bound rather than as a comparison
+       against zero, so that a count that is not a number at all is
+       refused here instead of being converted to an integer it has no
+       value for */
+    if (!(nobjects.real_.val >= 0.0) || !(nbytes.real_.val >= 0.0))
+        return rangecheck;
+
+    want = (double)nobjects.real_.val * (double)sizeof(Xpost_Object)
+         + (double)nbytes.real_.val;
+
+    mem = (ctx->vmmode == GLOBAL) ? ctx->gl : ctx->lo;
+
+    if (want > (double)0xffffffffu
+        || (double)mem->used + want > (double)0xffffffffu)
+        fits = 0;
+    else if ((size_t)mem->used + (size_t)want < (size_t)mem->max)
+        fits = 1;
+    else
+        fits = xpost_memory_file_grow(mem, (unsigned int)want) ? 1 : 0;
+
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(fits)))
+        return stackoverflow;
+    return 0;
+}
+
 static
 int globalvmstatus (Xpost_Context *ctx)
 {
@@ -176,6 +228,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".vmentcount", (Xpost_Op_Func)vmentcount, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmfreescan", (Xpost_Op_Func)vmfreescan, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmreserve", (Xpost_Op_Func)vmreserve, 2, floattype, floattype);
     INSTALL;
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
