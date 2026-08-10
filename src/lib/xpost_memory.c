@@ -419,18 +419,32 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         /* objects address the file through unsigned int offsets, which
            caps a memory file at 4G: clamp the geometric growth to that
            limit and fail once a request itself no longer fits, so the
-           caller raises VMerror instead of wrapping the size */
-        size_t req = sz;
-        sz += (size_t)(mem->max * 1.5);
-        if (sz > 0xffffffffu)
+           caller raises VMerror instead of wrapping the size.
+
+           The arithmetic is done in a type wide enough to hold the cap
+           whatever a pointer is. size_t is that wide only where a
+           pointer is: where one is four bytes, every size_t is below the
+           cap by construction, so the comparison answers no to every
+           request and the growth it exists to refuse wraps instead --
+           the file then reports a size it does not have and an address
+           taken in it lands outside the allocation.
+
+           The cap is the largest size a narrow platform can express at
+           all, so a request that reaches it is passed to the allocator
+           to refuse rather than being refused twice here. */
+        unsigned long long req = sz;
+        unsigned long long want = req + (unsigned long long)(mem->max * 1.5);
+
+        if (want > 0xffffffffull)
         {
-            if ((size_t)mem->used + req > 0xffffffffu)
+            if ((unsigned long long)mem->used + req > 0xffffffffull)
             {
                 XPOST_LOG_ERR("%d memory file full: cannot grow beyond addressable size", VMerror);
                 return 0;
             }
-            sz = 0xffffffffu;
+            want = 0xffffffffull;
         }
+        sz = (size_t)want;
     }
 
     XPOST_LOG_INFO("grow memory file%s%s (old: %d  new: %d)",
