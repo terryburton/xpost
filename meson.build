@@ -1551,6 +1551,16 @@ test('svg-append-fail',
   suite: cost_fast + ['vmlimit'],
   timeout: 120)
 
+# A fill's spans reach the page through whichever marking method the
+# device offers, and the page cannot tell which: the same shape painted
+# through a compiled rectangle fill and through the line walk covers one
+# pixel set. Plus the access a raster row keeps against the fill.
+test('fill-span',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/fill_span_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Access attributes in the device blitters: painting into a raster row a
 # program restocked with a read-only string raises invalidaccess and
 # leaves the read-only bytes untouched (PLRM 3.3.2).

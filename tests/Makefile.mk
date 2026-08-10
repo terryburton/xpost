@@ -116,6 +116,7 @@ tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_lifetime_test.ps \
 tests/filenameforall_large_test.ps \
+tests/fill_span_test.ps \
 tests/filter_abandon_test.ps \
 tests/filter_close_eod_test.ps \
 tests/filter_conformance_test.ps \

@@ -332,22 +332,20 @@ int _points_resolved_spans(Xpost_Span_Vertex *points,
     return 0;
 }
 
-/* Scan-convert a null-separated polygon array to winding-resolved band
-   spans: the array form of the vertices, where a null element separates
-   one subpath from the next. The caller owns the returned buffer.
-   0 on success. */
+/* Read a null-separated polygon array into a vertex run the scan
+   conversion takes: the array form of the boundary, where a null
+   element separates one subpath from the next. One vertex per array
+   element, so the run is as long as the array. The caller owns the
+   returned buffer. 0 on success. */
 static
-int _poly_resolved_spans(Xpost_Context *ctx,
-                         Xpost_Object poly,
-                         struct rspan **out,
-                         int *nout,
-                         int evenodd)
+int _poly_vertices(Xpost_Context *ctx,
+                   Xpost_Object poly,
+                   Xpost_Span_Vertex **out)
 {
     Xpost_Span_Vertex *points;
     integer i;
 
     *out = NULL;
-    *nout = 0;
 
     points = malloc(poly.comp_.sz * sizeof *points);
     if (!points)
@@ -379,6 +377,29 @@ int _poly_resolved_spans(Xpost_Context *ctx,
         points[i].x = (real)xpost_dev_line_quantize(x.real_.val);
         points[i].y = (real)xpost_dev_line_quantize(y.real_.val);
     }
+
+    *out = points;
+    return 0;
+}
+
+/* The same polygon, scan-converted to winding-resolved band spans the
+   caller owns. 0 on success. */
+static
+int _poly_resolved_spans(Xpost_Context *ctx,
+                         Xpost_Object poly,
+                         struct rspan **out,
+                         int *nout,
+                         int evenodd)
+{
+    Xpost_Span_Vertex *points;
+    int code;
+
+    *out = NULL;
+    *nout = 0;
+
+    code = _poly_vertices(ctx, poly, &points);
+    if (code)
+        return code;
 
     return _points_resolved_spans(points, (integer)poly.comp_.sz,
                                   out, nout, evenodd);
@@ -433,6 +454,60 @@ int _path_resolved_spans(Xpost_Context *ctx,
     return _points_resolved_spans(points, (integer)npts, out, nout, evenodd);
 }
 
+/* The consumer that paints a span where it lands: the device's own
+   rectangle fill, called for each span as the scan conversion states it.
+ *
+ * A span is stated in the page's rows. What the device holds is a
+ * raster of its own, whose first row is the page row named by firstrow;
+ * every raster device presents the whole page and so begins at its
+ * first row, and the difference is where a raster holding some other
+ * run of the page's rows would enter. The columns are the device's own
+ * business: it clips them against the row it is about to write, which is
+ * the only place the width of that row is known.
+ *
+ * The device's method is reached as an operator call rather than by
+ * scheduling PostScript to run once per span. Both arrive at the same
+ * method with the same operands, and what the method does with them is
+ * not this consumer's affair. */
+struct _rect_painter
+{
+    Xpost_Span_Consumer consumer;
+    Xpost_Context *ctx;
+    Xpost_Object devdic;
+    Xpost_Object comp[3];
+    int ncomp;
+    unsigned int fillrect;
+    int firstrow;
+};
+
+static
+int _rect_paint(Xpost_Span_Consumer *c, int band, real lo, real hi)
+{
+    struct _rect_painter *p = (struct _rect_painter *)c;
+    integer xlo = (integer)floor(lo);
+    integer xhi = (integer)ceil(hi);
+    int i;
+
+    /* Paint columns [floor(lo), ceil(hi)): every pixel whose interior
+       the span reaches, and exactly the geometry when the span lies on
+       pixel boundaries (PLRM 7.5.1). FillRect fills the inclusive box
+       [x, x+w] on row y under the driver contract, so a fill span is
+       w = xhi-xlo-1 and h = 0. */
+    if (xhi <= xlo)
+        return 0;
+
+    for (i = 0; i < p->ncomp; i++)
+        xpost_stack_push(p->ctx->lo, p->ctx->os, p->comp[i]);
+    xpost_stack_push(p->ctx->lo, p->ctx->os, xpost_int_cons(xlo));
+    xpost_stack_push(p->ctx->lo, p->ctx->os,
+                     xpost_int_cons(band - p->firstrow));
+    xpost_stack_push(p->ctx->lo, p->ctx->os, xpost_int_cons(xhi - xlo - 1));
+    xpost_stack_push(p->ctx->lo, p->ctx->os, xpost_int_cons(0)); /* h */
+    xpost_stack_push(p->ctx->lo, p->ctx->os, p->devdic);
+
+    return xpost_operator_exec(p->ctx, p->fillrect);
+}
+
 static
 int _fillpoly(Xpost_Context *ctx,
               Xpost_Object poly,
@@ -485,13 +560,6 @@ int _fillpoly(Xpost_Context *ctx,
         comp1 = xpost_stack_pop(ctx->lo, ctx->os);
     }
 
-    {
-        int code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 0);
-
-        if (code)
-            return code;
-    }
-
     /* A fill scanline is a horizontal span. When the device provides a
        compiled FillRect, render each span through it (the per-pixel plotting
        then happens in C rather than a PostScript DrawLine/PutPix loop);
@@ -501,14 +569,53 @@ int _fillpoly(Xpost_Context *ctx,
     fillrect = xpost_dict_get(ctx, devdic, nameFillRect);
     usefillrect = xpost_object_get_type(fillrect) == operatortype;
 
+    /* A device whose rectangle fill is compiled takes each span as the
+       conversion states it, so no part of the fill is carried by a
+       PostScript loop. A device whose FillRect is a procedure -- or
+       which has none, and paints spans as lines -- cannot be called from
+       here at all: what runs its method is the interpreter, so the spans
+       are gathered and handed to it below, one call per span. */
+    if (usefillrect)
+    {
+        struct _rect_painter p;
+        Xpost_Span_Vertex *points;
+        int code;
+
+        code = _poly_vertices(ctx, poly, &points);
+        if (code)
+            return code;
+
+        p.consumer.take = _rect_paint;
+        p.ctx = ctx;
+        p.devdic = devdic;
+        p.comp[0] = comp1;
+        if (ncomp == 3)
+        {
+            p.comp[1] = comp2;
+            p.comp[2] = comp3;
+        }
+        p.ncomp = ncomp;
+        p.fillrect = fillrect.mark_.padw;
+        /* the device's raster is the page's own rows */
+        p.firstrow = 0;
+
+        return xpost_span_scanconvert(points, (integer)poly.comp_.sz, 0,
+                                      NULL, &p.consumer);
+    }
+
+    {
+        int code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 0);
+
+        if (code)
+            return code;
+    }
+
     /* Paint columns [floor(lo), ceil(hi)): every pixel whose interior
        the span reaches, and exactly the geometry when the span lies on
-       pixel boundaries. Either method covers [xlo, xhi-1] under the
-       driver contract -- FillRect fills the inclusive box [x, x+w] on
-       row y, so a fill span is w = xhi-xlo-1 and h = 0; DrawLine paints
-       the pixel centres the segment covers, which for a run from xlo to
-       xhi is the same columns. The contract is what makes the two
-       interchangeable here; this loop does not assume it. */
+       pixel boundaries. DrawLine paints the pixel centres the segment
+       covers, which for a run from xlo to xhi is the same columns the
+       rectangle fill covers, which is what makes the two interchangeable
+       here; this loop does not assume it. */
     numlines = 0;
     for (i = 0; i < nrsp; i++)
     {
@@ -518,20 +625,10 @@ int _fillpoly(Xpost_Context *ctx,
 
         if (xhi <= xlo)
             continue;
-        if (usefillrect)
-        {
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xhi - xlo - 1));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0)); /* h */
-        }
-        else
-        {
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xhi));
-            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
-        }
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xlo));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xhi));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
         numlines++;
     }
 
@@ -599,19 +696,12 @@ int _fillpoly(Xpost_Context *ctx,
        */
 
     xpost_stack_push(ctx->lo, ctx->os, devdic);
-    if (usefillrect)
-    {
-        xpost_stack_push(ctx->lo, ctx->os, fillrect);
-    }
-    else
-    {
-        drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
-        xpost_stack_push(ctx->lo, ctx->os, drawline);
+    drawline = xpost_dict_get(ctx, devdic, nameDrawLine);
+    xpost_stack_push(ctx->lo, ctx->os, drawline);
 
-        /*if drawline is a procedure, we also need to call exec */
-        if (xpost_object_get_type(drawline) == arraytype)
-            xpost_stack_push(ctx->lo, ctx->os, XPOST_OP(ctx, exec));
-    }
+    /*if drawline is a procedure, we also need to call exec */
+    if (xpost_object_get_type(drawline) == arraytype)
+        xpost_stack_push(ctx->lo, ctx->os, XPOST_OP(ctx, exec));
 
     /*--the rest of the code here calls-back to postscript (by "continuation")
         by pushing executable names on the execution-stack, and then returns.

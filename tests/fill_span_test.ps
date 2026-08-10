@@ -1,0 +1,180 @@
+%!PS
+% The pixels a fill covers, and who covers them.
+%
+% A fill is scan-converted to spans -- one x extent per pixel row, under
+% the insideness rule the operator names (PLRM 4.5.2) and covering every
+% pixel the region meets (PLRM 7.5.1) -- and each span is painted by a
+% method of the device. Which method is the device's own affair: one
+% offering a compiled rectangle fill takes each span as the conversion
+% states it, and one offering none has its spans gathered and painted as
+% lines instead. The driver contract makes the two cover the same
+% columns, so the page must not be able to tell which was used.
+%
+% Each check paints a shape both ways into a device's raster and
+% requires the two rasters to agree, pixel for pixel, and requires the
+% shape to have painted something -- an equality between two blank pages
+% would hold whatever the conversion did.
+%
+% The last check is about access rather than geometry: a raster row is
+% reachable from a program, which may restock the array with a read-only
+% one, and the compiled fill writes rows through a raw pointer. Painting
+% into a read-only row is an invalidaccess (PLRM 3.3.2) and the row must
+% come through it unwritten.
+
+/fails 0 def
+/note { print (\n) print flush } bind def
+/ok { (ok   ) print note } bind def
+/bad { /fails fails 1 add def (FAIL: ) print note } bind def
+
+<< /OutputDevice /ppm /PageSize [60 40] /OutputFile (/dev/null) >> setpagedevice
+
+/rows DEVICE /ImgData get def
+/H rows length def
+/W rows 0 get length def
+/white 16777215 def
+
+% the device's compiled rectangle fill, held where naming it cannot run
+% it: an operator reached through a name is executed, and this one is
+% wanted as a value to put back
+/hold 1 dict def
+hold /compiled DEVICE /FillRect get put
+
+% -  snap  [ [ints] ... ]
+% a copy of every raster row, taken out of reach of the next painting
+/snap { [ 0 1 H 1 sub { rows exch get W array copy } for ] } bind def
+
+% a b  differing  int
+/differing {
+  /bb exch def /aa exch def /n 0 def
+  0 1 H 1 sub { /r exch def
+    /ar aa r get def /br bb r get def
+    0 1 W 1 sub { /c exch def ar c get br c get ne { /n n 1 add def } if } for
+  } for
+  n
+} bind def
+
+% a  marked  int
+% how many of the copy's pixels are not the white the page was cleared to
+/marked {
+  /aa exch def /n 0 def
+  0 1 H 1 sub { /r exch def /ar aa r get def
+    0 1 W 1 sub { ar exch get white ne { /n n 1 add def } if } for
+  } for
+  n
+} bind def
+
+% proc label  bothways  -
+% Paint the shape with the device's compiled rectangle fill, then again
+% with that method replaced by a procedure -- which the fill cannot call
+% itself, so the spans go to the device's line drawing instead -- and
+% require the two pages to agree and to be marked.
+/bothways {
+  /label exch def /paint exch def
+  1 setgray erasepage
+  paint
+  /a snap def
+  1 setgray erasepage
+  DEVICE /FillRect { pop pop pop pop pop pop pop pop } put
+  paint
+  DEVICE /FillRect hold /compiled get put
+  /b snap def
+  a marked 0 eq
+  { (nothing painted: ) print label bad }
+  { a b differing dup 0 eq
+    { pop label ok }
+    { 20 string cvs ( pixels differ: ) print print label bad } ifelse
+  } ifelse
+} bind def
+
+% a triangle whose corners lie between pixel boundaries: the span ends
+% are fractional and each row rounds outward on its own
+{ 0 0.4 0.8 setrgbcolor
+  newpath 4.3 6.7 moveto 50.2 9.1 lineto 30 35.5 lineto closepath fill }
+(a triangle off the pixel grid) bothways
+
+% a five-pointed star drawn as one self-crossing subpath: under the
+% nonzero rule the centre pentagon is inside
+{ 0.9 0.1 0.2 setrgbcolor
+  newpath 30 38 moveto 42 4 lineto 8 26 lineto 52 26 lineto 18 4 lineto
+  closepath fill }
+(a self-crossing star filled by the nonzero rule) bothways
+
+% the same star by the even-odd rule, whose centre pentagon is outside:
+% the interior is resolved to rectangles and those are what the device
+% is given, so the two methods must still agree
+{ 0.1 0.6 0.3 setrgbcolor
+  newpath 30 38 moveto 42 4 lineto 8 26 lineto 52 26 lineto 18 4 lineto
+  closepath eofill }
+(a self-crossing star filled by the even-odd rule) bothways
+
+% two subpaths, the inner one wound the other way: the nonzero rule
+% leaves a hole, so each row carries two spans with a gap between them
+{ 0.2 0.2 0.9 setrgbcolor
+  newpath 6 6 moveto 54 6 lineto 54 34 lineto 6 34 lineto closepath
+  18 14 moveto 18 26 lineto 42 26 lineto 42 14 lineto closepath fill }
+(concentric squares wound apart) bothways
+
+% a shape reaching past every edge of the page: the spans run off the
+% raster in both directions and on rows the raster does not hold
+{ 0.4 0.4 0.4 setrgbcolor
+  newpath -30 -20 moveto 90 -20 lineto 90 60 lineto -30 60 lineto
+  closepath fill }
+(a shape larger than the page) bothways
+
+% a shape lying wholly off the page: nothing is painted either way, so
+% the marked-pixel requirement above does not apply and the two pages
+% are compared directly
+1 setgray erasepage
+0 setgray
+newpath 200 200 moveto 260 200 lineto 260 260 lineto closepath fill
+/a snap def
+1 setgray erasepage
+DEVICE /FillRect { pop pop pop pop pop pop pop pop } put
+0 setgray
+newpath 200 200 moveto 260 200 lineto 260 260 lineto closepath fill
+DEVICE /FillRect hold /compiled get put
+/b snap def
+a marked 0 eq a b differing 0 eq and
+{ (a shape wholly off the page marks nothing) ok }
+{ (a shape wholly off the page marked the raster) bad } ifelse
+
+% --- access ---
+% A row the program has made read-only refuses the fill and keeps its
+% contents. The raster rows live in global VM, so the planted row must
+% too.
+1 setgray erasepage
+currentglobal true setglobal
+% a value no painting can produce, so a write shows even when the paint
+% and the row would otherwise agree
+/sentinel 12345 def
+/ro W array def
+0 1 W 1 sub { ro exch sentinel put } for
+/ro ro readonly def
+setglobal
+/target 20 def
+/keep rows target get def
+rows target ro put
+/d0 countdictstack def
+{ 0 setgray
+  newpath 6 6 moveto 54 6 lineto 54 34 lineto 6 34 lineto closepath fill }
+stopped
+dup { $error /errorname get 40 string cvs }{ (none) } ifelse
+countdictstack d0 sub { end } repeat
+initmatrix initclip
+exch
+{ dup (invalidaccess) eq
+  { pop (a fill into a read-only row is invalidaccess) ok }
+  { (a fill into a read-only row raised ) print print (\n) print
+    /fails fails 1 add def } ifelse }
+{ pop (a fill into a read-only row raised no error) bad } ifelse
+/clean true def
+0 1 W 1 sub { ro exch get sentinel ne { /clean false def } if } for
+clean
+{ (the read-only row is unwritten) ok }
+{ (the read-only row was written) bad } ifelse
+rows target keep put
+
+<< /OutputDevice /null >> setpagedevice
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
