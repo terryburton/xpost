@@ -347,6 +347,7 @@ xpost_save_stamp_birth
 xpost_scanner_radix_number
 xpost_scanner_rep_number
 xpost_skip_graphics_set
+xpost_span_scanconvert
 xpost_stack_bottomup_fetch
 xpost_stack_bottomup_replace
 xpost_stack_clear
