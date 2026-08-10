@@ -551,13 +551,9 @@ currentglobal true setglobal
             ( asked for a page of ) print exch =print
             ( by ) print =print ( pixels) print
         } if
-        //.internaldict /StartDeviceError known {
-            (: ) print //.internaldict /StartDeviceError get =print
-        }{
-            $error /newerror get $error /errorname known and {
-                (: ) print $error /errorname get =print
-            } if
-        } ifelse
+        $error /newerror get $error /errorname known and {
+            (: ) print $error /errorname get =print
+        } if
         (\n) print flush
     } stopped { (\n) print flush } if
     //.internaldict /.rundied get exec
@@ -1452,6 +1448,30 @@ setglobal
 currentglobal true setglobal
 .xpostsys /loadgraphics {
     //.internaldict /GRAPHICS_LOADED known { }{
+        % A load that stopped is not attempted again, and every attempt
+        % after the first answers with what stopped the first. The load
+        % happens once in the life of a context because not all of what
+        % it leaves behind is virtual memory: the writeable window on
+        % systemdict closes on a one-shot held in the context, and once
+        % that is spent a second reading has nowhere to define and stops
+        % at its first definition, under a name of its own. $error holds
+        % one error, the most recent, so that name would be the one the
+        % caller is told about instead of the limit the interpreter
+        % really reached.
+        //.internaldict /GRAPHICS_LOAD_STOPPED known {
+            //.internaldict /GRAPHICS_LOAD_STOPPED get
+            dup null eq
+                { pop stop }
+                { /loadgraphics cvx exch signalerror }
+            ifelse
+        } if
+        % The depth the dictionary stack has here is the depth it is put
+        % back to below. The language is read with systemdict open and
+        % current, so a reading that stopped part way and left it current
+        % would leave every definition made afterwards aimed at a
+        % dictionary that has just been closed.
+        .internaldict /GRAPHICS_LOAD_DEPTH countdictstack put
+        {
         % Open the writeable window on systemdict before the language is
         % read. The finalizer closes it, and closing it spends the
         % one-shot, so a program cannot reopen it.
@@ -1681,6 +1701,25 @@ currentglobal true setglobal
     } //.xpostsys /.defop get exec
     end % systemdict
 
+        } stopped {
+        % The load is over however it ended, so what it opened closes
+        % here. The dictionaries it left open go back to the depth
+        % recorded above, and the writeable window on systemdict closes
+        % whether or not the interpreter's own error handler has already
+        % closed it: a fault raised in PostScript never passes through
+        % that handler, and would otherwise leave systemdict open for the
+        % rest of the run.
+        countdictstack //.internaldict /GRAPHICS_LOAD_DEPTH get sub
+        dup 0 gt { { end } repeat }{ pop } ifelse
+        .sysdictrelock
+        % Kept where the attempt that met it can still name it: this is
+        % the last point at which $error holds this load's own error.
+        .internaldict /GRAPHICS_LOAD_STOPPED
+            $error /newerror get $error /errorname known and
+                { $error /errorname get }{ null } ifelse
+        put
+        stop
+        } if
     } ifelse
 } put
 

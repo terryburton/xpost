@@ -128,12 +128,15 @@ will ever be loaded. `.finalize` guards its graphics-only steps behind
 `/graphicsdict where`, so it hardens the interpreter with or without graphics —
 loading graphics stays genuinely optional. The `GRAPHICS_LOADED` latch (now in
 `.internaldict`), read through a frozen `//.internaldict`, keeps both steps
-idempotent.
+idempotent. `loadgraphics` is idempotent over a load that stopped as well:
+`GRAPHICS_LOAD_STOPPED` holds the name the load stopped under and every later
+call raises it again, because the window on `systemdict` is a one-shot held in
+the context and a second reading would have nowhere to define.
 
 | Dictionary | VM | Lifecycle | Sealed | Reached by / holds |
 |---|---|---|---|---|
 | `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | the single private helper namespace. Reached by run-time `//.xpostsys /h get exec` (the mutually-recursive path/clip/image/graphics family + interpreter control `.finalize`/`loadgraphics`/`.loadmodule`/`.devicemakers`) and by baking `.xpostsys begin … //h exec` (the colour/shading/pattern/halftone/font-CID families) |
-| `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
+| `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`/`GRAPHICS_LOAD_STOPPED`/`GRAPHICS_LOAD_DEPTH`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
 | `.xpostsys /.resources` | global | persistent | (member, writable) | the resource instance table; `defineresource` writes it; global-persistent per PLRM. A shallow read-only seal of `.xpostsys` correctly leaves this member writable |
 
 `.xpostsys` is global — a global `systemdict` procedure may freeze a `//`

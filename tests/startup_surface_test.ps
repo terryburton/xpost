@@ -75,13 +75,16 @@ ID length 0 gt (internaldict has members to check) assert
 
 % Its members are the private operators, the scratch-string anchor the
 % =string operator runs, the latches the interpreter keeps out of a
-% program's sight, and the record of the device and page the run was
+% program's sight -- including what a graphics load that stopped left
+% behind, which is the name it stopped under and the dictionary-stack
+% depth it began at -- and the record of the device and page the run was
 % started with, which the start-up report names when the device it asked
 % for could not be built. Anything else arriving here would be a name
 % that escaped its own home.
 /NONOPS << /.=stringproc true /QUIET true
            /GRAPHICS_LOADED true /USEDRAWLINE true
-           /StartDevice true /StartDeviceError true >> def
+           /GRAPHICS_LOAD_STOPPED true /GRAPHICS_LOAD_DEPTH true
+           /StartDevice true >> def
 /priv.odd 0 def /priv.leaked 0 def
 ID {
     pop dup type /nametype eq {
