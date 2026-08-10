@@ -59,6 +59,7 @@
 #include "xpost_handle.h"
 
 //#include "xpost_interpreter.h"
+#include "xpost_operator.h"
 #include "xpost_garbage.h"
 
 #ifdef DEBUG_GC
@@ -687,7 +688,8 @@ int _xpost_garbage_mark_stack(Xpost_Context *ctx,
 static
 int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                    Xpost_Memory_File *mem,
-                                   unsigned int stackadr)
+                                   unsigned int stackadr,
+                                   int markall)
 {
     if (!mem) return 0;
 
@@ -736,7 +738,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rsrc);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_dict(ctx, mem, ad, 0))
+                if (!_xpost_garbage_mark_dict(ctx, mem, ad, markall))
                     return 0;
                 ret = xpost_memory_table_get_addr(mem, rcpy, &ad);
                 if (!ret)
@@ -745,7 +747,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rcpy);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_dict(ctx, mem, ad, 0))
+                if (!_xpost_garbage_mark_dict(ctx, mem, ad, markall))
                     return 0;
             }
             if (rtype == arraytype)
@@ -758,7 +760,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rsrc);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, 0))
+                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, markall))
                     return 0;
                 ret = xpost_memory_table_get_addr(mem, rcpy, &ad);
                 if (!ret)
@@ -767,7 +769,7 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
                                   rcpy);
                     return 0;
                 }
-                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, 0))
+                if (!_xpost_garbage_mark_array(ctx, mem, ad, sz, markall))
                     return 0;
             }
         }
@@ -781,7 +783,8 @@ int _xpost_garbage_mark_save_stack(Xpost_Context *ctx,
 static
 int _xpost_garbage_mark_save(Xpost_Context *ctx,
                              Xpost_Memory_File *mem,
-                             unsigned int stackadr)
+                             unsigned int stackadr,
+                             int markall)
 {
     Xpost_Stack *s;
     unsigned int i;
@@ -796,7 +799,8 @@ int _xpost_garbage_mark_save(Xpost_Context *ctx,
     {
         for (i = 0; i < s->top; i++)
         {
-            if (!_xpost_garbage_mark_save_stack(ctx, mem, s->data[i].save_.stk))
+            if (!_xpost_garbage_mark_save_stack(ctx, mem, s->data[i].save_.stk,
+                                               markall))
                 return 0;
         }
     }
@@ -976,11 +980,35 @@ static int _xpost_garbage_mark_systemdict_exceptions(Xpost_Context *ctx,
    sweep.
    return reclaimed size or -1 if error occured.
  */
+/* Which banks a collection that runs of its own accord reclaims.
+
+   Both, unless a program has said otherwise: marking has to cross the
+   two whatever is reclaimed, because an object in one may be named from
+   the other, so reclaiming the second costs the walk of its table and
+   nothing more. There is therefore no rate to tune and no bank to
+   prefer -- a collection reclaims what it has just finished marking.
+
+   PLRM 8.2's vmreclaim can turn automatic collection off for one bank or
+   for both, and that is what this reads. */
+int xpost_garbage_auto_banks(Xpost_Context *ctx)
+{
+    int banks = XPOST_GARBAGE_SWEEP_NONE;
+
+    if (!ctx)
+        return XPOST_GARBAGE_SWEEP_BOTH;
+    if (ctx->lo && ctx->lo->garbage_collect_auto)
+        banks |= XPOST_GARBAGE_SWEEP_LOCAL;
+    if (ctx->gl && ctx->gl->garbage_collect_auto)
+        banks |= XPOST_GARBAGE_SWEEP_GLOBAL;
+    return banks;
+}
+
 int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 {
     unsigned int i;
     unsigned int *cid;
     Xpost_Context *ctx = NULL;
+    Xpost_Memory_File *other;
     int isglobal;
     unsigned int sz = 0;
     unsigned int ad;
@@ -1022,37 +1050,23 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     _xpost_garbage_work_waiting = 0;
     _xpost_garbage_work_ready = 0;
 
+    /* Marking is whole-heap and sweeping is per-bank. An object in one
+       bank may be named from the other -- local may name global freely,
+       and the six dictionaries systemdict holds are the sanctioned
+       exception the other way (PLRM 3.7.2) -- so a walk that stopped at
+       a bank boundary would take a named object for garbage. Asked for
+       both banks, the walk crosses; asked for one, it stays. Which bank
+       is then swept is a separate decision, and a bank may only be swept
+       by a collection that marked it. */
     if (isglobal)
     {
-        /* Global VM is not collected, so intermediate working storage
-           belongs in local VM, which is. The rest of this branch is the
-           global collection itself -- unmark, mark from the save and
-           name stacks, then walk each context's local VM -- and nothing
-           reaches it: the return is above it. It is parked here, beside
-           the decision it belongs to, rather than being kept anywhere
-           else; a reader meeting it should read it as not yet enabled
-           rather than as something left behind. */
-        dosweep = 0;
-        return 0;
-
-        _xpost_garbage_unmark(mem);
-
-        ad = xpost_memory_save_stack_adr(mem);
-        if (!_xpost_garbage_mark_save(ctx, mem, ad))
-            return -1;
-        ad = xpost_memory_name_stack_adr(mem);
-        if (!_xpost_garbage_mark_names(ctx, mem, ad, markall))
-            return -1;
-
-        for (i = 0; i < MAXCONTEXT && cid[i]; i++)
-        {
-            ctx = mem->interpreter_cid_get_context(cid[i]);
-            if (xpost_garbage_collect(ctx->lo, 0, markall) < 0)
-                return -1;
-        }
-
+        other = ctx->lo;
     }
-    else /* local */
+    else
+    {
+        other = ctx->gl;
+    }
+
     {
         //printf("collect!\n");
         /* the name-lookup cache holds objects outside the root set;
@@ -1069,7 +1083,7 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             _xpost_garbage_unmark(ctx->gl);
 
         ad = xpost_memory_save_stack_adr(mem);
-        if (!_xpost_garbage_mark_save(ctx, mem, ad))
+        if (!_xpost_garbage_mark_save(ctx, mem, ad, markall))
             return -1;
         ad = xpost_memory_name_stack_adr(mem);
 #ifdef DEBUG_GC
@@ -1077,6 +1091,23 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 #endif
         if (!_xpost_garbage_mark_names(ctx, mem, ad, markall))
             return -1;
+
+        /* and the other bank's, when the walk is asked for both. A name
+           is interned into whichever bank was being allocated from when
+           it was first seen, so both stacks carry names, and a name's
+           characters are an entity of their own that nothing else
+           reaches. The save stack likewise holds what a save took a
+           copy of, which the object it was copied from no longer
+           names. */
+        if (markall && other)
+        {
+            ad = xpost_memory_save_stack_adr(other);
+            if (!_xpost_garbage_mark_save(ctx, other, ad, markall))
+                return -1;
+            ad = xpost_memory_name_stack_adr(other);
+            if (!_xpost_garbage_mark_names(ctx, other, ad, markall))
+                return -1;
+        }
 
         for (i = 0; i < MAXCONTEXT && cid[i]; i++)
         {
@@ -1108,39 +1139,36 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 #ifdef DEBUG_GC
             printf("marking window device\n");
 #endif
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->window_device, markall))
+            /* Everything the context holds on its own account, walked
+               from the same list that declares it. An object the context
+               roots and the collector does not mark is taken by the
+               first collection that reaches it, so the two are kept in
+               one place rather than in two that must agree. */
+#define XPOST_MARK_CONTEXT_ROOT(f) \
+            if (!_xpost_garbage_mark_object(ctx, mem, ctx->f, markall)) \
                 return -1;
+            XPOST_CONTEXT_OBJECT_ROOTS(XPOST_MARK_CONTEXT_ROOT)
+#undef XPOST_MARK_CONTEXT_ROOT
 
-            /* the page device the graphics state template names: rooted
-               so its entity cannot be recycled while the interpreter
-               still holds it to retire, the memory it holds outside
-               virtual memory being reachable through that entity and
-               nothing else */
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->pagedevice, markall))
-                return -1;
+            /* the procedures the operator table holds. An operator
+               that runs a procedure keeps it there, and the table is
+               not an object, so nothing the walk reaches names it. */
+            if (markall && ctx->gl && ctx->state != 0)
+            {
+                unsigned int nops = xpost_operator_count();
+                unsigned int oi;
 
-            /* privatedict holds the local machinery off the dict stack; root it
-               here so its contents survive collection without a userdict anchor */
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->privatedict, markall))
-                return -1;
+                for (oi = 0; oi < nops; oi++)
+                {
+                    Xpost_Operator *optab_ = xpost_operator_table(ctx->gl);
+                    Xpost_Object proc_ = optab_[oi].proc;
 
-            /* and the global namespace beside it, for the same reason: its
-               userdict anchor is dropped at lockdown, so what roots it
-               otherwise is whichever procedure froze a reference. What C
-               keeps there is the object half of a cache whose other half a
-               static holds, which nothing else names. */
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->globalprivatedict, markall))
-                return -1;
-
-            /* the object being executed may exist only here */
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->currentobject, markall))
-                return -1;
-
-            /* the file the run wrapped around its program: once the
-               program has been read the run holds the only reference,
-               and the run closes it when it ends */
-            if (!_xpost_garbage_mark_object(ctx, mem, ctx->run_input_file, markall))
-                return -1;
+                    if (xpost_object_get_type(proc_) != arraytype)
+                        continue;
+                    if (!_xpost_garbage_mark_object(ctx, mem, proc_, markall))
+                        return -1;
+                }
+            }
 
             /* the sanctioned global->local references: the local
                dictionaries systemdict holds (userdict, $error, errordict,
@@ -1161,22 +1189,28 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 #ifdef DEBUG_GC
         printf("sweep\n");
 #endif
-        if (!isglobal && getenv("XPOST_GC_VERIFY") && ctx)
-            _xpost_garbage_diag_verify(ctx, mem);
+        if (getenv("XPOST_GC_VERIFY") && ctx)
+            _xpost_garbage_diag_verify(ctx, mem, markall);
         if (!isglobal && getenv("XPOST_GC_XBANK_CHECK") && ctx && ctx->gl)
             _xpost_garbage_diag_xbank(ctx, mem);
         
-        sz += _xpost_garbage_sweep(mem);
-        if (isglobal)
+        /* A bank is reclaimed only by a collection that marked it: a
+           sweep of storage this walk did not cover would take objects
+           that are still named. Marking crosses banks when it is asked
+           for both, which is what makes reclaiming both possible at all.
+
+           The two are separate choices because PLRM 8.2's vmreclaim
+           separates them -- it disables automatic collection in one bank
+           or in both, and performs an immediate collection in one or in
+           both -- so the caller says which banks it means. */
         {
-            for (i = 0; i < MAXCONTEXT && cid[i]; i++)
-            {
-#ifdef DEBUG_GC
-                printf("sweep context(%u)->gl\n", cid[i]);
-#endif
-                ctx = mem->interpreter_cid_get_context(cid[i]);
-                sz += _xpost_garbage_sweep(ctx->lo);
-            }
+            Xpost_Memory_File *localmem  = isglobal ? other : mem;
+            Xpost_Memory_File *globalmem = isglobal ? mem : other;
+
+            if ((dosweep & XPOST_GARBAGE_SWEEP_LOCAL) && localmem)
+                sz += _xpost_garbage_sweep(localmem);
+            if ((dosweep & XPOST_GARBAGE_SWEEP_GLOBAL) && globalmem && markall)
+                sz += _xpost_garbage_sweep(globalmem);
         }
     }
 

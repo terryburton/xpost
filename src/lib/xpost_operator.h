@@ -246,6 +246,11 @@ void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run);
  * @p gl, which may move the memory file. Every use re-derives it rather
  * than holding one across a call that can allocate.
  */
+/**
+ * @brief how many operators the table holds
+ */
+unsigned int xpost_operator_count(void);
+
 static inline Xpost_Operator *
 xpost_operator_table(Xpost_Memory_File *gl)
 {

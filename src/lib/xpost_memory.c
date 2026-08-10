@@ -781,6 +781,9 @@ xpost_memory_register_garbage_collect_function(
 {
     mem->garbage_collect = garbage_collect;
     mem->garbage_collect_is_installed = 1;
+    /* automatic collection reclaims this bank unless a program says
+       otherwise through vmreclaim */
+    mem->garbage_collect_auto = 1;
     return 1;
 }
 

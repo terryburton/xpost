@@ -60,22 +60,38 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
     switch (I.int_.val)
     {
         default: return rangecheck;
+
+        /* PLRM 8.2: the negative operands turn automatic collection off,
+           for one bank or for both, and zero turns it on again. What is
+           turned off is only the collection that runs of its own accord;
+           an immediate collection the operator is asked for below still
+           runs, which is what makes a program able to say when it would
+           rather pay for one. */
         case -2: /* disable automatic collection in local and global vm */
+            ctx->lo->garbage_collect_auto = 0;
+            ctx->gl->garbage_collect_auto = 0;
             break;
         case -1: /* disable automatic collection in local vm */
+            ctx->lo->garbage_collect_auto = 0;
             break;
         case 0: /* enable automatic collection */
+            ctx->lo->garbage_collect_auto = 1;
+            ctx->gl->garbage_collect_auto = 1;
             break;
+
+        /* An immediate collection marks both banks whichever it
+           reclaims: an object in one may be named from the other, so a
+           walk that stopped at the boundary would take a named object
+           for garbage. Which bank is then reclaimed is what the operand
+           says. */
         case 1: /* perform immediate collection in local vm */
-            if (ctx->garbage_collect_function(ctx->lo, 1, 0) == -1)
+            if (ctx->garbage_collect_function(ctx->lo,
+                                              XPOST_GARBAGE_SWEEP_LOCAL, 1) == -1)
                 return VMerror;
             break;
-        case 2: /* local and global; global collection is disabled (see
-                   xpost_garbage_collect), so perform the local collection --
-                   passing the global mfile would collect nothing. Global
-                   objects cannot reference local ones, so the local sweep is
-                   complete on its own. */
-            if (ctx->garbage_collect_function(ctx->lo, 1, 0) == -1)
+        case 2: /* perform immediate collection in local and global vm */
+            if (ctx->garbage_collect_function(ctx->lo,
+                                              XPOST_GARBAGE_SWEEP_BOTH, 1) == -1)
                 return VMerror;
             break;
     }

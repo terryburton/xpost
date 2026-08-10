@@ -102,6 +102,14 @@ static void _op_restore_note(Xpost_Context *ctx, int idx, Xpost_Object orig)
 static
 int _xpost_noops = 0;
 
+/* How many operators the table holds, so the collector can bound a walk
+   of it: an operator installed from C keeps its procedure there and
+   nowhere else. */
+unsigned int xpost_operator_count(void)
+{
+    return (unsigned int)(_xpost_noops < 0 ? 0 : _xpost_noops);
+}
+
 static
 int _stack_none(Xpost_Context *ctx)
 {

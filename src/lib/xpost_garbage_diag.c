@@ -78,7 +78,8 @@ static void _verify_stack(Xpost_Context *ctx, Xpost_Memory_File *mem,
             _verify_push(ctx, s->data[i], 0xFFFFFFFF, 2);
 }
 
-void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
+void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem,
+                                int bothbanks)
 {
     unsigned int head = 0;
     int bad = 0;
@@ -92,8 +93,16 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
     _verify_stack(ctx, ctx->lo, ctx->ds);
     _verify_stack(ctx, ctx->lo, ctx->es);
     _verify_stack(ctx, ctx->lo, ctx->hold);
-    _verify_push(ctx, ctx->currentobject, 0xFFFFFFFF, 3);
-    _verify_push(ctx, ctx->window_device, 0xFFFFFFFF, 3);
+    /* The same roots the collector marks from, expanded from the same
+       list. A verifier that walks fewer of them cannot report a gap in
+       what it does not reach, and answers "no gap" for a heap the
+       collector is mis-marking -- which is worse than not asking. */
+#define XPOST_VERIFY_CONTEXT_ROOT(f) \
+    _verify_push(ctx, ctx->f, 0xFFFFFFFF, 3);
+    XPOST_CONTEXT_OBJECT_ROOTS(XPOST_VERIFY_CONTEXT_ROOT)
+#undef XPOST_VERIFY_CONTEXT_ROOT
+    _verify_stack(ctx, ctx->gl, xpost_memory_name_stack_adr(ctx->gl));
+    _verify_stack(ctx, ctx->lo, xpost_memory_name_stack_adr(ctx->lo));
 
     while (head < _vq_n)
     {
@@ -104,15 +113,20 @@ void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem)
         unsigned int adr = m->table.tab[it.ent].adr;
         unsigned int off;
 
-        /* local unmarked reachable = the gap (global is never swept).
+        /* reachable and unmarked is the gap, in whichever bank the
+           collection covered.
            A file entity counts: the collector marks and sweeps them like
            any other, so one still reachable must be marked too. */
-        if (!it.bank && it.ent >= ctx->lo->start &&
-            (ctx->lo->table.tab[it.ent].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
-            && ctx->lo->table.tab[it.ent].sz != 0)
+        /* A bank the collection did not mark carries no marks to read,
+           so an unmarked entity there says nothing. Only a bank in play
+           is reported against. */
+        if ((!it.bank || bothbanks) && it.ent >= m->start &&
+            (m->table.tab[it.ent].mark & XPOST_MEMORY_TABLE_MARK_DATA_MARK_MASK) == 0
+            && m->table.tab[it.ent].sz != 0)
         {
-            fprintf(stderr, "VERIFY GAP: lo ent %u (tag %u used %u) reachable "
+            fprintf(stderr, "VERIFY GAP: %s ent %u (tag %u used %u) reachable "
                     "via parent ent %u (bank %d)\n",
+                    it.bank ? "gl" : "lo",
                     it.ent, tag, used, it.parent, it.pbank);
             bad++;
             if (bad > 8) break;

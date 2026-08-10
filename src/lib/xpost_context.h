@@ -151,6 +151,49 @@ enum { C_FREE, C_IDLE, C_RUN, C_WAIT, C_IOBLOCK, C_ZOMB };
 
 #define XPOST_OP_REF_MEMBER(ref, name) int ref;
 
+/**
+ * @def XPOST_CONTEXT_OBJECT_ROOTS
+ * @brief every object the context holds on its own account
+ *
+ * The collector begins its walk from these, and walks them by expanding
+ * this list rather than by naming them one at a time. An object the
+ * context holds and the collector does not walk is taken by the first
+ * collection that reaches it, so the declaration and the walk come from
+ * one list: a field added here is marked, and a field marked here is
+ * declared.
+ *
+ * A field belongs here when the context is what keeps the object
+ * reachable. One holding a name, or an object something else already
+ * keeps, need not be here and costs little to be here anyway.
+ */
+#define XPOST_CONTEXT_OBJECT_ROOTS(_) \
+    /* the object being executed, named in an error report */ \
+    _(currentobject) \
+    /* the array a procedure is being run out of: the run resolves its \
+       storage to a pointer, so it must outlive whatever else names it */ \
+    _(executingarray) \
+    /* the procedure the arc operators run, built while they are \
+       installed, before there is a dictionary to keep it in */ \
+    _(arcstartproc) \
+    /* the page device the graphics state template names, and the \
+       procedure that retires it */ \
+    _(pagedevice) \
+    _(pagedevice_destroy) \
+    /* the interpreter's own machinery, local and global */ \
+    _(privatedict) \
+    _(globalprivatedict) \
+    /* the file a run wrapped around its program */ \
+    _(run_input_file) \
+    /* the window a device draws into, and the handler it reports to */ \
+    _(window_device) \
+    _(event_handler) \
+    /* the two font directories, which setglobal rebinds FontDirectory \
+       between as the allocation mode calls for (PLRM 3.7.5) */ \
+    _(localfontdir) \
+    _(globalfontdir)
+
+#define XPOST_CONTEXT_DECLARE_ROOT(f) Xpost_Object f;
+
 /** @struct Xpost_Context
  * @brief The context structure for a thread of execution of ps code
  */
@@ -164,7 +207,6 @@ struct _Xpost_Context {
     } opcode_shortcuts;
 #undef XPOST_OP_REF_MEMBER
 
-    Xpost_Object currentobject;  /**< currently-executing object, for error() */
 
     /* Set when a registration could not place an operator in systemdict.
        Registration is several hundred calls spread over two dozen
@@ -180,6 +222,10 @@ struct _Xpost_Context {
        as PLRM 3.11 requires. Empty for operators that coerce nothing. */
     int op_restore_n;
     unsigned char op_restore_idx[8];
+    /* the objects the context holds on its own account; the collector
+       walks exactly these, from the same list that declares them */
+    XPOST_CONTEXT_OBJECT_ROOTS(XPOST_CONTEXT_DECLARE_ROOT)
+
     Xpost_Object op_restore_val[8];
 
     /* array-packing mode (setpacking/currentpacking): when set, the scanner
@@ -221,8 +267,6 @@ struct _Xpost_Context {
     /** The two font directories, so setglobal can rebind the name
         FontDirectory to whichever the allocation mode calls for (PLRM).
         Both are null until the boot file has defined them. */
-    Xpost_Object localfontdir;
-    Xpost_Object globalfontdir;
     unsigned int state;  /**< process state: running, blocked, iowait */
     unsigned int quit;  /**< if 1 cause mainloop() to return, if 0 keep looping */
 
@@ -238,8 +282,6 @@ struct _Xpost_Context {
         it. Zero when there is none. */
     unsigned int callback_error;
 
-    Xpost_Object event_handler;
-    Xpost_Object window_device;
 
     /** The page device the graphics state template names, recorded by
         setpagedevice as it installs one, with the save depth it was
@@ -253,8 +295,6 @@ struct _Xpost_Context {
         does so here, for the one it displaces (PLRM 6.1). The device is
         rooted in the collector, so the entity cannot be recycled while
         this names it. */
-    Xpost_Object pagedevice;
-    Xpost_Object pagedevice_destroy;
     unsigned int pagedevice_depth;
 
     /**< privatedict -- a LOCAL dictionary that holds the interpreter's local
@@ -264,7 +304,6 @@ struct _Xpost_Context {
          stack, so a program can neither name nor enumerate its members. The
          C reaches the device classes through it; PostScript through a frozen
          reference. Set from init.ps by .setprivatedict. */
-    Xpost_Object privatedict;
 
     /**< globalprivatedict -- the GLOBAL private namespace, .xpostsys. Rooted
          here for the same reason privatedict is, and reached from C the same
@@ -282,7 +321,20 @@ struct _Xpost_Context {
 
          Global, so it may not hold local objects; local machinery belongs in
          privatedict. Set from init.ps by .setglobalprivatedict. */
-    Xpost_Object globalprivatedict;
+
+    /**< executingarray -- the array a procedure is being run out of, while
+         it is being run. Its storage is resolved to a pointer once and the
+         elements read through it, so the array must not be reclaimed
+         underneath the walk, and the walk holds it in C where the
+         collector cannot see it. Recorded here for the length of the run
+         and put back to what it was afterwards, so a procedure that runs
+         another leaves the outer one rooted too. */
+
+    /**< arcstartproc -- the procedure the arc operators run to reach an
+         arc's starting point. It is built while those operators are
+         installed, before there is any dictionary to keep it in, and the
+         file that built it holds it in a variable of its own, which the
+         collector does not walk. Rooted here instead. */
     const char *device_str;
 
     int quiet; /**< the -q/--quiet startup flag, retained so the shutdown
@@ -333,12 +385,6 @@ struct _Xpost_Context {
     void **globs;
     unsigned int globs_size;
 
-    Xpost_Object run_input_file; /**< the file a run wrapped around the
-                                      program it was given, when the run
-                                      made the file itself; closed when the
-                                      run ends, so a run that stopped before
-                                      the end of its program does not leave
-                                      it open. Invalid between runs. */
 
     unsigned int es_run_base; /**< exec-stack depth at xpost_run entry;
                                     a completed run is truncated back to

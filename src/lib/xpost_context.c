@@ -334,6 +334,8 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->skip_graphics = 0;
     ctx->privatedict = null;
     ctx->globalprivatedict = null;
+    ctx->executingarray = null;
+    ctx->arcstartproc = null;
     ctx->pagedevice = null;
     ctx->pagedevice_destroy = null;
     ctx->pagedevice_depth = 0;

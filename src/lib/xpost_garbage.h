@@ -57,6 +57,29 @@
  * the answer is the only thing between that and a run whose memory
  * management has silently stopped.
  */
+/**
+ * @brief which banks a collection reclaims.
+ *
+ * Marking crosses both banks whenever it is asked to, because an object
+ * in one may be named from the other; what a collection then reclaims is
+ * a separate choice, and a bank may only be reclaimed by a collection
+ * that marked it. PLRM 8.2's vmreclaim distinguishes the two banks, so
+ * the caller says which it means.
+ */
+#define XPOST_GARBAGE_SWEEP_NONE   0
+#define XPOST_GARBAGE_SWEEP_LOCAL  1
+#define XPOST_GARBAGE_SWEEP_GLOBAL 2
+#define XPOST_GARBAGE_SWEEP_BOTH   (XPOST_GARBAGE_SWEEP_LOCAL | \
+                                    XPOST_GARBAGE_SWEEP_GLOBAL)
+
+/**
+ * @brief which banks a collection running of its own accord reclaims
+ *
+ * Both, unless a program has turned automatic collection off for one of
+ * them through vmreclaim (PLRM 8.2).
+ */
+int xpost_garbage_auto_banks(Xpost_Context *ctx);
+
 XPOST_MUST_CHECK int xpost_garbage_collect(Xpost_Memory_File *mem,
                                            int dosweep,
                                            int markall);
@@ -69,7 +92,8 @@ XPOST_MUST_CHECK int xpost_garbage_collect(Xpost_Memory_File *mem,
  * (XPOST_GC_XBANK_CHECK). The collector calls them only when the
  * variable is set.
  */
-void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem);
+void _xpost_garbage_diag_verify(Xpost_Context *ctx, Xpost_Memory_File *mem,
+                                int bothbanks);
 void _xpost_garbage_diag_xbank(Xpost_Context *ctx, Xpost_Memory_File *mem);
 
 #if 0
@@ -83,5 +107,7 @@ int test_garbage_collect(int (*xpost_interpreter_cid_init)(unsigned int *cid),
                          Xpost_Memory_File *(*xpost_interpreter_alloc_local_memory)(void),
                          Xpost_Memory_File *(*xpost_interpreter_alloc_global_memory)(void));
 #endif
+
+
 
 #endif

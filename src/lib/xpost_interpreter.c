@@ -545,6 +545,32 @@ int evaloperator(Xpost_Context *ctx, Xpost_Object op)
    the function returns. the loop returns to the interpreter whenever
    an element changes the execution stack, since anything it pushed
    must execute before the remaining interval. */
+/* Whether a collection has been asked for.
+
+   Either bank asks: the allocator records the request against the file
+   it was allocating from, and a job may spend its memory in either. A
+   safe point that read only one of them would leave a job that allocates
+   in the other -- fonts and resources are allocated in global memory --
+   growing until it ran out, with a collector able to reclaim it and
+   nothing ever asking. The request is cleared from both, because the
+   collection that follows reclaims both. */
+static int _collection_wanted(Xpost_Context *ctx)
+{
+    int wanted = 0;
+
+    if (ctx->lo && ctx->lo->garbage_collect_pending)
+    {
+        ctx->lo->garbage_collect_pending = 0;
+        wanted = 1;
+    }
+    if (ctx->gl && ctx->gl->garbage_collect_pending)
+    {
+        ctx->gl->garbage_collect_pending = 0;
+        wanted = 1;
+    }
+    return wanted;
+}
+
 static
 int evalarray(Xpost_Context *ctx, Xpost_Object a)
 {
@@ -696,14 +722,13 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
         /* between elements is a safe point just like the interpreter
            loop: a requested collection must not starve while a fused
            procedure runs through a long allocation-heavy stretch */
-        if (ctx->lo->garbage_collect_pending)
+        if (_collection_wanted(ctx))
         {
-            ctx->lo->garbage_collect_pending = 0;
             /* anchor the current element (not just the tail) so an unrooted
                anonymous procedure is not swept while its last element runs */
             EVALARRAY_ROOT_CURRENT();
             if (ctx->lo->garbage_collect_is_installed
-                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+                && ctx->lo->garbage_collect(ctx->lo, xpost_garbage_auto_banks(ctx), 1) < 0)
                 return VMerror;
             EVALARRAY_RECHECK_BASES();
         }
@@ -1429,7 +1454,24 @@ int eval(Xpost_Context *ctx)
         switch (type)
         {
             case operatortype: ret = evaloperator(ctx, t); break;
-            case arraytype:    ret = evalarray(ctx, t);    break;
+            case arraytype:
+            {
+                /* the run resolves the array's storage to a pointer and
+                   reads its elements through it, so the array has to
+                   outlive the run whatever else stops naming it. The
+                   execution stack carries the part not yet reached, and
+                   for the element in hand that is not enough: a
+                   collection arriving between two elements would find
+                   the last one named by nothing. Recorded for the length
+                   of the run and put back afterwards, so a procedure run
+                   from inside another leaves the outer one rooted. */
+                Xpost_Object outer = ctx->executingarray;
+
+                ctx->executingarray = t;
+                ret = evalarray(ctx, t);
+                ctx->executingarray = outer;
+                break;
+            }
             case nametype:     ret = evalload(ctx, t);     break;
             case integertype:  /*@fallthrough@*/
             case realtype:     /*@fallthrough@*/
@@ -1948,11 +1990,10 @@ ctxswitch:
            the root set is one. Carrying on instead spends fresh entity
            numbers until they run out, and reports that against whichever
            operator was allocating at the time. */
-        if (ctx->lo->garbage_collect_pending)
+        if (_collection_wanted(ctx))
         {
-            ctx->lo->garbage_collect_pending = 0;
             if (ctx->lo->garbage_collect_is_installed
-                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+                && ctx->lo->garbage_collect(ctx->lo, xpost_garbage_auto_banks(ctx), 1) < 0)
             {
                 XPOST_LOG_ERR("collection abandoned before its sweep");
                 _onerror(ctx, VMerror);
@@ -2109,11 +2150,10 @@ int xpost_interpreter_run_nested(Xpost_Context *ctx, Xpost_Object P)
     ++ctx->nest_depth;
     while (xpost_stack_count(ctx->lo, ctx->es) > base && !ctx->quit)
     {
-        if (ctx->lo->garbage_collect_pending)
+        if (_collection_wanted(ctx))
         {
-            ctx->lo->garbage_collect_pending = 0;
             if (ctx->lo->garbage_collect_is_installed
-                && ctx->lo->garbage_collect(ctx->lo, 1, 1) < 0)
+                && ctx->lo->garbage_collect(ctx->lo, xpost_garbage_auto_banks(ctx), 1) < 0)
             {
                 XPOST_LOG_ERR("collection abandoned before its sweep");
                 _onerror(ctx, VMerror);

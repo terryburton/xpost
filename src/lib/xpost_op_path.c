@@ -56,6 +56,7 @@
 #include "xpost_matrix.h"
 #include "xpost_save.h"  /* the current path obeys save/restore */
 
+#include "xpost_garbage.h"
 #include "xpost_operator.h"
 #include "xpost_op_dict.h"
 #include "xpost_op_path.h"
@@ -2211,6 +2212,16 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
         if (ret)
             return ret;
     }
-    return xpost_array_put(ctx, _arc_start_proc, 3,
-                           XPOST_OP(ctx, opifelse));
+    ret = xpost_array_put(ctx, _arc_start_proc, 3,
+                          XPOST_OP(ctx, opifelse));
+    if (ret)
+        return ret;
+
+    /* The procedure is held in a variable of this file, which the
+       collector does not walk. It is made while the operators are being
+       installed, before there is any dictionary to keep it in, so the
+       variable is rooted instead: the collector marks whatever it holds
+       from then on. */
+    ctx->arcstartproc = _arc_start_proc;
+    return 0;
 }

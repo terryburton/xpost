@@ -197,6 +197,7 @@ xpost_free_dump
 xpost_free_init
 xpost_free_memory_ent
 xpost_free_realloc
+xpost_garbage_auto_banks
 xpost_garbage_collect
 xpost_get_realtime_ms
 xpost_get_usertime_ms
@@ -315,6 +316,7 @@ xpost_oper_init_stack_ops
 xpost_oper_init_string_ops
 xpost_oper_init_token_ops
 xpost_oper_init_type_ops
+xpost_operator_count
 xpost_operator_cons
 xpost_operator_cons_opcode
 xpost_operator_cons_wrapped

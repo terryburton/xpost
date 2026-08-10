@@ -267,6 +267,14 @@ typedef struct Xpost_Memory_File
                                          sweep runs only when a file was born
                                          above the restored depth */
     unsigned int file_birth_max; /**< highest stamp with a nonzero count */
+    int garbage_collect_auto; /**< whether a collection that runs of its
+                                    own accord reclaims this bank. PLRM
+                                    8.2's vmreclaim turns automatic
+                                    collection off for one bank or for
+                                    both, and on again for both; an
+                                    immediate collection the operator
+                                    asks for is not automatic and runs
+                                    either way */
     int garbage_collect_pending; /**< a collection is due; performed at the
                                       interpreter's safe point rather than
                                       inside the triggering allocation, so
