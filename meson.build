@@ -292,6 +292,19 @@ if freetype_dep.found()
   config_h.set('HAVE_FREETYPE2', 1)
 endif
 
+# Virtual memory is one host allocation the interpreter suballocates, so a
+# read of storage it has reclaimed is, to a memory checker, an ordinary read
+# of memory the process owns and is reported as nothing at all. Describing
+# the arena to the checker turns exactly that read into an error naming its
+# reader. The description costs a call at every allocation and every
+# reclamation, so it is asked for rather than assumed.
+if get_option('valgrind-arena')
+  if not cc.has_header('valgrind/memcheck.h')
+    error('valgrind-arena needs valgrind/memcheck.h, which is not installed')
+  endif
+  config_h.set('XPOST_VALGRIND_ARENA', 1)
+endif
+
 jpeg_dep = dependency('libjpeg', method: 'pkg-config', required: false)
 if jpeg_dep.found()
   config_h.set('HAVE_LIBJPEG', 1)

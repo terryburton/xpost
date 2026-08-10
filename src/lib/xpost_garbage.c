@@ -816,6 +816,7 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
     unsigned int z;
     unsigned int i;
     unsigned int sz = 0;
+    int quarantine = 0;
 
 #ifdef WANT_DEBUG_HOOKS
     /* Quarantine: sweep nothing, so a freed entity is never handed out
@@ -836,6 +837,15 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
        below do. Taking a guarantee away is a build's decision. */
     if (getenv("XPOST_GC_NO_REUSE"))
         return 0;
+    /* Withhold: reclaim as usual but never offer the entity again. An
+       entity the free list hands back is opened again by the allocation
+       that takes it, so a reference still held to it reads storage that
+       is by then legitimately live and says nothing. Withholding leaves
+       the stale read on storage nothing has taken, which a described
+       arena reports against whoever read it. This is what makes such a
+       read observable rather than merely wrong, and it is a build's
+       decision for the same reason the switch above is. */
+    quarantine = getenv("XPOST_GC_WITHHOLD") != NULL;
 #endif
 
     z = xpost_memory_free_lists_adr(mem); /* address of the free list heads */
@@ -865,11 +875,23 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
             if (mem->table.tab[i].tag & XPOST_MEMORY_TABLE_TAG_HANDLE)
                 xpost_handle_release_entity(mem, i);
             mem->table.tab[i].tag = 0;
+            if (quarantine)
+            {
+                XPOST_VG_POISON_ENT(mem->base, mem->table.tab[i].adr,
+                                    mem->table.tab[i].sz);
+                sz += mem->table.tab[i].sz;
+                continue;
+            }
             b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;
             bz = z + b * sizeof(unsigned int);
             memcpy(xpost_ent_ptr(mem, i), xpost_vm_ptr(mem, bz), sizeof(unsigned int));
             memcpy(xpost_vm_ptr(mem, bz), &i, sizeof(unsigned int));
+            /* the entity has been reclaimed: a reference something still
+               holds now reads storage the interpreter has taken back,
+               which is the defect the arena is described for */
+            XPOST_VG_POISON_ENT(mem->base, mem->table.tab[i].adr,
+                                mem->table.tab[i].sz);
             sz += mem->table.tab[i].sz;
         }
     }

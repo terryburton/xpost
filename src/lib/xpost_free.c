@@ -141,6 +141,51 @@ int xpost_free_init(Xpost_Memory_File *mem)
     return 1;
 }
 
+#ifdef XPOST_VALGRIND_ARENA
+/* Close every entity the free lists hold again.
+ *
+ * A grow reopens the whole extent, because the file copies it forward
+ * and zeroes the part above the high-water mark, and the host allocator
+ * hands back a block that is accessible throughout in any case. The
+ * entities the collector has reclaimed are exactly the ones the free
+ * lists chain -- which the table cannot say, a freed entity carrying
+ * the same zero tag as a live raw allocation -- so they are read back
+ * from the lists themselves and closed again here.
+ */
+void xpost_free_repoison(Xpost_Memory_File *mem)
+{
+    unsigned int headz;
+    unsigned int b;
+    unsigned int rows;
+
+    if (!mem || !mem->base)
+        return;
+    headz = xpost_memory_free_lists_adr(mem);
+    /* no chain can hold more entities than the table has rows, which is
+       the bound the walk below is held to */
+    rows = mem->table.nextent;
+    for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
+    {
+        unsigned int e;
+        unsigned int seen = 0;
+
+        memcpy(&e, xpost_vm_ptr(mem, headz + b * sizeof(unsigned int)),
+               sizeof(unsigned int));
+        /* the walk is bounded by the table it indexes, so a link spoiled
+           by a stale write cannot spin it */
+        while (e && xpost_ent_valid(mem, e) && seen <= rows)
+        {
+            unsigned int a = mem->table.tab[e].adr;
+            unsigned int s = mem->table.tab[e].sz;
+
+            ++seen;
+            memcpy(&e, xpost_vm_ptr(mem, a), sizeof(unsigned int));
+            XPOST_VG_POISON_ENT(mem->base, a, s);
+        }
+    }
+}
+#endif
+
 /* free this ent! returns reclaimed size or -1 on error */
 int xpost_free_memory_ent(Xpost_Memory_File *mem,
                           unsigned int ent)
@@ -221,6 +266,7 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     /* push onto the bucket: link word lives in the ent's data area */
     memcpy(xpost_vm_ptr(mem, a), xpost_vm_ptr(mem, z), sizeof(unsigned int));
     memcpy(xpost_vm_ptr(mem, z), &ent, sizeof(unsigned int));
+    XPOST_VG_POISON_ENT(mem->base, a, sz);
 
     return sz;
 }
@@ -395,6 +441,9 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
             /* unlink: the predecessor link slot was recorded when the
                node was reached */
             memcpy(xpost_vm_ptr(mem, bestz), xpost_vm_ptr(mem, ad), sizeof(unsigned int));
+            /* the entity is being handed out again: its storage is
+               readable once more, and holds nothing yet */
+            XPOST_VG_UNPOISON_ENT(mem->base, ad, bestsz);
             tab->tab[best].tag = tag;
             *entity = best;
             return 1; /* found, return SUCCESS */

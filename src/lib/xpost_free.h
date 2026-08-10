@@ -131,6 +131,63 @@ xpost_free_bucket_for_size(unsigned int sz)
     return b;
 }
 
+/* Make the arena legible to memcheck.
+ *
+ * Virtual memory is one host allocation that this file suballocates, so
+ * an entity reclaimed by the collector and then read through a stale
+ * reference is, to memcheck, an ordinary read of memory the process
+ * owns: it reports nothing. Marking a reclaimed entity's storage
+ * inaccessible turns exactly that read into an error with a stack
+ * trace, which is what a collector defect needs to be caught by.
+ *
+ * The first word of a freed entity is the free list's own link, written
+ * by the reclaimer and read by the allocator's walk, so the redzone
+ * starts after it.
+ */
+#ifdef XPOST_VALGRIND_ARENA
+# include <valgrind/memcheck.h>
+/* the arena begins inaccessible in its whole extent and is opened a
+   piece at a time as the file hands the piece out, so that a read of
+   arena the file has not allocated -- past the high-water mark, in the
+   alignment padding between allocations, or of an entity the collector
+   has reclaimed -- is an error naming its reader, and not a plausible
+   value read out of bytes the process happens to own. */
+# define XPOST_VG_POISON_RANGE(base, adr, len) \
+    VALGRIND_MAKE_MEM_NOACCESS((char *)(base) + (adr), (len))
+# define XPOST_VG_UNPOISON_RANGE(base, adr, len) \
+    VALGRIND_MAKE_MEM_UNDEFINED((char *)(base) + (adr), (len))
+/* reopen storage without saying anything about what is in it: used
+   where the file rearranges an extent it has already written, so that
+   reopening it does not also declare its contents fresh */
+# define XPOST_VG_REOPEN_RANGE(base, adr, len) \
+    VALGRIND_MAKE_MEM_DEFINED((char *)(base) + (adr), (len))
+/* the first word of a freed entity is the free list's own link, written
+   by the reclaimer and read by the allocator's walk, so the redzone
+   starts after it */
+# define XPOST_VG_POISON_ENT(base, adr, sz) \
+    do { \
+        if ((sz) > sizeof(unsigned int)) \
+            VALGRIND_MAKE_MEM_NOACCESS((char *)(base) + (adr) + sizeof(unsigned int), \
+                                       (sz) - sizeof(unsigned int)); \
+    } while (0)
+# define XPOST_VG_UNPOISON_ENT(base, adr, sz) \
+    VALGRIND_MAKE_MEM_UNDEFINED((char *)(base) + (adr), (sz))
+#else
+# define XPOST_VG_POISON_RANGE(base, adr, len) do { (void)(base); } while (0)
+# define XPOST_VG_UNPOISON_RANGE(base, adr, len) do { (void)(base); } while (0)
+# define XPOST_VG_REOPEN_RANGE(base, adr, len) do { (void)(base); } while (0)
+# define XPOST_VG_POISON_ENT(base, adr, sz) do { (void)(base); } while (0)
+# define XPOST_VG_UNPOISON_ENT(base, adr, sz) do { (void)(base); } while (0)
+#endif
+
+#ifdef XPOST_VALGRIND_ARENA
+/**
+ * @brief  close every entity the free lists hold, after an extent the
+ *         host allocator has handed back accessible throughout
+ */
+void xpost_free_repoison(Xpost_Memory_File *mem);
+#endif
+
 /**
  * @brief  initialize the FREE special entity which points
  *         to the head of the free list

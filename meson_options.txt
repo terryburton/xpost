@@ -28,3 +28,9 @@ option('valgrind',
   value: false,
   description: 'run unit tests with valgrind'
 )
+
+option('valgrind-arena',
+  type: 'boolean',
+  value: false,
+  description: 'describe virtual memory to memcheck, so a read of storage the interpreter has reclaimed is reported'
+)

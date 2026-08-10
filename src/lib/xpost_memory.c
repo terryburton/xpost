@@ -277,6 +277,9 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
     if (fd == -1)
         memset(mem->base, 0, mem->max);
 
+    /* nothing has been handed out yet, so the whole extent is closed */
+    XPOST_VG_POISON_RANGE(mem->base, 0, mem->max);
+
     return 1;
 }
 
@@ -375,6 +378,13 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         XPOST_LOG_ERR("%d mem->base is NULL", VMerror);
         return 0;
     }
+
+    /* every route below moves or rewrites the whole extent -- copying
+       it forward, zeroing the part above the high-water mark -- so the
+       file's own bookkeeping reaches storage the arena has closed.
+       Open all of it here; the state is laid over the new extent once
+       it is in place. */
+    XPOST_VG_REOPEN_RANGE(mem->base, 0, mem->max);
 
     if (sz < xpost_memory_page_size)
         sz = xpost_memory_page_size;
@@ -578,6 +588,19 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     mem->base = (unsigned char *)tmp;
     mem->max = sz;
 
+    /* The host allocator hands back a block accessible in its whole
+       extent, so what the arena knows about it is laid over it again:
+       everything the file has handed out stays open, everything above
+       the high-water mark is closed. A reclaimed entity below the mark
+       reopens here -- the tag a freed entity carries is the same zero a
+       live raw allocation carries, so the two cannot be told apart from
+       the table, and reopening one costs a redzone while closing the
+       other would report the file's own bookkeeping as an error. */
+    XPOST_VG_POISON_RANGE(mem->base, mem->used, sz - mem->used);
+#ifdef XPOST_VALGRIND_ARENA
+    xpost_free_repoison(mem);
+#endif
+
     return ret;
 }
 
@@ -644,6 +667,9 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
             }
         }
 
+        /* opened before it is written: the zeroing below is the first
+           access the file makes to storage it has just handed out */
+        XPOST_VG_UNPOISON_RANGE(mem->base, (unsigned int)adr, sz);
         memset(xpost_vm_ptr(mem, (unsigned int)adr), 0, sz);
     }
 

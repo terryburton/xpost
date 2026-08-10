@@ -374,5 +374,6 @@ reserved-exception _xpost_garbage_diag_verify
 reserved-exception _xpost_garbage_diag_xbank
 reserved-exception _xpost_interpreter_is_tracing
 
+conditional xpost_free_repoison
 conditional xpost_oper_init_win32_device_ops
 conditional xpost_oper_init_xcb_device_ops
