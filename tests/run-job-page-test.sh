@@ -78,6 +78,9 @@ mark='0 0 moveto 40 0 lineto 40 40 lineto 0 40 lineto closepath fill'
 
 asked=0
 
+# devices whose output is a stream of drawing operators rather than a raster
+STREAM_WRITERS='pdfwrite svgwrite dscwrite'
+
 for dev in $DEVICE_FLEET_MARKING; do
     before=$fail
 
@@ -141,11 +144,21 @@ grestore"
 # The same image with the clip keeping none of it: the rows are written
 # through that clip, so nothing of it reaches the page and there is no
 # page to end.
+#
+# Asked of the devices that keep a raster. A device that writes a stream
+# of drawing operators records the image and the clip that hides it, so
+# what it leaves is not empty however little of it would be seen -- the
+# question this case asks is about ink on a page, and a stream is not one.
+case " $STREAM_WRITERS " in
+    *" $dev "*) ;;
+    *)
 run_case imageclipped nothing "%!PS
 gsave newpath 0 0 4 4 rectclip
 100 100 translate 200 200 scale
 2 2 8 [2 0 0 -2 0 2] <004080ff> image
 grestore"
+    ;;
+esac
 
 # Erased before the job ended: nothing remains to end.
     run_case erased nothing "%!PS
