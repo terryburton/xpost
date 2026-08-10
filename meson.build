@@ -878,7 +878,9 @@ test('string-bounds',
 # the destination of the refused read, since a return value nobody looks
 # at is served equally by a function that refused and one that did not.
 # The bound is taken in a width wider than the index, so a slot number
-# whose product wraps back inside the allocation is refused too.
+# whose product wraps back inside the allocation is refused too, and an
+# allocation the file rounds up past the top of its address range is
+# refused rather than made at the bottom of it, over storage in use.
 memory_bounds_exe = executable('memory_bounds_test',
   'tests/memory_bounds_test.c',
   c_args: '-DHAVE_CONFIG_H',

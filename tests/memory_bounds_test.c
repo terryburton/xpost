@@ -25,6 +25,21 @@
  * the address copied to, and a comparison made in the narrow width
  * agrees with the address and lets the copy through.
  *
+ * The same width holds one allocation away from another, and it is asked
+ * for here too. A memory file hands out its storage by rounding its
+ * cursor up to an eight-byte boundary and taking the bytes above it, and
+ * both of those numbers are addresses in the file, which are unsigned
+ * ints. A cursor within eight bytes of the top of that range rounds up
+ * past the end of it, and an address arrived at in the width it is
+ * counted in comes back round to the bottom -- naming the storage the
+ * file starts with, which is in use. Nothing in the file's own
+ * bookkeeping says so afterwards: the allocation is recorded at the
+ * address it was given.
+ *
+ * The size asked for there is small, so that an allocation which is not
+ * refused writes inside the file and leaves a failure to be reported
+ * rather than a fixture to be pieced back together.
+ *
  * The fixture is a memory file with no interpreter over it. What is
  * under test sits below the object layer, so a PostScript-level test
  * cannot present a slot number that far outside a composite, and the
@@ -66,6 +81,8 @@ int main(void)
     Xpost_Memory_File mem;
     unsigned int a = 0, b = 0;
     unsigned int aadr = 0, badr = 0;
+    unsigned int held_used, held_max;
+    unsigned int top = 0xdeadbeefu;
     unsigned char pattern[ENT_SZ];
     unsigned char readback[ENT_SZ];
     unsigned char intruder[ENT_SZ];
@@ -183,6 +200,34 @@ int main(void)
             break;
         }
     }
+
+    /* A cursor in the eight bytes below the top of the file's address
+       range, and capacity as far as the range goes. The rounding up the
+       allocator does to it reaches past the last address the file has,
+       which is a place no growth can put storage. */
+    held_used = mem.used;
+    held_max = mem.max;
+    mem.used = 0xfffffffbu;
+    mem.max = 0xffffffffu;
+
+    check(xpost_memory_file_alloc(&mem, 16, &top) == 0,
+          "an allocation rounded past the top of the address range is refused");
+    check(top == 0xdeadbeefu,
+          "a refused allocation hands back no address");
+    check(mem.used == 0xfffffffbu,
+          "a refused allocation leaves the file's cursor where it was");
+
+    mem.used = held_used;
+    mem.max = held_max;
+
+    /* the allocation the file starts with still holds what was put in
+       it, which a refusal that handed out the bottom of the file as the
+       top of it would have cleared */
+    memset(readback, 0, sizeof readback);
+    check(xpost_memory_get(&mem, a, 0, ENT_SZ, readback) == 1,
+          "the allocation reads after the refusal");
+    check(memcmp(readback, pattern, ENT_SZ) == 0,
+          "the allocation's bytes survive the refused allocation");
 
     xpost_memory_file_exit(&mem);
     xpost_quit();

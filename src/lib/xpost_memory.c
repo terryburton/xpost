@@ -590,7 +590,8 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
                         unsigned int sz,
                         unsigned int *retaddr)
 {
-    unsigned int adr;
+    unsigned long long adr;
+    unsigned long long end;
 
     if (!mem)
     {
@@ -609,26 +610,46 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
        and written at their natural alignment (the file base is already
        aligned). The bytes skipped before an aligned address are padding
        within the file; entities are located by their recorded address, not
-       by walking the file, so the gap is harmless. */
-    adr = (mem->used + 7u) & ~7u;
+       by walking the file, so the gap is harmless.
+
+       The aligned address and the byte one past the allocation are both
+       arrived at in a type wide enough to hold every address the file
+       has, whatever a pointer is on the platform. An address in the file
+       is an unsigned int, so where a size_t is no wider than one, a sum
+       of two of them wraps: an allocation reaching past the end of the
+       address range compares as one well inside it, and the address
+       handed back is a small number that names storage already in use --
+       or, taken as an offset from the file's base, memory in front of the
+       file altogether. */
+    adr = ((unsigned long long)mem->used + 7u) & ~(unsigned long long)7u;
+    end = adr + sz;
+
+    /* the file's addresses are unsigned ints and cannot name a byte past
+       this one, so an allocation ending beyond it is one no amount of
+       growth can hold */
+    if (end > 0xffffffffull)
+    {
+        XPOST_LOG_ERR("%d memory file full: cannot allocate beyond addressable size", VMerror);
+        return 0;
+    }
 
     if (sz)
     {
-        if ((size_t)adr + sz >= mem->max)
+        if (end >= mem->max)
         {
-            if (!xpost_memory_file_grow(mem, (adr - mem->used) + sz))
+            if (!xpost_memory_file_grow(mem, (size_t)(end - mem->used)))
             {
                 XPOST_LOG_ERR("%d unable to allocate memory", VMerror);
                 return 0;
             }
         }
 
-        memset(xpost_vm_ptr(mem, adr), 0, sz);
+        memset(xpost_vm_ptr(mem, (unsigned int)adr), 0, sz);
     }
 
-    mem->used = adr + sz;
-    *retaddr = adr;
-    //XPOST_LOG_INFO("allocated %u bytes at %u in %s", sz, adr, mem->fname);
+    mem->used = (unsigned int)end;
+    *retaddr = (unsigned int)adr;
+    //XPOST_LOG_INFO("allocated %u bytes at %u in %s", sz, *retaddr, mem->fname);
     return 1;
 }
 
