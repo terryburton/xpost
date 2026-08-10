@@ -318,6 +318,7 @@ tests/string_bounds_test.c \
 tests/subinterval_retention_test.ps \
 tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
+tests/run-job-page-test.sh \
 tests/run-thin-stroke-test.sh \
 tests/thin_stroke_test.ps \
 tests/token_sign_test.ps \

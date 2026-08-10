@@ -576,6 +576,8 @@ setglobal
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
+    % a page the program painted and never asked for is ended here
+    { //.xpostsys /.endjobpage get exec } stopped { } if
     quit
 } def
 
@@ -594,6 +596,8 @@ setglobal
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
+    % a page the program painted and never asked for is ended here
+    { //.xpostsys /.endjobpage get exec } stopped { } if
     quit
 } def
 %currentfile flushfile
@@ -615,6 +619,8 @@ setglobal
         //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
+    % a page the program painted and never asked for is ended here
+    { //.xpostsys /.endjobpage get exec } stopped { } if
     quit
 } def
 

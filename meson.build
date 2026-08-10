@@ -2989,6 +2989,20 @@ test('colour-range',
   suite: cost_fast,
   timeout: 300)
 
+# What becomes of the page a job leaves behind. A program that paints and
+# never asks for its page still has one, and a file written for inclusion in
+# another document carries no showpage at all -- the including document
+# supplies it -- so a file of that shape must not render blank. The converse
+# is held too: a program that transmitted a page has said where its pages
+# end, so marks made after the last one are a page it did not finish, an
+# erased page has nothing left to end, and a job that painted nothing has no
+# page. Each of those is a way to produce a page too many.
+test('job-page',
+  find_program('tests/run-job-page-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 # Where a number stops and a name starts. A sign and a decimal point begin
 # numbers and also make names, so the scanner decides between the two for
 # every token starting with one: PLRM 3.2 makes a token a number when it is

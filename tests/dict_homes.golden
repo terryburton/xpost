@@ -29,8 +29,13 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 289
+entries 294
 
+# Graphics-state template slots (data/gstate.ps). The list is the whole
+# fails the check, so a new slot is declared here in the commit that adds
+# it, and none may be dropped or renamed.
+# of the template: a slot the template declares and this list does not
+# the device class dictionaries, one per PostScript-implemented device
 .gscratch /.lresources
 .gscratch /.pfdict
 .gscratch /.stencilcache
@@ -54,6 +59,15 @@ entries 289
 .privatedict /.imginterp
 .privatedict /.resourcepath
 .privatedict /.wrappedprocs
+.privatedict /.xpost_BBOX
+.privatedict /.xpost_DSCWRITE
+.privatedict /.xpost_NULLDEV
+.privatedict /.xpost_PBMIMAGE
+.privatedict /.xpost_PDFWRITE
+.privatedict /.xpost_PGMIMAGE
+.privatedict /.xpost_PPMIMAGE
+.privatedict /.xpost_SVGWRITE
+.privatedict /.xpost_TIFFIMAGE
 .privatedict /DATA_DIR
 .privatedict /newDSCWRITEdevice
 .privatedict /newPBMIMAGEdevice
@@ -64,16 +78,6 @@ entries 289
 .privatedict /newTIFFIMAGEdevice
 .privatedict /newbboxdevice
 .privatedict /newnulldevice
-# the device class dictionaries, one per PostScript-implemented device
-.privatedict /.xpost_BBOX
-.privatedict /.xpost_DSCWRITE
-.privatedict /.xpost_NULLDEV
-.privatedict /.xpost_PBMIMAGE
-.privatedict /.xpost_PDFWRITE
-.privatedict /.xpost_PGMIMAGE
-.privatedict /.xpost_PPMIMAGE
-.privatedict /.xpost_SVGWRITE
-.privatedict /.xpost_TIFFIMAGE
 .xpostsys /.applytransfer
 .xpostsys /.argok
 .xpostsys /.axialsh
@@ -152,6 +156,7 @@ entries 289
 .xpostsys /.dir
 .xpostsys /.docap
 .xpostsys /.dsunwind
+.xpostsys /.endjobpage
 .xpostsys /.endpage
 .xpostsys /.eospanparts
 .xpostsys /.eospantile
@@ -226,8 +231,10 @@ entries 289
 .xpostsys /.outlinepath
 .xpostsys /.pagefilename
 .xpostsys /.pagehandler
+.xpostsys /.pagemarked
 .xpostsys /.pageno
 .xpostsys /.pagepause
+.xpostsys /.pagesent
 .xpostsys /.pagestate
 .xpostsys /.patchpaint
 .xpostsys /.patchsh
@@ -262,7 +269,9 @@ entries 289
 .xpostsys /.screenlattice
 .xpostsys /.sepconv
 .xpostsys /.setclipregion
+.xpostsys /.setpagemarked
 .xpostsys /.setpageno
+.xpostsys /.setpagesent
 .xpostsys /.shcolor
 .xpostsys /.showclip
 .xpostsys /.showfmap
@@ -321,56 +330,51 @@ entries 289
 .xpostsys /rect
 .xpostsys /setcolordict
 .xpostsys /xpost
-
-# Graphics-state template slots (data/gstate.ps). The list is the whole
-# of the template: a slot the template declares and this list does not
-# fails the check, so a new slot is declared here in the commit that adds
-# it, and none may be dropped or renamed.
-gstate /setspace
-gstate /colorspace
+gstate /blackgen
+gstate /bluescreenangle
+gstate /bluescreenfreq
+gstate /bluescreenproc
+gstate /bluetransfer
+gstate /clipcache
+gstate /clipregion
+gstate /clipsource
 gstate /colorcomp1
 gstate /colorcomp2
 gstate /colorcomp3
 gstate /colorcomp4
-gstate /sepindex
-gstate /septint
-gstate /tintcomps
-gstate /blackgen
-gstate /ucr
 gstate /colorrendering
-gstate /transfer
-gstate /redtransfer
-gstate /greentransfer
-gstate /bluetransfer
+gstate /colorspace
+gstate /currfont
 gstate /currpath
-gstate /clipregion
-gstate /clipsource
-gstate /clipcache
-gstate /flat
-gstate /linewidth
-gstate /linecap
-gstate /linejoin
-gstate /miterlimit
-gstate /overprint
-gstate /strokeadjust
-gstate /smoothness
 gstate /dasharray
 gstate /dashoffset
-gstate /currfont
 gstate /device
-gstate /screenfreq
-gstate /screenangle
-gstate /screenproc
-gstate /redscreenfreq
-gstate /redscreenangle
-gstate /redscreenproc
-gstate /greenscreenfreq
+gstate /flat
 gstate /greenscreenangle
+gstate /greenscreenfreq
 gstate /greenscreenproc
-gstate /bluescreenfreq
-gstate /bluescreenangle
-gstate /bluescreenproc
+gstate /greentransfer
 gstate /halftone
-gstate /patdict
+gstate /linecap
+gstate /linejoin
+gstate /linewidth
+gstate /miterlimit
+gstate /overprint
 gstate /patbase
 gstate /patcomps
+gstate /patdict
+gstate /redscreenangle
+gstate /redscreenfreq
+gstate /redscreenproc
+gstate /redtransfer
+gstate /screenangle
+gstate /screenfreq
+gstate /screenproc
+gstate /sepindex
+gstate /septint
+gstate /setspace
+gstate /smoothness
+gstate /strokeadjust
+gstate /tintcomps
+gstate /transfer
+gstate /ucr

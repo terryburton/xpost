@@ -49,6 +49,9 @@
 % -  erasepage  -
 % paint current page white
 /erasepage [ ] {
+    % the page is being cleared, so whatever had been painted on it is
+    % no longer there to end a job with
+    false //.xpostsys /.setpagemarked get exec
     % a device with an Erase method resets the page itself (the alpha
     % device clears to transparent); otherwise paint the page white
     DEVICE /Erase known {
@@ -270,6 +273,7 @@
             //.xpostsys /.applytransfer get exec
             counttomark 2 add -1 roll
             DEVICE dup /FillPoly get exec
+            true //.xpostsys /.setpagemarked get exec
             pop
         }{
             pop
@@ -285,6 +289,7 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         //.xpostsys /.applytransfer get exec
         DEVICE dup /FillPath get exec
+        true //.xpostsys /.setpagemarked get exec
         pop
         flushpage
         newpath
@@ -496,6 +501,7 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get get exec
         //.xpostsys /.applytransfer get exec
         DEVICE dup /StrokePath get exec
+        true //.xpostsys /.setpagemarked get exec
         pop
         flushpage
         newpath
@@ -525,6 +531,7 @@
                 %5 1 roll  % ... xN-1 yN-1 xN yN gray xN-1 yN-1 xN yN
                 %pstack(L)=
                 DEVICE dup /DrawLine get exec  % ... xN-1 yN-1 xN yN
+                true //.xpostsys /.setpagemarked get exec
                 pop
             } if
             4 2 roll pop pop % ... xN yN
@@ -539,6 +546,7 @@
                 %5 1 roll % gray xN yN x0 y0
                 %pstack(C)=
                 DEVICE dup /DrawLine get exec  % -
+                true //.xpostsys /.setpagemarked get exec
                 pop
             } if
         }
@@ -795,6 +803,7 @@
             } for
             width height ncomp m allrows decode interp
             DEVICE dup /PaintImage get exec
+            true //.xpostsys /.setpagemarked get exec
         }{
 
         % per-component decode as base + sample x scale over 0..255

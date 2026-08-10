@@ -270,6 +270,38 @@ currentglobal true setglobal
     //.xpostsys /.pagestate get exch /.plrmpage exch put
 } bind put
 
+% Two facts about the page, kept beside the count and for the same reason:
+% a job wraps a save and restore around its pages, and what has become of
+% them is not part of what a restore rewinds.
+%
+% Whether anything has been painted since the page began, and whether any
+% page has been transmitted at all. Together they say whether a job that
+% ends without asking for its page has one to give: a program that painted
+% and never transmitted has a page nobody has seen, and the alternative to
+% ending it here is throwing it away. A program that did transmit has said
+% where its pages end, and what it painted afterwards is a page it did not
+% finish -- that one is dropped, as it is by the interpreters this follows.
+
+% -  .pagemarked  bool
+.xpostsys /.pagemarked {
+    //.xpostsys /.pagestate get /.marked 2 copy known { get }{ pop pop false } ifelse
+} bind put
+
+% bool  .setpagemarked  -
+.xpostsys /.setpagemarked {
+    //.xpostsys /.pagestate get exch /.marked exch put
+} bind put
+
+% -  .pagesent  bool
+.xpostsys /.pagesent {
+    //.xpostsys /.pagestate get /.sent 2 copy known { get }{ pop pop false } ifelse
+} bind put
+
+% bool  .setpagesent  -
+.xpostsys /.setpagesent {
+    //.xpostsys /.pagestate get exch /.sent exch put
+} bind put
+
 % name  .pagehandler  proc|null
 % The handler the current page device carries under that name, or null where
 % it carries none.
@@ -297,6 +329,8 @@ currentglobal true setglobal
 
 % -  .beginpage  -
 .xpostsys /.beginpage {
+    % a page that has just begun carries nothing yet
+    false //.xpostsys /.setpagemarked get exec
     /BeginPage //.xpostsys /.pagehandler get exec
     dup null eq { pop }{
         //.xpostsys /.pageno get exec exch exec
@@ -339,6 +373,7 @@ setglobal
 /showpage [ ] {
     0 //.xpostsys /.endpage get exec {
         DEVICE dup /Emit get exec
+        true //.xpostsys /.setpagesent get exec
         //.xpostsys /ShowpageSemanticsDict get ShowpageSemantics get exec
     } if
     % a page ended by showpage is counted whether or not it was transmitted
@@ -349,11 +384,40 @@ setglobal
 /copypage [ ] {
     1 //.xpostsys /.endpage get exec {
         DEVICE dup /Emit get exec
+        true //.xpostsys /.setpagesent get exec
         flushpage
         //.xpostsys /CopypageSemanticsDict get ShowpageSemantics get exec
     } if
     % copypage ends a page without counting it (PLRM 6.2.6)
     //.xpostsys /.beginpage get exec
 } //.xpostsys /.defop get exec
+
+% -  .endjobpage  -
+% The page a job leaves behind when it ends without asking for one.
+%
+% A program that painted and never transmitted has a page nobody has seen,
+% and the job is over: the alternative to ending the page here is discarding
+% what it drew. Files written to be included in another document carry no
+% showpage at all -- the including document supplies it -- so this is the
+% ordinary way such a file arrives, not a corner.
+%
+% It is ended as a page ends normally rather than as a device going away, so
+% a page device's EndPage handler is asked about it on the same terms as any
+% other page and may still refuse it.
+%
+% A program that did transmit a page has said for itself where its pages end.
+% What it painted after the last one is a page it chose not to finish, and
+% that is left unfinished.
+currentglobal true setglobal
+.xpostsys /.endjobpage {
+    //.xpostsys /.pagesent get exec not
+    //.xpostsys /.pagemarked get exec and {
+        0 //.xpostsys /.endpage get exec {
+            DEVICE dup /Emit get exec
+            true //.xpostsys /.setpagesent get exec
+        } if
+    } if
+} bind put
+setglobal
 
 //.internaldict /QUIET known { }{ (eof device.ps\n)print } ifelse
