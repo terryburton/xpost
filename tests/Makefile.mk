@@ -318,6 +318,8 @@ tests/string_bounds_test.c \
 tests/subinterval_retention_test.ps \
 tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
+tests/run-thin-stroke-test.sh \
+tests/thin_stroke_test.ps \
 tests/trapping_test.ps \
 tests/valgrind.supp \
 tests/vecout_gc_test.ps \

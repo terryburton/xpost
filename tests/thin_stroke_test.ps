@@ -1,0 +1,120 @@
+% Which pixels a stroke narrower than one of them covers.
+%
+% PLRM 7.5.1 gives one rule for turning a shape into pixels: paint any
+% pixel whose square region the shape intersects, however small the
+% intersection, so that the area painted is never smaller than the shape
+% and nothing disappears for being unluckily placed. The rule is stated
+% for fills and for strokes of nonzero width alike; only a stroke of
+% width zero may paint fewer pixels than it covers, and that case is
+% device-dependent by the same paragraph.
+%
+% A width below one device unit is where the rule earns its keep, and
+% where the answer depends on placement rather than on width alone. A
+% pixel row spans from its own integer coordinate to the next, so a thin
+% stroke laid along a row's centre lies inside that row and paints one;
+% the same stroke laid along the boundary between two rows lies partly in
+% each and paints both. Both halves are asserted here, because a
+% renderer that always painted two would be as wrong as one that always
+% painted one -- the first paints more than the shape, the second less,
+% and the rule forbids only the second.
+%
+% Automatic stroke adjustment (PLRM 7.5.2) is what may quantise a thin
+% stroke onto the pixel grid, and it is what the two answers above are
+% conditional on. It is off here, both because this interpreter's initial
+% value is false and because the test sets it so.
+%
+% The device is asked what it painted. GetPix answers in the device's own
+% coordinates and in its own component range, so the places asked about
+% are carried through transform and compared against the value a blank
+% page reads back rather than against an assumed white.
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+/ncomp dev /nativecolorspace 2 copy known
+    { get /DeviceRGB eq { 3 }{ 1 } ifelse }{ pop pop 1 } ifelse def
+/getpix { dev dup /GetPix get exec } def
+
+/pixat { % userx usery  .  array   (the pixel covering that place)
+    transform truncate cvi exch truncate cvi exch
+    getpix ncomp array astore
+} bind def
+
+/same? { % a b  .  bool
+    /same?.b exch def
+    /same?.a exch def
+    /same?.r true def
+    0 1 same?.a length 1 sub {
+        /same?.i exch def
+        same?.a same?.i get same?.b same?.i get ne { /same?.r false def } if
+    } for
+    same?.r
+} bind def
+
+% Whether this device can answer the question at all. Having a GetPix is
+% not the same as keeping a raster to read: a device that draws into a
+% stream, or draws nowhere, has the method and reports the same thing
+% everywhere. So a mark is made and read back, and a device that cannot
+% see its own ink says so rather than reading every place as unpainted --
+% which would fail every assertion below for the one reason that is not
+% about the rule under test.
+/witness false def
+/blank null def
+dev /GetPix known
+{
+    % Asking is itself the probe: a device that answers with something
+    % other than a pixel, or refuses, is a device this cannot ask, and
+    % the error it raises belongs to the probe rather than to the run.
+    {
+        /blank 25 60.5 pixat def
+        0 setgray
+        newpath 10 70 moveto 40 70 lineto 40 75 lineto 10 75 lineto closepath fill
+        25 72.5 pixat blank same? not /witness exch def
+    } stopped { /witness false def clear } if
+} if
+
+witness not
+{
+    (SKIP: the device does not report its own pixels back\n) print
+}
+{
+    false setstrokeadjust
+
+    /marked? { pixat blank same? not } bind def
+
+    0 setgray
+    0.8 setlinewidth
+
+    % Along a row's centre: a row spans [20,21), so a stroke of eight
+    % tenths centred at 20.5 reaches from 20.1 to 20.9 and is inside it.
+    newpath 10 20.5 moveto 40 20.5 lineto stroke
+    25 20.5 marked?      (a thin stroke paints the row it lies in) assert
+    25 19.5 marked? not  (and not the row below it) assert
+    25 21.5 marked? not  (and not the row above it) assert
+
+    % Along the boundary between two rows: the same stroke centred at
+    % 30.0 reaches from 29.6 to 30.4, which is part of row 29 and part of
+    % row 30, and belongs to both.
+    newpath 10 30.0 moveto 40 30.0 lineto stroke
+    25 29.5 marked?      (a thin stroke on a boundary paints the row below) assert
+    25 30.5 marked?      (and the row above) assert
+    25 28.5 marked? not  (and neither of their neighbours) assert
+    25 31.5 marked? not  (nor the one above that) assert
+
+    % Width zero is the case the rule exempts: how few pixels it paints is
+    % the device's own business, so what is held is that it paints.
+    newpath 0 setlinewidth 10 40.5 moveto 40 40.5 lineto stroke
+    25 40.5 marked? 25 39.5 marked? or 25 41.5 marked? or
+        (a zero-width stroke marks the page) assert
+}
+ifelse
+
+faildict /n get 0 eq { (SUCCESS) = } { (FAILURES: ) print faildict /n get = }
+ifelse

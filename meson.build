@@ -2989,6 +2989,19 @@ test('colour-range',
   suite: cost_fast,
   timeout: 300)
 
+# Which pixels a stroke narrower than one of them covers. PLRM 7.5.1 paints
+# any pixel a shape intersects however slightly, for strokes of nonzero width
+# as much as for fills, so a thin stroke on a row's centre paints that row and
+# the same stroke on the boundary between two paints both. Painting one there
+# is the tempting answer -- it is the line the eye expects, and it is what
+# quantising a thin stroke to the grid would give -- and it paints less than
+# the shape covers, which is the one outcome the rule forbids.
+test('thin-stroke',
+  find_program('tests/run-thin-stroke-test.sh'),
+  args: [ xpost_exe, files('tests/thin_stroke_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
 # and possibly by the program itself, so every device's Destroy must be
 # idempotent -- clear the stored resource handle, never free it twice -- and
