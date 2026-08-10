@@ -141,9 +141,12 @@ currentglobal true setglobal
 % a program sees only the standard operators in systemdict while a font program
 % still reaches them through 1183615869 internaldict. The few operators fetched
 % by name during graphics loading are seeded here first, before that pass.
+% .rundied is seeded for the same reason from the other end: it records a
+% failure the caller is to see, and the failures it records include the
+% ones that stop graphics loading before the relocation pass is reached.
 userdict /.internaldict 256 dict put
 [ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows
-  /.pdfinit /.pdfput /.flatecompress /.vmreserve ]
+  /.pdfinit /.pdfput /.flatecompress /.vmreserve /.rundied ]
 { dup systemdict exch get .internaldict 3 1 roll put } forall
 
 % int  internaldict  dict
@@ -506,6 +509,61 @@ execdict begin
     /execdepth 0 def
 end
 
+% Report a start-up that never reached a program: the graphics language
+% could not be loaded, or the page device the run was started with could
+% not be built.
+%
+% The device and the page it was asked for are named, and so is the error
+% the attempt ended in. A caller that has to ask for something else needs
+% all three -- which device refused, what it was asked for and what limit
+% that reached -- and none of them is anything it can go and read
+% afterwards, because the run that knew them is over and wrote nothing.
+% PLRM 8.2 gives limitcheck for a limit of the implementation, which is
+% the name a page larger than a device can address comes back under; a
+% page larger than the memory to hold it comes back as VMerror. The
+% report names whichever was reached rather than deciding between them,
+% since a device refuses for its own reasons. A start-up device that
+% refused says so under the name data/device.ps kept for it as it
+% refused; anything else the load ended in is read from $error.
+%
+% The failure is recorded as well as printed. A start-up that produced no
+% page must not end with the status of a job that ran, or a caller
+% reading the status alone takes an interpreter that never started for a
+% program that started and drew nothing.
+%
+% Reporting is given a stopped context of its own, for the reason
+% .handlejoberror is: the naming below asks for names and dictionaries
+% that a run stopped at an implementation limit may not have to give, and
+% a failure part way through the sentence must still reach the recording
+% that the exit status is read from.
+%
+% in the private global namespace, reached by the start procedures below
+% through a frozen reference, so it does not sit visible in systemdict
+currentglobal true setglobal
+.xpostsys /.reportloadfailure {
+    {
+        (unable to load graphics) print
+        //.internaldict /StartDevice known {
+            //.internaldict /StartDevice get aload pop
+            % the recorded request is the device name and the page it was
+            % asked for, in that order
+            (: device ) print 3 -1 roll =print
+            ( asked for a page of ) print exch =print
+            ( by ) print =print ( pixels) print
+        } if
+        //.internaldict /StartDeviceError known {
+            (: ) print //.internaldict /StartDeviceError get =print
+        }{
+            $error /newerror get $error /errorname known and {
+                (: ) print $error /errorname get =print
+            } if
+        } ifelse
+        (\n) print flush
+    } stopped { (\n) print flush } if
+    //.internaldict /.rundied get exec
+} put
+setglobal
+
 % initiate an interactive session with prompt
 % a postscript 'executive' session
 /start {
@@ -515,7 +573,7 @@ end
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
     } stopped {
-        (unable to load graphics)print
+        //.xpostsys /.reportloadfailure get exec
         handleerror
         pstack
         quit
@@ -579,7 +637,7 @@ setglobal
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
     } stopped {
-        (unable to load graphics)print
+        //.xpostsys /.reportloadfailure get exec
         quit
     } if
     {
@@ -605,7 +663,7 @@ setglobal
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
     } stopped {
-        (unable to load graphics)print
+        //.xpostsys /.reportloadfailure get exec
         quit
     } if
     {
@@ -628,7 +686,7 @@ setglobal
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
     } stopped {
-        (unable to load graphics)print
+        //.xpostsys /.reportloadfailure get exec
         quit
     } if
     {
@@ -650,7 +708,8 @@ setglobal
 % is genuinely optional, and lets a program that needs no graphics avoid the cost.
 /startstdinnographics {
     { //.xpostsys /.finalize get exec } stopped {
-        (unable to lock down interpreter)print
+        (unable to lock down interpreter\n)print flush
+        //.internaldict /.rundied get exec
         quit
     } if
     {
@@ -663,7 +722,8 @@ setglobal
 
 /startfilenamenographics { % (filename)
     { //.xpostsys /.finalize get exec } stopped {
-        (unable to lock down interpreter)print
+        (unable to lock down interpreter\n)print flush
+        //.internaldict /.rundied get exec
         quit
     } if
     {
@@ -677,7 +737,8 @@ setglobal
 
 /startfilenographics { % file-object
     { //.xpostsys /.finalize get exec } stopped {
-        (unable to lock down interpreter)print
+        (unable to lock down interpreter\n)print flush
+        //.internaldict /.rundied get exec
         quit
     } if
     {

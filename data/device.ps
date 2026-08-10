@@ -220,8 +220,20 @@ setglobal
 % defined in xpost_interpreter.c:setlocalconfig() from the -d selection:
 % it runs the chosen maker (newPGMIMAGEdevice, newrasterdevice, ...) at
 % the configured page size and stores the instance as the graphics
-% state's /device -- the DEVICE wrapped operator below reads it back
-newdefaultdevice
+% state's /device -- the DEVICE wrapped operator below reads it back.
+%
+% The name a refusal comes back under is kept here, beside the request
+% the C recorded before the maker ran, because here is the last point at
+% which it is still this attempt's own name. $error holds one error, the
+% most recent, and the unwinding out of a graphics load that stopped part
+% way raises errors of its own on the way out; the start-up report in
+% data/init.ps would otherwise name one of those instead of the limit the
+% device reached. Re-raised once kept, so the load stops as it did.
+{ newdefaultdevice } stopped {
+    $error /errorname known
+        { .internaldict /StartDeviceError $error /errorname get put } if
+    stop
+} if
 
 % the interpreter's own device takes the same finishing setpagedevice
 % gives the ones it makes; the startup page is at the device's own

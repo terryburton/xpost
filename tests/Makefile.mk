@@ -331,6 +331,7 @@ tests/tamper_dispatch_test.ps \
 tests/run-glyph-page-test.sh \
 tests/run-job-page-test.sh \
 tests/run-page-extent-test.sh \
+tests/run-startup-page-test.sh \
 tests/run-thin-stroke-test.sh \
 tests/thin_stroke_test.ps \
 tests/token_sign_test.ps \

@@ -3057,6 +3057,19 @@ test('page-extent',
   suite: cost_slow,
   timeout: 120)
 
+# The same refusal reached from the other side. Above, a program asks for
+# the page and catches what comes back; here the page comes from the
+# command line, before any program is read, so the only answers are the
+# exit status and what was printed. Put to the whole roster: the devices
+# with a raster for the refusal, the ones without as the control that the
+# check is about a page a device cannot provide and not about a large one.
+test('startup-page',
+  find_program('tests/run-startup-page-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
+  timeout: 120)
+
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or
 # its outline into the content a vector writer keeps, or its ink box to a

@@ -2313,7 +2313,18 @@ int setlocalconfig(Xpost_Context *ctx,
        written in PostScript live, and in systemdict otherwise, where the
        ones a C driver registers live. That way neither has to be visible
        to a program for this to reach it. */
-    const char *strtemplate = "currentglobal false setglobal "
+    /* The device and page asked for are recorded before the maker is
+       run, because they are what the start-up report has to name when
+       the maker refuses: a device that was never built holds nothing to
+       read the request back off, and the run that carried it is over by
+       the time anyone reads the report. They go where a program cannot
+       see them (data/init.ps seals .internaldict) and where the report
+       reaches them through a reference no program can shadow. The record
+       is built in global memory because .internaldict is a global
+       dictionary, and the device below in local, as before. */
+    const char *strtemplate = "currentglobal true setglobal "
+                        ".internaldict /StartDevice [ /%s %s ] put "
+                        "false setglobal "
                         "%s graphicsdict /currgstate get /device %s "
                         ".privatedict /%s 2 copy known "
                         "{ get }{ pop pop /%s load } ifelse exec put "
@@ -2383,11 +2394,11 @@ int setlocalconfig(Xpost_Context *ctx,
         dimensions = x;
     }
     newdevstr = xpost_string_cons(ctx,
-                                  strlen(strtemplate) - 10  /* five %s */
+                                  strlen(strtemplate) - 14  /* seven %s */
                                   + strlen(device_strings[i][1])
-                                  + strlen(dimensions)
+                                  + 2 * strlen(dimensions)
                                   + 2 * strlen(device_strings[i][2])
-                                  + strlen(device_strings[i][0]) + 1,
+                                  + 2 * strlen(device_strings[i][0]) + 1,
                                   NULL);
     /* the template is written straight into the string's storage, so a
        construction that was refused would be written through the pointer
@@ -2399,6 +2410,7 @@ int setlocalconfig(Xpost_Context *ctx,
         goto done;
     }
     sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
+            device_strings[i][0], dimensions,
             device_strings[i][1], dimensions, device_strings[i][2],
             device_strings[i][2], device_strings[i][0]);
     --newdevstr.comp_.sz; /* trim the '\0' */
