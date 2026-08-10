@@ -3071,7 +3071,7 @@ test('startup-page',
   find_program('tests/run-startup-page-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_slow,
+  suite: cost_fast,
   timeout: 120)
 
 # The same question of a job whose marks are glyphs. Text does not reach the

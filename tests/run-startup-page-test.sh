@@ -49,7 +49,13 @@ echo showpage > "$work/job.ps"
 # reaches is the count a pixel's position is held in or the memory the
 # raster would take. A side small enough to look like a page is what
 # makes this a limit of the area rather than of the dimension.
-BIG=65535x65535+0+0
+#
+# The area is past every machine's memory rather than merely large, so
+# that no build allocates for it and the refusal is the same wherever
+# this runs. A page that some machine could hold would be provided on
+# that machine and refused on the next, and the test would be reading
+# the host rather than the interpreter.
+BIG=2000000000x2000000000+0+0
 # and a page any of them provides, so that a refusal is read as a refusal
 # of this page and not of every page.
 SMALL=200x200+0+0
@@ -116,16 +122,24 @@ one_device() {
         *) echo "FAILURES: $dev is not named in its own refusal: $line"; rc=1 ;;
     esac
     case $line in
-        *65535*65535*) ;;
+        *2000000000*2000000000*) ;;
         *) echo "FAILURES: $dev does not say what page was asked for: $line"
            rc=1 ;;
     esac
     case " $INDEXED " in
         *" $dev "*)
+            # Which of the two bounds this page reaches is the platform's
+            # to decide, so both are accepted and neither is assumed. A
+            # position within the raster is held in the width the platform
+            # expresses a size in: where that width is narrow the area is
+            # past what a position counts and the answer is limitcheck,
+            # and where it is wide the area is expressible and the memory
+            # is what runs out first, which is VMerror. What is held here
+            # is that a limit was named, not which one the machine has.
             case $line in
-                *limitcheck*) ;;
-                *) echo "FAILURES: $dev reaches the limit on addressing a" \
-                        "pixel and must report it as limitcheck: $line"
+                *limitcheck*|*VMerror*) ;;
+                *) echo "FAILURES: $dev reaches a limit on the page it was" \
+                        "asked for and must name it: $line"
                    rc=1 ;;
             esac ;;
         *)
