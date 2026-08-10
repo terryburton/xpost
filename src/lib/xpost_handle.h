@@ -38,16 +38,29 @@
 #include "xpost_context.h" /* Xpost_Context */
 
 /*
- * Where C-level state that a dictionary names lives.
+ * Where C-level state that virtual memory names lives.
  *
- * Some of what a dictionary stands for is a struct of pointers and
- * counts held outside virtual memory. A device's instance state is: it
- * names raster memory, which is not part of VM (PLRM 3.7.3), so a
- * `restore` reaches neither a page's pixels nor a writer's accumulated
- * content. A font's is: it names the face the font program was opened
- * as, which the font machinery holds for the process. What the
- * dictionary holds under its key is a handle on the block rather than
- * the block itself.
+ * Some of what virtual memory stands for is a struct of pointers and
+ * counts held outside it. A device's instance state is: it names raster
+ * memory, which is not part of VM (PLRM 3.7.3), so a `restore` reaches
+ * neither a page's pixels nor a writer's accumulated content. A font's
+ * is: it names the face the font program was opened as, which the font
+ * machinery holds for the process. A file's is: it names the stream the
+ * file layer reaches its bytes through, along with the coding state and
+ * buffers a filter keeps. What virtual memory holds is a handle on the
+ * block rather than the block itself.
+ *
+ * That is what keeps virtual memory position-independent. A composite
+ * object names its storage by entity number, an index into the memory
+ * table, and never by address; a handle is likewise a number issued
+ * here. So nothing virtual memory holds depends on where the process
+ * put anything.
+ *
+ * A handle is issued either to a dictionary, which holds it under a key
+ * as an ordinary value, or to an entity of the holder's own, which
+ * carries it as the whole of what the entity holds. A file is the
+ * second: the filetype object names the entity, and the entity names
+ * the stream.
  *
  * Such a dictionary is an ordinary dictionary and what it holds under
  * any key is whatever was last stored there, so the value a reader is
@@ -77,7 +90,18 @@
  * marked in the memory table, so the collector's sweep, the entity
  * reclaimer and the memory file's teardown each reach it -- the three
  * points at which a file's struct is likewise given up.
+ *
+ * A block held rather than issued here is the holder's: the file layer
+ * allocates a stream's struct, decides when nothing reaches it any
+ * longer -- a stream a filter still reads outlives the object naming
+ * it -- and frees it. Giving up such a handle gives up the record of
+ * the block, not the block.
  */
+
+/**
+ * @brief Bytes an entity carrying a handle holds.
+ */
+#define XPOST_HANDLE_ENTITY_SIZE (sizeof(unsigned int))
 
 /**
  * @brief Memory-table tag bit marking an entity as a handle on a block.
@@ -94,7 +118,8 @@ typedef enum
 {
     XPOST_HANDLE_DEVICE = 1, /**< a device's instance state */
     XPOST_HANDLE_CONTENT,    /**< a vector writer's accumulated content */
-    XPOST_HANDLE_FONT        /**< a font's face */
+    XPOST_HANDLE_FONT,       /**< a font's face */
+    XPOST_HANDLE_FILE        /**< a file's stream */
 } Xpost_Handle_Kind;
 
 /**
@@ -113,6 +138,43 @@ int xpost_handle_cons(Xpost_Context *ctx,
                       Xpost_Object *anchor,
                       Xpost_Handle_Kind kind,
                       size_t size);
+
+/**
+ * @brief Record a block the caller holds against an entity that already
+ * exists, and store its handle in that entity.
+ *
+ * The entity carries the handle and nothing else, so it must be a
+ * handle's width. The block stays the caller's to free. Returns 1, or 0
+ * where no record can be taken or the handle cannot be stored.
+ */
+int xpost_handle_hold(Xpost_Memory_File *mem,
+                      unsigned int ent,
+                      Xpost_Handle_Kind kind,
+                      size_t size,
+                      void *block);
+
+/**
+ * @brief The block the handle an entity carries names, or NULL where it
+ * names none of this kind and size.
+ *
+ * The handle is checked back against the entity it was read from, so a
+ * genuine handle written into another entity names that entity's block
+ * no more than a number of the program's own making does.
+ */
+void *xpost_handle_block_at(Xpost_Memory_File *mem,
+                            unsigned int ent,
+                            Xpost_Handle_Kind kind,
+                            size_t size);
+
+/**
+ * @brief Give up the record of a block held against an entity, and clear
+ * the handle the entity carries.
+ *
+ * The block is the holder's, and is not freed. The entity is cleared
+ * whether or not it carried a handle that named anything. Returns 1, or
+ * 0 where the entity cannot be written.
+ */
+int xpost_handle_drop(Xpost_Memory_File *mem, unsigned int ent);
 
 /**
  * @brief The block a handle names, or NULL where it names none of this

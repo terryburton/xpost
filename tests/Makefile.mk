@@ -114,6 +114,7 @@ tests/error_dict_test.ps \
 tests/error_unwind_test.ps \
 tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
+tests/file_handle_test.c \
 tests/file_lifetime_test.ps \
 tests/filenameforall_large_test.ps \
 tests/fill_span_test.ps \

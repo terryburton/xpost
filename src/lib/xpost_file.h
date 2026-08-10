@@ -107,7 +107,7 @@ typedef struct Xpost_File_Methods
    which no program object names: the filter above it is the only thing
    that can close it, so it does, along with itself.
 
-   ent is the file entity holding the pointer to this struct. No program
+   ent is the file entity carrying the handle on this struct. No program
    object naming a stream does not mean no ENTITY names it -- an owned
    stream still has one, and restore's close sweep walks entities rather
    than objects, so it reaches one. Whoever frees the struct must
@@ -125,6 +125,14 @@ struct Xpost_File
     unsigned int ent;
     Xpost_File_Wraps wraps;
 };
+
+/* What a file's handle is recorded and asked for as: the base every
+   stream begins with, whatever the subtype allocated behind it. A handle
+   of this kind names a stream, and which stream it is the method table
+   the struct opens with says -- so there is one question to ask of a
+   file entity and one answer to check, and a block issued for anything
+   else does not answer it. */
+#define XPOST_FILE_BLOCK_SIZE (sizeof(Xpost_File))
 
 /* Every file subtype begins with the base, so a subtype's address and its
    base's address are the same address and the cast between them is the

@@ -195,7 +195,6 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
     unsigned int z; /* free list pointer */
     unsigned int a; /* adr associated with ent */
     unsigned int sz; /* sz associated with adr */
-    int ret;
     /* return; */
 
     if (ent < mem->start)
@@ -213,8 +212,6 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
 
     if (tab->tab[rent].tag == filetype)
     {
-        Xpost_File *fp;
-
         /* retire this file from its birth-stamp bucket */
         {
             unsigned int b = (tab->tab[rent].mark
@@ -229,25 +226,21 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
                     mem->file_birth_max--;
             }
         }
-        /* A file entity holds an Xpost_File *, the stream abstraction --
-           not the stdio FILE * it once held. Reading it back as the type
-           it is means the two cannot be confused; a stream is closed
-           through its own method table, never by fclose on a pointer that
-           merely happens to be the same width.
+        /* A file entity carries a handle on the stream abstraction, which
+           is asked for as such. A stream is closed through its own method
+           table, never by fclose on something that merely happens to be
+           the same width, and a handle of one kind does not resolve for
+           another.
 
            Reaching here with a live stream would be a caller's mistake,
            not a case to handle: the entity is only offered for reclaim
-           once its stream has been closed and its pointer cleared, which
+           once its stream has been closed and its handle given up, which
            is why the one caller that can present a file entity tests for
-           NULL before asking. Say so and decline, rather than guess at a
-           close for a stream something else still believes it owns. */
-        ret = xpost_memory_get(mem, ent, 0, sizeof fp, &fp);
-        if (!ret)
-        {
-            XPOST_LOG_ERR("cannot load the stream of file ent %u", ent);
-            return -1;
-        }
-        if (fp)
+           no stream before asking. Say so and decline, rather than guess
+           at a close for a stream something else still believes it
+           owns. */
+        if (xpost_handle_block_at(mem, ent, XPOST_HANDLE_FILE,
+                                  XPOST_FILE_BLOCK_SIZE))
         {
             XPOST_LOG_ERR("refusing to reclaim file ent %u: its stream is "
                           "still open", ent);

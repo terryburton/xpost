@@ -206,9 +206,12 @@ xpost_getenv
 xpost_glob
 xpost_glob_free
 xpost_handle_block
+xpost_handle_block_at
 xpost_handle_block_of
 xpost_handle_cons
 xpost_handle_device_release
+xpost_handle_drop
+xpost_handle_hold
 xpost_handle_release_entity
 xpost_handle_release_memory_file
 xpost_init

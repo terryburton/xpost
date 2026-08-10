@@ -1227,6 +1227,23 @@ test('edit-stream-close',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A file is an entity in virtual memory and a stream struct outside it, and
+# the entity holds a handle on the stream rather than its address. Every
+# constructor is built here and its entity read, and a handle naming no live
+# stream -- or one read out of an entity it was not issued against --
+# resolves to no stream.
+file_handle_exe = executable('file_handle_test',
+  'tests/file_handle_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('file-handle',
+  file_handle_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The one growable byte buffer every byte-stream builder in the tree grows
 # through: its return convention (0 for no error, the error code to raise
 # otherwise), a zero-filled buffer being a valid empty one, content survival

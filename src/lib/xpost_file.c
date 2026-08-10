@@ -59,8 +59,9 @@
 #include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_compat.h"
-#include "xpost_memory.h"  /* files store FILE*s in (local) mfile */
+#include "xpost_memory.h"  /* a file entity lives in the (local) mfile */
 #include "xpost_object.h"
+#include "xpost_handle.h"  /* a file entity carries a handle on its stream */
 #include "xpost_stack.h"  /* files are objects */
 #include "xpost_context.h"
 
@@ -1316,6 +1317,12 @@ struct Xpost_File_Methods a85_methods =
 
 /* Tie a freshly allocated file entity to the stream it holds.
 
+   Records the stream against the entity, which then carries the handle
+   the file layer reaches it by. What the entity holds is a number, not
+   the address of the struct: everything virtual memory holds names its
+   storage by entity number, and a handle is likewise a number, so
+   nothing in it depends on where the process put anything.
+
    Records the save depth at which the entity is born (as depth+1, zero
    meaning unstamped) in its low-level mark field: restore closes a file
    created since the corresponding save (PLRM 3.8.2), and the sweep needs
@@ -1324,15 +1331,25 @@ struct Xpost_File_Methods a85_methods =
    snapshots.
 
    And records the entity on the stream, so that whoever frees the struct
-   can clear the entity that points at it. The two facts are written
-   together because they are one fact -- this entity and this struct
-   belong to each other -- and a stream that knew its depth but not its
-   entity is how a freed struct came to be closed a second time. */
-static void
+   can clear the entity that names it. The facts are written together
+   because they are one fact -- this entity and this struct belong to
+   each other -- and a stream that knew its depth but not its entity is
+   how a freed struct came to be closed a second time. A refusal writes
+   none of them: the entity is left holding no stream and outside the
+   birth census, which is what it would be taken back to. */
+static int
 _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
 {
     unsigned int vs, depth = 0, mk;
 
+    if (!xpost_handle_hold(mem, ent, XPOST_HANDLE_FILE,
+                           XPOST_FILE_BLOCK_SIZE, fp))
+    {
+        /* the entity keeps the tag of a file and holds whatever the
+           allocation left there, which is not to be read as a handle */
+        (void)xpost_handle_drop(mem, ent);
+        return 0;
+    }
     if (xpost_memory_save_stack_ready(mem))
     {
         vs = xpost_memory_save_stack_adr(mem);
@@ -1349,6 +1366,7 @@ _file_bind_entity(Xpost_Memory_File *mem, unsigned int ent, Xpost_File *fp)
         mem->file_birth_max = depth + 1;
     if (fp)
         fp->ent = ent;
+    return 1;
 }
 
 /* Take a closed file out of the birth census, just after it closes.
@@ -1387,30 +1405,29 @@ _file_retire_stamp(Xpost_Memory_File *mem, unsigned int ent)
         mem->file_birth_max--;
 }
 
-/* Clear the entity that points at this stream, just before the struct
-   goes. Entity zero is the free list, never a file, so it stands for "no
+/* Clear the entity that names this stream, just before the struct goes.
+   Entity zero is the free list, never a file, so it stands for "no
    entity" on a stream that never had one.
 
    The number is remembered, not held: the entity it named can be
    reclaimed while this struct is still alive, and the free list hands
    the same number out again to whatever asks next. Being in range says
    only that some entity is there, not that it is still this stream's, so
-   the tag is what decides. Without that, releasing a stream writes a
-   pointer's worth of zeroes into whichever object holds the number
-   now -- a file that reports itself open and then answers nothing, or a
-   string, or a link in the free list. */
+   the tag is what decides. Without that, releasing a stream clears the
+   handle of whichever object holds the number now -- a file that reports
+   itself open and then answers nothing, or a string, or a link in the
+   free list. */
 static void
 _file_forget_entity(Xpost_Memory_File *mem, Xpost_File *fp)
 {
-    Xpost_File *none = NULL;
     unsigned int tag;
 
     if (!fp->ent || !xpost_ent_valid(mem, fp->ent))
         return;
     if (!xpost_memory_table_get_tag(mem, fp->ent, &tag) || tag != filetype)
         return;
-    if (!xpost_memory_put(mem, fp->ent, 0, sizeof none, &none))
-        XPOST_LOG_ERR("cannot clear the file pointer of a released stream");
+    if (!xpost_handle_drop(mem, fp->ent))
+        XPOST_LOG_ERR("cannot clear the handle of a released stream");
 }
 
 Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
@@ -1419,7 +1436,6 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
 {
     Xpost_Object f = { 0 };
     unsigned int ent;
-    int ret;
     Xpost_File *df;
 
 #ifdef DEBUG_FILE
@@ -1429,27 +1445,21 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
     df = xpost_diskfile_open(fp, input);
     if (!df)
         return invalid;
-    /* xpost_memory_table_alloc(mem, sizeof(FILE *), 0, &f.mark_.padw); */
-    if (!xpost_memory_table_alloc(mem, sizeof df, filetype, &ent))
+    if (!xpost_memory_table_alloc(mem, XPOST_HANDLE_ENTITY_SIZE, filetype,
+                                  &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
         /* the stream is being abandoned before any program saw it */
         free(df);
         return invalid;
     }
-    _file_bind_entity(mem, ent, df);
-    f.mark_.padw = ent;
-    ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof df, &df);
-    if (!ret)
+    if (!_file_bind_entity(mem, ent, df))
     {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        /* the entity was allocated and stamped as a file born at this
-           save depth, and holds no stream at all: take it back out of
-           the census, so no restore goes looking for one in it */
-        _file_retire_stamp(mem, ent);
+        XPOST_LOG_ERR("cannot hold the stream of a file record");
         free(df);
         return invalid;
     }
+    f.mark_.padw = ent;
     return f;
 }
 
@@ -1479,7 +1489,8 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         return invalid;
     }
     ((Xpost_MemoryFile *)mf)->is_malloc = 1;
-    if (!xpost_memory_table_alloc(mem, sizeof mf, filetype, &ent))
+    if (!xpost_memory_table_alloc(mem, XPOST_HANDLE_ENTITY_SIZE, filetype,
+                                  &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
         /* the stream is being abandoned before any program saw it */
@@ -1487,19 +1498,14 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
         free(mf);
         return invalid;
     }
-    _file_bind_entity(mem, ent, mf);
-    f.mark_.padw = ent;
-    if (!xpost_memory_put(mem, f.mark_.padw, 0, sizeof mf, &mf))
+    if (!_file_bind_entity(mem, ent, mf))
     {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        /* the entity was allocated and stamped as a file born at this
-           save depth, and holds no stream at all: take it back out of
-           the census, so no restore goes looking for one in it */
-        _file_retire_stamp(mem, ent);
+        XPOST_LOG_ERR("cannot hold the stream of a file record");
         (void)xpost_file_close(mf);
         free(mf);
         return invalid;
     }
+    f.mark_.padw = ent;
     return f;
 }
 
@@ -1874,21 +1880,20 @@ _proc_stream_cons(Xpost_Context *ctx, Xpost_Object proc,
     mf = (Xpost_File *)pf;
 
     f.tag = filetype;
-    if (!xpost_memory_table_alloc(ctx->lo, sizeof mf, filetype, &ent))
+    if (!xpost_memory_table_alloc(ctx->lo, XPOST_HANDLE_ENTITY_SIZE, filetype,
+                                  &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
         free(pf);
         return invalid;
     }
-    _file_bind_entity(ctx->lo, ent, mf);
-    f.mark_.padw = ent;
-    if (!xpost_memory_put(ctx->lo, f.mark_.padw, 0, sizeof mf, &mf))
+    if (!_file_bind_entity(ctx->lo, ent, mf))
     {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        _file_retire_stamp(ctx->lo, ent);
+        XPOST_LOG_ERR("cannot hold the stream of a file record");
         free(pf);
         return invalid;
     }
+    f.mark_.padw = ent;
     return f;
 }
 
@@ -5113,7 +5118,6 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
 {
     Xpost_Object f = { 0 };
     unsigned int ent;
-    int ret;
 
     if (!ff)
         return invalid;
@@ -5124,22 +5128,20 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
     ff->ent = 0;
     ff->wraps = wraps;
     f.tag = filetype;
-    if (!xpost_memory_table_alloc(mem, sizeof ff, filetype, &ent))
+    if (!xpost_memory_table_alloc(mem, XPOST_HANDLE_ENTITY_SIZE, filetype,
+                                  &ent))
     {
         XPOST_LOG_ERR("cannot allocate file record");
         _filter_cons_abandon(ff);
         return invalid;
     }
-    _file_bind_entity(mem, ent, ff);
-    f.mark_.padw = ent;
-    ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof ff, &ff);
-    if (!ret)
+    if (!_file_bind_entity(mem, ent, ff))
     {
-        XPOST_LOG_ERR("cannot save file pointer in VM");
-        _file_retire_stamp(mem, ent);
+        XPOST_LOG_ERR("cannot hold the stream of a file record");
         _filter_cons_abandon(ff);
         return invalid;
     }
+    f.mark_.padw = ent;
     if (under)
         under->refs++;
     return f;
@@ -5676,29 +5678,31 @@ int xpost_file_open(Xpost_Memory_File *mem,
    The whole file layer reaches its streams through here, and every one of
    those reads is followed by a call through the method table the stream
    begins with. What comes back is therefore not data but a jump target,
-   and the only thing standing behind it is the entity the object names.
+   and the only thing standing behind it is the entity the object names
+   and the handle that entity carries.
 
    A file object can outlive that entity: restore releases the files
    opened since the save it undoes, and the collector reclaims the ones
    nothing reaches, either of which puts the number back on the free list
-   to be handed out again. The payload then holds the free list's own
+   to be handed out again. The entity then holds the free list's own
    link word, or whatever the next allocation stored there. Being in
    range says only that some entity is there; the tag is what says it is
-   still a stream. Ask, and answer "no stream" when it is not, which is
-   the answer every caller already handles -- status reports the file
-   closed, closefile has nothing left to do, and a read or a write
-   reports an ioerror. */
+   still a stream, and the handle is resolved against the entity it was
+   read from, so a number that was a handle somewhere else names nothing
+   here. Ask, and answer "no stream" when it is not, which is the answer
+   every caller already handles -- status reports the file closed,
+   closefile has nothing left to do, and a read or a write reports an
+   ioerror. */
 Xpost_File *xpost_file_get_file_pointer(Xpost_Memory_File *mem,
                                         Xpost_Object f)
 {
-    Xpost_File *fp;
     unsigned int tag;
 
     if (!xpost_memory_table_get_tag(mem, f.mark_.padw, &tag) || tag != filetype)
         return NULL;
-    if (!xpost_memory_get(mem, f.mark_.padw, 0, sizeof fp, &fp))
-        return NULL;
-    return fp;
+    return (Xpost_File *)xpost_handle_block_at(mem, f.mark_.padw,
+                                               XPOST_HANDLE_FILE,
+                                               XPOST_FILE_BLOCK_SIZE);
 }
 
 /* make sure the FILE* is not null */
@@ -5884,11 +5888,10 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
                releasing this struct later writes through whatever holds
                it by then. */
             fp->ent = 0;
-        fp = NULL;
-        ret = xpost_memory_put(mem, f.mark_.padw, 0, sizeof fp, &fp);
+        ret = xpost_handle_drop(mem, f.mark_.padw);
         if (!ret)
         {
-            XPOST_LOG_ERR("cannot write NULL over FILE* in VM");
+            XPOST_LOG_ERR("cannot clear the file's handle in VM");
             return VMerror;
         }
         _file_retire_stamp(mem, f.mark_.padw);

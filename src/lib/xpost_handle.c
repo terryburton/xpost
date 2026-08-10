@@ -46,8 +46,8 @@
 #include "xpost_name.h"
 #include "xpost_handle.h"
 
-/* One issued block: the entity carrying its handle, the dictionary it
-   was issued to, and what it holds. */
+/* One recorded block: the entity carrying its handle, the dictionary it
+   was issued to where there is one, and what it holds. */
 typedef struct
 {
     Xpost_Memory_File *mem;      /* memory file of the handle entity */
@@ -57,6 +57,7 @@ typedef struct
     Xpost_Handle_Kind kind;      /* what the block holds */
     unsigned int size;           /* bytes the block holds */
     unsigned int release;        /* opcode of a device block's release, or zero */
+    int held;                    /* the block is the holder's to free */
     void *block;
 } Xpost_Handle_Slot;
 
@@ -108,6 +109,74 @@ static Xpost_Handle_Slot *_slot_of(Xpost_Memory_File *mem,
     return &_slots[index];
 }
 
+/* Take a slot for a block, store its number in the entity that is to
+   carry the handle, and fill the slot in. Returns the slot, or NULL
+   where there is no slot to take or the entity will not hold the
+   number -- in which case nothing has been recorded and the entity has
+   not been written. */
+static Xpost_Handle_Slot *_slot_record(Xpost_Memory_File *mem,
+                                       unsigned int ent,
+                                       Xpost_Handle_Kind kind,
+                                       size_t size,
+                                       int held,
+                                       void *block)
+{
+    unsigned int index;
+
+    index = _slot_alloc();
+    if (index == 0)
+    {
+        XPOST_LOG_ERR("cannot record a block of state");
+        return NULL;
+    }
+    if (!xpost_memory_put(mem, ent, 0, sizeof index, &index))
+    {
+        XPOST_LOG_ERR("cannot store a handle");
+        return NULL;
+    }
+    _slots[index].mem = mem;
+    _slots[index].ent = ent;
+    _slots[index].ownermem = NULL;
+    _slots[index].owner = 0;
+    _slots[index].kind = kind;
+    _slots[index].size = (unsigned int)size;
+    _slots[index].release = 0;
+    _slots[index].held = held;
+    _slots[index].block = block;
+    return &_slots[index];
+}
+
+int xpost_handle_hold(Xpost_Memory_File *mem,
+                      unsigned int ent,
+                      Xpost_Handle_Kind kind,
+                      size_t size,
+                      void *block)
+{
+    return _slot_record(mem, ent, kind, size, 1, block) != NULL;
+}
+
+void *xpost_handle_block_at(Xpost_Memory_File *mem,
+                            unsigned int ent,
+                            Xpost_Handle_Kind kind,
+                            size_t size)
+{
+    Xpost_Handle_Slot *slot = _slot_of(mem, ent);
+
+    if (!slot || (slot->kind != kind) || (slot->size != size))
+        return NULL;
+    return slot->block;
+}
+
+int xpost_handle_drop(Xpost_Memory_File *mem, unsigned int ent)
+{
+    Xpost_Handle_Slot *slot = _slot_of(mem, ent);
+    unsigned int none = 0;
+
+    if (slot)
+        memset(slot, 0, sizeof(*slot));
+    return xpost_memory_put(mem, ent, 0, sizeof none, &none);
+}
+
 int xpost_handle_cons(Xpost_Context *ctx,
                       Xpost_Object dic,
                       Xpost_Object key,
@@ -116,8 +185,8 @@ int xpost_handle_cons(Xpost_Context *ctx,
                       size_t size)
 {
     Xpost_Memory_File *mem;
+    Xpost_Handle_Slot *slot;
     Xpost_Object o;
-    unsigned int index;
     unsigned int ent;
     unsigned int tag;
     int owner;
@@ -127,12 +196,6 @@ int xpost_handle_cons(Xpost_Context *ctx,
     if (owner < 0)
         return unregistered;
 
-    index = _slot_alloc();
-    if (index == 0)
-    {
-        XPOST_LOG_ERR("cannot record a block of state");
-        return VMerror;
-    }
     block = calloc(1, size);
     if (!block)
     {
@@ -143,7 +206,8 @@ int xpost_handle_cons(Xpost_Context *ctx,
     /* the handle is read-only to the program: what it names is checked
        either way, and a handle that cannot be overwritten in place is
        one fewer thing for the check to answer */
-    o = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(index), NULL));
+    o = xpost_object_cvlit(xpost_string_cons(ctx, XPOST_HANDLE_ENTITY_SIZE,
+                                             NULL));
     if (xpost_object_get_type(o) != stringtype)
     {
         free(block);
@@ -152,24 +216,21 @@ int xpost_handle_cons(Xpost_Context *ctx,
     }
     mem = xpost_context_select_memory(ctx, o);
     ent = (unsigned int)xpost_object_get_ent(o);
-    if (!xpost_memory_put(mem, ent, 0, sizeof(index), &index) ||
+    slot = _slot_record(mem, ent, kind, size, 0, block);
+    if (!slot ||
         !xpost_memory_table_get_tag(mem, ent, &tag) ||
         !xpost_memory_table_set_tag(mem, ent,
                                     tag | XPOST_MEMORY_TABLE_TAG_HANDLE))
     {
+        if (slot)
+            memset(slot, 0, sizeof(*slot));
         free(block);
         XPOST_LOG_ERR("cannot store a handle");
         return VMerror;
     }
 
-    _slots[index].mem = mem;
-    _slots[index].ent = ent;
-    _slots[index].ownermem = xpost_context_select_memory(ctx, dic);
-    _slots[index].owner = (unsigned int)owner;
-    _slots[index].kind = kind;
-    _slots[index].size = (unsigned int)size;
-    _slots[index].release = 0;
-    _slots[index].block = block;
+    slot->ownermem = xpost_context_select_memory(ctx, dic);
+    slot->owner = (unsigned int)owner;
 
     /* A device's instance state is released by an operator its class
        installs, and a released one runs where no error is caught, so the
@@ -184,7 +245,7 @@ int xpost_handle_cons(Xpost_Context *ctx,
                                               xpost_name_cons(ctx, "Destroy"));
 
         if (xpost_object_get_type(destroy) == operatortype)
-            _slots[index].release = destroy.mark_.padw;
+            slot->release = destroy.mark_.padw;
     }
 
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
@@ -272,7 +333,11 @@ void xpost_handle_release_entity(Xpost_Memory_File *mem,
 
     if (!slot)
         return;
-    free(slot->block);
+    /* a block the holder keeps goes when the holder says so: the file
+       layer frees a stream's struct once nothing reads through it, which
+       can be after the entity naming it has gone */
+    if (!slot->held)
+        free(slot->block);
     memset(slot, 0, sizeof(*slot));
 }
 
@@ -283,7 +348,8 @@ void xpost_handle_release_memory_file(Xpost_Memory_File *mem)
     for (i = 1; i < _nslots; i++)
         if ((_slots[i].ent != 0) && (_slots[i].mem == mem))
         {
-            free(_slots[i].block);
+            if (!_slots[i].held)
+                free(_slots[i].block);
             memset(&_slots[i], 0, sizeof(_slots[i]));
         }
 }
