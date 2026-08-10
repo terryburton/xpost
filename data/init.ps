@@ -31,6 +31,11 @@ true setglobal   % systemdict is global, so these allocations must be global
 % halftone families bake.
 currentglobal true setglobal
 userdict /.xpostsys 400 dict put
+% Recorded in the context as well, where the collector roots it and the C
+% reaches it. The anchor below is dropped at lockdown and what holds the
+% namespace afterwards is the references frozen into procedure bodies, which
+% no C code has; the caches C keeps here must be reachable from both sides.
+userdict /.xpostsys get .setglobalprivatedict
 setglobal
 
 currentglobal true setglobal

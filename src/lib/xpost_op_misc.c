@@ -429,6 +429,38 @@ int op_setprivatedict(Xpost_Context *ctx,
     return 0;
 }
 
+/* dict  .setglobalprivatedict  -
+   Record the interpreter's private global namespace in the context, where the
+   collector roots it and the C reaches it. Called once from init.ps.
+
+   The namespace drops its userdict anchor at lockdown, leaving it reachable
+   only through the references frozen into procedure bodies. That is enough for
+   PostScript, which holds such a reference wherever it needs one, and is
+   nothing at all for C, which holds none. Recording it here gives both a way
+   in and makes the namespace rooted in its own right rather than through
+   whichever procedure happens to have frozen a reference to it.
+
+   The dictionary must be global. What C keeps here is the half of a cache that
+   is an object, whose other half is a host resource held in a static: the two
+   must stay reachable together, and a record belonging to one context cannot
+   promise that when the contexts share these memory banks and the one that
+   filled the cache may end first. A global object may hold no local one, which
+   is the same reason the local machinery has a dictionary of its own.
+
+   It is recorded once. The record is context state rather than virtual memory,
+   so no `restore` puts back a namespace displaced from it. */
+static
+int op_setglobalprivatedict(Xpost_Context *ctx,
+                            Xpost_Object D)
+{
+    if (xpost_object_get_type(ctx->globalprivatedict) == dicttype)
+        return invalidaccess;
+    if (xpost_context_select_memory(ctx, D) != ctx->gl)
+        return invalidaccess;
+    ctx->globalprivatedict = D;
+    return 0;
+}
+
 /* -  .privatedict  dict
    Push the private local machinery dictionary. Like .gscratch, it hands a local
    object to whatever asks; a global procedure may use the result transiently
@@ -458,6 +490,8 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".sysdictunlock", (Xpost_Op_Func)op_sysdictunlock, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".setprivatedict", (Xpost_Op_Func)op_setprivatedict, 1, dicttype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".setglobalprivatedict", (Xpost_Op_Func)op_setglobalprivatedict, 1, dicttype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".privatedict", (Xpost_Op_Func)op_privatedict, 0);
     INSTALL;

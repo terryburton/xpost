@@ -1124,6 +1124,14 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->privatedict, markall))
                 return -1;
 
+            /* and the global namespace beside it, for the same reason: its
+               userdict anchor is dropped at lockdown, so what roots it
+               otherwise is whichever procedure froze a reference. What C
+               keeps there is the object half of a cache whose other half a
+               static holds, which nothing else names. */
+            if (!_xpost_garbage_mark_object(ctx, mem, ctx->globalprivatedict, markall))
+                return -1;
+
             /* the object being executed may exist only here */
             if (!_xpost_garbage_mark_object(ctx, mem, ctx->currentobject, markall))
                 return -1;

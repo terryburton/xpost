@@ -265,6 +265,24 @@ struct _Xpost_Context {
          C reaches the device classes through it; PostScript through a frozen
          reference. Set from init.ps by .setprivatedict. */
     Xpost_Object privatedict;
+
+    /**< globalprivatedict -- the GLOBAL private namespace, .xpostsys. Rooted
+         here for the same reason privatedict is, and reached from C the same
+         way: the namespace drops its userdict anchor at lockdown, so without
+         this record it is reachable only through the references frozen into
+         procedure bodies, and not reachable from C at all.
+
+         What it holds for C is state that outlives a save and belongs to no
+         one context: the caches whose other half is a host resource a C
+         static keeps. A slot in such a cache and the object it names must
+         stay reachable together, and a per-context record cannot do that --
+         contexts share these memory banks, and the context that filled the
+         cache may end before one still reading it. Held here, the objects
+         are reachable while any context that could reach the cache is.
+
+         Global, so it may not hold local objects; local machinery belongs in
+         privatedict. Set from init.ps by .setglobalprivatedict. */
+    Xpost_Object globalprivatedict;
     const char *device_str;
 
     int quiet; /**< the -q/--quiet startup flag, retained so the shutdown
