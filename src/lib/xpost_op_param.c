@@ -52,6 +52,7 @@
 #include "xpost_garbage.h"
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
+#include "xpost_op_math.h"   /* a count, as the object the PLRM gives it */
 #include "xpost_op_param.h"
 
 static
@@ -101,19 +102,23 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
 static
 int vmstatus (Xpost_Context *ctx)
 {
-    int lev, used, max;
+    int lev;
+    Xpost_Memory_File *vm;
     unsigned int vstk;
 
     vstk = xpost_memory_save_stack_adr(ctx->lo);
     lev = xpost_stack_count(ctx->lo, vstk);
-    used = ctx->gl->used + ctx->lo->used;
-    max = ctx->gl->max + ctx->lo->max;
+    /* PLRM 8.2: the two counts are of the bank the allocation mode
+       selects, virtual memory being accounted for separately in each.
+       The level is not: it is the depth of save nesting, which a
+       program has one of. */
+    vm = (ctx->vmmode == GLOBAL) ? ctx->gl : ctx->lo;
 
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(lev)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(used)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(vm->used)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(max)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(vm->max)))
         return stackoverflow;
     return 0;
 }
@@ -209,19 +214,16 @@ int vmreserve (Xpost_Context *ctx, Xpost_Object nobjects, Xpost_Object nbytes)
 static
 int globalvmstatus (Xpost_Context *ctx)
 {
-    int lev, used, max;
+    int lev;
     unsigned int vstk;
 
     vstk = xpost_memory_save_stack_adr(ctx->gl);
     lev = xpost_stack_count(ctx->gl, vstk);
-    used = ctx->gl->used;
-    max = ctx->gl->max;
-
     if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(lev)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(used)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(ctx->gl->used)))
         return stackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(max)))
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_count_cons(ctx->gl->max)))
         return stackoverflow;
     return 0;
 }

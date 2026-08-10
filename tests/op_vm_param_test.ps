@@ -1,10 +1,16 @@
 % The virtual-memory parameter operators (PLRM 8.2), run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
-% vmstatus reports the save level and the memory consumed and available;
+% vmstatus reports the save level and the memory consumed and available.
+% Virtual memory is accounted for separately in each bank, and the two
+% counts are of the bank the allocation mode selects (PLRM 8.2, vmstatus:
+% "the used and maximum values apply to either local or global VM
+% according to the current VM allocation mode"), while the level is the
+% depth of save nesting, which a program has one of. globalvmstatus
+% answers the same three numbers for global memory whatever the mode.
+%
 % vmreclaim controls the collector and answers rangecheck outside the five
-% values it defines. globalvmstatus reports the same three numbers for
-% global memory alone.
+% values it defines.
 
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
@@ -40,10 +46,25 @@ gmax isint gused isint and glevel isint and
     (globalvmstatus answers integers) assert
 gused 0 gt (globalvmstatus reports memory in use) assert
 gused gmax le (the global memory in use is within its maximum) assert
-% global memory is one of the two banks vmstatus totals
-vmstatus pop /totalused exch def pop
-gused totalused le
-    (the global memory in use is part of the total) assert
+% --- the two counts follow the allocation mode ---
+% Asked in global mode, vmstatus answers for the same bank
+% globalvmstatus does; asked in local mode it answers for the other. The
+% two are compared with room for what the calls themselves allocate, and
+% against each other to show they are not one number answering for both.
+clear
+currentglobal
+true setglobal
+vmstatus pop /gmodeused exch def pop
+false setglobal
+vmstatus pop /lmodeused exch def pop
+setglobal
+globalvmstatus pop /gbankused exch def pop
+gmodeused gbankused sub abs 65536 lt
+    (in global mode vmstatus counts the global bank) assert
+lmodeused gmodeused ne
+    (the mode chooses which bank is counted) assert
+lmodeused gbankused sub abs 65536 ge
+    (in local mode vmstatus does not count the global bank) assert
 
 % --- vmreclaim takes the five values it defines, and no others ---
 clear

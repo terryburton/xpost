@@ -79,6 +79,23 @@ static inline int xpost_int_mul_willover(integer x, integer y)
 }
 
 /**
+ * @brief a count, as an integer where the integer type holds it and a
+ * real where it does not.
+ *
+ * The same answer the arithmetic below gives a result that leaves the
+ * integer range, for a quantity that is counted rather than computed.
+ * A real loses the last digits of a very large count and says how large
+ * it is; an integer that has wrapped says the count is small, and says
+ * so exactly where the quantity is largest.
+ */
+static inline Xpost_Object xpost_count_cons(unsigned long long n)
+{
+    if (n > (unsigned long long)XPOST_INTEGER_MAX)
+        return xpost_real_cons((real)n);
+    return xpost_int_cons((integer)n);
+}
+
+/**
  * @brief the sum/difference/product of two integer objects, as the
  * object the PLRM prescribes: an integer, or a real when the exact
  * result leaves the integer range.

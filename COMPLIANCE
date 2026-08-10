@@ -331,7 +331,7 @@ Level 2 operators
  [X] fileposition, setfileposition
  [X] cleardictstack
  [X] undef
- [X] vmreclaim (a request only: collection is not implemented)
+ [X] vmreclaim
  [X] realtime
  [X] product, revision, serialnumber
  [X] languagelevel
@@ -429,6 +429,13 @@ Known behavioural deviations
      two levels deep still delivers every byte it supplied, once, in the order
      the stream has them, where some interpreters drop or repeat bytes past
      that depth and do not agree with each other on which.
+ [X] vmstatus  a count of bytes too large for the integer type is reported as
+     a real, where the operator is defined to answer three integers. Both
+     banks together span more bytes than the type counts, and an integer
+     that has wrapped reports the count as small exactly where it is
+     largest; a real reports the size and loses the last digits of it. The
+     same answer this interpreter gives an arithmetic result that leaves
+     the integer range.
  [X] SubFileDecode  a zero count with an empty EOD string passes zero bytes
      (PLRM), where some interpreters read to end-of-file.
  [X] ]  a construction closed over more objects than an array can hold is
