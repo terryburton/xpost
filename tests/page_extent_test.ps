@@ -1,0 +1,71 @@
+% A page with more pixels than a raster can be indexed by.
+%
+% A device reaches a pixel by its position within the raster, and the
+% arithmetic that reaches a row is done in the width the interpreter
+% counts pixels in. A page whose pixels outnumber what that width counts
+% cannot be addressed at all: the position of a pixel in its far half is
+% not a number that width holds, so it names somewhere else entirely.
+%
+% Such a page is refused. PLRM 8.2 has limitcheck for a limit of the
+% implementation rather than of the machine, and this is one: the memory
+% to hold the page is beside the point, since a device with the memory
+% still could not reach the whole of it. Refusing before allocating is
+% also what keeps a page nobody can draw from asking the system for the
+% memory to hold it.
+%
+% The page size is a program's to choose, so this is reachable by any
+% program, and an interpreter that ran on afterwards is the point of the
+% refusal: what follows must still draw.
+
+/failures 0 def
+/fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
+bind def
+/assert { exch { pop }{ fail } ifelse } bind def
+
+% A square page whose side is under the largest length a device accepts,
+% and whose area is over the count a pixel's position is held in. Both
+% halves matter: a side small enough to look ordinary is what makes this
+% a limit of the area rather than of the dimension.
+% Asked of a device that keeps its raster as one block indexed by a
+% pixel's position. A device whose page is built some other way has no
+% such index and no such limit, and answers about a page this size on
+% its own terms: one holding its rows as an array of strings says so by
+% carrying ImgData, and one emitting a stream of drawing operators says
+% so by drawing its glyphs as outlines rather than pixels.
+/indexed? DEVICE /ImgData known not
+          DEVICE /VectorGlyphs known not and def
+
+/refused false def
+/why null def
+{ << /PageSize [65000 65000] >> setpagedevice } stopped
+{ /refused true store /why $error /errorname get store } if
+clear
+
+indexed?
+{
+    refused (a page too large to index is refused) assert
+    refused { why /limitcheck eq
+              (the refusal is a limit of the implementation) assert } if
+}
+{
+    (# this device does not index one block of pixels: a page of that size
+   is its own question\n) print flush
+} ifelse
+
+% The interpreter carries on: the page was refused before anything was
+% built, so what follows is an ordinary job. Asked of the same devices,
+% for the same reason -- a device that answers such a page by trying to
+% build it out of virtual memory answers this question about what that
+% attempt cost, not about the refusal.
+indexed? {
+/drew false def
+{
+    << /PageSize [200 200] >> setpagedevice
+    0 setgray newpath 10 10 moveto 100 100 lineto stroke
+    /drew true store
+} stopped { (a job after the refusal did not run) fail } if
+clear
+drew (a job after the refusal draws) assert
+} if
+
+failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse

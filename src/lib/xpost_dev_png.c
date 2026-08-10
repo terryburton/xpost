@@ -189,8 +189,18 @@ int _create_cont(Xpost_Context *ctx,
                    (private.interlaced == PNG_INTERLACE_ADAM7) ? "Adam7" : "none");
 
     /* allocate buffer header and array */
-    private.buf = malloc(sizeof(Xpost_Png_Buffer) +
-                         sizeof(Xpost_Png_Pixel) * width * height);
+    {
+        size_t bytes;
+
+        if (!xpost_device_raster_bytes(width, height,
+                                       sizeof(Xpost_Png_Pixel), &bytes))
+        {
+            XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a raster"
+                          " can be indexed by", limitcheck, width, height);
+            return limitcheck;
+        }
+        private.buf = malloc(sizeof(Xpost_Png_Buffer) + bytes);
+    }
     if (!private.buf)
     {
         XPOST_LOG_ERR("cannot allocate buffer memory");
@@ -201,12 +211,12 @@ int _create_cont(Xpost_Context *ctx,
        transparent, so only marks made by the job carry opacity and an
        erased page is see-through */
     {
-        int i;
+        size_t i;
         Xpost_Png_Pixel init;
 
         init.red = init.green = init.blue = 255;
         init.alpha = private.alpha ? 0 : 255;
-        for (i = 0; i < width * height; i++)
+        for (i = 0; i < (size_t)width * height; i++)
             private.buf->data[i] = init;
     }
 
@@ -264,7 +274,7 @@ int _putpix(Xpost_Context *ctx,
         pixel.green = g;
         pixel.red = r;
         pixel.alpha = 255;
-        private.buf->data[iy * private.width + ix] = pixel;
+        private.buf->data[(size_t)iy * private.width + ix] = pixel;
     }
 
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -305,7 +315,7 @@ int _getpix(Xpost_Context *ctx,
         pixel.alpha = 0;
     }
     else
-        pixel = private.buf->data[iy * private.width + ix];
+        pixel = private.buf->data[(size_t)iy * private.width + ix];
 
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));
@@ -367,7 +377,7 @@ int _blendpix(Xpost_Context *ctx,
         return 0;
 
     {
-        Xpost_Png_Pixel *p = &private.buf->data[iy * private.width + ix];
+        Xpost_Png_Pixel *p = &private.buf->data[(size_t)iy * private.width + ix];
         int da = p->alpha;
         int oa = c + (da * (255 - c) + 127) / 255;
 
@@ -427,7 +437,7 @@ int _fillrect(Xpost_Context *ctx,
 
     for (iy = y0; iy <= y1; iy++)
     {
-        Xpost_Png_Pixel *row = private.buf->data + iy * private.width;
+        Xpost_Png_Pixel *row = private.buf->data + (size_t)iy * private.width;
         for (ix = x0; ix <= x1; ix++)
             row[ix] = pixel;
     }

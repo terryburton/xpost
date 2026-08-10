@@ -228,6 +228,7 @@ tests/op_wrapsig_test.ps \
 tests/operator_install_refusal_test.c \
 tests/outline_font_test.ps \
 tests/page_cover_test.ps \
+tests/page_extent_test.ps \
 tests/page_handlers_test.ps \
 tests/page_semantics_test.c \
 tests/path_bounds_test.ps \
@@ -324,6 +325,7 @@ tests/subinterval_retention_test.ps \
 tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
 tests/run-job-page-test.sh \
+tests/run-page-extent-test.sh \
 tests/run-thin-stroke-test.sh \
 tests/thin_stroke_test.ps \
 tests/token_sign_test.ps \

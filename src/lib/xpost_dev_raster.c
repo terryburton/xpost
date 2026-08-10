@@ -51,6 +51,7 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call load operator for convenience */
+#include "xpost_dev_generic.h" /* the raster extent limit */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_raster.h" /* check prototypes */
 
@@ -156,6 +157,7 @@ int _create_cont(Xpost_Context *ctx,
     integer width = w.int_.val;
     integer height = h.int_.val;
     Xpost_Object inbufstr;
+    size_t bytes;
     int ret;
     //printf("create_cont\n");
 
@@ -201,6 +203,30 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
+    /* A pixel is reached by its position within the raster, so a page
+       whose pixels outnumber what that position is counted in cannot be
+       addressed at all. Held before the buffer is considered, and for a
+       buffer the caller supplied as much as for one of ours: the reach
+       is the device's arithmetic either way. */
+    {
+        size_t pixel;
+
+        switch(private.pixelformat)
+        {
+            default: return unregistered;
+            case ARGB: pixel = sizeof(Xpost_Raster_ARGB_Pixel); break;
+            case RGB:  pixel = sizeof(Xpost_Raster_RGB_Pixel);  break;
+            case BGRA: pixel = sizeof(Xpost_Raster_BGRA_Pixel); break;
+            case BGR:  pixel = sizeof(Xpost_Raster_BGR_Pixel);  break;
+        }
+        if (!xpost_device_raster_bytes(width, height, pixel, &bytes))
+        {
+            XPOST_LOG_ERR("%d a page of %dx%d has more pixels than a raster"
+                          " can be indexed by", limitcheck, width, height);
+            return limitcheck;
+        }
+    }
+
     inbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"));
     if (xpost_object_get_type(inbufstr) == stringtype)
     {
@@ -213,27 +239,7 @@ int _create_cont(Xpost_Context *ctx,
     else
     {
         /* allocate buffer header and array */
-        switch(private.pixelformat)
-        {
-            default:
-                return unregistered;
-            case ARGB:
-                private.buf = malloc(sizeof(Xpost_Raster_Buffer) +
-                                     sizeof(Xpost_Raster_ARGB_Pixel) * width * height);
-                break;
-            case RGB:
-                private.buf = malloc(sizeof(Xpost_Raster_Buffer) +
-                                     sizeof(Xpost_Raster_RGB_Pixel) * width * height);
-                break;
-            case BGRA:
-                private.buf = malloc(sizeof(Xpost_Raster_Buffer) +
-                                     sizeof(Xpost_Raster_BGRA_Pixel) * width * height);
-                break;
-            case BGR:
-                private.buf = malloc(sizeof(Xpost_Raster_Buffer) +
-                                     sizeof(Xpost_Raster_BGR_Pixel) * width * height);
-                break;
-        }
+        private.buf = malloc(sizeof(Xpost_Raster_Buffer) + bytes);
         if (!private.buf)
             return VMerror;
         private.buf->height = height;

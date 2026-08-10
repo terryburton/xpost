@@ -33,6 +33,7 @@
 #endif
 
 #include <stdio.h> /* snprintf */
+#include <limits.h>
 #include <stdlib.h> /* abs */
 #include <stddef.h>
 
@@ -88,6 +89,43 @@ static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
+
+int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t *bytes)
+{
+    size_t pixels;
+
+    /* A page with no extent has no pixels rather than too many: it comes
+       to no bytes and is built, and whatever the device does with an
+       empty page it does on its own terms. A negative extent is not a
+       page at all, and the position of a pixel in one is not a number
+       the raster is indexed by. */
+    if (w < 0 || h < 0)
+        return 0;
+    if (w == 0 || h == 0)
+    {
+        *bytes = 0;
+        return 1;
+    }
+
+    /* A device reaches a pixel by its position within the raster, and the
+       arithmetic that reaches a row is done in the width the interpreter
+       counts pixels in. A page with more pixels than that width counts is
+       one no device can reach the far end of, however much memory is to
+       hand, so it is refused here rather than allocated and then indexed
+       past. Refusing before allocating also keeps a page nobody can draw
+       from asking the system for the memory to hold it. */
+    if ((size_t)w > (size_t)INT_MAX / (size_t)h)
+        return 0;
+    pixels = (size_t)w * (size_t)h;
+
+    /* the bytes those pixels come to must also be a size this platform
+       can express, which is a separate question from how many there are */
+    if (pixel && pixels > (size_t)-1 / pixel)
+        return 0;
+
+    *bytes = pixels * pixel;
+    return 1;
+}
 
 FILE *xpost_device_page_open(Xpost_Context *ctx, Xpost_Object devdic)
 {

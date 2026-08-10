@@ -83,7 +83,8 @@ done
 #    restatement. And nothing outside the header may restate the two
 #    steps that arithmetic is made of -- reflecting a negative extent
 #    through its origin, and clamping a coordinate to the device -- since
-#    a restatement is how the four behaviours came about.
+#    a restatement is how the four behaviours came about. The page's own
+#    extent is not this arithmetic and is excepted by name below.
 for f in $marking; do
     if grep -qE '"FillRect"|_fillrect' "$libdir/$f" &&
        ! grep -q 'xpost_dev_rect_normalize' "$libdir/$f"; then
@@ -91,8 +92,17 @@ for f in $marking; do
         echo "The painted rectangle is defined once, in xpost_dev_driver.h." >&2
         fail=1
     fi
-    hits=$(grep -nE '(w|h|width|height)[ \t]*(\.int_\.val)?[ \t]*<[ \t]*0|\bfloor[ \t]*\((dx|dy|x|y)\b' \
-           "$libdir/$f" || true)
+    # The extent of a page is a different question from the extent of a
+    # painted rectangle, and it has its own single home. A rectangle of
+    # negative extent names the same rectangle from the other corner, so
+    # it is reflected; a page of negative extent is not a page at all and
+    # is refused, by xpost_device_raster_bytes(). That function's body is
+    # therefore read past, and the rule stands everywhere else.
+    awk '/^[A-Za-z_].*\<xpost_device_raster_bytes\>[ \t]*\(/ { skip = 1 }
+         skip && /^}/                                          { skip = 0; next }
+         { if (!skip) print FNR ": " $0 }' "$libdir/$f" > "$work/rectscan"
+    hits=$(grep -E '(w|h|width|height)[ \t]*(\.int_\.val)?[ \t]*<[ \t]*0|\bfloor[ \t]*\((dx|dy|x|y)\b' \
+           "$work/rectscan" || true)
     if [ -n "$hits" ]; then
         echo "check-device-skeleton: $f restates the rectangle arithmetic:" >&2
         printf '%s\n' "$hits" >&2

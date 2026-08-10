@@ -3014,6 +3014,25 @@ test('job-page',
   suite: cost_fast,
   timeout: 300)
 
+# A page with more pixels than a raster can be indexed by. A device reaches
+# a pixel by its position, and the arithmetic that reaches a row is done in
+# the width the interpreter counts pixels in, so a page whose pixels
+# outnumber what that width counts names somewhere else entirely in its far
+# half. Such a page is refused before it is built: the memory to hold it is
+# beside the point, since a device with the memory could not reach all of
+# it. The page size is a program's to choose, so what follows the refusal
+# must still draw.
+# Put to every marking device rather than to one: the limit belongs to the
+# arithmetic that reaches a pixel, so a device that keeps a raster some
+# other way is the control that shows the refusal is the index's and not
+# the interpreter's.
+test('page-extent',
+  find_program('tests/run-page-extent-test.sh'),
+  args: [ xpost_exe, files('tests/page_extent_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # Where a number stops and a name starts. A sign and a decimal point begin
 # numbers and also make names, so the scanner decides between the two for
 # every token starting with one: PLRM 3.2 makes a token a number when it is

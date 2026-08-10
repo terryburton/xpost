@@ -114,6 +114,31 @@ int xpost_dev_pdf_fmt_num(char *o, double v);
 void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
 
 /**
+ * @brief report the bytes a raster of @p w by @p h pixels of @p pixel
+ *        bytes each needs, or refuse a page this interpreter cannot address
+ *
+ * Returns non-zero having written the byte count to @p bytes, or zero
+ * having written nothing, in which case the caller answers limitcheck.
+ *
+ * A page of no extent is reported rather than refused: it comes to no
+ * bytes and is built, and whatever a device makes of an empty page it
+ * makes on its own terms. A negative extent is not a page and is refused
+ * with the unaddressable ones.
+ *
+ * A device indexes its raster by a pixel's position within it, and the
+ * arithmetic that reaches a row is done in the width the interpreter
+ * counts pixels in. A page whose pixels outnumber what that width counts
+ * cannot be addressed however much memory is to hand, so it is refused
+ * here rather than allocated and then indexed past: the caller answers
+ * with limitcheck, which PLRM 8.2 gives for a limit of the implementation
+ * rather than of the machine.
+ *
+ * Refusing before allocating also keeps a page nobody can draw from
+ * asking the system for the memory to hold it.
+ */
+int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t *bytes);
+
+/**
  * @}
  */
 
