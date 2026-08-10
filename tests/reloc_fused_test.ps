@@ -10,9 +10,8 @@
 % that moved.
 %
 % The global half of that check is the reason this file exists. Global VM
-% is never collected, but it still grows, so the base it is reached
-% through still moves -- and nothing else in the suite makes it move
-% while a fused operator is running. An ordinary program does not: a
+% grows, so the base it is reached through moves -- and nothing else in
+% the suite makes it move while a fused operator is running. An ordinary program does not: a
 % memory file's capacity is extended geometrically, so the extensions are
 % few and land where they land. The moment is therefore built rather than
 % waited for. The global file is filled to within less than the size of

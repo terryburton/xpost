@@ -1,0 +1,174 @@
+The root set
+============
+
+What the garbage collector begins its mark phase from, and which bank of
+virtual memory each thing reachable from it lives in.
+
+Two banks
+---------
+
+An execution context has two memory files: local and global. Which one an
+allocation lands in is chosen by the allocation mode, which `setglobal`
+alters and `currentglobal` reports.
+
+PLRM 3.7.2 gives the rule that shapes everything below: a global object may
+not reference a local one. Local may reference global freely. So a local
+dictionary holding a global array is ordinary, and the reverse raises
+`invalidaccess`. Six dictionaries `systemdict` holds are the sanctioned
+exception, and the collector marks them as such.
+
+PLRM 3.7.3 exempts global virtual memory from `save` and `restore`: what a
+program puts there survives a restore that ends the save it was made in.
+PLRM 3.7.4 states the consequence for reclamation -- garbage collection is
+the only way storage in global virtual memory is ever recovered, since save
+and restore do not reach it.
+
+Both banks are collected. A collection marks them together in one pass,
+because an object in one may be named from the other and a walk that
+stopped at the boundary would take a named object for garbage, and then
+reclaims whichever banks it was asked for. A bank is reclaimed only by a
+collection that marked it, which is what PLRM 8.2's vmreclaim chooses
+between: it turns automatic collection off for one bank or for both, and
+performs an immediate collection of one or of both.
+
+Everything below is therefore a root in earnest -- an object reachable
+only through one of them, and not marked, is taken by the next collection
+that runs.
+
+In the tree below, (G) is global and (L) is local.
+
+The tree
+--------
+
+    COLLECTOR ROOTS
+    |
+    +- special entities -- below `start`, never swept ----------- per bank
+    |    FREE . SAVE_STACK . CONTEXT_LIST . NAME_STACK . NAME_TREE
+    |    BOGUS_NAME . OPERATOR_TABLE ........................... (G only)
+    |
+    +- save stack ......................... both banks
+    |    +- the backups a save took        (G) and (L), one stack each
+    |         the descent into a backup's members crosses banks with the
+    |         rest of the walk, so a backed-up composite marks what it
+    |         holds in the other bank
+    |
+    +- name stack ......................... both banks
+    |    +- (L) interned names
+    |    +- (G) interned names
+    |         a name is interned into the bank the allocation mode
+    |         selects, so both stacks hold names; each name's characters
+    |         are an entity of their own, above `start`
+    |
+    +- the operator table's procedures ...  (G)
+    |         an operator installed from C keeps its procedure there and
+    |         nowhere else, and the table is not an object
+    |
+    +- per context
+       +- os    operand stack ............. (L)
+       +- es    execution stack ........... (L)
+       +- hold ............................ (L)  an operator's temporaries
+       +- ds    dictionary stack .......... (L)
+       |   +- systemdict ................................. (G)
+       |   |   +- the language: operators and procedures .. (G)
+       |   |   +- sanctioned exceptions (PLRM 3.7.2) ...... (L)
+       |   |       userdict . $error . errordict . statusdict
+       |   |       serverdict . FontDirectory
+       |   +- userdict ................................... (L)
+       |
+       +- the objects the context holds on its own account, declared and
+       |  walked from one list (XPOST_CONTEXT_OBJECT_ROOTS):
+       |   +- currentobject ............... either
+       |   +- executingarray .............. either  the array a procedure
+       |   |                                        is being run out of
+       |   +- arcstartproc ................ (G)  built while the arc
+       |   |                                     operators are installed
+       |   +- pagedevice .................. (L)  device instance dictionary
+       |   |   +- ImgData ................. (G)  array of
+       |   |        +- row strings ........ (G)  the raster
+       |   +- pagedevice_destroy .......... (L)
+       |   +- privatedict ................. (L)  local machinery
+       |   |   +- device classes .......... (L)
+       |   |   +- .gscratch / .gtemplate .. (L)
+       |   |   +- .error .................. (L)
+       |   |   +- .wrappedprocs ........... (L) holding (G) procedures
+       |   +- globalprivatedict = .xpostsys  (G)  global machinery
+       |   |   +- helper procedures ....... (G)
+       |   |   +- .resources .............. (G)  resource instance table
+       |   |   +- .facecache .............. (G)  one entry per face
+       |   |        +- /<face name> ....... (G)  /CharStrings, /sfnts
+       |   +- run_input_file .............. (L)
+       |   +- window_device ............... (L)
+       |   +- event_handler ............... either
+       |   +- localfontdir / globalfontdir  (L) / (G)
+
+Notes on particular members
+---------------------------
+
+**The raster.** `ImgData` and its row strings are global, so that a mark
+made inside a `save` is still on the page after the restore that ends it,
+which is what PLRM 3.7.3 requires of raster memory. They hang from the
+device instance dictionary, which is a root, so they are reachable while
+the device is installed and become garbage when `setpagedevice` replaces it
+or the job ends.
+
+**The two private namespaces.** `.xpostsys` is global and `privatedict` is
+local, and the split is forced rather than stylistic: `privatedict` holds
+local objects -- the device classes, the graphics scratch -- which a global
+dictionary may not hold. `.xpostsys` is recorded in the context, which
+roots it directly and gives C a route to it. `.internaldict` is global and
+is reached through the references frozen into procedure bodies, and through
+the `internaldict` operator, whose own procedure holds one such reference.
+Both namespaces drop their `userdict` anchor when they are sealed.
+
+**Names.** `addname` interns into the bank the allocation mode selects, so
+a name first seen while allocation was global lives in global virtual
+memory and one first seen while it was local lives in local. Both name
+stacks are therefore populated in an ordinary run. A name object carries
+the index of its characters on the stack of its own bank, and the stack
+itself is a special entity, below `start`, so a sweep never takes it.
+
+**The operator table.** An operator that runs a procedure holds that
+procedure in the table, which is a special entity and is not walked by the
+collector. The procedures are also kept in `.wrappedprocs`, which is
+walked, and that is what keeps them from being taken for garbage.
+
+**The font face cache.** A face is cached so that every font dictionary a
+name produces shares one synthesized `CharStrings` dictionary and one
+`sfnts` array. The cache is split: a C structure keeps the face the font
+library opened and the file it came from, and the objects live in
+`.xpostsys /.facecache`, one dictionary per face. The dictionary is made
+while the boot files load, because the namespace is sealed read-only
+afterwards and a member added later would be refused; the seal is
+shallow, so writing into it goes on working.
+
+Reachability outside virtual memory
+-----------------------------------
+
+An object held in a variable or a structure of C is reached by nothing
+the collector walks, so the first collection takes it and the holder goes
+on using whatever the storage has become. Such a holder must name its
+object somewhere the walk does reach. There are three ways, and
+`tests/c_held_objects.register` records which each holder uses: the
+context holds it and the root list above covers it; an entity the walk
+covers names it, as a file entity names the procedure a procedure-source
+stream reads from; or it is reachable from an object already covered.
+
+The register is checked by `tests/check-c-held-objects.sh`, which fails
+on a holder that is not in it. The collector cannot be taught to look in
+a variable it has never heard of, so nothing else would catch one.
+
+Which bank a collection may sweep
+---------------------------------
+
+A bank may only be swept by a collection that marked it. The roots above
+reach an object in the other bank only when the collection is asked for
+both, so sweeping a bank this walk did not cover would take storage that
+is still named.
+
+A collection that runs of its own accord is asked for both, because
+marking has to cross them whatever is reclaimed and the sweep of the
+second is a walk of its entity table and nothing more. `vmreclaim`
+(PLRM 8.2) is the program's say in it: the negative operands turn the
+automatic collection off for one bank or for both and zero turns it on
+again, while 1 and 2 perform an immediate collection of local or of
+both.

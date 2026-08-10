@@ -2,7 +2,9 @@
 # Meson test wrapper: no repeatable operation may spend global memory each
 # time it runs.
 #
-# Global memory is never collected, so an allocation that reaches it is spent
+# Global memory outlives a job's save and restore, so an allocation a
+# repeated operation keeps naming is held for as long as the thing naming
+# it, which for the machinery below is the life of the context. It is spent
 # for the life of the context. That is correct for machinery built once at
 # load and for what must outlive a job's save/restore; it is a leak for
 # anything a job allocates per operation, and it shows up only in a context
@@ -35,8 +37,10 @@ measured=$(echo "$out" | grep -c 'B/iteration')
     exit 1
 }
 
-# the control allocates where nothing can reclaim it and has to be seen, or
-# the measurement is blind and every other line means nothing
+# the control allocates in global memory and has to be seen, or the
+# measurement is blind and every other line means nothing. It allocates far
+# less than a collection's threshold over the run, so nothing reclaims it
+# before it is measured
 echo "$out" | grep -q '^  OVER CONTROL:' || {
     echo "$out" | grep 'CONTROL' | sed -n 's/^/  /p'
     echo "FAIL: the control's global allocation was not seen -- the measurement is blind"
@@ -46,7 +50,7 @@ echo "$out" | grep -q '^  OVER CONTROL:' || {
 bad=$(echo "$out" | grep -E '^  (OVER|DIDNOTRUN) ' | grep -v 'CONTROL')
 [ -z "$bad" ] || {
     echo "$bad" | sed -n 's/^/  /p'
-    echo "FAIL: an operation spends global memory that is never reclaimed"
+    echo "FAIL: an operation spends global memory it goes on naming"
     exit 1
 }
 

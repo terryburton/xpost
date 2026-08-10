@@ -30,6 +30,7 @@ endif
 EXTRA_DIST += \
 doc/COMPAT \
 doc/INTERNALS \
+doc/ROOTS \
 doc/NEWINTERNALS \
 doc/MANUAL \
 doc/Doxyfile

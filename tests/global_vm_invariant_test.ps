@@ -1,11 +1,12 @@
 % A repeatable operation must not spend global memory each time it runs.
 %
-% Global memory is never collected: the collector returns early for it, so
-% whatever a job puts there is spent for the life of the context. That is
-% sound for machinery built once at load and for values that must outlive a
-% job's save/restore, and it is a leak for anything a job allocates per
-% operation. A context that serves one job per request -- an embedder's
-% worker -- pays for such an allocation until it is restarted.
+% Global memory is exempt from save and restore (PLRM 3.7.3), so what a job
+% puts there outlives the job that put it. A collection reclaims it once
+% nothing names it, but an operation that keeps naming what it allocates --
+% a record it appends to, a table it never clears -- is holding it, not
+% leaking it into somewhere unreachable, and no collection will take it
+% back. A context that serves one job per request, an embedder's worker,
+% grows by that amount for every request it serves.
 %
 % Each exercise below is an operation the language repeats. The test runs
 % each one, discards a warmup so one-off costs (a face cached on first use,
@@ -125,5 +126,7 @@
 % ----------------------------------------------------------------- control
 % The measurement must be able to see a global allocation, or a blind
 % instrument would report every exercise above as clean. The wrapper requires
-% this one to come back OVER.
+% this one to come back OVER. What it allocates is discarded, and over the
+% run it comes to far less than the threshold a collection waits for, so it
+% is still there to be measured.
 (CONTROL) { true setglobal 64 dict pop false setglobal } measure

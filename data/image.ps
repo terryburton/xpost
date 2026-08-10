@@ -33,21 +33,17 @@ currentglobal true setglobal
     dup /.copydict get exec
     begin
         % raster memory is not part of VM (PLRM 3.7.3): allocate the
-        % page buffer in global VM, which save/restore snapshots exempt,
-        % so marks placed inside a save survive its restore
+        % page buffer in global VM, which save and restore are defined not
+        % to reach (PLRM 3.7.2, 3.7.3), so a mark made inside a save is
+        % still on the page after the restore that ends it
         currentglobal true setglobal
-        % Global VM is outside what save and restore reach (PLRM 3.7.2)
-        % and the collector does not sweep it, so nothing gives back what
-        % a raster takes.
-        % A page built row by row until the memory runs out therefore
-        % keeps every row it managed to allocate, and the interpreter
-        % returns from the VMerror smaller than it went in -- far enough
-        % smaller, on a page of any size, that the next ordinary page
-        % cannot be built either. So the raster is priced before any of
-        % it is built: the ImgData spine is one element per row, each row
-        % costs what .rowcost says, and the whole extent is asked for at
-        % once. A page this interpreter cannot hold is refused here,
-        % having taken nothing to be refused with.
+        % The raster is priced before any of it is built: the ImgData
+        % spine is one element per row, each row costs what .rowcost
+        % says, and the whole extent is asked for at once. A page this
+        % interpreter cannot hold is refused having taken nothing to be
+        % refused with, where one built row by row until the memory ran
+        % out would ask the system for everything it could get before
+        % failing, and answer the same error at the end of it.
         height                      % spine elements
         .rowcost                    % spine rowelements rowbytes
         height mul                  % spine rowelements bytes

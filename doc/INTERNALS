@@ -330,9 +330,12 @@ Garbage Collection
 ------------------
 
 The garbage collector module ("xpost_garbage") implements a simple (?)
-mark-sweep algorithm. It operates on a per-Xpost_Memory_File basis, so global
-and local VMs are collected separately, but all contexts sharing
-an Xpost_Memory_File must be traversed in the /mark/ phase.
+mark-sweep algorithm. It operates on a per-Xpost_Memory_File basis. Local VM is
+collected, and so is global VM. A collection marks both banks in one pass --
+an object in one may be named from the other, so a walk that stopped at the
+boundary would take a named object for garbage -- and then reclaims whichever
+banks it was asked for. All contexts sharing an Xpost_Memory_File must be
+traversed in the /mark/ phase.
 
 I've tried to keep the algorithm very simple, because the memory
 interface itself is so complicated. Even conceptually simple operations
@@ -389,8 +392,11 @@ New special entry CTXLIST lists all contexts associated with the Xpost_Memory_Fi
 So the garbage collector's root-set for any given Xpost_Memory_File is the VS
 (the save stack) (only one for each Xpost_Memory_File, shared contexts are blocked
 during save/restore sections), and the stacks from each associated context.
-It has also been made bank-aware. When collecting a global Xpost_Memory_File, it
-only marks global data; likewise for a local sweep, only mark locals.
+It has also been made bank-aware. Marking crosses the banks when a collection
+is asked for both, so that an object one bank holds in the other is not taken
+for garbage; a bank is reclaimed only by a collection that marked it. PLRM 8.2's
+vmreclaim chooses which banks an immediate collection reclaims, and which the
+automatic ones do.
 
 Context IDs, `cid`s, are generated sequentially, starting from 1.
 They are designed so that `(cid - 1) % MAXCONTEXT` will yield the

@@ -218,8 +218,9 @@
         % one document: each is keyed by a counter the document restarts from
         % zero, so a document writes every entry it later reads and what an
         % earlier one left above that count is never consulted. They are made
-        % with the record because global memory is not collected, so a
-        % container made per document would be spent for good.
+        % with the record because the record outlives any one document and
+        % holds what is put in it: a container made per document would be
+        % held for as long as the record is, one for every document.
         .xpostsys /.vecout get /off 256 dict put
         .xpostsys /.vecout get /pobj 64 dict put
         .xpostsys /.vecout get /sobj 16 dict put

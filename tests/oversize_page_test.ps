@@ -12,11 +12,11 @@
 % out of the interpreter's virtual memory -- they carry the array of row
 % storage, ImgData -- because they are the ones with virtual memory in
 % the page to lose. That storage is global VM, which save and restore are
-% defined not to reach (PLRM 3.7.2) and which the collector does not
-% sweep, so nothing gives back a row once it has been allocated. A device
-% that allocated rows one at a time until the memory ran out would keep
-% every row it had managed to allocate and come back from the error too
-% small to build anything. A device whose page is a buffer outside
+% defined not to reach (PLRM 3.7.2), so a mark made inside a save is still
+% on the page after the restore that ends it. A device that allocated
+% rows one at a time until the memory ran out would ask the system for
+% everything it could get before failing, and answer the same error at
+% the end of it. A device whose page is a buffer outside
 % virtual memory has no virtual memory in the page to give back and
 % answers for its buffer elsewhere; it still runs everything below that
 % does not depend on the page being virtual memory.

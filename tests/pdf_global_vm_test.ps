@@ -1,11 +1,12 @@
 % Installing and retiring the paginated PDF writer repeatedly must not spend
 % global memory per document.
 %
-% Global memory is never collected, so a container made for each document is
-% spent for good: a context that renders one document per job grows without
-% bound. The writer's across-page maps therefore belong to the shared record,
-% made once with it, and a document restarts the counters that key them
-% instead of replacing them.
+% The shared record outlives any one document and names what it holds, so a
+% container made for each document is held for as long as the record is: a
+% context that renders one document per job grows without bound. The
+% writer's across-page maps therefore belong to the record, made once with
+% it, and a document restarts the counters that key them instead of
+% replacing them.
 %
 % The output file comes from the command line, so stdout carries only the
 % verdict. The bound is generous against the fixed per-document cost (the name
@@ -33,5 +34,5 @@ globalused exch sub 50 div
 dup (  global memory per document: ) print 20 string cvs print ( bytes\n) print
 1024 lt
 { (SUCCESS\n) print }
-{ (FAIL: a document spends global memory that is never reclaimed\n) print }
+{ (FAIL: a document spends global memory the record goes on naming\n) print }
 ifelse

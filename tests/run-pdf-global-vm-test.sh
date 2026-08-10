@@ -2,10 +2,11 @@
 # Meson test wrapper: rendering one document per job must not spend global
 # memory per document.
 #
-# Global memory is never collected, so anything a document allocates there is
-# spent for good. A writer that builds its across-page bookkeeping per
-# document therefore leaks tens of kilobytes a document, which a long-running
-# context pays for until it is restarted. The workload installs and retires
+# The shared record outlives any one document and holds what is put in it,
+# so a container a document adds is held for as long as the record. A writer
+# that builds its across-page bookkeeping per document therefore costs tens
+# of kilobytes a document, which a long-running context pays for until it is
+# restarted. The workload installs and retires
 # the PDF writer repeatedly and the script reports what each document cost.
 #
 #   $1  path to the built xpost binary
