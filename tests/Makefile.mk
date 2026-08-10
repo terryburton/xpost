@@ -153,6 +153,7 @@ tests/global_vm_invariant_test.ps \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
+tests/graphics_load_stop_test.c \
 tests/graphics_regression_test.ps \
 tests/graphicsdict_slots.golden \
 tests/gstate_matrix_test.ps \
