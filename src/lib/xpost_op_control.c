@@ -51,7 +51,6 @@
 #include "xpost_string.h"
 #include "xpost_array.h"
 #include "xpost_dict.h"
-#include "xpost_compat.h" /* glob_t: filenameforall state freed when unwound */
 
 #include "xpost_interpreter.h" /* the unwinding an error raised in PostScript needs */
 #include "xpost_operator.h"
@@ -469,10 +468,8 @@ int xpost_op_exit (Xpost_Context *ctx)
         if (xpost_object_get_type(x) == globtype)
         {
             /* filenameforall state unwinding with its frame: the matched
-               paths are malloc'd, not in VM, so free them here or never */
-            glob_t *globbuf = x.glob_.ptr;
-            xpost_glob_free(globbuf);
-            free(globbuf);
+               paths are not in VM, so give them back here or never */
+            xpost_context_glob_release(ctx, (unsigned int)x.glob_.id);
             continue;
         }
         if (xpost_object_get_type(x) == operatortype &&
@@ -586,10 +583,8 @@ int xpost_op_stop(Xpost_Context *ctx)
         if (xpost_object_get_type(x) == globtype)
         {
             /* a filenameforall frame unwinding with the stopped context:
-               free its malloc'd glob results as exit does */
-            glob_t *globbuf = x.glob_.ptr;
-            xpost_glob_free(globbuf);
-            free(globbuf);
+               give back its matched paths as exit does */
+            xpost_context_glob_release(ctx, (unsigned int)x.glob_.id);
             continue;
         }
         if (xpost_object_get_type(x) == operatortype &&

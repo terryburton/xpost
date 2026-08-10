@@ -305,6 +305,16 @@ struct _Xpost_Context {
     char run_error_info[128]; /**< errorinfo detail for the same ("" if none) */
     int run_uncaught;         /**< an error unwound past every stopped context */
 
+    /** The matched paths of each filenameforall now running. A set of
+        matched paths is a host allocation and not virtual memory, so the
+        object the enumeration leaves on the execution stack carries the
+        number its paths are held under here rather than their address.
+        Enumerations nest, so there is a slot for each one running; a slot
+        is given back as its enumeration ends, however it ends, and any
+        still held when the context goes are released with it. */
+    void **globs;
+    unsigned int globs_size;
+
     Xpost_Object run_input_file; /**< the file a run wrapped around the
                                       program it was given, when the run
                                       made the file itself; closed when the
@@ -355,6 +365,29 @@ int xpost_context_init(Xpost_Context *ctx,
  * @brief destroy the context structure, and all components
  */
 void xpost_context_exit(Xpost_Context *ctx);
+
+/**
+ * @brief hold the matched paths of a filenameforall, and report the
+ *        number they are held under.
+ *
+ * The number is what the enumeration's object carries; it is never zero,
+ * so an object that carries none is told from one that does. Returns 0
+ * where the number could not be issued.
+ */
+int xpost_context_glob_hold(Xpost_Context *ctx,
+                            void *glob,
+                            unsigned int *id);
+
+/**
+ * @brief the matched paths held under @p id, or NULL where none are.
+ */
+void *xpost_context_glob_held(Xpost_Context *ctx, unsigned int id);
+
+/**
+ * @brief release the matched paths held under @p id, and the number with
+ *        them. Does nothing where none are held under it.
+ */
+void xpost_context_glob_release(Xpost_Context *ctx, unsigned int id);
 
 /**
  * @brief utility function for extracting from the context

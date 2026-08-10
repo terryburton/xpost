@@ -347,14 +347,21 @@ typedef struct
  *
  * The globtype object is not available as a (Postscript) user type.
  * It has no use outside the filenameforall looping construct.
- * It carries the matched paths and nothing else: how many there are is a
+ * It names the matched paths and nothing else: how many there are is a
  * property of the directory, so the enumeration's cursor rides the
  * execution stack beside it as an integer rather than in a field here.
+ *
+ * The paths are a host allocation rather than virtual memory, and what
+ * is carried here is the number the context holds them under, not their
+ * address. An object outliving the enumeration that made it names
+ * nothing, and the operator reading it reports rather than follows it.
  */
 typedef struct
 {
     word tag; /**< globtype */
-    void *ptr; /**< ptr to the glob_t struct */
+    word pad; /**< == 0 */
+    dword id; /**< the number the matched paths are held under in the
+                    context; see xpost_context_glob_held */
 } Xpost_Object_Glob;
 
 /*
@@ -384,6 +391,32 @@ typedef union
     Xpost_Object_Saverec saverec_;
     Xpost_Object_Glob glob_;
 } Xpost_Object;
+
+/*
+ * An object is the unit virtual memory is allocated and measured in, so
+ * every member of the union is as wide as the union itself: one member
+ * wider than the rest widens every object in the interpreter, every
+ * array of objects, and every stack of them. A host pointer is what
+ * does that on a build whose fields are narrower than one, so a member
+ * given a pointer to carry fails the build here instead.
+ */
+#define XPOST_OBJECT_MEMBER_FILLS_UNION(member) \
+    typedef char xpost_object_ ## member ## fills_union \
+        [1 - 2*!(sizeof(((Xpost_Object *)0)->member) == sizeof(Xpost_Object))];
+
+XPOST_OBJECT_MEMBER_FILLS_UNION(mark_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(int_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(real_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(extended_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(comp_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(save_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(saverec_)
+XPOST_OBJECT_MEMBER_FILLS_UNION(glob_)
+
+/* and the union is the two fields the tag word shares its place with,
+   and no padding beyond them */
+typedef char xpost_object_is_tag_pad_and_payload
+    [1 - 2*!(sizeof(Xpost_Object) == sizeof(word)*2 + sizeof(dword))];
 
 
 /*

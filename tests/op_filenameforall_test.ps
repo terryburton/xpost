@@ -49,8 +49,29 @@ gotlen (fnfa1.scratch) length eq
 
 % --- exit leaves the enumeration early ---
 /hits 0 def
+/x0 countexecstack def
 (fnfa?.scratch) { pop /hits hits 1 add store exit } 128 string filenameforall
 hits 1 eq (exit leaves filenameforall after the current iteration) assert
+countexecstack x0 eq (and takes the whole loop frame with it) assert
+
+% --- an error in the procedure unwinds the enumeration too ---
+/e0 countexecstack def
+mark
+{ (fnfa?.scratch) { pop undefinedname } 128 string filenameforall } stopped
+    (an error in the procedure reaches the enclosing stopped) assert
+$error /errorname get /undefined eq (and arrives under its own name) assert
+cleartomark
+countexecstack e0 eq (the loop frame unwinds with the error) assert
+
+% --- an enumeration runs inside an enumeration ---
+/outer 0 def
+/inner 0 def
+(fnfa?.scratch) {
+    pop /outer outer 1 add store
+    (fnfa?.scratch) { pop /inner inner 1 add store } 128 string filenameforall
+} 128 string filenameforall
+outer 2 eq (an enumeration inside another leaves the outer one running) assert
+inner 4 eq (and the inner one runs whole on each pass of the outer) assert
 
 % --- a scratch string too short for a matching name is a rangecheck ---
 { (fnfa?.scratch) { pop } 2 string filenameforall } /rangecheck

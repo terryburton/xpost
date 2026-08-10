@@ -73,6 +73,9 @@ xpost_context_append_ctxlist
 xpost_context_dump
 xpost_context_exit
 xpost_context_fork3
+xpost_context_glob_held
+xpost_context_glob_hold
+xpost_context_glob_release
 xpost_context_init
 xpost_context_init_ctxlist
 xpost_context_install_event_handler

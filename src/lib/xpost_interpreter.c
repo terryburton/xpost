@@ -3205,10 +3205,16 @@ run:
            runs just as for completed ones. A run abandoned inside a
            wrapped operator leaves that call's frame here too: let go
            of the operands saved for it, or a context serving run after
-           run fills the room the copies are taken from. */
+           run fills the room the copies are taken from. A run abandoned
+           part-way through a filenameforall leaves that enumeration's
+           frame here as well, and the paths it matched are held outside
+           virtual memory until they are given back. */
         while (xpost_stack_count(ctx->lo, ctx->es) > (int)ctx->es_run_base)
         {
             Xpost_Object x = xpost_stack_pop(ctx->lo, ctx->es);
+
+            if (xpost_object_get_type(x) == globtype)
+                xpost_context_glob_release(ctx, (unsigned int)x.glob_.id);
 
             if (xpost_object_get_type(x) == operatortype &&
                 (x.mark_.padw == (unsigned int)XPOST_OP_CODE(ctx, wrapdone) ||

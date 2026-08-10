@@ -337,6 +337,8 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->pagedevice_destroy = null;
     ctx->pagedevice_depth = 0;
     ctx->job_snapshots = 1;
+    ctx->globs = NULL;
+    ctx->globs_size = 0;
     ctx->xpost_interpreter_cid_init = xpost_interpreter_cid_init;
     ctx->xpost_interpreter_alloc_local_memory = xpost_interpreter_alloc_local_memory;
     ctx->xpost_interpreter_alloc_global_memory = xpost_interpreter_alloc_global_memory;
@@ -368,16 +370,80 @@ static void _release_files(Xpost_Memory_File *mem)
             xpost_file_release_entity(mem, ent);
 }
 
+/* The matched paths of a filenameforall live outside virtual memory, and
+   the object the enumeration leaves on the execution stack names them by
+   a number issued here. A number is one more than the slot holding the
+   paths, so zero names nothing and an object carrying a number the
+   enumeration has finished with resolves to nothing rather than to
+   whatever the slot was given next.
+
+   Enumerations nest and each holds its paths for as long as it runs, so
+   the slots are as many as there are running at once, and a slot given
+   back is the next one taken. */
+int xpost_context_glob_hold(Xpost_Context *ctx, void *glob, unsigned int *id)
+{
+    unsigned int i;
+    void **grown;
+
+    for (i = 0; i < ctx->globs_size; i++)
+    {
+        if (!ctx->globs[i])
+        {
+            ctx->globs[i] = glob;
+            *id = i + 1;
+            return 1;
+        }
+    }
+    grown = realloc(ctx->globs, (ctx->globs_size + 1) * sizeof(*grown));
+    if (!grown)
+        return 0;
+    ctx->globs = grown;
+    ctx->globs[ctx->globs_size] = glob;
+    *id = ++ctx->globs_size;
+    return 1;
+}
+
+void *xpost_context_glob_held(Xpost_Context *ctx, unsigned int id)
+{
+    if (id == 0 || id > ctx->globs_size)
+        return NULL;
+    return ctx->globs[id - 1];
+}
+
+void xpost_context_glob_release(Xpost_Context *ctx, unsigned int id)
+{
+    glob_t *globbuf;
+
+    if (id == 0 || id > ctx->globs_size)
+        return;
+    globbuf = ctx->globs[id - 1];
+    if (!globbuf)
+        return;
+    ctx->globs[id - 1] = NULL;
+    xpost_glob_free(globbuf);
+    free(globbuf);
+}
+
 /* destroy context
 FIXME: delete cid from CTXLIST, destroy memory file when empty
  */
 void xpost_context_exit(Xpost_Context *ctx)
 {
+    unsigned int i;
+
     if (!ctx)
         return;
 
     _release_files(ctx->lo);
     _release_files(ctx->gl);
+
+    /* the matched paths of any enumeration the context was still running:
+       a host allocation the execution stack named, which goes with it */
+    for (i = 0; i < ctx->globs_size; i++)
+        xpost_context_glob_release(ctx, i + 1);
+    free(ctx->globs);
+    ctx->globs = NULL;
+    ctx->globs_size = 0;
 
     /* the same for what a device held outside virtual memory: the
        entities carrying the handles go with the memory file, and the
@@ -460,6 +526,12 @@ unsigned int xpost_context_fork3(Xpost_Context *ctx,
     newctx->state = C_IDLE;
     newctx->nest_depth = 0;
     newctx->callback_error = 0;
+    /* the new context runs its own enumerations and holds their paths
+       itself: the copy would have it share the table with this one, and
+       a hold that grew the table would leave this one naming the table
+       as it was */
+    newctx->globs = NULL;
+    newctx->globs_size = 0;
     newctx->lo = ctx->lo;
     /* The list is what the collector walks to find the contexts a memory
        file serves, and it holds MAXCONTEXT entries. One entry is added

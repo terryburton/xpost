@@ -1109,6 +1109,20 @@ int xpost_op_string_renamefile (Xpost_Context *ctx,
 
 //#ifndef _WIN32
 
+/* The object the matched paths of an enumeration ride the execution stack
+   as. It carries the number they are held under and nothing else, so a
+   copy of it is a name for them and not a way to reach them. */
+static
+Xpost_Object xpost_glob_cons(unsigned int id)
+{
+    Xpost_Object o;
+
+    o.glob_.tag = globtype;
+    o.glob_.pad = 0;
+    o.glob_.id = id;
+    return o;
+}
+
 /* internal continuation operator for filenameforall.
 
    The cursor into the matched paths rides the execution stack beside the
@@ -1131,7 +1145,11 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
     int len;
     Xpost_Object interval;
 
-    globbuf = oglob.glob_.ptr;
+    globbuf = xpost_context_glob_held(ctx, (unsigned int)oglob.glob_.id);
+    /* the enumeration whose paths these were has ended and given them
+       back, so the object names none */
+    if (!globbuf)
+        return undefined;
     cursor = (size_t)ocursor.int_.val;
     /* skip entries the engaged sandbox would not let the program open, so
        a listing cannot disclose names outside the permitted set */
@@ -1173,8 +1191,7 @@ int xpost_op_contfilenameforall (Xpost_Context *ctx,
            beneath the continuation, then release the matched paths and
            their container */
         (void)xpost_stack_pop(ctx->lo, ctx->es);
-        xpost_glob_free(globbuf);
-        free(globbuf);
+        xpost_context_glob_release(ctx, (unsigned int)oglob.glob_.id);
     }
     return 0;
 }
@@ -1190,6 +1207,7 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     char *tmpbuf;
     glob_t *globbuf;
     Xpost_Object oglob = { 0 };
+    unsigned int id;
     int ret;
 
     tmpbuf = xpost_string_allocate_cstring(ctx, Tmp);
@@ -1213,8 +1231,14 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
         return 0;
     }
 
-    oglob.glob_.tag = globtype;
-    oglob.glob_.ptr = globbuf;
+    if (!xpost_context_glob_hold(ctx, globbuf, &id))
+    {
+        xpost_glob_free(globbuf);
+        free(globbuf);
+        free(tmpbuf);
+        return VMerror;
+    }
+    oglob = xpost_glob_cons(id);
 
     /* loop frame: the sentinel loop operator (which exit searches for)
        stays beneath the per-iteration continuation until iteration
@@ -1222,8 +1246,7 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           XPOST_OP(ctx, filenameforall)))
     {
-        xpost_glob_free(globbuf);
-        free(globbuf);
+        xpost_context_glob_release(ctx, id);
         free(tmpbuf);
         return execstackoverflow;
     }
