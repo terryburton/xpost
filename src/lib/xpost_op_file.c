@@ -1189,7 +1189,7 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
 {
     char *tmpbuf;
     glob_t *globbuf;
-    Xpost_Object oglob;
+    Xpost_Object oglob = { 0 };
     int ret;
 
     tmpbuf = xpost_string_allocate_cstring(ctx, Tmp);

@@ -92,7 +92,7 @@ const char *xpost_object_type_names[] =
 
 Xpost_Object xpost_bool_cons (int b)
 {
-    Xpost_Object obj;
+    Xpost_Object obj = { 0 };
 
     obj.int_.tag = booleantype
         | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED
@@ -105,7 +105,7 @@ Xpost_Object xpost_bool_cons (int b)
 
 XPOST_TEST_VISIBLE Xpost_Object xpost_int_cons (integer i)
 {
-    Xpost_Object obj;
+    Xpost_Object obj = { 0 };
 
     obj.int_.tag = integertype
         | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED
@@ -118,7 +118,7 @@ XPOST_TEST_VISIBLE Xpost_Object xpost_int_cons (integer i)
 
 Xpost_Object xpost_real_cons (real r)
 {
-    Xpost_Object obj;
+    Xpost_Object obj = { 0 };
 
     obj.real_.tag = realtype
         | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED

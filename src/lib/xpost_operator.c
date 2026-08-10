@@ -355,7 +355,7 @@ void xpost_operator_dump(Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Operator op;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     Xpost_Object str;
     char *s;
     Xpost_Signature *sig;
@@ -382,7 +382,7 @@ void xpost_operator_dump(Xpost_Context *ctx,
 /* create operator object by opcode number */
 Xpost_Object xpost_operator_cons_opcode(int opcode)
 {
-    Xpost_Object op;
+    Xpost_Object op = { 0 };
     op.mark_.tag = operatortype;
     op.mark_.pad0 = 0;
     op.mark_.padw = opcode;
@@ -407,7 +407,7 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                                  int in, ...)
 {
     Xpost_Object nm;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     int opcode;
     int i;
     unsigned si;

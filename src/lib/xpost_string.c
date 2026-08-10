@@ -54,7 +54,7 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
                                       /*@NULL@*/ const char *ini)
 {
     unsigned int ent;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     int ret;
 
     /* A string object counts its length in comp_.sz, which is narrower

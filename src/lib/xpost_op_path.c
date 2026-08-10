@@ -272,7 +272,7 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
 static Xpost_Object
 _path_cons(Xpost_Context *ctx, unsigned int cap)
 {
-    Xpost_Object s;
+    Xpost_Object s = { 0 };
     unsigned int ent;
     char *p;
 
@@ -835,7 +835,7 @@ _rawarray_cons(Xpost_Context *ctx, unsigned int sz, Xpost_Object **payload)
 {
     Xpost_Memory_File *mem = ctx->lo;
     unsigned int ent;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
 
     if (!xpost_memory_table_alloc(mem, sz * sizeof(Xpost_Object), arraytype, &ent))
         return invalid;

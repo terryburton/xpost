@@ -172,7 +172,7 @@ int Vrestore(Xpost_Context *ctx,
                    entity's stored pointer; a reusable stream survives
                    its close rewound, keeps its pointer, and then keeps
                    its entity too */
-                Xpost_Object o;
+                Xpost_Object o = { 0 };
 
                 o.mark_.tag = filetype;
                 o.mark_.pad0 = 0;

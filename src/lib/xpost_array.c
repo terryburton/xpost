@@ -67,7 +67,7 @@ Xpost_Object xpost_array_cons_memory(Xpost_Memory_File *mem,
                                      unsigned int sz)
 {
     unsigned int ent;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     unsigned int i;
 
     assert(mem->base);
@@ -206,7 +206,7 @@ Xpost_Object xpost_array_get_memory(Xpost_Memory_File *mem,
                                     Xpost_Object a,
                                     integer i)
 {
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     int ret;
 
     ret = xpost_memory_get(mem, xpost_object_get_ent(a),

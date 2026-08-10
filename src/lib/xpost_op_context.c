@@ -58,7 +58,7 @@
 static
 int xpost_op_currentcontext (Xpost_Context *ctx)
 {
-    Xpost_Object ctxobj;
+    Xpost_Object ctxobj = { 0 };
     ctxobj.mark_.tag = contexttype;
     ctxobj.mark_.padw = ctx->id;
     xpost_stack_push(ctx->lo, ctx->os, ctxobj);
@@ -116,7 +116,7 @@ int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
     //xpost_op_currentcontext(newctx);
     newctx->state = C_RUN;
     {
-        Xpost_Object ctxobj;
+        Xpost_Object ctxobj = { 0 };
         ctxobj.mark_.tag = contexttype;
         ctxobj.mark_.padw = newctx->id;
         xpost_stack_push(ctx->lo, ctx->os, ctxobj);

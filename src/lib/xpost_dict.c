@@ -269,7 +269,7 @@ unsigned int hash(Xpost_Object k)
 Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
                unsigned int sz)
 {
-    Xpost_Object d;
+    Xpost_Object d = { 0 };
     dichead *dp;
     dicrec *tp;
     unsigned int i;
@@ -509,7 +509,7 @@ static
 Xpost_Object consextended (double d)
 {
     Xpost_Ieee_Double_As_Int r;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
 
     r.number = d;
     o.extended_.tag = extendedtype;
@@ -532,7 +532,7 @@ double xpost_dict_convert_extended_to_double (Xpost_Object e)
    depending upon flag */
 Xpost_Object xpost_dict_convert_extended_to_number (Xpost_Object e)
 {
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     double d = xpost_dict_convert_extended_to_double(e);
 
     if (e.tag & XPOST_OBJECT_TAG_DATA_EXTENDED_INT)
@@ -1009,7 +1009,7 @@ int main(void)
     printf("\n^test di.c\n");
     init();
 
-    Xpost_Object d;
+    Xpost_Object d = { 0 };
     d = xpost_dict_cons (ctx, 12);
     printf("1 2 def\n");
     xpost_dict_put(ctx, d, xpost_int_cons(1), xpost_int_cons(2));

@@ -258,7 +258,7 @@ Xpost_Object xpost_name_cons_n(Xpost_Context *ctx,
 {
     unsigned int u;
     unsigned int t;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     unsigned int tstk;
     int ret;
 
@@ -334,7 +334,7 @@ Xpost_Object xpost_name_cons_global(Xpost_Context *ctx,
 {
     unsigned int u;
     unsigned int t;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     unsigned int tstk;
     int ret;
 

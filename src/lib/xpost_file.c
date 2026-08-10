@@ -1417,7 +1417,7 @@ Xpost_Object xpost_file_cons(Xpost_Memory_File *mem,
                              /*@NULL@*/ const FILE *fp,
                              int input)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     unsigned int ent;
     int ret;
     Xpost_File *df;
@@ -1461,7 +1461,7 @@ Xpost_Object xpost_file_cons_readstring(Xpost_Memory_File *mem,
                                         const unsigned char *ptr,
                                         unsigned int len)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     unsigned int ent;
     Xpost_File *mf;
     unsigned char *copy;
@@ -1851,7 +1851,7 @@ static Xpost_Object
 _proc_stream_cons(Xpost_Context *ctx, Xpost_Object proc,
                   Xpost_File_Methods *methods)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     unsigned int ent;
     Xpost_File *mf;
     Xpost_ProcFile *pf;
@@ -4626,7 +4626,7 @@ _enc_cons(Xpost_Memory_File *mem, Xpost_Object tgt, size_t size,
 {
     Xpost_File *target = xpost_file_get_file_pointer(mem, tgt);
     Xpost_EncBase *ff;
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
 
     *out = NULL;
     if (!target)
@@ -4737,7 +4737,7 @@ Xpost_Object xpost_file_cons_filter_enc_ccitt(Xpost_Memory_File *mem,
                                               int eol, int eob)
 {
     Xpost_EncBase *base;
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     Xpost_FaxEncFile *ff;
 
     if (columns < 1 || columns > (1 << 20))
@@ -4778,7 +4778,7 @@ Xpost_Object xpost_file_cons_filter_enc_dct(Xpost_Memory_File *mem,
                                             const int *vsamp)
 {
     Xpost_EncBase *base;
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     Xpost_DctEncFile *ff;
     int i;
 
@@ -5111,7 +5111,7 @@ _filter_object_cons(Xpost_Memory_File *mem, Xpost_File *ff,
                     Xpost_File_Methods *methods,
                     Xpost_File_Wraps wraps, Xpost_File *under)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     unsigned int ent;
     int ret;
 
@@ -5496,7 +5496,7 @@ int _file_adopt_stream(Xpost_Memory_File *mem,
                        unsigned int access,
                        Xpost_Object *retval)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
 
     f = xpost_file_cons(mem, fp,
                         access == XPOST_OBJECT_TAG_ACCESS_FILE_READ);
@@ -5542,7 +5542,7 @@ int xpost_file_open(Xpost_Memory_File *mem,
                     char *mode,
                     Xpost_Object *retval)
 {
-    Xpost_Object f;
+    Xpost_Object f = { 0 };
     FILE *fp;
     int ret;
 
@@ -5904,7 +5904,7 @@ int xpost_file_object_close(Xpost_Memory_File *mem,
 static Xpost_Object
 _file_object_of_entity(unsigned int ent)
 {
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
 
     o.mark_.tag = filetype;
     o.mark_.pad0 = 0;

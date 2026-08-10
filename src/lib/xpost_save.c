@@ -107,7 +107,7 @@ void xpost_save_stamp_birth(Xpost_Memory_File *mem, unsigned int ent)
    this object is itself a stack (contains a stackadr) */
 Xpost_Object xpost_save_create_snapshot_object(Xpost_Memory_File *mem)
 {
-    Xpost_Object v;
+    Xpost_Object v = { 0 };
     unsigned int vs;
 
     v.tag = savetype;
@@ -251,7 +251,7 @@ int xpost_save_save_ent(Xpost_Memory_File *mem,
                         unsigned ent)
 {
     Xpost_Memory_Table *tab;
-    Xpost_Object o;
+    Xpost_Object o = { 0 };
     unsigned tlev;
     Xpost_Object sav;
     unsigned int adr;
