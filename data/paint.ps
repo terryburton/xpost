@@ -982,6 +982,24 @@
                 bd .blitrow
                 interpok { .keeprow } if
             } for
+            % A row written here goes straight into the raster and passes
+            % none of the painting operators, so what it leaves on the
+            % page is recorded here instead. What it leaves is the box the
+            % mapping puts the image in, met with the region the rows are
+            % written through: an image the clip keeps nothing of reaches
+            % the page nowhere and leaves it as it found it.
+            /ibx0 m 4 get def
+            /ibx1 ibx0 width m 0 get mul add def
+            ibx1 ibx0 lt { ibx0 ibx1 /ibx0 exch def /ibx1 exch def } if
+            /iby0 m 5 get def
+            /iby1 iby0 height m 3 get mul add def
+            iby1 iby0 lt { iby0 iby1 /iby0 exch def /iby1 exch def } if
+            ibx0 ccx0 lt { /ibx0 ccx0 def } if
+            ibx1 ccx1 gt { /ibx1 ccx1 def } if
+            iby0 ccy0 lt { /iby0 ccy0 def } if
+            iby1 ccy1 gt { /iby1 ccy1 def } if
+            ibx1 ibx0 gt iby1 iby0 gt and
+            { true //.xpostsys /.setpagemarked get exec } if
         }{
         % invert into a fresh matrix: the operand matrix belongs to
         % the caller, who may reuse it (a Type 3 font mutating one

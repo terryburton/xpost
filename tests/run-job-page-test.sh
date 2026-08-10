@@ -129,6 +129,24 @@ $mark
 copypage
 $mark"
 
+# Painted by an image rather than by a path. A raster device takes image
+# rows straight into its page buffer without passing any of the painting
+# operators, and a file whose whole content is one image -- what a
+# converted photograph looks like -- has nothing else to leave a mark.
+run_case imaged page "%!PS
+gsave 100 100 translate 200 200 scale
+2 2 8 [2 0 0 -2 0 2] <004080ff> image
+grestore"
+
+# The same image with the clip keeping none of it: the rows are written
+# through that clip, so nothing of it reaches the page and there is no
+# page to end.
+run_case imageclipped nothing "%!PS
+gsave newpath 0 0 4 4 rectclip
+100 100 translate 200 200 scale
+2 2 8 [2 0 0 -2 0 2] <004080ff> image
+grestore"
+
 # Erased before the job ended: nothing remains to end.
     run_case erased nothing "%!PS
 $mark
