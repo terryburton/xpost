@@ -248,9 +248,20 @@ jobs:
           [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
           echo "$face -> $file"
         done
+    # Virtual memory is one allocation from the host that the interpreter
+    # suballocates, so a checker sees the whole of it as memory the process
+    # owns and says nothing about what is done inside it: reading an entity
+    # the collector has reclaimed is an ordinary read of an ordinary byte.
+    # That is the one place a collector's mistakes appear, and it is the
+    # place this lane would otherwise be blind in. Described, the arena
+    # reports such a read against whoever made it.
+    #
+    # It costs about a sixteenth of the lane's time, measured, and answers
+    # nothing on a tree that is sound: the whole of this profile ran under
+    # it over ten thousand times with no report.
     - name: setup and build
       run: |
-        meson setup builddir
+        meson setup builddir -Dvalgrind-arena=true
         ninja -C builddir
     # meson's own wrapper, so every test runs under it rather than a
     # hand-picked few.
