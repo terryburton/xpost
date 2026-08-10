@@ -685,12 +685,6 @@ Xpost_Object xpost_dict_get_memory (Xpost_Context *ctx,
     {
         return invalid;
     }
-    else if (xpost_object_get_type(r->value) == magictype)
-    {
-        Xpost_Object ret;
-        r->value.magic_.pair->get(ctx, d, k, &ret);
-        return ret;
-    }
     return r->value;
 }
 
@@ -710,8 +704,7 @@ Xpost_Object xpost_dict_get(Xpost_Context *ctx,
    Get value from dict with a name key.
 
    names are already canonical dict keys, so the key normalisation and
-   generality of the full lookup are unnecessary; magic values and any
-   irregularity fall back to the full path. */
+   generality of the full lookup are unnecessary. */
 Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
         Xpost_Object d,
         Xpost_Object k)
@@ -739,22 +732,14 @@ Xpost_Object xpost_dict_get_name(Xpost_Context *ctx,
         if (xpost_object_get_type(tp[i].key) == nulltype)
             return invalid;
         if (hashval == tp[i].hash && _keys_equal(ctx, tp[i].key, k))
-        {
-            if (xpost_object_get_type(tp[i].value) == magictype)
-                return xpost_dict_get_memory(ctx, mem, d, k);
             return tp[i].value;
-        }
     }
     for (i = 0; i < h; i++)
     {
         if (xpost_object_get_type(tp[i].key) == nulltype)
             return invalid;
         if (hashval == tp[i].hash && _keys_equal(ctx, tp[i].key, k))
-        {
-            if (xpost_object_get_type(tp[i].value) == magictype)
-                return xpost_dict_get_memory(ctx, mem, d, k);
             return tp[i].value;
-        }
     }
     return invalid;
 }
@@ -856,11 +841,6 @@ int xpost_dict_put_memory(Xpost_Context *ctx,
         note_capacity(dp);
         r->key = k; /* canonicalised above */
         r->hash = hash(k);
-    }
-    else if (xpost_object_get_type(r->value) == magictype)
-    {
-        r->value.magic_.pair->put(ctx, d, k, v);
-        return 0;
     }
     r->value = v;
     return 0;

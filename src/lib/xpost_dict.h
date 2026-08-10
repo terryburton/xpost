@@ -73,12 +73,6 @@ typedef struct
     Xpost_Object value;
 } dicrec;
 
-typedef struct Xpost_Magic_Pair
-{
-    int (*get)(Xpost_Context *ctx, Xpost_Object dict, Xpost_Object key, Xpost_Object *pval);
-    int (*put)(Xpost_Context *ctx, Xpost_Object dict, Xpost_Object key, Xpost_Object val);
-} Xpost_Magic_Pair;
-
 /**
  * @brief the dictionary header at an entity, and at a raw address.
  *

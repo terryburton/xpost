@@ -109,6 +109,12 @@
  * @enum Xpost_Object_Type
  * @brief A value to track the type of object,
  *        and select the correct union member for manipulation.
+ *
+ * The numbering is what the language is told: a type's position here
+ * fixes the position of every type after it, and the name each position
+ * carries is what the type operator answers with. magictype names no
+ * member of the union and no object is built of it; the entry holds the
+ * number in place.
  */
 typedef enum
 {
@@ -351,18 +357,6 @@ typedef struct
     void *ptr; /**< ptr to the glob_t struct */
 } Xpost_Object_Glob;
 
-/**
- * @struct Xpost_Object_Magic
- * @brief The magictype object exist as dictionary values where they
- *        are treated specially by the dicput and dicget functions.
- */
-typedef struct
-{
-    word tag; /**< magictype */
-    word pad;
-    struct Xpost_Magic_Pair *pair; /**< pointer to struct containing getter/setter function pointers */
-} Xpost_Object_Magic;
-
 /*
  *
  * Union
@@ -389,7 +383,6 @@ typedef union
     Xpost_Object_Save save_;
     Xpost_Object_Saverec saverec_;
     Xpost_Object_Glob glob_;
-    Xpost_Object_Magic magic_;
 } Xpost_Object;
 
 
