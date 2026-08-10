@@ -8,6 +8,7 @@
 #ifndef XPOST_DEV_DRIVER_H
 #define XPOST_DEV_DRIVER_H
 
+#include <limits.h> /* INT_MAX: what a buffer's row width and count are */
 #include <math.h> /* the device-space geometry below rounds by floor */
 #include <stddef.h> /* a buffer position is counted in the platform's size */
 
@@ -276,6 +277,26 @@ xpost_dev_rect_clip(int *x0, int *y0, int *x1, int *y1,
  * address rather than by the range of a pixel coordinate.
  */
 typedef size_t Xpost_Dev_Raster_Offset;
+
+/* The page extent @p v as a buffer extent, or zero for a page no buffer
+   here carries. A page size is a number the program chose and arrives as
+   an interpreter integer; a buffer's row width and row count are ints,
+   which is what the row arithmetic above takes. Where the interpreter
+   counts further than an int does, a program can name a page whose
+   extent no buffer geometry here holds, and narrowing it in silence
+   builds a buffer of some other page: the number the device dictionary
+   reports and the number the memory is laid out in would then differ by
+   a multiple of what an int counts, and every mark would land somewhere
+   other than where the program put it. The caller answers limitcheck,
+   PLRM 8.2's name for a limit of the implementation. */
+static inline int
+xpost_dev_buffer_extent(integer v, int *extent)
+{
+    if (v < 0 || v > (integer)INT_MAX)
+        return 0;
+    *extent = (int)v;
+    return 1;
+}
 
 /* The pixel at column @p x of row @p y of a buffer @p stride pixels
    wide, as a count of pixels from the buffer's first. The coordinates

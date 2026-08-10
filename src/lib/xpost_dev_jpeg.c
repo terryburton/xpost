@@ -173,10 +173,23 @@ int _create_cont(Xpost_Context *ctx,
 {
     PrivateData private;
     Xpost_Object privatestr;
-    integer width = w.int_.val;
-    integer height = h.int_.val;
+    int width, height;
     int ret;
     //printf("create_cont\n");
+
+    /* The page the program asked for, as the extent of the buffer that
+       will hold it. Every device here holds a whole page in one block,
+       so the two carry the same numbers; a page naming an extent no
+       buffer's row arithmetic carries is refused before anything is
+       built for it. */
+    if (!xpost_dev_buffer_extent(w.int_.val, &width)
+     || !xpost_dev_buffer_extent(h.int_.val, &height))
+    {
+        XPOST_LOG_ERR("%d a page of %ldx%ld names an extent no raster"
+                      " carries", limitcheck,
+                      (long)w.int_.val, (long)h.int_.val);
+        return limitcheck;
+    }
 
     /* create a string to contain device data structure */
     ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,

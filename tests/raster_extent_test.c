@@ -209,6 +209,51 @@ int main(void)
         }
     }
 
+    /* ---- the page, as the extent of the buffer that holds it ---- */
+
+    /* A page size is a number the program chose and reaches a device as
+       an interpreter integer; a buffer's row width and row count are
+       ints. Where the two are the same width every page a program can
+       name is one a buffer names too, and where the interpreter counts
+       further the difference has to be refused rather than dropped: a
+       buffer built from a narrowed extent is a buffer of some other
+       page, and every mark on it lands somewhere other than where the
+       program put it. */
+    {
+        int extent = -1;
+
+        if (!xpost_dev_buffer_extent(0, &extent) || extent != 0)
+            report_failure("a page of no extent is not a buffer of none");
+        if (!xpost_dev_buffer_extent(1234, &extent) || extent != 1234)
+            report_failure("an ordinary page extent does not pass through");
+        if (!xpost_dev_buffer_extent((integer)INT_MAX, &extent)
+            || extent != INT_MAX)
+            report_failure("the widest extent a buffer names is refused");
+
+        extent = -1;
+        if (xpost_dev_buffer_extent(-1, &extent))
+            report_failure("a negative page extent is taken for a buffer's");
+        if (extent != -1)
+            report_failure("a refused page extent wrote an extent anyway");
+
+        /* Only where the interpreter counts further than a buffer's
+           extent does: in a build where they are the same width there is
+           no such number to hand it. Formed through an unsigned type so
+           the value exists in either build without the arithmetic that
+           makes it running past its own type. */
+        if (sizeof(integer) > sizeof(int))
+        {
+            integer past = (integer)((unsigned long long)INT_MAX + 1u);
+
+            extent = -1;
+            if (xpost_dev_buffer_extent(past, &extent))
+                report_failure("a page wider than any buffer is taken for"
+                               " a buffer's extent");
+            if (extent != -1)
+                report_failure("a refused wide page wrote an extent anyway");
+        }
+    }
+
     /* ---- where a pixel sits ---- */
 
     corners("an ordinary page", 100, 50, 5000);
