@@ -320,6 +320,7 @@ tests/svg_append_fail_test.ps \
 tests/tamper_dispatch_test.ps \
 tests/run-thin-stroke-test.sh \
 tests/thin_stroke_test.ps \
+tests/token_sign_test.ps \
 tests/trapping_test.ps \
 tests/valgrind.supp \
 tests/vecout_gc_test.ps \

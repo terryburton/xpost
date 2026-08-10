@@ -2989,6 +2989,19 @@ test('colour-range',
   suite: cost_fast,
   timeout: 300)
 
+# Where a number stops and a name starts. A sign and a decimal point begin
+# numbers and also make names, so the scanner decides between the two for
+# every token starting with one: PLRM 3.2 makes a token a number when it is
+# one and a name otherwise, with no third answer and no error. A program that
+# names its own procedures `-` and `+` -- the natural spelling for a turtle
+# that turns -- depends on the whole of that at once, in a file that also
+# passes signed numbers to rotate.
+test('token-sign',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/token_sign_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast)
+
 # Which pixels a stroke narrower than one of them covers. PLRM 7.5.1 paints
 # any pixel a shape intersects however slightly, for strokes of nonzero width
 # as much as for fills, so a thin stroke on a row's centre paints that row and

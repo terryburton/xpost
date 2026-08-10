@@ -1,0 +1,101 @@
+% Where a number stops and a name starts.
+%
+% A sign and a decimal point are characters a number begins with and also
+% characters a name may be made of, so the scanner decides between the
+% two for every token that starts with one. PLRM 3.2 makes a token a
+% number when it is one and a name otherwise: there is no third answer
+% and no error, so `-` is a name, `-5` is a number, and a token that
+% begins like a number and then stops being one -- `1-2`, `1e`, `-e5` --
+% is a name rather than a malformed number.
+%
+% This is not a corner. A program that uses `-` and `+` as the names of
+% its own procedures, which is the natural spelling for a turtle that
+% turns, relies on the whole of it at once: the same file defines `/-`,
+% calls `-`, and passes `-45` to a rotation, and a scanner that resolved
+% any one of those the other way would either lose the definition or
+% turn the number into a name that is not there.
+%
+% Read with `token` rather than by executing the text, so a token that
+% scans as a name is examined instead of being looked up and run.
+
+/failures 0 def
+/concatstrings { % a b . ab
+    /cs.b exch def
+    /cs.a exch def
+    cs.a length cs.b length add string
+    dup 0 cs.a putinterval
+    dup cs.a length cs.b putinterval
+} bind def
+
+/fail { /failures failures 1 add store (FAIL: ) print print (\n) print flush }
+bind def
+
+/assert { % bool (name)  .  -
+    exch { pop }{ fail } ifelse
+} bind def
+
+/istype { % (text) /wanted  .  -
+    /istype.want exch def
+    /istype.text exch def
+    istype.text token
+    {
+        exch pop type istype.want eq not
+        { istype.text ( scanned as the wrong type) concatstrings fail } if
+    }
+    { istype.text ( yielded no token at all) concatstrings fail }
+    ifelse
+} bind def
+
+/isnum { % (text) value  .  -   (a number, and the value it carries)
+    /isnum.want exch def
+    /isnum.text exch def
+    isnum.text token
+    {
+        exch pop
+        dup type dup /integertype eq exch /realtype eq or not
+        { pop isnum.text ( is not a number) concatstrings fail }
+        {
+            isnum.want sub abs 0.0001 gt
+            { isnum.text ( carries the wrong value) concatstrings fail } if
+        }
+        ifelse
+    }
+    { isnum.text ( yielded no token at all) concatstrings fail }
+    ifelse
+} bind def
+
+% A sign or a point alone, and runs of them, are names: each is a token
+% that is not a number, and PLRM 3.2 has no other answer.
+(-)     /nametype istype
+(+)     /nametype istype
+(--)    /nametype istype
+(++)    /nametype istype
+(.)     /nametype istype
+(-.)    /nametype istype
+
+% A sign in front of digits is part of the number.
+(-5)    -5   isnum
+(+5)     5   isnum
+(-0)     0   isnum
+(.5)     0.5 isnum
+(-.5)   -0.5 isnum
+(1e5)  100000 isnum
+
+% Begun like a number and then not one: a name, not an error.
+(1-2)   /nametype istype
+(5+)    /nametype istype
+(-e5)   /nametype istype
+(1e)    /nametype istype
+(16#-1) /nametype istype
+
+% And the whole of it together, which is what a program using a sign as
+% the name of a procedure depends on: the definition is made, the call
+% reaches it, and a signed number in the same file is still a number.
+/turned 0 def
+/- { /turned turned 1 sub store } def
+/+ { /turned turned 1 add store } def
++ + + -
+turned 2 eq (a sign names a procedure the program can call) assert
+-45 -45 eq (a signed number beside it is still a number) assert
+
+failures 0 eq { (SUCCESS) = } { (FAILURES: ) print failures = } ifelse
