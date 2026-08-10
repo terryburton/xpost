@@ -52,6 +52,25 @@ trap 'rm -rf "$topwork"' EXIT
 
 fail=0
 
+# Run the interpreter and hand back everything it wrote, the newlines it
+# ended with included, along with how it ended.
+#
+# A command substitution strips the newlines its command's output ends
+# with, so how much of a run's output survives being captured turns on
+# what the interpreter printed last rather than on what the run left. A
+# run that ends in a page marker keeps the newline before that marker;
+# one that ends the moment its program does loses the newline it ended
+# on. The difference between those two counts is the whole of the
+# measure below, and it comes out one byte wide with no page behind it.
+# The sentinel carries the newlines through the substitution and comes
+# off again here; the status comes out of the subshell the same way.
+#   sets out to what the run wrote, and st to how it ended
+run_out() {         # the interpreter and its arguments
+    out=$( "$@" </dev/null 2>&1; _run_st=$?; printf 'X'; exit "$_run_st" )
+    st=$?
+    out=${out%X}
+}
+
 # What a run left, as one number: the bytes of the file it was told to
 # write plus the bytes it wrote to its own output, less the marker the
 # default page semantics print when a page is transmitted. That marker is
@@ -75,8 +94,7 @@ run_case() {        # name expect program
     name=$1; expect=$2; prog=$3
     printf '%s\n' "$prog" > "$work/$name.ps"
     rm -f "$work/$name.$dev"
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/$name.$dev" "$work/$name.ps" </dev/null 2>&1)
-    st=$?
+    run_out "$xpost" -q $ns -d "$dev" -o "$work/$name.$dev" "$work/$name.ps"
     verdict_run "$st" "$out" "the $name job on $dev" || { fail=$((fail + 1)); return; }
     got=$(left "$work/$name.$dev" "$out")
 
@@ -142,11 +160,11 @@ one_device() {
     # carry.
     printf '%%!PS\n%s\nshowpage\n' "$mark" > "$work/cal-page.ps"
     printf '%%!PS\n%% this job paints nothing\n' > "$work/cal-none.ps"
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-page.$dev" "$work/cal-page.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration page on $dev" || return 1
+    run_out "$xpost" -q $ns -d "$dev" -o "$work/cal-page.$dev" "$work/cal-page.ps"
+    verdict_run "$st" "$out" "the calibration page on $dev" || return 1
     sz_page=$(left "$work/cal-page.$dev" "$out")
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-none.$dev" "$work/cal-none.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration blank on $dev" || return 1
+    run_out "$xpost" -q $ns -d "$dev" -o "$work/cal-none.$dev" "$work/cal-none.ps"
+    verdict_run "$st" "$out" "the calibration blank on $dev" || return 1
     sz_none=$(left "$work/cal-none.$dev" "$out")
 
     if [ "$sz_page" -le "$sz_none" ]; then
@@ -165,8 +183,8 @@ one_device() {
     # list of names kept beside it.
     printf '%%!PS\nDEVICE /VectorGlyphs known { (VECTORGLYPHS) print } if\n%s\nshowpage\n' \
         "$text" > "$work/cal-text.ps"
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-text.$dev" "$work/cal-text.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration text on $dev" || return 1
+    run_out "$xpost" -q $ns -d "$dev" -o "$work/cal-text.$dev" "$work/cal-text.ps"
+    verdict_run "$st" "$out" "the calibration text on $dev" || return 1
     sz_text=$(left "$work/cal-text.$dev" "$out")
     vector=no
     case "$out" in *VECTORGLYPHS*) vector=yes ;; esac
