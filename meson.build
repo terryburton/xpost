@@ -3024,7 +3024,7 @@ test('job-page',
   find_program('tests/run-job-page-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # A page with more pixels than a raster can be indexed by. A device reaches
@@ -3054,7 +3054,7 @@ test('page-extent',
   find_program('tests/run-page-extent-test.sh'),
   args: [ xpost_exe, files('tests/page_extent_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 120)
 
 # The same question of a job whose marks are glyphs. Text does not reach the
@@ -3195,7 +3195,7 @@ test('multipage',
   find_program('tests/run-multipage-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # Embedded Type 1 with a no-access Private: definefont must reach the loader and
