@@ -1,0 +1,27 @@
+# How many pages each program of this corpus draws. One basename and
+# one count per line.
+#
+# It is held from both ends: a program of this corpus with no count
+# here fails the corpus, so one cannot be added without a count, and a
+# count naming a program the corpus does not hold fails it too.
+#
+# The counts are not a record of what this tree draws -- a count taken
+# from that makes whatever the tree does today correct by definition.
+# Every program here is one encapsulated illustration and eleven of the
+# twelve say so themselves in a %%Pages: 1 line their producer wrote;
+# mathematica carries no such line and is the single drawing its one
+# showpage ends. An encapsulated file is a figure for another document
+# to place, so one page is the shape of the whole corpus and a program
+# of it drawing two would be a program that had stopped being one.
+circle 1
+football_logo 1
+fsu_logo 1
+heawood 1
+icam_logo 1
+knightstour 1
+mathematica 1
+petersen 1
+sc_logo 1
+scs_logo 1
+triangular_1 1
+tutte 1

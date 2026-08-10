@@ -460,8 +460,10 @@ endif
 # What a test is about
 #   xpost     the interpreter's own suite: everything the tree can run
 #             out of itself
-#   corpus    the differential run over real programs fetched into
-#             tests/corpus, which skips until they are
+#   corpus    the runs over real programs fetched into tests/corpus,
+#             which skip until they are: four comparing what they
+#             render against a reference engine, one holding what it
+#             renders to this interpreter's own terms
 #   vendor    a downstream consumer's own test suite, run out of a
 #             checkout of its own, which skips until there is one
 #   memacct   the five that read the memory a run holds rather than
@@ -3185,6 +3187,28 @@ foreach corpus : [ [ 'ghostscript', 'slow' ],
     suite: [ 'corpus', corpus[1] ],
     timeout: 1800)
 endforeach
+
+# The encapsulated corpus: twelve real illustrations written to be placed
+# in another document, held to what this interpreter alone does with them.
+# It carries the corpus suite so the same profiles select it as select its
+# siblings, and it is fetched like them, but it asks no other engine
+# anything -- what it holds is that each program finishes without an
+# error, draws the pages the corpus declares, and puts ink on each of
+# them. Four of the twelve carry no showpage, which is the ordinary shape
+# of an encapsulated file, so the only page they produce is the one the
+# job's end supplies; without that they render blank, and the ink check
+# over those four is the check of it.
+#
+# A hash of the bytes would be the wrong hold here: the programs are
+# fetched from a source free to revise them, and the first revision
+# upstream would turn the gate red over a change that is not this
+# tree's.
+test('corpus-eps',
+  find_program('tests/corpus/run-eps-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: [ 'corpus', 'slow' ],
+  timeout: 1800)
 
 # A downstream consumer's own suite: Barcode Writer in Pure PostScript,
 # a hundred and thirty programs of real-world PostScript run to verdicts

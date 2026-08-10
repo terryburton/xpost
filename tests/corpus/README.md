@@ -1,9 +1,13 @@
-Differential corpus
-===================
+Corpora of real programs
+========================
 
-A set of real PostScript programs, rendered through xpost and through a
-reference interpreter and compared, to catch rendering regressions that
-the unit suite does not reach. The programs themselves are **not** kept
+Sets of real PostScript programs, rendered to catch the faults the unit
+suite does not reach, because a page of real PostScript is not a test
+and does things no test thought to. Most of them are rendered through
+xpost and through a reference interpreter and compared, which is what
+the rest of this file is about; `eps` is the one held to what this
+interpreter alone must do with it, by a test of its own that asks no
+other engine anything. The programs themselves are **not** kept
 in this repository: they belong to other people, or are generated, and
 committing them would raise a licensing question and bloat the tree.
 Instead each corpus is a directory here that holds only what is ours --
@@ -97,6 +101,27 @@ The corpora
                 personal.math.ubc.ca; copyright the author, not
                 redistributed here.
 
+  eps           Twelve encapsulated illustrations from John Burkardt's
+                sample collection (LGPL) -- graph drawings, plotted
+                figures, and institutional logos wrapped around a
+                photograph. Four of them carry no `showpage`, which is
+                the ordinary shape of a file written to be placed in
+                another document: the document supplies it. Fetched from
+                people.sc.fsu.edu; not redistributed here.
+
+                This corpus is held by a test of its own rather than by
+                the differential run, and that test asks no other engine
+                anything: each program must finish without an error,
+                draw the pages the corpus declares, and put ink on each
+                of them. The four that ask for no page have nothing else
+                holding them -- without the page a job's end supplies
+                they render blank -- so an `unasked` register beside the
+                other two names them, held against the files both ways.
+                Byte-exact goldens are deliberately not used: the
+                programs are fetched from a source free to revise them,
+                and a hash would turn the gate red over a change that is
+                not this tree's.
+
   bwipp         The variable-data examples from BWIPP (Terry Burton's
                 barcode writer, MIT), driven off a local checkout. They
                 repeat a compute-intensive logo and barcode across many
@@ -177,6 +202,7 @@ SOURCES
 
   ghostscript  https://github.com/ArtifexSoftware/ghostpdl  (examples/)
   casselman    https://personal.math.ubc.ca/~cass/graphics/manual/
+  eps          https://people.sc.fsu.edu/~jburkardt/data/eps/  (eps.html)
   bwipp        https://github.com/bwipp/postscriptbarcode  (contrib/Examples,
                build/monolithic_package/barcode.ps)
   adobe        Adobe's "PostScript Language Tutorial and Cookbook" (Blue

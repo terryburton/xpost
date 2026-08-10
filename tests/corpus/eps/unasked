@@ -1,0 +1,27 @@
+# The programs of this corpus that paint a page and never ask for it.
+# One basename per line.
+#
+# An encapsulated file is a figure for another document to place, and
+# the document supplies the showpage: a file of that shape carries none
+# of its own, so the only page it produces is the one the interpreter
+# ends for a job that painted and stopped. That is the whole of what
+# these four put on paper, and it is why they are in the corpus -- the
+# rest of it would render the same whether that page were ended or
+# thrown away.
+#
+# Read off the files rather than off a run: the entry says the program
+# carries no showpage, which is a fact about the text, and the text is
+# where it is checked. Every program of the corpus is scanned with its
+# comment tails removed and held to this register both ways, so a name
+# here whose program does ask for its page fails, and a program that
+# stops asking without being named here fails too -- either is the
+# corpus quietly ceasing to cover the behaviour while still reporting
+# twelve programs rendered. An empty register fails for the same
+# reason.
+#
+# All four are ImageMagick's encapsulated wrapper around a photograph:
+# one image operator, no showpage, and nothing else on the page.
+football_logo
+icam_logo
+sc_logo
+scs_logo

@@ -74,6 +74,9 @@ tests/corpus/bwipp/prelude.fetched \
 tests/corpus/casselman/heldout \
 tests/corpus/casselman/nopage \
 tests/corpus/casselman/pages \
+tests/corpus/eps/nopage \
+tests/corpus/eps/pages \
+tests/corpus/eps/unasked \
 tests/corpus/evaluate.sh \
 tests/corpus/fetch.sh \
 tests/corpus/ghostscript/nondeterministic \
@@ -81,6 +84,7 @@ tests/corpus/ghostscript/nopage \
 tests/corpus/ghostscript/pages \
 tests/corpus/ghostscript/prelude \
 tests/corpus/run-corpus-test.sh \
+tests/corpus/run-eps-test.sh \
 tests/counttomark_test.ps \
 tests/dct_truncated_test.ps \
 tests/dev_rect_test.c \

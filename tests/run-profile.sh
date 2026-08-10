@@ -104,7 +104,7 @@ case $profile in
             what='every test the tree runs out of itself' ;;
     corpus) filter='--suite corpus'
             want='corpus'; without=''
-            what='the differential corpus' ;;
+            what='the corpora of real programs' ;;
     vendor) filter='--suite vendor'
             want='vendor'; without=''
             what='the downstream consumer suite' ;;

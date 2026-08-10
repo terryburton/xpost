@@ -1,0 +1,17 @@
+# What this corpus draws no page for. One entry per line -- a basename
+# for a program that produces no page at all, a basename and " pN" for
+# one page of a program that produces others -- each with the reason it
+# draws nothing.
+#
+# A program that draws nothing is outside every comparison a run makes,
+# so a run of programs that all drew nothing reports exactly what a run
+# in which every one rendered reports: it reached them either way.
+# Saying so here in advance is what keeps that from passing for a
+# result. An absence nobody declared fails the corpus, and so does a
+# declared absence that turns out to have rendered -- the entry's reason
+# has lapsed, and the line is left telling its next reader something
+# untrue.
+#
+# Nothing here draws no page. Every program of this corpus is one
+# illustration and produces it, the four that never ask for it
+# included.

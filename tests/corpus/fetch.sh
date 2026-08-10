@@ -61,6 +61,19 @@ fetch_casselman() {
     done
 }
 
+fetch_eps() {
+    base="https://people.sc.fsu.edu/~jburkardt/data/eps"
+    d="$here/eps"; mkdir -p "$d"
+    for f in circle football_logo fsu_logo heawood icam_logo knightstour \
+             mathematica petersen sc_logo scs_logo triangular_1 tutte; do
+        if get "$base/$f.eps" "$d/$f.eps" && [ -s "$d/$f.eps" ]; then
+            echo "  eps/$f.eps"
+        else
+            echo "  MISS eps/$f.eps"; rm -f "$d/$f.eps"; missing=$((missing + 1))
+        fi
+    done
+}
+
 fetch_bwipp() {
     # BWIPP is a local checkout, not a download: the barcode resource
     # is generated, so it is copied rather than vendored. The
@@ -97,11 +110,12 @@ fetch_adobe() {
     echo "         Place flat *.ps files under $here/adobe/ -- see README SOURCES."
 }
 
-for name in ${*:-ghostscript casselman bwipp adobe}; do
+for name in ${*:-ghostscript casselman eps bwipp adobe}; do
     echo "populating $name ..."
     case "$name" in
         ghostscript) fetch_ghostscript;;
         casselman)   fetch_casselman;;
+        eps)         fetch_eps;;
         bwipp)       fetch_bwipp;;
         adobe)       fetch_adobe;;
         *)           echo "  unknown corpus: $name" >&2; missing=$((missing + 1));;
