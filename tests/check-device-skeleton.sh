@@ -78,6 +78,34 @@ for f in $fleet xpost_dev_win32.c; do
     fi
 done
 
+# 3a. A device that reaches its own buffer for a pixel reaches it for a
+#    rectangle too. The base class fills a rectangle by walking it a pixel
+#    at a time and calling PutPix for each, which is the right answer for
+#    a device whose page is the base class's own row array and the wrong
+#    one for a device that has put its buffer somewhere else: every call
+#    goes out through the operator dispatch and comes back in. Every page
+#    begins with an erasepage over the whole of it, so a device without
+#    its own FillRect spends the page's area in dispatches before a
+#    program has drawn anything -- twenty seconds, on a page two thousand
+#    square, to reach the state the page starts in.
+#
+#    A line is not held to this. Its cost is its length, where a
+#    rectangle's is the area of the page.
+#
+#    This is a cost, not a wrong answer, so no rendering shows it and no
+#    assertion about what a device paints will catch it. Timing it in the
+#    suite would answer differently on a busy machine. What can be said
+#    for certain is which methods a device offers, so that is what is
+#    asked.
+for f in $marking; do
+    if grep -q '"PutPix"' "$libdir/$f" && ! grep -q '"FillRect"' "$libdir/$f"; then
+        echo "check-device-skeleton: $f reaches its own buffer for a pixel but not" >&2
+        echo "      for a rectangle, so it fills one through the base class, a" >&2
+        echo "      dispatch per pixel. Give it a FillRect beside its PutPix." >&2
+        fail=1
+    fi
+done
+
 # 3. A file that fills a rectangle paints the contract rectangle: its
 #    extent arithmetic must be xpost_dev_rect_normalize, not a private
 #    restatement. And nothing outside the header may restate the two
