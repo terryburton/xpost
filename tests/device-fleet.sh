@@ -75,3 +75,74 @@ DEVICE_FLEET_LIFETIME='pgm null bbox raster bgr png jpeg pdfwrite svgwrite'
 
 DEVICE_FLEET_MARKING='pgm ppm pbm null bbox raster bgr png pngalpha jpeg
                       pdfwrite svgwrite'
+
+# fleet_each FUNCTION ITEM...
+#
+# Runs FUNCTION once per item and replays each run's output in the order
+# the items were given.
+#
+# A wrapper that asks one question of every device spends nearly all of
+# its time waiting for an interpreter to start, run and exit, and one
+# device's answer does not depend on another's, so the runs overlap.
+# What a reader sees does not: the output is held per item and replayed
+# in roster order, so the device a line belongs to is the device the
+# roster reads next, whichever run finished first.
+#
+# FUNCTION is called with one item and says how it went by its exit
+# status: 0 for a device that answered and held, 2 for one that could
+# not be asked and has said so in its output, anything else for a
+# failure. fleet_asked counts the devices put to the question, held or
+# not, and fleet_unasked the ones that could not be; a wrapper holds its
+# floor against the first, so a roster that skipped from end to end is
+# told apart from one that answered and disagreed. fleet_each returns
+# non-zero if any item failed.
+#
+# The width is FLEET_JOBS, defaulting to four. A wrapper runs beside
+# every other test the suite is running at the time, so the width is a
+# share of the machine rather than the whole of it.
+fleet_each() {
+    _fe_body=$1
+    shift
+    _fe_dir=$(mktemp -d)
+    _fe_width=${FLEET_JOBS:-4}
+    _fe_live=0
+    _fe_i=0
+
+    for _fe_item in "$@"; do
+        _fe_i=$((_fe_i + 1))
+        (
+            "$_fe_body" "$_fe_item" > "$_fe_dir/$_fe_i.out" 2>&1
+            echo $? > "$_fe_dir/$_fe_i.st"
+        ) &
+        _fe_live=$((_fe_live + 1))
+        if [ "$_fe_live" -ge "$_fe_width" ]; then
+            wait
+            _fe_live=0
+        fi
+    done
+    wait
+
+    _fe_rc=0
+    _fe_i=0
+    fleet_asked=0
+    fleet_unasked=0
+    fleet_unasked_list=
+    for _fe_item in "$@"; do
+        _fe_i=$((_fe_i + 1))
+        [ -f "$_fe_dir/$_fe_i.out" ] && cat "$_fe_dir/$_fe_i.out"
+        # A run whose status never landed is a run that died without
+        # reaching the line that records it, which is a failure and not
+        # a device declining to answer.
+        _fe_st=1
+        [ -f "$_fe_dir/$_fe_i.st" ] && _fe_st=$(cat "$_fe_dir/$_fe_i.st")
+        case "$_fe_st" in
+            2) fleet_unasked=$((fleet_unasked + 1))
+               fleet_unasked_list="$fleet_unasked_list $_fe_item" ;;
+            0) fleet_asked=$((fleet_asked + 1)) ;;
+            *) fleet_asked=$((fleet_asked + 1)); _fe_rc=1 ;;
+        esac
+    done
+
+    rm -rf "$_fe_dir"
+    return $_fe_rc
+}

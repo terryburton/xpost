@@ -28,17 +28,28 @@ trap 'rm -rf "$work"' EXIT
 fail=0
 asked=0
 
+one_device() {
+    dev=$1
+    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    st=$?
+    printf '%s\n' "$out" | sed "s/^/$dev: /"
+    verdict_run "$st" "$out" "the page-extent job on $dev" || return 1
+    verdict_ok "$out" "the page-extent check on $dev" || return 1
+    return 0
+}
+
+# The devices with a raster to index, which is the roster less the two
+# that keep no pixels.
+roster=
 for dev in $DEVICE_FLEET_MARKING; do
     case "$dev" in
         null|bbox) continue ;;
     esac
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
-    st=$?
-    printf '%s\n' "$out" | sed "s/^/$dev: /"
-    verdict_run "$st" "$out" "the page-extent job on $dev" || { fail=1; continue; }
-    verdict_ok "$out" "the page-extent check on $dev" || fail=1
-    asked=$((asked + 1))
+    roster="$roster $dev"
 done
+
+fleet_each one_device $roster || fail=1
+asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that
 # answered for everything.

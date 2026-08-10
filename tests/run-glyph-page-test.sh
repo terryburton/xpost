@@ -47,8 +47,8 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+topwork=$(mktemp -d)
+trap 'rm -rf "$topwork"' EXIT
 
 fail=0
 
@@ -122,8 +122,15 @@ text='/Helvetica 24 selectfont 72 72 moveto (hi) show'
 
 asked=0
 
-for dev in $DEVICE_FLEET_MARKING; do
-    before=$fail
+# One device's whole share of the question. It is run for each device at
+# once, so everything it writes goes under a directory of its own: the
+# case files are named for the case, and two devices running the same
+# case would otherwise be writing one path from two runs.
+one_device() {
+    dev=$1
+    work="$topwork/$dev"
+    mkdir -p "$work" || return 1
+    fail=0
 
     # Whether this device can be asked at all, established from the
     # device rather than assumed. Two jobs are run whose answers are not
@@ -136,15 +143,15 @@ for dev in $DEVICE_FLEET_MARKING; do
     printf '%%!PS\n%s\nshowpage\n' "$mark" > "$work/cal-page.ps"
     printf '%%!PS\n%% this job paints nothing\n' > "$work/cal-none.ps"
     out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-page.$dev" "$work/cal-page.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration page on $dev" || { fail=$((fail + 1)); continue; }
+    verdict_run "$?" "$out" "the calibration page on $dev" || return 1
     sz_page=$(left "$work/cal-page.$dev" "$out")
     out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-none.$dev" "$work/cal-none.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration blank on $dev" || { fail=$((fail + 1)); continue; }
+    verdict_run "$?" "$out" "the calibration blank on $dev" || return 1
     sz_none=$(left "$work/cal-none.$dev" "$out")
 
     if [ "$sz_page" -le "$sz_none" ]; then
         echo "$dev: its output does not tell a transmitted page from none; not asked"
-        continue
+        return 2
     fi
     # anything above what the no-page job left is a page having arrived
     empty=$sz_none
@@ -159,7 +166,7 @@ for dev in $DEVICE_FLEET_MARKING; do
     printf '%%!PS\nDEVICE /VectorGlyphs known { (VECTORGLYPHS) print } if\n%s\nshowpage\n' \
         "$text" > "$work/cal-text.ps"
     out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-text.$dev" "$work/cal-text.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration text on $dev" || { fail=$((fail + 1)); continue; }
+    verdict_run "$?" "$out" "the calibration text on $dev" || return 1
     sz_text=$(left "$work/cal-text.$dev" "$out")
     vector=no
     case "$out" in *VECTORGLYPHS*) vector=yes ;; esac
@@ -172,11 +179,9 @@ $built"
 
     if [ "$sz_text" -le "$empty" ]; then
         echo "$dev: no installed font reaches it; its glyph routes not asked"
-        asked=$((asked + 1))
-        if [ "$fail" -eq "$before" ]; then
-            echo "$dev: the page a job of text leaves behind is what it should be"
-        fi
-        continue
+        [ "$fail" -eq 0 ] || return 1
+        echo "$dev: the page a job of text leaves behind is what it should be"
+        return 0
     fi
 
     # Painted by show and never asked for: the ordinary shape of an
@@ -214,11 +219,13 @@ newpath 0 0 2 2 rectclip
 /Helvetica 24 selectfont 72 72 moveto (hi) show"
     fi
 
-    asked=$((asked + 1))
-    if [ "$fail" -eq "$before" ]; then
-        echo "$dev: the page a job of text leaves behind is what it should be"
-    fi
-done
+    [ "$fail" -eq 0 ] || return 1
+    echo "$dev: the page a job of text leaves behind is what it should be"
+    return 0
+}
+
+fleet_each one_device $DEVICE_FLEET_MARKING || fail=1
+asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that
 # answered for everything.

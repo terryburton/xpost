@@ -37,8 +37,8 @@ else
     ns=''
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+topwork=$(mktemp -d)
+trap 'rm -rf "$topwork"' EXIT
 
 fail=0
 
@@ -81,8 +81,15 @@ asked=0
 # devices whose output is a stream of drawing operators rather than a raster
 STREAM_WRITERS='pdfwrite svgwrite dscwrite'
 
-for dev in $DEVICE_FLEET_MARKING; do
-    before=$fail
+# One device's whole share of the question. It is run for each device at
+# once, so everything it writes goes under a directory of its own: the
+# case files are named for the case, and two devices running the same
+# case would otherwise be writing one path from two runs.
+one_device() {
+    dev=$1
+    work="$topwork/$dev"
+    mkdir -p "$work" || return 1
+    fail=0
 
     # Whether this device can be asked at all, established from the
     # device rather than assumed. Two jobs are run whose answers are not
@@ -96,16 +103,16 @@ for dev in $DEVICE_FLEET_MARKING; do
     printf '%%!PS\n%s\nshowpage\n' "$mark" > "$work/cal-page.ps"
     printf '%%!PS\n%% this job paints nothing\n' > "$work/cal-none.ps"
     out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-page.$dev" "$work/cal-page.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration page on $dev" || { fail=1; continue; }
+    verdict_run "$?" "$out" "the calibration page on $dev" || return 1
     out=$("$xpost" -q $ns -d "$dev" -o "$work/cal-none.$dev" "$work/cal-none.ps" </dev/null 2>&1)
-    verdict_run "$?" "$out" "the calibration blank on $dev" || { fail=1; continue; }
+    verdict_run "$?" "$out" "the calibration blank on $dev" || return 1
 
     sz_page=0; [ -e "$work/cal-page.$dev" ] && sz_page=$(wc -c < "$work/cal-page.$dev")
     sz_none=0; [ -e "$work/cal-none.$dev" ] && sz_none=$(wc -c < "$work/cal-none.$dev")
 
     if [ "$sz_page" -le "$sz_none" ]; then
         echo "$dev: its output does not tell a transmitted page from none; not asked"
-        continue
+        return 2
     fi
     # anything above what the no-page job left is a page having arrived
     empty=$sz_none
@@ -170,11 +177,13 @@ erasepage"
 % this program draws nothing"
 
 
-    asked=$((asked + 1))
-    if [ "$fail" -eq "$before" ]; then
-        echo "$dev: the page a job leaves behind is what it should be"
-    fi
-done
+    [ "$fail" -eq 0 ] || return 1
+    echo "$dev: the page a job leaves behind is what it should be"
+    return 0
+}
+
+fleet_each one_device $DEVICE_FLEET_MARKING || fail=1
+asked=$fleet_asked
 
 # A roster that answered for nothing reports as quietly as one that
 # answered for everything.
