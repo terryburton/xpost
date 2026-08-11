@@ -1591,14 +1591,15 @@ test('render-classes',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# Raster device classes as a program-made instance: the grayscale and rgb
-# classes mark the same pixels for the same geometry, bounds violations are
-# swallowed, and the marking methods stay silent (a stray diagnostic would
-# interleave with a page stream written to standard output). The strict
-# The raster device's pixel formats, named after the colon in the device
-# string. Only the fallback was exercised, so neither the selection of the
-# others nor the buffer each sizes had run; a name matching none of them has to
-# be harmless rather than leaving the format unset.
+# The raster devices' pixel formats: which component lands where. For the
+# devices that hand a buffer to the embedder the format is the name after the
+# colon in the device string, and only the fallback was exercised, so neither
+# the selection of the others nor the buffer each sizes had run; a name
+# matching none of them has to be harmless rather than leaving the format
+# unset. For the devices that write a file the format is the file's, and the
+# bytes that come out are read back against the colour that was painted, so a
+# page whose every pixel is wrong in the same way fails here -- which a test
+# comparing one of its own outputs against another cannot do.
 test('raster-formats',
   find_program('tests/run-raster-formats-test.sh'),
   args: [ xpost_exe ],
@@ -1617,6 +1618,10 @@ test('device-features',
   suite: cost_slow,
   timeout: 180)
 
+# Raster device classes as a program-made instance: the grayscale and rgb
+# classes mark the same pixels for the same geometry, bounds violations are
+# swallowed, and the marking methods stay silent (a stray diagnostic would
+# interleave with a page stream written to standard output). The strict
 # wrapper requires the output to be exactly SUCCESS.
 test('raster-class',
   find_program('tests/run-strict-ps-test.sh'),
