@@ -297,31 +297,75 @@ xpost_mkstemp(char *template, int *fd)
     return 1;
 }
 
+/* Write `path` into `buf` without the prefix GetFinalPathNameByHandle
+   puts in front of a resolved name, so that a resolved path is spelt the
+   way a path is spelt everywhere else here: a drive letter and a colon,
+   or two backslashes for a share. Answers 0 when it will not fit. */
+static int
+_xpost_path_unprefix(const char *path, char *buf, size_t buflen)
+{
+    if (_strnicmp(path, "\\\\?\\UNC\\", 8) == 0) /* \\?\UNC\server\share -> \\server\share */
+    {
+        if ((size_t)(2 + strlen(path + 8)) >= buflen)
+            return 0;
+        buf[0] = '\\';
+        buf[1] = '\\';
+        strcpy(buf + 2, path + 8);
+        return 1;
+    }
+    if (_strnicmp(path, "\\\\?\\", 4) == 0)
+    {
+        if (strlen(path + 4) >= buflen)
+            return 0;
+        strcpy(buf, path + 4);
+        return 1;
+    }
+    if (strlen(path) >= buflen)
+        return 0;
+    strcpy(buf, path);
+    return 1;
+}
+
+/* The canonical name of an existing file or directory: the name is
+   resolved through whatever stands between it and the volume -- symbolic
+   links, junctions, substituted drives, short names -- and a path that
+   names nothing is refused. Resolving is done by opening the thing and
+   asking the handle what it is, which is what makes existence part of
+   the answer; FILE_FLAG_BACKUP_SEMANTICS is what lets a directory be
+   opened, and attributes are all the access asked for, so a directory
+   whose contents the caller may not read still resolves. */
 char *
 xpost_realpath(const char *path)
 {
-    char *resolved_path;
-    DWORD sz = 0UL;
+    char final[XPOST_PATH_MAX];
+    char resolved[XPOST_PATH_MAX];
+    char *ret;
+    HANDLE h;
+    DWORD n;
 
     if (!path || !*path)
         return NULL;
 
-    sz = GetFullPathName(path, 0UL, NULL, NULL);
-    if (sz == 0UL)
+    h = CreateFile(path, FILE_READ_ATTRIBUTES,
+                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                   NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
-    resolved_path = malloc(sz * sizeof(char));
-    if (!resolved_path)
+    n = GetFinalPathNameByHandle(h, final, sizeof final, FILE_NAME_NORMALIZED);
+    CloseHandle(h);
+    if (n == 0UL || n >= sizeof final)
         return NULL;
 
-    sz = GetFullPathName(path, sz, resolved_path, NULL);
-    if (sz == 0UL)
-    {
-        free(resolved_path);
+    if (!_xpost_path_unprefix(final, resolved, sizeof resolved))
         return NULL;
-    }
 
-    return resolved_path;
+    ret = malloc(strlen(resolved) + 1);
+    if (!ret)
+        return NULL;
+    strcpy(ret, resolved);
+
+    return ret;
 }
 
 FILE *
@@ -438,29 +482,9 @@ xpost_fd_realpath(int fd, char *buf, size_t buflen)
     n = GetFinalPathNameByHandle(h, tmp, sizeof tmp, FILE_NAME_NORMALIZED);
     if (n == 0UL || n >= sizeof tmp)
         return 0;
-    /* GetFinalPathNameByHandle yields the \\?\ (or \\?\UNC\) prefixed form;
-       strip it so the result matches xpost_realpath (GetFullPathName), the
+    /* the same resolved form xpost_realpath answers with, which is the
        form the permit set is stored in */
-    if (_strnicmp(tmp, "\\\\?\\UNC\\", 8) == 0) /* \\?\UNC\server\share -> \\server\share */
-    {
-        if ((size_t)(2 + strlen(tmp + 8)) >= buflen)
-            return 0;
-        buf[0] = '\\';
-        buf[1] = '\\';
-        strcpy(buf + 2, tmp + 8);
-        return 1;
-    }
-    if (_strnicmp(tmp, "\\\\?\\", 4) == 0)
-    {
-        if (strlen(tmp + 4) >= buflen)
-            return 0;
-        strcpy(buf, tmp + 4);
-        return 1;
-    }
-    if (strlen(tmp) >= buflen)
-        return 0;
-    strcpy(buf, tmp);
-    return 1;
+    return _xpost_path_unprefix(tmp, buf, buflen);
 }
 
 int
