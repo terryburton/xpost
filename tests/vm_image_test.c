@@ -36,13 +36,13 @@
  *   deliberately identical in all of those, so what is measured is the
  *   process and nothing else.
  *
- *   It does not say the differing words are unreachable. Some of them
- *   are not in a live operator signature at all -- they are what an
- *   earlier tenant left in storage that has since been handed out again,
- *   in the part of an allocation its occupant does not cover. This
- *   reports them, and reports that they are host addresses, and stops
- *   there: whether anything can still read one is a question about
- *   reachability that a comparison of two images cannot answer.
+ *   It does not say the differing words are unreachable. It says only
+ *   that each is where an operator's signature keeps one of this
+ *   process's own functions. A word that differs anywhere else is a
+ *   failure, whether or not anything can still read it: storage handed
+ *   out to a new occupant is cleared of what the last one left, so a
+ *   host address outside a live signature has nowhere to have come from
+ *   that this run understands.
  *
  *   It says nothing about a context created a second time in a process
  *   that already had one. That is a different question -- a boot from a
@@ -695,11 +695,12 @@ static void _compare_global(const Image *a, const Image *b)
            "process's code %llx apart\n",
            nsig, nfp, (unsigned long long)slide);
     if (n_residue)
-        printf("NOTE: %u differing word(s) lie in no live operator signature. "
-               "They are host addresses in storage that has been handed out "
-               "again -- the part of an allocation its occupant does not "
-               "cover -- and this run says they are addresses and not that "
-               "they are unreachable.\n", n_residue);
+        report_failure("global bank: %u differing word(s) lie in no live "
+                       "operator signature. They are host addresses left in "
+                       "storage that has been handed out again -- the part of "
+                       "an allocation its occupant does not cover -- which is "
+                       "cleared as the storage is handed out, so there is "
+                       "nowhere for one to be", n_residue);
 
     /* Say where a few of them are, so the report names storage rather
        than only counting it. */

@@ -904,6 +904,29 @@ _xpost_memory_table_alloc_new(Xpost_Memory_File *mem,
     return 1;
 }
 
+/* The part of an entity's block that its occupant does not cover.
+
+   A block comes off the free list whole, so one handed to a smaller
+   request keeps the rest of whatever was there before -- and what was
+   there before may be a structure this process filled with its own
+   addresses. Nothing reads those bytes through the entity, whose length
+   is what it was allocated for; everything that reads virtual memory
+   whole does, and reads them as part of what the memory holds.
+
+   Cleared as the block is handed out, which is the moment the previous
+   tenant stops being the answer to what is in it. Nothing where the
+   block is fresh: an allocation the file has just grown into is exactly
+   as long as it was asked for. */
+static void _clear_slack(Xpost_Memory_File *mem, unsigned int ent)
+{
+    unsigned int used = mem->table.tab[ent].used;
+    unsigned int sz = mem->table.tab[ent].sz;
+
+    if (sz > used)
+        memset(xpost_vm_ptr(mem, mem->table.tab[ent].adr + used), 0,
+               sz - used);
+}
+
 /*
    allocate sz bytes in the memory table, using free-list if installed,
    possibly calling garbage collector, if installed
@@ -954,6 +977,7 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
         if (ret == 1)
         {
             mem->table.tab[*entity].used = sz;
+            _clear_slack(mem, *entity);
             return 1;
         }
         else if (ret == XPOST_FREE_WANT_COLLECTION)

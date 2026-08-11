@@ -54,6 +54,7 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
                                       /*@NULL@*/ const char *ini)
 {
     unsigned int ent;
+    unsigned int room;
     Xpost_Object o = { 0 };
     int ret;
 
@@ -71,12 +72,13 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
     }
 #endif
 
-    //xpost_memory_table_alloc(mem, (sz/sizeof(int) + 1)*sizeof(int), 0, &ent);
-    if (!xpost_memory_table_alloc(mem,
-                                  ((sz + sizeof(Xpost_Object) /*- 1*/) / sizeof(Xpost_Object))*sizeof(Xpost_Object),
-                                  //sz,
-                                  stringtype,
-                                  &ent))
+    /* Asked for in whole objects, so that a string's storage begins and
+       ends where one does. What that rounding adds is between one and
+       eight bytes a string of this length does not count and nothing can
+       read through it. */
+    room = ((sz + sizeof(Xpost_Object)) / sizeof(Xpost_Object))
+           * sizeof(Xpost_Object);
+    if (!xpost_memory_table_alloc(mem, room, stringtype, &ent))
     {
         XPOST_LOG_ERR("cannot allocate string");
         return null;
@@ -97,6 +99,20 @@ Xpost_Object xpost_string_cons_memory(Xpost_Memory_File *mem,
         void *data = xpost_ent_ptr_checked(mem, ent);
         if (data)
             memset(data, 0, sz);
+    }
+
+    /* The rounding's own bytes, past the length the string counts. They
+       are storage the file has handed out and nobody has written, so
+       whatever the last tenant of a recycled block left is what stands
+       there -- which for a block that once held an operator's signature
+       is the address of a C function in this process. Nothing reads them
+       through the string, and everything that reads virtual memory whole
+       does. */
+    {
+        unsigned char *data = xpost_ent_ptr_checked(mem, ent);
+
+        if (data)
+            memset(data + sz, 0, room - sz);
     }
     /* every field carries a value before the object is passed by value */
     o.tag = stringtype | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
