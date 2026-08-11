@@ -3818,6 +3818,29 @@ raster_extent_exe = executable('raster_extent_test',
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 test('raster-extent', raster_extent_exe, suite: cost_fast)
+
+# The arrangement of the buffer a raster device hands its embedder. The
+# name after the colon -- rgb, argb, bgr, bgra -- is the whole of what
+# that family promises, and it is observable in one place only: the
+# buffer an XPOST_OUTPUT_BUFFEROUT run stores back. From a program
+# GetPix answers red, green and blue whatever the buffer holds them as,
+# so a device whose store and whose load agree on a wrong arrangement
+# reads back correct through the PostScript suite while the embedder
+# receives the wrong colour. Read here as an embedder reads it, byte by
+# byte, against a colour whose components differ from one another and
+# from the alpha byte, so no rearrangement of a pixel is invisible. A C
+# test because the buffer has no reader outside the embedding API.
+raster_buffer_format_exe = executable('raster_buffer_format_test',
+  'tests/raster_buffer_format_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('raster-buffer-format',
+  raster_buffer_format_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')
 #endif
