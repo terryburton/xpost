@@ -1115,6 +1115,24 @@ test('graphics-load-stop',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The device a context is started with: made once in the life of the
+# context rather than once per job -- a job's bracket would unmake it and
+# leave the state it reached outside virtual memory unreachable -- and
+# what a graphics state carrying no device answers a program that paints
+# on it. Asked of the device whose instance state is outside virtual
+# memory, so that a second instance is visible as a second handle.
+startup_device_exe = executable('startup_device_test',
+  'tests/startup_device_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('startup-device',
+  startup_device_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: a context serves job after job under either
 # snapshot setting. Every other test that reuses a context turns
 # snapshots off, and every test that leaves them on runs a single job,
