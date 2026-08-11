@@ -132,6 +132,23 @@ currentglobal true setglobal
         .unitclamp 255 mul cvi
     } bind
 
+    % c1..cN x y  .screenpix  c1'..cN' x y
+    % The colour this class stores for a colour painted at a pixel. A
+    % class that stores the colour it is handed answers it unchanged; a
+    % class that screens answers what its screen leaves at that pixel,
+    % which is a function of the position as well as of the colour. The
+    % position is a whole one naming a pixel of the device plane, on the
+    % page or off it, and it stays behind for the caller, which needs it
+    % to reach the row.
+    %
+    % The write below and the read of a pixel this device holds no
+    % storage for both come through here, so the two halves of a screened
+    % page are read on the same terms: what a read answers where nothing
+    % is stored is what a paint would have stored there, which is what an
+    % emitted file carries there. A class states its screen once, in
+    % here, rather than once for the paint and again for the read.
+    /.screenpix { } bind
+
     % x y  .onpage  bool
     % Whether a device coordinate names a pixel of the page: the four
     % edges a mark is dropped at, as one answer, for the read that has
@@ -146,17 +163,43 @@ currentglobal true setglobal
         or not
     } bind
 
-    % -  .groundpix  c1..cN
-    % What the page shows where this device holds no pixel: the colour
-    % erasepage last cleared the page to, in the channel scale a stored
-    % pixel reads back in. A device that has not been erased has no
-    % ground recorded, and its rows stand as they were allocated, which
-    % is what it answers.
-    /.groundpix { % -  .  c1..cN
-        currentdict /.ground known
-            { .ground { .chan } forall }
-            { .ncomp { 0 } repeat }
-        ifelse
+    % x y  .groundpix  c1..cN
+    % What the page shows at a pixel where this device holds no storage:
+    % the colour erasepage last cleared the page to, as this class would
+    % have stored it at that pixel, in the channel scale a stored pixel
+    % reads back in. The colour goes through .screenpix on its way, the
+    % same fold a paint takes, so a class whose stored colour depends on
+    % the position answers here what stands at that position rather than
+    % what stands at the page at large. The position is put on the pixel
+    % grid first, which is the shape a paint reaches .screenpix in.
+    %
+    % A class whose fold cannot answer for the position leaves the colour
+    % as it was recorded. A read is answered rather than refused, and a
+    % screen the device cannot address is one the paint does not go
+    % through either, so the unfolded colour is what the page carries
+    % there.
+    %
+    % A device that has not been erased has no ground recorded, and its
+    % rows stand as they were allocated, which is what it answers.
+    /.groundpix { % x y  .  c1..cN
+        currentdict /.ground known {
+            mark 3 1 roll               % mark x y
+            { .to-int exch .to-int exch % mark x y
+              .ground aload pop         % mark x y c1..cN
+              .ncomp 2 add .ncomp roll  % mark c1..cN x y
+              .screenpix pop pop        % mark c1'..cN'
+            } stopped {
+                cleartomark
+                .ground aload pop
+            }{
+                .ncomp 1 add .ncomp roll pop
+            } ifelse
+            % each component to its channel in turn, the ones behind it
+            % rolling up to follow: .ncomp turns leave them as they lay
+            .ncomp { .chan .ncomp 1 roll } repeat
+        }{
+            pop pop .ncomp { 0 } repeat
+        } ifelse
     } bind
 
     /PutPix { % c1..cN x y IMAGE  .  -
@@ -167,6 +210,7 @@ currentglobal true setglobal
             dup height ge { stop } if
             1 index 0 lt { stop } if
             1 index width ge { stop } if
+            .screenpix                  % c1..cN x y
             ImgData exch get exch       % c1..cN row x
             .ncomp 2 add 2 roll         % row x c1..cN
             .rowput
@@ -180,18 +224,21 @@ currentglobal true setglobal
     % there is answered the same way, with the ground. A row the device
     % does not hold is the page's own ground as well -- Emit lays it
     % into the file over those rows -- so the read agrees with the file
-    % rather than refusing a pixel the file carries.
+    % rather than refusing a pixel the file carries. The ground is
+    % answered for the pixel that was asked about, not for the page at
+    % large: where this class screens what it stores, what the page
+    % shows differs from one pixel to the next.
     /GetPix { % x y IMAGE  .  c1..cN
     begin
         2 copy .onpage {
-            .to-int exch .to-int exch
-            ImgData exch get            % x row
+            .to-int exch .to-int exch   % x y
+            2 copy ImgData exch get     % x y x row
             dup .rowheld
-                { exch .rowget }
+                { 4 2 roll pop pop exch .rowget }
                 { pop pop .groundpix }
             ifelse
         }{
-            pop pop .groundpix
+            .groundpix
         } ifelse
     end } bind
 
@@ -440,7 +487,9 @@ currentglobal true setglobal
     % page held in part shows it over the rows that are not held, and the
     % one row standing for those is laid in it here -- through .rowput,
     % the same store the fills reach, so the rows that are held and the
-    % rows that are not come out the same colour.
+    % rows that are not come out the same colour. It is laid unscreened,
+    % which is why Create holds the whole page for a class that screens:
+    % one row cannot carry a pattern that changes from row to row.
     %
     % The colour itself is recorded on the instance under /.ground, for
     % the reads that land where the device holds no pixel. Every raster

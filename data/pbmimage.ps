@@ -17,32 +17,28 @@
 % every grey painted screens through the halftone in force
 .xpost_PBMIMAGE /ScreenPaint true put
 
-.xpost_PBMIMAGE /PutPix { % val x y IMAGE  .  -
-begin
-    {
-        .to-int exch .to-int exch
-        dup 0 lt { stop } if
-        dup height ge { stop } if
-        1 index 0 lt { stop } if
-        1 index width ge { stop } if
-        currentdict /.htcell known {
-            2 copy                          % v x y x y
-            .hth mod .htw mul               % v x y x (y%h)*w
-            exch .htw mod add               % v x y idx
-            .htcell exch get                % v x y thr
-            4 -1 roll .unitclamp 256 mul 0.5 add cvi exch ge % x y white?
-            { 255 }{ 0 } ifelse 3 1 roll    % v' x y
-            ImgData exch get 3 1 roll exch
-            put
-        }{
-            ImgData exch get 3 1 roll exch
-            .chan
-            put
-        } ifelse
-    } stopped {
-        pop pop pop
+% What this device stores for a grey at a pixel. The screen in force
+% ranks the pixels of a cell, the cell tiles the device plane, and a grey
+% whitens the pixel it covers where it reaches the threshold under that
+% pixel: the position picks the threshold, so what is stored varies from
+% one pixel to the next as well as with the grey. The tiling is counted
+% the same way on both sides of the origin, so it runs off the page as it
+% runs across it.
+%
+% The base class takes a paint through here on its way to the row and
+% takes a read of a pixel this device holds no storage for through here
+% as well, so the page is read on the terms it was written on.
+.xpost_PBMIMAGE /.screenpix { % c1 x y  .  c1' x y
+    currentdict /.htcell known {
+        2 copy                                      % c x y x y
+        .hth mod dup 0 lt { .hth add } if .htw mul  % c x y x (y%h)*w
+        exch .htw mod dup 0 lt { .htw add } if add  % c x y idx
+        .htcell exch get                            % c x y thr
+        4 -1 roll .unitclamp 256 mul 0.5 add cvi
+        exch ge { 1 }{ 0 } ifelse                   % x y white?
+        3 1 roll                                    % c' x y
     } if
-end } put
+} put
 
 % emission thresholds and packs through the compiled row writer; the
 % Emit dispatch itself is inherited
