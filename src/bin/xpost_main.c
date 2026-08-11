@@ -388,22 +388,34 @@ int main(int argc, char *argv[])
     {
         if (*argv[i] == '-')
         {
+            /* The three options that report and stop leave through the
+               same shutdown as every other exit from here. xpost_init
+               above took what the process holds for as long as it runs --
+               the font configuration's cache, and on some platforms the
+               socket library and a handle on the system's random source --
+               and xpost_quit is what gives each of them back; a path that
+               returned without it would hold them to the end of the
+               process and be answerable for them there. The label below
+               is the failing exit and these three succeeded. */
             if ((!strcmp(argv[i], "-h")) ||
                 (!strcmp(argv[i], "--help")))
             {
                 _xpost_main_usage(filename);
+                xpost_quit();
                 return EXIT_SUCCESS;
             }
             else if ((!strcmp(argv[i], "-V")) ||
                      (!strcmp(argv[i], "--version")))
             {
                 _xpost_main_version(filename);
+                xpost_quit();
                 return EXIT_SUCCESS;
             }
             else if ((!strcmp(argv[i], "-L")) ||
                      (!strcmp(argv[i], "--license")))
             {
                 _xpost_main_license();
+                xpost_quit();
                 return EXIT_SUCCESS;
             }
             else if ((!strncmp(argv[i], "-D", 2)) ||
