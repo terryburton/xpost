@@ -15,7 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         object: [small, large]
-    name: linux - ${{ matrix.object }}-object
+        # Virtual memory is backed by a mapping grown with mremap or by
+        # the allocator, and the two take different arms of the memory
+        # file at every point where the arena is made, grown and
+        # released. Both are built and both run the suite: whichever
+        # were left out would be compiled by no lane, and the arms it
+        # holds would go stale without anything saying so.
+        backing: [mapped, allocator]
+    name: linux - ${{ matrix.object }}-object, ${{ matrix.backing }} memory
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
@@ -56,7 +63,22 @@ jobs:
     # its log, and the promotion follows a leg that has been seen clean
     # rather than being made on its behalf.
     - name: meson
-      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} -Dc_args=-Werror=unused-result builddir
+      run: meson setup -Dlarge-object=${{ matrix.object == 'large' }} -Dmmap=${{ matrix.backing == 'mapped' }} -Dc_args=-Werror=unused-result builddir
+    # The option asks for a backing; the configuration decides one, and on
+    # a host without mremap it decides the allocator whatever was asked.
+    # A lane that quietly configured the other backing would report a
+    # green run for arms it never compiled, so what was asked for is held
+    # against what config.h says.
+    - name: the memory backing is the one this lane is for
+      run: |
+        if [ "${{ matrix.backing }}" = mapped ]; then want=1; else want=0; fi
+        got=$(grep -c '^#define HAVE_MREMAP' builddir/config.h || true)
+        [ "$got" = "$want" ] || {
+          echo "asked for the ${{ matrix.backing }} backing;"
+          echo "config.h defines HAVE_MREMAP $got time(s), wanted $want"
+          exit 1
+        }
+        echo "${{ matrix.backing }}: as configured"
     - name: ninja
       run: ninja -C builddir
     - name: meson test
