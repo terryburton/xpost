@@ -50,7 +50,8 @@ libxpost_src = files([
   'xpost_save.c',
   'xpost_span.c',
   'xpost_stack.c',
-  'xpost_string.c'
+  'xpost_string.c',
+  'xpost_vm_image.c'
 ])
 
 if xcb_dep.found()

@@ -377,6 +377,10 @@ xpost_string_put
 xpost_string_put_memory
 xpost_unlinkat_beneath
 xpost_version_get
+xpost_vm_image_bank_field_name
+xpost_vm_image_bank_name
+xpost_vm_image_row_field_name
+xpost_vm_image_write
 
 reserved-exception _currentpoint
 reserved-exception _xpost_garbage_diag_verify
