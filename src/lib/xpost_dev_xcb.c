@@ -852,10 +852,23 @@ int loadxcbdevicecont(Xpost_Context *ctx,
 
 
 
-    /* Paint glyphs without blending their edges. A blended edge is one
-       colour negotiated with the display server and one point laid per
-       pixel, over pixels the server will not report back, so the edge is
-       composited over the ground rather than over what the window holds.
+    /* Paint glyphs without blending their edges. What this device reads
+       a pixel back as is the page's ground and not what the window holds
+       (GetPix above), so a partly covered edge is composited over the
+       ground wherever it falls. Where the page is unmarked the ground is
+       the colour under the edge and the edge comes out right; where a
+       mark is already laid it is not, and the edge is pulled toward the
+       ground instead of toward the ink beneath it. A black glyph on a
+       grey panel picks up a fringe lighter than the panel, and white
+       text on a black one gets no gradation at all -- white over a white
+       ground is white at every coverage -- so the glyph thickens where
+       it would have softened.
+
+       The blend also reaches every pixel an edge partly covers, around
+       two and a half times the pixels the aliased path lays for a page
+       of text, and a pixel of either path is a colour negotiated with
+       the display server before its point goes down.
+
        Declaring one bit of text alpha takes the aliased path, which
        paints through PutPix above. */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "TextAlphaBits"),

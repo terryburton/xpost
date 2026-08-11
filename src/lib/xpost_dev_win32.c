@@ -1087,12 +1087,23 @@ int loadwin32devicecont(Xpost_Context *ctx,
 
 
 
-    /* Paint glyphs without blending their edges. A blended edge costs a
-       read and a one-pixel blit per pixel on the buffered backend, and
-       on the backend that keeps no buffer it is composited over the
-       ground rather than over what the window holds. Declaring one bit
-       of text alpha takes the aliased path, which paints through PutPix
-       above. */
+    /* Paint glyphs without blending their edges. This lands on the class,
+       which is where a device's features are declared, and Create chooses
+       the backend afterwards, so the one value serves both of them and
+       the backend with the most to lose by it decides what it is.
+
+       That is the backend which keeps no buffer: it reads a pixel back as
+       the page's ground, so a partly covered edge falling over a mark
+       already laid is pulled toward the ground rather than toward the ink
+       beneath it. The buffered backend blends against what the window
+       actually holds and has no such edge, so for it this is cost alone:
+       blending reaches every pixel an edge partly covers and not only the
+       ones the aliased path fills, and each of those is a device context
+       made, a bitmap selected into it, a one-pixel blit, and the context
+       destroyed.
+
+       Declaring one bit of text alpha takes the aliased path, which
+       paints through PutPix above. */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "TextAlphaBits"),
                          xpost_int_cons(1));
     if (ret)
