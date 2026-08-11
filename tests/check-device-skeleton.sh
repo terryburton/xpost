@@ -509,6 +509,38 @@ elif [ "$c_csl" -eq 0 ] || [ "$c_csl" -gt "$c_polyl" ]; then
     fail=1
 fi
 
+# 13. A device fills a polygon through the shared scan conversion, never
+#     through a polygon primitive of its window system.
+#
+#     The completion above installs the compiled polygon fill on every
+#     device it finishes, so a FillPoly in a driver's own table is a
+#     method nothing calls. That is the small half of it. The large half
+#     is that the primitive could not stand in for the fill if it were
+#     called: the polygon arrives as one point list with a null between
+#     subpaths, which such a primitive has no form for; the rule
+#     PostScript fills a path under is the nonzero winding number (PLRM
+#     8.2), which is not the rule a server-side polygon is drawn with; and
+#     which pixels a boundary covers is the driver contract's answer,
+#     stated once, not the window system's. The rectangle fills and the
+#     line walk are held to that last point by the rules above; this is
+#     the same rule for the third shape, and it is stated separately
+#     because the way to break it is to bring a method rather than to
+#     restate a formula.
+for f in $fleet xpost_dev_win32.c; do
+    hits=$(grep -nE '\{[ \t]*"FillPoly"[ \t]*,' "$libdir/$f" || true)
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: $f brings a polygon fill of its own:" >&2
+        printf '%s\n' "$hits" >&2
+        echo "The completion installs the compiled polygon fill over it, so it is" >&2
+        echo "never called; and a window system's polygon primitive fills under" >&2
+        echo "its own rule, over its own pixels, with no form for the subpath" >&2
+        echo "separators the polygon carries. Let the shared scan conversion" >&2
+        echo "resolve the polygon and paint the spans through this device's" >&2
+        echo "FillRect." >&2
+        fail=1
+    fi
+done
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi

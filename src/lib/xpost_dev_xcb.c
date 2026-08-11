@@ -685,73 +685,17 @@ int _fillrect(Xpost_Context *ctx,
     return 0;
 }
 
-static
-int _fillpoly(Xpost_Context *ctx,
-              Xpost_Object red,
-              Xpost_Object green,
-              Xpost_Object blue,
-              Xpost_Object poly,
-              Xpost_Object devdic)
-{
-    Xpost_Object privatestr;
-    PrivateData private;
-    int r, g, b;
-
-    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
-    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
-    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
-
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* a released device takes no marks */
-    if (!private.c)
-        return 0;
-
-    {
-        xcb_point_t *points;
-        word i;
-        xcb_alloc_color_reply_t *rep;
-        unsigned int value;
-
-        rep = xcb_alloc_color_reply(private.c,
-                                    xcb_alloc_color(private.c, private.cmap,
-                                                    r, g, b),
-                                    0);
-        if (!rep)
-            return unregistered;
-
-        value = rep->pixel;
-        free(rep);
-        xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
-
-        points = malloc((poly.comp_.sz //+ 1
-                    ) * sizeof *points);
-        if (!points)
-            return VMerror;
-        for (i = 0; i < poly.comp_.sz; i++)
-        {
-            Xpost_Object pair;
-            pair = xpost_array_get(ctx, poly, i);
-            points[i].x = xpost_dev_num_to_int(xpost_array_get(ctx, pair, 0));
-            points[i].y = xpost_dev_num_to_int(xpost_array_get(ctx, pair, 1));
-        }
-        //points[i].x = points[0].x;
-        //points[i].y = points[0].y;
-
-        xcb_fill_poly(private.c, private.img, private.gc,
-                      XCB_POLY_SHAPE_NONCONVEX,
-                      XCB_COORD_MODE_ORIGIN,
-                      poly.comp_.sz, //+ 1
-                      points);
-        free(points);
-    }
-
-    return 0;
-}
-
+/* This device brings no polygon fill of its own. A polygon is filled by
+   the shared scan conversion, which resolves it to spans and paints each
+   through the FillRect above -- the same route the line walk and the
+   rectangle take, and for the same reason: the pixels a shape covers are
+   the driver contract's, and the display server's idea of them is not
+   the one every other device paints. The server's polygon primitive
+   would differ on more than edges. The polygon arrives as one point list
+   with a null between subpaths, which that primitive has no form for,
+   and the rule PostScript fills a path under is the nonzero winding
+   number (PLRM 8.2), which is not the rule a server polygon is drawn
+   with. */
 
 static
 int _flush(Xpost_Context *ctx,
@@ -880,7 +824,6 @@ int loadxcbdevicecont(Xpost_Context *ctx,
         { "BlendPix", "xcbBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
         { "DrawLine", "xcbDrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
         { "FillRect", "xcbFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
-        { "FillPoly", "xcbFillPoly", (Xpost_Op_Func)_fillpoly, XPOST_DEV_M_POLY },
         { "Emit", "xcbEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
         { "Flush", "xcbFlush", (Xpost_Op_Func)_flush, XPOST_DEV_M_PAGE },
         { "Destroy", "xcbDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
