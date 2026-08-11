@@ -331,9 +331,15 @@ typedef size_t Xpost_Dev_Raster_Offset;
 static inline int
 xpost_dev_buffer_extent(integer v, int *extent)
 {
-    if (v < 0 || v > (integer)INT_MAX)
+    /* The bound is taken in a type wider than either of them, so that a
+       build whose interpreter integer is itself an int is not asking
+       whether a value exceeds the largest one its own type can hold --
+       a question with one answer, which a compiler is right to refuse. */
+    long long w = (long long)v;
+
+    if (w < 0 || w > (long long)INT_MAX)
         return 0;
-    *extent = (int)v;
+    *extent = (int)w;
     return 1;
 }
 
