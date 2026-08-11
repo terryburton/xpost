@@ -1,0 +1,37 @@
+# What virtual memory holds that names this process, and what a reader of
+# a memory file written by another process must do with each. See
+# tests/check-vm-host-state.sh for the rule and for what each kind means.
+#
+# Virtual memory is otherwise position-independent by construction: a
+# composite object names its storage by entity number, an index into the
+# memory table, and never by address. That is what would let a memory
+# file be written out and read back at a different address in a
+# different process with every reference still resolving. The entries
+# below are what does not carry, and they need opposite treatment:
+#
+#   rebuilt   a host address. It cannot be carried at all. A reader must
+#             build the structure afresh and check it against what the
+#             memory file names, because what indexes it was written by
+#             the process that wrote the file.
+#
+#   handle    a number this process issued, standing for a block of state
+#             held outside virtual memory. It carries, but it names
+#             nothing in another process. A reader must issue the block
+#             again and store the fresh handle, or leave the entity to
+#             resolve to nothing -- which it does safely, since a handle
+#             is checked back against the entity it was read from.
+#
+# The operator table is the whole of the rebuilt kind. An operator object
+# carries the opcode of its table row, so rebuilding the table is not
+# enough on its own: the rows must come out in the order the memory file
+# was written with, and a reader must hold them to the operator names the
+# memory file carries. Getting that wrong raises nothing -- it dispatches
+# to the wrong operator.
+#
+# where it is                              kind      what it names
+xpost_operator.h:Xpost_Signature.fp        rebuilt   the C function implementing an operator
+xpost_operator.h:Xpost_Signature.checkstack rebuilt  the C function checking one signature's operands
+xpost_handle.h:XPOST_HANDLE_DEVICE         handle    a device's instance state
+xpost_handle.h:XPOST_HANDLE_CONTENT        handle    a vector writer's accumulated content
+xpost_handle.h:XPOST_HANDLE_FONT           handle    the face a font program was opened as
+xpost_handle.h:XPOST_HANDLE_FILE           handle    the stream a file reaches its bytes through

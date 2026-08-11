@@ -2978,6 +2978,19 @@ test('check-vm-address',
   suite: cost_fast,
   timeout: 120)
 
+# And virtual memory names nothing by where the process put it. A
+# composite object names its storage by entity number and a handle is a
+# number this process issued, so a memory file could be read back
+# somewhere else with every reference still resolving; a host address
+# stored in it breaks that in silence. The register says what does not
+# carry -- the operator table's two function pointers, and each kind of
+# block a handle stands for -- and what a reader must do with each.
+test('check-vm-host-state',
+  find_program('tests/check-vm-host-state.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # ... and every fused operator must actually have those cases: adding one
 # to the fast path without equivalence coverage fails here.
 test('check-fused-ops',
