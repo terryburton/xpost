@@ -124,6 +124,14 @@
  * device reading back as the ground is a statement about its raster and
  * not about the colour: a page cleared to a light grey reads light.
  *
+ * The fold a device applies is the fold its own PutPix applies, and for a
+ * device that screens or halftones what it stores that fold depends on
+ * the pixel as well as on the colour: what such a device stores for a
+ * grey is a pattern repeating over a cell that tiles the device plane.
+ * Its ground is answered for the pixel that was asked about, the tiling
+ * counted the same way off the page as across it, and one pixel of it is
+ * no more the colour than one bit of a byte is -- a cell of it is.
+ *
  * Instance state: C-level device state lives in a block outside virtual
  * memory, so it is exempt from `restore` (raster memory is not part of
  * VM, PLRM 3.7.3). What the instance dictionary holds under /Private is
