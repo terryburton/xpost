@@ -2565,11 +2565,27 @@ test('file-lifetime',
 # rest of the suite put together, and run alongside the others it slows
 # them enough to push one off its own timeout. It therefore runs on its
 # own, where what it costs is its own to pay.
+#
+# Running on its own is arranged by emptying the machine, and that costs
+# the rest of the suite more than this test costs itself. A test declared
+# unparallel is reached in the order tests are taken in like any other,
+# and reaching it stops the runner: it waits for everything already
+# started to finish, runs this one with nothing beside it, and starts
+# nothing else until it ends. The wait is whatever the longest test
+# already running has left, which measured here is half a minute with
+# every other lane standing empty for all of it -- a sixth of a suite
+# that finishes in two minutes fifty.
+#
+# Tests are taken highest priority first, so a priority above every other
+# one has this reached before anything has started. There is then nothing
+# to wait for, and emptying the machine costs the three seconds this test
+# takes and nothing else.
 test('filenameforall-large',
   find_program('tests/run-filenameforall-large-test.sh'),
   args: [ xpost_exe, files('tests/filenameforall_large_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   is_parallel: false,
+  priority: 200,
   suite: cost_slow,
   timeout: 120)
 
