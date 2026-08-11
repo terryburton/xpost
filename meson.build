@@ -686,6 +686,31 @@ else
     is_default: true)
 endif
 
+# What a handful of tests need of the allocator, where the allocator's
+# refusal is their subject. Each asks for a block no allocator can serve
+# -- a raster for a page past what any machine holds, a buffer capacity
+# that fills the address space -- and reads what comes back: the C
+# library answers null, and the caller raises the error PLRM 8.2 names
+# for it. A sanitizer refuses a request past what it can shadow by
+# ending the process at the malloc, so the refusal the test is about
+# never happens and there is nothing for it to read. Told to answer
+# null it refuses as the C library does and the test's subject is
+# reached again.
+#
+# Carried by the tests whose subject this is, and not set over the build.
+# Everywhere else the abort is the right answer: a request that size is a
+# fault wherever it was not asked for on purpose, and a build-wide
+# setting would turn every one of them into a null pointer for some later
+# line to dereference. What it costs is bounded to these tests, and
+# bounded within them -- an over-large request they did not intend still
+# yields null, and the use of that null is still a report.
+#
+# A test's env replaces meson's own for a name rather than adding to it,
+# so what meson sets for a sanitized run is restated here. Without it
+# these would be the one corner of the suite where a sanitizer report
+# does not stop the test that earned it.
+asan_answers_null = 'halt_on_error=1:abort_on_error=1:print_summary=1:allocator_may_return_null=1'
+
 cost_fast = ['xpost', 'fast']
 cost_slow = ['xpost', 'slow']
 cost_veryslow = ['xpost', 'veryslow']
@@ -1167,10 +1192,13 @@ graphics_load_stop_exe = executable('graphics_load_stop_test',
   link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
+# One of the pages it asks for is a block no allocator can serve, so this
+# one answers null rather than ending the process at the request.
 test('graphics-load-stop',
   graphics_load_stop_exe,
   suite: cost_fast,
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+         'ASAN_OPTIONS': asan_answers_null })
 
 # A dictionary's access is part of its value and is held in the entity a
 # save level copies, so a level that copied the entity after the access
@@ -1354,11 +1382,10 @@ strbuf_exe = executable('strbuf_test',
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
 # the unsatisfiable reserve asks the allocator for a block no allocator can
-# serve; AddressSanitizer aborts on such a request unless told to answer null
-# the way the C library does
+# serve, which is why this one answers null rather than aborting on it
 test('strbuf', strbuf_exe,
   suite: cost_fast,
-  env: { 'ASAN_OPTIONS': 'allocator_may_return_null=1' })
+  env: { 'ASAN_OPTIONS': asan_answers_null })
 
 # Memory-table bookkeeping under dictionary growth: dicgrow's entity swap
 # must move (adr, sz, used) together; the invariant used <= sz holds for
@@ -3229,10 +3256,13 @@ test('c-held-objects',
 # against each platform's boundary by the raster-extent check. The page asked
 # for is past every machine's memory, so no device gets as far as asking
 # the system for any of it and the run costs what an empty page costs.
+# That refusal is the allocator's to make, so this one answers null
+# rather than ending the process at the request.
 test('page-extent',
   find_program('tests/run-page-extent-test.sh'),
   args: [ xpost_exe, files('tests/page_extent_test.ps') ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+         'ASAN_OPTIONS': asan_answers_null },
   suite: cost_fast)
 
 # The same refusal reached from the other side. Above, a program asks for
@@ -3241,10 +3271,13 @@ test('page-extent',
 # exit status and what was printed. Put to the whole roster: the devices
 # with a raster for the refusal, the ones without as the control that the
 # check is about a page a device cannot provide and not about a large one.
+# The page it names is a block no allocator can serve, so this one
+# answers null rather than ending the process at the request.
 test('startup-page',
   find_program('tests/run-startup-page-test.sh'),
   args: [ xpost_exe ],
-  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+         'ASAN_OPTIONS': asan_answers_null },
   suite: cost_fast,
   timeout: 120)
 
