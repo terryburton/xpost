@@ -1335,20 +1335,6 @@ _ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
     return (const unsigned char *)xpost_string_get_pointer(ctx, c);
 }
 
-/* A raster row about to be written through a raw pointer must be
-   writable: the rows are fetched from the device dictionary, which a
-   program can reach and restock, so a row may arrive carrying the
-   read-only (or tighter) attribute. The raw pointer bypasses the checked
-   mutator, so the access check happens here, before the pointer is
-   taken. */
-static int
-_row_writable(Xpost_Context *ctx, Xpost_Object row)
-{
-    if (!xpost_object_is_writeable(ctx, row))
-        return invalidaccess;
-    return 0;
-}
-
 /* A colour raster row is three component planes -- one string of one
    byte per pixel for red, for green and for blue, in that order -- and
    its pixel count is the length the three share. This reads a row into
@@ -1393,6 +1379,38 @@ _rgb_planes(Xpost_Context *ctx, Xpost_Object row, int forwrite,
         }
     }
     *w = (int)sz;
+    return 0;
+}
+
+/* A grey raster row is one string of one byte per pixel, and its pixel
+   count is the string's length. This reads a row into that pointer and
+   count; pass a null pointer to measure a row without taking a pointer
+   into it.
+
+   A caller that writes asks with forwrite, which holds the row to its
+   access before its pointer is taken, since a raw pointer bypasses the
+   checked mutator. Nothing is copied for a save level first: PLRM 3.7.3
+   exempts strings from save and restore, so the bytes written are the
+   bytes that stay. The pointer is good until something allocates, which
+   would move the memory file under it.
+
+   Returns nonzero, having written nothing, when the row is not a string
+   or refuses the write. */
+static int
+_gray_row(Xpost_Context *ctx, Xpost_Object row, int forwrite,
+          unsigned char **p, int *w)
+{
+    if (xpost_object_get_type(row) != stringtype)
+        return typecheck;
+    if (forwrite && !xpost_object_is_writeable(ctx, row))
+        return invalidaccess;
+    if (p)
+    {
+        *p = (unsigned char *)xpost_string_get_pointer(ctx, row);
+        if (!*p)
+            return VMerror;
+    }
+    *w = (int)row.comp_.sz;
     return 0;
 }
 
@@ -1442,28 +1460,26 @@ int _fillrectgray(Xpost_Context *ctx,
     for (iy = iy0; iy <= iy1; iy++)
     {
         int cx0 = ix0, cx1 = ix1;
+        unsigned char *p;
+        int rw, gret;
+
         row = xpost_array_get(ctx, imgdata, iy);
-        if (xpost_dev_span_clip(&cx0, &cx1, row.comp_.sz))
+        gret = _gray_row(ctx, row, 1, &p, &rw);
+        if (gret)
+            return gret;
+        if (!xpost_dev_span_clip(&cx0, &cx1, rw))
+            continue;
+
+        if (cell)
         {
-            unsigned char *p;
-            int wret = _row_writable(ctx, row);
+            const unsigned char *crow = cell + (iy % hh) * hw;
+            int ix;
 
-            if (wret)
-                return wret;
-            p = (unsigned char *)
-                xpost_string_get_pointer(ctx, row);
-
-            if (cell)
-            {
-                const unsigned char *crow = cell + (iy % hh) * hw;
-                int ix;
-
-                for (ix = cx0; ix <= cx1; ix++)
-                    p[ix] = bht >= crow[ix % hw] ? 255 : 0;
-            }
-            else
-                memset(p + cx0, b, (size_t)(cx1 - cx0 + 1));
+            for (ix = cx0; ix <= cx1; ix++)
+                p[ix] = bht >= crow[ix % hw] ? 255 : 0;
         }
+        else
+            memset(p + cx0, b, (size_t)(cx1 - cx0 + 1));
     }
 
     return 0;
@@ -1528,18 +1544,17 @@ int _blendpixgray(Xpost_Context *ctx,
     if (iy < 0 || iy >= (integer)imgdata.comp_.sz)
         return 0;
     row = xpost_array_get(ctx, imgdata, iy);
-    if (ix < 0 || ix >= (integer)row.comp_.sz)
-        return 0;
-    src = (int)_channel(val, 255.0);
     {
-        int wret = _row_writable(ctx, row);
+        int rw, gret = _gray_row(ctx, row, 1, &p, &rw);
 
-        if (wret)
-            return wret;
+        if (gret)
+            return gret;
+        if (ix < 0 || ix >= rw)
+            return 0;
     }
-    p = (unsigned char *)xpost_string_get_pointer(ctx, row) + ix;
-    dst = *p;
-    *p = (unsigned char)_blendchannel(dst, src, c);
+    src = (int)_channel(val, 255.0);
+    dst = p[ix];
+    p[ix] = (unsigned char)_blendchannel(dst, src, c);
     return 0;
 }
 
@@ -1938,13 +1953,12 @@ int _blitform(Xpost_Context *ctx,
         }
         else if (xpost_object_get_type(srow) == stringtype)
         {
-            ret = _row_writable(ctx, drow);
+            ret = _gray_row(ctx, srow, 0, &sp[0], &w);
             if (ret)
                 return ret;
-            sp[0] = (unsigned char *)xpost_string_get_pointer(ctx, srow);
-            dp[0] = (unsigned char *)xpost_string_get_pointer(ctx, drow);
-            w = srow.comp_.sz;
-            dw = drow.comp_.sz;
+            ret = _gray_row(ctx, drow, 1, &dp[0], &dw);
+            if (ret)
+                return ret;
         }
         else
             return typecheck;
@@ -2585,18 +2599,16 @@ int _blitrow(Xpost_Context *ctx,
                         }
                         else
                         {
-                            int wret;
+                            int gret, rw;
 
                             /* a row of no width, as above */
                             if (row.comp_.sz == 0)
                                 continue;
-                            if (xpost_object_get_type(row) != stringtype
-                             || row.comp_.sz < (unsigned int)devw)
+                            gret = _gray_row(ctx, row, 1, &rowp[0], &rw);
+                            if (gret)
+                                { free(cols); return gret; }
+                            if (rw < devw)
                                 { free(cols); return rangecheck; }
-                            wret = _row_writable(ctx, row);
-                            if (wret)
-                                { free(cols); return wret; }
-                            rowp[0] = (unsigned char *)xpost_string_get_pointer(ctx, row);
                         }
                         {
                         double sxstep = 1.0 / xscale;
@@ -2732,18 +2744,16 @@ int _blitrow(Xpost_Context *ctx,
         }
         else
         {
-            int wret;
+            int gret, rw;
 
             /* a row of no width, as above */
             if (row.comp_.sz == 0)
                 continue;
-            if (xpost_object_get_type(row) != stringtype
-             || row.comp_.sz < (unsigned int)devw)
+            gret = _gray_row(ctx, row, 1, &rowp[0], &rw);
+            if (gret)
+                return gret;
+            if (rw < devw)
                 return rangecheck;
-            wret = _row_writable(ctx, row);
-            if (wret)
-                return wret;
-            rowp[0] = (unsigned char *)xpost_string_get_pointer(ctx, row);
         }
 
         for (x = 0; x < w; x++)
@@ -2882,6 +2892,16 @@ int _flatecompress(Xpost_Context *ctx, Xpost_Object arr)
         if (i < n)
         {
             Xpost_Object s = xpost_array_get(ctx, arr, i);
+            /* the elements are the strings whose bytes are compressed;
+               one that is not a string has no bytes to read, so it is
+               refused rather than followed through a pointer taken from
+               whatever it is */
+            if (xpost_object_get_type(s) != stringtype)
+            {
+                xpost_strbuf_free(&out);
+                deflateEnd(&strm);
+                return typecheck;
+            }
             strm.next_in = (unsigned char *)xpost_string_get_pointer(ctx, s);
             strm.avail_in = s.comp_.sz;
         }

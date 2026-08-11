@@ -1831,6 +1831,17 @@ test('blit-range',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The compiled grey fills reach a device's ImgData rows through a raw
+# pointer that is a string's bytes, and ImgData is a program-reachable
+# dictionary slot. A row that is not a string has no such bytes, so each
+# grey fill refuses one with a typecheck before the pointer is taken and
+# leaves the planted row untouched.
+test('dev-gray-row',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/dev_gray_row_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The current path is a packed string in a program-reachable dictionary,
 # so the extent and the two element offsets its header carries are
 # program data: a field naming more than the string holds is a

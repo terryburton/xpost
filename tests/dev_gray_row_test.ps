@@ -1,0 +1,112 @@
+%!
+% The compiled grey fills reach a device's ImgData rows through a raw
+% pointer, and ImgData is an ordinary dictionary slot a program can
+% restock. A row is meant to be a string of one byte per pixel; the
+% pointer is the string's bytes. A row that is not a string has no such
+% bytes, so the pointer taken from one would be derived from object
+% storage rather than string storage, and the write through it would
+% land in whatever the object is. Each grey fill therefore refuses a row
+% that is not a string, before the pointer is taken, and leaves the
+% planted row untouched.
+%
+% Each case below hands a grey fill a row of the wrong type and requires
+% a typecheck, then requires the row it planted to read back unchanged.
+% A positive control at the end fills and blends a well-formed grey
+% device, so a check that refused every row would be caught too.
+
+/fails 0 def
+/note { print (\n) print } def
+
+/id 1183615869 internaldict def
+/frg id /.fillrectgray get def
+/bpg id /.blendpixgray get def
+/flc id /.flatecompress get def
+
+% proc name (label)  .  -   run proc; require it stopped with name
+/expect {
+  /label exch def
+  /want exch def
+  /d0 countdictstack def
+  stopped
+  { $error /errorname get want eq
+    { (ok   ) print label note }
+    { /fails fails 1 add def
+      (FAIL: ) print label print ( raised ) print
+      $error /errorname get 128 string cvs note } ifelse }
+  { /fails fails 1 add def
+    (FAIL: ) print label print ( raised no error) note } ifelse
+  countdictstack d0 sub { end } repeat
+} def
+
+% array (label)  .  -   require the array still reads 11 22 33 ...
+/intact {
+  /label exch def
+  dup 0 get 11 eq exch dup 1 get 22 eq exch 2 get 33 eq and and
+  { }{ (FAIL: ) print label print (: a refused fill modified the row\n) print
+       /fails fails 1 add def } ifelse
+} def
+
+% --- .fillrectgray refuses a non-string row ---
+% an array standing in for a row: eight integers, so the fill could
+% reach across a whole eight-byte object were the pointer taken
+/arow [ 11 22 33 44 55 66 77 88 ] def
+{ 1.0 0 0 8 1 << /ImgData [ arow ] >> frg } /typecheck
+  (.fillrectgray over an array row) expect
+arow (.fillrectgray over an array row) intact
+
+% an integer standing in for a row
+{ 1.0 0 0 8 1 << /ImgData [ 42 ] >> frg } /typecheck
+  (.fillrectgray over an integer row) expect
+
+% a name standing in for a row
+{ 1.0 0 0 8 1 << /ImgData [ /notarow ] >> frg } /typecheck
+  (.fillrectgray over a name row) expect
+
+% the screening path takes the same pointer, so a non-string row is
+% refused whether or not a halftone cell is present
+/celldev << /ImgData [ arow ] /.htcell 4 string /.htw 2 /.hth 2 >> def
+{ 0.5 0 0 8 1 celldev frg } /typecheck
+  (.fillrectgray over an array row, screened) expect
+arow (.fillrectgray over an array row, screened) intact
+
+% --- .blendpixgray refuses a non-string row ---
+% val cov x y dev : blend one pixel; the row it would touch is an array
+{ 1.0 128 0 0 << /ImgData [ arow ] >> bpg } /typecheck
+  (.blendpixgray over an array row) expect
+arow (.blendpixgray over an array row) intact
+
+% --- .flatecompress refuses a non-string element ---
+% it concatenates an array of strings, reaching each element's bytes
+% through a raw pointer, so an element that is not a string is refused.
+% Probe first: built without zlib the operator returns its input
+% unchanged and never reaches an element, so there is nothing to refuse.
+[ (abc) ] flc exch pop
+{ { [ 42 ] flc } /typecheck (.flatecompress over a non-string element) expect }
+{ (ok   .flatecompress built without zlib; element type moot) note }
+ifelse
+
+% --- positive control: well-formed grey device still paints ---
+% a two-row device of four-byte string rows, each ground to solid white,
+% so a black fill and a mid-coverage blend both leave visible marks
+/r0 4 string def  0 1 3 { r0 exch 255 put } for
+/r1 4 string def  0 1 3 { r1 exch 255 put } for
+/gdev << /ImgData [ r0 r1 ] >> def
+{ 0.0 0 0 4 2 gdev frg } stopped
+{ /fails fails 1 add def (FAIL: a sound grey fill raised ) print
+  $error /errorname get 128 string cvs note }
+{ r0 0 get 0 eq
+  { (ok   a sound grey fill still paints) note }
+  { /fails fails 1 add def (FAIL: a sound grey fill painted nothing) note }
+  ifelse } ifelse
+
+% blend a mid-coverage white over the black the fill left at pixel (2,1)
+{ 1.0 128 2 1 gdev bpg } stopped
+{ /fails fails 1 add def (FAIL: a sound grey blend raised ) print
+  $error /errorname get 128 string cvs note }
+{ r1 2 get dup 0 gt exch 255 lt and
+  { (ok   a sound grey blend still paints) note }
+  { /fails fails 1 add def (FAIL: a sound grey blend painted wrong) note }
+  ifelse } ifelse
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
