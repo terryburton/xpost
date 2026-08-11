@@ -823,6 +823,26 @@ test('single-instance',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Two fresh boots, and what their virtual memory has in common. An image of
+# virtual memory written at start-up and read back in a later process is
+# worth having only if what it holds is a function of the language rather
+# than of the run that produced it, and this is what says whether two runs
+# produce the same memory at all. The comparison reads the operator table
+# out of an image as this build's own structures, so it is built against
+# the library's internals.
+vm_image_exe = executable('vm_image_test',
+  'tests/vm_image_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('vm-image',
+  find_program('tests/run-vm-image-test.sh'),
+  args: [ vm_image_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: a process may create, use and destroy contexts for as
 # long as it lives, so no per-context table or allocation may carry over.
 context_reuse_exe = executable('context_reuse_test',
