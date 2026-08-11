@@ -88,9 +88,16 @@
 % them, so the writers meet the ground row as well as the held ones.
 /device? { .privatedict /.graphicsdict get /currgstate get /device get } bind def
 
+% The page is emitted to a scratch file beside the run, and the run
+% removes it. A sink that discards what is written to it is named by the
+% platform rather than by the language, so a page sent to one is a page
+% emitted only where that name exists -- and a page never written is not
+% a page the writers were asked for.
+/scratch (raster_row_test.page) def
+
 /banded { % /dev proc  .  -
     /rowok exch def /D exch def
-    << /OutputDevice D /PageSize [64 64] /OutputFile (/dev/null)
+    << /OutputDevice D /PageSize [64 64] /OutputFile scratch
        /ImagingBBox [16 16 48 48] >> setpagedevice
     /dv device? def
     dv /ImgData get 32 get 64 rowok exec
@@ -106,5 +113,6 @@
 /ppm { colourrow? } banded
 
 << /OutputDevice /null >> setpagedevice
+scratch deletefile
 
 fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails == } ifelse
