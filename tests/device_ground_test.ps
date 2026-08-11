@@ -1,0 +1,47 @@
+% What this device reads where it holds no pixel, for three pages
+% cleared to three different colours. Run against a live device
+% (-d <dev>) by run-device-ground-test.sh, which reads the answers of
+% the whole roster and holds them against each other.
+%
+% This file asserts nothing. The question is whether the devices agree,
+% and no single run of a single device can see that: a device asked what
+% its own ground is will always say what it says. So each run reports
+% its three readings and the wrapper does the comparing.
+%
+% erasepage clears the page to grey 1.0 (PLRM 8.2), so the colour a page
+% is cleared to is not an operand of it. What that grey comes to is the
+% transfer function's answer, which is how three different pages are had
+% here.
+
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+/getpix { dev dup /GetPix get exec } def
+
+% Read a pixel, taking what came back rather than assuming it. How many
+% components a device reports is the device's own business, and a read
+% that refuses reports none; either way the stack is left at the depth
+% the read was handed.
+/readpix { % x y  .  [c1..cN]
+    count 2 sub /rp.depth exch def
+    { getpix } stopped {
+        count rp.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+        [ ]
+    }{
+        count rp.depth sub array astore
+    } ifelse
+} def
+
+% The reading is taken off the page, where there is nothing to hold a
+% pixel and a mark aimed there is dropped, so what a read answers is the
+% ground and nothing else. Every device answers there, whether or not it
+% can report a pixel it holds.
+/report { % (tag) proc  .  -
+    gsave settransfer erasepage grestore
+    -1 -1 readpix
+    exch print
+    { ( ) print 20 string cvs print } forall
+    (\n) print
+} def
+
+(GROUND full:) { } report
+(GROUND high:) { pop 0.75 } report
+(GROUND low:)  { pop 0.25 } report

@@ -103,6 +103,7 @@ tests/device_destroy_test.ps \
 tests/device_private_test.ps \
 tests/device_features_test.ps \
 tests/device_getpix_destroyed_test.ps \
+tests/device_ground_test.ps \
 tests/device_restore_retired_test.ps \
 tests/device_retire_restored_test.ps \
 tests/dict_capacity_field_test.c \
@@ -277,6 +278,7 @@ tests/run-device-contract-test.sh \
 tests/run-device-destroy-test.sh \
 tests/run-device-features-test.sh \
 tests/run-device-getpix-test.sh \
+tests/run-device-ground-test.sh \
 tests/run-device-quit-test.sh \
 tests/run-device-restore-test.sh \
 tests/run-devices-test.sh \

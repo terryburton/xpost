@@ -3256,6 +3256,21 @@ test('device-contract',
   suite: cost_slow,
   timeout: 300)
 
+# One page, one erase, one ground: every device has to read the same
+# colour where it holds no pixel. Each device is asked what it reads
+# there for three differently cleared pages and the answers are held
+# against each other, as fractions of each device's own channel scale,
+# because a device asked only about itself will always agree with itself
+# -- which is how one family came to call the ground black while another
+# called it whatever the page was cleared to. The window device is asked
+# too, on a display where there is one and on a conjured one otherwise.
+test('device-ground',
+  find_program('tests/run-device-ground-test.sh'),
+  args: [ xpost_exe, files('tests/device_ground_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
+  timeout: 300)
+
 # What a fill meant to cover a whole surface covers. A marking method's
 # extent operands name an inclusive pixel span, so a caller holding a
 # surface's size hands the far corner, one less than the size. A raster
