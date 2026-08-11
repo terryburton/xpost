@@ -62,6 +62,14 @@
 
 #define XCB_ALL_PLANES ~0
 
+/* What a pixel of this device reads back as. Its raster is a drawable on
+   the display server reached through a colormap, so a read would answer
+   an index this device cannot turn back into the components it was
+   given: every pixel reads as the ground, which is the bottom of the
+   channel range whatever scale the channel is held in. GetPix answers
+   it, and BlendPix composites a partly covered pixel over it. */
+#define XCB_GROUND_LEVEL 0
+
 typedef struct
 {
     xcb_connection_t *c;
@@ -341,6 +349,34 @@ int _create_cont(Xpost_Context *ctx,
     return 0;
 }
 
+/* Lay one pixel of the drawable in a 16-bit rgb colour, through the
+   colormap the device allocates its inks from. */
+static
+int _point(PrivateData *private, int r, int g, int b, int ix, int iy)
+{
+    xcb_alloc_color_reply_t *rep;
+    unsigned int value;
+    xcb_point_t p;
+
+    p.x = ix;
+    p.y = iy;
+
+    rep = xcb_alloc_color_reply(private->c,
+                                xcb_alloc_color(private->c, private->cmap,
+                                                r, g, b),
+                                0);
+    if (!rep)
+        return unregistered;
+
+    value = rep->pixel;
+    free(rep);
+    xcb_change_gc(private->c, private->gc, XCB_GC_FOREGROUND, &value);
+
+    xcb_poly_point(private->c, XCB_COORD_MODE_ORIGIN,
+                   private->img, private->gc, 1, &p);
+    return 0;
+}
+
 static
 int _putpix(Xpost_Context *ctx,
             Xpost_Object red,
@@ -352,7 +388,7 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, ix, iy;
+    int r, g, b, ix, iy, ret;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
     r = xpost_dev_num_to_scaled(red, 65535.0);
@@ -370,27 +406,85 @@ int _putpix(Xpost_Context *ctx,
         (iy < 0) || (iy >= private.height))
         return 0;
 
-    {
-        xcb_alloc_color_reply_t *rep;
-        unsigned int value;
-        xcb_point_t p;
-        p.x = ix;
-        p.y = iy;
+    ret = _point(&private, r, g, b, ix, iy);
+    if (ret)
+        return ret;
 
-        rep = xcb_alloc_color_reply(private.c,
-                                    xcb_alloc_color(private.c, private.cmap,
-                                                    r, g, b),
-                                    0);
-        if (!rep)
-            return unregistered;
+    /* save private data struct in string */
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
-        value = rep->pixel;
-        free(rep);
-        xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
+    return 0;
+}
 
-        xcb_poly_point(private.c, XCB_COORD_MODE_ORIGIN,
-                       private.img, private.gc, 1, &p);
-    }
+/* One channel of a coverage-weighted blend: the level already there
+   moved toward the ink by the fraction c/255, rounded to the nearest
+   whole level. Rounding is about a distance and has no sign, so the
+   half step is taken away from zero at both ends -- C division
+   truncates toward zero, and a half added regardless of direction
+   rounds a darkening step the short way, leaving full ink over the
+   opposite ground a level short of it. */
+static int _blendchannel(int dst, int src, int c)
+{
+    int d = (src - dst) * c;
+
+    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
+}
+
+/* Blend a coverage-weighted pixel: each channel moves toward the colour
+   by cov/255 from the level the pixel already holds. What this device
+   reads a pixel back as is the ground (GetPix below), its raster being
+   a drawable on the display server reached through a colormap, so the
+   ground is what a partly covered pixel is composited over and the
+   result goes down through the same point the solid path lays.
+
+   The class this device specialises carries a blend that reads a raster
+   held as PostScript row arrays. This device keeps no such array, and
+   the driver contract names BlendPix among the slots a device with a
+   raster of its own brings itself. */
+static
+int _blendpix(Xpost_Context *ctx,
+              Xpost_Object red,
+              Xpost_Object green,
+              Xpost_Object blue,
+              Xpost_Object cov,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int r, g, b, c, ix, iy, ret;
+
+    /* fold numbers per the driver contract; xcb colour channels are 16-bit */
+    r = xpost_dev_num_to_scaled(red, 65535.0);
+    g = xpost_dev_num_to_scaled(green, 65535.0);
+    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    c = xpost_dev_num_to_int(cov);
+    ix = xpost_dev_num_to_int(x);
+    iy = xpost_dev_num_to_int(y);
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    /* check bounds */
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
+        return 0;
+
+    if (c <= 0)
+        return 0;
+    if (c > 255)
+        c = 255;
+
+    r = _blendchannel(XCB_GROUND_LEVEL, r, c);
+    g = _blendchannel(XCB_GROUND_LEVEL, g, c);
+    b = _blendchannel(XCB_GROUND_LEVEL, b, c);
+
+    ret = _point(&private, r, g, b, ix, iy);
+    if (ret)
+        return ret;
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -405,7 +499,8 @@ int _putpix(Xpost_Context *ctx,
    turn into the components it was given. It answers the ground instead,
    as the vector writers do: a method the class dictionary offers must
    answer its declared results, and answering nothing leaves the caller
-   reading whatever was beneath. */
+   reading whatever was beneath. The ground is XCB_GROUND_LEVEL above,
+   which BlendPix composites a partly covered pixel over. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -422,9 +517,9 @@ int _getpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
     return 0;
 }
 
@@ -739,6 +834,7 @@ int loadxcbdevicecont(Xpost_Context *ctx,
         { "Create", "xcbCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
         { "PutPix", "xcbPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
         { "GetPix", "xcbGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "xcbBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
         { "DrawLine", "xcbDrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
         { "FillRect", "xcbFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
         { "FillPoly", "xcbFillPoly", (Xpost_Op_Func)_fillpoly, XPOST_DEV_M_POLY },
@@ -770,13 +866,12 @@ int loadxcbdevicecont(Xpost_Context *ctx,
 
 
 
-    /* Paint glyphs without blending their edges. The blend the text
-       operators would otherwise use reads the pixel already there, which
-       for a window means asking the server for it one pixel at a time;
-       the base class's blend reaches for a raster of PostScript arrays
-       this device does not keep at all, and answers undefined. Declaring
-       one bit of text alpha takes the aliased path, which paints through
-       PutPix above. */
+    /* Paint glyphs without blending their edges. A blended edge is one
+       colour negotiated with the display server and one point laid per
+       pixel, over pixels the server will not report back, so the edge is
+       composited over the ground rather than over what the window holds.
+       Declaring one bit of text alpha takes the aliased path, which
+       paints through PutPix above. */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "TextAlphaBits"),
                          xpost_int_cons(1));
     if (ret)

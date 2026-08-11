@@ -554,6 +554,110 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* One channel of a coverage-weighted blend: the level already there
+   moved toward the ink by the fraction c/255, rounded to the nearest
+   whole level. Rounding is about a distance and has no sign, so the
+   half step is taken away from zero at both ends -- C division
+   truncates toward zero, and a half added regardless of direction
+   rounds a darkening step the short way, leaving full ink over the
+   opposite ground a level short of it. */
+static int _blendchannel(int dst, int src, int c)
+{
+    int d = (src - dst) * c;
+
+    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
+}
+
+/* Blend a coverage-weighted pixel: each channel moves toward the colour
+   by cov/255 from the level the pixel already holds. The buffered
+   backend reads that level out of its own buffer and writes the result
+   back to the same place PutPix does; the backend that keeps no buffer
+   reads the ground, as GetPix below does, and composites over that.
+
+   The class this device specialises carries a blend that reads a raster
+   held as PostScript row arrays. This device keeps no such array, and
+   the driver contract names BlendPix among the slots a device with a
+   raster of its own brings itself. */
+static
+int _blendpix(Xpost_Context *ctx,
+              Xpost_Object red,
+              Xpost_Object green,
+              Xpost_Object blue,
+              Xpost_Object cov,
+              Xpost_Object x,
+              Xpost_Object y,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    Render_Data *rd;
+    int r, g, b, c, ix, iy;
+    int dr = 0, dg = 0, db = 0;
+
+    /* fold numbers per the driver contract */
+    r = xpost_dev_num_to_byte(red);
+    g = xpost_dev_num_to_byte(green);
+    b = xpost_dev_num_to_byte(blue);
+    c = xpost_dev_num_to_int(cov);
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    /* check bounds */
+    if ((ix < 0) || (ix >= private.width) ||
+        (iy < 0) || (iy >= private.height))
+        return 0;
+
+    if (c <= 0)
+        return 0;
+    if (c > 255)
+        c = 255;
+
+    rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
+    if (!rd)
+        return 0;
+
+    switch (rd->backend_type)
+    {
+        case RENDER_BACKEND_GDI:
+        {
+            HDC cdc;
+            unsigned int pix = rd->backend.gdi.buf
+                [xpost_dev_raster_offset(ix, iy, private.width)];
+
+            dr = (pix >> 16) & 0xFF;
+            dg = (pix >> 8) & 0xFF;
+            db = pix & 0xFF;
+
+            rd->backend.gdi.buf
+                [xpost_dev_raster_offset(ix, iy, private.width)] =
+                _blendchannel(dr, r, c) << 16 |
+                _blendchannel(dg, g, c) << 8 |
+                _blendchannel(db, b, c);
+
+            cdc = CreateCompatibleDC(rd->dc);
+            SelectObject(cdc, rd->backend.gdi.bitmap);
+            BitBlt(rd->dc, ix, iy, 1, 1, cdc, ix, iy, SRCCOPY);
+            DeleteDC(cdc);
+            break;
+        }
+        case RENDER_BACKEND_GL:
+            glBegin(GL_POINTS);
+            glColor4f(_blendchannel(dr, r, c) / 255.0f,
+                      _blendchannel(dg, g, c) / 255.0f,
+                      _blendchannel(db, b, c) / 255.0f, 1.0f);
+            glVertex2f((GLfloat)ix, (GLfloat)iy);
+            glEnd();
+            rd->backend.gl.changed = 1;
+            break;
+    }
+
+    return 0;
+}
+
 /* Read a pixel back in the device's stored channel scale, the same one
    PutPix writes. A pixel outside the raster, or a backend that keeps no
    buffer of its own, reads as the ground: the slot declares three
@@ -945,6 +1049,7 @@ int loadwin32devicecont(Xpost_Context *ctx,
         { "Create", "win32Create", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
         { "PutPix", "win32PutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
         { "GetPix", "win32GetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "win32BlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
         { "DrawLine", "win32DrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
         { "FillRect", "win32FillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
         /* showing the page and flushing it are the same act on a window;
@@ -973,13 +1078,12 @@ int loadwin32devicecont(Xpost_Context *ctx,
 
 
 
-    /* Paint glyphs without blending their edges. The blend the text
-       operators would otherwise use reads the pixel already there, which
-       for a window means asking the server for it one pixel at a time;
-       the base class's blend reaches for a raster of PostScript arrays
-       this device does not keep at all, and answers undefined. Declaring
-       one bit of text alpha takes the aliased path, which paints through
-       PutPix above. */
+    /* Paint glyphs without blending their edges. A blended edge costs a
+       read and a one-pixel blit per pixel on the buffered backend, and
+       on the backend that keeps no buffer it is composited over the
+       ground rather than over what the window holds. Declaring one bit
+       of text alpha takes the aliased path, which paints through PutPix
+       above. */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "TextAlphaBits"),
                          xpost_int_cons(1));
     if (ret)

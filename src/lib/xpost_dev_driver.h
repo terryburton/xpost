@@ -474,9 +474,10 @@ xpost_dev_line_next(Xpost_Dev_Line *l, int *px, int *py)
  * xpost_dev_class_install() registers a table and then checks what it
  * produced: every mandatory slot filled, and -- for a device whose
  * raster is a buffer of its own rather than the base class's row array
- * -- every slot that would reach for that row array overridden. A
- * device that fails either does not load, rather than loading with a
- * method that answers undefined the first time the pipeline reaches it.
+ * -- every slot that would reach for that row array named by the table
+ * that brings Create. A device that fails either does not load, rather
+ * than loading with a method that answers undefined the first time the
+ * pipeline reaches it.
  */
 typedef enum
 {
@@ -500,14 +501,18 @@ typedef struct
 
 #define XPOST_DEV_METHOD_COUNT(t) ((int)(sizeof(t) / sizeof(*(t))))
 
-/* The slots whose base-class body reads the raster held as PostScript
-   row arrays. A device that brings its own buffer must override every
-   one of them: what it inherits instead reads a name its instance does
-   not carry and answers undefined -- present, callable and broken,
-   which no probe with `known` can tell from working. GetPix was
-   inherited unoverridden by five devices for exactly that reason.
-   tests/check-device-skeleton.sh holds this list to the classes. */
-#define XPOST_DEV_RASTER_SLOTS { "Create", "PutPix", "GetPix", "Emit" }
+/* The slots whose class value reads the raster held as PostScript row
+   arrays -- the base class's own method bodies, and the compiled
+   operators a class stores in a slot in place of one, which read the
+   same row array from the instance dictionary. A device that brings its
+   own buffer must override every one of them: what it inherits instead
+   reads a name its instance does not carry and answers undefined --
+   present, callable and broken, which no probe with `known` can tell
+   from working. GetPix was inherited unoverridden by five devices for
+   exactly that reason. tests/check-device-skeleton.sh holds this list
+   to the classes, and holds every device that keeps its own raster to
+   naming all of it in its method table. */
+#define XPOST_DEV_RASTER_SLOTS { "Create", "PutPix", "GetPix", "BlendPix", "Emit" }
 
 /* Slots no device may be without, whatever it keeps its raster in. */
 #define XPOST_DEV_MANDATORY_SLOTS { "Create", "Emit", "Destroy", ".copydict" }
@@ -594,7 +599,17 @@ xpost_dev_class_install(Xpost_Context *ctx,
 {
     static const char *mandatory[] = XPOST_DEV_MANDATORY_SLOTS;
     static const char *raster[] = XPOST_DEV_RASTER_SLOTS;
-    int i;
+    int i, j, suite = 0;
+
+    /* Whether this table states the device's suite, which is the table
+       that brings Create: a class is complete once one has been
+       installed, and a later table adds a method to a class that
+       already is -- so what a later one holds is not the whole of what
+       the device offers, and the completeness below is not its
+       question. */
+    for (i = 0; i < nmethods; i++)
+        if (!strcmp(methods[i].slot, "Create"))
+            suite = 1;
 
     for (i = 0; i < nmethods; i++)
     {
@@ -626,12 +641,28 @@ xpost_dev_class_install(Xpost_Context *ctx,
         }
     }
 
-    if (raster_is_compiled)
+    /* A device with a raster of its own brings every slot that would
+       read the base class's. What it brings is what its table names:
+       the value the class holds does not say, because a base class
+       fills a slot with a compiled operator as readily as with a body
+       of its own, and an inherited operator is an operator. */
+    if (raster_is_compiled && suite)
         for (i = 0; i < (int)(sizeof(raster) / sizeof(*raster)); i++)
         {
-            Xpost_Object v = xpost_dict_get(ctx, classdic,
-                                            xpost_name_cons(ctx, raster[i]));
+            Xpost_Object v;
 
+            for (j = 0; j < nmethods; j++)
+                if (!strcmp(methods[j].slot, raster[i]))
+                    break;
+            if (j == nmethods)
+            {
+                XPOST_LOG_ERR("device keeps its own raster but inherits %s,"
+                              " which reads the base class's", raster[i]);
+                return unregistered;
+            }
+
+            v = xpost_dict_get(ctx, classdic,
+                               xpost_name_cons(ctx, raster[i]));
             if (xpost_object_get_type(v) != operatortype)
             {
                 XPOST_LOG_ERR("device keeps its own raster but inherits %s,"

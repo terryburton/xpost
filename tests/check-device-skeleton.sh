@@ -321,16 +321,64 @@ done
 #     a parameter of the generated raster suite -- .writepage reads the
 #     row array too, but nothing reaches it except Emit, which is on the
 #     list, so a device that overrides that never runs it.
+#
+#     A slot is read whether the class states it as a body of its own or
+#     fills it with a compiled operator, since such an operator reads the
+#     row array out of the instance dictionary it is handed. Both are
+#     collected, or a slot filled from C reads as no slot at all: that is
+#     what BlendPix was, and a device that keeps its own raster inherited
+#     a blend with nothing to blend into.
 sed -n 's/^#define XPOST_DEV_RASTER_SLOTS { \(.*\) }$/\1/p' \
     "$libdir/xpost_dev_driver.h" | tr -d '" ' | tr ',' '\n' \
     | grep -v '^$' | sort > "$work/hdr"
+classfiles="$src/data/image.ps $src/data/pgmimage.ps $src/data/ppmimage.ps
+            $src/data/pbmimage.ps $src/data/tiffimage.ps"
 # the methods in the classes whose body reads ImgData
 awk '
     /^[ \t]*\/[A-Za-z.][A-Za-z0-9._]*[ \t]*\{/ { m = $1; sub(/^\//, "", m) }
     m != "" && /ImgData/ { print m; m = "" }
-' "$src"/data/image.ps "$src"/data/pgmimage.ps "$src"/data/ppmimage.ps \
-  "$src"/data/pbmimage.ps "$src"/data/tiffimage.ps \
-  | grep -v '^\.' | sort -u > "$work/cls"
+' $classfiles | grep -v '^\.' | sort -u > "$work/cls"
+
+# the compiled operators that read the row array, under the names
+# PostScript reaches them by: which C function each registered name
+# names, and whether that function's body reads ImgData. The rasteriser
+# is read twice, once for each question.
+awk '
+    NR == FNR {
+        if ($0 ~ /^}/) { if (fn != "" && saw) reads[fn] = 1; fn = ""; saw = 0 }
+        else if ($0 ~ /^[A-Za-z_]/ && $0 ~ /\(/ && $0 !~ /;[ \t]*$/ &&
+                 match($0, /[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/)) {
+            fn = substr($0, RSTART, RLENGTH)
+            sub(/[ \t]*\(.*$/, "", fn)
+            saw = 0
+        }
+        if (fn != "" && $0 ~ /nameImgData/) saw = 1
+        next
+    }
+    match($0, /xpost_operator_cons\(ctx, "\.[A-Za-z0-9_]+",[ \t]*\(Xpost_Op_Func\)[A-Za-z0-9_]+/) {
+        s = substr($0, RSTART, RLENGTH)
+        ps = s; sub(/^[^"]*"/, "", ps); sub(/".*$/, "", ps)
+        f = s; sub(/^.*\(Xpost_Op_Func\)/, "", f)
+        if (reads[f]) print ps
+    }
+' "$libdir/xpost_dev_generic.c" "$libdir/xpost_dev_generic.c" \
+    | sort -u > "$work/rowops"
+if [ ! -s "$work/rowops" ]; then
+    echo "FAILURES: no compiled operator reads the row array; fix the guard" >&2
+    exit 1
+fi
+# the class slots those operators are stored in
+sed -n 's|^[ \t]*/\([A-Za-z][A-Za-z0-9_]*\)[ \t]*//\.internaldict[ \t]*/\(\.[A-Za-z0-9_]*\)[ \t]*get.*|\2 \1|p' \
+    $classfiles | sort -u > "$work/clsops"
+if [ ! -s "$work/clsops" ]; then
+    echo "FAILURES: no class slot is filled from the rasteriser; fix the guard" >&2
+    exit 1
+fi
+while read -r op slot; do
+    grep -qx "$op" "$work/rowops" && echo "$slot"
+done < "$work/clsops" >> "$work/cls"
+sort -u -o "$work/cls" "$work/cls"
+
 if [ ! -s "$work/hdr" ] || [ ! -s "$work/cls" ]; then
     echo "FAILURES: the raster-slot lists could not be read; fix the guard" >&2
     exit 1
@@ -352,8 +400,49 @@ if ! cmp -s "$work/hdr" "$work/cls"; then
     fail=1
 fi
 
+# 11. A device that keeps its raster in a buffer of its own names every
+#     one of those slots in its own method table.
+#
+#     xpost_dev_class_install says the same thing and refuses a device
+#     that does not, but only where the device can be built and loaded.
+#     A driver this platform cannot compile is never held to it at all,
+#     and that is where the hole lasted: both window devices inherited
+#     the blend, and each declared one bit of text alpha, so the text
+#     path never reached the slot and nothing else asked.
+#
+#     Which devices are held is read from the install call rather than
+#     listed: the argument after the component count says whether the
+#     raster is the device's own. A file whose call this cannot read
+#     fails here rather than being passed over.
+compiled=0
+for f in $fleet xpost_dev_win32.c; do
+    own=$(sed -n 's/.*xpost_dev_class_install(ctx, classdic, [0-9][0-9]*, \([01]\),.*/\1/p' \
+          "$libdir/$f" | sort -u | tr -d '\n')
+    case "$own" in
+        0) continue ;;
+        1) ;;
+        *) echo "check-device-skeleton: cannot read from $f whether its raster is" >&2
+           echo "its own; xpost_dev_class_install is the one call that says so." >&2
+           fail=1
+           continue ;;
+    esac
+    compiled=$((compiled + 1))
+    while read -r slot; do
+        if ! grep -qE "\{[ \t]*\"$slot\"[ \t]*," "$libdir/$f"; then
+            echo "check-device-skeleton: $f keeps its own raster and its method" >&2
+            echo "table has no $slot, so it inherits one that reads the base" >&2
+            echo "class's row array and answers undefined when it is reached." >&2
+            fail=1
+        fi
+    done < "$work/hdr"
+done
+if [ "$compiled" -eq 0 ]; then
+    echo "FAILURES: no device was held to the raster slots; fix the guard" >&2
+    exit 1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion, $compiled devices behind the raster slots)"
