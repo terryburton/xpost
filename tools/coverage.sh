@@ -485,7 +485,8 @@ printf -- '- every `%s` refusal, which fires only where memory is already corrup
 printf '\nBeside them, and not separable from the tables by file or by\n'
 printf 'condition: the Windows halves of the compatibility layer, the portable\n'
 printf 'path-confinement fallback used where the kernel has no openat2, the\n'
-printf 'mmap and file-backed VM paths, and the 4 GiB growth clamp.\n\n'
+printf 'arm of the memory file belonging to the backing this build did not\n'
+printf 'take, the file-backed VM paths, and the 4 GiB growth clamp.\n\n'
 
 printf '**Largest raw uncovered but lower consequence**, for completeness. The\n'
 printf 'biggest blocks of unexecuted lines outside the discount:\n\n'

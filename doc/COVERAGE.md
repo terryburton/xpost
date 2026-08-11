@@ -115,7 +115,8 @@ out:
 Beside them, and not separable from the tables by file or by
 condition: the Windows halves of the compatibility layer, the portable
 path-confinement fallback used where the kernel has no openat2, the
-mmap and file-backed VM paths, and the 4 GiB growth clamp.
+arm of the memory file belonging to the backing this build did not
+take, the file-backed VM paths, and the 4 GiB growth clamp.
 
 **Largest raw uncovered but lower consequence**, for completeness. The
 biggest blocks of unexecuted lines outside the discount:
