@@ -4,6 +4,14 @@
 # stays opaque (distinct from the page background); the png device must
 # stay plain RGB. Colour types come from the IHDR; pixel semantics are
 # checked when python3 is available.
+#
+# A pixel is read against a colour whose three components differ from
+# one another and from the 255 an opaque alpha carries. Black, white and
+# transparency are the same bytes under every rearrangement of a pixel's
+# components, so a check that asks only for ink at (0,0,0,255) and a
+# white fill at (255,255,255,255) is satisfied by a device that wrote
+# blue where red goes. The colour below is what says which component
+# landed where, and it is asked of both devices.
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
@@ -17,6 +25,10 @@ trap 'rm -f "$ps" "$outa" "$outrgb"' EXIT
 cat > "$ps" <<'EOF'
 newpath 20 20 moveto 100 20 lineto 100 60 lineto 20 60 lineto closepath fill
 1 setgray newpath 120 20 moveto 200 20 lineto 200 60 lineto 120 60 lineto closepath fill
+% the colour that tells the components apart: 0.75 0.5 0.25 folds to
+% 191 127 63, no two alike and none of them the 255 of an opaque alpha
+0.75 0.5 0.25 setrgbcolor
+newpath 220 20 moveto 300 20 lineto 300 60 lineto 220 60 lineto closepath fill
 % anti-aliased text: the glyph edges are blended against the page, which
 % is the device's blending method rather than its rectangle fill
 0 setgray /Helvetica findfont 24 scalefont setfont
@@ -39,10 +51,13 @@ ct() { od -An -j25 -N1 -tu1 "$1" | tr -d ' '; }
 [ "$(ct "$outrgb")" = 2 ] || { echo "FAIL: png colour type $(ct "$outrgb"), want 2"; exit 1; }
 echo "colour types OK (RGBA=6, RGB=2)"
 
-if command -v python3 >/dev/null 2>&1; then
-    python3 - "$outa" <<'PYEOF'
+# Read one image's pixels: the file, and how many bytes a pixel takes in
+# it. A four-byte pixel carries the alpha checks as well.
+pixels_of() {   # $1 file  $2 bytes a pixel  $3 how the file is named
+    python3 - "$1" "$2" "$3" <<'PYEOF'
 import struct, sys, zlib
-d = open(sys.argv[1],'rb').read()
+path, bpp, label = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+d = open(path,'rb').read()
 pos, idat, meta = 8, b'', {}
 while pos < len(d):
     ln, typ = struct.unpack('>I4s', d[pos:pos+8])
@@ -53,15 +68,15 @@ while pos < len(d):
     pos += 12 + ln
 raw = zlib.decompress(idat)
 W, H = meta['w'], meta['h']
-stride = W*4
+stride = W*bpp
 out, prev, i = bytearray(), bytearray(stride), 0
 for y in range(H):
     f = raw[i]; i += 1
     line = bytearray(raw[i:i+stride]); i += stride
     for x in range(stride):
-        a = line[x-4] if x>=4 else 0
+        a = line[x-bpp] if x>=bpp else 0
         b = prev[x]
-        c = prev[x-4] if x>=4 else 0
+        c = prev[x-bpp] if x>=bpp else 0
         if f==1: line[x]=(line[x]+a)&255
         elif f==2: line[x]=(line[x]+b)&255
         elif f==3: line[x]=(line[x]+(a+b)//2)&255
@@ -70,27 +85,48 @@ for y in range(H):
             line[x]=(line[x]+(a if (pa<=pb and pa<=pc) else (b if pb<=pc else c)))&255
     out += line; prev = line
 def pix(x,y):
-    o=(y*W+x)*4; return tuple(out[o:o+4])
-# A glyph rendered with anti-aliasing has edge pixels only partly
-# covered: their alpha lies strictly between transparent and opaque.
-# A device that painted glyphs without blending would give every pixel
-# one or the other.
-alphas = {out[(y*W+x)*4 + 3] for y in range(H) for x in range(W)}
-partial = {a for a in alphas if 0 < a < 255}
+    o=(y*W+x)*bpp; return tuple(out[o:o+bpp])
 
+# The three fills, at a point well inside each. The coloured one is the
+# only one of them that can tell one component from another; the black
+# and the white say that ink and an explicit white reach the file at
+# all, which is a different question and one they can answer.
 checks = [
-    (pix(2,2)[3] == 0,               "erased page is transparent"),
-    (pix(60,H-40) == (0,0,0,255),    "ink is opaque"),
-    (pix(160,H-40) == (255,255,255,255), "an explicit white fill is opaque"),
-    (255 in alphas,                  "the text rendered at all"),
-    (len(partial) > 0,               "anti-aliased glyph edges are partly covered"),
+    (pix(60,H-40)[:3] == (0,0,0),          "ink is black"),
+    (pix(160,H-40)[:3] == (255,255,255),   "an explicit white fill is white"),
+    (pix(260,H-40)[:3] == (191,127,63),    "a colour reaches the file component"
+                                           " for component, in the order the"
+                                           " format declares"),
 ]
+
+if bpp == 4:
+    # A glyph rendered with anti-aliasing has edge pixels only partly
+    # covered: their alpha lies strictly between transparent and opaque.
+    # A device that painted glyphs without blending would give every
+    # pixel one or the other.
+    alphas = {out[(y*W+x)*4 + 3] for y in range(H) for x in range(W)}
+    partial = {a for a in alphas if 0 < a < 255}
+    checks += [
+        (pix(2,2)[3] == 0,        "erased page is transparent"),
+        (pix(60,H-40)[3] == 255,  "ink is opaque"),
+        (pix(160,H-40)[3] == 255, "an explicit white fill is opaque"),
+        (pix(260,H-40)[3] == 255, "a coloured fill is opaque"),
+        (255 in alphas,           "the text rendered at all"),
+        (len(partial) > 0,        "anti-aliased glyph edges are partly covered"),
+    ]
+
 bad = [msg for ok,msg in checks if not ok]
-for m in bad: print("FAIL:", m)
+for m in bad: print("FAIL: %s: %s" % (label, m))
 sys.exit(1 if bad else 0)
 PYEOF
-    [ $? -eq 0 ] || exit 1
-    echo "alpha semantics OK"
+}
+
+if command -v python3 >/dev/null 2>&1; then
+    fail=0
+    pixels_of "$outa" 4 "pngalpha" || fail=1
+    pixels_of "$outrgb" 3 "png" || fail=1
+    [ "$fail" -eq 0 ] || exit 1
+    echo "pixel semantics OK (both devices, components in the declared order)"
 else
     echo "python3 not found: pixel semantics not checked"
 fi
