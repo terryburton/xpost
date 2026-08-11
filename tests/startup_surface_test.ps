@@ -75,13 +75,15 @@ ID length 0 gt (internaldict has members to check) assert
 
 % Its members are the private operators, the scratch-string anchor the
 % =string operator runs, and the latches the interpreter keeps out of a
-% program's sight -- including what a graphics load that stopped left
-% behind, which is the name it stopped under and the dictionary-stack
-% depth it began at. Anything else arriving here would be a name that
-% escaped its own home.
+% program's sight -- including what a graphics load or an interpreter
+% lockdown that stopped left behind, which is the name it stopped under
+% and the dictionary-stack depth it began at. Anything else arriving
+% here would be a name that escaped its own home.
 /NONOPS << /.=stringproc true /QUIET true
            /GRAPHICS_LOADED true /USEDRAWLINE true
-           /GRAPHICS_LOAD_STOPPED true /GRAPHICS_LOAD_DEPTH true >> def
+           /GRAPHICS_LOAD_STOPPED true /GRAPHICS_LOAD_DEPTH true
+           /LOCKDOWN_DONE true
+           /LOCKDOWN_STOPPED true /LOCKDOWN_DEPTH true >> def
 /priv.odd 0 def /priv.leaked 0 def
 ID {
     pop dup type /nametype eq {

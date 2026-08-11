@@ -30,10 +30,11 @@ readers among the boot files and a live startup to one another.
 
 A value the *load itself* consumes and nothing reads afterwards is not one of
 these, however it arrived. `QUIET` (the `-q` flag) guards the load-time progress
-messages and has no reader once loading is over; `GRAPHICS_LOAD_STOPPED` and
-`GRAPHICS_LOAD_DEPTH` are the graphics load's own bookkeeping, written and read
-inside it. These are spent by the load that read them, and stay with the
-machinery that reads them.
+messages and has no reader once loading is over; `GRAPHICS_LOAD_STOPPED`,
+`GRAPHICS_LOAD_DEPTH`, `LOCKDOWN_STOPPED` and `LOCKDOWN_DEPTH` are the graphics
+load's and the lockdown's own bookkeeping, written and read inside them. These
+are spent by the step that read them, and stay with the machinery that reads
+them.
 
 Which device this run was started with, and the page it was started at, are
 settings and not language (`StartDevice`, `StartPageSize`). The modules load
@@ -163,12 +164,20 @@ the private namespaces, and returns the device classes to local VM in
 it only runs after `loadgraphics` because it must seal *after* everything that
 will ever be loaded. `.finalize` guards its graphics-only steps behind
 `/graphicsdict where`, so it hardens the interpreter with or without graphics —
-loading graphics stays genuinely optional. The `GRAPHICS_LOADED` latch (now in
-`.internaldict`), read through a frozen `//.internaldict`, keeps both steps
-idempotent. `loadgraphics` is idempotent over a load that stopped as well:
-`GRAPHICS_LOAD_STOPPED` holds the name the load stopped under and every later
+loading graphics stays genuinely optional. Each step records its own completion
+in `.internaldict`, read through a frozen `//.internaldict` — `GRAPHICS_LOADED`
+for the load, `LOCKDOWN_DONE` for the lockdown — which is what keeps each
+idempotent without either latch standing for the other: a lockdown that stopped
+must not send a load that finished round again.
+
+Both are idempotent over an attempt that stopped as well. `GRAPHICS_LOAD_STOPPED`
+and `LOCKDOWN_STOPPED` hold the name that attempt stopped under and every later
 call raises it again, because the window on `systemdict` is a one-shot held in
-the context and a second reading would have nowhere to define.
+the context: a second reading would have nowhere to define, and a second
+lockdown would find `systemdict` shut and stop at its own ordering check. Each
+also puts back what it opened — the dictionary stack to the depth recorded in
+`GRAPHICS_LOAD_DEPTH` or `LOCKDOWN_DEPTH`, and the window on `systemdict` — at
+the point its own frame is left.
 
 `.startdevice` **makes the run's device** — it reads `StartDevice` and
 `StartPageSize`, runs the maker the roster keeps for that device, finishes it
@@ -186,7 +195,7 @@ device and a painting operator raises `undefined`.
 | Dictionary | VM | Lifecycle | Sealed | Reached by / holds |
 |---|---|---|---|---|
 | `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | the single private helper namespace. Reached by run-time `//.xpostsys /h get exec` (the mutually-recursive path/clip/image/graphics family + interpreter control `.finalize`/`loadgraphics`/`.startdevice`/`.loadmodule`/`.devicemakers`) and by baking `.xpostsys begin … //h exec` (the colour/shading/pattern/halftone/font-CID families) |
-| `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`/`GRAPHICS_LOAD_STOPPED`/`GRAPHICS_LOAD_DEPTH`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
+| `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`/`GRAPHICS_LOAD_STOPPED`/`GRAPHICS_LOAD_DEPTH`/`LOCKDOWN_DONE`/`LOCKDOWN_STOPPED`/`LOCKDOWN_DEPTH`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
 | `.xpostsys /.resources` | global | persistent | (member, writable) | the resource instance table; `defineresource` writes it; global-persistent per PLRM. A shallow read-only seal of `.xpostsys` correctly leaves this member writable |
 | `.xpostsys /.hostdict` | global | per-run settled | (member, writable) | **what this run settled, and nothing else** — see below. Writable for the same reason `.resources` is: the seal is shallow |
 

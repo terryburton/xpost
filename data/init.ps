@@ -1510,7 +1510,12 @@ setglobal
 % body are global, matching the global .xpostsys their table installs into.
 currentglobal true setglobal
 .xpostsys /loadgraphics {
-    //.internaldict /GRAPHICS_LOADED known { }{
+    % The load records its own completion below, so a lockdown that stops
+    % after it does not send it round again. A locked-down interpreter is
+    % the other answer to the same question: systemdict is shut for good
+    % by then, so the language it has is the language it keeps.
+    //.internaldict /GRAPHICS_LOADED known
+    //.internaldict /LOCKDOWN_DONE known or { }{
         % A load that stopped is not attempted again, and every attempt
         % after the first answers with what stopped the first. The load
         % happens once in the life of a context because not all of what
@@ -1780,6 +1785,11 @@ currentglobal true setglobal
     } //.xpostsys /.defop get exec
     end % systemdict
 
+    % The language stands. Recorded by the load itself, as the last thing
+    % it does, so that the step after it stopping leaves this true: a
+    % reading that finished is not a reading to do again.
+    .internaldict /GRAPHICS_LOADED true put
+
         } stopped {
         % The load is over however it ended, so what it opened closes
         % here. The dictionaries it left open go back to the depth
@@ -1809,8 +1819,10 @@ currentglobal true setglobal
 % operators, moves the private C operators into .internaldict, seals and hides
 % the private namespaces, and returns the device classes to local VM. The
 % language itself needs no moving: it is read into systemdict to begin with. loadgraphics does the loading; this does the
-% locking down -- so nothing unrelated to graphics is tied to loading it. The
-% shared GRAPHICS_LOADED latch, set here, keeps both steps idempotent.
+% locking down -- so nothing unrelated to graphics is tied to loading it. Each
+% step records its own completion, the load in GRAPHICS_LOADED and this in
+% LOCKDOWN_DONE, which is what keeps each idempotent without either standing
+% for the other.
 % bool (what)  .mustbe  -
 % A start-up step whose order matters says so here. The steps below have
 % to run in one order and no other -- a name has to be an operator before
@@ -1828,7 +1840,30 @@ currentglobal true setglobal
 } bind put
 
 .xpostsys /.finalize {
-    //.internaldict /GRAPHICS_LOADED known { }{
+    //.internaldict /LOCKDOWN_DONE known { }{
+        % A lockdown that stopped is not attempted again, and every attempt
+        % after the first answers with what stopped the first. The lockdown
+        % happens once in the life of a context because not all of what it
+        % leaves behind is virtual memory: the writeable window on
+        % systemdict closes on a one-shot held in the context, and once
+        % that is spent a second attempt finds systemdict shut and stops at
+        % its own ordering check, under a name of its own. $error holds one
+        % error, the most recent, so that name would be the one the caller
+        % is told about instead of what really stopped the lockdown.
+        //.internaldict /LOCKDOWN_STOPPED known {
+            //.internaldict /LOCKDOWN_STOPPED get
+            dup null eq
+                { pop stop }
+                { /.finalize cvx exch signalerror }
+            ifelse
+        } if
+        % The depth the dictionary stack has here is the depth it is put
+        % back to below. The promotion opens a working dictionary around
+        % each operator it moves, so a lockdown that stopped part way
+        % would otherwise leave one current and every definition made
+        % afterwards would be aimed at it.
+        //.internaldict /LOCKDOWN_DEPTH countdictstack put
+        {
         % Open a writeable window on systemdict. loadgraphics opens the same
         % one before reading the language into it; this call covers the run
         % that never loads graphics, and is what lets the steps below undefine
@@ -2015,11 +2050,10 @@ currentglobal true setglobal
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
-    % The load latch and the internal draw-line flag are interpreter state a
-    % program has no use for; both go into .internaldict, out of a program's
-    % sight, while it is still writable here. .internaldict is sealed below, so
-    % the latch cannot be removed or overwritten afterwards.
-    .internaldict /GRAPHICS_LOADED true put
+    % The internal draw-line flag is interpreter state a program has no use
+    % for; it goes into .internaldict, out of a program's sight, while it is
+    % still writable here. .internaldict is sealed below, so the flag cannot
+    % be removed or overwritten afterwards.
     .internaldict /USEDRAWLINE true put
     % device -- so a job's page setup does not leak into the next. In local VM the
     % ordinary save/restore reverts those writes; a global home does not.
@@ -2040,19 +2074,6 @@ currentglobal true setglobal
 
     .internaldict /.sysdictrelock get exec
 
-    % Seal the private namespaces. They are fully populated now -- init and the
-    % graphics modules have defined every helper, and the C operators have just
-    % been relocated into .internaldict -- and the machinery only reads them
-    % hereafter, always through a frozen // reference to the object. Freeze each
-    % read-only so a program cannot overwrite a helper, and drop its userdict
-    % anchor so a program cannot reach or even enumerate it. The frozen
-    % references keep the objects alive and working; .gscratchdict stays writable
-    % and anchored, as the machinery mutates it every render.
-    userdict /.internaldict get readonly pop
-    userdict /.xpostsys get readonly pop
-    userdict /.internaldict undef
-    userdict /.xpostsys undef
-
     % Return the device class dictionaries to local VM. setpagedevice records the
     % page geometry into them at run time, and that state must be subject to save
     % and restore -- a restore to before a setpagedevice reinstates the earlier
@@ -2071,11 +2092,57 @@ currentglobal true setglobal
     % privatedict), so only its userdict anchor remains -- drop it
     userdict /.gstatetemplate known { userdict /.gstatetemplate undef } if
     setglobal
+
+    % The interpreter is locked down. Recorded last, so that a lockdown
+    % which stopped anywhere above records instead what stopped it.
+    .internaldict /LOCKDOWN_DONE true put
+
+    % Seal the private namespaces, as the last act of all. They are fully
+    % populated now -- init and the graphics modules have defined every helper,
+    % the C operators have been relocated into .internaldict and the local
+    % machinery anchors have moved into privatedict -- and the machinery only
+    % reads them hereafter, always through a frozen // reference to the object.
+    % Freeze each read-only so a program cannot overwrite a helper, and drop its
+    % userdict anchor so a program cannot reach or even enumerate it. The frozen
+    % references keep the objects alive and working; .gscratchdict stays writable
+    % and anchored, as the machinery mutates it every render.
+    %
+    % Last because .internaldict is where a lockdown that stopped writes what
+    % stopped it: sealed any earlier, a stop between the seal and the end would
+    % have nowhere to record and the attempt after it would start over.
+    userdict /.internaldict get readonly pop
+    userdict /.xpostsys get readonly pop
+    userdict /.internaldict undef
+    userdict /.xpostsys undef
     % The graphics state is not initialised here. It is initialised by
     % the device being installed, which is what settles the parameters
     % that describe how a device renders, and no device has been made
     % yet: the lockdown is language work and runs whether or not this
     % run ever has one.
+
+        } stopped {
+        % The lockdown is over however it ended, so what it opened closes
+        % here. The dictionaries it left open go back to the depth
+        % recorded above, and the writeable window on systemdict closes
+        % whether or not the interpreter's own error handler has already
+        % closed it: a fault raised in PostScript never passes through
+        % that handler, and would otherwise leave systemdict open for the
+        % rest of the run.
+        countdictstack //.internaldict /LOCKDOWN_DEPTH get sub
+        dup 0 gt { { end } repeat }{ pop } ifelse
+        % The relock as the operator itself: the steps above take the
+        % dotted operators out of systemdict, so by this point the name
+        % answers from .internaldict rather than from the dictionary
+        % stack, and this reaches it either way.
+        //.sysdictrelock
+        % Kept where the attempt that met it can still name it: this is
+        % the last point at which $error holds this lockdown's own error.
+        //.internaldict /LOCKDOWN_STOPPED
+            $error /newerror get $error /errorname known and
+                { $error /errorname get }{ null } ifelse
+        put
+        stop
+        } if
     } ifelse
 } put
 setglobal
