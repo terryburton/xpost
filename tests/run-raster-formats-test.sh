@@ -51,6 +51,21 @@ case $xpost in /* | ?:/* | ?:\\*) ;; *) xpost=$PWD/$xpost ;; esac
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# A path written into a program the interpreter runs is read by the
+# interpreter, so it has to be spelt the way the platform spells it. A
+# shell that keeps a file-system of its own rewrites a path it hands over
+# as an argument, and cannot rewrite one inside a file it wrote: the
+# directory this shell calls /tmp/x is nowhere at all to a program built
+# against the platform, and a program naming it opens nothing. So the
+# programs below name the working directory the platform's way, through
+# the shell's own translator where there is one.
+cygpath=$(command -v cygpath 2>/dev/null) || cygpath=
+if [ -n "$cygpath" ]; then
+    hwork=$("$cygpath" -m "$work")
+else
+    hwork=$work
+fi
+
 fail=0
 
 # The colour every check below is measured against. Its three components
@@ -320,12 +335,12 @@ fi
 if emit tiff flat.ps "$work/out.tiff"; then
     if header_is tiff "$work/out.tiff" "II*"; then
         cat > "$work/untiff.ps" <<PSEOF
-/in ($work/out.tiff) (r) file def
+/in ($hwork/out.tiff) (r) file def
 in 8 setfileposition
 /d in /LZWDecode filter def
 /s $((px * 3)) string def
 d s readstring pop
-/out ($work/tiff.raw) (w) file def
+/out ($hwork/tiff.raw) (w) file def
 out exch writestring
 out closefile
 quit
