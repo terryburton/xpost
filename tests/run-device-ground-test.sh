@@ -23,12 +23,21 @@
 # scale, by cross-multiplication rather than division. The full scale is
 # read off the device too, as what it answers for a page cleared to white.
 #
-# The tolerance is one level of the coarser of the two channels being
+# The tolerance is one step of the coarser of the two channels being
 # compared. Each device folds the ground by truncation, so a device with
 # a finer channel lands nearer the true fraction than a coarser one can
 # express, and the two differ by less than the coarse device's step. Two
 # devices whose fractions differ by more than that are not rounding
 # differently: they are describing different pages.
+#
+# What a device's channel is, is the device's to say. On most of them it
+# is the stored value and its step is one level of it. A device that
+# screens what it stores holds no colour at a pixel -- it holds a pattern
+# over a cell that tiles the device plane -- so its channel is that cell,
+# its reading is the cell's own colour (device_ground_test.ps averages
+# one), and its step is one pixel of the cell. Each device reports how
+# many pixels its reading covers and the step follows from that, so a
+# device is held to the precision it has rather than to a byte's.
 #
 # A device that answers the same reading whatever the page was cleared to
 # is not reporting the ground at all, and there is no fraction to compare
@@ -160,6 +169,21 @@ ask() {
         ag_vals="$ag_vals $ag_first"
     done
 
+    # How many pixels of the device plane one of those readings covers,
+    # which is what sizes the tolerance below. A device that does not say
+    # is one whose readings cannot be placed against anyone else's.
+    ag_cell=$(printf '%s\n' "$ag_out" | sed -n 's/^GROUND cell://p' | tr -d ' ')
+    case $ag_cell in
+        '' | *[!0-9]*)
+            echo "FAIL $ag_dev: it did not report how much of the plane a"
+            echo "      reading of it covers"
+            return 1 ;;
+    esac
+    [ "$ag_cell" -ge 1 ] || {
+        echo "FAIL $ag_dev: it reported a reading over $ag_cell pixels"
+        return 1
+    }
+
     # A device answering the same for all three pages is answering
     # something of its own rather than reporting what the page was
     # cleared to; there is no scale in it to take a fraction of.
@@ -174,9 +198,22 @@ ask() {
         return 1
     fi
 
-    echo "$ag_vals" > "$work/read.$ag_dev"
-    echo "OK   $ag_dev (white $1, 0.75 $2, 0.25 $3)"
+    echo "$ag_vals $ag_cell" > "$work/read.$ag_dev"
+    echo "OK   $ag_dev (white $1, 0.75 $2, 0.3 $3, over $ag_cell)"
     return 0
+}
+
+# The step a device's reading moves in, in that device's own scale. A
+# reading taken at one pixel moves by one level of the channel behind it.
+# A reading taken over a cell of a screen is that cell's coverage and
+# moves by one pixel of the cell, so a coarser cell is a coarser channel.
+#   $1 full-scale reading   $2 pixels the reading covers
+step_of() {
+    if [ "$2" -le 1 ]; then
+        echo 1
+    else
+        echo $(( ($1 + $2 - 1) / $2 ))
+    fi
 }
 
 fail=0
@@ -189,16 +226,18 @@ fleet_hold_unasked "$unasked_want" || fail=1
 ref=
 for d in $devices; do
     [ -f "$work/read.$d" ] || continue
-    read -r f h l < "$work/read.$d"
+    read -r f h l c < "$work/read.$d"
     if [ -z "$ref" ]; then
-        ref=$d; rf=$f; rh=$h; rl=$l
+        ref=$d; rf=$f; rh=$h; rl=$l; rstep=$(step_of "$f" "$c")
         continue
     fi
     # a fraction of each device's own full scale, cross-multiplied so the
-    # comparison is in whole numbers, and held to one level of the
-    # coarser channel
-    tol=$rf
-    [ "$f" -gt "$tol" ] && tol=$f
+    # comparison is in whole numbers, and held to one step of the coarser
+    # channel: a step of either device's reading moves the cross product
+    # by that step times the other device's full scale
+    step=$(step_of "$f" "$c")
+    tol=$(( step * rf ))
+    [ $(( rstep * f )) -gt "$tol" ] && tol=$(( rstep * f ))
     for pair in "high $h $rh" "low $l $rl"; do
         set -- $pair
         diff=$(( $2 * rf - $3 * f ))

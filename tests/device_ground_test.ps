@@ -16,6 +16,22 @@
 /dev .privatedict /.graphicsdict get /currgstate get /device get def
 /getpix { dev dup /GetPix get exec } def
 
+% How much of the device plane one reading has to cover to be a colour.
+% A device that screens what it stores holds no colour at a pixel: it
+% holds a pattern over a cell that tiles the plane, and the colour is
+% what a cell of it comes to. One pixel of such a device is no more its
+% ground than one bit of a byte is, so the reading is taken over a whole
+% cell and averaged. A device that stores the colour it is handed has a
+% cell of one pixel and is read at one pixel, as it always was.
+%
+% The cell is asked of the device, which is where a screen installs it.
+/cellw dev /.htw 2 copy known { get }{ pop pop 1 } ifelse def
+/cellh dev /.hth 2 copy known { get }{ pop pop 1 } ifelse def
+cellw type /integertype ne { /cellw 1 def } if
+cellh type /integertype ne { /cellh 1 def } if
+cellw 1 lt { /cellw 1 def } if
+cellh 1 lt { /cellh 1 def } if
+
 % Read a pixel, taking what came back rather than assuming it. How many
 % components a device reports is the device's own business, and a read
 % that refuses reports none; either way the stack is left at the depth
@@ -30,18 +46,54 @@
     } ifelse
 } def
 
-% The reading is taken off the page, where there is nothing to hold a
+% The readings are taken off the page, where there is nothing to hold a
 % pixel and a mark aimed there is dropped, so what a read answers is the
 % ground and nothing else. Every device answers there, whether or not it
 % can report a pixel it holds.
+%
+% They run over one whole cell in each direction, so every place in the
+% cell is read exactly once and their mean is what the cell comes to.
+% Each is a whole number of pixels before the page, which is off it
+% however wide the page is.
 /report { % (tag) proc  .  -
     gsave settransfer erasepage grestore
-    -1 -1 readpix
-    exch print
-    { ( ) print 20 string cvs print } forall
+    /rp.sum null def
+    /rp.n 0 def
+    cellw neg 1 -1 {
+        /rp.x exch def
+        cellh neg 1 -1 {
+            rp.x exch readpix /rp.r exch def
+            rp.sum null eq {
+                /rp.sum rp.r def
+            }{
+                % a read that answers a different count from the one
+                % before it is answering nothing that can be averaged
+                rp.r length rp.sum length eq {
+                    0 1 rp.sum length 1 sub {
+                        /rp.i exch def
+                        rp.sum rp.i
+                            rp.sum rp.i get rp.r rp.i get add put
+                    } for
+                }{ /rp.sum [ ] def } ifelse
+            } ifelse
+            /rp.n rp.n 1 add def
+        } for
+    } for
+    print
+    rp.sum { ( ) print rp.n div cvi 20 string cvs print } forall
     (\n) print
 } def
 
+% The three pages. The first two are colours a screen's cell can carry
+% exactly, and the third is not: a cell of sixteen pixels covers a grey
+% to a sixteenth, so a device reading one lands a little off a device
+% reading a byte, and the wrapper is left to hold each to the step its
+% own channel moves in rather than to a byte's.
 (GROUND full:) { } report
 (GROUND high:) { pop 0.75 } report
-(GROUND low:)  { pop 0.25 } report
+(GROUND low:)  { pop 0.3 } report
+
+% How many pixels one of those readings covers. It is what the reading
+% can move by: a mean over a cell of n pixels moves a whole pixel of the
+% cell at a time, which is the coarsest step any device here reports in.
+(GROUND cell: ) print cellw cellh mul 20 string cvs print (\n) print
