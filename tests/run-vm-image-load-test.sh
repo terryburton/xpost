@@ -11,6 +11,12 @@
 # to be shown is not that the interpreter still runs but that the memory
 # it runs on is the memory the image describes. Two processes, because
 # what an image must not carry is anything of the process that wrote it.
+# It holds one of this run's images against another of them, so it says
+# an image describes the memory it was written from and cannot say that
+# memory was right: a boot that built the language wrongly writes the
+# same wrong image twice and passes. What a boot has to produce is
+# tests/vm_image_test.c's, which compares two fresh boots field by field
+# and says in its own prose what that establishes and what it does not.
 #
 # Refusal. Every way an image can be unusable has to end with the
 # language built from the boot files instead. Each way is asked for in

@@ -18,7 +18,11 @@
 # the page: what a consumer paints from our PDF is compared with what the
 # interpreter paints from the drawing the PDF came from, pixel for pixel,
 # so a mark that reached the file in the wrong place or not at all shows
-# up as a difference rather than as a well-formed lie.
+# up as a difference rather than as a well-formed lie. Both sides of that
+# imaging comparison come from the same drawing, though, so it says the
+# file carries what the interpreter drew and cannot say the interpreter
+# drew the right thing: a fault in the drawing stands in both rasters.
+# What a page has to look like is the golden-render manifest's.
 #
 # Only what pdfwrite writes is read here. The other writing devices put
 # out other languages -- dscwrite PostScript, svgwrite SVG -- and neither

@@ -38,7 +38,15 @@ count precount eq (an out-of-range rgb PutPix is swallowed) assert
 
 % --- the classes agree pixel-for-pixel on the same geometry ---
 % grays painted as v into one and (v v v) into the other must land as the
-% same bytes everywhere
+% same bytes everywhere.
+%
+% This holds one class against the other and neither against a recorded
+% page, so it says the two agree and cannot say either is right: a fault
+% in what both share passes. The colour it paints is a grey besides,
+% whose three components are equal, so a colour class holding a
+% pixel's components in the wrong planes agrees here too. What a
+% component has to be is the PutPix reading above; what it has to be in
+% a page that was emitted is tests/run-raster-formats-test.sh's.
 /geq { % -  .  bool
     true
     0 1 7 { /yy exch def

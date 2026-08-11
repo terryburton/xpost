@@ -39,6 +39,15 @@
 #   offset   the same marks with the page image shifted, which moves the
 #            marks and must move the box with them
 #
+# WHAT THE SECOND QUESTION DOES NOT COVER, plainly. It compares one of
+# this run's pages against another of them, so it says the box changed
+# nothing and cannot say either page was right. A fault in what both
+# runs share -- the marking, the colour conversion, the format the
+# writer emits -- stands in both pages equally and passes here. What a
+# page's bytes have to be is the golden-render manifest's, and what a
+# raster format's pixels have to be is
+# tests/run-raster-formats-test.sh's.
+#
 #   $1  path to the built xpost binary
 #   $2  path to imaging_bbox_test.ps
 set -u

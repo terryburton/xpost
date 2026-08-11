@@ -8,6 +8,11 @@
 # also match the one written to a regular file byte for byte, which is what
 # catches a count that drifts from what was actually put out.
 #
+# That last reading compares one of this run's documents against another
+# of them, so it says the two routes agree and cannot say the document
+# was right. A fault in what both routes share passes here; the bytes a
+# pdfwrite page has to be are the golden-render manifest's.
+#
 #   $1  path to the built xpost binary
 #   $2  path to the PostScript workload
 set -u

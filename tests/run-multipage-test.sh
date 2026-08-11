@@ -41,6 +41,18 @@
 # too: "no file" is their answer and not an omission. The devices that paint
 # nothing, null and bbox, are the `devices` test's.
 #
+# WHAT THIS DOES NOT COVER, plainly. Every reading below compares one of this
+# run's outputs against another of them: the three %d pages must differ from
+# each other, and the fixed-name file must equal the last of them. Not one page
+# is held to anything recorded, so nothing here can tell a right page from a
+# wrong one -- only a page numbered wrongly from a page numbered rightly. A
+# change that corrupts every page in the same way passes here with the same
+# report as a tree in good order, and a colour raster whose components were
+# emitted in the wrong order did exactly that. What a page's bytes have to be
+# is the golden-render manifest's, and what a raster format's pixels have to be
+# is tests/run-raster-formats-test.sh's; this is the page counter's and the
+# per-page file semantics', which is what it was written for.
+#
 #   $1  path to the built xpost binary
 set -u
 xpost=$1
