@@ -33,6 +33,7 @@ tests/check-device-roster.sh \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-device-skeleton.sh \
+tests/check-width-comparisons.sh \
 tests/check-dict-homes.sh \
 tests/check-dist-lists.sh \
 tests/check-encoder-units.sh \

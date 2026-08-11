@@ -78,9 +78,17 @@ add_project_arguments(cc.get_supported_arguments(strict_warnings), language: 'c'
 # from behind whichever build reports nothing about it. They go through
 # get_supported_arguments like the rest, so a compiler that does not know
 # them drops them rather than failing.
+# The third is the same question asked by the compilers that have a
+# separate name for it. -Wtype-limits does not reach a bound written as
+# a cast of a limit constant -- the shape a width-dependent bound takes
+# when the type it is bounding is the interpreter's own integer -- and
+# so the two builds can differ over such a comparison with neither of
+# them saying so.
 comparison_errors = [
   '-Werror=sign-compare',
   '-Werror=type-limits',
+  '-Werror=tautological-type-limit-compare',
+  '-Werror=tautological-constant-out-of-range-compare',
 ]
 add_project_arguments(cc.get_supported_arguments(comparison_errors), language: 'c')
 
@@ -3738,6 +3746,17 @@ test('check-device-skeleton',
   find_program('tests/check-device-skeleton.sh'),
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
+
+# A comparison whose answer the object width decides is asked of a
+# second compiler, one syntax-only pass per width. The build's own
+# -Werror=type-limits does not reach a bound written as a cast of a
+# limit constant, and the compilers that do reject that form are not
+# necessarily the one to hand, so without this the first report of such
+# a comparison comes from a platform lane rather than from here.
+test('check-width-comparisons',
+  find_program('tests/check-width-comparisons.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), meson.current_build_dir() ])
 
 # The file a page is written to is named and opened when the page is
 # written. The page number a %d in the output name stands for belongs to
