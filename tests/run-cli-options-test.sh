@@ -252,13 +252,29 @@ printf '%s\n' "$got" | grep -q 'STDIN-EXECUTED' \
 # not every version passes back -- is what says the form works here.
 # Where neither does, the two cases below are not asked and the run says
 # so; they are the only ones that cannot be asked without one.
+#
+# A shell that emulates terminals for its own programs can make one that
+# a native program is not handed: the interpreter reads standard input as
+# the platform presents it, which on Windows means a console handle, and
+# what script(1) provides there is the shell runtime's own pseudo
+# terminal -- a pipe to anything built against the platform. `test -t 0`
+# in that shell answers for the shell, so the probe below would report a
+# terminal the interpreter cannot be given, and the interpreter deciding
+# there is nobody at a keyboard would be the right answer read as a
+# failure. The two cases are held unasked there, with the reason said.
 pty=none
-case $(script -qec 'test -t 0 && echo HAVE-TTY' /dev/null </dev/null 2>/dev/null) in
-    *HAVE-TTY*) pty=util ;;
-    *) case $(script -q /dev/null /bin/sh -c 'test -t 0 && echo HAVE-TTY' \
-              </dev/null 2>/dev/null) in
-           *HAVE-TTY*) pty=bsd ;;
-       esac ;;
+held='script(1) provides no terminal here'
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+        held='the terminals here are the shell runtime'\''s, not the platform'\''s' ;;
+    *)
+        case $(script -qec 'test -t 0 && echo HAVE-TTY' /dev/null </dev/null 2>/dev/null) in
+            *HAVE-TTY*) pty=util ;;
+            *) case $(script -q /dev/null /bin/sh -c 'test -t 0 && echo HAVE-TTY' \
+                      </dev/null 2>/dev/null) in
+                   *HAVE-TTY*) pty=bsd ;;
+               esac ;;
+        esac ;;
 esac
 
 # What the terminal is fed is arithmetic rather than a message, because a
@@ -277,7 +293,8 @@ on_terminal() {  # $1 the command line to run with a terminal on stdin
 }
 
 if [ "$pty" = none ]; then
-    echo "no terminal available: -o at a terminal not checked"
+    echo "held unasked: a run at a terminal, with and without an output"
+    echo "      file -- $held"
 else
     # with -o: a file to produce, so the run ends with the program and
     # what the terminal went on to send is never executed
