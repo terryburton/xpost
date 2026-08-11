@@ -221,6 +221,7 @@ xpost_interpreter_cid_get_context
 xpost_interpreter_exit
 xpost_interpreter_get_initializing
 xpost_interpreter_init
+xpost_interpreter_load_language
 xpost_interpreter_run_nested
 xpost_interpreter_set_initializing
 xpost_interrupt

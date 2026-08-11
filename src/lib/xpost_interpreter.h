@@ -32,6 +32,8 @@
 #ifndef XPOST_ITP_H
 #define XPOST_ITP_H
 
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
+
 /**
  * @file xpost_interpreter.h
  * @brief the interpreter functions
@@ -101,6 +103,26 @@ int xpost_op_errorunwind(Xpost_Context *ctx);
 
 int xpost_interpreter_init(Xpost_Interpreter *itp, const char *device);
 void xpost_interpreter_exit(Xpost_Interpreter *itp);
+
+/**
+ * @brief Load the language into the context.
+ *
+ * The first of the two steps a run brings a context up with before the
+ * program it was given: the modules are read and the interpreter is
+ * locked down, and what stands afterwards is the language -- the same
+ * names with the same values however the run was started. The second
+ * step, making the device this run was started with, is what settles
+ * something of the run, and it is not done here.
+ *
+ * A run does this itself for the context it was handed, so a caller
+ * that only runs programs never needs it. It is separate for the sake
+ * of the point between the two steps, which is where a context's
+ * virtual memory is a picture of the language and of nothing else.
+ *
+ * The load runs once in the life of a context; whether it succeeded is
+ * read from the context afterwards.
+ */
+XPOST_TEST_VISIBLE void xpost_interpreter_load_language(Xpost_Context *ctx);
 
 /**
  * @brief Run a procedure to completion and return, so a C caller

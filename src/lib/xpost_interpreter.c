@@ -3210,7 +3210,7 @@ static void _run_startup_step(Xpost_Context *ctx, const char *proc,
    than from this run: the procedure reports nothing, and the start
    procedure the caller's own run begins with meets the same failure and
    reports it there. */
-static void _load_language(Xpost_Context *ctx)
+XPOST_TEST_VISIBLE void xpost_interpreter_load_language(Xpost_Context *ctx)
 {
     /* whether the language stands is read from the context afterwards,
        which is the answer the caller acts on; the run below says only
@@ -3430,7 +3430,7 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
     {
         if (!ctx->sysdict_load_done)
         {
-            _load_language(ctx);
+            xpost_interpreter_load_language(ctx);
             _make_start_device(ctx);
         }
 
