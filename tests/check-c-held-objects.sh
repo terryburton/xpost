@@ -54,7 +54,7 @@ sed 's/#.*//' "$register" | awk 'NF >= 2 { print $1 }' | sort -u > "$work/allowe
 for f in "$libdir"/*.c; do
     b=$(basename "$f")
     # a file-scope object variable
-    sed -n 's/^\(static  *\)\?Xpost_Object  *\([A-Za-z_][A-Za-z0-9_]*\)[;[].*/\2/p' "$f" \
+    sed -nE 's/^(static +)?Xpost_Object +([A-Za-z_][A-Za-z0-9_]*)[;[].*/\2/p' "$f" \
         | while read -r n; do echo "$b:$n"; done >> "$work/found"
     # an object inside a structure the file keeps for itself
     awk -v b="$b" '

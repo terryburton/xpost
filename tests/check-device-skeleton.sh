@@ -126,8 +126,8 @@ for f in $marking; do
     # it is reflected; a page of negative extent is not a page at all and
     # is refused, by xpost_device_raster_bytes(). That function's body is
     # therefore read past, and the rule stands everywhere else.
-    awk '/^[A-Za-z_].*\<xpost_device_raster_bytes\>[ \t]*\(/ { skip = 1 }
-         skip && /^}/                                          { skip = 0; next }
+    awk '/^[A-Za-z_].*[^A-Za-z0-9_]xpost_device_raster_bytes[ \t]*\(/ { skip = 1 }
+         skip && /^}/                                                  { skip = 0; next }
          { if (!skip) print FNR ": " $0 }' "$libdir/$f" > "$work/rectscan"
     hits=$(grep -E '(w|h|width|height)[ \t]*(\.int_\.val)?[ \t]*<[ \t]*0|\bfloor[ \t]*\((dx|dy|x|y)\b' \
            "$work/rectscan" || true)
