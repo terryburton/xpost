@@ -9,12 +9,15 @@
 % virtual memory: the collector owns none of it and will never look, so
 % it is released at the restore or not at all.
 %
-% The raster is the part of that a program can see. A released one reads
-% as the ground, where a page the device was installed on reads as the
-% colour it was erased to, so the same read before and after the restore
-% tells the two apart. The reading on the erased page is taken first:
-% without it a device that never had a raster to read would answer the
-% ground both times and agree for the wrong reason.
+% The raster is the part of that a program can see, and a mark is what
+% tells a raster that is still there from one that is gone. A pixel
+% painted on the installed page reads back as the paint; a released
+% raster holds no pixel and reads as the page's ground, the colour it was
+% cleared to. So the pixel is painted and read before the restore and
+% read again after it, and the two readings tell the two apart. The
+% reading before is taken first: without it a device that never had a
+% raster to read would answer the ground both times and agree for the
+% wrong reason.
 %
 % A device whose Destroy is a PostScript procedure is out of the
 % restore's reach, restore executing no PostScript. Those classes keep
@@ -66,17 +69,23 @@
     ncomp 0 le { (FAILURE: GetPix returned no components) bail } if
     clear
 
+    % The mark the readings below are taken against: black on a page
+    % erased to its ground, so a raster that is still there answers with
+    % the paint and one that is gone answers with the ground. Defined
+    % here, outside every save below, so a restore does not take the
+    % definition away with the device it retires.
+    /paintmark { ncomp { 0 } repeat 2 2 getdevice dup /PutPix get exec } def
+
     save
 
     << /PageSize [400 400] >> setpagedevice
 
-    % the page the replacement was installed on is erased, so it reads as
-    % the page colour rather than as the ground
+    paintmark
     2 2 getdevice dup /GetPix get exec
     /live 0 def
     ncomp { 0 ne { /live live 1 add def } if } repeat
-    live 0 eq
-        { (FAILURE: the installed page did not read as an erased page) bail }
+    live 0 ne
+        { (FAILURE: the installed page did not take the mark) bail }
     if
 
     % hold the replacement under the save object, so the program still
@@ -85,11 +94,12 @@
 
     restore
 
-    % the read that says whether the restore retired it
+    % the read that says whether the restore retired it: the mark is
+    % gone with the raster that held it
     2 2 3 -1 roll dup /GetPix get exec
     /bad 0 def
     ncomp { 0 ne { /bad bad 1 add def } if } repeat
-    bad 0 ne
+    bad 0 eq
         { (FAILURE: a device displaced by restore kept its raster) bail }
     if
 
@@ -112,6 +122,7 @@
     getdevice /Destroy get type /arraytype ne
         { (FAILURE: the device's Destroy did not take the overwrite) bail }
     if
+    paintmark
     getdevice exch
 
     restore
@@ -119,7 +130,7 @@
     2 2 3 -1 roll dup /GetPix get exec
     /bad 0 def
     ncomp { 0 ne { /bad bad 1 add def } if } repeat
-    bad 0 ne
+    bad 0 eq
         { (FAILURE: an overwritten Destroy chose the release) bail }
     if
 
@@ -140,12 +151,13 @@
     % the page up goes on painting on that page.
     save
     << /PageSize [400 400] >> setpagedevice
+    paintmark
     save
     restore
     2 2 getdevice dup /GetPix get exec
     /kept 0 def
     ncomp { 0 ne { /kept kept 1 add def } if } repeat
-    kept 0 eq
+    kept 0 ne
         { (FAILURE: a restore that displaced nothing retired the device) bail }
     if
     restore

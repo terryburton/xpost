@@ -87,6 +87,7 @@ static Xpost_Object nameRbracket;
 static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
+static Xpost_Object namedotground;
 
 int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
                               size_t *bytes)
@@ -136,6 +137,32 @@ int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
 
     *bytes = pixels * pixel + reserve;
     return 1;
+}
+
+void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
+                                  int *r, int *g, int *b)
+{
+    Xpost_Object ground;
+
+    /* A device that has not been erased has no ground recorded, and its
+       page stands as its Create left it: every device here fills a
+       fresh buffer white, so that is what a read off such a page owes.
+       The same answer covers a device whose instance holds something
+       other than the record under that name, the instance dictionary
+       being an ordinary dictionary. */
+    *r = *g = *b = 255;
+
+    ground = xpost_dict_get(ctx, devdic, namedotground);
+    if (xpost_object_get_type(ground) != arraytype || ground.comp_.sz < 3)
+        return;
+
+    /* the components are in the range a colour operand arrives in, and
+       fold to a channel through the contract's fold, the same one this
+       device's PutPix and FillRect put a painted colour through: the
+       ground a read answers is the value an erased pixel holds */
+    *r = xpost_dev_num_to_byte(xpost_array_get(ctx, ground, 0));
+    *g = xpost_dev_num_to_byte(xpost_array_get(ctx, ground, 1));
+    *b = xpost_dev_num_to_byte(xpost_array_get(ctx, ground, 2));
 }
 
 XPAPI void xpost_output_buffer_release(unsigned char **buffer)
@@ -3659,6 +3686,8 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((nameFillRect = xpost_name_cons(ctx, "FillRect"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namepdfPrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

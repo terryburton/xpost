@@ -396,8 +396,8 @@ int _putpix(Xpost_Context *ctx,
    created with. The class this device copies reads the base class's row
    array, which this device does not have, so the inherited method would
    answer undefined; a slot the class dictionary offers has to work. A
-   pixel outside the raster reads as the ground, and so does every pixel
-   of an instance whose buffer has been released. */
+   pixel outside the raster reads as the page's ground, and so does every
+   pixel of an instance whose buffer has been released. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -407,7 +407,7 @@ int _getpix(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     int ix, iy;
-    int r = 0, g = 0, b = 0;
+    int r, g, b;
 
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
@@ -415,6 +415,8 @@ int _getpix(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
 
     if (private.buf &&
         ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)

@@ -114,6 +114,25 @@ int xpost_dev_pdf_fmt_num(char *o, double v);
 void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
 
 /**
+ * @brief the page's ground, as the channel values a read answers with
+ *
+ * The colour erasepage last cleared the page to, which the raster base
+ * class records on the instance as it clears (data/image.ps, /Ground).
+ * It is grey 1.0 through the transfer function in force (PLRM 8.2), so
+ * what it comes to is the page's business rather than white by
+ * assumption.
+ *
+ * A device whose page is a buffer of its own reads it for the pixels
+ * that buffer does not hold: one outside the page, where a mark is
+ * dropped and so a read answers rather than refusing, and every pixel of
+ * an instance whose buffer has been released. A device that has not been
+ * erased has no record, and the answer is the white its Create filled
+ * the buffer with.
+ */
+void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
+                                  int *r, int *g, int *b);
+
+/**
  * @brief report what to allocate for a raster of @p w by @p h pixels of
  *        @p pixel bytes each, or refuse a buffer this platform cannot address
  *

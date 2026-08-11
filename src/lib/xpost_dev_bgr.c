@@ -405,8 +405,8 @@ int _fillrect(Xpost_Context *ctx,
    PutPix writes. The class this device copies reads the base class's
    row array, which this device does not have, so the inherited method
    would answer undefined; a slot the class dictionary offers has to
-   work. A pixel outside the raster reads as the ground, and so does
-   every pixel of an instance whose buffer has been released. */
+   work. A pixel outside the raster reads as the page's ground, and so
+   does every pixel of an instance whose buffer has been released. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -415,8 +415,7 @@ int _getpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int ix, iy;
-    Xpost_Bgr_Pixel pixel;
+    int ix, iy, r, g, b;
 
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
@@ -428,14 +427,18 @@ int _getpix(Xpost_Context *ctx,
     if (!private.buf ||
         (ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
-        pixel.red = pixel.green = pixel.blue = 0;
+        xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
     else
-        pixel = private.buf->data
+    {
+        Xpost_Bgr_Pixel pixel = private.buf->data
             [xpost_dev_raster_offset(ix, iy, private.width)];
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.red));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.green));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(pixel.blue));
+        r = pixel.red; g = pixel.green; b = pixel.blue;
+    }
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
 
     return 0;
 }

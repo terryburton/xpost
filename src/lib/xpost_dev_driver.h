@@ -93,6 +93,16 @@
  * answer a pixel outside the raster gets; it takes no marks; and it emits
  * nothing, its output having been finalised when it was released.
  *
+ * The ground is the colour erasepage last cleared the page to, which is
+ * grey 1.0 through the transfer function in force (PLRM 8.2) and so is
+ * the page's to say rather than white by assumption. The base class
+ * records it on the instance as it clears, and every device reads it
+ * back through xpost_device_ground_channels() (xpost_dev_generic.h). It
+ * is what a read answers wherever the device holds no pixel: outside the
+ * page, over a row the device does not hold, and on a released raster.
+ * A read is answered there rather than refused, because a mark aimed
+ * there is dropped rather than refused.
+ *
  * Instance state: C-level device state lives in a block outside virtual
  * memory, so it is exempt from `restore` (raster memory is not part of
  * VM, PLRM 3.7.3). What the instance dictionary holds under /Private is

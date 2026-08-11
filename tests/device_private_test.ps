@@ -120,13 +120,20 @@ loadrasterdevice
 /b exch def /g exch def /r exch def
 r 255 eq g 0 eq and b 0 eq and (a raster instance still takes a mark) require
 
+% The page's ground, taken off the device rather than named: a pixel
+% outside the page is one no mark reaches, and what a read answers there
+% is the colour the page was cleared to.
+-1 -1 dev getpix
+/gb exch def /gg exch def /gr exch def
+
 % Destroy releases the buffer and not the instance, so the instance's
-% state is still there to be read afterwards and the released raster
-% reads as the ground
+% state is still there to be read afterwards; the raster is gone, and
+% every pixel of it reads as the ground rather than as the mark that
+% was on it
 dev destroy
 2 2 dev getpix
 /b exch def /g exch def /r exch def
-r 0 eq g 0 eq and b 0 eq and
+r gr eq g gg eq and b gb eq and
   (a released raster still answers, as the ground) require
 { dev destroy } stopped
 { /fails fails 1 add def
