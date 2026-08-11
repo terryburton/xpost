@@ -181,8 +181,17 @@ typedef enum {
                                 zero-terminated OS path string
                                 (implemented in pgm and ppm devices). */
     XPOST_OUTPUT_BUFFERIN, /**< Treats outputptr as an unsigned char *
-                                and render directly into this memory
-                                (not currently implemented). */
+                                and renders directly into this memory.
+                                Implemented by the raster device, which
+                                keeps its page extent in front of the
+                                page and so needs room for that as well;
+                                every other device allocates a page of
+                                its own and leaves this memory alone. The
+                                memory stays the caller's throughout: it
+                                is not given back with
+                                xpost_output_buffer_release(), which has
+                                nothing to give back for a page the
+                                library did not allocate. */
     XPOST_OUTPUT_BUFFEROUT /**< Treats outputptr as an unsigned char **
                                 and assigns a new buffer to the
                                 unsigned char * which outputptr points
