@@ -877,6 +877,23 @@ test('context-reuse',
   suite: cost_fast + ['memacct'],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The array a wrapped call copies its operands into is kept in privatedict
+# under .wrapsave, which is the name a program reaches it by. A name is an
+# index into the name stack of the context it was interned in, so a process
+# that brings up context after context has to intern it in each: this asks
+# every context of a process to rebuild the entry and requires it back
+# under that name and nowhere else.
+wrapsave_context_exe = executable('wrapsave_context_test',
+  'tests/wrapsave_context_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('wrapsave-context',
+  wrapsave_context_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The same embedding runs with the collector set to collect constantly. What
 # the interpreter holds outside the collector's root set survives by luck at
 # the ordinary threshold and not at all at this one.

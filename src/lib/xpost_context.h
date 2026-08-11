@@ -241,6 +241,13 @@ struct _Xpost_Context {
     unsigned int namecache_size;   /**< entries allocated */
     unsigned int namebind_gen;     /**< current binding generation */
 
+    /** the name a wrapped call's saved-operand array is kept in
+        privatedict under, interned on first use. A name object is an
+        index into the name stack of the context that interned it and
+        names something else, or nothing, in any other, so the one
+        interned here belongs to this context and is kept with it. */
+    Xpost_Object namewrapsave;
+
     Xpost_Object typenames[XPOST_OBJECT_NTYPES + 1]; /**< executable name per
                                                           type index, populated
                                                           on first use; the

@@ -361,4 +361,5 @@ tests/wrapped_bind.golden \
 tests/wrapped_bind_test.ps \
 tests/wrapped_save_test.ps \
 tests/wrapsave_bank_test.ps \
+tests/wrapsave_context_test.c \
 tests/xpost_test.h

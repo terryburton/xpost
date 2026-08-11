@@ -346,6 +346,7 @@ int xpost_context_init(Xpost_Context *ctx,
         return 0;
     }
     ctx->event_handler = null;
+    ctx->namewrapsave = null;
     ctx->operator_install_refused = 0;
     ctx->ignoreinvalidaccess = 0;
     ctx->es_over = 0;

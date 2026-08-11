@@ -799,8 +799,6 @@ void _xpost_operator_push_args_to_hold(Xpost_Context *ctx,
    really made at, and forty at the widest a call can save. */
 #define XPOST_WRAPPED_SAVE_SLOTS 512
 
-static Xpost_Object namewrapsave; /* cached xpost_name_cons(ctx, ".wrapsave") */
-
 /* the context's saved-operand array, made on first use */
 static
 Xpost_Object _wrapped_save_array(Xpost_Context *ctx)
@@ -809,13 +807,13 @@ Xpost_Object _wrapped_save_array(Xpost_Context *ctx)
 
     if (xpost_object_get_type(ctx->privatedict) != dicttype)
         return null;
-    if (xpost_object_get_type(namewrapsave) != nametype)
+    if (xpost_object_get_type(ctx->namewrapsave) != nametype)
     {
-        namewrapsave = xpost_name_cons(ctx, ".wrapsave");
-        if (xpost_object_get_type(namewrapsave) != nametype)
+        ctx->namewrapsave = xpost_name_cons(ctx, ".wrapsave");
+        if (xpost_object_get_type(ctx->namewrapsave) != nametype)
             return null;
     }
-    arr = xpost_dict_get(ctx, ctx->privatedict, namewrapsave);
+    arr = xpost_dict_get(ctx, ctx->privatedict, ctx->namewrapsave);
     /* The array must be local. It is dereferenced against local memory
        below and its declared size is the bound the copy is held to, so
        both hold only for a local array: a copy read out of a local
@@ -838,7 +836,7 @@ Xpost_Object _wrapped_save_array(Xpost_Context *ctx)
         return null;
     if (xpost_array_put_memory(ctx->lo, arr, 0, xpost_int_cons(1)) != 0)
         return null;
-    if (xpost_dict_put(ctx, ctx->privatedict, namewrapsave, arr) != 0)
+    if (xpost_dict_put(ctx, ctx->privatedict, ctx->namewrapsave, arr) != 0)
         return null;
     return arr;
 }
