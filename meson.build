@@ -3511,6 +3511,15 @@ test('stencil-mask-size',
 # do not, and the cheap pair is worth running far more often than the
 # expensive one. The adobe corpus is costed as the others are rather than
 # as the skip it is until its programs are fetched.
+#
+# They are also taken before everything else, behind the one test that
+# runs on its own. The longest of them takes longer than any other test
+# here, so a selection holding it cannot finish before it does wherever
+# in the order it starts; reached where they are registered it starts a
+# third of the way into the run, and the run's last twenty seconds are
+# that one test with every other lane empty. Priority is the order tests
+# are taken in, and putting these at the front of it is what has the
+# longest thing the suite does start when the suite starts.
 foreach corpus : [ [ 'ghostscript', 'slow' ],
                    [ 'casselman', 'veryslow' ],
                    [ 'bwipp', 'veryslow' ],
@@ -3520,6 +3529,7 @@ foreach corpus : [ [ 'ghostscript', 'slow' ],
     args: [ xpost_exe, corpus[0] ],
     env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
     suite: [ 'corpus', corpus[1] ],
+    priority: 100,
     timeout: 1800)
 endforeach
 
@@ -3543,6 +3553,7 @@ test('corpus-eps',
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: [ 'corpus', 'slow' ],
+  priority: 100,
   timeout: 1800)
 
 # A downstream consumer's own suite: Barcode Writer in Pure PostScript,
