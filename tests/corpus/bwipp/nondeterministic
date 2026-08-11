@@ -1,1 +1,27 @@
+# Programs of this corpus whose output is not a function of this tree.
+# One basename per line, each with the reason -- where the program gets
+# what this tree cannot supply, named specifically enough that a later
+# reader can go and look.
+#
+# The entry says what a difference may be read as, not what any two
+# runs will be. A program that draws on the clock is free to give the
+# same answer twice, and how often it does is a property of the machine
+# rather than of the tree, so nothing here is measured by rendering the
+# program again and seeing whether it moved: a check like that reports
+# the machine's jitter and reddens on a run that found none. What the
+# entry rests on is the reason below it, and the corpus fails for an
+# entry that carries none -- a bare name excuses every difference the
+# program ever shows and says nothing about why, which is the one thing
+# it was for.
+#
+# vdp -- prints how long it took onto the page it is timing. The
+#        program is a demonstration of caching a costly drawing in a
+#        form, and it shows its working: it takes realtime before and
+#        after each stage and shows the differences as text at the head
+#        of every page ("About to start plotting ... at runtime N",
+#        "Took N ms"). realtime counts in real time independently of
+#        the interpreter's execution (PLRM 8.2, realtime), so those
+#        digits are how busy the machine was while it drew, and they
+#        are painted in the same ink as the barcodes underneath them.
+#        The rest of the page is this tree's and is compared with it.
 vdp

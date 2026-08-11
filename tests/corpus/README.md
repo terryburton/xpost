@@ -84,6 +84,39 @@ summary is otherwise the evaluator's account of itself -- it agrees with
 the work the run did and says nothing about the work the run was given,
 so a run that named half the programs reports honestly on that half.
 
+A last register covers the programs whose output is not a function of
+this tree at all. A program that seeds a generator from the execution
+it has had, or prints its own elapsed time onto the page it is timing,
+draws partly from the machine, and no comparison of it -- against
+another engine, against yesterday, against itself -- can be read as
+saying anything about the renderer. A corpus names those in a
+`nondeterministic` file, one basename per line with the reason, and the
+run labels their numbers so that nobody reads them as this tree's
+doing. `SKIP_NONDET=1` holds them out entirely, for a comparison that
+needs every difference to mean something.
+
+What such an entry claims is that a difference *may* be the machine's,
+not that any two runs *will* differ. The two are not the same and only
+the first is true: a program reading the clock is free to return the
+same reading twice, and how often it does is a property of the machine
+it runs on rather than of anything in this repository. So the entry is
+not checked by rendering the program twice and requiring the two to
+disagree. Such a check fails whenever the nondeterminism does not
+happen to show, at a rate nothing here sets -- measured at about one
+run in ten on one machine, and tending to certainty on a machine whose
+timings are steadier. A gate that reddens on the weather teaches its
+reader to discount it. What holds the entry honest instead is the
+reason written beside it, which is checked to be there: a bare name
+excuses every difference that program ever shows and says nothing about
+why, and the name is held to the corpus as the other registers' are.
+
+This is narrower than differing from another engine, and the two are
+easy to confuse. A program that seeds a generator with a constant draws
+the same page here every time and a different one elsewhere, because
+the PLRM leaves `rand`'s sequence to the implementation; that is a
+difference between engines, it is expected, and it is not what this
+register is for.
+
 The corpora
 -----------
 
@@ -189,9 +222,10 @@ A difference is a lead, not a verdict. Ghostscript is informative;
 where a deviation matters, Adobe Distiller is authoritative. Some
 divergences are expected and not defects:
 
-  - rand/srand pages (Ghostscript's snowflak and vasarely) draw
-    different figures in every interpreter, the PLRM leaving the
-    generator implementation-defined;
+  - rand/srand pages draw different figures in every interpreter, the
+    PLRM leaving the generator implementation-defined -- snowflak and
+    vasarely both do, though only vasarely also differs from itself
+    (see the `nondeterministic` register above);
   - CMYK and DeviceN colour differs between Ghostscript's colour-managed
     render and the PLRM arithmetic xpost follows;
   - masked images under /Interpolate differ by design across

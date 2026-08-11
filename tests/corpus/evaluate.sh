@@ -120,26 +120,6 @@ evaluate_one() {
             fi
             exit 0
         fi
-        # A program declared to differ from itself is declared, and
-        # nothing measured it: the label goes beside its numbers on the
-        # strength of the entry alone, and an entry whose reason has
-        # lapsed goes on excusing whatever difference turns up next. So
-        # it is rendered a second time and the two runs are held against
-        # each other.
-        if [ -f "$here/$corpus/nondeterministic" ] &&
-           grep -qxF "$b" "$here/$corpus/nondeterministic"; then
-            timeout 960 "$XPOST" -d $dev -o "$work/y_%d.$dev" "$src" \
-                    </dev/null >/dev/null 2>&1
-            same=1
-            j=1
-            while [ "$j" -le "$nx" ]; do
-                cmp -s "$work/x_$j.$dev" "$work/y_$j.$dev" || { same=0; break; }
-                j=$((j+1))
-            done
-            [ "$same" = 1 ] &&
-                echo "  $b  DECLARED NONDETERMINISTIC AND IS NOT: its two runs agree"
-        fi
-
         i=1
         compared=0
         # The pages either engine drew, and the pages the corpus says
@@ -243,12 +223,19 @@ evaluate_corpus() {
             continue
         fi
         # a corpus may also list basenames in a "nondeterministic" file:
-        # programs whose own output differs between two runs of the same
-        # build, so a difference against anything says nothing about the
-        # renderer. They are evaluated and labelled by default, since the
-        # rest of what they exercise is still worth running; SKIP_NONDET=1
-        # holds them out for a comparison that needs every difference to
-        # mean something.
+        # programs whose output is not a function of this tree, because
+        # the program draws from something outside it -- the clock, the
+        # execution it has had -- so two runs of the same build may
+        # differ and a difference against anything says nothing about
+        # the renderer. The entry excuses the program from being read
+        # that way; it does not predict that any two runs will in fact
+        # differ, which is a property of the machine rather than of the
+        # tree and is not a thing this evaluator can measure. What
+        # stands behind the entry is the reason written beside it, held
+        # to below. They are evaluated and labelled by default, since
+        # the rest of what they exercise is still worth running;
+        # SKIP_NONDET=1 holds them out for a comparison that needs every
+        # difference to mean something.
         if [ -f "$dir/nondeterministic" ] && grep -qxF "$b" "$dir/nondeterministic"; then
             if [ "${SKIP_NONDET:-0}" != 0 ]; then
                 echo "  $b  held out (see $corpus/nondeterministic)"
@@ -331,11 +318,11 @@ evaluate_corpus() {
                     miscount=$((miscount + 1))
                 fi
             fi
-            # a program that differs from itself between two runs differs
-            # from anything, so say so beside its numbers rather than
-            # leaving them to be read as the renderer's doing
+            # a program whose output is not a function of this tree
+            # differs from anything, so say so beside its numbers rather
+            # than leaving them to be read as the renderer's doing
             case " $nondet " in
-                *" $b "*) echo "  $b  nondeterministic: its own two runs differ (see $corpus/nondeterministic)";;
+                *" $b "*) echo "  $b  nondeterministic: its output is not this tree's alone (see $corpus/nondeterministic)";;
             esac
             seen=$((seen + 1))
         else
@@ -396,6 +383,28 @@ evaluate_corpus() {
         done < "$dir/$reg"
     done
 
+    # and the nondeterminism register to the reason each entry stands
+    # on. Nothing measures a declaration of nondeterminism: it says what
+    # a difference may be read as, not what any two runs will be, and a
+    # program that draws on the clock is free to give the same answer
+    # twice. So the reason is the entry's whole value -- it is what says
+    # where the program's output comes from, and so what a later reader
+    # holds against the tree to see whether the entry still earns its
+    # place. A name with no reason beside it excuses every difference
+    # that program ever shows and says nothing about why, which is the
+    # one thing the entry was for. The reason is a comment naming the
+    # program, as in the other registers.
+    noreason=0
+    if [ -f "$dir/nondeterministic" ]; then
+        while read -r u rest; do
+            case $u in ''|'#'*) continue ;; esac
+            awk -v b="$u" '($1 == "#" && $2 == b) || $1 == "#" b { f = 1 }
+                           END { exit !f }' "$dir/nondeterministic" && continue
+            echo "  $u  named in $corpus/nondeterministic with no reason beside it"
+            noreason=$((noreason + 1))
+        done < "$dir/nondeterministic"
+    fi
+
     # and the page counts as declarations in their own right. A count
     # that is not a number is a program declared to draw none of its
     # pages, and a program counted twice is two answers of which a
@@ -437,6 +446,8 @@ evaluate_corpus() {
         echo "$corpus: NOT EVALUATED -- $seen of $n programs reported$note"
     elif [ "$stale" != 0 ]; then
         echo "$corpus: REGISTER NAMES NOTHING -- $stale entries name no program of this corpus; $n programs evaluated$note"
+    elif [ "$noreason" != 0 ]; then
+        echo "$corpus: REGISTER GIVES NO REASON -- $noreason entries of $corpus/nondeterministic have none; $n programs evaluated$note"
     elif [ "$malformed" != 0 ]; then
         echo "$corpus: REGISTER MALFORMED -- $malformed entries of $corpus/pages declare no count; $n programs evaluated$note"
     elif [ "$uncounted" != 0 ]; then

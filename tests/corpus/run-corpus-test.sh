@@ -77,8 +77,8 @@ printf '%s\n' "$out" | grep -q 'NO-PAGE SET DIFFERS' && {
     echo "corpus: what drew no page is not what the corpus declares -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'REGISTER NAMES NOTHING' && {
     echo "corpus: a register names a program the corpus does not hold -- see above"; exit 1; }
-printf '%s\n' "$out" | grep -q 'DECLARED NONDETERMINISTIC AND IS NOT' && {
-    echo "corpus: a program declared to differ from itself does not -- see above"; exit 1; }
+printf '%s\n' "$out" | grep -q 'REGISTER GIVES NO REASON' && {
+    echo "corpus: a program is declared nondeterministic with no reason given -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'REGISTER MALFORMED' && {
     echo "corpus: a page count declares no number -- see above"; exit 1; }
 printf '%s\n' "$out" | grep -q 'PAGES NOT DECLARED' && {

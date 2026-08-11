@@ -1,1 +1,36 @@
+# Programs of this corpus whose output is not a function of this tree.
+# One basename per line, each with the reason -- where the program gets
+# what this tree cannot supply, named specifically enough that a later
+# reader can go and look.
+#
+# The entry says what a difference may be read as, not what any two
+# runs will be. A program that draws on the clock is free to give the
+# same answer twice, and how often it does is a property of the machine
+# rather than of the tree, so nothing here is measured by rendering the
+# program again and seeing whether it moved: a check like that reports
+# the machine's jitter and reddens on a run that found none. What the
+# entry rests on is the reason below it, and the corpus fails for an
+# entry that carries none -- a bare name excuses every difference the
+# program ever shows and says nothing about why, which is the one thing
+# it was for.
+#
+# This is a narrower thing than differing from another engine. A
+# program that seeds a generator with a constant renders the same page
+# in this tree every time and a different one elsewhere: the PLRM gives
+# rand a range and an srand/rrand interface and says nothing about the
+# sequence between them (PLRM 8.2, rand), so two conforming engines are
+# free to draw different figures from one seed. That difference is
+# between engines and this register is not about it. snowflak is
+# exactly that program and is deliberately not named here.
+#
+# vasarely -- seeds the generator from usertime: the program opens with
+#             "usertime srand" and every colour, angle and figure on
+#             the page follows from the seed. usertime is the execution
+#             the interpreter has had, in milliseconds (PLRM 8.2,
+#             usertime), so the seed is however many milliseconds of
+#             work booting and reading this far happened to take, which
+#             is the machine's answer and not the tree's. Holding
+#             usertime to a constant makes two runs byte-identical and
+#             changing that constant changes the page, so it is the
+#             whole of the difference.
 vasarely

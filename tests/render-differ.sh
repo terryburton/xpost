@@ -552,7 +552,7 @@ flush() {
     [ "$pbad" = 0 ]  || _s="$_s, $pbad crashed or timed out"
     [ "$pmiss" = 0 ] || _s="$_s, $pmiss NOT EVALUATED"
     if is_nondet "${prev%%/*}" "${prev#*/}"; then
-        _s="$_s -- nondeterministic, its own two runs differ"
+        _s="$_s -- nondeterministic, its output is not this tree's alone"
     fi
     printf '  %-26s %2d devices: %s\n' "$prev" "$_t" "$_s"
     [ -z "$pdetail" ] || printf '%s\n' "$pdetail"
