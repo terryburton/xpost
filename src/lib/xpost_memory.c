@@ -168,6 +168,11 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
 
     mem->free_scan = 0;
     mem->push_refused = 0;
+    mem->path_walk.ent = 0;
+    mem->path_walk.end = 0;
+    mem->path_walk.sps = 0;
+    mem->path_walk.last = 0;
+    mem->path_walk.steps = 0;
 
     if(fname)
     {
@@ -931,6 +936,29 @@ static void _clear_slack(Xpost_Memory_File *mem, unsigned int ent)
                sz - used);
 }
 
+/* An entity number is about to name contents of somebody else's making.
+   Anything holding a conclusion about what it named before is dropped
+   here.
+
+   This is the one place a number is ever handed out -- from the free
+   list and on a fresh slot alike -- which is why the conclusions are
+   dropped here rather than where a number is released. Numbers are
+   released from more than one place: xpost_free.c releases one at a
+   time, and the collector's sweep splices whole runs of them onto the
+   free list itself, so a release is a place to be forgotten. A release
+   the conclusion outlives is not the danger in any case. The storage
+   still holds the bytes that were examined, but for the one word the
+   free list writes its link through, and nothing can offer a released
+   entity for examination: what let it be reclaimed was that nothing
+   referred to it. What makes a conclusion wrong is somebody else
+   writing the storage, and that begins here. */
+static void
+_ent_issued(Xpost_Memory_File *mem, unsigned int ent)
+{
+    if (mem->path_walk.ent == ent)
+        mem->path_walk.ent = 0;
+}
+
 /*
    allocate sz bytes in the memory table, using free-list if installed,
    possibly calling garbage collector, if installed
@@ -980,6 +1008,7 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
         ret = mem->free_list_alloc(mem, sz, tag, entity);
         if (ret == 1)
         {
+            _ent_issued(mem, *entity);
             mem->table.tab[*entity].used = sz;
             _clear_slack(mem, *entity);
             return 1;
@@ -999,6 +1028,11 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
     ret = _xpost_memory_table_alloc_new(mem, sz, tag, entity);
     if (!ret)
         return 0; /* *entity is not valid on failure */
+    /* a fresh slot is a number never handed out before, so there is
+       nothing held about it; told all the same, so that the rule is
+       "every number is announced where it is issued" and not a rule
+       with a case in it */
+    _ent_issued(mem, *entity);
     //XPOST_LOG_INFO("allocated %u(%u) bytes with tag %u as ent %u at %u in %s", sz, mem->table.tab[*entity].sz, tag, *entity, mem->table.tab[*entity].adr, mem->fname);
     mem->table.tab[*entity].used = sz;
     return ret;

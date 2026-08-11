@@ -1,0 +1,142 @@
+% What a conclusion about an entity is worth once the number is reused,
+% run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The current path is a packed string in a dictionary a program can
+% reach, and the operators that read the packed layout check it first:
+% the two offsets its header carries must each name an element the chain
+% reaches, and nothing but a walk of the chain settles that. The walk is
+% made once per state of a path rather than once per operator that reads
+% one, so the interpreter records the entity it walked.
+%
+% The record is about an entity number, and entity numbers are reused. A
+% path dropped is reclaimed -- by the collector, which returns numbers to
+% the free list itself rather than through the single-entity release --
+% and the number is handed out again for contents of somebody else's
+% making. A record that outlived its entity is a check turned off in the
+% one direction that matters: the offsets in the header are answered from
+% the record instead of from the elements actually there, and the walk
+% resumes above them and never looks at them.
+%
+% So this drives the reuse and then asks for the refusal. Each round
+% builds a path of line elements and reads it, so the walk records that
+% entity; drops the path and collects, so the entity is reclaimed; and
+% then asks for a string of exactly that allocation, which the free list
+% offers as an exact fit. The string is written to be believed by a
+% record that survived: it carries the extent and both offsets of the
+% path that was walked, and a curve as its first element, which moves
+% every boundary after it off the run of line elements the walked path
+% had. Its last-element offset therefore names a coordinate byte, and a
+% current point taken from one is a coordinate read as a command.
+%
+% Two things the reuse depends on, both of which fail by passing:
+%
+% Nothing between the collection and the check may read a path. A walk of
+% any path replaces the record, and there would be nothing left standing
+% for the check to be answered from. newpath is safe here because it
+% seats a fresh path without reading the one it replaces.
+%
+% Nothing may still name the path when the collection runs, and a name
+% left bound by a helper counts. The header is therefore read out of a
+% copy of its bytes rather than through the path object, so that the only
+% mention of the path is the transient the copy is made from: a reader
+% that bound the path to a name of its own would keep it reachable for
+% the round it was asked to reclaim it, the number would not be reused
+% that round, and every assertion below would be reached with nothing
+% weighing on it.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.vmentcount 1183615869 internaldict /.vmentcount get def
+
+/gs graphicsdict /currgstate get def
+/hdr gs /currpath get length def
+
+/get32 { /o exch def /str exch def
+    str o get  str o 1 add get 8 bitshift add
+    str o 2 add get 16 bitshift add  str o 3 add get 24 bitshift add
+} def
+/put32 { /v exch def /o exch def /str exch def
+    str o        v          255 and put
+    str o 1 add  v -8  bitshift 255 and put
+    str o 2 add  v -16 bitshift 255 and put
+    str o 3 add  v -24 bitshift 255 and put
+} def
+
+% The string operator asks the allocator for the length rounded up to a
+% whole object, so a string that is to land on a path's allocation asks
+% for that much less. Where the arithmetic is wrong the allocation misses
+% the free list, the count of reuses stays at zero, and the first
+% assertion says so rather than the run passing on nothing.
+/STRING_ROOM 8 def
+
+/ROUNDS 12 def
+/SEGS 2000 def
+
+/kept ROUNDS array def
+/accepted 0 def
+/reused 0 def
+/hdrbytes hdr string def
+/usedA 0 def  /spsA 0 def  /lastA 0 def  /capA 0 def
+/entsbefore 0 def
+/z null def
+
+1 1 ROUNDS {
+    /round exch def
+    % a path of a run of line elements, read so that the walk records it
+    newpath 10 10 moveto
+    1 1 SEGS { pop 1 1 rlineto } for
+    currentpoint pop pop
+    % the header's bytes are taken, and the path itself is left unnamed
+    hdrbytes 0 gs /currpath get putinterval
+    /usedA hdrbytes 0  get32 store
+    /spsA  hdrbytes 4  get32 store
+    /lastA hdrbytes 8  get32 store
+    /capA  hdrbytes 12 get32 store
+    newpath
+    2 vmreclaim
+    % from here to the check, nothing reads a path
+    /entsbefore .vmentcount pop store
+    /z capA STRING_ROOM sub string store
+    .vmentcount pop entsbefore eq { /reused reused 1 add store } if
+    z hdr 2 put                       % a curve: every later boundary moves
+    z 0  usedA put32
+    z 4  spsA  put32
+    z 8  lastA put32
+    z 12 capA  put32
+    gs /currpath z put
+    { currentpoint } stopped
+    { }
+    { pop pop /accepted accepted 1 add store } ifelse
+    kept round 1 sub z put            % kept, so its entity never competes
+    newpath                           % the forged path is not left seated
+    initgraphics
+} for
+
+% A round in which the allocation did not come out of the free list put
+% no weight on the entity number and would pass saying nothing, so
+% require first that the reuse happened.
+reused 0 gt
+    (a string allocation reused a reclaimed entity number) assert
+
+% The property itself.
+accepted 0 eq
+    (an offset naming no element is refused on a reused entity) assert
+
+% And the same operators still answer a path that has nothing wrong with
+% it, so the refusal above is the tampering's doing and not a check that
+% has started refusing everything.
+initgraphics
+newpath 100 100 moveto 200 100 lineto 200 200 lineto
+currentpoint 2 copy
+200 sub abs 0.01 lt exch 200 sub abs 0.01 lt and 3 1 roll pop pop
+    (a real path still answers its current point) assert
+
+checks 3 eq (every check was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse

@@ -35,6 +35,7 @@
 #define _USE_MATH_DEFINES /* needed for M_PI with Visual Studio */
 #include <assert.h>
 #include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -236,11 +237,57 @@ _path_extent(Xpost_Context *ctx, Xpost_Object path,
    the last-element offset at offset 8 each name an element the chain
    reaches. The readers take a command code and its coordinates from
    those two offsets, so an offset naming a coordinate byte reads a
-   command the coordinate happens to spell and a width to match. */
+   command the coordinate happens to spell and a width to match.
+
+   The chain is walked from where the last walk over the same entity
+   stopped rather than from the header, which rests on every writer of a
+   path's elements leaving the boundaries below that point where they
+   were. There are three, and they are all in this file.
+
+   _path_append writes its element at the extent and raises the extent
+   past it, so it only ever adds boundaries above where a walk reached.
+
+   The move-onto-move merge in _path_append rewrites one element's
+   coordinates in place, below the extent, and moves no boundary.
+
+   _retagclose rewrites one command byte in place, below the extent,
+   from PATH_CMD_LINE to PATH_CMD_CLOSE. That moves no boundary because
+   _path_elem_size gives a move, a line and a close the same width, and
+   the offset it writes at is one _path_ok has just accounted for, since
+   it reads the path through _cpath. The equal widths are what the
+   resumption rests on here: a close made narrower than a line -- which
+   is the space there is to save, its coordinates being the subpath
+   start repeated -- would move every boundary after it, and the walk
+   would have to begin at the header again.
+
+   Every other write of a path's bytes lands on an entity freshly
+   allocated by _path_cons -- the growth in _path_append, .copypath and
+   .newpathstr -- or on that entity's header, which the walk starts
+   past. A fresh entity is a number no walk has a record of, because
+   xpost_memory_table_alloc drops the record as it issues the number;
+   without that the record would outlive the path it describes, a
+   reclaimed number would come back carrying a conclusion about its
+   previous tenant, and the offsets in a new path's header would be
+   answered from that instead of from the elements actually there.
+
+   Restore points the number at the storage kept from the save, whose
+   extent is the one the path had then and so is never longer than the
+   one a walk since has reached: the extent test below sends that back
+   to the header, and where the two are equal the storage is what was
+   walked. A program reaches the header and no further, because the
+   string handle the graphics state hands out spans the header alone
+   and every writer of a string -- put, putinterval, copy, cvs, the
+   readstring family, token's pushback -- is bounded by the handle's
+   own length.
+
+   The two offsets carry the same way: one an earlier walk found naming
+   an element is naming it still, and one below the resumed point that
+   the earlier walk did not find sends this one back to the header. */
 static int
 _path_ok(Xpost_Context *ctx, Xpost_Object path)
 {
-    unsigned int used, last, sps, o;
+    Xpost_Memory_File *mem;
+    unsigned int used, last, sps, o, ent;
     char *p;
     int lastok = 0, spsok = 0;
 
@@ -250,7 +297,23 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
         return 0;
     sps = _path_get_u32(p, 4);
     last = _path_get_u32(p, 8);
-    for (o = PATH_HDR; o < used; )
+    mem = xpost_context_select_memory(ctx, path);
+    ent = xpost_object_get_ent(path);
+    o = PATH_HDR;
+    if (ent != 0 && ent == mem->path_walk.ent && used >= mem->path_walk.end)
+    {
+        /* an offset the earlier walk reached an element at is still one;
+           any other offset below where it stopped is unaccounted for,
+           and the whole chain is walked to account for it */
+        spsok = sps >= PATH_HDR && sps == mem->path_walk.sps;
+        lastok = last >= PATH_HDR && last == mem->path_walk.last;
+        if ((sps >= mem->path_walk.end || spsok)
+         && (last >= mem->path_walk.end || lastok))
+            o = mem->path_walk.end;
+        else
+            spsok = lastok = 0;
+    }
+    for (; o < used; )
     {
         unsigned int esz;
 
@@ -264,8 +327,19 @@ _path_ok(Xpost_Context *ctx, Xpost_Object path)
         if (o == last)
             lastok = 1;
         o += esz;
+        if (mem->path_walk.steps < (unsigned int)INT_MAX)
+            ++mem->path_walk.steps;
     }
-    return used == PATH_HDR || (spsok && lastok);
+    if (!(used == PATH_HDR || (spsok && lastok)))
+        return 0;
+    /* only an offset a walk reached an element at is recorded as one:
+       an empty path is well formed whatever its two offsets say, and
+       what they say there was established about nothing */
+    mem->path_walk.ent = ent;
+    mem->path_walk.end = used;
+    mem->path_walk.sps = spsok ? sps : 0;
+    mem->path_walk.last = lastok ? last : 0;
+    return 1;
 }
 
 /* paths always live in local VM: the graphics state dictionary is
@@ -1375,6 +1449,21 @@ int _pathempty(Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .pathwalksteps  int
+   The number of path elements the layout checks have walked in local
+   memory, saturating rather than wrapping. What reading a path costs is
+   this number and not the path's length, so it is the measure of whether
+   the cost of building a path tracks the elements it gains or that
+   number multiplied by the operators that read it along the way. */
+static
+int _pathwalksteps(Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->lo->path_walk.steps)))
+        return stackoverflow;
+    return 0;
+}
+
 /* x y  .devmoveto  -
    append a move element in device coordinates, bypassing the CTM */
 static
@@ -2137,6 +2226,8 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     INSTALL;
     pathempty_op = op;   /* baked into _arc_start_proc below, so the arc
                             machinery reaches it after it relocates off systemdict */
+    op = xpost_operator_cons(ctx, ".pathwalksteps", (Xpost_Op_Func)_pathwalksteps, 0);
+    INSTALL;
     op = xpost_operator_cons(ctx, ".devmoveto", (Xpost_Op_Func)_devmoveto, 2, floattype, floattype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".devlineto", (Xpost_Op_Func)_devlineto, 2, floattype, floattype);

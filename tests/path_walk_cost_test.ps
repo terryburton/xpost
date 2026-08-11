@@ -1,0 +1,125 @@
+% What reading the current path costs, run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% The current path is a packed string in a dictionary a program can
+% reach, so the operators that read the packed layout check it first:
+% the extent must fit the string, every element from the header on must
+% fit the extent, and the two offsets the header carries must each name
+% an element the chain reaches. Nothing but a walk of the chain settles
+% the last of those.
+%
+% The walk is over the whole path, and the operators that ask for it are
+% asked once per segment while a path is being built -- a stroke outline
+% appends a dozen elements a segment and reads the current point between
+% them. A walk repeated from the beginning each time costs the path's
+% length every time, which is the path's length squared over the build,
+% and that is a shape no short run shows: it is invisible on a hundred
+% segments and it is the whole cost on fifteen thousand.
+%
+% So the assertion is a count of elements walked and not a time: the
+% interpreter carries the count itself, and a bound stated in elements
+% survives a loaded machine, which a bound stated in seconds does not.
+% The two arms build the same outline over one and two thousand
+% segments, and what the second walks may not be the square of what the
+% first does -- that is the whole property, and it is what the count can
+% say and a wall clock cannot.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.pathwalksteps 1183615869 internaldict /.pathwalksteps get def
+
+/SMALL 1000 def
+/LARGE 2000 def
+
+% The elements a stroke outline holds per segment of the path it is
+% drawn along: the body of the segment is a move, three lines and a
+% close, and the join at its end is a move, up to three lines and a
+% close, so a dozen covers it. The ceiling below is that dozen with an
+% order of magnitude on top, because a walk let off its bound again
+% lands at the path's length times the number of times it is read --
+% four orders of magnitude above this on the larger arm, not a factor
+% or two.
+/PERSEG 120 def
+
+% Draw a zigzag of n segments and stroke its outline, answering the
+% number of path elements the layout checks walked doing it. The
+% outline is built and left; painting it is a different question, and
+% asking it here would put a scan conversion in the middle of the
+% measurement.
+/measure { % int  .  int
+    /n exch def
+    newpath
+    0 1 moveto
+    0 1 n { dup 2 mul exch 2 mod 0 eq { 7 }{ 1 } ifelse lineto } for
+    .pathwalksteps
+    strokepath
+    .pathwalksteps exch sub
+    newpath
+} def
+
+<< /PageSize [ 30000 8 ] >> setpagedevice
+0.5 setlinewidth
+
+/small SMALL measure def
+/large LARGE measure def
+
+% A hook stuck at one number would satisfy every bound below by saying
+% nothing, so require first that it moved.
+small 0 gt
+    (the interpreter reports the path elements it walked) assert
+
+small SMALL PERSEG mul le
+    (checking a path being built stays within the bound) assert
+
+large LARGE PERSEG mul le
+    (and stays within it over twice the segments) assert
+
+% The property itself: twice the segments, and no more than twice the
+% work between them. Two and a half is the headroom for the outline's
+% own growth; a walk repeated from the beginning misses it by the
+% number of segments rather than by a factor.
+large small 5 mul 2 idiv le
+    (the cost of checking a path does not follow its length squared) assert
+
+% What a resumed walk may not lose. The string the graphics state hands
+% out spans the path's header, so a program writes the two offsets of a
+% path the interpreter built and has already checked -- and the check
+% that follows must refuse it exactly as it refuses the same offset in a
+% path nothing has read yet. A resumption that took the offsets on trust
+% because it had checked this entity before would answer a current point
+% read from a coordinate byte instead.
+
+/gs graphicsdict /currgstate get def
+/hdr gs /currpath get length def
+
+% str off val  .  -    a 32-bit field, low byte first
+/put32 {
+    /v exch def /o exch def /str exch def
+    str o        v          255 and put
+    str o 1 add  v -8  bitshift 255 and put
+    str o 2 add  v -16 bitshift 255 and put
+    str o 3 add  v -24 bitshift 255 and put
+} def
+
+initgraphics
+newpath 100 100 moveto 200 100 lineto 200 200 lineto closepath
+% read it, so that the walk over this path is the one a later check
+% would resume from
+currentpoint pop pop
+% the last-element offset moved to a coordinate byte of the first
+% element, which is an element start at no width
+gs /currpath get 8 hdr 1 add put32
+{ currentpoint } stopped
+{ $error /errorname get /nocurrentpoint eq }{ false } ifelse
+    (a checked path is checked again after its header is written) assert
+initgraphics
+
+checks 5 eq (every check was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse

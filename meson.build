@@ -1091,6 +1091,22 @@ test('free-scan',
   suite: cost_fast,
   timeout: 300)
 
+# What reading the current path costs. The packed layout is checked
+# before it is read, and the check has to walk the element chain to say
+# whether the two offsets the header carries name elements; the
+# operators that build a path ask for that check between appends, so a
+# check that starts at the header every time costs the path's length
+# once per element it gains. That shape is invisible on a short path and
+# is the whole cost on a long one, so the interpreter counts the
+# elements the check walks, and the assertion is that count, held both
+# to a ceiling and to twice the segments costing no more than twice.
+test('path-walk-cost',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/path_walk_cost_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The capacity a dictionary reports, against the header field that
 # carries it. A capacity asked for above that field's width is a request
 # only the library makes -- `dict` refuses one before any dictionary is
@@ -1808,6 +1824,18 @@ test('blit-range',
 test('path-bounds',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/path_bounds_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The walk that settles those offsets is made once per state of a path
+# rather than once per operator that reads one, so the interpreter
+# records the entity it walked. Entity numbers are reused: a path
+# dropped is reclaimed and its number handed out again for contents of
+# somebody else's making, and a record that outlived its entity would
+# answer the new contents' header offsets from the old contents' walk.
+test('path-recycle',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/path_recycle_test.ps') ],
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 

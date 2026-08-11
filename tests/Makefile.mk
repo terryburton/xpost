@@ -248,6 +248,8 @@ tests/page_handlers_test.ps \
 tests/page_semantics_test.c \
 tests/path_bounds_test.ps \
 tests/path_confine_test.c \
+tests/path_recycle_test.ps \
+tests/path_walk_cost_test.ps \
 tests/pattern_phase_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \

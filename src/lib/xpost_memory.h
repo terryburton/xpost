@@ -245,6 +245,46 @@ typedef struct Xpost_Memory_File
                                   a large number cannot present itself as
                                   a small one. */
 
+    /** The packed path in this file whose element chain has been walked
+        and found well formed, and how far that walk reached.
+
+        A path is held in one entity, and no writer moves an element
+        boundary below the extent a walk has already reached, so what a
+        walk established still holds over the part of the path that was
+        there at the time and the next walk over the same entity starts
+        where the last one stopped. The writers are enumerated where the
+        walk is, in xpost_op_path.c.
+
+        The record lives with the memory file so that it is per file and
+        so that xpost_memory_table_alloc can drop it. That is where an
+        entity number is handed out, and a number handed out names
+        contents of somebody else's writing, about which a walk of the
+        contents before them establishes nothing. It is dropped there
+        and nowhere else: a number is released from several places --
+        one at a time in xpost_free.c, and in runs by the collector's
+        own sweep -- so a release is a place to be forgotten, while
+        every number in existence is issued from that one. */
+    struct
+    {
+        unsigned int ent; /**< the entity walked, 0 for none */
+        unsigned int end; /**< the extent walked: every element from the
+                                header up to here was well formed, and
+                                here is an element boundary */
+        unsigned int sps; /**< the subpath-start offset that walk found
+                                naming an element */
+        unsigned int last; /**< the last-element offset that walk found
+                                 naming an element */
+        unsigned int steps; /**< path elements walked over the life of
+                                  this memory file. Checking a path costs
+                                  the elements appended since it was last
+                                  checked, so this rises with the length
+                                  of the paths a job builds and not with
+                                  that length times the number of times
+                                  the path is read. The count saturates
+                                  rather than wrapping, so a large number
+                                  cannot present itself as a small one. */
+    } path_walk;
+
     int period;
     int threshold;
     int free_list_alloc_is_installed;
