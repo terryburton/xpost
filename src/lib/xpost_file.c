@@ -77,7 +77,14 @@
    unless the path resolves within a permitted directory. This is defence
    in depth around the operating-system confinement of the host process,
    not a substitute for it. Resource-file loading is separately confined
-   (see xpost_diskfile_fopen_beneath) and does not consult this. */
+   (see xpost_diskfile_fopen_beneath) and does not consult this.
+
+   The latch and the permitted set are the process's. Every context in the
+   process is confined by the same latch and reaches the same directories,
+   which is also how a context created after the latch engaged reads its
+   own start-up files: those are permitted by whichever context reached
+   that directory first. So this confines the process against the program
+   it runs; it does not divide one job in the process from another. */
 
 #define XPOST_PATH_PERMIT_MAX 64
 
@@ -86,43 +93,6 @@ static int xpost_permit_read_cnt = 0;
 static char *xpost_permit_write_dir[XPOST_PATH_PERMIT_MAX];
 static int xpost_permit_write_cnt = 0;
 static int xpost_path_control_engaged = 0;
-
-static int
-xpost_path_permit_add(char **tab, int *cnt, const char *dir)
-{
-    char *rp;
-
-    if (xpost_path_control_engaged) /* the permit set is frozen once engaged */
-        return 0;
-    if (*cnt >= XPOST_PATH_PERMIT_MAX)
-        return 0;
-    rp = xpost_realpath(dir);
-    if (!rp)
-        return 0;
-    tab[*cnt] = rp;
-    ++*cnt;
-    return 1;
-}
-
-int
-xpost_path_permit_read(const char *dir)
-{
-    return xpost_path_permit_add(xpost_permit_read_dir,
-                                 &xpost_permit_read_cnt, dir);
-}
-
-int
-xpost_path_permit_write(const char *dir)
-{
-    return xpost_path_permit_add(xpost_permit_write_dir,
-                                 &xpost_permit_write_cnt, dir);
-}
-
-void
-xpost_path_control_engage(void)
-{
-    xpost_path_control_engaged = 1;
-}
 
 /* Index of the permitted entry that contains the canonical path `full`, or
    -1 if none does. A permitted directory contains `full` when it is a prefix
@@ -149,6 +119,72 @@ xpost_path_within_idx(const char *full, char *const *tab, int cnt)
 #endif
     }
     return -1;
+}
+
+/* Permit a directory tree, answering whether it is permitted afterwards.
+
+   A directory the table already covers is answered yes without an entry:
+   the check above is a containment scan, so a second entry inside the
+   first decides nothing the first does not. That is what makes a permit
+   idempotent, and what a process asking once per context for the same
+   start-up directory relies on -- a table that spent an entry per ask
+   would fill, and a full table permits nothing at all.
+
+   Anything else needs an entry, which a frozen or a full table cannot
+   give. Then the answer is no, and it is said aloud as well as returned:
+   a caller that believes it has configured a sandbox and has not is
+   worse off than one that is told. */
+static int
+xpost_path_permit_add(char **tab, int *cnt, const char *dir)
+{
+    char *rp = xpost_realpath(dir);
+
+    if (!rp)
+    {
+        XPOST_LOG_ERR("cannot resolve the directory to permit: %s", dir);
+        return 0;
+    }
+    if (xpost_path_within_idx(rp, tab, *cnt) >= 0)
+    {
+        free(rp);
+        return 1;
+    }
+    if (xpost_path_control_engaged) /* the permit set is frozen once engaged */
+    {
+        XPOST_LOG_ERR("file access is engaged: %s cannot be permitted now", rp);
+        free(rp);
+        return 0;
+    }
+    if (*cnt >= XPOST_PATH_PERMIT_MAX)
+    {
+        XPOST_LOG_ERR("no room beside the %d permitted directories for %s",
+                      XPOST_PATH_PERMIT_MAX, rp);
+        free(rp);
+        return 0;
+    }
+    tab[*cnt] = rp;
+    ++*cnt;
+    return 1;
+}
+
+int
+xpost_path_permit_read(const char *dir)
+{
+    return xpost_path_permit_add(xpost_permit_read_dir,
+                                 &xpost_permit_read_cnt, dir);
+}
+
+int
+xpost_path_permit_write(const char *dir)
+{
+    return xpost_path_permit_add(xpost_permit_write_dir,
+                                 &xpost_permit_write_cnt, dir);
+}
+
+void
+xpost_path_control_engage(void)
+{
+    xpost_path_control_engaged = 1;
 }
 
 /* Resolve `path` to an absolute, symlink-free target in `buf`. An existing

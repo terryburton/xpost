@@ -387,9 +387,20 @@ XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable);
  * directories first and engage before running untrusted input.
  * Resource-file loading is separately confined and is unaffected.
  *
- * The permit functions return 1 on success, or 0 when the directory
- * cannot be resolved, the permit table is full, or the sandbox is
- * already engaged.
+ * The permit functions answer whether the directory is permitted
+ * afterwards: 1 when it is, including when the permitted set already
+ * covers it -- asking again for the same tree costs nothing and may be
+ * done as often as is convenient -- and 0 when the set does not cover it
+ * and cannot be extended to, because the directory does not resolve, the
+ * sandbox is engaged, or the table (64 entries) is full. A refusal is
+ * also reported on the error log.
+ *
+ * The sandbox belongs to the process, not to a context. Every context
+ * the process creates is confined by the same latch and reaches the same
+ * directories, so one created after the sandbox is engaged finds it
+ * engaged and finds what was permitted before it existed. This confines
+ * the process against the program it runs; it does not divide one job in
+ * the process from another.
  *
  * This is defence in depth: it complements, and does not replace,
  * operating-system confinement of the host process.

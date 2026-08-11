@@ -3750,6 +3750,20 @@ test('lockdown',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The sandbox across the contexts of one process: the latch and the permitted
+# set are the process's, a permit already covered costs no room, and one that
+# cannot be granted is refused rather than dropped.
+sandbox_contexts_exe = executable('sandbox_contexts_test',
+  'tests/sandbox_contexts_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('sandbox-contexts',
+  sandbox_contexts_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Implicit resource loading: findresource loads a named instance from the
 # search path on a miss, confined and leaf-validated.
 resource_load_exe = executable('resource_load_test',

@@ -1654,33 +1654,40 @@ int xpost_op_bool_echo (Xpost_Context *ctx,
 }
 
 /* string  .permitfileread  -
-   permit reading files within the directory tree; ignored once locked down */
+   permit reading files within the directory tree. A tree the permitted set
+   already covers is permitted already and this does nothing; anything the
+   set cannot be extended to hold -- because the sandbox is engaged, or the
+   directory does not resolve, or there is no room -- raises
+   invalidfileaccess, so a prolog that could not get the sandbox it asked
+   for fails rather than proceeding as though it had. */
 static
 int xpost_op_string_permitfileread (Xpost_Context *ctx,
                                     Xpost_Object dir)
 {
     char *d = xpost_string_allocate_cstring(ctx, dir);
+    int permitted;
 
     if (!d)
         return VMerror;
-    xpost_path_permit_read(d);
+    permitted = xpost_path_permit_read(d);
     free(d);
-    return 0;
+    return permitted ? 0 : invalidfileaccess;
 }
 
 /* string  .permitfilewrite  -
-   permit writing files within the directory tree; ignored once locked down */
+   permit writing files within the directory tree, as .permitfileread */
 static
 int xpost_op_string_permitfilewrite (Xpost_Context *ctx,
                                      Xpost_Object dir)
 {
     char *d = xpost_string_allocate_cstring(ctx, dir);
+    int permitted;
 
     if (!d)
         return VMerror;
-    xpost_path_permit_write(d);
+    permitted = xpost_path_permit_write(d);
     free(d);
-    return 0;
+    return permitted ? 0 : invalidfileaccess;
 }
 
 /* Remove the sandbox-control and raw resource-open operators from systemdict
