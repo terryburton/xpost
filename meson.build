@@ -3891,6 +3891,15 @@ test('one-bytebuf',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# An object brace-initialised in the library is cleared to its full
+# width. A union initialiser reaches no further than the member named
+# first, so the member named first spans an object, and what holds it to
+# spanning one is still there to say so.
+test('object-brace-init',
+  find_program('tests/check-object-brace-init.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # A cursor is held in a slot as wide as the bound it is checked against.
 # A word is sixteen bits in the default build, so a cursor of that width
 # reaches the end of what it counts only where the bound is the size

@@ -48,6 +48,7 @@ tests/check-host-settings.sh \
 tests/check-must-check.sh \
 tests/check-name-registers.sh \
 tests/check-narrow-cursors.sh \
+tests/check-object-brace-init.sh \
 tests/check-one-bytebuf.sh \
 tests/check-op-references.sh \
 tests/check-opsigs-writer.sh \

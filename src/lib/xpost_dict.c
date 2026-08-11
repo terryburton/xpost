@@ -615,7 +615,7 @@ _keys_equal(Xpost_Context *ctx, Xpost_Object a, Xpost_Object b)
             && _keys_equal(ctx, tp[i].key, k))) \
         return tp + i
 
-static dicrec invalidrec[] = {{ 0, {0}, {0}}};
+static dicrec invalidrec[] = {{ 0, {{0}}, {{0}}}};
 
 /* perform a hash-assisted lookup.
    returns a pointer to the desired pair (if found)), or a null-pair. */

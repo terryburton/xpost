@@ -86,10 +86,12 @@
 #define XPOST_OBJECT_DECLARE_SINGLETON(_) \
     XPOST_TEST_VISIBLE extern Xpost_Object _ ;
 
+/* The inner braces are the member the union names first, which is the
+   one an initialiser reaches through; see the union below. */
 #define XPOST_OBJECT_DEFINE_SINGLETON(_) \
     Xpost_Object _ = \
     { \
-        XPOST_OBJECT_AS_TYPE(_) \
+        { XPOST_OBJECT_AS_TYPE(_) 0, 0 } \
     };
 
 #define XPOST_OBJECT_SINGLETONS(_) \
@@ -377,12 +379,28 @@ typedef struct
  * The tag word overlays the tag words in each subtype, so it can
  * be used to determine an object's type (using the xpost_object_get_type()
  * function which masks-off any flags in the tag).
+ *
+ * mark_ is named first, and which member is named first decides how
+ * much of an object a brace initialiser reaches. A union is not an
+ * aggregate: `= { 0 }` gives the member named first a value and says
+ * nothing about the storage past that member (C99 6.2.5, 6.7.8), so a
+ * first member narrower than the object leaves the rest of it holding
+ * whatever the storage held before. Such an object is written to
+ * virtual memory whole and read back as the language's, and what it
+ * carries there is a value the language never put in it. A member
+ * spanning the object, named first, puts every field within the
+ * initialiser's reach: the fields after the one the initialiser gives a
+ * value to are the remainder of an aggregate, which is cleared. The
+ * assertions below hold mark_ to spanning an object and to there being
+ * no padding anywhere in one, so its three fields are every byte there
+ * is; tests/check-object-brace-init.sh holds the order.
  */
 typedef union
 {
+    Xpost_Object_Mark mark_;
+
     word tag;
 
-    Xpost_Object_Mark mark_;
     Xpost_Object_Int int_;
     Xpost_Object_Real real_;
     Xpost_Object_Extended extended_;
