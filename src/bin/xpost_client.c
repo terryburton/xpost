@@ -177,7 +177,9 @@ _xpost_client_usage(const char *filename)
 int main(int argc, const char *argv[])
 {
     Xpost_Context *ctx;
-    void *buffer_type_object = NULL;
+    /* the page a buffer-out run hands back, in the type that output
+       type is spelled in */
+    unsigned char *buffer_type_object = NULL;
     const char *filename;
     const char *device;
     const void *ptr;
@@ -387,11 +389,12 @@ int main(int argc, const char *argv[])
         int ferr = 0;
         FILE *fp;
 
-        buffer = buffer_type_object;
+        buffer = (pixel *)buffer_type_object;
         if (!buffer)
         {
             fprintf(stderr, "the program returned no page buffer\n");
             xpost_destroy(ctx);
+            xpost_output_buffer_release(&buffer_type_object);
             xpost_quit();
             return 1;
         }
@@ -400,6 +403,7 @@ int main(int argc, const char *argv[])
         {
             fprintf(stderr, "cannot open %s for writing\n", filename);
             xpost_destroy(ctx);
+            xpost_output_buffer_release(&buffer_type_object);
             xpost_quit();
             return 1;
         }
@@ -417,8 +421,11 @@ int main(int argc, const char *argv[])
         }
         fclose(fp);
     }
+    /* the page outlives the context that painted it, and is given back
+       after it: a run that handed none back leaves the pointer null,
+       which the release takes as nothing to give back */
     xpost_destroy(ctx);
-    //free(buffer_type_object);
+    xpost_output_buffer_release(&buffer_type_object);
     xpost_quit();
   quit_xpost:
     return 0;

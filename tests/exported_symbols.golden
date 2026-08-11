@@ -335,6 +335,7 @@ xpost_operator_init_optab
 xpost_operator_set_count
 xpost_operator_wrapped_release
 xpost_oplib_init_ops
+xpost_output_buffer_release
 xpost_path_control_engage
 xpost_path_control_is_engaged
 xpost_path_fill_points

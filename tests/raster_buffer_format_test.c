@@ -60,6 +60,15 @@
  * White is the same bytes under every rearrangement and so settles no
  * ordering; the ordering is settled by the painted rows alone.
  *
+ * When it is read, and what becomes of it. The buffer is the embedder's
+ * from the handoff, and the interpreter is not what holds it: each page
+ * here is read after the context that painted it has been destroyed,
+ * which is what an embedder that keeps a rendering and ends the job
+ * does, and a page that did not outlive its context would be read as
+ * freed memory. It is then given back with xpost_output_buffer_release()
+ * -- the only call in this process that gives it back, so what a leak
+ * checker says about this run is a statement about that call.
+ *
  * What this does not cover: whether the marks are in the right places
  * (the golden-render manifest's), the file-writing devices' formats
  * (tests/run-raster-formats-test.sh's), and the compiled image writers,
@@ -71,35 +80,6 @@
 #include "xpost.h"
 
 #include "xpost_test.h"
-
-/* A leak checker, where the build has one. */
-#if defined(__SANITIZE_ADDRESS__)
-# define XPOST_TEST_LEAKS_WATCHED 1
-#elif defined(__has_feature)
-# if __has_feature(address_sanitizer)
-#  define XPOST_TEST_LEAKS_WATCHED 1
-# endif
-#endif
-
-#ifdef XPOST_TEST_LEAKS_WATCHED
-# include <sanitizer/lsan_interface.h>
-#endif
-
-/* Say that one block is not this process's to give back.
-   The buffer a run hands over is a position inside the block the device
-   allocated rather than the block itself, and the device leaves the
-   block alone from the handoff on, so no call in this process frees it.
-   Naming the one block per run keeps every other allocation the runs
-   make under the checker's eye, where turning the checker off would
-   not. */
-static void handed_over(const void *p)
-{
-#ifdef XPOST_TEST_LEAKS_WATCHED
-    __lsan_ignore_object(p);
-#else
-    (void)p;
-#endif
-}
 
 /* Small enough that every byte of every buffer is read, and tall enough
    to hold a row for each store method with rows left over that nothing
@@ -286,6 +266,7 @@ static void run_format(const Format *f)
     {
         report_failure("%s: the painting run did not complete", f->device);
         xpost_destroy(ctx);
+        xpost_output_buffer_release(&buf);
         return;
     }
 
@@ -299,10 +280,23 @@ static void run_format(const Format *f)
         return;
     }
 
-    buffer_holds(f, buf);
-    handed_over(buf);
-
+    /* The page is the embedder's from the handoff on, and the context is
+       not what holds it: it is read here after the context that painted
+       it has gone, because that is what an embedder that keeps a
+       rendering and ends the job does. Then it is given back, which is
+       the only call in this process that gives it back -- so a leak
+       checker watching this run has the last word on whether it was. */
     xpost_destroy(ctx);
+    buffer_holds(f, buf);
+
+    xpost_output_buffer_release(&buf);
+    if (buf)
+        report_failure("%s: the released pointer still names memory",
+                       f->device);
+
+    /* the same call again, on the variable it cleared: there is nothing
+       left to give back and it is not given back twice */
+    xpost_output_buffer_release(&buf);
 }
 
 int main(void)
@@ -314,6 +308,9 @@ int main(void)
         report_failure("xpost_init");
         return verdict();
     }
+
+    /* nowhere to read a pointer from is nothing to give back */
+    xpost_output_buffer_release(NULL);
 
     /* One interpreter instance lives at a time, so the runs are
        sequential: each device is created, painted through and destroyed

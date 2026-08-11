@@ -35,6 +35,7 @@
 
 #ifdef HAVE_LIBPNG
 
+#include <stddef.h> /* offsetof */
 #include <stdlib.h>
 #include <string.h>
 #include <png.h>
@@ -66,8 +67,22 @@ typedef struct
 typedef struct
 {
     int width, height, byte_stride;
+    /* the block this raster is part of. A client is handed the raster
+       and gives the block back, so the block's own address is kept
+       here, immediately before the raster, where the release entry
+       point reads it. */
+    void *block;
     Xpost_Png_Pixel data[1];
 } Xpost_Png_Buffer;
+
+/* Say that the block's address is immediately before the raster rather
+   than leave it to hold by luck: the release entry point reaches it by
+   stepping one pointer back from the address the client holds. (A
+   negative array size rather than _Static_assert: this builds as C99
+   with -pedantic-errors, which rejects the latter.) */
+typedef char xpost_png_block_precedes_the_raster[
+    offsetof(Xpost_Png_Buffer, data)
+    == offsetof(Xpost_Png_Buffer, block) + sizeof(void *) ? 1 : -1];
 
 /* A PNG stream holds exactly one image, so the file and the writer that
    fills it belong to the page and not to the device: both are made when
@@ -84,6 +99,9 @@ typedef struct
     Xpost_Png_Buffer *buf;
     unsigned int interlaced : 1;
     unsigned int alpha : 1;
+    /* the device allocated buf and has not handed it to the client
+       through OutputBufferOut, so Destroy frees it */
+    unsigned int bufowned : 1;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -225,6 +243,8 @@ int _create_cont(Xpost_Context *ctx,
         XPOST_LOG_ERR("cannot allocate buffer memory");
         return VMerror;
     }
+    private.buf->block = private.buf;
+    private.bufowned = 1;
 
     /* the page starts opaque white; the alpha device starts fully
        transparent, so only marks made by the job carry opacity and an
@@ -583,8 +603,15 @@ int _emit(Xpost_Context *ctx,
     png_destroy_write_struct(&png_ptr, &info_ptr);
     xpost_device_page_close(f);
 
-    /* pass data back to client application */
-    xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data);
+    /* pass data back to client application; the raster then belongs to
+       the client, which gives the block it sits in back through the
+       release entry point, so Destroy must leave it alone from here on */
+    if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
+    {
+        private.bufowned = 0;
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+            return VMerror;
+    }
 
     return 0;
 }
@@ -630,9 +657,12 @@ int _destroy(Xpost_Context *ctx,
         return undefined;
 
     /* the raster is all the instance holds: each page's file and writer
-       were finished as that page was written */
-    free(private.buf);
+       were finished as that page was written. A raster handed to the
+       client is the client's to give back */
+    if (private.bufowned)
+        free(private.buf);
     private.buf = NULL;
+    private.bufowned = 0;
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;

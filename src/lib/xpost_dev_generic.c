@@ -138,6 +138,26 @@ int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
     return 1;
 }
 
+XPAPI void xpost_output_buffer_release(unsigned char **buffer)
+{
+    void *block;
+
+    /* Nothing to give back: no variable, or a variable no run has
+       stored a page through -- which is what a variable that has been
+       released already holds, since releasing clears it. */
+    if (!buffer || !*buffer)
+        return;
+
+    /* what the client holds is the raster; what was allocated is the
+       block around it, whose address the device left in front of it */
+    block = xpost_dev_output_buffer_block(*buffer);
+    free(block);
+
+    /* the client's pointer named the block until this call, and names
+       nothing after it */
+    *buffer = NULL;
+}
+
 FILE *xpost_device_page_open(Xpost_Context *ctx, Xpost_Object devdic)
 {
     Xpost_Object namestr;

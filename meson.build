@@ -3874,6 +3874,26 @@ test('raster-buffer-format',
   raster_buffer_format_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The lifetime of that buffer rather than its arrangement: the page is
+# the embedder's from the handoff, so it is read after the context that
+# painted it has been destroyed, and it is given back through
+# xpost_output_buffer_release(), the only call in the process that gives
+# it back. Covers the devices that write a page to a file and hand the
+# raster over as well, whose handoff nothing else reaches, and the
+# corners of the release call. A C test because none of it is reachable
+# from a program.
+output_buffer_release_exe = executable('output_buffer_release_test',
+  'tests/output_buffer_release_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('output-buffer-release',
+  output_buffer_release_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 #if get_option('nls') == true
 #  subdir('po')
 #endif

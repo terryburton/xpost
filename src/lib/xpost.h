@@ -184,9 +184,10 @@ typedef enum {
                                 and render directly into this memory
                                 (not currently implemented). */
     XPOST_OUTPUT_BUFFEROUT /**< Treats outputptr as an unsigned char **
-                                and malloc()s a new buffer and assigns
-                                it to the unsigned char * which
-                                outputptr points to. */
+                                and assigns a new buffer to the
+                                unsigned char * which outputptr points
+                                to. The buffer is given back with
+                                xpost_output_buffer_release(). */
 } Xpost_Output_Type;
 
 /**
@@ -523,6 +524,46 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx,
  * @see xpost_create()
  */
 XPAPI void xpost_destroy(Xpost_Context *ctx);
+
+/**
+ * @brief Give back a page buffer a run handed over.
+ *
+ * @param buffer The address a #XPOST_OUTPUT_BUFFEROUT run was given as
+ *        its outputptr, holding the buffer that run stored there.
+ *
+ * A run started with #XPOST_OUTPUT_BUFFEROUT stores its finished page
+ * through the address the caller gave xpost_create(), and the page is
+ * the caller's from that moment. It is not part of the interpreter's
+ * memory: xpost_destroy() leaves it alone and nothing the interpreter
+ * does afterwards reaches it, so a caller may destroy the context and
+ * read the pixels after. This call is how the buffer is given back.
+ *
+ * Pass the address xpost_create() was given, holding the pointer the run
+ * stored there. The buffer is released and the pointer set to null, so a
+ * second call on the same variable does nothing: a null @p buffer, and a
+ * @p buffer holding null, are both accepted and do nothing. Any address
+ * holding the pointer will do -- what the call reads is the pointer and
+ * what it clears is the variable it was handed -- but a caller that
+ * releases through a copy is left holding an original that no longer
+ * names memory. An address holding a pointer this library did not hand
+ * over is as undefined as passing such a pointer to free().
+ *
+ * Release once the context is done with the buffer. Every page of a run
+ * is painted into the same buffer and the context paints into it until
+ * it is destroyed, so the buffer is given back after xpost_destroy(), or
+ * at least after the last run that paints a page.
+ *
+ * A caller that never releases leaks the buffer. Neither xpost_destroy()
+ * nor xpost_quit() gives it back, since neither can know whether the
+ * caller is still reading it; this call is the only one that does.
+ *
+ * How the memory was obtained, and how it is given back, is the
+ * library's business and not part of this contract -- which is why the
+ * buffer is released here rather than by the caller's own free().
+ *
+ * @see xpost_create()
+ */
+XPAPI void xpost_output_buffer_release(unsigned char **buffer);
 
 /**
  * @brief Set quality value for compression of JPEG files.

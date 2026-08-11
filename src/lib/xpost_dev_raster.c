@@ -33,6 +33,7 @@
 #endif
 
 #include <assert.h>
+#include <stddef.h> /* offsetof */
 #include <stdlib.h> /* abs */
 #include <stdio.h>  /* FIXME: remove once printf() is removed */
 #include <string.h>
@@ -80,8 +81,22 @@ typedef struct
 typedef struct
 {
     int width, height, byte_stride;
+    /* the block this raster is part of. A client is handed the raster
+       and gives the block back, so the block's own address is kept
+       here, immediately before the raster, where the release entry
+       point reads it. Null for a raster the device did not allocate. */
+    void *block;
     /*(Xpost_Raster_*_Pixel)*/ char *data[1];
 } Xpost_Raster_Buffer;
+
+/* Say that the block's address is immediately before the raster rather
+   than leave it to hold by luck: the release entry point reaches it by
+   stepping one pointer back from the address the client holds. (A
+   negative array size rather than _Static_assert: this builds as C99
+   with -pedantic-errors, which rejects the latter.) */
+typedef char xpost_raster_block_precedes_the_raster[
+    offsetof(Xpost_Raster_Buffer, data)
+    == offsetof(Xpost_Raster_Buffer, block) + sizeof(void *) ? 1 : -1];
 
 typedef struct
 {
@@ -252,6 +267,9 @@ int _create_cont(Xpost_Context *ctx,
         memcpy(&inbuf, xpost_string_get_pointer(ctx, inbufstr), sizeof(inbuf));
         private.buf = (Xpost_Raster_Buffer *)inbuf;
         private.bufowned = 0; /* the client's memory, never ours to free */
+        /* and a raster the device did not allocate names no block of
+           the device's to give back */
+        private.buf->block = NULL;
     }
     else
     {
@@ -262,6 +280,7 @@ int _create_cont(Xpost_Context *ctx,
             return VMerror;
         private.buf->height = height;
         private.buf->width = width;
+        private.buf->block = private.buf;
         private.bufowned = 1;
     }
 
@@ -664,9 +683,9 @@ int _emit(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    /* pass data back to client application; the buffer then belongs to
-       the client (the API documents the handed-out buffer as the
-       caller's to free): Destroy must leave it alone from here on */
+    /* pass data back to client application; the raster then belongs to
+       the client, which gives the block it sits in back through the
+       release entry point, so Destroy must leave it alone from here on */
     if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
     {
         private.bufowned = 0;

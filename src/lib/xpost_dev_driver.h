@@ -643,12 +643,32 @@ xpost_dev_class_install(Xpost_Context *ctx,
     return 0;
 }
 
+/* Where the block a handed-over raster sits in begins.
+
+   What a client receives is the raster, which is a position inside the
+   block the device allocated rather than the block itself, so the
+   address the client holds is not one the block can be given back by. A
+   device that allocates a framebuffer therefore keeps the block's own
+   address in the pointer immediately before the raster -- for a device
+   whose buffer is a struct, the member declared just before the raster
+   -- and xpost_output_buffer_release() reads it back from there. A
+   raster the device did not allocate names no block, and the pointer
+   before it is null. */
+static inline void *
+xpost_dev_output_buffer_block(unsigned char *data)
+{
+    void *block;
+
+    memcpy(&block, data - sizeof(block), sizeof(block));
+    return block;
+}
+
 /* Hand the rendered framebuffer to the embedding client: when the
    client registered an output-buffer hook (a pointer this run settled
    into the /OutputBufferOut string), store the buffer pointer through
-   it. Returns 1 when the buffer was handed off -- ownership passes to
-   the client and Destroy must leave the buffer alone -- and 0 when no
-   hook is registered. */
+   it. Returns 1 when the buffer was handed off -- the block is the
+   client's to give back through xpost_output_buffer_release() and
+   Destroy must leave it alone -- and 0 when no hook is registered. */
 static inline int
 xpost_dev_output_buffer_handoff(Xpost_Context *ctx,
                                 unsigned char *data)

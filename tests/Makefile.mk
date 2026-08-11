@@ -237,6 +237,7 @@ tests/op_vmreclaim_test.ps \
 tests/op_wrapsig_test.ps \
 tests/operator_install_refusal_test.c \
 tests/outline_font_test.ps \
+tests/output_buffer_release_test.c \
 tests/oversize_page_test.ps \
 tests/page_cover_test.ps \
 tests/page_extent_test.ps \
