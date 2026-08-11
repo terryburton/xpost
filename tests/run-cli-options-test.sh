@@ -54,7 +54,7 @@ render() {  # $1 what to call it in a complaint, $2... the arguments
 # a geometry sets the page size: the raster carries its dimensions
 render "a 200x100 geometry" -g 200x100+0+0 -d pgm -o "$work/g.pgm"
 if [ -f "$work/g.pgm" ]; then
-    dim=$(head -c 32 "$work/g.pgm" | tr '\n' ' ' | awk '{print $2"x"$3}')
+    dim=$(head -c 32 "$work/g.pgm" | LC_ALL=C tr '\n' ' ' | awk '{print $2"x"$3}')
     [ "$dim" = "200x100" ] || note "a geometry of 200x100 produced a page of $dim"
 else
     note "a well-formed geometry produced no page at all"
@@ -77,7 +77,7 @@ status=$?
 # without -g the default page size stands
 render "a run with no geometry" -d pgm -o "$work/def.pgm"
 if [ -f "$work/def.pgm" ]; then
-    dim=$(head -c 32 "$work/def.pgm" | tr '\n' ' ' | awk '{print $2"x"$3}')
+    dim=$(head -c 32 "$work/def.pgm" | LC_ALL=C tr '\n' ' ' | awk '{print $2"x"$3}')
     [ "$dim" = "612x792" ] || note "the default page is $dim, not 612x792"
 else
     note "no page without a geometry"
@@ -285,10 +285,21 @@ esac
 # something ran it.
 printf '1966 1 add ==\n' > "$work/feed.ps"
 
+# The two spellings differ in more than their options. The util-linux
+# one runs the command with the feed already on the terminal, so the
+# interpreter reads it when it reaches its executive. The BSD one copies
+# its own standard input to the terminal as it goes, and sends end of
+# file when that input runs out -- so a feed handed to it whole is echoed
+# into the terminal before the interpreter has finished starting, and the
+# end of file that follows closes the session before anything is read.
+# The feed is therefore delivered after the interpreter has had time to
+# reach its executive, and the terminal is held open afterwards for long
+# enough for what it ran to come back.
 on_terminal() {  # $1 the command line to run with a terminal on stdin
     case $pty in
         util) script -qec "$1" /dev/null < "$work/feed.ps" 2>&1 ;;
-        bsd)  script -q /dev/null /bin/sh -c "$1" < "$work/feed.ps" 2>&1 ;;
+        bsd)  { sleep 3; cat "$work/feed.ps"; sleep 2; } \
+                  | script -q /dev/null /bin/sh -c "$1" 2>&1 ;;
     esac
 }
 
