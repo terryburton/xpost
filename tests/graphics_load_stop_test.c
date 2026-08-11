@@ -1,4 +1,5 @@
-/* What a graphics load that stops leaves behind, and what it says.
+/* What a graphics load or a lockdown that stops leaves behind, and what
+ * it says.
  *
  * The language is read into systemdict, which is opened for writing for
  * as long as the reading lasts and closed on a one-shot when it ends. A
@@ -34,6 +35,28 @@
  * attempt is the one that meets the device: an interpreter that answers
  * the second attempt with something of its own is the failure this is
  * looking for.
+ *
+ * The lockdown that follows the load is held to the same three things,
+ * for the same reasons: it opens the same window on systemdict, it is
+ * entered again by the next start procedure, and what it leaves is what
+ * the run after it has.
+ *
+ * A lockdown has no device to refuse it, so its refusal is arranged out
+ * of its own work. The promotion of the procedure-implemented standard
+ * operators puts each one back into the dictionary it was found in, so a
+ * dictionary that cannot be written refuses it -- and the refusal
+ * arrives while the promotion's own working dictionary is open, which is
+ * what makes the dictionary stack part of the question rather than a
+ * depth that was never disturbed.
+ *
+ * Both ways a run reaches the lockdown are put to it. A run that loads
+ * the graphics language reaches it after the load, and there the load
+ * that finished must not be sent round again by the lockdown stopping:
+ * the language cannot be read into a systemdict that is shut, so a
+ * second reading would stop under a name of its own and that name would
+ * be the one the caller is told. A run that loads no graphics reaches
+ * the lockdown on its own, which is the lockdown with nothing else in
+ * the picture.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -47,6 +70,8 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_context.h"
+#include "xpost_dict.h"
+#include "xpost_name.h"
 
 #include "xpost_test.h"
 
@@ -87,21 +112,21 @@ static int systemdict_is_writeable(Xpost_Context *ctx)
 }
 
 /* The window is shut, the one-shot that opens it is spent, and the
-   dictionary the load made current is closed again. */
-static void the_load_left_no_window(Xpost_Context *ctx, const char *dev,
-                                    const char *when, int entry_depth)
+   dictionaries the step made current are closed again. */
+static void no_window_was_left(Xpost_Context *ctx, const char *whose,
+                               const char *when, int entry_depth)
 {
     if (systemdict_is_writeable(ctx))
-        report_failure("%s: systemdict is still writeable %s", dev, when);
+        report_failure("%s: systemdict is still writeable %s", whose, when);
     if (ctx->sysdict_unlocked)
         report_failure("%s: the writeable window on systemdict is still "
-                       "open %s", dev, when);
+                       "open %s", whose, when);
     if (!ctx->sysdict_load_done)
         report_failure("%s: the one-shot that opens systemdict is unspent "
-                       "%s, so it can be opened again", dev, when);
+                       "%s, so it can be opened again", whose, when);
     if (xpost_stack_count(ctx->lo, ctx->ds) != entry_depth)
         report_failure("%s: the dictionary stack is %d deep %s, not the %d "
-                       "it began at", dev,
+                       "it began at", whose,
                        xpost_stack_count(ctx->lo, ctx->ds), when, entry_depth);
 }
 
@@ -131,8 +156,8 @@ static void an_ordinary_page(const char *dev)
     else
         check(strstr(out, "drew") != NULL,
               "a run on a page the device provides reaches the program");
-    the_load_left_no_window(ctx, dev, "after a load that ran to its end",
-                            entry_depth);
+    no_window_was_left(ctx, dev, "after a load that ran to its end",
+                       entry_depth);
     xpost_stdout_handler_set(ctx, NULL, NULL);
     xpost_destroy(ctx);
 }
@@ -176,8 +201,180 @@ static void a_page_it_cannot_provide(const char *dev)
             report_failure("%s: attempt %d names no limit the device "
                            "reached: %s", dev, attempt, out);
 
-        the_load_left_no_window(ctx, dev, "after a load that stopped",
+        no_window_was_left(ctx, dev, "after a load that stopped",
                                 entry_depth);
+    }
+
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+}
+
+/* The interpreter's own flags, which it keeps in its private namespace.
+   The namespace loses its userdict anchor when the lockdown finishes, so
+   this reaches it only in a run whose lockdown stopped -- which is every
+   run below that asks. */
+static Xpost_Object interpreter_flags(Xpost_Context *ctx)
+{
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    Xpost_Object ud = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "userdict"));
+
+    if (xpost_object_get_type(ud) != dicttype)
+        return null;
+    return xpost_dict_get(ctx, ud, xpost_name_cons(ctx, ".internaldict"));
+}
+
+static Xpost_Object flag(Xpost_Context *ctx, const char *name)
+{
+    Xpost_Object flags = interpreter_flags(ctx);
+
+    if (xpost_object_get_type(flags) != dicttype)
+    {
+        report_failure("the interpreter's flags are out of reach");
+        return null;
+    }
+    return xpost_dict_get(ctx, flags, xpost_name_cons(ctx, name));
+}
+
+static int flag_is_set(Xpost_Context *ctx, const char *name)
+{
+    return xpost_object_get_type(flag(ctx, name)) != invalidtype;
+}
+
+static int flag_names(Xpost_Context *ctx, const char *name, const char *what)
+{
+    Xpost_Object held = flag(ctx, name);
+
+    return xpost_object_get_type(held) == nametype &&
+           xpost_dict_compare_objects(ctx, held,
+                                      xpost_name_cons(ctx, what)) == 0;
+}
+
+/* The dictionary the language itself never defines into, and which
+   stands above systemdict in the name lookup: a standard operator
+   planted there is the one the promotion finds, and nothing that runs
+   before the lockdown is disturbed by what it holds. */
+static Xpost_Object the_home_above(Xpost_Context *ctx)
+{
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    Xpost_Object gd = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "globaldict"));
+
+    if (xpost_object_get_type(gd) != dicttype)
+        report_failure("globaldict is not a dictionary");
+    return gd;
+}
+
+static void plant(Xpost_Context *ctx, Xpost_Object home, const char *op,
+                  Xpost_Object value)
+{
+    if (xpost_object_get_type(home) != dicttype)
+        return;
+    if (xpost_dict_put(ctx, home, xpost_name_cons(ctx, op), value))
+        report_failure("cannot plant %s where the promotion will find it", op);
+}
+
+/* A home the promotion cannot write the promoted operator back into. The
+   refusal is raised by the C the write goes through, so the
+   interpreter's own error handler sees it. */
+static void a_home_that_refuses(Xpost_Context *ctx, const char *op)
+{
+    Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    Xpost_Object home = the_home_above(ctx);
+    Xpost_Object proc = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, op));
+
+    if (xpost_object_get_type(proc) != arraytype)
+    {
+        report_failure("%s is not a procedure before the promotion", op);
+        return;
+    }
+    plant(ctx, home, op, proc);
+    xpost_object_set_access(ctx, home, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+}
+
+/* An operator that states its operands and holds no procedure to
+   promote, which is the post-condition the lockdown checks once the
+   promotion has run. That refusal is raised in PostScript and never
+   passes through the interpreter's own error handler, so the window on
+   systemdict is the lockdown's own to shut. */
+static void a_home_that_holds_no_procedure(Xpost_Context *ctx, const char *op)
+{
+    plant(ctx, the_home_above(ctx), op, xpost_int_cons(0));
+}
+
+/* A lockdown that cannot finish. Twice, and the second attempt is the
+   one under test: it must answer with what stopped the first rather than
+   with anything of its own. */
+static void a_lockdown_that_stops(int graphics, int in_postscript)
+{
+    Xpost_Context *ctx;
+    Xpost_Run_Status st;
+    const char *out;
+    const char *how = graphics ? "after the graphics language"
+                              : "with no graphics language";
+    /* PLRM 8.2 gives invalidaccess for an attempt to write where access
+       forbids it, and undefined for a name with no value; which of the
+       two arrives is which refusal was arranged. */
+    const char *name = in_postscript ? "undefined" : "invalidaccess";
+    int attempt;
+    int entry_depth;
+
+    ctx = xpost_create("null", XPOST_OUTPUT_FILENAME, "/dev/null",
+                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
+                       XPOST_USE_SIZE, ORDINARY_SIDE, ORDINARY_SIDE);
+    if (!ctx)
+    {
+        report_failure("%s: no context", how);
+        return;
+    }
+    if (!graphics)
+        xpost_skip_graphics_set(ctx, 1);
+    if (in_postscript)
+        a_home_that_holds_no_procedure(ctx, "rectfill");
+    else
+        a_home_that_refuses(ctx, "rectfill");
+    entry_depth = xpost_stack_count(ctx->lo, ctx->ds);
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+
+    for (attempt = 1; attempt <= 2; attempt++)
+    {
+        out = collect_run(ctx, "showpage", &st);
+
+        if (st == XPOST_RUN_COMPLETE)
+            report_failure("%s: attempt %d ran a program on an interpreter "
+                           "it could not lock down", how, attempt);
+        /* the two start procedures say it differently; either way the
+           caller is told the run never reached its program */
+        if (strstr(out, graphics ? "unable to load graphics"
+                                 : "unable to lock down interpreter") == NULL)
+            report_failure("%s: attempt %d said nothing about the start-up it "
+                           "could not finish: %s", how, attempt, out);
+        /* The name the lockdown stopped under is the one it keeps and
+           the one it raises again. */
+        if (!flag_names(ctx, "LOCKDOWN_STOPPED", name))
+            report_failure("%s: after attempt %d the lockdown does not hold "
+                           "%s, the name it stopped under", how, attempt, name);
+        /* A start-up ordering complaint on a later attempt is the
+           interpreter finding its own repeat out of order, which is a
+           fault of the repeat and not of what stopped the lockdown. The
+           attempt that met the arranged refusal may make it: where the
+           refusal was arranged out of the lockdown's own post-condition,
+           that complaint is the refusal. */
+        if (attempt > 1 || !in_postscript)
+        {
+            if (strstr(out, "start-up ordering broken") != NULL)
+                report_failure("%s: attempt %d complained about the order its "
+                               "own steps ran in: %s", how, attempt, out);
+        }
+
+        /* A load that finished says so, and the lockdown stopping does
+           not take that back: the record is what a later attempt reads
+           to know there is no language left to read in. */
+        if (graphics && !flag_is_set(ctx, "GRAPHICS_LOADED"))
+            report_failure("%s: after attempt %d the load that finished is "
+                           "not recorded as done, so the lockdown stopping "
+                           "sends it round again", how, attempt);
+
+        no_window_was_left(ctx, how, "after a lockdown that stopped",
+                           entry_depth);
     }
 
     xpost_stdout_handler_set(ctx, NULL, NULL);
@@ -204,6 +401,11 @@ int main(void)
         an_ordinary_page(devices[i]);
         a_page_it_cannot_provide(devices[i]);
     }
+
+    a_lockdown_that_stops(1, 0);
+    a_lockdown_that_stops(0, 0);
+    a_lockdown_that_stops(1, 1);
+    a_lockdown_that_stops(0, 1);
 
     xpost_quit();
 

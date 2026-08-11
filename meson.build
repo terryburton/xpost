@@ -1151,13 +1151,15 @@ test('job-snapshot-balance',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# A graphics load stopped by a page the device cannot provide: the name
-# the caller is given for it, and the state the interrupted load leaves
-# systemdict in. The window opened for the language to be read into must
-# be shut when the load ends however it ended, and the report must name
-# the limit the device reached rather than anything raised on the way out
-# of the load. Read off the context, since the run that could ask in
-# PostScript is the run that did not happen.
+# A graphics load stopped by a page the device cannot provide, and the
+# lockdown after it stopped by a refusal arranged out of its own work:
+# the name the caller is given for each, and the state the interrupted
+# step leaves systemdict in. The window opened for the language to be
+# read into must be shut when the step ends however it ended, the
+# dictionary stack must be back at the depth it began at, and the report
+# must name what stopped the step rather than anything raised by a repeat
+# of it. Read off the context, since the run that could ask in PostScript
+# is the run that did not happen.
 graphics_load_stop_exe = executable('graphics_load_stop_test',
   'tests/graphics_load_stop_test.c',
   c_args: '-DHAVE_CONFIG_H',
