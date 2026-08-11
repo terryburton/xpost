@@ -24,6 +24,16 @@
  * definition aimed at a dictionary that has just been closed. So the
  * depth the load began at is the depth it must end at.
  *
+ * The other end of a run is held to the same thing, and for a reason of
+ * its own. A job that painted and never asked for a page has that page
+ * ended for it as the job ends, which writes a file; a name that cannot
+ * be opened stops the device's own method with the device dictionary
+ * current and the refused operands on the stack, and the failure is not
+ * reported because the job is over. So a run that meets one has to end
+ * on the stacks it was given, or the next run begins on a dictionary
+ * stack with a device on top of it and definitions of its own landing in
+ * the device.
+ *
  * Two devices, for the two ways the refusal is raised. A device whose
  * raster is one block of pixels outside virtual memory is refused by the
  * C that would allocate it, and that refusal reaches the interpreter's
@@ -158,6 +168,61 @@ static void an_ordinary_page(const char *dev)
               "a run on a page the device provides reaches the program");
     no_window_was_left(ctx, dev, "after a load that ran to its end",
                        entry_depth);
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+}
+
+/* A page the device provides and cannot write.
+
+   A job that painted and never asked for a page has that page ended for
+   it as the job ends, which opens the file the page is written to. A
+   name that cannot be opened stops the device's own method part way,
+   and the method had made the device dictionary current to do its work:
+   what the failure leaves is that dictionary still current and the
+   operands the open was refused with still on the stack. The job is
+   over and the failure is not reported to it -- the program is no longer
+   there to be told -- so the state it left is the next job's to meet,
+   and the next job is entitled to begin where this one began (PLRM
+   3.7.7).
+
+   The name below is a file in a directory that is not there, which no
+   platform opens for writing and none creates anything in. It is not a
+   device's own limit and not a page the device refused: the device
+   provided the page and painted it, and only the writing failed. */
+#define UNWRITABLE_NAME "xpost-no-such-directory/page.out"
+
+static void a_page_it_cannot_write(const char *dev)
+{
+    Xpost_Context *ctx;
+    Xpost_Run_Status st;
+    const char *out;
+    int entry_depth;
+    int entry_count;
+
+    ctx = xpost_create(dev, XPOST_OUTPUT_FILENAME, UNWRITABLE_NAME,
+                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
+                       XPOST_USE_SIZE, ORDINARY_SIDE, ORDINARY_SIDE);
+    if (!ctx)
+    {
+        report_failure("%s: no context on a page it cannot write", dev);
+        return;
+    }
+    entry_depth = xpost_stack_count(ctx->lo, ctx->ds);
+    entry_count = xpost_stack_count(ctx->lo, ctx->os);
+    xpost_stdout_handler_set(ctx, out_sink, NULL);
+    out = collect_run(ctx, "0 0 moveto 10 10 lineto stroke (drew) print flush",
+                      &st);
+    if (st != XPOST_RUN_COMPLETE)
+        report_failure("%s: a page it cannot write did not run: %s", dev, out);
+    else
+        check(strstr(out, "drew") != NULL,
+              "a run whose page cannot be written reaches the program");
+    no_window_was_left(ctx, dev, "after a job whose page could not be written",
+                       entry_depth);
+    if (xpost_stack_count(ctx->lo, ctx->os) != entry_count)
+        report_failure("%s: the operand stack holds %d after a job whose page "
+                       "could not be written, not the %d it began at", dev,
+                       xpost_stack_count(ctx->lo, ctx->os), entry_count);
     xpost_stdout_handler_set(ctx, NULL, NULL);
     xpost_destroy(ctx);
 }
@@ -399,6 +464,7 @@ int main(void)
     for (i = 0; i < sizeof devices / sizeof devices[0]; i++)
     {
         an_ordinary_page(devices[i]);
+        a_page_it_cannot_write(devices[i]);
         a_page_it_cannot_provide(devices[i]);
     }
 

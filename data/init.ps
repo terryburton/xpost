@@ -661,6 +661,43 @@ currentglobal true setglobal
 } put
 setglobal
 
+% -  .endjob  -
+% What a job does after its program: the page it painted and never asked
+% for is ended, and the stacks are put back to the state a job begins
+% with (PLRM 3.7.7, which clears the operand stack and resets the
+% dictionary stack as the last thing a job does before its virtual
+% memory reverts).
+%
+% Ending the page is allowed to fail and the failure is not reported:
+% the job is over and the program is no longer there to be told. What it
+% leaves behind is another matter. The page goes out through the
+% device's own methods, each of which makes the device dictionary
+% current while it works, and a method that stops part way -- an output
+% file that cannot be opened is the ordinary way for one to -- leaves
+% that dictionary current and the operands the failure met still on the
+% stack. A caller whose context outlives the job then begins the next
+% one on a dictionary stack a device sits on top of, where every
+% definition it makes lands in the device rather than in its own
+% namespace.
+%
+% Both stacks, and not the dictionary stack alone: the two are disturbed
+% by the same failure and are put back by the same act.
+%
+% The two operators are taken as they stand here, before any program has
+% run: a job's own definitions are still in reach at this point, and a
+% program that redefined either name would otherwise decide what
+% resetting the stacks means.
+%
+% in the private global namespace, reached by the start procedures below
+% through a frozen reference, so it does not sit visible in systemdict
+currentglobal true setglobal
+.xpostsys /.endjob {
+    { //.xpostsys /.endjobpage get exec } stopped { } if
+    //clear
+    //cleardictstack
+} put
+setglobal
+
 % execute postscript program from stdin, and handle errors,
 % but do not assume an interactive session
 /startstdin {
@@ -677,8 +714,9 @@ setglobal
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
-    % a page the program painted and never asked for is ended here
-    { //.xpostsys /.endjobpage get exec } stopped { } if
+    % a page the program painted and never asked for is ended here, and
+    % the stacks the job used go back to the state a job begins with
+    //.xpostsys /.endjob get exec
     quit
 } def
 
@@ -705,8 +743,9 @@ setglobal
     } stopped {
         //.xpostsys /.handlejoberror get exec
     } if
-    % a page the program painted and never asked for is ended here
-    { //.xpostsys /.endjobpage get exec } stopped { } if
+    % a page the program painted and never asked for is ended here, and
+    % the stacks the job used go back to the state a job begins with
+    //.xpostsys /.endjob get exec
     quit
 } def
 %currentfile flushfile
@@ -729,8 +768,9 @@ setglobal
         //.internaldict /.rundied get exec
         //.xpostsys /.handlejoberror get exec
     } if
-    % a page the program painted and never asked for is ended here
-    { //.xpostsys /.endjobpage get exec } stopped { } if
+    % a page the program painted and never asked for is ended here, and
+    % the stacks the job used go back to the state a job begins with
+    //.xpostsys /.endjob get exec
     quit
 } def
 
