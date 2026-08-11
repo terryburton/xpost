@@ -105,6 +105,11 @@ int _event_handler(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a destroyed device holds no connection, and nothing is polled
+       through one */
+    if (!private.c)
+        return 0;
+
     event = xcb_poll_for_event(private.c);
     if (event)
     {
@@ -401,6 +406,11 @@ int _putpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released device takes no marks: the recorded dimensions outlive
+       the connection, so the bounds check below does not stand in for this */
+    if (!private.c)
+        return 0;
+
     /* check bounds */
     if ((ix < 0) || (ix >= private.width) ||
         (iy < 0) || (iy >= private.height))
@@ -467,6 +477,10 @@ int _blendpix(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released device takes no marks */
+    if (!private.c)
+        return 0;
 
     /* check bounds */
     if ((ix < 0) || (ix >= private.width) ||
@@ -548,6 +562,10 @@ int _drawline(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released device takes no marks */
+    if (!private.c)
+        return 0;
+
     {
         xcb_alloc_color_reply_t *rep;
         unsigned int value;
@@ -611,6 +629,10 @@ int _fillrect(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released device takes no marks */
+    if (!private.c)
+        return 0;
+
     /* the contract's rectangle: inclusive span, clipped to the device */
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(width),
@@ -672,6 +694,10 @@ int _fillpoly(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    /* a released device takes no marks */
+    if (!private.c)
+        return 0;
+
     {
         xcb_point_t *points;
         word i;
@@ -725,6 +751,11 @@ int _flush(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    /* a released device emits nothing, its page having gone up when the
+       connection it was drawn over was released */
+    if (!private.c)
+        return 0;
 
     xcb_copy_area(private.c, private.img, private.win, private.gc,
                   0, 0, 0, 0, private.width, private.height);

@@ -24,4 +24,48 @@ newpath 10 10 moveto 90 90 lineto stroke showpage
 .destroydevice
 .destroydevice
 
-count 0 eq { (SUCCESS) = } { (FAILURES: operand stack unbalanced) = } ifelse
+% Destroy releases what the device held and leaves the instance
+% dictionary, so every slot is still there to be called and the program
+% holding the dictionary can call one. A released device takes no marks
+% and emits nothing; what it must not do is follow the handle it gave
+% back. The recorded width and height outlive that handle, so a pixel
+% inside the page passes the bounds check and arrives at the released
+% resource with nothing between.
+%
+% So every marking slot is called once more, after the device is gone.
+% An error is an answer -- the program can catch it, and a device that
+% loses the name its raster was reached by reports one -- so what is
+% asked is that the interpreter is still here to print below.
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+/ncomp dev /.ncomp 2 copy known { get }{ pop pop
+    dev /nativecolorspace 2 copy known { get }{ pop pop /DeviceGray } ifelse
+    dup /DeviceCMYK eq { pop 4 }{ /DeviceRGB eq { 3 }{ 1 } ifelse } ifelse
+} ifelse def
+/ink { ncomp { 0.5 } repeat } def
+/gone 0 def
+/afterwards { % /slot {operands}  .  -
+    /aw.args exch def /aw.slot exch def
+    dev aw.slot known {
+        /gone gone 1 add store
+        { aw.args dev dup aw.slot get exec } stopped pop
+        clear
+    } if
+} bind def
+
+/PutPix   { ink 5 5 } afterwards
+/BlendPix { ink 128 5 5 } afterwards
+/DrawLine { ink 1 1 8 8 } afterwards
+/DrawRect { ink 1 1 4 4 } afterwards
+/FillRect { ink 1 1 4 4 } afterwards
+/FillPoly { ink [ [1 1] [4 1] [4 4] ] } afterwards
+/GetPix   { 5 5 } afterwards
+/Flush    { } afterwards
+
+count 0 eq {
+    % A slot the device does not carry is not called, so a device that
+    % stopped offering them would reach the line below without having
+    % been asked anything. The floor is what the thinnest device in the
+    % roster carries.
+    gone 6 ge { (SUCCESS) = }
+              { (FAILURES: the released device was asked nothing) = } ifelse
+} { (FAILURES: operand stack unbalanced) = } ifelse
