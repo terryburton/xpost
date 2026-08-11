@@ -3367,7 +3367,10 @@ test('startup-page',
 # Its own limit rather than the configuration's, for the reason above: this
 # asks every marking device six questions and calibrates each with three
 # more, so its cost follows the roster's length rather than the work of any
-# one case. Measured at sixteen seconds run alone.
+# one case. That length also puts it at the top of the fast band, close
+# enough that a run sharing the machine carries it over: the tag is what
+# it costs with the machine to itself, and the cost report is expected to
+# name this one from time to time without the tag being wrong.
 test('glyph-page',
   find_program('tests/run-glyph-page-test.sh'),
   args: [ xpost_exe ],
@@ -3484,7 +3487,7 @@ test('imaging-bbox',
   find_program('tests/run-imaging-bbox-test.sh'),
   args: [ xpost_exe, files('tests/imaging_bbox_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # A page too large for the device to build must be refused without taking the
