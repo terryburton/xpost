@@ -243,7 +243,7 @@ static unsigned int _data_hash(void)
     for (i = 0; i < g.gl_pathc; i++)
     {
         unsigned char buf[4096];
-        unsigned int h = 2166136261u;
+        unsigned int h = XPOST_VM_IMAGE_DIGEST_SEED;
         const char *path = g.gl_pathv[i];
         const char *base;
         FILE *f;
@@ -270,7 +270,7 @@ static unsigned int _data_hash(void)
    against the build reading it rather than against a constant. */
 static void _stamps(unsigned int *stamp, int host_state)
 {
-    unsigned int build = 2166136261u;
+    unsigned int build = XPOST_VM_IMAGE_DIGEST_SEED;
 
     build = _hash_text(build, PACKAGE_VERSION);
 
@@ -441,20 +441,39 @@ static int _capture_operators(Xpost_Context *ctx, _Host_Table *t)
    writing a structure whole would carry the padding the compiler left
    inside it, which is storage no one assigned and which would differ
    between two images of the same memory. */
-static int _put(FILE *f, unsigned int v)
+/* Where an image is being written, and what has gone into it so far.
+   Every byte of an image passes through this, and every byte is hashed
+   on the way: the digest at the end of the file is over the whole of
+   what came before it, so nothing an image carries is outside what the
+   digest answers for. */
+typedef struct
 {
-    return fwrite(&v, sizeof v, 1, f) == 1;
+    FILE *f;
+    unsigned int digest;
+} _Writer;
+
+static int _emit(_Writer *w, const void *p, size_t n)
+{
+    if (n == 0)
+        return 1;
+    w->digest = _hash(w->digest, p, n);
+    return fwrite(p, n, 1, w->f) == 1;
 }
 
-static int _put_object(FILE *f, Xpost_Object o)
+static int _put(_Writer *w, unsigned int v)
 {
-    return fwrite(&o, sizeof o, 1, f) == 1;
+    return _emit(w, &v, sizeof v);
+}
+
+static int _put_object(_Writer *w, Xpost_Object o)
+{
+    return _emit(w, &o, sizeof o);
 }
 
 /* An operator row: what it states and what it is called. The name is
    padded out to a whole number of values so that everything after it
    keeps the alignment every other part of an image has. */
-static int _put_operators(FILE *f, Xpost_Context *ctx, unsigned int count)
+static int _put_operators(_Writer *w, Xpost_Context *ctx, unsigned int count)
 {
     unsigned int k;
 
@@ -472,33 +491,36 @@ static int _put_operators(FILE *f, Xpost_Context *ctx, unsigned int count)
         }
         len = (unsigned int)strlen(name);
         pad = (4u - (len % 4u)) % 4u;
-        if (!_put(f, (unsigned int)optab[k].n)) return 0;
-        if (!_put(f, len)) return 0;
-        if (len && fwrite(name, len, 1, f) != 1) return 0;
-        while (pad--)
-            if (fputc(0, f) == EOF)
-                return 0;
+        if (!_put(w, (unsigned int)optab[k].n)) return 0;
+        if (!_put(w, len)) return 0;
+        if (len && !_emit(w, name, len)) return 0;
+        if (pad)
+        {
+            static const char zero[4] = { 0, 0, 0, 0 };
+
+            if (!_emit(w, zero, pad)) return 0;
+        }
     }
     return 1;
 }
 
 /* The context's own share of what the boot settled. */
-static int _put_context(FILE *f, Xpost_Context *ctx)
+static int _put_context(_Writer *w, Xpost_Context *ctx)
 {
     unsigned int i;
 
 #define _PUT_CTX_FIELD(field) \
-    if (!_put(f, (unsigned int)ctx->field)) return 0;
+    if (!_put(w, (unsigned int)ctx->field)) return 0;
     XPOST_VM_IMAGE_CTX_FIELDS(_PUT_CTX_FIELD)
 #undef _PUT_CTX_FIELD
 
 #define _PUT_CTX_ROOT(field) \
-    if (!_put_object(f, ctx->field)) return 0;
+    if (!_put_object(w, ctx->field)) return 0;
     XPOST_CONTEXT_OBJECT_ROOTS(_PUT_CTX_ROOT)
 #undef _PUT_CTX_ROOT
 
     for (i = 0; i < _TYPENAME_COUNT; i++)
-        if (!_put_object(f, ctx->typenames[i]))
+        if (!_put_object(w, ctx->typenames[i]))
             return 0;
     return 1;
 }
@@ -507,7 +529,7 @@ static int _put_context(FILE *f, Xpost_Context *ctx)
    signed members go out as the bytes they occupy: nothing here
    interprets them, and a reader takes them back the way they were
    stored. */
-static int _put_bank_fields(FILE *f, Xpost_Memory_File *mem)
+static int _put_bank_fields(_Writer *w, Xpost_Memory_File *mem)
 {
     unsigned int field[XPOST_VM_IMAGE_BANK_FIELDS];
     unsigned int i;
@@ -528,7 +550,7 @@ static int _put_bank_fields(FILE *f, Xpost_Memory_File *mem)
     field[XPOST_VM_IMAGE_BANK_PUSH_REFUSED] = (unsigned int)mem->push_refused;
 
     for (i = 0; i < XPOST_VM_IMAGE_BANK_FIELDS; i++)
-        if (!_put(f, field[i]))
+        if (!_put(w, field[i]))
             return 0;
     return 1;
 }
@@ -544,7 +566,7 @@ static int _put_bank_fields(FILE *f, Xpost_Memory_File *mem)
 
    The copy is what makes that possible without disturbing the running
    interpreter: the arena the image is taken of stays exactly as it is. */
-static int _put_arena(FILE *f, Xpost_Context *ctx, Xpost_Memory_File *mem,
+static int _put_arena(_Writer *w, Xpost_Context *ctx, Xpost_Memory_File *mem,
                       int is_global, int host_state)
 {
     unsigned char *copy;
@@ -566,7 +588,7 @@ static int _put_arena(FILE *f, Xpost_Context *ctx, Xpost_Memory_File *mem,
     XPOST_VG_REOPEN_RANGE(mem->base, 0, mem->used);
 
     if (host_state || !is_global)
-        return fwrite(mem->base, 1, mem->used, f) == mem->used;
+        return _emit(w, mem->base, mem->used);
 
     copy = malloc(mem->used);
     if (!copy)
@@ -597,7 +619,7 @@ static int _put_arena(FILE *f, Xpost_Context *ctx, Xpost_Memory_File *mem,
         }
     }
 
-    ok = fwrite(copy, 1, mem->used, f) == mem->used;
+    ok = _emit(w, copy, mem->used);
     free(copy);
     return ok;
 }
@@ -613,7 +635,7 @@ static int _put_arena(FILE *f, Xpost_Context *ctx, Xpost_Memory_File *mem,
    name the same bytes, and storage no one has written since the arena
    was cleared is exactly where a difference between two runs would
    otherwise go unseen. */
-static int _put_bank(FILE *f, Xpost_Context *ctx, unsigned int bank,
+static int _put_bank(_Writer *w, Xpost_Context *ctx, unsigned int bank,
                      Xpost_Memory_File *mem, int host_state)
 {
     char name[8];
@@ -622,26 +644,26 @@ static int _put_bank(FILE *f, Xpost_Context *ctx, unsigned int bank,
 
     memset(name, 0, sizeof name);
     strncpy(name, xpost_vm_image_bank_name(bank), sizeof name - 1);
-    if (fwrite(name, sizeof name, 1, f) != 1)
+    if (!_emit(w, name, sizeof name))
         return 0;
 
-    if (!_put_bank_fields(f, mem))
+    if (!_put_bank_fields(w, mem))
         return 0;
 
     for (i = 0; i < XPOST_VM_IMAGE_FILE_BIRTHS; i++)
-        if (!_put(f, mem->file_births[i]))
+        if (!_put(w, mem->file_births[i]))
             return 0;
 
     for (ent = 0; ent < mem->table.nextent; ent++)
     {
-        if (!_put(f, mem->table.tab[ent].adr)) return 0;
-        if (!_put(f, mem->table.tab[ent].used)) return 0;
-        if (!_put(f, mem->table.tab[ent].sz)) return 0;
-        if (!_put(f, mem->table.tab[ent].mark)) return 0;
-        if (!_put(f, mem->table.tab[ent].tag)) return 0;
+        if (!_put(w, mem->table.tab[ent].adr)) return 0;
+        if (!_put(w, mem->table.tab[ent].used)) return 0;
+        if (!_put(w, mem->table.tab[ent].sz)) return 0;
+        if (!_put(w, mem->table.tab[ent].mark)) return 0;
+        if (!_put(w, mem->table.tab[ent].tag)) return 0;
     }
 
-    return _put_arena(f, ctx, mem, bank == 0, host_state);
+    return _put_arena(w, ctx, mem, bank == 0, host_state);
 }
 
 /* Empty the scratch stack, of what it holds and of what it held.
@@ -692,7 +714,8 @@ XPOST_TEST_VISIBLE int
 xpost_vm_image_write(Xpost_Context *ctx, const char *path, int host_state)
 {
     unsigned int stamp[XPOST_VM_IMAGE_STAMPS];
-    FILE *f;
+    _Writer writer;
+    _Writer *w = &writer;
     Xpost_Memory_File *bank[XPOST_VM_IMAGE_BANKS];
     unsigned int i;
     int err = 0;
@@ -734,34 +757,45 @@ xpost_vm_image_write(Xpost_Context *ctx, const char *path, int host_state)
        interpreter creates. The path is the caller's and not a running
        program's, so it is an interpreter-managed open rather than one
        the sandbox stands between. */
-    f = xpost_diskfile_fopen(path, "wb", 1, &err);
-    if (!f)
+    writer.f = xpost_diskfile_fopen(path, "wb", 1, &err);
+    writer.digest = XPOST_VM_IMAGE_DIGEST_SEED;
+    if (!writer.f)
     {
         XPOST_LOG_ERR("%d cannot open %s to write virtual memory to",
                       err, path);
         return 0;
     }
 
-    if (fwrite(XPOST_VM_IMAGE_MAGIC, XPOST_VM_IMAGE_MAGIC_LEN, 1, f) != 1)
+    if (!_emit(w, XPOST_VM_IMAGE_MAGIC, XPOST_VM_IMAGE_MAGIC_LEN))
         goto refuse;
     for (i = 0; i < XPOST_VM_IMAGE_STAMPS; i++)
-        if (!_put(f, stamp[i]))
+        if (!_put(w, stamp[i]))
             goto refuse;
 
-    if (!_put_operators(f, ctx, stamp[XPOST_VM_IMAGE_STAMP_OPERATORS]))
+    if (!_put_operators(w, ctx, stamp[XPOST_VM_IMAGE_STAMP_OPERATORS]))
         goto refuse;
-    if (!_put_context(f, ctx))
+    if (!_put_context(w, ctx))
         goto refuse;
 
     for (i = 0; i < XPOST_VM_IMAGE_BANKS; i++)
-        if (!_put_bank(f, ctx, i, bank[i], host_state))
+        if (!_put_bank(w, ctx, i, bank[i], host_state))
             goto refuse;
+
+    /* The digest of everything above, and the last thing in the file. It
+       is not hashed into itself, and nothing follows it, so a reader
+       hashes the file up to its last four bytes and compares. */
+    {
+        unsigned int digest = writer.digest;
+
+        if (fwrite(&digest, sizeof digest, 1, writer.f) != 1)
+            goto refuse;
+    }
 
     /* the image is only written where it reached storage: a short write
        discovered at the close is the same failure as one discovered
        above, and a caller told the write succeeded would go on to
        compare or load a truncated image */
-    if (fclose(f) != 0)
+    if (fclose(writer.f) != 0)
     {
         XPOST_LOG_ERR("cannot finish writing virtual memory to %s", path);
         return 0;
@@ -770,7 +804,7 @@ xpost_vm_image_write(Xpost_Context *ctx, const char *path, int host_state)
 
   refuse:
     XPOST_LOG_ERR("cannot write virtual memory to %s", path);
-    (void)fclose(f);
+    (void)fclose(writer.f);
     return 0;
 }
 
@@ -1220,6 +1254,33 @@ xpost_vm_image_load(Xpost_Context *ctx, const char *path)
     }
     r.at = bytes;
     r.left = len;
+
+    /* What the file says of itself, before anything in it is read as
+       anything. Every byte an image carries went into the digest at its
+       end, so a file that does not answer for itself is put down here
+       and nothing below is asked to make sense of it. */
+    if (len < XPOST_VM_IMAGE_MAGIC_LEN + sizeof(unsigned int))
+    {
+        XPOST_LOG_INFO("%s is too short to be an image of virtual memory",
+                       path);
+        goto done;
+    }
+    {
+        unsigned int said;
+        unsigned int found;
+
+        memcpy(&said, bytes + len - sizeof said, sizeof said);
+        found = _hash(XPOST_VM_IMAGE_DIGEST_SEED, bytes,
+                      len - sizeof said);
+        if (said != found)
+        {
+            XPOST_LOG_INFO("%s answers for itself with %08x and its bytes "
+                           "come to %08x; the image is not the one that was "
+                           "written", path, said, found);
+            goto done;
+        }
+        r.left = len - sizeof said;
+    }
 
     if (!_take(&r, magic, sizeof magic) ||
         memcmp(magic, XPOST_VM_IMAGE_MAGIC, XPOST_VM_IMAGE_MAGIC_LEN) != 0)

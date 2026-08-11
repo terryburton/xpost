@@ -85,7 +85,7 @@ case $count in
         echo "FAILURES: could not read how many ways an image can be damaged"
         exit 1 ;;
 esac
-if [ "$count" -lt 6 ]; then
+if [ "$count" -lt 20 ]; then
     echo "FAILURES: only $count ways to damage an image were offered, which is"
     echo "      fewer than the fixed ones this knows about"
     exit 1

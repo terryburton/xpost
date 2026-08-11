@@ -177,7 +177,12 @@ typedef struct
     size_t len;
     unsigned int stamp[XPOST_VM_IMAGE_STAMPS];
     size_t operators;       /* the first operator row */
-    size_t bank[XPOST_VM_IMAGE_BANKS]; /* each bank's name */
+    size_t context;         /* the context's own values */
+    size_t roots;           /* the objects the context roots */
+    size_t rows[XPOST_VM_IMAGE_BANKS];  /* each bank's entity table */
+    size_t arena[XPOST_VM_IMAGE_BANKS]; /* each bank's arena */
+    size_t used[XPOST_VM_IMAGE_BANKS];  /* and how long it is */
+    size_t bank[XPOST_VM_IMAGE_BANKS];  /* each bank's name */
 } Image;
 
 static int _read(const char *path, Image *im)
@@ -234,7 +239,9 @@ static int _read(const char *path, Image *im)
         namelen = _u32(im->bytes + at + sizeof(unsigned int));
         at += 2 * sizeof(unsigned int) + namelen + (4u - (namelen % 4u)) % 4u;
     }
+    im->context = at;
     at += im->stamp[XPOST_VM_IMAGE_STAMP_CONTEXT_FIELDS] * sizeof(unsigned int);
+    im->roots = at;
     at += (size_t)(im->stamp[XPOST_VM_IMAGE_STAMP_ROOTS]
                    + im->stamp[XPOST_VM_IMAGE_STAMP_TYPENAMES])
           * sizeof(Xpost_Object);
@@ -260,10 +267,14 @@ static int _read(const char *path, Image *im)
                        + XPOST_VM_IMAGE_BANK_NEXTENT * sizeof(unsigned int));
         at += (XPOST_VM_IMAGE_BANK_FIELDS + XPOST_VM_IMAGE_FILE_BIRTHS)
               * sizeof(unsigned int);
+        im->rows[b] = at;
         at += (size_t)nextent * XPOST_VM_IMAGE_ROW_FIELDS * sizeof(unsigned int);
+        im->arena[b] = at;
+        im->used[b] = used;
         at += used;
     }
-    if (at != im->len)
+    /* the digest of everything above it is the last thing in the file */
+    if (at + sizeof(unsigned int) != im->len)
     {
         report_failure("%s carries %lu bytes past what it describes", path,
                        (unsigned long)(im->len - at));
@@ -275,9 +286,24 @@ static int _read(const char *path, Image *im)
 /* The first row of a bank's entity table. */
 static size_t _rows(const Image *im, unsigned int bank)
 {
-    return im->bank[bank] + 8
-           + (XPOST_VM_IMAGE_BANK_FIELDS + XPOST_VM_IMAGE_FILE_BIRTHS)
-             * sizeof(unsigned int);
+    return im->rows[bank];
+}
+
+/* What an image answers for itself with. The digest is the last value in
+   the file and covers every byte before it, so a damage that means to be
+   met by a check further in has to leave the file answering for itself,
+   and one that means to be met by the digest has to not. */
+static void _reseal(Image *im, size_t len)
+{
+    unsigned int h = XPOST_VM_IMAGE_DIGEST_SEED;
+    size_t i;
+
+    for (i = 0; i + sizeof h <= len; i++)
+    {
+        h ^= im->bytes[i];
+        h *= 16777619u;
+    }
+    memcpy(im->bytes + len - sizeof h, &h, sizeof h);
 }
 
 /* Swap the names of two operator rows, leaving everything else where it
@@ -318,9 +344,24 @@ static int _swap_two_names(Image *im)
     return 0;
 }
 
-/* Every way an image is damaged here. The stamps are damaged one at a
-   time, by name, so that a stamp added to the head of an image without a
-   comparison behind it fails this rather than passing unnoticed. */
+/* Every way an image is damaged here, in two kinds.
+
+   The first kind damages what an image says: the value it begins with,
+   the stamps at its head, which operator each row of its table is, what
+   an entity of it claims to cover, how long the file is. Each of those
+   is met by a check written for it, and each is resealed after the
+   damage so that it is met by that check and not by the digest -- an
+   image that no longer answers for itself would be turned away at the
+   door and the check further in would never be reached.
+
+   The second kind damages a byte and leaves the file no longer answering
+   for itself. Those are met by the digest, and there is nowhere in an
+   image they are not: every region the file has is flipped in, and so is
+   the digest itself, and so are seven places spread across the whole
+   length of it. The digest is the only thing standing between a file
+   somebody else has written and this interpreter's virtual memory, and a
+   flip that reached the arena would put a chosen byte among the
+   procedures the language is made of. */
 typedef enum
 {
     DAMAGE_MAGIC,
@@ -328,14 +369,68 @@ typedef enum
     DAMAGE_ROW,
     DAMAGE_SHORT,
     DAMAGE_LONG,
-    DAMAGE_FIXED
+    DAMAGE_STAMP        /* and XPOST_VM_IMAGE_STAMPS of these */
 } Damage;
 
-#define DAMAGES (DAMAGE_FIXED + XPOST_VM_IMAGE_STAMPS)
+/* the damages that leave the file answering for itself */
+#define SEALED (DAMAGE_STAMP + XPOST_VM_IMAGE_STAMPS)
+/* and the flips that do not */
+#define FLIPS ((unsigned int)(sizeof _flip_names / sizeof *_flip_names))
+#define DAMAGES (SEALED + FLIPS)
+
+/* The places a flip lands in, and the fraction of the way through the
+   file the last of them are. Named apart from the image so that asking
+   what the damages are does not need one. */
+static const char *const _flip_names[] =
+{
+    "a byte of an operator's name",
+    "a byte of the context's own values",
+    "a byte of the objects the context roots",
+    "a byte of the global bank's entity table",
+    "a byte near the start of the global arena",
+    "a byte in the middle of the global arena",
+    "a byte near the end of the global arena",
+    "a byte of the local bank's entity table",
+    "a byte in the middle of the local arena",
+    "a byte of the digest itself",
+    "a byte a tenth of the way through",
+    "a byte a quarter of the way through",
+    "a byte two fifths of the way through",
+    "a byte eleven twentieths of the way through",
+    "a byte seven tenths of the way through",
+    "a byte seventeen twentieths of the way through",
+    "a byte nineteen twentieths of the way through"
+};
+
+static const unsigned int _flip_parts[] = { 10, 25, 40, 55, 70, 85, 95 };
+
+/* Where one flip lands. The offsets are worked out from the image rather
+   than written down, so a flip goes on landing in the region it names
+   when the format around it moves. */
+static size_t _flip_at(const Image *im, unsigned int f)
+{
+    switch (f)
+    {
+        case 0: return im->operators + 2 * sizeof(unsigned int);
+        case 1: return im->context;
+        case 2: return im->roots;
+        case 3: return im->rows[0] + 8 * XPOST_VM_IMAGE_ROW_FIELDS
+                                       * sizeof(unsigned int);
+        case 4: return im->arena[0] + 64;
+        case 5: return im->arena[0] + im->used[0] / 2;
+        case 6: return im->arena[0] + im->used[0] - 8;
+        case 7: return im->rows[1] + 8 * XPOST_VM_IMAGE_ROW_FIELDS
+                                       * sizeof(unsigned int);
+        case 8: return im->arena[1] + im->used[1] / 2;
+        case 9: return im->len - 1;
+        default: break;
+    }
+    return im->len * _flip_parts[f - 10] / 100;
+}
 
 static const char *_damage_name(unsigned int which)
 {
-    static char buf[64];
+    static char buf[80];
 
     switch (which)
     {
@@ -346,9 +441,13 @@ static const char *_damage_name(unsigned int which)
         case DAMAGE_LONG: return "an image with a byte on the end";
         default: break;
     }
-    snprintf(buf, sizeof buf, "the stamp for %s",
-             xpost_vm_image_stamp_name(which - DAMAGE_FIXED));
-    return buf;
+    if (which < SEALED)
+    {
+        snprintf(buf, sizeof buf, "the stamp for %s",
+                 xpost_vm_image_stamp_name(which - DAMAGE_STAMP));
+        return buf;
+    }
+    return _flip_names[which - SEALED];
 }
 
 static void _damages(void)
@@ -378,42 +477,74 @@ static void _damage(const char *in, const char *out, unsigned int which)
     }
     len = im.len;
 
-    switch (which)
+    if (which >= SEALED)
     {
-        case DAMAGE_MAGIC:
-            im.bytes[0] ^= 0xff;
-            break;
-        case DAMAGE_NAMES:
-            if (!_swap_two_names(&im))
+        /* a byte, and the file no longer answering for itself */
+        size_t off = _flip_at(&im, which - SEALED);
+
+        if (off >= len)
+        {
+            report_failure("%s lies outside an image of %lu bytes",
+                           _flip_names[which - SEALED], (unsigned long)len);
+            free(im.bytes);
+            return;
+        }
+        im.bytes[off] ^= 0xff;
+    }
+    else
+    {
+        switch (which)
+        {
+            case DAMAGE_MAGIC:
+                im.bytes[0] ^= 0xff;
+                break;
+            case DAMAGE_NAMES:
+                if (!_swap_two_names(&im))
+                {
+                    free(im.bytes);
+                    return;
+                }
+                break;
+            case DAMAGE_ROW:
+                /* the first entity of global memory, told it lies past
+                   the end of the arena it is in */
+                _put_u32(im.bytes + _rows(&im, 0)
+                         + XPOST_VM_IMAGE_ROW_ADR * sizeof(unsigned int),
+                         0xffff0000u);
+                break;
+            case DAMAGE_SHORT:
+                if (len < 64)
+                {
+                    report_failure("the image is too short to cut short");
+                    free(im.bytes);
+                    return;
+                }
+                len -= 64;
+                break;
+            case DAMAGE_LONG:
             {
-                free(im.bytes);
-                return;
+                unsigned char *grown = realloc(im.bytes, len + 1);
+
+                if (!grown)
+                {
+                    report_failure("cannot lengthen the image");
+                    free(im.bytes);
+                    return;
+                }
+                im.bytes = grown;
+                im.bytes[len] = 0;
+                len++;
+                break;
             }
-            break;
-        case DAMAGE_ROW:
-            /* the first entity of global memory, told it lies past the
-               end of the arena it is in */
-            _put_u32(im.bytes + _rows(&im, 0)
-                     + XPOST_VM_IMAGE_ROW_ADR * sizeof(unsigned int),
-                     0xffff0000u);
-            break;
-        case DAMAGE_SHORT:
-            if (len < 64)
-            {
-                report_failure("the image is too short to cut short");
-                free(im.bytes);
-                return;
-            }
-            len -= 64;
-            break;
-        case DAMAGE_LONG:
-            im.bytes[0] = im.bytes[0];  /* the byte goes on below */
-            break;
-        default:
-            _put_u32(im.bytes + XPOST_VM_IMAGE_MAGIC_LEN
-                     + (which - DAMAGE_FIXED) * sizeof(unsigned int),
-                     im.stamp[which - DAMAGE_FIXED] ^ 0x5a5a5a5au);
-            break;
+            default:
+                _put_u32(im.bytes + XPOST_VM_IMAGE_MAGIC_LEN
+                         + (which - DAMAGE_STAMP) * sizeof(unsigned int),
+                         im.stamp[which - DAMAGE_STAMP] ^ 0x5a5a5a5au);
+                break;
+        }
+        /* left answering for itself, so that the check written for this
+           damage is what meets it */
+        _reseal(&im, len);
     }
 
     f = fopen(out, "wb");
@@ -423,9 +554,7 @@ static void _damage(const char *in, const char *out, unsigned int which)
         free(im.bytes);
         return;
     }
-    if (fwrite(im.bytes, 1, len, f) != len ||
-        (which == DAMAGE_LONG && fputc(0, f) == EOF) ||
-        fclose(f) != 0)
+    if (fwrite(im.bytes, 1, len, f) != len || fclose(f) != 0)
         report_failure("cannot write a damaged image to %s", out);
     free(im.bytes);
 }

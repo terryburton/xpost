@@ -294,7 +294,8 @@ static int _read_image(const char *path, Image *im)
         at += _bank_used(b);
     }
 
-    if (at != im->len)
+    /* the digest of everything above it is the last thing in the file */
+    if (at + sizeof(unsigned int) != im->len)
     {
         report_failure("%s carries %lu bytes past what it describes", path,
                        (unsigned long)(im->len - at));

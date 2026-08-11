@@ -79,6 +79,11 @@
  * is a refusal, and every refusal is a fall back to booting the
  * language from those files.
  *
+ * An image answers for its own bytes: the last four are a digest of all
+ * the rest, and a read that does not arrive at the same value stops
+ * before anything in the file is read as anything. What that catches,
+ * and what it does not, is XPOST_VM_IMAGE_DIGEST_SEED.
+ *
  * A read that refuses an image says so where a run is told what it is
  * doing rather than where it is told what went wrong: nothing has gone
  * wrong, and what a refusal costs the run is the time it would have
@@ -235,7 +240,43 @@ typedef enum
  * @def XPOST_VM_IMAGE_VERSION
  * @brief The layout below, which a reader must know in full.
  */
-#define XPOST_VM_IMAGE_VERSION 2u
+#define XPOST_VM_IMAGE_VERSION 3u
+
+/**
+ * @def XPOST_VM_IMAGE_DIGEST_SEED
+ * @brief What the digest of an image's bytes begins from.
+ *
+ * The last four bytes of an image are a digest of every byte before
+ * them, and a read that does not arrive at the same value stops there.
+ *
+ * WHAT IT ANSWERS. That the file is the one that was written. Every
+ * single-byte difference is caught, and caught with certainty rather
+ * than with high probability: each step of the digest exclusive-ors a
+ * byte into the running value and multiplies by an odd constant, and
+ * multiplication by an odd constant is one-to-one over the width of the
+ * value, so a difference introduced at any byte cannot be cancelled by
+ * the bytes after it. A difference of several bytes is caught unless the
+ * bytes conspire, which for damage that is not aimed comes to about one
+ * chance in four thousand million.
+ *
+ * WHAT IT DOES NOT ANSWER, plainly: that the image came from anywhere in
+ * particular. It is a check and not a signature. Anyone able to write
+ * the file is able to work out the digest of what they wrote -- the
+ * constants are here in the open and there is no secret anywhere -- so
+ * an image assembled on purpose passes as readily as a true one. What
+ * this catches is damage: a write that stopped part way, storage that
+ * decayed, a file half copied, a byte changed by somebody who did not
+ * expect to be checked.
+ *
+ * So an image is exactly as trusted as the boot files beside it and the
+ * executable that reads it, and wants the same permissions: it is read
+ * into virtual memory, which holds the procedures the language is made
+ * of and the numbers that index the operator table, and a program that
+ * can choose what goes in there can choose what the interpreter does.
+ * The defence against a hostile image is that nobody hostile can write
+ * the file. This is the defence against an unlucky one.
+ */
+#define XPOST_VM_IMAGE_DIGEST_SEED 2166136261u
 
 /**
  * @def XPOST_VM_IMAGE_ENDIAN
@@ -322,6 +363,8 @@ XPOST_TEST_VISIBLE const char *xpost_vm_image_bank_name(unsigned int bank);
  *   for each of the bank's entity table rows, in the order the row
  *   enumeration gives; and finally the bytes of the arena, from its
  *   start to the high-water mark the bank's used field records.
+ *
+ *   and last, one value: the digest of every byte above it.
  *
  * Every value is a four-byte unsigned quantity. The signed members of
  * the memory file are written as the four bytes they occupy, so a
