@@ -194,6 +194,16 @@ while IFS="$(printf '\t')" read -r base args; do
     set --
     while read -r v; do set -- "$@" "$v"; done < "$work/values"
     st=$(runguard "$g" "$@")
+    # 77 is the skip status, which a guard uses to say the question it
+    # asks cannot be put on this machine -- a guard needing a second
+    # compiler on a machine with one, say. That is not a guard failing
+    # on the tree it is given, and the probes below are skipped with it:
+    # a guard that cannot ask its question cannot be asked to notice a
+    # tree that has been broken either.
+    if [ "$st" = 77 ]; then
+        echo "$base: skipped, so what it holds was not put to the test"
+        continue
+    fi
     if [ "$st" != 0 ]; then
         echo "FAIL: tests/$base does not succeed on the tree it is given"
         echo "      (exit $st); its refusals below would prove nothing"
