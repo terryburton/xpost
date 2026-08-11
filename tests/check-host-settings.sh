@@ -168,7 +168,7 @@ awk '
             out = out c
             i++
         }
-        print FILENAME ":" FNR ":" out
+        print FILENAME "\t" FNR "\t" out
     }' "$src"/data/*.ps > "$work/code"
 if [ ! -s "$work/code" ]; then
     echo "FAILURES: no PostScript found under $src/data; every reader would"
@@ -194,12 +194,16 @@ if [ ! -s "$work/reads" ]; then
     echo "      settings would be registered and never read"
     exit 1
 fi
-awk -F: '
+# The scan reads a line as <file> <line number> <code>, separated by
+# tabs. A path is what a colon cannot separate: a drive letter carries
+# one, so a field split on colons takes the file name for two fields and
+# hands the code below a line it reads no name out of -- every reader
+# reported as written in a shape this cannot read.
+awk -F '\t' '
     function isname(t) { return t ~ /^\/[^][(){}<>\/%]+$/ }
     {
         where = $1 ":" $2
-        line = $0
-        sub(/^[^:]*:[0-9]*:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         gsub(/[{}\[\]]/, " ", line)
         n = split(line, tok, /[ \t]+/)
         for (i = 1; i <= n; i++) {
