@@ -46,6 +46,18 @@
  * implementation of every marking method the pipeline can reach (the
  * vector devices do).
  *
+ * A device keeps the marking methods it brings. Selecting a device
+ * finishes it (.completedevice, data/device.ps), and part of that
+ * finishing is replacing the base class's PostScript fills with the
+ * compiled ones; those write the raster as the array of row strings the
+ * base classes keep under /ImgData, and paint in the colour spaces they
+ * know a component count for, so a device that keeps its pixels in a
+ * buffer of its own, or declares another space, is left holding its
+ * own. That rule is stated there rather than by the class-install check
+ * below: the check reads a class as the driver loads it, and which fill
+ * an instance ends up with is settled per instance, after Create, by
+ * what the instance turns out to hold.
+ *
  * Colour arity rule: the class's /nativecolorspace value determines the
  * component count of every <colour> operand: /DeviceRGB methods take
  * r g b, /DeviceGray methods take a single value. Components are unit

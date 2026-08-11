@@ -1,0 +1,211 @@
+% What device completion installs on a fresh device, and what it must
+% leave alone.
+%
+% .completedevice (data/device.ps) finishes every device the interpreter
+% makes, and part of that finishing is replacing the class's PostScript
+% marking methods with the compiled rasterisers. Neither compiled fill
+% serves every device. The rectangle fills write the page as the array
+% of row strings the raster base classes keep under /ImgData, so a
+% device holding its pixels in a buffer of its own has nothing for them
+% to write; the polygon fill paints in DeviceGray or DeviceRGB and in no
+% other space. A device that does not match must come out of the
+% completion still holding the method it brought, because what it would
+% be given instead reaches for something the device does not carry and
+% says so at the first mark rather than at load -- present, callable and
+% broken, which no probe with `known` can tell from working.
+%
+% Every device this interpreter ships that keeps its own buffer declares
+% DeviceRGB, so the grey side of the rule is unreached by the fleet and
+% reachable here: a device is a dictionary, and a dictionary is
+% something a program can build.
+
+/faildict 1 dict def
+faildict /n 0 put
+/assert { % bool (name)  .  -
+    exch { pop }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+/id 1183615869 internaldict def
+/frgray id /.fillrectgray get def
+/frrgb  id /.fillrectrgb  get def
+/fpoly  id /.fillpoly     get def
+
+% the marking methods a built device brings, kept where the assertions
+% can name the very objects that were installed: what the completion
+% must leave alone is these, not something that merely looks like them
+/ownrect { pop pop pop pop pop pop } bind def
+/ownpoly { pop pop pop } bind def
+
+% w h cs ncomp  .mkdev  dev
+% A device dictionary of the smallest shape .completedevice reads: the
+% page it adopted, the colour space it declares, and a marking suite of
+% its own. The raster is a flat string under /Buf -- what a device that
+% keeps its pixels in a buffer of its own looks like from PostScript.
+/mkdev { % w h cs ncomp  .  dev
+    /md.n exch def /md.cs exch def /md.h exch def /md.w exch def
+    <<
+        /nativecolorspace md.cs
+        /.ncomp md.n
+        /width md.w
+        /height md.h
+        /dimensions [ md.w md.h ]
+        /defaultmatrix [ 1 0 0 -1 0 md.h ]
+        /Buf md.w md.h mul string
+        /Create { pop pop }
+        /FillRect /ownrect load
+        /FillPoly /ownpoly load
+        /Emit { pop }
+        /Destroy { pop }
+    >>
+} bind def
+
+% dev  .withgreyrows  dev
+% Give the device the raster the base classes keep instead: one string
+% per row under /ImgData, which is what the compiled grey fill writes.
+/withgreyrows { % dev  .  dev
+    dup /width get /wr.w exch def
+    dup /height get /wr.h exch def
+    dup /ImgData [ wr.h { wr.w string } repeat ] put
+} bind def
+
+% dev  .withrgbrows  dev
+% The colour raster: one row of three component planes per scanline,
+% which is what the compiled rgb fill writes.
+/withrgbrows { % dev  .  dev
+    dup /width get /wr.w exch def
+    dup /height get /wr.h exch def
+    dup /ImgData
+    [ wr.h { [ wr.w string wr.w string wr.w string ] } repeat ] put
+} bind def
+
+/complete { % dev  .  dev
+    dup 1 1 .privatedict /.completedevice get exec
+} bind def
+
+% --- the rectangle fill ----------------------------------------------
+
+% A device that keeps its raster in a buffer of its own carries no row
+% array for the compiled fill to write, so it keeps the fill it brought.
+% Both colour spaces the compiled fills cover, because the rule is the
+% fill's and not one space's.
+16 16 /DeviceGray 1 mkdev complete
+    dup /FillRect get /ownrect load eq
+    (a grey device with its own buffer keeps its own FillRect) assert
+    pop
+
+16 16 /DeviceRGB 3 mkdev complete
+    dup /FillRect get /ownrect load eq
+    (an rgb device with its own buffer keeps its own FillRect) assert
+    pop
+
+% A device that brought a compiled rectangle fill of its own keeps that
+% too: what it brought reaches the raster it holds. The other colour
+% space's compiled fill stands in for one, being a compiled rectangle
+% fill that is not the one the completion would install.
+16 16 /DeviceGray 1 mkdev withgreyrows
+    dup /FillRect /frrgb load put complete
+    dup /FillRect get /frrgb load eq
+    (a grey device keeps a compiled FillRect it brought) assert
+    pop
+
+16 16 /DeviceRGB 3 mkdev withrgbrows
+    dup /FillRect /frgray load put complete
+    dup /FillRect get /frgray load eq
+    (an rgb device keeps a compiled FillRect it brought) assert
+    pop
+
+% The other half of the same rule: a device whose raster is the row
+% array does take the compiled fill, and the fill writes those rows.
+% Without this the guards above would pass by never installing anything.
+/D 16 16 /DeviceGray 1 mkdev withgreyrows complete def
+D /FillRect get /frgray load eq
+    (a grey device whose raster is the row array takes the compiled FillRect) assert
+0.5 2 3 4 5 D dup /FillRect get exec
+D /ImgData get 3 get 2 get 0 gt
+    (the compiled grey fill wrote the row array) assert
+
+/D 16 16 /DeviceRGB 3 mkdev withrgbrows complete def
+D /FillRect get /frrgb load eq
+    (an rgb device whose raster is the row array takes the compiled FillRect) assert
+0.5 0.5 0.5 2 3 4 5 D dup /FillRect get exec
+D /ImgData get 3 get 0 get 2 get 0 gt
+    (the compiled rgb fill wrote the row array) assert
+
+% --- the polygon fill ------------------------------------------------
+
+% The compiled polygon fill paints in the two spaces it knows the
+% component count of; a device declaring another keeps the class's own,
+% which takes that count from the device.
+16 16 /DeviceCMYK 4 mkdev complete
+    dup /FillPoly get /ownpoly load eq
+    (a device declaring a space the compiled fill does not paint keeps its own FillPoly) assert
+    pop
+
+16 16 /DeviceGray 1 mkdev complete
+    dup /FillPoly get /fpoly load eq
+    (a grey device takes the compiled FillPoly) assert
+    pop
+
+16 16 /DeviceRGB 3 mkdev complete
+    dup /FillPoly get /fpoly load eq
+    (an rgb device takes the compiled FillPoly) assert
+    pop
+
+% --- what a completed device does when it is painted on --------------
+
+% The slot assertions above say what was installed; this says what the
+% page does. A grey device keeping its own buffer is installed in the
+% graphics state and the page is cleared, which is the shortest path
+% from a program to the rectangle fill the completion chose: erasepage
+% paints the whole page through FillRect (data/paint.ps), so a page that
+% cannot be cleared is a device that cannot be drawn on at all.
+/painted 16 16 /DeviceGray 1 mkdev def
+% a rectangle fill of its own that paints into that buffer, so what the
+% clearing wrote can be counted afterwards. The buffer starts as a fresh
+% string, every byte zero, and the page is cleared to white.
+painted /FillRect { % val x y w h IMAGE  .  -
+    12 dict begin
+    /dv exch def
+    /h exch cvi def /w exch cvi def /y exch cvi def /x exch cvi def
+    /v exch def
+    /raster dv /Buf get def
+    /rw dv /width get def
+    /rh dv /height get def
+    y 1 y h add {
+        /py exch def
+        x 1 x w add {
+            /px exch def
+            px 0 ge px rw lt and py 0 ge py rh lt and and {
+                raster py rw mul px add v 255 mul cvi put
+            } if
+        } for
+    } for
+    end
+} bind put
+painted complete pop
+
+/olddev graphicsdict /currgstate get /device get def
+graphicsdict /currgstate get /device painted put
+.privatedict /.gstatetemplate get exec /device painted put
+
+{ initgraphics erasepage } stopped
+/failed exch def
+
+graphicsdict /currgstate get /device olddev put
+.privatedict /.gstatetemplate get exec /device olddev put
+initgraphics
+
+failed not
+    (a completed grey device with its own buffer clears its page) assert
+failed { clear } if
+
+0 painted /Buf get { 128 ge { 1 add } if } forall
+painted /Buf get length eq
+    (the clearing reached every pixel of the device's own buffer) assert
+
+count 0 eq (the suite leaves the operand stack empty) assert
+faildict /n get 0 eq { (SUCCESS) = }{ (FAILURES: ) print faildict /n get = } ifelse
+quit

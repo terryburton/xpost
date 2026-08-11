@@ -116,30 +116,44 @@ setglobal
         }{ pop pop pop } ifelse
     }{ pop pop } ifelse
 
-    % Override the class's scanline FillPoly with the compiled
-    % rasterizer, except where the device declares it draws nothing:
+    % Override the class's scanline methods with the compiled
+    % rasterizers, except where the device declares it draws nothing:
     % rasterizing into the null device would burn the whole render cost
     % of a page to discard every span.
+    %
+    % Fetch nativecolorspace with get, and hold it literal: some devices
+    % store it as an executable name, which naming it again would
+    % execute.
     dev /NoOutput known not {
-        dev /FillPoly //.internaldict /.fillpoly get put
-        % grayscale array-of-strings devices (.xpost_PGMIMAGE) get the
-        % compiled FillRect too; erasepage clears the page through it.
-        % Fetch the value with get: some devices store nativecolorspace
-        % as an executable name, which a bare reference would execute.
-        dev /nativecolorspace get /DeviceGray eq {
-            dev /FillRect //.internaldict /.fillrectgray get put
+        /cs dev /nativecolorspace get cvlit def
+        % The compiled scanline fill paints in the device's native
+        % colour space, and it paints in two of them; a device declaring
+        % any other keeps the class's own polygon fill, which takes its
+        % component count from the device.
+        cs /DeviceGray eq cs /DeviceRGB eq or {
+            dev /FillPoly //.internaldict /.fillpoly get put
         } if
-        % planar rgb devices whose raster is a PS-level ImgData
-        % array (PPMIMAGE) likewise -- .fillrectrgb writes those rows
-        % directly, so a device that keeps its raster in a C buffer
-        % (bgr) has no ImgData and stays on its own FillRect. Skip a
-        % device that brought a compiled FillRect of its own (the png
-        % family) too.
-        dev /nativecolorspace get /DeviceRGB eq {
-            dev /ImgData known {
-                dev /FillRect get type /operatortype ne {
-                    dev /FillRect //.internaldict /.fillrectrgb get put
-                } if
+        % The compiled rectangle fills write the page as the array of
+        % row strings the base classes keep it in under /ImgData
+        % (.xpost_PGMIMAGE, PPMIMAGE), so they fit a device whose raster
+        % is that array and no other: a device that keeps its raster in
+        % a C buffer (bgr, the png family) carries no such array, and a
+        % fill reaching for one answers undefined at the first
+        % rectangle. A device that brought a compiled rectangle fill of
+        % its own keeps that as well -- what it brought reaches the
+        % raster it holds. Both conditions are the compiled fill's
+        % rather than one colour space's, so they are asked once and the
+        % colour space chooses only which fill is installed; erasepage
+        % clears the page through whichever the device ends up with.
+        dev /ImgData known {
+            dev /FillRect 2 copy known
+                { get type /operatortype ne }{ pop pop true } ifelse
+        }{ false } ifelse {
+            cs /DeviceGray eq {
+                dev /FillRect //.internaldict /.fillrectgray get put
+            } if
+            cs /DeviceRGB eq {
+                dev /FillRect //.internaldict /.fillrectrgb get put
             } if
         } if
     } if

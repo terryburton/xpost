@@ -3404,6 +3404,23 @@ test('thin-stroke',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast)
 
+# What device completion installs on a fresh device, and what it must leave
+# alone. The compiled rectangle fills write the raster the base classes keep as
+# an array of row strings, and the compiled polygon fill paints in two colour
+# spaces; a device that keeps its pixels in a buffer of its own, or declares
+# another space, must come out of the completion still holding the method it
+# brought. What it would be given instead is present, callable and broken --
+# no probe with `known` tells it from a working one, and it answers only when
+# the page is first painted. Every shipped device that keeps its own buffer
+# declares DeviceRGB, so the grey side of the rule is reached here by building
+# a device dictionary, which is all a device is.
+test('device-completion',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/device_completion_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # Device teardown discipline: Destroy is called at setpagedevice, at job end,
 # and possibly by the program itself, so every device's Destroy must be
 # idempotent -- clear the stored resource handle, never free it twice -- and

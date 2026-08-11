@@ -96,6 +96,7 @@ tests/counttomark_test.ps \
 tests/dct_truncated_test.ps \
 tests/dev_rect_test.c \
 tests/device-fleet.sh \
+tests/device_completion_test.ps \
 tests/device_contract_test.ps \
 tests/device_destroy.golden \
 tests/device_destroy_test.ps \
