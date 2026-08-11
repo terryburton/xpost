@@ -545,8 +545,6 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     if (tmp == MAP_FAILED)
     { /* hanging error case */
 #else
-    /* initialize mem (valgrind) */
-    memset(xpost_vm_ptr(mem, mem->used), 0, mem->max - mem->used);
     if (getenv("XPOST_GROW_MOVES"))
     {
         /* Force every grow to relocate, so that a pointer taken into the
@@ -569,12 +567,21 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         if (tmp != NULL)
         {
             memcpy(tmp, mem->base, mem->used);
-            memset((unsigned char *)tmp + mem->used, 0, sz - mem->used);
             free(mem->base);
         }
     }
     else
     tmp = realloc(mem->base, sz);
+    /* A block from the host allocator carries what it last held, past
+       what was copied into it. A memory file reads as zero above its
+       high-water mark from the moment it is made, and it goes on
+       reading that way through a grow: the storage above the mark is
+       what the file hands out next, and an allocation that came back
+       carrying the last tenant's bytes would put them in the middle of
+       what the file holds. Both ways of growing the file are covered by
+       the one clearing. */
+    if (tmp != NULL)
+        memset((unsigned char *)tmp + mem->used, 0, sz - mem->used);
     if (tmp == NULL)
     { /* hanging error case */
 #endif
@@ -671,6 +678,31 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
            access the file makes to storage it has just handed out */
         XPOST_VG_UNPOISON_RANGE(mem->base, (unsigned int)adr, sz);
         memset(xpost_vm_ptr(mem, (unsigned int)adr), 0, sz);
+    }
+
+    /* The bytes skipped to reach an aligned address are inside what the
+       file holds and nothing ever writes them: no entity is located
+       there and no reader has a reason to look. What that leaves is
+       storage in the middle of the file whose contents are whatever the
+       file's own storage arrived carrying -- zero where it was mapped,
+       and whatever the host allocator last had in it where it was not.
+       So the gaps are cleared as they are skipped, and every byte below
+       the high-water mark is one the file put there. Opened to be
+       written and closed again: the padding is not handed out, so
+       nothing may read it afterwards either. */
+    if (adr > mem->used)
+    {
+        unsigned int gap = (unsigned int)adr - mem->used;
+
+        /* An allocation of nothing is not grown for, so the alignment it
+           steps over is only the file's to clear as far as the file
+           reaches. */
+        if (mem->used + gap > mem->max)
+            gap = mem->max - mem->used;
+
+        XPOST_VG_UNPOISON_RANGE(mem->base, mem->used, gap);
+        memset(xpost_vm_ptr(mem, mem->used), 0, gap);
+        XPOST_VG_POISON_RANGE(mem->base, mem->used, gap);
     }
 
     mem->used = (unsigned int)end;
