@@ -46,6 +46,15 @@
 # include <sys/mman.h> /* mmap munmap mremap */
 #endif
 
+/* A mapped arena grows by extending its mapping, and that is the whole
+   of what it is worth: where the mapping cannot be extended the file has
+   to be copied between two mappings, which holds both at once and costs
+   more than the allocator it would be standing in for. The two names are
+   defined together or not at all. */
+#if defined(HAVE_MMAP) && !defined(HAVE_MREMAP)
+# error "HAVE_MMAP without HAVE_MREMAP: a mapped arena needs both, or neither"
+#endif
+
 #ifdef _WIN32
 # ifndef WIN32_LEAN_AND_MEAN
 #  define WIN32_LEAN_AND_MEAN
@@ -513,35 +522,30 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
             XPOST_LOG_ERR("ftruncate(%d, %d) returned -1 (error: %s)",
                           mem->fd, sz, strerror(errno));
     }
-# ifdef HAVE_MREMAP
-    tmp = mremap(mem->base, mem->max, sz, MREMAP_MAYMOVE);
-# else
-    if (mem->fd != -1)
-    {
-        msync((void *)mem->base, mem->used, MS_SYNC);
-        munmap((void *)mem->base, mem->max);
-        lseek(mem->fd, 0, SEEK_SET);
-        if (ftruncate(mem->fd, sz) == -1)
-            XPOST_LOG_ERR("ftruncate(%d, %d) returned -1 (error: %s)",
-                          mem->fd, sz, strerror(errno));
-
-        tmp = mmap(NULL, sz,
-                   PROT_READ | PROT_WRITE,
-                   MAP_SHARED,
-                   mem->fd, 0);
-    }
-    else
+    /* Extending the mapping in place is what makes this backing worth
+       having: the storage that is added is never written by the grow, so
+       the extent a geometric growth leaves spare costs nothing until the
+       file reaches it. That also means a pointer taken into the arena
+       before a grow usually still works, and a stale one is found only
+       by chance. Under XPOST_GROW_MOVES the mapping is made afresh
+       elsewhere and the old one released instead, so any pointer held
+       across an allocation addresses an unmapped page; that is what
+       tests/run-reloc-stress-test.sh runs the interpreter under. Both
+       routes grow the file and leave the caller with what it asked for. */
+    if (getenv("XPOST_GROW_MOVES"))
     {
         tmp = mmap(NULL, sz,
                    PROT_READ | PROT_WRITE,
-                   MAP_ANONYMOUS | MAP_PRIVATE,
+                   (mem->fd == -1 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED),
                    mem->fd, 0);
         if (tmp != MAP_FAILED)
         {
             memcpy(tmp, mem->base, mem->used);
+            munmap((void *)mem->base, mem->max);
         }
     }
-# endif
+    else
+        tmp = mremap(mem->base, mem->max, sz, MREMAP_MAYMOVE);
     if (tmp == MAP_FAILED)
     { /* hanging error case */
 #else

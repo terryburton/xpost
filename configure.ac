@@ -575,15 +575,25 @@ fi
 
 AC_CHECK_FUNCS([buttox])
 
-# mremap
+# mmap and mremap
+#
+# A mapped arena grows by extending its mapping, and that is what makes
+# it worth taking: the storage a geometric growth leaves spare is never
+# written and so costs nothing until the file reaches it. Where the
+# mapping cannot be extended the file has to be copied between two
+# mappings, holding both at once, which costs more than the allocator it
+# would stand in for. So the two are asked for together and defined
+# together, and a host offering only the first takes the allocator.
 have_mremap="no"
 if test "x${have_mmap}" = "xyes" ; then
-   AC_CHECK_FUNCS([mmap mremap])
-   if ! test "x${ac_cv_func_mmap}" = "xyes" ; then
+   AC_CHECK_FUNC([mmap], [], [have_mmap="no"])
+   AC_CHECK_FUNC([mremap], [have_mremap="yes"], [have_mremap="no"])
+   if test "x${have_mremap}" = "xno" ; then
       have_mmap="no"
    fi
-   if test "x${ac_cv_func_mremap}" = "xyes" ; then
-      have_mremap="yes"
+   if test "x${have_mmap}" = "xyes" ; then
+      AC_DEFINE([HAVE_MMAP], [1], [Define to 1 if you have the `mmap' function.])
+      AC_DEFINE([HAVE_MREMAP], [1], [Define to 1 if you have the `mremap' function.])
    fi
 fi
 
@@ -604,9 +614,9 @@ echo "  OS...................: ${host_os}"
 echo
 echo "  Release mode.........: ${enable_release}"
 if test "x${have_mmap}" = "xyes" ; then
-echo "  mmap support.........: ${have_mmap} (mremap: ${have_mremap})"
+echo "  Memory backing.......: mapped (mmap/mremap)"
 else
-echo "  mmap support.........: no"
+echo "  Memory backing.......: allocator"
 fi
 echo "  Freetype support.....: ${have_freetype}"
 echo "  Fontconfig support...: ${have_fontconfig}"
