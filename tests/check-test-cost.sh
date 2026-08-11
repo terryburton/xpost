@@ -51,9 +51,57 @@
 #   to be a tag some profile names; a fourth tag introduced and left out
 #   of the wrapper would put its tests in no profile at all.
 #
+# All of that is the form of a tag. None of it compares a tag to a
+# duration, so a tag can be wrong the day it is written and go on being
+# wrong as the test it names gets faster or slower.
+#
+# Given a build directory as well, this reads that build's test record
+# and says which tags the run disagrees with. That part is a report and
+# not a rule: nothing it finds about a tag changes the exit status.
+# Being unable to read a record it was pointed at does fail, because a
+# report that answers with silence when it was handed nothing is the
+# one way it could be worse than not existing.
+#
+# It is not a rule because of what a cost is. The taxonomy defines one
+# as the time a test takes run alone on an otherwise idle machine, and
+# an ordinary run is neither -- the suite runs several tests at once by
+# default, and the machine is whatever its owner was already doing on
+# it. A check that failed a test for measuring outside its band would
+# fail hardest on the busiest machine, which is when a developer least
+# wants to be arguing with it, and what it would teach is to tag for the
+# worst run rather than for the cost. So the tags get a refresh instead:
+# durations are taken from a run that was going to happen anyway, the
+# disagreements are printed, and a human decides.
+#
+# What the report establishes:
+#
+#   that a test measured outside the band its tag names, in a record
+#   whose tests did not overlap each other. That is a real disagreement
+#   between the tag and the run.
+#
+# What it does not establish, said here because a report read for more
+# than it says is worse than no report at all:
+#
+#   that the machine was idle. Nothing in the record says, and nothing
+#   can. Load only ever adds to a duration, so the two directions are
+#   not alike: a test reported under its band was under it whatever else
+#   the machine was doing, and a test reported over its band may only
+#   have been sharing. Confirm an over-band finding by running that test
+#   alone before re-costing it.
+#
+#   anything about a test the record does not hold. A record left by a
+#   profile covers that profile and no more, and a test that skipped
+#   measured nothing at all. Both are counted out and both are said.
+#
+#   that a tag it passes over is right. Silence here is one measurement
+#   that fell inside the band, not a property of the test.
+#
 #   $1  path to the source tree root
+#   $2  optional: a build directory whose test record to read durations
+#       from, made by `meson test -C <build> --num-processes 1`
 set -u
-src=${1:?usage: check-test-cost.sh <srcroot>}
+src=${1:?usage: check-test-cost.sh <srcroot> [buildroot]}
+build=${2:-}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
 guard_require_file "$src/meson.build" "the build description"
@@ -91,6 +139,32 @@ for c in $costs; do
             fail=1
         fi
     done
+done
+
+# ---- the bands the costs stand for ----
+#
+# The three costs are ranges of duration, and where one ends and the
+# next begins is stated once, in the taxonomy in meson.build. The report
+# below needs them as numbers, which is a second statement of the same
+# thing, so the second is held to the first: reword the taxonomy and
+# this fails until the numbers come with it. That is the whole reason
+# the wording is matched exactly rather than loosely -- a match that
+# tolerated a reword would tolerate the reword that moved a bound.
+band_fast_max=5
+band_slow_max=50
+for want in 'fast      under five seconds' \
+            'slow      five seconds to fifty' \
+            'veryslow  longer than fifty'
+do
+    if ! grep -qx "#   $want" "$meson"; then
+        echo "FAIL: the cost taxonomy in meson.build no longer reads"
+        echo "      \"#   $want\""
+        echo "      This guard restates those bounds as $band_fast_max and"
+        echo "      $band_slow_max seconds to compare them against measured"
+        echo "      durations; change the two together or they say"
+        echo "      different things"
+        fail=1
+    fi
 done
 
 # ---- one cost per registration ----
@@ -206,4 +280,145 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 echo "SUCCESS ($total registrations, each naming one cost)"
+
+if [ -z "$build" ]; then
+    echo "      the form of the tags only -- what the tests measure was"
+    echo "      not read; pass a build directory to compare the two"
+    exit 0
+fi
+
+# ---- what the tests measured, against what they declare ----
+#
+# Everything from here is a report. It prints and does not fail, for the
+# reasons in the header.
+#
+# The record is meson's own, one JSON object a line, and is read as the
+# profile wrapper reads it: a key is the unescaped form of its name, and
+# an unescaped quote cannot occur inside the captured output beside it,
+# so the first match on a line is the field and not a mention of it. It
+# is read where it lies rather than mirrored: it is written by the build
+# rather than checked out, so the line endings are the ones this machine
+# makes.
+#
+# The suites are read off the record too, not off meson.build. What a
+# test was tagged when it ran is what the run is evidence about; a tag
+# edited since is a tag no measurement here speaks for.
+guard_require_dir "$build" "the build directory"
+record="$build/meson-logs/testlog.json"
+guard_require_file "$record" "the test record"
+
+awk '
+    {
+        name = ""; res = ""; dur = ""; st = ""
+        if (match($0, /^\{"name": "[^"]*"/)) {
+            name = substr($0, RSTART, RLENGTH)
+            sub(/^\{"name": "/, "", name); sub(/"$/, "", name)
+        }
+        if (match($0, /, "result": "[A-Z]+"/)) {
+            res = substr($0, RSTART, RLENGTH)
+            sub(/^, "result": "/, "", res); sub(/"$/, "", res)
+        }
+        if (match($0, /, "duration": [0-9]+\.?[0-9]*/)) {
+            dur = substr($0, RSTART, RLENGTH); sub(/^, "duration": /, "", dur)
+        }
+        if (match($0, /, "starttime": [0-9]+\.?[0-9]*/)) {
+            st = substr($0, RSTART, RLENGTH); sub(/^, "starttime": /, "", st)
+        }
+        i = index(name, " / ")
+        if (name == "" || res == "" || dur == "" || st == "" || i == 0) next
+        suites = substr(name, 1, i - 1)
+        sub(/^[^:]*:/, "", suites)
+        tag = ""
+        n = split(suites, s, "+")
+        for (j = 1; j <= n; j++)
+            if (s[j] == "fast" || s[j] == "slow" || s[j] == "veryslow")
+                tag = (tag == "" ? s[j] : "?")
+        print substr(name, i + 3) "\t" tag "\t" res "\t" st "\t" dur
+    }' "$record" > "$work/measured"
+
+# Counts in against counts out. A record whose shape has moved on would
+# leave the scan reading a fraction of the run and reporting on it as
+# though it were the run, which is the one way a report like this turns
+# into a lie rather than into silence.
+held=$(grep -c . "$record")
+read_back=$(grep -c . "$work/measured")
+if [ "$read_back" -eq 0 ] || [ "$read_back" -ne "$held" ]; then
+    echo "      $read_back of $held records could be read from $record;"
+    echo "      the shape of the record has moved and nothing is reported"
+    echo "      from it -- fix the scan above"
+    exit 0
+fi
+
+# Whether the run was one test at a time, which is half of what the
+# taxonomy asks for and the half a record can answer. Durations taken
+# while other tests had the machine are not costs, so a record made in
+# parallel is not read at all rather than read with a caveat: a caveat
+# on every line is a caveat nobody reads.
+tab=$(printf '\t')
+overlap=$(sort -t "$tab" -k4,4n "$work/measured" | awk -F'\t' '
+    NR > 1 && end > $4 + 0.05 { n++ }
+    { end = $4 + $5 }
+    END { print n + 0 }')
+if [ "$overlap" -ne 0 ]; then
+    echo "      the record in $build was left by a run of more than one"
+    echo "      test at a time ($overlap of them overlapping another), and a"
+    echo "      duration measured while the rest of the suite had the"
+    echo "      machine is not what a cost is. Nothing is reported from it."
+    echo "      Make one this can read with:"
+    echo "        meson test -C $build --num-processes 1"
+    exit 0
+fi
+
+awk -F'\t' -v fmax="$band_fast_max" -v smax="$band_slow_max" '
+    $3 == "SKIP" { skipped++; next }
+    $2 == "" || $2 == "?" { untagged++; next }
+    {
+        d = $5 + 0
+        measured++
+        want = (d < fmax) ? "fast" : (d <= smax) ? "slow" : "veryslow"
+        if (want != $2) {
+            drift++
+            printf "L      %-30s %7.2f s  tagged %-8s measures %s\n", \
+                   $1, d, $2, want
+        }
+    }
+    END {
+        printf "C\t%d\t%d\t%d\t%d\n", measured + 0, drift + 0, \
+               skipped + 0, untagged + 0
+    }' "$work/measured" > "$work/drift"
+
+counts=$(awk -F'\t' '$1 == "C" { print $2, $3, $4, $5 }' "$work/drift")
+if [ -z "$counts" ]; then
+    echo "      the comparison above wrote no tally, so how much of the"
+    echo "      record it covered cannot be told and nothing is reported"
+    exit 0
+fi
+# shellcheck disable=SC2086
+set -- $counts
+measured=$1; ndrift=$2; skipped=$3; untagged=$4
+
+if [ "$ndrift" -eq 0 ]; then
+    echo "cost drift: none of the $measured tests this record measured is"
+    echo "      outside the band its tag names"
+else
+    echo "cost drift: $ndrift of the $measured tests this record measured are"
+    echo "      outside the band their tags name:"
+    sed -n 's/^L//p' "$work/drift"
+    echo "      Re-cost each in meson.build, or leave it and say in the"
+    echo "      comment above it why the measurement is not the cost."
+fi
+
+# The report's own edges, said every time rather than only when it finds
+# something: a reader who takes a quiet run for a clean bill of costs has
+# read it for more than it says.
+echo "      Read in one direction only: load adds to a duration and never"
+echo "      takes away, so a test named under its band is under it whatever"
+echo "      else the machine was doing, while one named over its band may"
+echo "      only have been sharing -- run that one alone before re-costing."
+if [ "$skipped" -ne 0 ] || [ "$untagged" -ne 0 ]; then
+    echo "      $skipped test(s) skipped and so measured nothing; $untagged carried"
+    echo "      no single cost in the record. Neither is reported on."
+fi
+echo "      The record holds $held test(s). One the run that left it did not"
+echo "      select is not among them, and nothing here speaks for its tag."
 exit 0

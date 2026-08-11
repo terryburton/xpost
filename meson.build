@@ -3108,6 +3108,21 @@ test('check-test-cost',
   args: [ meson.current_source_dir() ],
   suite: cost_fast)
 
+# The same guard given this build's test record as well, which turns it
+# from a check on the form of the tags into a report on whether they are
+# true. It is a target and not a test because the answer depends on the
+# run that came before it: a cost is what a test takes run alone on an
+# idle machine, and the suite runs several at once on whatever machine
+# it is given. Selecting on a wrong tag is not a failure the tree can
+# gate on without gating on the load of the machine, so this is asked
+# for rather than run, after a serial run has left a record to read:
+#
+#   meson test -C build --num-processes 1
+#   ninja -C build cost-drift
+run_target('cost-drift',
+  command: [ find_program('tests/check-test-cost.sh'),
+             meson.current_source_dir(), meson.current_build_dir() ])
+
 # Every configuration raises the time limit off meson's default. A test
 # killed by a clock reports the same red as one that found a defect, and
 # the tree's own measurements put the default within a small multiple of
