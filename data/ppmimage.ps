@@ -42,6 +42,14 @@
     /.rowalloc { [ width string width string width string ] } bind
     /.rowempty { [ 0 string 0 string 0 string ] } bind
 
+    % whether a row of the raster is one the page holds. A row of either
+    % kind names three planes, so what tells them apart is the plane: a
+    % held row's is as long as the page is wide and an empty row's holds
+    % no pixel.
+    /.rowheld { % row  .  bool
+        0 get length 0 ne
+    } bind
+
     % what one .rowalloc costs the memory it allocates from, as the
     % elements and the string bytes it takes: a planar row is the three
     % elements naming its planes and one byte per pixel in each of them.

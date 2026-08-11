@@ -35,6 +35,13 @@
     /.rowalloc { width string } bind
     /.rowempty { 0 string } bind
 
+    % whether a row of the raster is one the page holds. A grayscale row
+    % is the pixels itself, so a held row is as long as the page is wide
+    % and the empty row is as long as it holds pixels.
+    /.rowheld { % row  .  bool
+        length 0 ne
+    } bind
+
     % what one .rowalloc costs the memory it allocates from, as the
     % elements and the string bytes it takes: a string row is one byte
     % per pixel and no elements. Create prices the whole raster from this

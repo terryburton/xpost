@@ -132,6 +132,33 @@ currentglobal true setglobal
         .unitclamp 255 mul cvi
     } bind
 
+    % x y  .onpage  bool
+    % Whether a device coordinate names a pixel of the page: the four
+    % edges a mark is dropped at, as one answer, for the read that has
+    % to go on and produce a value where a write simply stops. The
+    % coordinates are tested as they arrive rather than after .to-int:
+    % floor is monotone and the edges are whole numbers, so the two
+    % orders answer alike, and a coordinate the page does not reach need
+    % not be one an integer holds.
+    /.onpage { % x y  .  bool
+        dup 0 lt exch height ge or
+        exch dup 0 lt exch width ge or
+        or not
+    } bind
+
+    % -  .groundpix  c1..cN
+    % What the page shows where this device holds no pixel: the colour
+    % erasepage last cleared the page to, in the channel scale a stored
+    % pixel reads back in. A device that has not been erased has no
+    % ground recorded, and its rows stand as they were allocated, which
+    % is what it answers.
+    /.groundpix { % -  .  c1..cN
+        currentdict /.ground known
+            { .ground { .chan } forall }
+            { .ncomp { 0 } repeat }
+        ifelse
+    } bind
+
     /PutPix { % c1..cN x y IMAGE  .  -
     begin
         {
@@ -148,11 +175,24 @@ currentglobal true setglobal
         } if
     end } bind
 
+    % A read answers what the page shows at the named pixel, and never
+    % refuses: a mark aimed off the page is dropped, so a read from
+    % there is answered the same way, with the ground. A row the device
+    % does not hold is the page's own ground as well -- Emit lays it
+    % into the file over those rows -- so the read agrees with the file
+    % rather than refusing a pixel the file carries.
     /GetPix { % x y IMAGE  .  c1..cN
     begin
-        .to-int exch .to-int exch
-        ImgData exch get exch       % row x
-        .rowget
+        2 copy .onpage {
+            .to-int exch .to-int exch
+            ImgData exch get            % x row
+            dup .rowheld
+                { exch .rowget }
+                { pop pop .groundpix }
+            ifelse
+        }{
+            pop pop .groundpix
+        } ifelse
     end } bind
 
     % The pixels a segment covers are the driver contract's (.linepix,
@@ -402,12 +442,23 @@ currentglobal true setglobal
     % the same store the fills reach, so the rows that are held and the
     % rows that are not come out the same colour.
     %
-    % A sub-class holding its page some other way replaces Create and so
-    % never records a run of rows. It holds the whole page, has no ground
-    % to show, and drops the colour it is offered.
+    % The colour itself is recorded on the instance under /.ground, for
+    % the reads that land where the device holds no pixel. Every raster
+    % class reaches this, including a sub-class that holds its page some
+    % other way: such a class replaces Create and so records no run of
+    % rows and has no row to lay, but it has a page whose edge a read can
+    % fall off, and the components are the only statement of what that
+    % page was cleared to. They are kept in the components' own range,
+    % since what a stored channel is differs from class to class.
+    %
+    % The record is one array, made once and stored into thereafter, and
+    % it is made in global VM: a mark survives the restore that ends a
+    % save because raster memory is not part of virtual memory (PLRM
+    % 3.7.3), and the ground the page was cleared to has to keep to the
+    % page it describes.
     /Ground { % c1..cN IMAGE  .  -
     begin
-        currentdict /.bandrows known { .bandrows height lt }{ false } ifelse {
+        currentdict /.groundrow known {
             0 1 width 1 sub {            % c1..cN x
                 .groundrow exch          % c1..cN row x
                 % the components stay for the next pixel, so the copy
@@ -416,7 +467,12 @@ currentglobal true setglobal
                 .rowput
             } for
         } if
-        .ncomp { pop } repeat
+        currentdict /.ground known not {
+            currentglobal true setglobal
+            /.ground .ncomp array def
+            setglobal
+        } if
+        .ground astore pop
     end } bind
 
     % write the page: open the name settled for this page and hand the
