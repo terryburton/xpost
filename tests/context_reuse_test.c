@@ -15,6 +15,21 @@
  * does not report it the cycles still run and their results are still
  * checked; only the growth comparison is left out, which the test says
  * so on its output.
+ *
+ * A peak is a high-water mark of the address space the process has
+ * touched, not of the memory it holds, and an allocator that satisfies a
+ * request from fresh pages rather than from the ones just returned moves
+ * that mark without anything having been retained. Such an allocator
+ * moves it by a bounded amount, spent over the first cycles and tailing
+ * off; retention moves it by a context's worth on every cycle for as
+ * long as the process runs. The two are told apart by reading the growth
+ * in units of what one context costs, which is measured here rather than
+ * assumed: the peak before any context has been created against the peak
+ * once one has been created, used and destroyed. What the growth is read
+ * over is the second half of the run, since that is the half in which an
+ * allocator's own movement has largely been spent while retention would
+ * still be costing a unit a cycle. The allowance is a few units for that
+ * half, which a run keeping every context would exceed twice over.
  */
 
 #include <stdio.h>
@@ -28,7 +43,20 @@
 
 #include "xpost_test.h"
 
-#define CYCLES 8
+#define CYCLES 24
+
+/* The growth is read over the second half of the run. An allocator that
+   moves the mark without anything having been retained spends most of
+   that movement on the first cycles, so the half that is read is the
+   half where it has largely stopped, while retention costs the same in
+   either half. */
+#define MEASURED_FROM (CYCLES / 2 - 1)
+
+/* the growth allowed over that half, in units of what one context costs:
+   enough that an allocator's own drift fits inside it, and half of the
+   CYCLES - 1 - MEASURED_FROM units that retaining every context would
+   come to */
+#define GROWTH_UNITS 6
 
 /* the peak resident size of this process in KiB, or 0 where the
    platform does not report it */
@@ -65,6 +93,8 @@ static size_t out_sink(void *user, const char *buf, size_t len)
 
 int main(void)
 {
+    long base;
+    long one = 0;
     long settled = 0;
     long grown = 0;
     int i;
@@ -74,6 +104,10 @@ int main(void)
         report_failure("xpost_init");
         return verdict();
     }
+
+    /* the process with the library up and no context in it: what a
+       context costs is read against this */
+    base = peak_resident_kib();
 
     for (i = 0; i < CYCLES; i++)
     {
@@ -102,16 +136,25 @@ int main(void)
         xpost_stdout_handler_set(ctx, NULL, NULL);
         xpost_destroy(ctx);
 
-        /* the first two cycles reach the peak that serving one context
-           costs; from there a further cycle must cost nothing */
-        if (i == 1)
+        /* the first cycle carries one context's worth onto the peak, so
+           the reading after it is what a context costs */
+        if (i == 0)
+            one = peak_resident_kib();
+        if (i == MEASURED_FROM)
             settled = peak_resident_kib();
         grown = peak_resident_kib();
     }
 
-    if (settled > 0)
-        check(grown - settled < 512,
-              "a destroyed context leaves the process no larger");
+    if (base > 0 && one > base)
+    {
+        long unit = one - base;
+
+        printf("one context costs %ld KiB; the last %d cycles of %d "
+               "added %ld KiB\n", unit, CYCLES - 1 - MEASURED_FROM, CYCLES,
+               grown - settled);
+        check(grown - settled < unit * GROWTH_UNITS,
+              "a run of contexts keeps no context's worth per cycle");
+    }
     else
         printf("NOTE: peak resident size unavailable; growth not compared\n");
 
