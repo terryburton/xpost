@@ -80,6 +80,14 @@
  */
 int xpost_garbage_auto_banks(Xpost_Context *ctx);
 
+/**
+ * @brief say which banks a collection running of its own accord reclaims
+ *
+ * The setting vmreclaim writes and restore puts back, that setting being
+ * the whole of the VMReclaim user parameter (PLRM C.3.5).
+ */
+void xpost_garbage_auto_banks_set(Xpost_Context *ctx, int banks);
+
 XPOST_MUST_CHECK int xpost_garbage_collect(Xpost_Memory_File *mem,
                                            int dosweep,
                                            int markall);

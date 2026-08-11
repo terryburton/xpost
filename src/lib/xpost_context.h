@@ -274,6 +274,24 @@ struct _Xpost_Context {
         the parameter is save/restore-subject (PLRM 8.2 restore) */
     unsigned char vmmode_hist[256];
 
+    /** The VMThreshold user parameter (PLRM C.3.5), which this context
+        records and reports and nothing else reads: what paces a
+        collection that runs of its own accord here is a count of
+        allocations rather than a count of bytes allocated. Held per
+        context, as a user parameter is (PLRM C.1.1), and recorded at
+        each save level so restore reverts it (PLRM 8.2 restore). The
+        count is the width of the integers a program hands it, so a
+        count it can express is a count it reads back. */
+    integer vmthreshold;
+    integer vmthreshold_hist[256];
+
+    /** Which banks a collection that runs of its own accord reclaims,
+        at each save level, in the form xpost_garbage_auto_banks reports.
+        That setting is the whole of the VMReclaim user parameter -- it
+        is what currentuserparams reads and what vmreclaim writes -- so
+        putting it back at the restore is what reverts the parameter. */
+    unsigned char autobanks_hist[256];
+
     /** The two font directories, so setglobal can rebind the name
         FontDirectory to whichever the allocation mode calls for (PLRM).
         Both are null until the boot file has defined them. */

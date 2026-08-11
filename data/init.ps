@@ -275,10 +275,6 @@ setglobal
 % the interpreter answers for the whole language
 /languagelevel 3 def
 
-/setvmthreshold [ /integertype ] {
-    pop
-} //.xpostsys /.defop get exec
-
 % the shared-VM view of global VM, one and the same here
 /setshared /setglobal load def
 /currentshared /currentglobal load def
@@ -834,36 +830,14 @@ setglobal
     flush
 } //.xpostsys /.defop get exec
 
-% User, system, and device parameters. The current* operators return a fresh
+% System and device parameters. The current* operators return a fresh
 % dictionary of the present values; the set* operators apply the parameters they
-% recognise from the supplied dictionary and ignore the rest. The stack limits
-% mirror the interpreter's fixed capacities (XPOST_{OPER,DICT,EXEC}_STACK_LIMIT
-% in xpost_interpreter.c) and cannot be changed.
-currentglobal true setglobal
-.xpostsys /.uparams << /VMReclaim 0 /VMThreshold 0 >> put
-setglobal
-
+% recognise from the supplied dictionary and ignore the rest. The user
+% parameters belong to the context and revert with a restore, so
+% currentuserparams and setuserparams are operators over that state and are
+% not defined here.
 /setdevparams [ /stringtype /dicttype ] { pop pop } //.xpostsys /.defop get exec
 /currentdevparams [ /stringtype ] { pop 0 dict } //.xpostsys /.defop get exec
-
-/currentuserparams [ ] {
-    << /MaxOpStack 1000000 /MaxDictStack 5000 /MaxExecStack 1000000
-       /VMReclaim //.xpostsys /.uparams get /VMReclaim get
-       /VMThreshold //.xpostsys /.uparams get /VMThreshold get >>
-} //.xpostsys /.defop get exec
-/setuserparams [ /dicttype ] {
-    dup /VMReclaim known {
-        dup /VMReclaim get
-        dup //.xpostsys /.uparams get /VMReclaim 3 -1 roll put
-        vmreclaim
-    } if
-    dup /VMThreshold known {
-        dup /VMThreshold get
-        dup //.xpostsys /.uparams get /VMThreshold 3 -1 roll put
-        setvmthreshold
-    } if
-    pop
-} //.xpostsys /.defop get exec
 
 /currentsystemparams [ ] {
     << /RealFormat (IEEE) /ByteOrder true /MaxFontCache 1048576 >>

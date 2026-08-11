@@ -50,7 +50,7 @@
 #include "xpost_error.h"
 
 #include "xpost_garbage.h"
-//#include "xpost_interpreter.h"
+#include "xpost_interpreter.h" /* the stack capacities the parameters name */
 #include "xpost_operator.h"
 #include "xpost_op_math.h"   /* a count, as the object the PLRM gives it */
 #include "xpost_op_param.h"
@@ -67,17 +67,18 @@ int vmreclaim (Xpost_Context *ctx, Xpost_Object I)
            turned off is only the collection that runs of its own accord;
            an immediate collection the operator is asked for below still
            runs, which is what makes a program able to say when it would
-           rather pay for one. */
+           rather pay for one. These three are also the VMReclaim user
+           parameter (PLRM 8.2 vmreclaim), which is read back from the
+           setting they leave rather than from a copy of the operand. */
         case -2: /* disable automatic collection in local and global vm */
-            ctx->lo->garbage_collect_auto = 0;
-            ctx->gl->garbage_collect_auto = 0;
+            xpost_garbage_auto_banks_set(ctx, XPOST_GARBAGE_SWEEP_NONE);
             break;
         case -1: /* disable automatic collection in local vm */
-            ctx->lo->garbage_collect_auto = 0;
+            xpost_garbage_auto_banks_set(ctx, xpost_garbage_auto_banks(ctx)
+                                              & ~XPOST_GARBAGE_SWEEP_LOCAL);
             break;
         case 0: /* enable automatic collection */
-            ctx->lo->garbage_collect_auto = 1;
-            ctx->gl->garbage_collect_auto = 1;
+            xpost_garbage_auto_banks_set(ctx, XPOST_GARBAGE_SWEEP_BOTH);
             break;
 
         /* An immediate collection marks both banks whichever it
@@ -211,6 +212,189 @@ int vmreserve (Xpost_Context *ctx, Xpost_Object nobjects, Xpost_Object nbytes)
     return 0;
 }
 
+/* The count of bytes this interpreter answers a request for the default
+   with, and the count a context starts with. */
+#define XPOST_VM_THRESHOLD_DEFAULT 0
+
+/* The VMReclaim user parameter (PLRM C.3.5) as the collector's own
+   setting reads: 0 where a collection running of its own accord
+   reclaims both banks, -1 where it leaves local VM alone, -2 where it
+   runs for neither. Those three are what vmreclaim sets, so those three
+   are what this answers with, and the number a program reads back is
+   the setting itself rather than a copy of it kept alongside. */
+static
+int _vmreclaim_code(Xpost_Context *ctx)
+{
+    int banks = xpost_garbage_auto_banks(ctx);
+
+    if (banks == XPOST_GARBAGE_SWEEP_BOTH)
+        return 0;
+    if (banks & XPOST_GARBAGE_SWEEP_GLOBAL)
+        return -1;
+    return -2;
+}
+
+/* int  setvmthreshold  -
+   ask for a count of bytes to be allocated between the collections that
+   run of their own accord.
+
+   PLRM 8.2: -1 asks for the implementation's default, any other
+   negative operand is a rangecheck, and a count outside what the
+   implementation can do is replaced by the nearest it can. What this
+   interpreter does with the count is record it and report it back, its
+   own automatic collection being paced by a count of allocations, so
+   every count from zero up is achievable and only the default has to be
+   supplied. The count is the VMThreshold user parameter (PLRM 8.2
+   setvmthreshold), so currentuserparams reads it back and restore
+   reverts it. */
+static
+int setvmthreshold(Xpost_Context *ctx, Xpost_Object I)
+{
+    if (I.int_.val == -1)
+        ctx->vmthreshold = XPOST_VM_THRESHOLD_DEFAULT;
+    else if (I.int_.val < 0)
+        return rangecheck;
+    else
+        ctx->vmthreshold = I.int_.val;
+    return 0;
+}
+
+/* the names of the user parameters, so that what currentuserparams
+   reports and what setuserparams recognises are one list */
+static const char *_userparam_vmreclaim = "VMReclaim";
+static const char *_userparam_vmthreshold = "VMThreshold";
+static const char *_userparam_maxopstack = "MaxOpStack";
+static const char *_userparam_maxdictstack = "MaxDictStack";
+static const char *_userparam_maxexecstack = "MaxExecStack";
+
+/* one parameter's present value, into the dictionary being reported */
+static
+int _param_report(Xpost_Context *ctx, Xpost_Object d, const char *key,
+                  integer val)
+{
+    return xpost_dict_put(ctx, d, xpost_name_cons(ctx, key),
+                          xpost_int_cons(val));
+}
+
+/* -  currentuserparams  dict
+   the user interpreter parameters and the values they now have, in a
+   dictionary of the caller's own (PLRM 8.2 currentuserparams).
+
+   The three stack sizes are the capacities this interpreter holds its
+   stacks to, read from the ceilings it enforces, so a program that asks
+   for another size and reads the answer back is told what it will
+   actually get. */
+static
+int currentuserparams(Xpost_Context *ctx)
+{
+    Xpost_Object d;
+    int ret;
+
+    d = xpost_dict_cons(ctx, 5);
+    if (xpost_object_get_type(d) == invalidtype)
+        return VMerror;
+
+    ret = _param_report(ctx, d, _userparam_vmreclaim, _vmreclaim_code(ctx));
+    if (ret)
+        return ret;
+    ret = _param_report(ctx, d, _userparam_vmthreshold, ctx->vmthreshold);
+    if (ret)
+        return ret;
+    ret = _param_report(ctx, d, _userparam_maxopstack, XPOST_OPER_STACK_LIMIT);
+    if (ret)
+        return ret;
+    ret = _param_report(ctx, d, _userparam_maxdictstack, XPOST_DICT_STACK_LIMIT);
+    if (ret)
+        return ret;
+    ret = _param_report(ctx, d, _userparam_maxexecstack, XPOST_EXEC_STACK_LIMIT);
+    if (ret)
+        return ret;
+
+    if (!xpost_stack_push(ctx->lo, ctx->os, d))
+        return stackoverflow;
+    return 0;
+}
+
+/* the value a dictionary offers for one parameter: absent where it
+   offers none, and a typecheck where what it offers is not the integer
+   the parameter takes (PLRM 8.2 setuserparams). A caller that only
+   needs the value checked passes neither out-parameter. */
+static
+int _param_request(Xpost_Context *ctx, Xpost_Object D, const char *key,
+                   integer *val, int *have)
+{
+    Xpost_Object v;
+
+    if (have)
+        *have = 0;
+    v = xpost_dict_get(ctx, D, xpost_name_cons(ctx, key));
+    if (xpost_object_get_type(v) == invalidtype)
+        return 0;
+    if (xpost_object_get_type(v) != integertype)
+        return typecheck;
+    if (val)
+        *val = v.int_.val;
+    if (have)
+        *have = 1;
+    return 0;
+}
+
+/* dict  setuserparams  -
+   set the user interpreter parameters the dictionary names, leaving the
+   rest as they were (PLRM 8.2 setuserparams).
+
+   A key naming no parameter of this implementation is ignored, and a
+   value the implementation cannot achieve is replaced by the nearest it
+   can, without an error indication. The three stack sizes name
+   capacities this interpreter fixes, so the nearest achievable value is
+   the capacity it already has and the request is answered by
+   currentuserparams reporting that capacity back; VMReclaim can hold
+   only the three collector settings, so any other number leaves the
+   setting where it stands; every VMThreshold from zero up is
+   achievable, so only a negative one is replaced.
+
+   Every value offered is read and checked before any of them is
+   applied, so a dictionary that is refused leaves the whole set as it
+   found it. */
+static
+int setuserparams(Xpost_Context *ctx, Xpost_Object D)
+{
+    integer reclaim = 0, threshold = 0;
+    int have_reclaim = 0, have_threshold = 0;
+    int ret;
+
+    /* the dictionary is searched, so it needs read access */
+    if (!xpost_object_is_readable(ctx, D))
+        return invalidaccess;
+
+    ret = _param_request(ctx, D, _userparam_vmreclaim, &reclaim, &have_reclaim);
+    if (ret)
+        return ret;
+    ret = _param_request(ctx, D, _userparam_vmthreshold,
+                         &threshold, &have_threshold);
+    if (ret)
+        return ret;
+    ret = _param_request(ctx, D, _userparam_maxopstack, NULL, NULL);
+    if (ret)
+        return ret;
+    ret = _param_request(ctx, D, _userparam_maxdictstack, NULL, NULL);
+    if (ret)
+        return ret;
+    ret = _param_request(ctx, D, _userparam_maxexecstack, NULL, NULL);
+    if (ret)
+        return ret;
+
+    if (have_reclaim && (reclaim == 0 || reclaim == -1 || reclaim == -2))
+    {
+        ret = vmreclaim(ctx, xpost_int_cons(reclaim));
+        if (ret)
+            return ret;
+    }
+    if (have_threshold)
+        ctx->vmthreshold = threshold < 0 ? XPOST_VM_THRESHOLD_DEFAULT : threshold;
+    return 0;
+}
+
 static
 int globalvmstatus (Xpost_Context *ctx)
 {
@@ -238,6 +422,12 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     assert(ctx->gl->base);
 
     op = xpost_operator_cons(ctx, "vmreclaim", (Xpost_Op_Func)vmreclaim, 1, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "setvmthreshold", (Xpost_Op_Func)setvmthreshold, 1, integertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "currentuserparams", (Xpost_Op_Func)currentuserparams, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, "setuserparams", (Xpost_Op_Func)setuserparams, 1, dicttype);
     INSTALL;
     op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)vmstatus, 0);
     INSTALL;

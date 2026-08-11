@@ -363,6 +363,9 @@ int xpost_context_init(Xpost_Context *ctx,
     ctx->pagedevice_destroy = null;
     ctx->pagedevice_depth = 0;
     ctx->job_snapshots = 1;
+    /* the VMThreshold user parameter a context starts with: no count of
+       bytes asked for between automatic collections */
+    ctx->vmthreshold = 0;
     ctx->globs = NULL;
     ctx->globs_size = 0;
     ctx->xpost_interpreter_cid_init = xpost_interpreter_cid_init;

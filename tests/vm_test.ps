@@ -184,6 +184,155 @@ restore
 
 clear false setglobal
 
+% --- the user interpreter parameters are subject to save and restore ------
+% PLRM 8.2 restore: restore resets all user interpreter parameters to their
+% state at the time of the matching save; PLRM C.1.1 says the same from the
+% other end. As with the allocation mode above, the answers are carried past
+% the restores on the operand stack, which restore leaves alone.
+/uthr { currentuserparams /VMThreshold get } bind def
+/urec { currentuserparams /VMReclaim get } bind def
+
+<< /VMThreshold 4242 >> setuserparams
+save
+    << /VMThreshold 999999 >> setuserparams
+    uthr
+exch restore
+uthr
+4242 eq (restore gives back the user parameter the save was taken with) assert
+999999 eq (a user parameter set inside a bracket takes effect there) assert
+
+% VMReclaim names which banks a collection that runs of its own accord
+% reclaims, and that setting is what currentuserparams reads: a revert that
+% gave the number back without the setting could not answer here
+<< /VMReclaim 0 >> setuserparams
+save
+    << /VMReclaim -2 >> setuserparams
+    urec
+exch restore
+urec
+0 eq (restore gives back the automatic collection the save was taken with) assert
+-2 eq (a VMReclaim set inside a bracket turns automatic collection off there) assert
+
+% nested brackets each revert to their own save's value
+<< /VMThreshold 100 >> setuserparams
+save
+    << /VMThreshold 200 >> setuserparams
+    save
+        << /VMThreshold 300 >> setuserparams
+    restore
+    uthr
+exch restore
+uthr
+100 eq (an outer restore reverts a user parameter to the outer save's value) assert
+200 eq (an inner restore reverts a user parameter to the inner save's value) assert
+
+% a bracket that leaves the parameters alone gives them back unchanged, and
+% one that sets the value it was already given gives that back too, so the
+% revert cannot pass by always answering a default
+<< /VMThreshold 555 >> setuserparams
+save
+restore
+uthr 555 eq (a bracket that leaves a user parameter alone restores it unchanged) assert
+
+<< /VMThreshold 777 >> setuserparams
+save
+    << /VMThreshold 777 >> setuserparams
+restore
+uthr 777 eq (a bracket that sets the value it was given still gives it back) assert
+
+% outside a bracket the effect is cumulative (PLRM C.1)
+<< /VMThreshold 888 >> setuserparams
+uthr 888 eq (a user parameter set outside a bracket keeps its value) assert
+
+% PLRM 8.2 setvmthreshold: the parameter it sets is the VMThreshold user
+% parameter, so it is read back with the others and reverts with them
+1234 setvmthreshold
+uthr 1234 eq (setvmthreshold sets the VMThreshold user parameter) assert
+save
+    5678 setvmthreshold
+restore
+uthr 1234 eq (restore reverts a threshold set through setvmthreshold) assert
+-1 setvmthreshold
+uthr 0 eq (setvmthreshold -1 asks for the default threshold) assert
+{ -5 setvmthreshold } probe $error /errorname get /rangecheck eq and
+    (a negative threshold other than -1 is a rangecheck) assert
+clear
+
+% PLRM 8.2 setuserparams: a value the implementation cannot achieve is
+% replaced by the nearest it can, without an error indication
+<< /VMThreshold 4242 >> setuserparams
+{ << /VMThreshold -5 >> setuserparams } probe not
+    (setuserparams does not raise for a threshold it cannot achieve) assert
+uthr 0 eq (an unachievable threshold is replaced by the nearest achievable) assert
+
+<< /VMReclaim -1 >> setuserparams
+{ << /VMReclaim 2 >> setuserparams } probe not
+    (setuserparams does not raise for a VMReclaim it cannot hold) assert
+urec -1 eq (a VMReclaim naming no collector setting leaves the setting alone) assert
+<< /VMReclaim 0 >> setuserparams
+
+% the stack sizes are capacities this interpreter fixes: asking for another
+% is accepted and answered with the capacity, which is the one it enforces
+<< /VMThreshold 4242 >> setuserparams
+currentuserparams /MaxOpStack get
+{ << /MaxOpStack 300 >> setuserparams } probe not
+    (a stack capacity may be asked for without an error) assert
+currentuserparams /MaxOpStack get eq
+    (a stack capacity request is answered with the capacity) assert
+currentuserparams /MaxDictStack get 0 gt
+    (currentuserparams reports a dictionary stack capacity) assert
+currentuserparams /MaxExecStack get 0 gt
+    (currentuserparams reports an execution stack capacity) assert
+uthr 4242 eq (a stack capacity request leaves the other parameters alone) assert
+
+% and the capacity reported is the one enforced: a dictionary stack filled
+% to the number reported is accepted, and driving it past that number is
+% dictstackoverflow. The ceilings are read at intervals rather than at every
+% push, so what the second half asks for is a stack driven well past.
+/dsfill {
+    currentuserparams /MaxDictStack get countdictstack sub
+    { 1 dict begin } repeat
+} bind def
+/dspast { 4096 { 1 dict begin } repeat } bind def
+{ dsfill } probe not
+    (the dictionary stack fills to the capacity reported) assert
+{ dspast } probe $error /errorname get /dictstackoverflow eq and
+    (a dictionary stack driven past the capacity reported overflows) assert
+cleardictstack
+clear
+
+% a value of the wrong type is a typecheck, and leaves the parameter alone
+{ << /VMThreshold (x) >> setuserparams } probe $error /errorname get /typecheck eq and
+    (a non-integer user parameter value is a typecheck) assert
+clear
+uthr 4242 eq (a refused setuserparams leaves the parameter alone) assert
+{ << /VMThreshold 1.5 >> setuserparams } probe $error /errorname get /typecheck eq and
+    (a real user parameter value is a typecheck) assert
+clear
+
+% the dictionary is searched, so it needs read access
+{ 1 dict dup /VMThreshold 42 put noaccess setuserparams } probe
+$error /errorname get /invalidaccess eq and
+    (setuserparams on an unreadable dictionary is invalidaccess) assert
+clear
+uthr 4242 eq (the refused dictionary changed nothing) assert
+
+% PLRM 8.2 setuserparams: a key naming no parameter of this implementation
+% is ignored
+{ << /ZorkParam 5 >> setuserparams } probe not
+    (a key naming no user parameter is ignored) assert
+
+% currentuserparams hands back a fresh dictionary, not the interpreter's own
+currentuserparams currentuserparams ne
+    (currentuserparams returns a different dictionary each time) assert
+currentuserparams dup /Zork 1 put /Zork known
+    (the dictionary currentuserparams returns is writable) assert
+currentuserparams /Zork known not
+    (a fresh dictionary does not carry an earlier one's entries) assert
+
+<< /VMThreshold 0 >> setuserparams
+clear false setglobal
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

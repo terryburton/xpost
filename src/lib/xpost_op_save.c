@@ -50,6 +50,7 @@
 #include "xpost_string.h"
 #include "xpost_dict.h"
 #include "xpost_dev_generic.h"
+#include "xpost_garbage.h" /* the collector setting VMReclaim names */
 
 //#include "xpost_interpreter.h"
 #include "xpost_operator.h"
@@ -135,6 +136,14 @@ int Zsave(Xpost_Context *ctx)
     /* and the allocation mode, which restore reverts likewise */
     if (v.save_.lev < sizeof ctx->vmmode_hist)
         ctx->vmmode_hist[v.save_.lev] = (unsigned char)ctx->vmmode;
+    /* and the user parameters, which restore reverts likewise. VMReclaim
+       is recorded as the collector setting it names, that setting being
+       the whole of the parameter. */
+    if (v.save_.lev < sizeof ctx->autobanks_hist)
+        ctx->autobanks_hist[v.save_.lev] =
+            (unsigned char)xpost_garbage_auto_banks(ctx);
+    if (v.save_.lev < sizeof ctx->vmthreshold_hist / sizeof ctx->vmthreshold_hist[0])
+        ctx->vmthreshold_hist[v.save_.lev] = ctx->vmthreshold;
     if (!xpost_stack_push(ctx->lo, ctx->os, v))
         return stackoverflow;
     return 0;
@@ -260,6 +269,25 @@ int Vrestore(Xpost_Context *ctx,
         ctx->vmmode = ctx->vmmode_hist[V.save_.lev];
         _rebind_fontdirectory(ctx);
     }
+
+    /* The user interpreter parameters are named in the same sentence
+       (PLRM 8.2 restore, PLRM C.1.1), and each of them is a number a
+       program reads back and a way the interpreter then behaves, so
+       giving the number back means putting the behaviour back with it.
+       VMReclaim is both at once: what a program reads is the setting
+       that says which banks a collection running of its own accord
+       reclaims, so putting that setting back is the whole of reverting
+       it, and the two cannot come apart. VMThreshold is a count this
+       interpreter records and reports and nothing else reads, so
+       reverting the count is all there is to revert.
+
+       These come last with the allocation mode, and for the same
+       reason: the teardown above allocates, and both it and the
+       collector it may set off belong to the level being discarded. */
+    if (V.save_.lev < sizeof ctx->autobanks_hist)
+        xpost_garbage_auto_banks_set(ctx, ctx->autobanks_hist[V.save_.lev]);
+    if (V.save_.lev < sizeof ctx->vmthreshold_hist / sizeof ctx->vmthreshold_hist[0])
+        ctx->vmthreshold = ctx->vmthreshold_hist[V.save_.lev];
 
     return 0;
 }

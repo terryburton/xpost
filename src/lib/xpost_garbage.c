@@ -1003,6 +1003,21 @@ int xpost_garbage_auto_banks(Xpost_Context *ctx)
     return banks;
 }
 
+/* The same setting written back. vmreclaim reaches it with the code the
+   program gave, and restore with the code the save level was taken
+   under, the setting being the whole of the VMReclaim user parameter
+   (PLRM C.3.5) and so subject to save and restore with the rest of them
+   (PLRM 8.2 restore). */
+void xpost_garbage_auto_banks_set(Xpost_Context *ctx, int banks)
+{
+    if (!ctx)
+        return;
+    if (ctx->lo)
+        ctx->lo->garbage_collect_auto = (banks & XPOST_GARBAGE_SWEEP_LOCAL) != 0;
+    if (ctx->gl)
+        ctx->gl->garbage_collect_auto = (banks & XPOST_GARBAGE_SWEEP_GLOBAL) != 0;
+}
+
 int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
 {
     unsigned int i;

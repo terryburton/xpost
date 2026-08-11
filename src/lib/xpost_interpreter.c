@@ -343,22 +343,6 @@ void xpost_interpreter_exit(Xpost_Interpreter *itpptr)
 typedef
 int evalfunc(Xpost_Context *ctx, Xpost_Object t);
 
-/* The stacks grow by VM segments without any structural bound, so a
-   runaway loop or recursion would grind through memory rather than
-   fail. Execution past these depths raises the stack's overflow
-   error, checked at the two places depth accumulates: evalarray's
-   internal procedure call and the interpreter loop. A latch per
-   stack raises once per crossing, so the error machinery runs (and
-   the program recovers) above the ceiling without retriggering it,
-   and rearms when the depth recedes. The ceilings sit far beyond any
-   legitimate job's depth while keeping the error path's walk over
-   the stacks cheap. The exec ceiling leaves room for the
-   deferred-paint queues the devices stage there: a vector device
-   decomposes a large fill into very many queued spans. */
-#define XPOST_EXEC_STACK_LIMIT 1000000
-#define XPOST_OPER_STACK_LIMIT 1000000
-#define XPOST_DICT_STACK_LIMIT 5000
-
 /* Ceiling on errors handled back-to-back without the run reaching `stop`.
    A well-formed program recovers from every error through the error
    machinery, which ends in `stop`; that resets the count (see

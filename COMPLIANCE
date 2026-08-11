@@ -328,11 +328,12 @@ Level 2 operators
  [X] setcmykcolor, currentcmykcolor
  [X] setoverprint, currentoverprint (recorded only)
  [X] setsystemparams, currentsystemparams, setuserparams,
-     currentuserparams, setdevparams, currentdevparams (accepted;
-     the parameter sets are minimal, and a user parameter set inside a
-     save bracket keeps the value it was given past the restore that
-     ends the bracket, where a user parameter is defined to revert with
-     it)
+     currentuserparams, setdevparams, currentdevparams (accepted; the
+     parameter sets are minimal. MaxOpStack, MaxDictStack and
+     MaxExecStack report capacities this interpreter fixes: a program
+     may ask for a smaller stack, and is answered with the capacity it
+     will actually get. VMThreshold is recorded and reported back but
+     does not change how often collection runs)
  [X] deletefile, renamefile, filenameforall
  [X] fileposition, setfileposition
  [X] cleardictstack
