@@ -932,10 +932,16 @@ vm_image_load_exe = executable('vm_image_load_test',
   link_args: internals_link_args,
   include_directories: [ config_dir, include_directories('src/lib') ],
   install: false)
+# It writes an image of virtual memory and boots from it repeatedly, so
+# it takes about twenty seconds with the machine to itself and rather
+# more with fifteen other tests running beside it. The limit is the one
+# the other tests of that weight carry, so a suite run wide does not
+# report it as having hung when it was only waiting its turn.
 test('vm-image-load',
   find_program('tests/run-vm-image-load-test.sh'),
   args: [ vm_image_load_exe ],
   suite: cost_slow,
+  timeout: 300,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedding contract: a process may create, use and destroy contexts for as
