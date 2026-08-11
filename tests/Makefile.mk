@@ -25,6 +25,7 @@ tests/blit_range_test.ps \
 tests/build_personality_test.ps \
 tests/cacheparams_range_test.ps \
 tests/callback_reentry_test.ps \
+tests/check-buffer-family.sh \
 tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
 tests/check-device-destroy.sh \

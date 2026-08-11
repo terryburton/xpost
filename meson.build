@@ -3902,14 +3902,15 @@ test('raster-buffer-format',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# The lifetime of that buffer rather than its arrangement: the page is
-# the embedder's from the handoff, so it is read after the context that
-# painted it has been destroyed, and it is given back through
-# xpost_output_buffer_release(), the only call in the process that gives
-# it back. Covers the devices that write a page to a file and hand the
-# raster over as well, whose handoff nothing else reaches, and the
-# corners of the release call. A C test because none of it is reachable
-# from a program.
+# The lifetime of that buffer rather than its arrangement, asked of every
+# device that can hand one over rather than of one device at a time: the
+# page is the embedder's from the handoff, so it is read after the
+# context that painted it has been destroyed, and it is given back
+# through xpost_output_buffer_release(), the only call in the process
+# that gives it back. Covers the devices that write a page to a file and
+# hand the raster over as well, whose handoff nothing else reaches, the
+# buffer an embedder lends a run instead, and the corners of the release
+# call. A C test because none of it is reachable from a program.
 output_buffer_release_exe = executable('output_buffer_release_test',
   'tests/output_buffer_release_test.c',
   c_args: '-DHAVE_CONFIG_H',
@@ -3921,6 +3922,19 @@ test('output-buffer-release',
   output_buffer_release_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# Who that family is, derived from the sources rather than listed: the
+# devices a page-device request can make, the driver registering each
+# one's maker, and which of those drivers calls the handoff. A device
+# that gains a handoff and is not on the test's roster fails here, so the
+# contract cannot come to be asked of a shorter family than there is.
+# Holds the block-in-front-of-the-page layout the release reads by, and
+# the programs in this tree that take a page and are expected to give it
+# back.
+test('check-buffer-family',
+  find_program('tests/check-buffer-family.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
 #if get_option('nls') == true
 #  subdir('po')
 #endif
