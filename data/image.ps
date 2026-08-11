@@ -32,22 +32,53 @@ currentglobal true setglobal
     currentdict end
     dup /.copydict get exec
     begin
+        % The rows of the page this device holds. A program may declare
+        % the page's imaging bounding box (PLRM 6.2), asserting that it
+        % paints no marks outside it; PLRM 6.2 leaves a device free to
+        % render or to drop the marks that do fall outside, so the rows
+        % the box does not reach need not be held at all and the page
+        % shows the ground over them instead.
+        %
+        % The run of rows is left for this device by the page device
+        % that is making it, and taken here. Taken, and not merely read:
+        % a device that holds its page some other way never asks for it,
+        % and the next device made must not inherit a box that was not
+        % asked of it.
+        graphicsdict /.rasterband 2 copy known {
+            2 copy get 3 1 roll undef aload pop
+        }{ pop pop 0 height } ifelse
+        % A device that screens what it stores holds the whole page
+        % whatever the box says. What such a device leaves for a grey is
+        % a pattern that varies from one row to the next, and the single
+        % ground row below cannot stand for the rows that are not held.
+        currentdict /ScreenPaint known { pop pop 0 height } if
+        /.bandrows exch def /.bandtop exch def
+        % the run is held to the page, whatever named it
+        .bandtop 0 lt .bandtop height ge or { /.bandtop 0 def } if
+        .bandrows 1 lt { /.bandrows 1 def } if
+        .bandtop .bandrows add height gt
+            { /.bandrows height .bandtop sub def } if
+
         % raster memory is not part of VM (PLRM 3.7.3): allocate the
         % page buffer in global VM, which save and restore are defined not
         % to reach (PLRM 3.7.2, 3.7.3), so a mark made inside a save is
         % still on the page after the restore that ends it
         currentglobal true setglobal
         % The raster is priced before any of it is built: the ImgData
-        % spine is one element per row, each row costs what .rowcost
-        % says, and the whole extent is asked for at once. A page this
-        % interpreter cannot hold is refused having taken nothing to be
-        % refused with, where one built row by row until the memory ran
-        % out would ask the system for everything it could get before
+        % spine is one element per row of the page, each row held costs
+        % what .rowcost says, and the whole extent is asked for at once.
+        % A page held in part holds one row more, the one carrying the
+        % ground the rest of the page shows. A page this interpreter
+        % cannot hold is refused having taken nothing to be refused
+        % with, where one built row by row until the memory ran out
+        % would ask the system for everything it could get before
         % failing, and answer the same error at the end of it.
         height                      % spine elements
         .rowcost                    % spine rowelements rowbytes
-        height mul                  % spine rowelements bytes
-        exch height mul             % spine bytes elements
+        .bandrows .bandrows height lt { 1 add } if
+                                    % spine rowelements rowbytes rows
+        dup 3 1 roll mul            % spine rowelements rows bytes
+        3 1 roll mul                % spine bytes elements
         3 -1 roll add               % bytes elements'
         exch                        % elements' bytes
         //.internaldict /.vmreserve get exec not {
@@ -55,10 +86,29 @@ currentglobal true setglobal
             /Create cvx /VMerror signalerror
         } if
         /ImgData height array def
-        0 1 height 1 sub {
+        .bandtop 1 .bandtop .bandrows add 1 sub {
             ImgData exch .rowalloc put
         } for
+        .bandrows height lt {
+            % One empty row stands for every row the page does not hold.
+            % It carries no pixel for a mark to reach, so a mark landing
+            % on such a row is dropped where every other out-of-page mark
+            % is dropped: against the row it was about to be written to.
+            /.emptyrow ImgData .bandtop get 0 0 getinterval def
+            0 1 .bandtop 1 sub { ImgData exch .emptyrow put } for
+            .bandtop .bandrows add 1 height 1 sub
+                { ImgData exch .emptyrow put } for
+        } if
         .rowsinit
+        .bandrows height lt {
+            % The ground the rows the page does not hold show. It starts
+            % as one of the rows that are held starts, and erasepage
+            % fills it in through /Ground below.
+            /.groundrow ImgData .bandtop get
+                dup type /stringtype eq
+                    { dup length string }{ dup length array } ifelse
+                copy def
+        } if
         setglobal
     currentdict
     end } bind
@@ -349,11 +399,45 @@ currentglobal true setglobal
 
     end } bind %FillPoly
 
+    % c1..cN  Ground  -
+    % Take up the colour the page is being cleared to; PLRM 8.2 erases
+    % the entire page, so this is the colour every row of it carries. A
+    % page held in part shows it over the rows that are not held, and the
+    % one row standing for those is laid in it here -- through .packpix,
+    % the same fold to a stored pixel the fills take, so the rows that
+    % are held and the rows that are not come out the same colour.
+    %
+    % A sub-class holding its page some other way replaces Create and so
+    % never records a run of rows. It holds the whole page, has no ground
+    % to show, and drops the colour it is offered.
+    /Ground { % c1..cN IMAGE  .  -
+    begin
+        currentdict /.bandrows known { .bandrows height lt }{ false } ifelse {
+            .packpix
+            0 1 width 1 sub { .groundrow exch 2 index put } for
+            pop
+        }{
+            .ncomp { pop } repeat
+        } ifelse
+    end } bind
+
     % write the page: open the name settled for this page and hand the
     % rows to the class's .writepage
     /Emit { % IMAGE  .  -
     begin
-        ImgData
+        % The page a writer is given is the page the program asked for.
+        % Where the device holds only the rows an imaging bounding box
+        % reaches (PLRM 6.2), the rest of the page shows the ground, and
+        % the whole page is put together here so that no writer has to
+        % know the difference.
+        .bandrows height lt {
+            ImgData height array copy
+            0 1 .bandtop 1 sub { 1 index exch .groundrow put } for
+            .bandtop .bandrows add 1 height 1 sub
+                { 1 index exch .groundrow put } for
+        }{
+            ImgData
+        } ifelse
         .outputfile (w) file
         .writepage
     end } bind

@@ -63,6 +63,14 @@
         [ //.xpostsys /currentcolordict get DEVICE /nativecolorspace get
         get exec
         //.xpostsys /.applytransfer get exec
+        % The entire page is erased (PLRM 8.2). A device holding only
+        % part of the page shows the ground over the rest of it, and the
+        % colour the page is being cleared to is what that ground is.
+        % The components are above the mark, so how many there are is
+        % counted from it rather than assumed.
+        DEVICE /Ground known {
+            counttomark copy DEVICE dup /Ground get exec
+        } if
         % a fill's extent operands name an inclusive pixel span, so the
         % rectangle covering a page of w columns is spanned by w-1 (the
         % driver contract, src/lib/xpost_dev_driver.h)

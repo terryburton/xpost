@@ -2556,6 +2556,12 @@ int _blitrow(Xpost_Context *ctx,
                                 continue;
                         }
                         row = xpost_array_get(ctx, rows, dy);
+                        /* A row of no width is a row the device does not
+                           hold: the page shows the ground over it, and an
+                           image reaching it is dropped where every other
+                           mark that reaches it is. */
+                        if (row.comp_.sz == 0)
+                            continue;
                         if (packed)
                         {
                             int pret;
@@ -2697,6 +2703,11 @@ int _blitrow(Xpost_Context *ctx,
                 continue;
         }
         row = xpost_array_get(ctx, rows, dy);
+        /* A row of no width is a row the device does not hold: the page
+           shows the ground over it, and an image reaching it is dropped
+           where every other mark that reaches it is. */
+        if (row.comp_.sz == 0)
+            continue;
         if (packed)
         {
             int pret;

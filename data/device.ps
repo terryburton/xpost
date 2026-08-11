@@ -148,6 +148,54 @@ setglobal
     setglobal
 } bind put
 
+% bbox h off sy ph  .imagingrows  [top rows]
+%                                 null
+% The run of a page's rows an imaging bounding box reaches.
+%
+% PLRM 6.2 gives ImagingBBox as four numbers in the default user
+% coordinate system -- left, bottom, right and top -- and calls it the
+% program's assertion that it paints no marks outside them. Only the
+% vertical pair is read here: a device holding its page as rows can drop
+% whole rows and cannot hold half of one, so what the box buys is the
+% rows above its top edge and below its bottom edge and nothing else.
+%
+% h is the page's height and off the vertical page offset, both in the
+% default user space the box is stated in; sy is the rows a unit of it
+% covers, and ph the rows of the whole page. Default user space runs up
+% from the foot of the page and the rows run down from its head, so the
+% top edge gives the first row and the bottom edge the last.
+%
+% The answer is null wherever the box says nothing that saves a row --
+% not four numbers, or covering the page already -- and a caller given
+% null holds the whole page. A box that reaches no row of the page at
+% all still leaves a page to paint on, so one row is held rather than
+% none.
+currentglobal true setglobal
+.xpostsys /.imagingrows { % bbox h off sy ph  .  [top rows] | null
+    12 dict begin
+    {/ph /sy /off /h /bbox}{exch def}forall
+    bbox type dup /arraytype eq exch /packedarraytype eq or
+    { bbox length 4 eq }{ false } ifelse
+    { true bbox { type dup /integertype eq exch /realtype eq or and } forall }
+    { false } ifelse
+    {
+        /y0 bbox 1 get off add def
+        /y1 bbox 3 get off add def
+        y0 y1 gt { /t y0 def /y0 y1 def /y1 t def } if
+        /top h y1 sub sy mul floor cvi def
+        /bot h y0 sub sy mul ceiling cvi def
+        top 0 lt { /top 0 def } if
+        bot ph 1 sub gt { /bot ph 1 sub def } if
+        bot top lt { /top 0 def /bot 0 def } if
+        top 0 le bot ph 1 sub ge and
+            { null }
+            { [ top bot top sub 1 add ] }
+        ifelse
+    }{ null } ifelse
+    end
+} bind put
+setglobal
+
 % name  .pagefilename  name'
 % substitute the page number for a %d marker in an output file name,
 % counting the pages transmitted; without the marker every page writes

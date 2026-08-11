@@ -1545,6 +1545,10 @@ currentglobal true setglobal
     %   /HWResolution   [rx ry] dots per inch (default [72 72])
     %   /OutputFile     output path for the device
     %   /PageOffset     [x y] points, translated after initgraphics
+    %   /ImagingBBox    [llx lly urx ury] points, or null for the whole
+    %                   page: the boundary the program says it paints
+    %                   within, which a device may hold less than the
+    %                   page for (PLRM 6.2)
     % Every other key is stored on the device dictionary, which is how
     % device features (TextAlphaBits, WhiteIsOpaque, ...) are reached.
     % Same-device requests merge over the previous ones, so a partial
@@ -1679,6 +1683,17 @@ currentglobal true setglobal
         }{ pop pop } ifelse
 
         graphicsdict /.exactpagedims [pwf phf] put
+        % PLRM 6.2: a program supplying an imaging bounding box asserts
+        % that it paints no marks outside it, and applications are asked
+        % to supply one wherever they can, since a device is then free to
+        % hold less of the page than the page. The run of rows the box
+        % reaches is left here for the device about to be made; a device
+        % that holds its page some other way never asks for it.
+        merged /ImagingBBox 2 copy known {
+            get size 1 get off 1 get sy ph
+            //.xpostsys /.imagingrows get exec
+            dup null eq { pop }{ graphicsdict /.rasterband 3 -1 roll put } ifelse
+        }{ pop pop } ifelse
         % the new device builds under its own local name -- DEVICE
         % everywhere means the accessor reading the graphics state, and
         % the machinery's frozen references to it must not see the
@@ -1692,6 +1707,7 @@ currentglobal true setglobal
         % so the next mark made after the caught error reads freed memory.
         /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
         graphicsdict /.exactpagedims undef
+        graphicsdict /.rasterband undef
 
         % retire the outgoing device (Destroy frees its buffers; a
         % vector device's output was written by showpage's Emit)

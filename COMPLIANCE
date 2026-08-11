@@ -266,7 +266,10 @@ Level 2 operators
  [X] setcolor
  [X] currentcolor
  [X] setpagedevice (OutputDevice, PageSize, HWResolution, OutputFile,
-     PageOffset; other keys reach the device as features)
+     PageOffset, ImagingBBox; other keys reach the device as features.
+     A device keeping its page as rows keeps only the rows an imaging
+     bounding box reaches, so a mark painted outside the box a program
+     declared is not rendered)
  [X] currentpagedevice
  [X] BeginPage, EndPage (called with the count of pages the device has
      transmitted, EndPage also with the reason -- 0 showpage, 1 copypage,

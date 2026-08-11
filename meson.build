@@ -3311,6 +3311,20 @@ test('setpagedevice-failure',
   suite: cost_slow,
   timeout: 300)
 
+# The page device's imaging bounding box (PLRM 6.2). A program declaring one
+# asserts that it paints no marks outside it, and PLRM leaves a device free to
+# render or to drop the marks that do fall outside -- which is what lets a
+# device hold only the rows the box reaches. Two questions, put to every device:
+# what a program observes of the page, which the box must not change at all, and
+# what comes out, which must be the same page to the byte as the same program
+# rendered declaring no box.
+test('imaging-bbox',
+  find_program('tests/run-imaging-bbox-test.sh'),
+  args: [ xpost_exe, files('tests/imaging_bbox_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # A page too large for the device to build must be refused without taking the
 # memory it would have needed, so that the job after it still draws. The page a
 # raster device builds out of the interpreter's virtual memory is global VM,

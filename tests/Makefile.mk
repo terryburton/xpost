@@ -167,6 +167,7 @@ tests/halftone_cell_test.ps \
 tests/halftone_matrix_test.ps \
 tests/host_settings.golden \
 tests/image_matrix_test.ps \
+tests/imaging_bbox_test.ps \
 tests/internal_debug_ops_test.ps \
 tests/interrupt_test.ps \
 tests/isolation_test.ps \
@@ -282,6 +283,7 @@ tests/run-filenameforall-large-test.sh \
 tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
+tests/run-imaging-bbox-test.sh \
 tests/run-jpeg-refusal-test.sh \
 tests/run-leak-test.sh \
 tests/run-interrupt-test.sh \

@@ -35,5 +35,6 @@ bracketed /.csrec
 lifetime /.formcache
 lifetime /.formserial
 lifetime /.exactpagedims
+lifetime /.rasterband
 lifetime /.outputdevice
 lifetime /.fontserial

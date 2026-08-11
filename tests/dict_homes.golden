@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 301
+entries 302
 
 # Graphics-state template slots (data/gstate.ps). The list is the whole
 # fails the check, so a new slot is declared here in the commit that adds
@@ -198,6 +198,7 @@ entries 301
 .xpostsys /.imagepaintm
 .xpostsys /.imagetype3
 .xpostsys /.imagetype4
+.xpostsys /.imagingrows
 .xpostsys /.imgsource
 .xpostsys /.initdevicegstate
 .xpostsys /.installcolorscreen
