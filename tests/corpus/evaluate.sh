@@ -75,8 +75,29 @@ evaluate_one() {
             cat "$here/$corpus/prelude" "$p" > "$work/src.ps"
             src="$work/src.ps"
         fi
+        # The two engines have nothing to say to each other: different
+        # programs over different output names in a directory that is
+        # this program's alone, and nothing is read until both have
+        # stopped. So the reference is started in the background and
+        # this interpreter runs beside it, and the program costs the
+        # slower of the two rather than the sum -- which on the longest
+        # program of the suite is the whole of the difference between
+        # them, and that program is what the suite's wall clock is.
+        #
+        # Both exit statuses have to survive that, because the verdicts
+        # below are read off them and a status not captured at the
+        # moment it is available is gone. So exactly one engine is
+        # backgrounded and the other is waited for in the foreground:
+        # the foreground status is taken from $? on the line after the
+        # command, before anything else can overwrite it, and the
+        # background status from "wait" on that one process id, which
+        # answers for the process named and not for whichever finished
+        # first. Backgrounding both and waiting for the pair would lose
+        # them both -- a bare "wait" reports on nothing.
         "$GS" -q -sDEVICE=$gsdev -sPAPERSIZE=letter -r72 -dNOSAFER \
-              -dBATCH -dNOPAUSE -o "$work/g_%d.$dev" "$src" >/dev/null 2>&1
+              -dBATCH -dNOPAUSE -o "$work/g_%d.$dev" "$src" \
+              </dev/null >/dev/null 2>&1 &
+        gspid=$!
         # The budget separates a program that is slow from one that will
         # never finish, and it is spent on a machine this evaluator is
         # itself loading: every corpus renders its programs several at a
@@ -93,6 +114,15 @@ evaluate_one() {
         timeout 960 "$XPOST" -d $dev -o "$work/x_%d.$dev" "$src" \
                 </dev/null >"$work/xlog" 2>&1
         xstatus=$?
+        # and the reference collected before any of that is read. It
+        # comes first because everything below this line either reads
+        # what the two engines wrote or leaves, and the directory is
+        # taken away on the way out: a verdict reached while the
+        # reference was still running would be reached over half its
+        # output, and an exit would leave it drawing into a directory
+        # about to be removed.
+        wait "$gspid"
+        gstatus=$?
         xerr=$(grep -m1 -oE 'Error: [a-zA-Z.]+' "$work/xlog" | sed 's/Error: //')
         # a signal death or a timeout is a hard regression, distinct from a
         # controlled PostScript error (which just yields no page, below)
@@ -111,12 +141,23 @@ evaluate_one() {
         # is the reason for it, and reasons live in that file.
         if [ "$nx" = 0 ] || [ "$ng" = 0 ]; then
             printf '%s\n' "$b" >> "$work.miss"
+            # what the reference exited with, where it drew nothing. An
+            # engine that died has written no page to say so on, and
+            # its status is the only account of it there is; a program
+            # the reference merely declines to draw exits cleanly and
+            # says nothing here, which is the difference worth seeing.
+            gwhy=
+            if [ "$gstatus" -ge 128 ]; then
+                gwhy=" (reference died on signal $((gstatus - 128)))"
+            elif [ "$gstatus" != 0 ]; then
+                gwhy=" (reference exited $gstatus)"
+            fi
             if [ "$nx" = 0 ] && [ "$ng" = 0 ]; then
-                echo "  $b  no page from either engine"
+                echo "  $b  no page from either engine$gwhy"
             elif [ "$nx" = 0 ]; then
                 echo "  $b  XPOST FAILED${xerr:+: $xerr}"
             else
-                echo "  $b  reference produced no page ($nx from xpost)"
+                echo "  $b  reference produced no page ($nx from xpost)$gwhy"
             fi
             exit 0
         fi
