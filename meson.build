@@ -1813,6 +1813,16 @@ test('raster-row',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A page whose held rows are not a run: the page a writer is handed is
+# assembled from the rows the device holds and the ground row standing
+# for the rest, so a scatter of held rows emits every row of the page in
+# its own place.
+test('sparse-rows',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/sparse_rows_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Access attributes in the device blitters: painting into a raster row a
 # program restocked with a read-only string raises invalidaccess and
 # leaves the read-only bytes untouched (PLRM 3.3.2).

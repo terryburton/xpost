@@ -67,16 +67,15 @@ currentglobal true setglobal
         % The raster is priced before any of it is built: the ImgData
         % spine is one element per row of the page, each row held costs
         % what .rowcost says, and the whole extent is asked for at once.
-        % A page held in part holds one row more, the one carrying the
-        % ground the rest of the page shows. A page this interpreter
+        % One row beyond the run is the row carrying the ground every
+        % row the device does not hold shows. A page this interpreter
         % cannot hold is refused having taken nothing to be refused
         % with, where one built row by row until the memory ran out
         % would ask the system for everything it could get before
         % failing, and answer the same error at the end of it.
         height                      % spine elements
         .rowcost                    % spine rowelements rowbytes
-        .bandrows .bandrows height lt { 1 add } if
-                                    % spine rowelements rowbytes rows
+        .bandrows 1 add             % spine rowelements rowbytes rows
         dup 3 1 roll mul            % spine rowelements rows bytes
         3 1 roll mul                % spine bytes elements
         3 -1 roll add               % bytes elements'
@@ -89,22 +88,27 @@ currentglobal true setglobal
         .bandtop 1 .bandtop .bandrows add 1 sub {
             ImgData exch .rowalloc put
         } for
-        .bandrows height lt {
-            % One empty row stands for every row the page does not hold.
-            % It is a row of the class's own shape carrying no pixel, so
-            % a mark landing on such a row is dropped where every other
-            % out-of-page mark is dropped: against the row it was about
-            % to be written to.
-            /.emptyrow .rowempty def
-            0 1 .bandtop 1 sub { ImgData exch .emptyrow put } for
-            .bandtop .bandrows add 1 height 1 sub
-                { ImgData exch .emptyrow put } for
-            % The ground the rows the page does not hold show. It is a
-            % row of the class's own shape, laid out as a row that is
-            % held starts, and erasepage fills it in through /Ground
-            % below.
-            /.groundrow .rowalloc def
-        } if
+        % One empty row stands for every row the device does not hold.
+        % It is a row of the class's own shape carrying no pixel, so a
+        % mark landing on such a row is dropped where every other
+        % out-of-page mark is dropped: against the row it was about to
+        % be written to. Carrying no pixel is what makes it safe to
+        % share one of them across every row that is not held: a write
+        % that reaches it lands nowhere, where a full-width row shared
+        % the same way would take the mark and show it on every row
+        % standing in through that same object.
+        /.emptyrow .rowempty def
+        0 1 .bandtop 1 sub { ImgData exch .emptyrow put } for
+        .bandtop .bandrows add 1 height 1 sub
+            { ImgData exch .emptyrow put } for
+        % The ground the rows the device does not hold show. It is a row
+        % of the class's own shape, laid out as a row that is held
+        % starts, and erasepage fills it in through /Ground below. It is
+        % held whether or not any row is standing in at this moment,
+        % since which rows the device holds is not settled once at
+        % Create: it is one row against a page, and having it costs less
+        % than deciding twice whether to.
+        /.groundrow .rowalloc def
         setglobal
     currentdict
     end } bind
@@ -529,18 +533,25 @@ currentglobal true setglobal
     /Emit { % IMAGE  .  -
     begin
         % The page a writer is given is the page the program asked for.
-        % Where the device holds only the rows an imaging bounding box
-        % reaches (PLRM 6.2), the rest of the page shows the ground, and
-        % the whole page is put together here so that no writer has to
-        % know the difference.
-        .bandrows height lt {
-            ImgData height array copy
-            0 1 .bandtop 1 sub { 1 index exch .groundrow put } for
-            .bandtop .bandrows add 1 height 1 sub
-                { 1 index exch .groundrow put } for
-        }{
-            ImgData
-        } ifelse
+        % Where the device holds only some of the page's rows, the rest
+        % of it shows the ground, and the whole page is put together
+        % here so that no writer has to know the difference.
+        %
+        % Which rows those are is asked of the rows themselves, one at a
+        % time, rather than worked out from the run the device set out
+        % to hold. The two answer alike while the rows a device holds
+        % are settled once and for all at Create, and only the first
+        % stays right when they are not: a page whose held rows are the
+        % ones a mark reached does not hold a run at all, and there is
+        % no arithmetic over .bandtop and .bandrows that describes it.
+        ImgData height array copy
+        0 1 height 1 sub {              % page i
+            1 index 1 index get         % page i row
+            .rowheld
+                { pop }
+                { 1 index exch .groundrow put }
+            ifelse
+        } for
         .outputfile (w) file
         .writepage
     end } bind

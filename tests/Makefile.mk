@@ -342,6 +342,7 @@ tests/show_clip_test.ps \
 tests/show_pattern_test.ps \
 tests/showop_matrix_test.ps \
 tests/single_instance_test.c \
+tests/sparse_rows_test.ps \
 tests/stack_bounds_test.c \
 tests/stack_peek_bound_test.c \
 tests/stack_push_refusal_test.c \

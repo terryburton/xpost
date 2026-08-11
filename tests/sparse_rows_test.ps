@@ -1,0 +1,129 @@
+%!
+% A page whose held rows are not a run.
+%
+% A device keeping its page as rows need not hold every row of it: the
+% rows it does not hold show the ground the page was last cleared to
+% (PLRM 8.2 erases the entire page), and the page a writer is handed is
+% put together from the rows that are held and that one ground row.
+%
+% Which rows are held is asked of the rows themselves. Nothing requires
+% them to form a run: a page holding the rows a mark reached holds a
+% scatter of them, and no pair of numbers describes that. This test
+% holds a scatter directly -- it stands rows 1, 4 and 7 of ten down and
+% paints the other seven, each in a shade of its own -- and reads the
+% emitted page back to see that every row of it carries what that row
+% was left showing. A page assembled from a run instead of from the rows
+% would emit the seven held rows and nothing for the three, and come out
+% three rows short with the shades of the rows below the first gap slid
+% up into it.
+%
+% The page is written and read as raw PGM (P5), whose rows are the bytes
+% themselves, so what the file carries at a row is read without decoding.
+
+/fails 0 def
+/note { print (\n) print } def
+/assert { % bool (what)  .  -
+    exch { pop }{ /fails fails 1 add def (FAIL: ) print note } ifelse
+} bind def
+
+/device? { .privatedict /.graphicsdict get /currgstate get /device get } bind def
+
+/W 8 def
+/H 10 def
+/OUT (sparse_rows_out.pgm) def
+
+% the rows this page stands down, chosen so that they neither run
+% together nor touch either edge: the first row and the last are held,
+% so a page assembled wrongly cannot come out the right length by
+% losing rows from an end
+/GAP [ 1 4 7 ] def
+/gap? { % i  .  bool
+    false GAP { 2 index eq or } forall exch pop
+} bind def
+
+% the shade row i is painted in. Distinct from one row to the next, so a
+% row emitted in the wrong place is told from the row that belongs there.
+/shade { % i  .  byte
+    23 mul 11 add 255 and
+} bind def
+
+<< /OutputDevice /pgm /OutputFile OUT /PageSize [W H] >> setpagedevice
+
+% A ground that is neither white nor black, so a row showing it is told
+% apart both from a row this test painted and from a row of storage
+% nothing has written.
+{ pop 0.6 } settransfer
+erasepage
+
+/dev device? def
+/ground dev /.groundrow get 0 get def
+
+% the shades and the ground have to be different bytes or the reads
+% below cannot tell a row that is held from one that is not
+true 0 1 H 1 sub { shade ground ne and } for
+    (the ground is a shade no row is painted in) assert
+
+% Stand the gap rows down and paint the rest. The rows are reached
+% directly rather than through the painting operators: what is under
+% test is the page that comes out of a given scatter of held rows, and
+% naming the scatter is more direct than contriving marks that produce
+% one.
+0 1 H 1 sub {
+    /i exch def
+    i gap? {
+        dev /ImgData get i dev /.emptyrow get put
+    }{
+        /r dev /ImgData get i get def
+        0 1 W 1 sub { r exch i shade put } for
+    } ifelse
+} for
+
+showpage
+
+% read the emitted page back
+/f OUT (r) file def
+/data f 4096 string readstring pop def
+f closefile
+
+% P5 carries three newlines before the raster: one after the magic, one
+% after the two extents, one after the maximum value.
+/nl 0 def
+/off -1 def
+0 1 data length 1 sub {
+    /j exch def
+    nl 3 lt {
+        data j get 10 eq {
+            /nl nl 1 add def
+            nl 3 eq { /off j 1 add def } if
+        } if
+    } if
+} for
+
+off 0 ge (the emitted page carries a PGM header) assert
+
+off 0 ge {
+    /raster data length off sub def
+    /whole raster W H mul eq def
+    whole (the emitted page carries every row of the page) assert
+
+    % Every row, held or not, carries what that row was left showing.
+    % Asked only of a page that came out the right length, since a short
+    % page has no row to read at the far end of it and the length is
+    % already answered for above.
+    whole {
+        /bad 0 def
+        0 1 H 1 sub {
+            /i exch def
+            /want i gap? { ground }{ i shade } ifelse def
+            0 1 W 1 sub {
+                /k exch def
+                data off i W mul add k add get want ne
+                    { /bad bad 1 add def } if
+            } for
+        } for
+        bad 0 eq (every row carries what it was left showing) assert
+    } if
+} if
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails 20 string cvs note } ifelse
+quit
