@@ -248,6 +248,70 @@ rgbdev /ImgData get 0 get (.blitform over a readonly row) intact
 { systemdict noaccess pop }             /invalidaccess (noaccess systemdict) chk
 { 1183615869 internaldict noaccess pop } /invalidaccess (noaccess internaldict) chk
 
+% --- access across a save bracket ---
+% A dictionary's access attribute is a property of its value, while every
+% other composite carries it on the object (PLRM 3.3.2 "Access"). restore
+% resets the values of all composite objects in local VM, except strings,
+% to their state at the time of the save, and leaves objects in global VM
+% alone (PLRM 3.7.3). Together those decide the type by type answers
+% below: a dictionary's seal is part of what a restore resets, an array's
+% or a string's is not part of any value and so is nothing for a restore
+% to reach, and a slot holding a sealed reference is reset with the
+% dictionary that holds the slot.
+
+/bchk { % bool (label) -> -
+    exch { pop }
+    { (FAIL: ) print print (\n) print
+      faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
+/svd1 3 dict def
+save svd1 readonly pop restore
+svd1 wcheck (a dict sealed inside a save bracket is writable after the restore) bchk
+
+/svd2 3 dict def
+svd2 readonly pop
+save restore
+svd2 wcheck not (a dict sealed before a save is still sealed after the restore) bchk
+
+/svd3 3 dict def svd3 /k 1 put
+save svd3 /k 2 put restore
+svd3 /k get 1 eq (a dict value written inside a bracket is reset by the restore) bchk
+
+% an array carries access on the object, so sealing one reference inside a
+% bracket is not a change to any value and the original is untouched
+/sva1 [1 2 3] def
+save /svjunk sva1 readonly def restore
+sva1 wcheck (an array sealed inside a bracket leaves the original writable) bchk
+
+/sva2 [1 2 3] def
+save sva2 0 99 put restore
+sva2 0 get 1 eq (an array value written inside a bracket is reset by the restore) bchk
+
+% a string's value is the one composite value a restore does not reset
+/svs1 (abc) def
+save svs1 0 88 put restore
+svs1 (Xbc) eq (a string value written inside a bracket survives the restore) bchk
+
+/svs2 (abc) def
+save /svjunk2 svs2 readonly def restore
+svs2 wcheck (a string sealed inside a bracket leaves the original writable) bchk
+
+% a sealed reference stored in a dictionary is part of that dictionary's
+% value, so the restore that resets the dictionary resets the slot with it
+/svc1 3 dict def
+/sva3 [1 2 3] def
+svc1 /a sva3 put
+save svc1 /a sva3 readonly put restore
+svc1 /a get wcheck (a dict slot holding a sealed array reference is reset by the restore) bchk
+
+% objects in global VM are not reached by a restore at all
+true setglobal
+/svg1 3 dict def
+false setglobal
+save svg1 readonly pop restore
+svg1 wcheck not (a global dict sealed inside a bracket is still sealed after the restore) bchk
+
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop
 faildict /n get 0 eq { (SUCCESS\n) print }{ faildict /n get =print ( failures\n) print } ifelse

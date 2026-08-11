@@ -116,6 +116,10 @@ Xpost_Object_Tag_Access xpost_dict_get_access(Xpost_Context *ctx, Xpost_Object d
 
 /**
  * @brief set the access field in the dichead in vm
+ *
+ * The head is inside the entity a save level copies, so this takes the
+ * backup before writing. Answers null where the backup was refused,
+ * having left the access as it found it.
  */
 Xpost_Object xpost_dict_set_access(Xpost_Context *ctx, Xpost_Object d, Xpost_Object_Tag_Access access);
 

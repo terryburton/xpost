@@ -512,8 +512,17 @@ _t1_charstrings_from_file(Xpost_Context *ctx, const char *path)
 done:
         if (entries > 0)
         {
-            csdict = xpost_object_set_access(ctx, csdict,
-                          XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+            Xpost_Object sealed =
+                xpost_object_set_access(ctx, csdict,
+                                        XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+
+            /* The dictionary was made under whatever save level stands
+               over this call, so it is not one that level has to back up
+               and the seal cannot be declined the room. Taken only when
+               it is a dictionary all the same: what a decline answers is
+               a null, and a null is not what belongs under the name. */
+            if (xpost_object_get_type(sealed) == dicttype)
+                csdict = sealed;
             result = csdict;
         }
         ctx->vmmode = oldmode;
@@ -784,8 +793,14 @@ _cff_charstrings_from_file(Xpost_Context *ctx, const char *path, void *face)
         }
         if (entries > 0)
         {
-            csdict = xpost_object_set_access(ctx, csdict,
-                          XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+            Xpost_Object sealed =
+                xpost_object_set_access(ctx, csdict,
+                                        XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+
+            /* as above: the seal cannot be declined here, and a null is
+               not what belongs under the name if it were */
+            if (xpost_object_get_type(sealed) == dicttype)
+                csdict = sealed;
             result = csdict;
         }
         ctx->vmmode = oldmode;
@@ -1119,8 +1134,18 @@ int _findfont(Xpost_Context *ctx,
                     }
                 }
                 ctx->vmmode = oldmode;
-                csdict = xpost_object_set_access(ctx, csdict,
-                                                 XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+                {
+                    Xpost_Object sealed =
+                        xpost_object_set_access(ctx, csdict,
+                                                XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+
+                    /* as elsewhere: the dictionary was made under the
+                       save level standing over this call, so the seal
+                       cannot be declined the room, and a null is not
+                       what belongs under the name if it were */
+                    if (xpost_object_get_type(sealed) == dicttype)
+                        csdict = sealed;
+                }
                 if (slot >= 0)
                     _face_put(ctx, face_cache[slot].name, "CharStrings", csdict);
                 ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),

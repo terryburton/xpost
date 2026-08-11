@@ -96,6 +96,23 @@ Xpost_Object xpost_dict_set_access(Xpost_Context *ctx, Xpost_Object d, Xpost_Obj
     Xpost_Memory_File *mem;
     dichead *dp;
     mem = xpost_context_select_memory(ctx, d);
+    /* A dictionary's access attribute is a property of its value rather
+       than of the object naming it (PLRM 3.3.2), and it is kept where
+       the value is: in the dictionary's head, inside the entity a save
+       level copies and a restore puts back. Writing it is therefore a
+       write to that entity, and every write to an entity takes the
+       backup first -- the copy a level holds stands for the entity as it
+       was when the level was taken, which it is only if nothing reaches
+       the entity ahead of it. A copy taken after this write would hold
+       the access set here, and the restore that ends the level would
+       hand back an access the dictionary never had at the save.
+
+       Refused, the access is left alone and the refusal is answered
+       with a null, so that the change is not made unrevertable: the
+       caller decides what a dictionary it could not reduce means to it. */
+    if (xpost_save_cow(mem, dicttype, 0, xpost_object_get_ent(d)))
+        return null;
+    /* the backup allocates, so the head is found after it */
     dp = xpost_dict_head(mem, xpost_object_get_ent(d));
     dp->tag &= ~XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK;
     dp->tag |= access << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET;

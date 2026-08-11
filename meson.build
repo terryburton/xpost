@@ -1135,6 +1135,25 @@ test('graphics-load-stop',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A dictionary's access is part of its value and is held in the entity a
+# save level copies, so a level that copied the entity after the access
+# had been changed would rewind to the access at that write rather than
+# the access at the level. Held over the dictionaries the interpreter
+# seals once the language has loaded -- systemdict and the two private
+# namespaces -- since a save bracket is the whole of an ordinary run, and
+# over a dictionary of the test's own for the rule itself.
+sealed_dict_restore_exe = executable('sealed_dict_restore_test',
+  'tests/sealed_dict_restore_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('sealed-dict-restore',
+  sealed_dict_restore_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The device a context is started with: made once in the life of the
 # context rather than once per job -- a job's bracket would unmake it and
 # leave the state it reached outside virtual memory unreachable -- and

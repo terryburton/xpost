@@ -386,7 +386,15 @@ int op_sysdictunlock(Xpost_Context *ctx)
     if (ctx->sysdict_load_done)
         return 0;
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
+    /* opening systemdict writes its value, which backs it up to whatever
+       save level stands over the load first; refused, systemdict stays
+       shut and the load reports it rather than proceeding against a
+       dictionary it cannot define into */
+    if (xpost_object_get_type(
+            xpost_object_set_access(ctx, sd,
+                                    XPOST_OBJECT_TAG_ACCESS_UNLIMITED))
+        == invalidtype)
+        return VMerror;
     ctx->sysdict_unlocked = 1;
     return 0;
 }
@@ -398,6 +406,9 @@ static
 int op_sysdictrelock(Xpost_Context *ctx)
 {
     Xpost_Object sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    /* the window this shuts was opened by a write that backed systemdict
+       up to any save level standing over the load, so shutting it takes
+       no further backup and cannot be refused */
     xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     ctx->sysdict_unlocked = 0;
     ctx->sysdict_load_done = 1;

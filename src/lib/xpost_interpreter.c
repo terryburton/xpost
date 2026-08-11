@@ -1750,7 +1750,9 @@ void _onerror(Xpost_Context *ctx,
 
     /* if a fault interrupts loading the graphics language into systemdict,
        restore systemdict to read-only so the writeable window never outlives
-       the load */
+       the load. The window was opened by a write that backed systemdict up
+       to any save level standing over the load, so shutting it takes no
+       further backup and cannot be refused. */
     if (ctx->sysdict_unlocked)
     {
         xpost_object_set_access(ctx,
@@ -2937,6 +2939,9 @@ XPAPI Xpost_Context *xpost_create(const char *device,
         XPOST_LOG_ERR("%s naming systemdict in itself", errorname[ret]);
         return NULL;
     }
+    /* the context is being built and no save level stands over it yet,
+       so this seal is not one a level has to back up and cannot be
+       refused the room */
     xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
 #if 0
     if (!xpost_stack_bottomup_replace(xpost_ctx->lo, xpost_ctx->ds, 0, xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY)))

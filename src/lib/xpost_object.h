@@ -681,6 +681,11 @@ void xpost_object_install_file_set_access(Xpost_Object (*set_access_func)(Xpost_
  * It returns the modified object by clearing the access-field with
  * an inverse mask. OR-in the new access field, shifted up by
  * #XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET.
+ *
+ * A dictionary carries its access on its value rather than on the
+ * object, so setting it reaches virtual memory and can be refused
+ * there; a refusal is answered with null and leaves the access as it
+ * was. Every other type carries it on the object and cannot refuse.
  */
 Xpost_Object xpost_object_set_access(Xpost_Context *ctx,
                                      Xpost_Object obj,

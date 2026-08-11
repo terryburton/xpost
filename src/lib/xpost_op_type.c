@@ -169,6 +169,11 @@ int Anoaccess(Xpost_Context *ctx,
         xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_READ_ONLY)
         return invalidaccess;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
+    /* a dictionary's access is part of its value, so reducing it writes
+       virtual memory and can be declined room for the backup a standing
+       save level needs */
+    if (xpost_object_get_type(o) == invalidtype)
+        return VMerror;
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
 }
@@ -183,6 +188,9 @@ int Areadonly(Xpost_Context *ctx,
     if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
         return typecheck;
     o = xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    /* as noaccess above: a dictionary's seal is a write to its value */
+    if (xpost_object_get_type(o) == invalidtype)
+        return VMerror;
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
 }

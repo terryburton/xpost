@@ -211,31 +211,33 @@ void _rebind_fontdirectory(Xpost_Context *ctx)
         return;
 
     fd = (ctx->vmmode == GLOBAL) ? ctx->globalfontdir : ctx->localfontdir;
-    /* Back systemdict up to the save it stands under before the window
-       below is opened. A save keeps the copy a restore puts back, and it
-       takes that copy at the first write it sees; a copy taken through
-       this window is a copy of systemdict with the window open, so the
-       restore that ends the level would hand back a systemdict a program
-       may write, and a program that may write systemdict may redefine
-       the language. Refused, the write is abandoned rather than made
-       unrevertable: what it rebinds is a convenience the PLRM describes
-       and not something the interpreter's own correctness rests on. */
-    if (xpost_save_cow(xpost_context_select_memory(ctx, sd), dicttype, 0,
-                       xpost_object_get_ent(sd)) != 0)
-    {
-        XPOST_LOG_ERR("cannot back systemdict up before rebinding "
-                      "FontDirectory");
-        return;
-    }
     ignore = ctx->ignoreinvalidaccess;
     access = xpost_object_get_access(ctx, sd);
     ctx->ignoreinvalidaccess = 1;
-    xpost_object_set_access(ctx, sd, XPOST_OBJECT_TAG_ACCESS_UNLIMITED);
+    /* Opening the window is a write to systemdict's value, so it backs
+       systemdict up to the save level it stands under before it takes
+       effect, and a level that ends here gives back the systemdict this
+       found rather than the one this made -- a program that may write
+       systemdict may redefine the language. Refused, the rebinding is
+       abandoned rather than made unrevertable: what it rebinds is a
+       convenience the PLRM describes and not something the interpreter's
+       own correctness rests on. */
+    if (xpost_object_get_type(
+            xpost_object_set_access(ctx, sd,
+                                    XPOST_OBJECT_TAG_ACCESS_UNLIMITED))
+        == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = ignore;
+        XPOST_LOG_ERR("cannot open systemdict to rebind FontDirectory");
+        return;
+    }
     /* the name is already in systemdict, so the store replaces an entry
        rather than making one: it allocates nothing and cannot be
        refused, which is what makes this safe on the error path */
     XPOST_REFUSAL_IMPOSSIBLE(
         xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd));
+    /* systemdict is backed up at this level now, so shutting the window
+       writes its head and takes no further backup: it cannot be refused */
     xpost_object_set_access(ctx, sd, access);
     ctx->ignoreinvalidaccess = ignore;
 }
