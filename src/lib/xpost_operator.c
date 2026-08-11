@@ -584,7 +584,10 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
     XPOST_OP_REFS(XPOST_OP_REF_CAPTURE)
 #undef XPOST_OP_REF_CAPTURE
 
-    o.tag = operatortype;
+    /* every field, so that what the object carries is what this says it
+       carries wherever the storage it was built in came from */
+    o.mark_.tag = operatortype;
+    o.mark_.pad0 = 0;
     o.mark_.padw = opcode;
     return o;
 }
