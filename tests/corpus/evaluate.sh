@@ -1,10 +1,10 @@
 #!/bin/sh
-# Render each corpus through xpost and Ghostscript and report the
-# per-page difference. A corpus whose directory is absent or empty is
-# skipped, as is one whose programs need a prelude that is populated
-# rather than committed and has not been, so this is never a build
-# dependency. Ghostscript is used as the differential reference; read
-# the difference as a lead, not a verdict (see README.md).
+# Render each corpus through xpost and through a reference engine and
+# report the per-page difference. A corpus whose directory is absent or
+# empty is skipped, as is one whose programs need a prelude that is
+# populated rather than committed and has not been, so this is never a
+# build dependency. The reference is an oracle and not an authority:
+# read a difference as a lead, not a verdict (see README.md).
 #
 #   evaluate.sh                 evaluate every corpus present
 #   evaluate.sh ghostscript     evaluate one
