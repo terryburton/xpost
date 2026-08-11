@@ -110,6 +110,15 @@ unsigned int xpost_operator_count(void)
     return (unsigned int)(_xpost_noops < 0 ? 0 : _xpost_noops);
 }
 
+/* How many operators the table holds, told rather than counted, for a
+   context whose table arrived whole. The rows are then already in
+   virtual memory and this is what says how many of them are rows: the
+   count lives outside virtual memory and does not arrive with them. */
+void xpost_operator_set_count(unsigned int count)
+{
+    _xpost_noops = (int)(count < MAXOPS ? count : MAXOPS - 1);
+}
+
 static
 int _stack_none(Xpost_Context *ctx)
 {

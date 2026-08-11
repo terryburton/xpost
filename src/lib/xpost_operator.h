@@ -251,6 +251,15 @@ void xpost_operator_wrapped_release(Xpost_Context *ctx, Xpost_Object run);
  */
 unsigned int xpost_operator_count(void);
 
+/**
+ * @brief say how many operators the table holds.
+ *
+ * For a context whose operator table was not built here but arrived
+ * whole, in an image of the virtual memory it lives in. The rows come
+ * with the memory and the count does not, so the count is told.
+ */
+void xpost_operator_set_count(unsigned int count);
+
 static inline Xpost_Operator *
 xpost_operator_table(Xpost_Memory_File *gl)
 {

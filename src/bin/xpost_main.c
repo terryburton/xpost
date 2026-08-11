@@ -557,6 +557,13 @@ int main(int argc, char *argv[])
         goto quit_xpost;
     }
 
+    /* An image of virtual memory carries the language it was written
+       with, and it is read as the context is created. A run that means
+       to load no graphics wants another language, so it says before the
+       context exists that it will build one. */
+    if (no_graphics)
+        xpost_vm_image_refuse();
+
     if (!(ctx = xpost_create(device,
                              XPOST_OUTPUT_FILENAME,
                              output_file,

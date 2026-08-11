@@ -352,6 +352,12 @@ struct _Xpost_Context {
                             relocks it if a load faults */
     int sysdict_load_done; /**< the graphics language has been loaded into
                              systemdict; the one-shot unlock is spent */
+    int device_made; /**< the device this run was started with has been
+                        made. Read beside the flag above to decide
+                        whether a job has to bring the context up first:
+                        the language may stand without the device having
+                        been made, which is where a context whose
+                        language arrived whole begins */
 
     int es_over;              /**< the exec-stack ceiling has been reported;
                                    holds off a re-raise until depth recedes */

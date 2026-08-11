@@ -57,6 +57,7 @@
 #include "xpost_file.h"  /* eval functions examine files */
 
 #include "xpost_interpreter.h" /* uses: context itp MAXCONTEXT MAXMFILE */
+#include "xpost_vm_image.h"
 #include "xpost_garbage.h"  /*  test gc, install collect() in context's memory files */
 #include "xpost_operator.h"  /* eval functions call operators */
 #include "xpost_op_dict.h"  /* the shared def fast path */
@@ -2366,28 +2367,41 @@ int setlocalconfig(Xpost_Context *ctx,
     return 0;
 }
 
-/*
-   load init.ps (which also loads err.ps) while systemdict is writeable
-   ignore invalidaccess errors.
+/* Where the boot files are, or the empty string where they are nowhere
+   this looks. What is looked for is init.ps, which is the file the run
+   would begin with and the one every other is reached from.
 
-   The directory the boot files were found in is reported back in
-   datadir, empty where they were not found at all. It is one of the
-   things this run settles rather than something true of the build, so
-   the caller records it with the rest of them.
- */
-static
-void loadinitps(Xpost_Context *ctx, char *datadir, size_t datadirsz)
+   The answer is one of the things a run settles rather than something
+   true of the build, so a caller records it with the rest of them. It is
+   asked for twice over: once by the load that runs those files, and once
+   by the image of virtual memory, which stamps what it holds with what
+   the files it was built out of say. Both must be asking about the same
+   directory, so both ask here. */
+/* A path with no backslashes in it. A path reaches PostScript as a
+   string the boot files build a file name out of, and a backslash there
+   begins an escape (PLRM 3.2.2). */
+static void _forward_slashes(char *path)
 {
-    char buf[1024];
+#ifdef _WIN32
+    while (*path)
+    {
+        if (*path == '\\')
+            *path = '/';
+        path++;
+    }
+#else
+    (void)path;
+#endif
+}
+
+XPOST_TEST_VISIBLE void xpost_interpreter_data_dir(char *datadir,
+                                                   size_t datadirsz)
+{
     char path_init_ps[XPOST_PATH_MAX];
     struct stat statbuf;
-    char *path_init;
     char *path;
-    int n;
 
-    assert(ctx->gl->base);
     datadir[0] = '\0';
-    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
 
 #define XPOST_PATH_INIT \
     do \
@@ -2395,8 +2409,9 @@ void loadinitps(Xpost_Context *ctx, char *datadir, size_t datadirsz)
         snprintf(path_init_ps, sizeof(path_init_ps), "%s/init.ps", path); \
         if (stat(path_init_ps, &statbuf) == 0) \
         { \
-            path_init = path; \
-            goto load_init_ps; \
+            snprintf(datadir, datadirsz, "%s", path); \
+            _forward_slashes(datadir); \
+            return; \
         } \
         else \
             XPOST_LOG_DBG("init.ps not present in", path_init_ps); \
@@ -2438,27 +2453,84 @@ void loadinitps(Xpost_Context *ctx, char *datadir, size_t datadirsz)
     XPOST_PATH_INIT;
 
     XPOST_LOG_ERR("init.ps can not be found");
+}
+#undef XPOST_PATH_INIT
 
-    return;
+/* Where an image of virtual memory is read from, and where one is
+   written to. Both are named by the environment rather than by an
+   argument: an image is a property of an installation -- one file
+   beside the boot files it was built out of -- and every caller of the
+   library gets it or does not without knowing it exists.
 
-  load_init_ps:
-    /* init.ps loads now and graphics.ps loads lazily from this same directory;
-       permit reading it so a later sandbox does not deny the interpreter its
-       own start-up files */
-    xpost_path_permit_read(path_init);
+   Nothing names one by default, so a build that has not been given one
+   boots the way it always has. XPOST_NO_VM_IMAGE names nothing and
+   means it: it is what turns the reading off for a run that wants the
+   long way without moving the file.
 
-    /* backslashes are not supported in path because they are inserted in
-    * PostScript files, and PostScript */
-#ifdef _WIN32
-    path = path_init_ps;
-    while (*path++) if (*path == '\\') *path = '/';
-    path = path_init;
-    while (*path++) if (*path == '\\') *path = '/';
-#endif
-    snprintf(datadir, datadirsz, "%s", path_init);
+   Only a quiet run reads or writes one. The boot files narrate their own
+   loading, and a run that reads an image does no loading to narrate; the
+   flag that silences that narration is itself part of what an image
+   carries, so an image and the run reading it must agree about it. */
+static const char *_image_read_path(int quiet)
+{
+    const char *path;
+
+    if (!quiet || xpost_vm_image_refused() || getenv("XPOST_NO_VM_IMAGE"))
+        return NULL;
+    path = getenv("XPOST_VM_IMAGE");
+    return (path && path[0]) ? path : NULL;
+}
+
+static const char *_image_write_path(void)
+{
+    const char *path = getenv("XPOST_VM_IMAGE_WRITE");
+
+    return (path && path[0]) ? path : NULL;
+}
+
+/* Written where the language stands complete; defined below, beside the
+   step that reaches that point. */
+static void _write_image(Xpost_Context *ctx);
+
+/* How many contexts this process has created. An image is written from
+   the first and only from the first: a context created after another has
+   lived and died in the same process does not arrive at the same virtual
+   memory, and an image of it would differ from an image of a fresh boot
+   for reasons no reader could account for. */
+static unsigned int _contexts_created = 0;
+
+/* Say that the boot files may be read, whichever way the language
+   arrives. init.ps is read from here now and graphics.ps lazily from the
+   same directory, so a later sandbox must not deny the interpreter its
+   own start-up files -- and a run whose language came out of an image
+   reaches the same directory for whatever it did not carry. */
+void xpost_interpreter_permit_data_dir(const char *datadir)
+{
+    if (datadir[0])
+        xpost_path_permit_read(datadir);
+}
+
+/*
+   load init.ps (which also loads err.ps) while systemdict is writeable
+   ignore invalidaccess errors.
+ */
+static
+void loadinitps(Xpost_Context *ctx, const char *datadir)
+{
+    char buf[1024];
+    char path_init_ps[XPOST_PATH_MAX];
+    int n;
+
+    assert(ctx->gl->base);
+    if (!datadir[0])
+        return;
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
+    snprintf(path_init_ps, sizeof(path_init_ps), "%s/init.ps", datadir);
+
+    _forward_slashes(path_init_ps);
     n = snprintf(buf, sizeof(buf),
                  "(%s) (r) file cvx "
-                 "/DATA_DIR (%s) def exec ", path_init_ps, path_init);
+                 "/DATA_DIR (%s) def exec ", path_init_ps, datadir);
     xpost_stack_push(ctx->lo, ctx->es,
                      xpost_object_cvx(xpost_string_cons(ctx, n, buf)));
 
@@ -2536,22 +2608,63 @@ static int _host_put(Xpost_Context *ctx, const char *name, Xpost_Object value)
     return xpost_dict_put(ctx, h, xpost_name_cons(ctx, name), value);
 }
 
+/* What stands under a setting's name now. */
+static Xpost_Object _host_get(Xpost_Context *ctx, const char *name)
+{
+    Xpost_Object h = _host_dict(ctx);
+
+    if (xpost_object_get_type(h) != dicttype)
+        return null;
+    return xpost_dict_get(ctx, h, xpost_name_cons(ctx, name));
+}
+
+/* Whether a value already under a name is somewhere this run's own
+   value can be put without making anything.
+
+   Every setting is written on every launch, and a launch whose language
+   came out of an image is writing over what the run that wrote the image
+   left. Where the two runs settled the same thing, virtual memory has to
+   come out where it went in -- an image read and written back must be
+   the image that was read -- so a value of the same kind and the same
+   size is filled in rather than replaced. It is reached only through the
+   name it is under, and the name is about to hold this run's answer
+   either way. */
+static int _reusable(Xpost_Context *ctx, const char *name,
+                     Xpost_Object_Type type, unsigned int sz,
+                     Xpost_Object *had)
+{
+    *had = _host_get(ctx, name);
+    return xpost_object_get_type(*had) == type
+           && (*had).comp_.sz == sz
+           && (*had).comp_.off == 0;
+}
+
 /* Write a setting whose value is text the caller gave. Nothing said is
-   left as the null the whole set was cleared to, so a reader tells a
-   setting the host declined to make from one it made empty. */
+   written as a null, so a reader tells a setting the host declined to
+   make from one it made empty. */
 static int _host_put_string(Xpost_Context *ctx, const char *name,
                             const char *text)
 {
     Xpost_Object o;
+    unsigned int len;
 
     if (!text)
-        return 0;
+        return _host_put(ctx, name, null);
     /* the text becomes a string, which counts its length in a field
        narrower than a path or a device selector may be */
     if (strlen(text) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
         return limitcheck;
-    o = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)strlen(text),
-                                             text));
+    len = (unsigned int)strlen(text);
+    if (_reusable(ctx, name, stringtype, len, &o))
+    {
+        char *p = xpost_string_get_pointer(ctx, o);
+
+        if (!p)
+            return VMerror;
+        memcpy(p, text, len);
+        return 0;
+    }
+    o = xpost_object_cvlit(xpost_string_cons(ctx, len, text));
     if (xpost_object_get_type(o) != stringtype)
         return VMerror;
     return _host_put(ctx, name, o);
@@ -2564,22 +2677,29 @@ static int _host_put_pointer(Xpost_Context *ctx, const char *name,
                              const void *p, size_t sz)
 {
     Xpost_Object o;
+    char *data;
 
     if (!p)
-        return 0;
-    o = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)sz, NULL));
-    if (xpost_object_get_type(o) != stringtype
-        || !xpost_string_get_pointer(ctx, o))
+        return _host_put(ctx, name, null);
+    if (!_reusable(ctx, name, stringtype, (unsigned int)sz, &o))
+    {
+        o = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)sz, NULL));
+        if (xpost_object_get_type(o) != stringtype)
+            return VMerror;
+        xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
+    }
+    data = xpost_string_get_pointer(ctx, o);
+    if (!data)
         return VMerror;
-    xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
-    memcpy(xpost_string_get_pointer(ctx, o), &p, sz);
+    memcpy(data, &p, sz);
     return _host_put(ctx, name, o);
 }
 
 /* Settle what this run's host decides, once the language is in place to
-   be asked. The whole set is cleared first, so a name the branches below
-   have nothing to say about answers null for this run rather than with
-   whatever was under it.
+   be asked. Every name in the table is written here, on every launch:
+   one the host has nothing to say about is written as a null rather than
+   left out, so nothing a run reads under one of these names can have
+   been settled by anything other than this run.
 
    What the settings are made of goes in global memory. They are settled
    before the program runs and are read for the whole life of the
@@ -2604,10 +2724,6 @@ static int _record_host_config(Xpost_Context *ctx,
     int ret;
     int i;
 
-    for (i = 0; host_settings[i]; i++)
-        if ((ret = _host_put(ctx, host_settings[i], null)) != 0)
-            return ret;
-
     vmmode = ctx->vmmode;
     ctx->vmmode = GLOBAL;
 
@@ -2618,11 +2734,14 @@ static int _record_host_config(Xpost_Context *ctx,
        names one. It is data rather than a procedure, so it is literal:
        an executable array would be run instead of read when the path is
        walked. */
-    o = xpost_object_cvlit(xpost_array_cons(ctx, 0));
-    if (xpost_object_get_type(o) != arraytype)
+    if (!_reusable(ctx, ".resourcepath", arraytype, 0, &o))
     {
-        ret = VMerror;
-        goto done;
+        o = xpost_object_cvlit(xpost_array_cons(ctx, 0));
+        if (xpost_object_get_type(o) != arraytype)
+        {
+            ret = VMerror;
+            goto done;
+        }
     }
     if ((ret = _host_put(ctx, ".resourcepath", o)) != 0)
         goto done;
@@ -2661,11 +2780,14 @@ static int _record_host_config(Xpost_Context *ctx,
                          xpost_object_cvlit(xpost_name_cons(ctx, selected))))
         != 0)
         goto done;
-    o = xpost_object_cvlit(xpost_array_cons(ctx, 2));
-    if (xpost_object_get_type(o) != arraytype)
+    if (!_reusable(ctx, "StartPageSize", arraytype, 2, &o))
     {
-        ret = VMerror;
-        goto done;
+        o = xpost_object_cvlit(xpost_array_cons(ctx, 2));
+        if (xpost_object_get_type(o) != arraytype)
+        {
+            ret = VMerror;
+            goto done;
+        }
     }
     if (set_size != XPOST_USE_SIZE)
     {
@@ -2700,8 +2822,25 @@ static int _record_host_config(Xpost_Context *ctx,
     if ((ret = _host_put_pointer(ctx, "OutputBufferIn",
                                  bufferin, sizeof(bufferin))) != 0)
         goto done;
-    ret = _host_put_pointer(ctx, "OutputBufferOut",
-                            bufferout, sizeof(bufferout));
+    if ((ret = _host_put_pointer(ctx, "OutputBufferOut",
+                                bufferout, sizeof(bufferout))) != 0)
+        goto done;
+
+    /* Every name the table holds is written by one of the branches
+       above, and one that is not would answer a reader with whatever
+       some other run left under it. Written as a null here rather than
+       cleared before the branches run: the branches fill a value of the
+       right shape in where they find one, and a clearing pass would have
+       taken it away first. */
+    for (i = 0; host_settings[i]; i++)
+        if (!xpost_dict_known_key(ctx, ctx->gl, _host_dict(ctx),
+                                  xpost_name_cons(ctx, host_settings[i])))
+        {
+            XPOST_LOG_ERR("this run settled nothing under %s",
+                          host_settings[i]);
+            if ((ret = _host_put(ctx, host_settings[i], null)) != 0)
+                goto done;
+        }
 
 done:
     ctx->vmmode = vmmode;
@@ -2800,6 +2939,8 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 {
     Xpost_Object sd, ud;
     char datadir[XPOST_PATH_MAX];
+    const char *image_path;
+    int built;
     int ret;
     const char *outfile = NULL;
     const char *bufferin = NULL;
@@ -2866,6 +3007,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 #endif
 
     nextid = 0; /*reset process counter */
+    _contexts_created++;
 
     /* Allocate and initialize all interpreter data structures. */
     ret = initalldata(device);
@@ -2907,15 +3049,39 @@ XPAPI Xpost_Context *xpost_create(const char *device,
 
     xpost_stack_clear(xpost_ctx->lo, xpost_ctx->hold);
     xpost_interpreter_set_initializing(0);
-    loadinitps(xpost_ctx, datadir, sizeof(datadir));
+
+    xpost_interpreter_data_dir(datadir, sizeof(datadir));
+    xpost_interpreter_permit_data_dir(datadir);
+
+    /* The language: read whole out of an image of the virtual memory a
+       run of this build already built it in, or built here by running
+       the boot files, as every run did before there were images. The two
+       arrive at the same place, so what follows a build -- the userdict
+       names copied across and the seal on systemdict -- is done only
+       where the language was built, the image having been written after
+       them.
+
+       Every way an image can be unusable answers that it was not read,
+       and the boot files are what happens then. So a missing, stale,
+       damaged or foreign image costs a run the time it would have saved
+       and nothing else. */
+    image_path = _image_read_path(quiet);
+    built = !(image_path && xpost_vm_image_load(xpost_ctx, image_path));
+    if (built)
+        loadinitps(xpost_ctx, datadir);
 
     /* Settle what this run's host decides, in the one dictionary that
        holds such things, now that the language is loaded and there is
        somewhere to put them. Everything above this point is the language
        being built and is the same for every run of this build; the
-       settings below it are this run's alone. A context whose settings
-       could not be recorded is not one to hand back: its readers would
-       answer with nothing, or with what some other run left. */
+       settings below it are this run's alone -- and a context whose
+       language came out of an image writes them over the ones the image
+       carries, which is what keeps a run from inheriting the settings of
+       whichever run wrote the file.
+
+       A context whose settings could not be recorded is not one to hand
+       back: its readers would answer with nothing, or with what some
+       other run left. */
     ret = _record_host_config(xpost_ctx, datadir, device, outfile,
                               bufferin, bufferout, semantics,
                               set_size, width, height);
@@ -2925,24 +3091,28 @@ XPAPI Xpost_Context *xpost_create(const char *device,
         return NULL;
     }
 
-    ret = copyudtosd(xpost_ctx, ud, sd);
-    if (ret)
+    if (built)
     {
-        XPOST_LOG_ERR("%s error in copyudtosd", errorname[ret]);
-        return NULL;
-    }
+        ret = copyudtosd(xpost_ctx, ud, sd);
+        if (ret)
+        {
+            XPOST_LOG_ERR("%s error in copyudtosd", errorname[ret]);
+            return NULL;
+        }
 
-    /* make systemdict readonly FIXME: use new access semantics */
-    ret = xpost_dict_put(xpost_ctx, sd, xpost_name_cons(xpost_ctx, "systemdict"), sd);
-    if (ret)
-    {
-        XPOST_LOG_ERR("%s naming systemdict in itself", errorname[ret]);
-        return NULL;
+        /* make systemdict readonly FIXME: use new access semantics */
+        ret = xpost_dict_put(xpost_ctx, sd, xpost_name_cons(xpost_ctx, "systemdict"), sd);
+        if (ret)
+        {
+            XPOST_LOG_ERR("%s naming systemdict in itself", errorname[ret]);
+            return NULL;
+        }
+        /* the context is being built and no save level stands over it
+           yet, so this seal is not one a level has to back up and
+           cannot be refused the room. A context that arrived out of an
+           image is already sealed, and does not pass here. */
+        xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     }
-    /* the context is being built and no save level stands over it yet,
-       so this seal is not one a level has to back up and cannot be
-       refused the room */
-    xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
 #if 0
     if (!xpost_stack_bottomup_replace(xpost_ctx->lo, xpost_ctx->ds, 0, xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY)))
     {
@@ -2967,6 +3137,8 @@ XPAPI Xpost_Context *xpost_create(const char *device,
                       "interpreter was starting");
         return NULL;
     }
+
+    _write_image(xpost_ctx);
 
     return xpost_ctx;
 }
@@ -3220,9 +3392,44 @@ XPOST_TEST_VISIBLE void xpost_interpreter_load_language(Xpost_Context *ctx)
     /* whether the language stands is read from the context afterwards,
        which is the answer the caller acts on; the run below says only
        how the load's own run ended */
-    _run_startup_step(ctx, ctx->skip_graphics ? "loadlanguagenographics"
-                                              : "loadlanguage",
-                      "the language load");
+    /* Unless the language arrived whole. An image is written after this
+       step and holds what the step leaves behind, so a context that read
+       one has been through it; running it again is idempotent in what it
+       decides and not in what it spends -- it allocates as it satisfies
+       itself there is nothing to do -- and virtual memory would then be
+       further on than the image that describes it. */
+    if (!xpost_vm_image_in_use())
+        _run_startup_step(ctx, ctx->skip_graphics ? "loadlanguagenographics"
+                                                  : "loadlanguage",
+                          "the language load");
+}
+
+/* Write an image of virtual memory, where this process was told to.
+
+   The point it is taken at is the one below and no other: the language
+   stands complete and locked down, and nothing of the run has been
+   decided. The language load is asked for here rather than waited for,
+   because by the time a run asks for it the run has already put its
+   program on the operand stack -- and an image taken then would carry
+   the name of whatever file the run that wrote it was given.
+
+   Only where a run reading the image would arrive at the same place. A
+   process that has said it will build the language wants another one; a
+   run whose messages an image cannot reproduce is not one an image is
+   read into; and a context that is not the first this process made does
+   not reach the memory a first one does. Each of those leaves the file
+   alone rather than writing something no reader would expect. */
+static void _write_image(Xpost_Context *ctx)
+{
+    const char *path = _image_write_path();
+
+    if (!path || xpost_vm_image_refused() || !ctx->quiet ||
+        _contexts_created != 1)
+        return;
+
+    xpost_interpreter_load_language(ctx);
+    if (!xpost_vm_image_write(ctx, path, 0))
+        XPOST_LOG_ERR("cannot write an image of virtual memory to %s", path);
 }
 
 /* Make the device this run was started with, for the same reason the
@@ -3243,6 +3450,7 @@ XPOST_TEST_VISIBLE void xpost_interpreter_load_language(Xpost_Context *ctx)
    one and the graphics state it locks down carries none. */
 static void _make_start_device(Xpost_Context *ctx)
 {
+    ctx->device_made = 1;
     if (ctx->skip_graphics)
         return;
     _run_startup_step(ctx, "startdevice",
@@ -3429,11 +3637,17 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
        context whose language did not load takes no bracket at all, and
        its run reports the failure the way a run on its own does. Both
        steps run once in the life of the context, so this is where they
-       happen and the start procedure below finds them done. */
+       happen and the start procedure below finds them done.
+
+       Both are asked after, because either may already be done without
+       the other: a context whose language arrived whole out of an image
+       has the language and has made no device, and a device made inside
+       the bracket would be unmade by the rewind that ends the job and
+       made again by the next one. */
     if (ctx->job_snapshots
         && _showpage_semantic(ctx) != XPOST_SHOWPAGE_RETURN)
     {
-        if (!ctx->sysdict_load_done)
+        if (!ctx->sysdict_load_done || !ctx->device_made)
         {
             xpost_interpreter_load_language(ctx);
             _make_start_device(ctx);

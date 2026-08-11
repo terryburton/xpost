@@ -107,10 +107,7 @@ typedef struct
 {
     unsigned char *bytes;
     size_t len;
-    unsigned int version;
-    unsigned int object_size;
-    unsigned int ent_max;
-    unsigned int banks;
+    unsigned int stamp[XPOST_VM_IMAGE_STAMPS];
     Bank bank[XPOST_VM_IMAGE_BANKS];
 } Image;
 
@@ -191,42 +188,70 @@ static int _read_image(const char *path, Image *im)
         return 0;
     }
 
-    at = XPOST_VM_IMAGE_MAGIC_LEN + 4 * sizeof(unsigned int);
+    at = XPOST_VM_IMAGE_MAGIC_LEN + XPOST_VM_IMAGE_STAMPS * sizeof(unsigned int);
     if (im->len < at ||
         memcmp(im->bytes, XPOST_VM_IMAGE_MAGIC, XPOST_VM_IMAGE_MAGIC_LEN) != 0)
     {
         report_failure("%s does not begin as an image of virtual memory", path);
         return 0;
     }
-    im->version = _u32(im->bytes + XPOST_VM_IMAGE_MAGIC_LEN);
-    im->object_size = _u32(im->bytes + XPOST_VM_IMAGE_MAGIC_LEN + 4);
-    im->ent_max = _u32(im->bytes + XPOST_VM_IMAGE_MAGIC_LEN + 8);
-    im->banks = _u32(im->bytes + XPOST_VM_IMAGE_MAGIC_LEN + 12);
+    for (i = 0; i < XPOST_VM_IMAGE_STAMPS; i++)
+        im->stamp[i] = _u32(im->bytes + XPOST_VM_IMAGE_MAGIC_LEN
+                            + i * sizeof(unsigned int));
 
-    if (im->version != XPOST_VM_IMAGE_VERSION)
+    if (im->stamp[XPOST_VM_IMAGE_STAMP_VERSION] != XPOST_VM_IMAGE_VERSION)
     {
         report_failure("%s is version %u of the layout and this reads "
-                       "version %u", path, im->version,
+                       "version %u", path,
+                       im->stamp[XPOST_VM_IMAGE_STAMP_VERSION],
                        (unsigned int)XPOST_VM_IMAGE_VERSION);
         return 0;
     }
-    if (im->banks != XPOST_VM_IMAGE_BANKS)
+    if (im->stamp[XPOST_VM_IMAGE_STAMP_BANKS] != XPOST_VM_IMAGE_BANKS)
     {
         report_failure("%s holds %u banks and this reads %u", path,
-                       im->banks, (unsigned int)XPOST_VM_IMAGE_BANKS);
+                       im->stamp[XPOST_VM_IMAGE_STAMP_BANKS],
+                       (unsigned int)XPOST_VM_IMAGE_BANKS);
         return 0;
     }
     /* The comparison below reads the operator table out of the arena as
        this build's structures. An image of the other object width is a
        different shape and would be read as nonsense rather than
        refused. */
-    if (im->object_size != (unsigned int)sizeof(Xpost_Object))
+    if (im->stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE]
+        != (unsigned int)sizeof(Xpost_Object))
     {
         report_failure("%s was written by a build whose objects are %u bytes "
                        "and this build's are %u; an image of one object width "
                        "is not comparable with the other",
-                       path, im->object_size,
+                       path, im->stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE],
                        (unsigned int)sizeof(Xpost_Object));
+        return 0;
+    }
+    /* The operator names, which this steps over: what they are for is
+       holding a reader's own operator table to the one the image was
+       written with, and this compares two images rather than reading
+       either into a context. */
+    for (i = 0; i < im->stamp[XPOST_VM_IMAGE_STAMP_OPERATORS]; i++)
+    {
+        unsigned int namelen;
+
+        if (im->len < at + 2 * sizeof(unsigned int))
+        {
+            report_failure("%s ends among its operator names", path);
+            return 0;
+        }
+        namelen = _u32(im->bytes + at + sizeof(unsigned int));
+        at += 2 * sizeof(unsigned int) + namelen + (4u - (namelen % 4u)) % 4u;
+    }
+    /* and the context's own share of what the boot settled */
+    at += im->stamp[XPOST_VM_IMAGE_STAMP_CONTEXT_FIELDS] * sizeof(unsigned int);
+    at += (size_t)(im->stamp[XPOST_VM_IMAGE_STAMP_ROOTS]
+                   + im->stamp[XPOST_VM_IMAGE_STAMP_TYPENAMES])
+          * sizeof(Xpost_Object);
+    if (im->len < at)
+    {
+        report_failure("%s ends among what it says about the context", path);
         return 0;
     }
 
@@ -752,7 +777,7 @@ static void _write(const char *path)
        made next, and it is what an image must not carry. */
     xpost_interpreter_load_language(ctx);
 
-    if (!xpost_vm_image_write(ctx, path))
+    if (!xpost_vm_image_write(ctx, path, 1))
         report_failure("cannot write the image to %s", path);
 
     xpost_destroy(ctx);
@@ -771,12 +796,18 @@ static void _compare(const char *pa, const char *pb)
         return;
     }
 
-    if (a.object_size != b.object_size || a.ent_max != b.ent_max)
+    if (a.stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE]
+        != b.stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE] ||
+        a.stamp[XPOST_VM_IMAGE_STAMP_ENT_MAX]
+        != b.stamp[XPOST_VM_IMAGE_STAMP_ENT_MAX])
     {
         report_failure("the two images were written by builds of different "
                        "object widths (%u/%u bytes, %u/%u entity numbers) and "
                        "are not comparable",
-                       a.object_size, b.object_size, a.ent_max, b.ent_max);
+                       a.stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE],
+                       b.stamp[XPOST_VM_IMAGE_STAMP_OBJECT_SIZE],
+                       a.stamp[XPOST_VM_IMAGE_STAMP_ENT_MAX],
+                       b.stamp[XPOST_VM_IMAGE_STAMP_ENT_MAX]);
         free(a.bytes);
         free(b.bytes);
         return;

@@ -32,6 +32,8 @@
 #ifndef XPOST_ITP_H
 #define XPOST_ITP_H
 
+#include <stddef.h> /* size_t */
+
 #include "xpost_private.h" /* XPOST_TEST_VISIBLE */
 
 /**
@@ -123,6 +125,23 @@ void xpost_interpreter_exit(Xpost_Interpreter *itp);
  * read from the context afterwards.
  */
 XPOST_TEST_VISIBLE void xpost_interpreter_load_language(Xpost_Context *ctx);
+
+/**
+ * @brief where the boot files are, or the empty string.
+ *
+ * What is looked for is init.ps, which is the file a boot begins with
+ * and the one every other is reached from. Asked for by the boot that
+ * runs those files and by the image of virtual memory that stamps what
+ * it holds with what they say, so that both are asking about the same
+ * directory.
+ */
+XPOST_TEST_VISIBLE void xpost_interpreter_data_dir(char *datadir,
+                                                   size_t datadirsz);
+
+/**
+ * @brief say the boot files may be read, whichever way the language arrives.
+ */
+void xpost_interpreter_permit_data_dir(const char *datadir);
 
 /**
  * @brief Run a procedure to completion and return, so a C caller

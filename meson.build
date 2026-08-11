@@ -843,6 +843,24 @@ test('vm-image',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Bringing an interpreter up out of an image of virtual memory: that a
+# context out of one writes back the image it read, and that every way an
+# image can be unusable ends with the language built from the boot files
+# instead. Built against the library's internals for the same reason the
+# comparison above is: it reads an image as this build's own structures.
+vm_image_load_exe = executable('vm_image_load_test',
+  'tests/vm_image_load_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('vm-image-load',
+  find_program('tests/run-vm-image-load-test.sh'),
+  args: [ vm_image_load_exe ],
+  suite: cost_slow,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Embedding contract: a process may create, use and destroy contexts for as
 # long as it lives, so no per-context table or allocation may carry over.
 context_reuse_exe = executable('context_reuse_test',

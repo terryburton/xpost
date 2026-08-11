@@ -218,10 +218,12 @@ xpost_handle_release_memory_file
 xpost_init
 xpost_int_cons
 xpost_interpreter_cid_get_context
+xpost_interpreter_data_dir
 xpost_interpreter_exit
 xpost_interpreter_get_initializing
 xpost_interpreter_init
 xpost_interpreter_load_language
+xpost_interpreter_permit_data_dir
 xpost_interpreter_run_nested
 xpost_interpreter_set_initializing
 xpost_interrupt
@@ -329,6 +331,7 @@ xpost_operator_cons_wrapped
 xpost_operator_dump
 xpost_operator_exec
 xpost_operator_init_optab
+xpost_operator_set_count
 xpost_operator_wrapped_release
 xpost_oplib_init_ops
 xpost_path_control_engage
@@ -379,7 +382,12 @@ xpost_unlinkat_beneath
 xpost_version_get
 xpost_vm_image_bank_field_name
 xpost_vm_image_bank_name
+xpost_vm_image_in_use
+xpost_vm_image_load
+xpost_vm_image_refuse
+xpost_vm_image_refused
 xpost_vm_image_row_field_name
+xpost_vm_image_stamp_name
 xpost_vm_image_write
 
 reserved-exception _currentpoint

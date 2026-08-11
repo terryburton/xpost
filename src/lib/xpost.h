@@ -305,6 +305,21 @@ XPAPI int xpost_add_definitions(Xpost_Context *ctx,
 XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable);
 
 /**
+ * @brief Build the language rather than read it out of an image.
+ *
+ * Where the environment names an image of virtual memory,
+ * xpost_create() reads the language out of it instead of running the
+ * boot files, and the context comes up with the language the image was
+ * written with. That is decided before a caller has said anything about
+ * what language it wants, so a caller that wants another one -- one
+ * without graphics -- says so here, before creating the context.
+ *
+ * There is no way back: a process that has said this builds the
+ * language for the rest of its life.
+ */
+XPAPI void xpost_vm_image_refuse(void);
+
+/**
  * @brief Declare that this context serves no interactive user.
  *
  * A program named to xpost_run() as XPOST_INPUT_FILENAME is a job, and a
