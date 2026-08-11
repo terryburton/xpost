@@ -785,7 +785,7 @@ xpost_vm_image_write(Xpost_Context *ctx, const char *path, int host_state)
    read that runs off it rather than by whatever it left uninitialised. */
 typedef struct
 {
-    const unsigned char *at;
+    unsigned char *at;
     size_t left;
 } _Reader;
 
@@ -806,9 +806,9 @@ static int _take_u32(_Reader *r, unsigned int *v)
 
 /* Skip forward, for a part of an image whose bytes are read where they
    lie rather than copied out. */
-static const unsigned char *_take_run(_Reader *r, size_t n)
+static unsigned char *_take_run(_Reader *r, size_t n)
 {
-    const unsigned char *p = r->at;
+    unsigned char *p = r->at;
 
     if (r->left < n)
         return NULL;
@@ -861,8 +861,8 @@ typedef struct
 {
     unsigned int field[XPOST_VM_IMAGE_BANK_FIELDS];
     unsigned int births[XPOST_VM_IMAGE_FILE_BIRTHS];
-    const unsigned char *rows;
-    const unsigned char *arena;
+    unsigned char *rows;
+    unsigned char *arena;
 } _Bank;
 
 static int _read_bank(_Reader *r, unsigned int which, _Bank *b)
@@ -892,22 +892,6 @@ static int _read_bank(_Reader *r, unsigned int which, _Bank *b)
     b->arena = _take_run(r, b->field[XPOST_VM_IMAGE_BANK_USED]);
     if (!b->arena)
         return 0;
-    return 1;
-}
-
-/* One field of one row of a bank's entity table, as the image holds it.
-   Answers 0 where the bank has no such row, which is a value no row
-   field of a live entity carries in the fields this is asked for. */
-static unsigned int _bank_row(const _Bank *b, unsigned int ent,
-                              unsigned int field, unsigned int *v)
-{
-    if (ent >= b->field[XPOST_VM_IMAGE_BANK_NEXTENT])
-    {
-        *v = 0;
-        return 0;
-    }
-    memcpy(v, b->rows + ((size_t)ent * XPOST_VM_IMAGE_ROW_FIELDS + field)
-                        * sizeof(unsigned int), sizeof *v);
     return 1;
 }
 
@@ -1089,15 +1073,34 @@ static int _check_operators(const _Image_Row *image, unsigned int nimage,
    way back from. */
 static const unsigned char *_image_optab(const _Bank *g, unsigned int rows)
 {
+    Xpost_Memory_File view;
+    unsigned int used = g->field[XPOST_VM_IMAGE_BANK_USED];
+    unsigned int entities = g->field[XPOST_VM_IMAGE_BANK_NEXTENT];
     unsigned int adr;
-    unsigned int used;
 
-    if (_bank_row(g, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE,
-                  XPOST_VM_IMAGE_ROW_ADR, &adr) == 0)
+    /* A bank holding fewer entities than there are special ones holds no
+       operator table, and the accessor below would read a row that is not
+       there. */
+    if (entities < XPOST_MEMORY_COLLECT_START_GLOBAL)
         return NULL;
-    used = g->field[XPOST_VM_IMAGE_BANK_USED];
-    if (adr > used ||
-        (size_t)rows * sizeof(Xpost_Operator) > used - adr)
+
+    /* The bank as the memory file it is a picture of, so that where the
+       table lies is asked the one way it is asked anywhere. The rows of
+       an image are the rows of a table -- five addresses and counts in
+       the order a row declares them -- and the arena is the arena. What
+       the view has not got is everything about the host, which nothing
+       here asks it for. */
+    memset(&view, 0, sizeof view);
+    view.fd = -1;
+    view.base = g->arena;
+    view.used = used;
+    view.max = used;
+    view.table.tab = (void *)g->rows;
+    view.table.nextent = entities;
+    view.table.max = entities;
+
+    adr = xpost_memory_operator_table_adr(&view);
+    if (adr > used || (size_t)rows * sizeof(Xpost_Operator) > used - adr)
         return NULL;
     return g->arena + adr;
 }
