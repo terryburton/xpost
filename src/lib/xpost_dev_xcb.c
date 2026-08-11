@@ -57,18 +57,17 @@
 
 #include "xpost_operator.h" /* create operators */
 #include "xpost_op_dict.h" /* call xpost_op_any_load operator for convenience */
+#include "xpost_dev_generic.h" /* the page's ground */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_xcb.h" /* check prototypes */
 
 #define XCB_ALL_PLANES ~0
 
-/* What a pixel of this device reads back as. Its raster is a drawable on
-   the display server reached through a colormap, so a read would answer
-   an index this device cannot turn back into the components it was
-   given: every pixel reads as the ground, which is the bottom of the
-   channel range whatever scale the channel is held in. GetPix answers
-   it, and BlendPix composites a partly covered pixel over it. */
-#define XCB_GROUND_LEVEL 0
+/* The scale this device holds a colour channel on. Its colours reach the
+   display server as 16-bit components, so the contract's fold is applied
+   at that scale: a colour operand, and the page's ground, come to a
+   number in this range rather than in a byte. */
+#define XCB_CHANNEL_SCALE 65535.0
 
 typedef struct
 {
@@ -396,9 +395,9 @@ int _putpix(Xpost_Context *ctx,
     int r, g, b, ix, iy, ret;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, 65535.0);
-    g = xpost_dev_num_to_scaled(green, 65535.0);
-    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
+    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
+    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
 
@@ -465,11 +464,12 @@ int _blendpix(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     int r, g, b, c, ix, iy, ret;
+    int dr, dg, db;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, 65535.0);
-    g = xpost_dev_num_to_scaled(green, 65535.0);
-    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
+    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
+    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
     c = xpost_dev_num_to_int(cov);
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
@@ -492,9 +492,11 @@ int _blendpix(Xpost_Context *ctx,
     if (c > 255)
         c = 255;
 
-    r = _blendchannel(XCB_GROUND_LEVEL, r, c);
-    g = _blendchannel(XCB_GROUND_LEVEL, g, c);
-    b = _blendchannel(XCB_GROUND_LEVEL, b, c);
+    xpost_device_ground_scaled(ctx, devdic, XCB_CHANNEL_SCALE, &dr, &dg, &db);
+
+    r = _blendchannel(dr, r, c);
+    g = _blendchannel(dg, g, c);
+    b = _blendchannel(db, b, c);
 
     ret = _point(&private, r, g, b, ix, iy);
     if (ret)
@@ -513,8 +515,15 @@ int _blendpix(Xpost_Context *ctx,
    turn into the components it was given. It answers the ground instead,
    as the vector writers do: a method the class dictionary offers must
    answer its declared results, and answering nothing leaves the caller
-   reading whatever was beneath. The ground is XCB_GROUND_LEVEL above,
-   which BlendPix composites a partly covered pixel over. */
+   reading whatever was beneath.
+
+   The ground is the colour erasepage left, which the base class records
+   on the instance and every device here reads back the same way, folded
+   at this device's channel scale so that what a read answers is what
+   this device's PutPix would have written for it. The window reading
+   back as the ground is a statement about the drawable, not about the
+   colour: a page cleared to a light grey reads light. BlendPix above
+   composites a partly covered pixel over the same value. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -523,6 +532,7 @@ int _getpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int r, g, b;
 
     (void)x;
     (void)y;
@@ -531,9 +541,11 @@ int _getpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(XCB_GROUND_LEVEL));
+    xpost_device_ground_scaled(ctx, devdic, XCB_CHANNEL_SCALE, &r, &g, &b);
+
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
     return 0;
 }
 
@@ -554,9 +566,9 @@ int _drawline(Xpost_Context *ctx,
     Xpost_Dev_Line line;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, 65535.0);
-    g = xpost_dev_num_to_scaled(green, 65535.0);
-    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
+    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
+    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -621,9 +633,9 @@ int _fillrect(Xpost_Context *ctx,
     int x0, y0, x1, y1;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, 65535.0);
-    g = xpost_dev_num_to_scaled(green, 65535.0);
-    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
+    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
+    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -686,9 +698,9 @@ int _fillpoly(Xpost_Context *ctx,
     int r, g, b;
 
     /* fold numbers per the driver contract; xcb colour channels are 16-bit */
-    r = xpost_dev_num_to_scaled(red, 65535.0);
-    g = xpost_dev_num_to_scaled(green, 65535.0);
-    b = xpost_dev_num_to_scaled(blue, 65535.0);
+    r = xpost_dev_num_to_scaled(red, XCB_CHANNEL_SCALE);
+    g = xpost_dev_num_to_scaled(green, XCB_CHANNEL_SCALE);
+    b = xpost_dev_num_to_scaled(blue, XCB_CHANNEL_SCALE);
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))

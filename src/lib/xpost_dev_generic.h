@@ -114,7 +114,7 @@ int xpost_dev_pdf_fmt_num(char *o, double v);
 void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
 
 /**
- * @brief the page's ground, as the channel values a read answers with
+ * @brief the page's ground, as channel values on the scale of @p scale
  *
  * The colour erasepage last cleared the page to, which the raster base
  * class records on the instance as it clears (data/image.ps, /Ground).
@@ -126,8 +126,27 @@ void xpost_device_retire_restored(Xpost_Context *ctx, unsigned int level);
  * that buffer does not hold: one outside the page, where a mark is
  * dropped and so a read answers rather than refusing, and every pixel of
  * an instance whose buffer has been released. A device that has not been
- * erased has no record, and the answer is the white its Create filled
- * the buffer with.
+ * erased has no record, and the answer is the full scale its Create
+ * filled the buffer with.
+ *
+ * The record is kept in the range a colour operand arrives in, which is
+ * the only range every device shares, and each device folds it to the
+ * channel it stores. @p scale is that device's integer channel scale,
+ * the one it hands xpost_dev_num_to_scaled() -- 255 for an 8-bit
+ * channel, 65535 for a 16-bit one. Folding once to a byte and stretching
+ * the byte to a wider channel is not the same number as folding to the
+ * wider channel, and the value a read answers is the value an erased
+ * pixel of that device holds, which is whatever the device's own PutPix
+ * would have written.
+ */
+void xpost_device_ground_scaled(Xpost_Context *ctx, Xpost_Object devdic,
+                                double scale, int *r, int *g, int *b);
+
+/**
+ * @brief the page's ground, as 8-bit channel values
+ *
+ * xpost_device_ground_scaled() for a device whose channels are bytes,
+ * which is every device here but the window one.
  */
 void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
                                   int *r, int *g, int *b);

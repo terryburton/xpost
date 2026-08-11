@@ -57,7 +57,7 @@
 
 #include "xpost_operator.h"
 #include "xpost_op_dict.h"
-#include "xpost_dev_generic.h" /* the raster extent limit */
+#include "xpost_dev_generic.h" /* the raster extent limit, the page's ground */
 #include "xpost_dev_driver.h" /* device contract and shared helpers */
 #include "xpost_dev_win32.h"
 
@@ -572,7 +572,9 @@ static int _blendchannel(int dst, int src, int c)
    by cov/255 from the level the pixel already holds. The buffered
    backend reads that level out of its own buffer and writes the result
    back to the same place PutPix does; the backend that keeps no buffer
-   reads the ground, as GetPix below does, and composites over that.
+   has nothing to read and composites over the ground, which is the
+   colour erasepage left and so is what such a page shows everywhere it
+   has not been marked.
 
    The class this device specialises carries a blend that reads a raster
    held as PostScript row arrays. This device keeps no such array, and
@@ -592,7 +594,7 @@ int _blendpix(Xpost_Context *ctx,
     PrivateData private;
     Render_Data *rd;
     int r, g, b, c, ix, iy;
-    int dr = 0, dg = 0, db = 0;
+    int dr, dg, db;
 
     /* fold numbers per the driver contract */
     r = xpost_dev_num_to_byte(red);
@@ -615,6 +617,10 @@ int _blendpix(Xpost_Context *ctx,
         return 0;
     if (c > 255)
         c = 255;
+
+    /* what the pixel holds where the backend keeps nothing to read it
+       from; the buffered one replaces this with what its buffer holds */
+    xpost_device_ground_channels(ctx, devdic, &dr, &dg, &db);
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (!rd)
@@ -660,8 +666,9 @@ int _blendpix(Xpost_Context *ctx,
 
 /* Read a pixel back in the device's stored channel scale, the same one
    PutPix writes. A pixel outside the raster, or a backend that keeps no
-   buffer of its own, reads as the ground: the slot declares three
-   results and must answer three. */
+   buffer of its own, reads as the ground -- the colour erasepage left,
+   which is what the page shows wherever this device holds no pixel to
+   answer from: the slot declares three results and must answer three. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -671,7 +678,7 @@ int _getpix(Xpost_Context *ctx,
     Xpost_Object privatestr;
     PrivateData private;
     Render_Data *rd;
-    int ix, iy, r = 0, g = 0, b = 0;
+    int ix, iy, r, g, b;
 
     ix = xpost_dev_pixel(xpost_object_number(x));
     iy = xpost_dev_pixel(xpost_object_number(y));
@@ -679,6 +686,8 @@ int _getpix(Xpost_Context *ctx,
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
+
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
 
     rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
     if (rd && rd->backend_type == RENDER_BACKEND_GDI &&
