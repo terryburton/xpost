@@ -333,14 +333,34 @@ inc1="$work/resources-one"
 inc2="$work/resources-two"
 mkdir -p "$inc1" "$inc2"
 
+# A setting's value is held to the argument that settled it, so the
+# argument has to be spelt the way the interpreter receives it. Where the
+# shell keeps a file-system of its own, the two spellings differ: a
+# directory the shell calls /tmp/x is somewhere else entirely to a
+# program built against the platform, and the shell rewrites a path
+# argument on its way to one. Naming the directories the platform's way
+# means the interpreter is handed what is written here, whether or not
+# anything rewrites arguments.
+hostpath() {                    # <path as this shell spells it>
+    if [ -n "$cygpath" ]; then
+        "$cygpath" -m "$1"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+cygpath=$(command -v cygpath 2>/dev/null) || cygpath=
+hwork=$(hostpath "$work")
+hinc1="$hwork/resources-one"
+hinc2="$hwork/resources-two"
+
 probe_run() {                   # <output file> <extra args...>
     o=$1
     shift
     XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox "$@" \
-        "$work/probe.ps" </dev/null 2>/dev/null | tr -d "$cr" > "$o"
+        "$hwork/probe.ps" </dev/null 2>/dev/null | tr -d "$cr" > "$o"
 }
 
-probe_run "$work/out" -d null "-I$inc1" "-I$inc2"
+probe_run "$work/out" -d null "-I$hinc1" "-I$hinc2"
 
 if ! grep -qx 'ok recovered' "$work/out"; then
     echo "FAILURES: the live startup did not yield a .hostdict to read;"
@@ -386,7 +406,7 @@ compare_values() {              # <label> <output file> <expected>
 
 compare_values "a run given a data directory and two resource directories" \
     "$work/out" "DATA_DIR $src/data
-.resourcepath  $inc1 $inc2
+.resourcepath  $hinc1 $hinc2
 .interactive false
 ShowpageSemantics 0
 StartDevice /null
@@ -397,7 +417,7 @@ OutputBufferIn -
 OutputBufferOut -
 "
 
-probe_run "$work/out2" -d null:bgra -o "$work/page.out"
+probe_run "$work/out2" -d null:bgra -o "$hwork/page.out"
 compare_values "a run given an output file and a device mode" \
     "$work/out2" "DATA_DIR $src/data
 .resourcepath 
@@ -406,7 +426,7 @@ ShowpageSemantics 0
 StartDevice /null
 StartPageSize  612 792
 SUBDEVICE bgra
-OutputFileName $work/page.out
+OutputFileName $hwork/page.out
 OutputBufferIn -
 OutputBufferOut -
 "
