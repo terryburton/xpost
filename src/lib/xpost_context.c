@@ -56,8 +56,29 @@
 #include "xpost_save.h"  // initializes save/restore stacks
 
 #include "xpost_context.h"
+#include "xpost_dict.h" /* read what the host settled */
+#include "xpost_name.h" /* name a setting */
 #include "xpost_file.h"
 #include "xpost_handle.h"
+
+/* What this run settled under name, or a null where it settled nothing.
+   The settings live in .hostdict, a member of the private global
+   namespace this context roots -- the one dictionary that holds what the
+   invocation decided rather than what the language is. A context whose
+   namespace is not built yet has no settings to give, which reads as
+   nothing settled. */
+Xpost_Object xpost_context_host_setting(Xpost_Context *ctx, const char *name)
+{
+    Xpost_Object h;
+
+    if (xpost_object_get_type(ctx->globalprivatedict) != dicttype)
+        return null;
+    h = xpost_dict_get(ctx, ctx->globalprivatedict,
+                       xpost_name_cons(ctx, ".hostdict"));
+    if (xpost_object_get_type(h) != dicttype)
+        return null;
+    return xpost_dict_get(ctx, h, xpost_name_cons(ctx, name));
+}
 
 /* initialize the context list
    special entity in the mfile */

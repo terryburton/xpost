@@ -150,7 +150,6 @@ int _create_cont(Xpost_Context *ctx,
                  Xpost_Object h,
                  Xpost_Object devdic)
 {
-    Xpost_Object sd;
     Xpost_Object subdevice;
     Xpost_Object privatestr;
     PrivateData private;
@@ -174,9 +173,11 @@ int _create_cont(Xpost_Context *ctx,
         return limitcheck;
     }
 
-    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-    subdevice = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "SUBDEVICE"));
-    if (xpost_object_get_type(subdevice) == invalidtype)
+    /* the mode selector of the "device:mode" this run was started with,
+       one of the settings the run made; a run that named no mode takes
+       the format the device has when nobody asked for one */
+    subdevice = xpost_context_host_setting(ctx, "SUBDEVICE");
+    if (xpost_object_get_type(subdevice) != stringtype)
     {
         subdevice = xpost_string_cons(ctx, sizeof("rgb") - 1, "rgb");
     }
@@ -242,7 +243,8 @@ int _create_cont(Xpost_Context *ctx,
         }
     }
 
-    inbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"));
+    /* the framebuffer an embedding caller lent this run, if it lent one */
+    inbufstr = xpost_context_host_setting(ctx, "OutputBufferIn");
     if (xpost_object_get_type(inbufstr) == stringtype)
     {
         unsigned char *inbuf;

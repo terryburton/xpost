@@ -13,9 +13,12 @@ Before anything else: is the value the same for every run of this build, or did
 Almost everything is the language — the same names with the same values however
 the interpreter was started. A handful of values are not. Where this run found
 its boot files, which directories a resource search covers, whether there is a
-user at the other end of standard input: each comes from the command line, the
-environment, the embedding caller, or the state of the process, and each is
-decided afresh on every launch.
+user at the other end of standard input, what a page does when it ends and where
+it goes: each comes from the command line, the environment, the embedding
+caller, or the state of the process, and each is decided afresh on every launch.
+
+`WIN32` is *not* one of these. It is settled by the build (`#ifdef _WIN32`), so
+it is the same for every run of that build and belongs with the language.
 
 Those live in **`.hostdict`** and nowhere else (below). The interpreter writes
 every one of them itself, from one table in `xpost_interpreter.c`, *after* the
@@ -186,6 +189,10 @@ the machine that took it.
 | `DATA_DIR` | where this run found its boot files: `XPOST_DATA_DIR`, the shared library's own directory, the configured data directory, or a relative path from wherever the process started |
 | `.resourcepath` | `-I` and `xpost_add_resource_dir`, in the order given |
 | `.interactive` | whether the caller asked for a batch run, and whether standard input is a terminal; settled again for every run the context serves |
+| `ShowpageSemantics` | the semantics `xpost_create` was given: pause at a page, carry on, or hand control back |
+| `SUBDEVICE` | the mode selector of a `-d device:mode` selection, which the raster device reads for its pixel format |
+| `OutputFileName` | `-o`. The **host's** binding only: a program's own `/OutputFileName`, on the dictionary stack, still wins, and `setpagedevice` writes the program's into `userdict` from `/OutputFile`. The device machinery looks on the dictionary stack first and here second, which is the precedence the host's copy had when it sat at the bottom of that stack |
+| `OutputBufferIn`, `OutputBufferOut` | the framebuffer an embedding caller lends the raster device and where it wants the finished one written back; the pointers travel in strings a program cannot read |
 
 The boot files read a setting through the accessor `.xpostsys /.hostvalue`, so a
 caller names the setting and not its home. A name that is not a setting is

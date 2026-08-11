@@ -644,19 +644,18 @@ xpost_dev_class_install(Xpost_Context *ctx,
 }
 
 /* Hand the rendered framebuffer to the embedding client: when the
-   client registered an output-buffer hook (a pointer serialized into
-   the /OutputBufferOut string in systemdict), store the buffer pointer
-   through it. Returns 1 when the buffer was handed off -- ownership
-   passes to the client and Destroy must leave the buffer alone -- and
-   0 when no hook is registered. */
+   client registered an output-buffer hook (a pointer this run settled
+   into the /OutputBufferOut string), store the buffer pointer through
+   it. Returns 1 when the buffer was handed off -- ownership passes to
+   the client and Destroy must leave the buffer alone -- and 0 when no
+   hook is registered. */
 static inline int
 xpost_dev_output_buffer_handoff(Xpost_Context *ctx,
                                 unsigned char *data)
 {
-    Xpost_Object sd, outbufstr;
+    Xpost_Object outbufstr;
 
-    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-    outbufstr = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"));
+    outbufstr = xpost_context_host_setting(ctx, "OutputBufferOut");
     if (xpost_object_get_type(outbufstr) == stringtype)
     {
         unsigned char **outbuf;

@@ -438,6 +438,25 @@ int xpost_context_init(Xpost_Context *ctx,
 void xpost_context_exit(Xpost_Context *ctx);
 
 /**
+ * @brief what this run settled under the given name
+ *
+ * The interpreter's dictionaries hold the language, which is the same for
+ * every run of this build. What is not -- where this run found its boot
+ * files, which directories a resource search covers, whether there is a
+ * user at the other end of standard input, where a page goes -- is
+ * settled by the host on every launch and kept apart from the language,
+ * in .hostdict inside the private global namespace this context roots.
+ * This is how C reads one.
+ *
+ * Answers a null for a setting the host had nothing to say about, which
+ * is what the interpreter writes for one, and for a name that is no
+ * setting at all: a caller reads a setting it knows the interpreter
+ * records, and tests/host_settings.golden is what holds it to the set
+ * that exists.
+ */
+Xpost_Object xpost_context_host_setting(Xpost_Context *ctx, const char *name);
+
+/**
  * @brief hold the matched paths of a filenameforall, and report the
  *        number they are held under.
  *

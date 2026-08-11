@@ -2280,10 +2280,6 @@ static
 int setlocalconfig(Xpost_Context *ctx,
                    Xpost_Object sd,
                    const char *device,
-                   const char *outfile,
-                   const char *bufferin,
-                   char **bufferout,
-                   Xpost_Showpage_Semantics semantics,
                    Xpost_Set_Size set_size,
                    int width,
                    int height)
@@ -2347,30 +2343,17 @@ int setlocalconfig(Xpost_Context *ctx,
         return ret;
 #endif
 
-    devstr = strdup(device); /*  Parse device string for mode selector "dev:mode" */
-    if ((subdevice=strchr(devstr, ':'))) {
-        Xpost_Object subobj;
-
-        *subdevice++ = '\0';
-        /* the mode selector becomes a string, which counts its length in
-           a field narrower than the selector may be */
-        if (strlen(subdevice) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
-        {
-            ret = limitcheck;
-            goto done;
-        }
-        subobj = xpost_string_cons(ctx, (unsigned int)strlen(subdevice),
-                                   subdevice);
-        if (xpost_object_get_type(subobj) != stringtype)
-        {
-            ret = VMerror;
-            goto done;
-        }
-        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "SUBDEVICE"),
-                             xpost_object_cvlit(subobj));
-        if (ret)
-            goto done;
+    /* Parse the device string for a mode selector, "dev:mode". Which
+       device is being selected is settled here; the mode is one of the
+       run's own settings and is recorded with the rest of them. */
+    devstr = strdup(device);
+    if (!devstr)
+    {
+        ret = VMerror;
+        goto done;
     }
+    if ((subdevice = strchr(devstr, ':')))
+        *subdevice++ = '\0';
 
     /* define the /newdefaultdevice name called by /start */
     for (i = 0; device_strings[i][0]; i++)
@@ -2419,56 +2402,6 @@ int setlocalconfig(Xpost_Context *ctx,
     ret = xpost_dict_put(ctx, sd, namenewdev, xpost_object_cvx(newdevstr));
     if (ret)
         goto done;
-
-    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "ShowpageSemantics"),
-                         xpost_int_cons(semantics));
-    if (ret)
-        goto done;
-
-    if (outfile)
-    {
-        Xpost_Object outobj;
-
-        /* the output file name becomes a string, which counts its length
-           in a field narrower than a path may be: a name the field cannot
-           count would be written to under the name it wrapped to */
-        if (strlen(outfile) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
-        {
-            ret = limitcheck;
-            goto done;
-        }
-        outobj = xpost_string_cons(ctx, (unsigned int)strlen(outfile), outfile);
-        if (xpost_object_get_type(outobj) != stringtype)
-        {
-            ret = VMerror;
-            goto done;
-        }
-        ret = xpost_dict_put(ctx, sd,
-                             xpost_name_cons(ctx, "OutputFileName"),
-                             xpost_object_cvlit(outobj));
-        if (ret)
-            goto done;
-    }
-
-    if (bufferin)
-    {
-        Xpost_Object s = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(bufferin), NULL));
-        xpost_object_set_access(ctx, s, XPOST_OBJECT_TAG_ACCESS_NONE);
-        memcpy(xpost_string_get_pointer(ctx, s), &bufferin, sizeof(bufferin));
-        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferIn"), s);
-        if (ret)
-            goto done;
-    }
-
-    if (bufferout)
-    {
-        Xpost_Object s = xpost_object_cvlit(xpost_string_cons(ctx, sizeof(bufferout), NULL));
-        xpost_object_set_access(ctx, s, XPOST_OBJECT_TAG_ACCESS_NONE);
-        memcpy(xpost_string_get_pointer(ctx, s), &bufferout, sizeof(bufferout));
-        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "OutputBufferOut"), s);
-        if (ret)
-            goto done;
-    }
 
     ret = 0;
 done:
@@ -2590,13 +2523,14 @@ void loadinitps(Xpost_Context *ctx, char *datadir, size_t datadirsz)
    The interpreter's dictionaries hold the language: the same names with
    the same values however the interpreter was started. A few values are
    not like that. The directory the boot files were found in, the
-   directories a resource search covers and whether there is a user at
-   the other end of standard input are decided afresh on every launch, by
-   the command line, the environment, the caller, or the state of the
-   process. Those live in a dictionary of their own -- .hostdict, a
-   member of the private global namespace -- so that whether a value is
-   the same for every run of this build is answered by which dictionary
-   holds it rather than by knowing what the name means.
+   directories a resource search covers, whether there is a user at the
+   other end of standard input, what a page does when it ends and where
+   it goes are decided afresh on every launch, by the command line, the
+   environment, the caller, or the state of the process. Those live in a
+   dictionary of their own -- .hostdict, a member of the private global
+   namespace -- so that whether a value is the same for every run of this
+   build is answered by which dictionary holds it rather than by knowing
+   what the name means.
 
    Every name here is written on every launch and written from here. One
    the host has nothing to say about is written as a null rather than
@@ -2611,6 +2545,11 @@ static const char *const host_settings[] =
     "DATA_DIR",
     ".resourcepath",
     ".interactive",
+    "ShowpageSemantics",
+    "SUBDEVICE",
+    "OutputFileName",
+    "OutputBufferIn",
+    "OutputBufferOut",
     NULL
 };
 
@@ -2639,6 +2578,46 @@ static int _host_put(Xpost_Context *ctx, const char *name, Xpost_Object value)
     return xpost_dict_put(ctx, h, xpost_name_cons(ctx, name), value);
 }
 
+/* Write a setting whose value is text the caller gave. Nothing said is
+   left as the null the whole set was cleared to, so a reader tells a
+   setting the host declined to make from one it made empty. */
+static int _host_put_string(Xpost_Context *ctx, const char *name,
+                            const char *text)
+{
+    Xpost_Object o;
+
+    if (!text)
+        return 0;
+    /* the text becomes a string, which counts its length in a field
+       narrower than a path or a device selector may be */
+    if (strlen(text) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
+        return limitcheck;
+    o = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)strlen(text),
+                                             text));
+    if (xpost_object_get_type(o) != stringtype)
+        return VMerror;
+    return _host_put(ctx, name, o);
+}
+
+/* Write a setting that carries one of the caller's pointers across to
+   the device that uses it. The pointer is the caller's and no business
+   of a program, so the string it travels in is closed to one. */
+static int _host_put_pointer(Xpost_Context *ctx, const char *name,
+                             const void *p, size_t sz)
+{
+    Xpost_Object o;
+
+    if (!p)
+        return 0;
+    o = xpost_object_cvlit(xpost_string_cons(ctx, (unsigned int)sz, NULL));
+    if (xpost_object_get_type(o) != stringtype
+        || !xpost_string_get_pointer(ctx, o))
+        return VMerror;
+    xpost_object_set_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
+    memcpy(xpost_string_get_pointer(ctx, o), &p, sz);
+    return _host_put(ctx, name, o);
+}
+
 /* Settle what this run's host decides, once the language is in place to
    be asked. The whole set is cleared first, so a name the branches below
    have nothing to say about answers null for this run rather than with
@@ -2648,9 +2627,16 @@ static int _host_put(Xpost_Context *ctx, const char *name, Xpost_Object value)
    before the program runs and are read for the whole life of the
    context, so they must outlive the restores that end a job; local
    memory would revert them with the job that happened to be running. */
-static int _record_host_config(Xpost_Context *ctx, const char *datadir)
+static int _record_host_config(Xpost_Context *ctx,
+                               const char *datadir,
+                               const char *device,
+                               const char *outfile,
+                               const char *bufferin,
+                               char **bufferout,
+                               Xpost_Showpage_Semantics semantics)
 {
     unsigned int vmmode;
+    const char *subdevice;
     Xpost_Object o;
     int ret;
     int i;
@@ -2662,26 +2648,8 @@ static int _record_host_config(Xpost_Context *ctx, const char *datadir)
     vmmode = ctx->vmmode;
     ctx->vmmode = GLOBAL;
 
-    ret = 0;
-    if (datadir && datadir[0])
-    {
-        /* the directory becomes a string, which counts its length in a
-           field narrower than a path may be */
-        if (strlen(datadir) > (size_t)XPOST_OBJECT_COMP_MAX_SZ)
-        {
-            ret = limitcheck;
-            goto done;
-        }
-        o = xpost_object_cvlit(xpost_string_cons(ctx,
-                                   (unsigned int)strlen(datadir), datadir));
-        if (xpost_object_get_type(o) != stringtype)
-        {
-            ret = VMerror;
-            goto done;
-        }
-        if ((ret = _host_put(ctx, "DATA_DIR", o)) != 0)
-            goto done;
-    }
+    if ((ret = _host_put_string(ctx, "DATA_DIR", datadir[0] ? datadir : NULL)))
+        goto done;
 
     /* The directories a resource search covers, empty until the host
        names one. It is data rather than a procedure, so it is literal:
@@ -2699,7 +2667,34 @@ static int _record_host_config(Xpost_Context *ctx, const char *datadir)
     /* Whether there is a user at the other end of this run is settled
        per run rather than per launch, by _record_session_kind; a launch
        that never starts one answers as a run with nobody there. */
-    ret = _host_put(ctx, ".interactive", xpost_bool_cons(0));
+    if ((ret = _host_put(ctx, ".interactive", xpost_bool_cons(0))) != 0)
+        goto done;
+
+    /* What showpage does when a page ends, as the context was created
+       with: pause, carry on, or hand control back to the caller. */
+    if ((ret = _host_put(ctx, "ShowpageSemantics",
+                         xpost_int_cons(semantics))) != 0)
+        goto done;
+
+    /* The mode selector of a "device:mode" selection, which the raster
+       device reads to settle its pixel format. */
+    subdevice = device ? strchr(device, ':') : NULL;
+    if ((ret = _host_put_string(ctx, "SUBDEVICE",
+                                subdevice ? subdevice + 1 : NULL)) != 0)
+        goto done;
+
+    /* Where this run's pages go when the page device names nothing and
+       the program has bound no name of its own. */
+    if ((ret = _host_put_string(ctx, "OutputFileName", outfile)) != 0)
+        goto done;
+
+    /* The framebuffer an embedding caller lends the raster device, and
+       the place such a caller wants the finished one written back to. */
+    if ((ret = _host_put_pointer(ctx, "OutputBufferIn",
+                                 bufferin, sizeof(bufferin))) != 0)
+        goto done;
+    ret = _host_put_pointer(ctx, "OutputBufferOut",
+                            bufferout, sizeof(bufferout));
 
 done:
     ctx->vmmode = vmmode;
@@ -2876,9 +2871,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     sd = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 0);
     ud = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 2);
 
-    ret = setlocalconfig(xpost_ctx, sd,
-                         device, outfile, bufferin, bufferout,
-                         semantics, set_size, width, height);
+    ret = setlocalconfig(xpost_ctx, sd, device, set_size, width, height);
     if (ret)
     {
         XPOST_LOG_ERR("%s recording the interpreter's configuration",
@@ -2916,7 +2909,8 @@ XPAPI Xpost_Context *xpost_create(const char *device,
        settings below it are this run's alone. A context whose settings
        could not be recorded is not one to hand back: its readers would
        answer with nothing, or with what some other run left. */
-    ret = _record_host_config(xpost_ctx, datadir);
+    ret = _record_host_config(xpost_ctx, datadir, device, outfile,
+                              bufferin, bufferout, semantics);
     if (ret)
     {
         XPOST_LOG_ERR("%s recording what this run settles", errorname[ret]);
@@ -3159,14 +3153,17 @@ static void _record_session_kind(Xpost_Context *ctx)
 }
 
 /* What showpage does at the end of a page, as the context was created
-   with. Read from systemdict, which is what device.ps reads it from and
-   what the run is measured against when it ends. */
+   with: one of the run's own settings, read here from where the boot
+   files read it and where the run is measured against it when it ends.
+   A context that did not finish starting has settled nothing, and takes
+   the semantics a caller gets by saying nothing at all. */
 static int _showpage_semantic(Xpost_Context *ctx)
 {
-    Xpost_Object semantic = xpost_dict_get(ctx,
-                  xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0),
-                  xpost_name_cons(ctx, "ShowpageSemantics"));
+    Xpost_Object semantic = xpost_context_host_setting(ctx,
+                                                       "ShowpageSemantics");
 
+    if (xpost_object_get_type(semantic) != integertype)
+        return XPOST_SHOWPAGE_DEFAULT;
     return semantic.int_.val;
 }
 

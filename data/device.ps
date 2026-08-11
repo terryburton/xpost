@@ -62,10 +62,13 @@ currentglobal true setglobal
             /dimensions [width height] def
         end
     } if
-    /OutputFileName where {
-        /OutputFileName exch 1 index get
-        3 copy put pop pop
-    } if
+    % the file name in force: what a program bound on the dictionary
+    % stack, or failing that what this run was started with
+    /OutputFileName where
+        { /OutputFileName get }
+        { /OutputFileName //.xpostsys /.hostvalue get exec }
+    ifelse
+    dup null eq { pop }{ 1 index exch /OutputFileName exch put } ifelse
 } bind put
 setglobal
 
@@ -189,7 +192,9 @@ currentglobal true setglobal
 .xpostsys /.transmitpage {
     dup /OutputFileName 2 copy known
         { get }
-        { pop pop /OutputFileName where { pop OutputFileName }{ (%stdout) } ifelse }
+        { pop pop /OutputFileName where { pop OutputFileName }{
+            /OutputFileName //.xpostsys /.hostvalue get exec
+            dup null eq { pop (%stdout) } if } ifelse }
     ifelse
     //.xpostsys /.pagefilename get exec
     1 index exch /.outputfile exch put
@@ -414,7 +419,7 @@ setglobal
     0 //.xpostsys /.endpage get exec {
         DEVICE //.xpostsys /.transmitpage get exec
         true //.xpostsys /.setpagesent get exec
-        //.xpostsys /ShowpageSemanticsDict get ShowpageSemantics get exec
+        //.xpostsys /ShowpageSemanticsDict get /ShowpageSemantics //.xpostsys /.hostvalue get exec get exec
     } if
     % a page ended by showpage is counted whether or not it was transmitted
     //.xpostsys /.pageno get exec 1 add //.xpostsys /.setpageno get exec
@@ -426,7 +431,7 @@ setglobal
         DEVICE //.xpostsys /.transmitpage get exec
         true //.xpostsys /.setpagesent get exec
         flushpage
-        //.xpostsys /CopypageSemanticsDict get ShowpageSemantics get exec
+        //.xpostsys /CopypageSemanticsDict get /ShowpageSemantics //.xpostsys /.hostvalue get exec get exec
     } if
     % copypage ends a page without counting it (PLRM 6.2.6)
     //.xpostsys /.beginpage get exec

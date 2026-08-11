@@ -43,10 +43,14 @@
 #
 #   The values, against the invocation.  A member that is present says
 #   nothing about where its value came from. So the interpreter is
-#   started with a data directory and a resource path this guard chooses,
-#   and the values it left behind must be those and in that order. That
-#   is what catches a setting that has stopped tracking the run and gone
-#   back to answering with a constant.
+#   started twice, with a data directory, a resource path, an output file
+#   and a device mode this guard chooses, and every setting it left
+#   behind must be what was asked for. That is what catches a setting
+#   that has stopped tracking the run and gone back to answering with a
+#   constant. The two runs also see every setting both made and unmade,
+#   which is where a setting the host says nothing about is held to
+#   answering with a null rather than with an absence: a reader always
+#   finds the name.
 #
 # And three properties of the dictionary itself, in the same live
 # startup: a name that is not a setting is refused where it is asked for,
@@ -172,25 +176,62 @@ if [ ! -s "$work/code" ]; then
     exit 1
 fi
 
-# A statement is written on one line here, which is what lets the name
-# and the dictionary be read off together. The two lines that define
-# .hostdict and .hostvalue name only themselves and so contribute none.
+# A setting is reached in one of two shapes, and the scan below reads the
+# name out of each. A statement is written on one line here, which is
+# what lets the name and the dictionary be read off together.
+#
+#   <key> //.xpostsys /.hostvalue get exec    -- the accessor
+#   .xpostsys /.hostdict get <key> ...        -- reaching the dictionary
+#
+# The accessor's shape is required rather than searched for: a call
+# written another way is one whose key this scan would take from
+# somewhere else on the line, or not find at all, and either way the
+# name would go unheld. The dictionary's own definition names no member
+# and contributes none.
 grep -E '\.hostdict|\.hostvalue' "$work/code" > "$work/reads" || :
 if [ ! -s "$work/reads" ]; then
     echo "FAILURES: nothing in $src/data reaches .hostdict at all; the"
     echo "      settings would be registered and never read"
     exit 1
 fi
-awk -F: '{
-    where = $1 ":" $2
-    line = $0
-    sub(/^[^:]*:[0-9]*:/, "", line)
-    n = split(line, tok, /[ \t{}\[\]]+/)
-    for (i = 1; i <= n; i++)
-        if (tok[i] ~ /^\/[^][(){}<>\/%]+$/ &&
-            tok[i] != "/.hostdict" && tok[i] != "/.hostvalue")
-            print substr(tok[i], 2) " " where
-}' "$work/reads" > "$work/readnames"
+awk -F: '
+    function isname(t) { return t ~ /^\/[^][(){}<>\/%]+$/ }
+    {
+        where = $1 ":" $2
+        line = $0
+        sub(/^[^:]*:[0-9]*:/, "", line)
+        gsub(/[{}\[\]]/, " ", line)
+        n = split(line, tok, /[ \t]+/)
+        for (i = 1; i <= n; i++) {
+            if (tok[i] == "/.hostvalue" && tok[i + 1] == "get") {
+                # a call, as against the definition, which is written
+                # into the namespace by name and takes no // reference
+                if (i < 3 || tok[i - 1] != "//.xpostsys" || !isname(tok[i - 2])) {
+                    print "SHAPE " where
+                    continue
+                }
+                print "NAME " substr(tok[i - 2], 2) " " where
+            }
+            else if (tok[i] == "/.hostdict" && tok[i + 1] == "get") {
+                for (j = i + 2; j <= n && j <= i + 4; j++)
+                    if (isname(tok[j])) { print "NAME " substr(tok[j], 2) " " where; break }
+            }
+        }
+    }' "$work/reads" > "$work/readscan"
+
+if grep -q '^SHAPE ' "$work/readscan"; then
+    echo "FAILURES: a setting is asked for in a shape this check cannot read"
+    echo "      the name out of; write it as \`/<name> //.xpostsys /.hostvalue"
+    echo "      get exec\`, on one line:"
+    sed -n 's/^SHAPE /      /p' "$work/readscan"
+    exit 1
+fi
+sed -n 's/^NAME //p' "$work/readscan" > "$work/readnames"
+if [ ! -s "$work/readnames" ]; then
+    echo "FAILURES: no setting is named anywhere in $src/data; the register"
+    echo "      would be held to nothing on the reader side"
+    exit 1
+fi
 
 while read -r name where; do
     [ -n "$name" ] || continue
@@ -225,13 +266,27 @@ found /.hostdict known not { (bad recovered\n) print quit } if
 H { pop dup type /nametype eq { (member ) print 60 string cvs print (\n) print }
     { pop } ifelse } forall
 
-% the two values this run was started with, written out for the caller
-% to compare against what it asked for
-H /DATA_DIR get dup null eq { pop (datadir -\n) print }
-    { (datadir ) print print (\n) print } ifelse
-H /.resourcepath get dup null eq { pop }
-    { { (respath ) print print (\n) print } forall } ifelse
-H /.interactive get { (interactive yes\n) }{ (interactive no\n) } ifelse print
+% every setting this run made, written out for the caller to compare
+% against what it asked for. A setting the run made nothing of is a null
+% and prints as a dash: the name is there, and it says the host said
+% nothing, which is not the same as the name being absent.
+/render { % value  .  -
+    dup null eq { pop (-) print }{
+    dup type /stringtype eq {
+        % the strings carrying an embedding caller's pointers are closed
+        % to a program, and are reported as closed rather than read
+        dup rcheck { print }{ pop (closed) print } ifelse
+    }{
+    dup type /arraytype eq {
+        { ( ) print render } forall
+    }{
+        40 string cvs print
+    } ifelse } ifelse } ifelse
+} bind def
+H { % key value
+    exch (value ) print 40 string cvs print ( ) print
+    render (\n) print
+} forall
 
 % a name that is not a setting is refused where it is asked for, rather
 % than answered with a null the caller would carry off somewhere else
@@ -260,15 +315,23 @@ H { pop dup type /nametype eq {
 leaked 0 eq { (ok unreachable\n) }{ (bad unreachable\n) } ifelse print
 PSEOF
 
-# Directories this guard chose, so that a value which has stopped
+# Two invocations this guard chooses, so that a value which has stopped
 # tracking the run shows up as the wrong answer rather than as a
-# plausible one.
+# plausible one. The first names a data directory and two resource
+# directories and nothing else; the second names an output file and a
+# device mode. Between them every setting is seen both made and unmade.
 inc1="$work/resources-one"
 inc2="$work/resources-two"
 mkdir -p "$inc1" "$inc2"
-XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
-    "-I$inc1" "-I$inc2" "$work/probe.ps" </dev/null 2>/dev/null \
-    | tr -d "$cr" > "$work/out"
+
+probe_run() {                   # <output file> <extra args...>
+    o=$1
+    shift
+    XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox "$@" \
+        "$work/probe.ps" </dev/null 2>/dev/null | tr -d "$cr" > "$o"
+}
+
+probe_run "$work/out" -d null "-I$inc1" "-I$inc2"
 
 if ! grep -qx 'ok recovered' "$work/out"; then
     echo "FAILURES: the live startup did not yield a .hostdict to read;"
@@ -297,27 +360,43 @@ if ! diff -u "$work/registered" "$work/live" > "$work/livediff"; then
     fail=1
 fi
 
-got=$(sed -n 's/^datadir //p' "$work/out")
-if [ "$got" != "$src/data" ]; then
-    echo "FAILURES: the run was started with its data directory at"
-    echo "      $src/data and settled DATA_DIR as ${got:-nothing}"
-    fail=1
-fi
+# Every setting's value, against the invocation that was meant to settle
+# it. A dash is a setting the run made nothing of, which this invocation
+# says nothing about: written as a null, not left out, so a reader always
+# finds the name.
+compare_values() {              # <label> <output file> <expected>
+    sed -n 's/^value //p' "$2" | LC_ALL=C sort > "$work/gotvalues"
+    printf '%s' "$3" | grep . | LC_ALL=C sort > "$work/wantvalues"
+    if ! diff -u "$work/wantvalues" "$work/gotvalues" > "$work/valdiff"; then
+        echo "FAILURES: $1 settled values the invocation did not ask for"
+        echo "      (- asked for, + settled):"
+        sed -n '4,$p' "$work/valdiff" | sed 's/^/      /'
+        fail=1
+    fi
+}
 
-printf '%s\n%s\n' "$inc1" "$inc2" > "$work/wantpath"
-sed -n 's/^respath //p' "$work/out" > "$work/gotpath"
-if ! diff -u "$work/wantpath" "$work/gotpath" > "$work/pathdiff"; then
-    echo "FAILURES: the run was given two resource directories and settled a"
-    echo "      different path (- asked for, + settled):"
-    sed -n '4,$p' "$work/pathdiff" | sed 's/^/      /'
-    fail=1
-fi
+compare_values "a run given a data directory and two resource directories" \
+    "$work/out" "DATA_DIR $src/data
+.resourcepath  $inc1 $inc2
+.interactive false
+ShowpageSemantics 0
+SUBDEVICE -
+OutputFileName -
+OutputBufferIn -
+OutputBufferOut -
+"
 
-if ! grep -qx 'interactive no' "$work/out"; then
-    echo "FAILURES: the run read its program from a file with standard input"
-    echo "      closed and settled that it has a user at the other end"
-    fail=1
-fi
+probe_run "$work/out2" -d null:bgra -o "$work/page.out"
+compare_values "a run given an output file and a device mode" \
+    "$work/out2" "DATA_DIR $src/data
+.resourcepath 
+.interactive false
+ShowpageSemantics 0
+SUBDEVICE bgra
+OutputFileName $work/page.out
+OutputBufferIn -
+OutputBufferOut -
+"
 
 if [ "$fail" -ne 0 ]; then
     echo "host-settings: the boundary in tests/host_settings.golden no longer holds."

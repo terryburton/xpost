@@ -114,7 +114,12 @@ def gen(keys):
     L.append("")
     L.append("% nothing is missing: every golden name key is present in systemdict")
     L.append("golden {")
-    L.append("  pop dup cvn systemdict exch known { pop }{ (missing systemdict key) bad } ifelse")
+    # A key given as a string is stored as the name it spells (PLRM 3.4),
+    # so what comes back out of the golden set is a name already; a key
+    # some other kind is asked about as it stands rather than converted.
+    L.append("  pop")
+    L.append("  dup type /stringtype eq { dup cvn }{ dup } ifelse")
+    L.append("  systemdict exch known { pop }{ (missing systemdict key) bad } ifelse")
     L.append("} forall")
     L.append("")
     L.append("fail 0 eq { (SUCCESS) = }{ (FAILURES: ) print fail = } ifelse")
