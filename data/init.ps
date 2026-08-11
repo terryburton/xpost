@@ -182,7 +182,7 @@ currentglobal true setglobal
 % failure the caller is to see, and the failures it records include the
 % ones that stop graphics loading before the relocation pass is reached.
 userdict /.internaldict 256 dict put
-[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.zerorows /.writeppmrows
+[ /.fillpoly /.fillrectgray /.fillrectrgb /.blendpixgray /.blendpixrgb /.writeppmrows
   /.pdfinit /.pdfput /.flatecompress /.vmreserve /.rundied ]
 { dup systemdict exch get .internaldict 3 1 roll put } forall
 
@@ -1189,10 +1189,14 @@ setglobal
                 rgbdev { 0 0 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
                        { 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse
                 fd //.xpostsys /.execformdirect get exec
+                % the first painting is read back after the second has
+                % overwritten the raster, so the copy has to reach the
+                % storage itself: a grey row is that storage and a
+                % colour row names the planes that are
                 /rowsa [ mdev /ImgData get {
                     dup type /stringtype eq
                         { dup length string copy }
-                        { dup length array copy } ifelse
+                        { [ exch { dup length string copy } forall ] } ifelse
                 } forall ] def
                 rgbdev { 1 1 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
                        { 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse

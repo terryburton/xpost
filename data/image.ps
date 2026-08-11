@@ -4,8 +4,8 @@
 % Create through Emit, the scanline plot machinery and the pixel
 % accessors -- over a handful of parameters: the colour space, the
 % number of colour components a paint delivers (.ncomp), how a scanline
-% row is allocated and initialised, how components pack into a stored
-% pixel and unpack out of it, the coverage blender, and the page writer.
+% row is allocated and what it costs, how components store into a row
+% and read back out of it, the coverage blender, and the page writer.
 % .rasterproto holds the suite once; .makerasterclass builds a class
 % from a parameter dictionary. The grayscale and rgb classes below are
 % parameter files over this generator, and the bilevel and TIFF classes
@@ -91,23 +91,19 @@ currentglobal true setglobal
         } for
         .bandrows height lt {
             % One empty row stands for every row the page does not hold.
-            % It carries no pixel for a mark to reach, so a mark landing
-            % on such a row is dropped where every other out-of-page mark
-            % is dropped: against the row it was about to be written to.
-            /.emptyrow ImgData .bandtop get 0 0 getinterval def
+            % It is a row of the class's own shape carrying no pixel, so
+            % a mark landing on such a row is dropped where every other
+            % out-of-page mark is dropped: against the row it was about
+            % to be written to.
+            /.emptyrow .rowempty def
             0 1 .bandtop 1 sub { ImgData exch .emptyrow put } for
             .bandtop .bandrows add 1 height 1 sub
                 { ImgData exch .emptyrow put } for
-        } if
-        .rowsinit
-        .bandrows height lt {
-            % The ground the rows the page does not hold show. It starts
-            % as one of the rows that are held starts, and erasepage
-            % fills it in through /Ground below.
-            /.groundrow ImgData .bandtop get
-                dup type /stringtype eq
-                    { dup length string }{ dup length array } ifelse
-                copy def
+            % The ground the rows the page does not hold show. It is a
+            % row of the class's own shape, laid out as a row that is
+            % held starts, and erasepage fills it in through /Ground
+            % below.
+            /.groundrow .rowalloc def
         } if
         setglobal
     currentdict
@@ -125,10 +121,10 @@ currentglobal true setglobal
     % the nearest valid value (PLRM 8.2), but a Separation or DeviceN
     % tint transform is the program's own procedure and returns whatever
     % it computes, so a component outside [0,1] does reach here. Scaled
-    % without it, 1.7 stores as 0.69 of full scale and a packed pixel
-    % carries the overflow into the next component. Truncation, not
-    % rounding, is what the compiled fills do, so a page painted through
-    % either lands on the same byte.
+    % without it, 1.7 stores as 0.69 of full scale, the byte having
+    % wrapped past the top of its range. Truncation, not rounding, is
+    % what the compiled fills do, so a page painted through either lands
+    % on the same byte.
     /.unitclamp { % c  .  c'
         dup 0 lt { pop 0 }{ dup 1 gt { pop 1 } if } ifelse
     } bind
@@ -146,8 +142,7 @@ currentglobal true setglobal
             1 index width ge { stop } if
             ImgData exch get exch       % c1..cN row x
             .ncomp 2 add 2 roll         % row x c1..cN
-            .packpix                    % row x pixel
-            put
+            .rowput
         } stopped {
             .ncomp 2 add { pop } repeat
         } if
@@ -156,8 +151,8 @@ currentglobal true setglobal
     /GetPix { % x y IMAGE  .  c1..cN
     begin
         .to-int exch .to-int exch
-        ImgData exch get exch get
-        .unpackpix
+        ImgData exch get exch       % row x
+        .rowget
     end } bind
 
     % The pixels a segment covers are the driver contract's (.linepix,
@@ -403,9 +398,9 @@ currentglobal true setglobal
     % Take up the colour the page is being cleared to; PLRM 8.2 erases
     % the entire page, so this is the colour every row of it carries. A
     % page held in part shows it over the rows that are not held, and the
-    % one row standing for those is laid in it here -- through .packpix,
-    % the same fold to a stored pixel the fills take, so the rows that
-    % are held and the rows that are not come out the same colour.
+    % one row standing for those is laid in it here -- through .rowput,
+    % the same store the fills reach, so the rows that are held and the
+    % rows that are not come out the same colour.
     %
     % A sub-class holding its page some other way replaces Create and so
     % never records a run of rows. It holds the whole page, has no ground
@@ -413,12 +408,15 @@ currentglobal true setglobal
     /Ground { % c1..cN IMAGE  .  -
     begin
         currentdict /.bandrows known { .bandrows height lt }{ false } ifelse {
-            .packpix
-            0 1 width 1 sub { .groundrow exch 2 index put } for
-            pop
-        }{
-            .ncomp { pop } repeat
-        } ifelse
+            0 1 width 1 sub {            % c1..cN x
+                .groundrow exch          % c1..cN row x
+                % the components stay for the next pixel, so the copy
+                % this one stores is taken from where they lie
+                .ncomp { .ncomp 1 add index } repeat
+                .rowput
+            } for
+        } if
+        .ncomp { pop } repeat
     end } bind
 
     % write the page: open the name settled for this page and hand the

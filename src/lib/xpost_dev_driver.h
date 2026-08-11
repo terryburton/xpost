@@ -123,9 +123,9 @@ xpost_dev_num_to_int(Xpost_Object obj)
    value (PLRM 8.2), but a Separation or DeviceN tint transform is the
    program's own procedure and its result is whatever it computes.
    Unclamped, the scale below wraps the stored channel -- 1.7 lands as
-   0.69 of full scale, and on a packed pixel the overflow shifts across
-   into the neighbouring component -- so the ink comes out a different
-   colour rather than the nearest one. */
+   0.69 of full scale, the byte having run past the top of its range --
+   so the ink comes out a different colour rather than the nearest
+   one. */
 static inline double
 xpost_dev_num_to_component(Xpost_Object obj)
 {

@@ -1676,6 +1676,18 @@ test('fill-span',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The shape of a raster row: one byte per pixel per component, held in a
+# string per component rather than in one string or one array element per
+# pixel. It is what the compiled fills, blends and emitters read, and it
+# is what lets a colour page reach the same width as a grayscale one --
+# a row carrying three interleaved components in one string would divide
+# that width by three.
+test('raster-row',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/raster_row_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Access attributes in the device blitters: painting into a raster row a
 # program restocked with a read-only string raises invalidaccess and
 # leaves the read-only bytes untouched (PLRM 3.3.2).

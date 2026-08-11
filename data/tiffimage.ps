@@ -17,7 +17,9 @@
 .xpost_TIFFIMAGE /.writepage { % img file
     12 dict begin
     {/f /a}{exch def}forall
-    /w a 0 get length def
+    % the page's extent: its rows, and the pixels one component plane of
+    % the first of them holds
+    /w a 0 get 0 get length def
     /h a length def
     /hdr 200 string def
     /hp 0 def

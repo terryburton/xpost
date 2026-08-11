@@ -253,6 +253,7 @@ tests/privatedict_install_test.ps \
 tests/quit_run_test.ps \
 tests/raster_class_test.ps \
 tests/raster_extent_test.c \
+tests/raster_row_test.ps \
 tests/refusal_report_test.ps \
 tests/reloc_fused_test.ps \
 tests/reloc_stress_test.ps \

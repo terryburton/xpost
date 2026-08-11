@@ -23,11 +23,18 @@
 /.fillpoly     1183615869 internaldict /.fillpoly get def
 /.fillrectgray 1183615869 internaldict /.fillrectgray get def
 /.fillrectrgb  1183615869 internaldict /.fillrectrgb get def
-/.zerorows     1183615869 internaldict /.zerorows get def
 /.wrapop       1183615869 internaldict /.wrapop get def
 
 % failures accumulate in a dedicated dict, so an assert that runs with
 % another dictionary begun still updates the shared counter
+% a colour raster back to zero, the ground the checks below start from:
+% the compiled fill over the device's whole extent, whose far corner is
+% inclusive (the driver contract, src/lib/xpost_dev_driver.h)
+/zerorgb { % dev  .  -
+    /zd exch def
+    0 0 0 0 0 zd /width get 1 sub zd /height get 1 sub zd .fillrectrgb
+} bind def
+
 /faildict 2 dict def
 faildict /n 0 put
 /assert { % bool (name) . -
@@ -1691,10 +1698,10 @@ matrix setmatrix
 60 lt exch 195 gt and exch 195 gt and
 (per-channel transfers reach the colour raster) assert
 
-% The compiled colour rect fill and raster zeroing write the packed
-% rows as PutPix would: channels scaled by 255 and truncated,
-% inclusive end coordinates, untouched pixels left alone
-DEV2 /ImgData get .zerorows
+% The compiled colour rect fill writes the component planes as PutPix
+% would: channels scaled by 255 and truncated, inclusive end
+% coordinates, untouched pixels left alone
+DEV2 zerorgb
 0.5 0.25 1 1 1 5 2 DEV2 .fillrectrgb
 1 1 DEV2 dup /GetPix get exec
 255 eq exch 63 eq and exch 127 eq and
@@ -2442,7 +2449,7 @@ matrix setmatrix
 16 3 div 0 ppt  8 3 div 0 ppt
 255 pb 0 pb 0 pb   0 pb 255 pb 0 pb
 0 pb 0 pb 255 pb   255 pb 255 pb 0 pb
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 <<
   /ShadingType 6 /ColorSpace /DeviceRGB
   /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
@@ -2469,7 +2476,7 @@ DEV2 /ImgData get .zerorows
 16 3 div 16 3 div ppt  16 3 div 8 3 div ppt
 255 pb 0 pb 0 pb   0 pb 255 pb 0 pb
 0 pb 0 pb 255 pb   255 pb 255 pb 0 pb
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 <<
   /ShadingType 7 /ColorSpace /DeviceRGB
   /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8
@@ -2482,7 +2489,7 @@ DEV2 /ImgData get .zerorows
 (the tensor corner c3 is blue) assert
 
 % type 1: a sampled two-input function, corner samples RGBY
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 <<
   /ShadingType 1 /ColorSpace /DeviceRGB
   /Domain [0 1 0 1] /Matrix [8 0 0 8 0 0]
@@ -2505,7 +2512,7 @@ DEV2 /ImgData get .zerorows
 /shp 0 def
 0 0 ppt 0 pb   8 0 ppt 0 pb
 0 8 ppt 255 pb 8 8 ppt 255 pb
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 <<
   /ShadingType 5 /ColorSpace /DeviceRGB /VerticesPerRow 2
   /BitsPerCoordinate 16 /BitsPerComponent 8
@@ -2617,7 +2624,7 @@ newpath
 % first chunk standing in for the whole image)
 graphicsdict /currgstate get /device DEV2 put
 matrix setmatrix
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 /ci.data 192 string def
 0 1 167 { ci.data exch 0 put } for
 168 1 191 { ci.data exch dup 168 sub 3 mod 1 eq { 255 }{ 0 } ifelse put } for
@@ -2642,7 +2649,7 @@ initgraphics
 % each pixel by its nearest sample
 graphicsdict /currgstate get /device DEV2 put
 matrix setmatrix
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 /DeviceRGB setcolorspace
 gsave
 8 8 scale
@@ -2657,7 +2664,7 @@ grestore
 ip.r ip.l sub 100 gt (a planar image ramps under Interpolate) assert
 4 4 rgbat pop pop dup 40 gt exch 215 lt and
 (the ramp passes through the blend) assert
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 gsave
 8 8 scale
 << /ImageType 3 /InterleaveType 3
@@ -2675,7 +2682,7 @@ grestore
 5 6 rgbat pop pop /ip.a exch def
 7 6 rgbat pop pop /ip.b exch def
 ip.a ip.b ne (the unmasked cells ramp rather than step) assert
-DEV2 /ImgData get .zerorows
+DEV2 zerorgb
 gsave
 newpath 0 0 moveto 8 0 lineto 0 8 lineto closepath clip
 8 8 scale
@@ -2703,7 +2710,7 @@ initgraphics
 /DEVT 8 8 .privatedict /newTIFFIMAGEdevice get exec def
 DEVT /OutputFileName (graphics.scratch) put
 DEVT /.outputfile (graphics.scratch) put
-DEVT /ImgData get .zerorows
+DEVT zerorgb
 1 1 0 2 2 4 4 DEVT dup /FillRect get exec
 DEVT dup /Emit get exec
 /tf.h (graphics.scratch) (r) file 500 string readstring pop def

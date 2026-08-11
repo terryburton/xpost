@@ -1,0 +1,110 @@
+% The shape of a raster row, and the page width it allows. Run through
+% `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every check
+% holds.
+%
+% A grayscale scanline is one string of one byte per pixel. A colour
+% scanline is three of them, one component plane each, and it is three
+% rather than one because a composite has a length limit: the default
+% build holds 65535 elements (PLRM Appendix B.1), so a row carrying
+% three interleaved components in a single string would hold a third of
+% the pixels a plane does, and a colour page would be a third the width
+% of a grayscale one. The two classes are therefore required here to
+% give the same verdict at every width tried, rather than either being
+% held to a ceiling written down in advance.
+%
+% The widths tried are the ones an interleaved row would divide: the
+% third of the default build's ceiling, the first width past it, and the
+% ceiling itself. Each is asked of the grayscale class as well, so a
+% build that could not reach a width at all says so instead of passing
+% the comparison with two refusals.
+%
+% The row shape is also the contract the compiled fills, blends, form
+% blits and page emitters read, so it is stated here rather than left to
+% be inferred from them -- including on a page held in part, where the
+% rows standing for the rows the device does not hold are rows of the
+% class's own shape too.
+
+/fails 0 def
+/note { % bool (label) w  .  -
+    /ww exch def /L exch def
+    { }{ (FAIL: ) print L print ( at width ) print ww 20 string cvs print
+         (\n) print /fails fails 1 add store } ifelse
+} bind def
+
+/greyrow? { % row w  .  bool
+    exch dup type /stringtype eq exch length 3 -1 roll eq and
+} bind def
+
+/colourrow? { % row w  .  bool
+    /cw exch def
+    dup type /arraytype eq
+    exch dup length 3 eq
+        { true exch { dup type /stringtype eq exch length cw eq and and } forall }
+        { pop false }
+    ifelse
+    and
+} bind def
+
+% w key  .  dev true
+%           false
+% build a two-row page of the named class, reporting whether it built.
+% A refusal leaves its own operands behind, so the attempt runs above a
+% mark and the mark takes them.
+/try {
+    /K exch def /W exch def
+    mark
+    { W 2 .privatedict K get exec } stopped
+        { cleartomark false }
+        { /D exch def cleartomark D true } ifelse
+} bind def
+
+[ 21845 21846 65535 ] {
+    /w exch def
+
+    w /newPGMIMAGEdevice try
+    { /gdev exch def true }{ false } ifelse /grey exch def
+    w /newPPMIMAGEdevice try
+    { /cdev exch def true }{ false } ifelse /colour exch def
+
+    grey (the grayscale class built no page this wide) w note
+    grey colour eq
+        (the colour class and the grayscale class disagree on building a page)
+        w note
+
+    grey {
+        gdev /ImgData get 0 get w greyrow?
+            (a grayscale row is not one byte per pixel) w note
+    } if
+    colour {
+        cdev /ImgData get 0 get w colourrow?
+            (a colour row is not three planes of one byte per pixel) w note
+    } if
+} forall
+
+% A page whose imaging bounding box (PLRM 6.2) leaves rows unheld: the
+% rows the box reaches carry the page, one row of the class's own shape
+% carrying no pixel stands for the rest, and one more of the class's own
+% shape carries the ground they show. Emission assembles the page from
+% them, so the writers meet the ground row as well as the held ones.
+/device? { .privatedict /.graphicsdict get /currgstate get /device get } bind def
+
+/banded { % /dev proc  .  -
+    /rowok exch def /D exch def
+    << /OutputDevice D /PageSize [64 64] /OutputFile (/dev/null)
+       /ImagingBBox [16 16 48 48] >> setpagedevice
+    /dv device? def
+    dv /ImgData get 32 get 64 rowok exec
+        (a held row of a page held in part is not the class's row) 64 note
+    dv /ImgData get 0 get 0 rowok exec
+        (the row standing for an unheld row is not the class's row) 64 note
+    dv /.groundrow get 64 rowok exec
+        (the ground row of a page held in part is not the class's row) 64 note
+    showpage
+} bind def
+
+/pgm { greyrow? } banded
+/ppm { colourrow? } banded
+
+<< /OutputDevice /null >> setpagedevice
+
+fails 0 eq { (SUCCESS) = }{ (FAILURES: ) print fails == } ifelse

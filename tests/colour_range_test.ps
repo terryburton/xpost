@@ -74,8 +74,8 @@ faildict /n 0 put
 % --- a coverage past the ends of its range ----------------------------
 % BlendPix weights the colour against the ground by cov/255. The blend is
 % an interpolation and only stays between its endpoints while the weight
-% does: past 255 a packed rgb pixel carries the overflow across into the
-% neighbouring channel, and an alpha device wraps a fully covered pixel
+% does: past 255 the blend runs beyond the ink and the stored channel
+% wraps inside its byte, and an alpha device wraps a fully covered pixel
 % round to fully transparent -- ink asked for at more than full strength
 % coming out as none.
 

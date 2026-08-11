@@ -29,10 +29,34 @@
 
 /device? { .privatedict /.graphicsdict get /currgstate get /device get } bind def
 
+% row  .rowpixels  int
+% how many pixels one stored row holds. A grayscale row is the pixels
+% itself and a colour row names the component planes that are, so the
+% count comes from the row or from a plane of it as the class stores
+% them; either way a row the device does not store answers zero.
+/rowpixels {
+    dup type /stringtype eq
+        { length }
+        { dup length 0 eq { pop 0 }{ 0 get length } ifelse }
+    ifelse
+} bind def
+
 % -  rowlengths  [len ...]
-% how long each of the device's stored rows is; a row the device does
-% not store has none of the page in it and answers zero
-/rowlengths { [ device? /ImgData get { length } forall ] } bind def
+% how many pixels each of the device's stored rows holds; a row the
+% device does not store has none of the page in it and answers zero
+/rowlengths { [ device? /ImgData get { rowpixels } forall ] } bind def
+
+% row x  pixat  int
+% what one pixel of a stored row holds: the byte of a grayscale row, or
+% the red component of a colour row's planes. Either answers zero where
+% the page is inked black and its full range where it is not, which is
+% all any read below asks of it.
+/pixat {
+    exch dup type /stringtype eq
+        { exch get }
+        { 0 get exch get }
+    ifelse
+} bind def
 
 % The page without the hint, for everything the hint must not change.
 << /PageSize [200 200] /ImagingBBox null >> setpagedevice
@@ -108,7 +132,7 @@ holdsrows screens not and {
     % 5. A mark inside the box reaches the raster it belongs to.
     0 setgray newpath 60 60 moveto 90 60 lineto 90 90 lineto 60 90 lineto
     closepath fill
-    device? /ImgData get 125 get 75 get 0 eq
+    device? /ImgData get 125 get 75 pixat 0 eq
     (a mark inside the box is painted) assert
 
     % 6. A mark outside the box is dropped rather than refused, and
@@ -119,9 +143,9 @@ holdsrows screens not and {
       closepath fill } stopped not
     (a fill outside the box raises no error) assert
     cleartomark
-    device? /ImgData get 190 get length 0 eq
+    device? /ImgData get 190 get rowpixels 0 eq
     (a fill outside the box leaves the unheld row unheld) assert
-    device? /ImgData get 125 get 10 get 0 ne
+    device? /ImgData get 125 get 10 pixat 0 ne
     (a fill outside the box does not reach a row inside it) assert
 
     % An image is not painted the way a fill is: its samples are written
@@ -135,9 +159,9 @@ holdsrows screens not and {
     (an image outside the box raises no error) assert
     cleartomark
     grestore
-    device? /ImgData get 190 get length 0 eq
+    device? /ImgData get 190 get rowpixels 0 eq
     (an image outside the box leaves the unheld row unheld) assert
-    device? /ImgData get 125 get 10 get 0 ne
+    device? /ImgData get 125 get 10 pixat 0 ne
     (an image outside the box does not reach a row inside it) assert
 } if
 
@@ -147,7 +171,7 @@ holdsrows screens not and {
 holdsrows {
     rowlengths plainrows eqarray
     (a null box holds the whole page again) assert
-    device? /ImgData get 190 get 10 get 0 ne
+    device? /ImgData get 190 get 10 pixat 0 ne
     (the page a null box gives back can be painted everywhere) assert
 } if
 

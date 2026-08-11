@@ -318,10 +318,9 @@ done
 #     the check goes on passing while the hole reopens.
 #
 #     Only the names the pipeline looks up count. A dot-prefixed name is
-#     a parameter of the generated raster suite -- .rowsinit and
-#     .writepage read the row array too, but nothing reaches them except
-#     Create and Emit, which are on the list, so a device that overrides
-#     those never runs them.
+#     a parameter of the generated raster suite -- .writepage reads the
+#     row array too, but nothing reaches it except Emit, which is on the
+#     list, so a device that overrides that never runs it.
 sed -n 's/^#define XPOST_DEV_RASTER_SLOTS { \(.*\) }$/\1/p' \
     "$libdir/xpost_dev_driver.h" | tr -d '" ' | tr ',' '\n' \
     | grep -v '^$' | sort > "$work/hdr"

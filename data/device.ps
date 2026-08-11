@@ -129,7 +129,7 @@ setglobal
         dev /nativecolorspace get /DeviceGray eq {
             dev /FillRect //.internaldict /.fillrectgray get put
         } if
-        % packed-integer rgb devices whose raster is a PS-level ImgData
+        % planar rgb devices whose raster is a PS-level ImgData
         % array (PPMIMAGE) likewise -- .fillrectrgb writes those rows
         % directly, so a device that keeps its raster in a C buffer
         % (bgr) has no ImgData and stays on its own FillRect. Skip a

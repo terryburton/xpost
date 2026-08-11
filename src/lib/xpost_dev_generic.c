@@ -1294,60 +1294,51 @@ _row_writable(Xpost_Context *ctx, Xpost_Object row)
     return 0;
 }
 
-/* A pointer to a packed-array row's own elements, for a loop that
-   writes a run of them. The answers xpost_array_put works out per
-   element -- which memory file the array lives in, whether it may be
-   written, and whether a copy has yet been taken for the save in force
-   -- are the same answer for every element of one row, so they are
-   worked out here and the run written straight into memory afterwards.
+/* A colour raster row is three component planes -- one string of one
+   byte per pixel for red, for green and for blue, in that order -- and
+   its pixel count is the length the three share. This reads a row into
+   the three pointers and that count; pass a null pointer array to
+   measure a row without taking pointers into it.
 
-   Two conditions come with the pointer. The values written must be
-   simple: the mutator refuses a composite stored from local into global
-   VM, and that check is skipped here because a packed pixel is an
-   integer. And the loop must not allocate, since a collection would
-   move the memory file under the pointer.
+   A caller that writes asks for the pointers with forwrite, which holds
+   each plane to its access before its pointer is taken, since a raw
+   pointer bypasses the checked mutator. Nothing is copied for a save
+   level first: PLRM 3.7.3 exempts strings from save and restore, so the
+   bytes written are the bytes that stay. The pointers are good until
+   something allocates, which would move the memory file under them.
 
-   Returns NULL and sets err when the row may not be written or does not
-   hold the elements it claims; err is 0 alongside a good pointer. */
-static Xpost_Object *
-_row_elements(Xpost_Context *ctx, Xpost_Object row, int *err)
+   Returns nonzero, having written nothing, when the row is not three
+   planes of one length or a plane refuses the write. */
+static int
+_rgb_planes(Xpost_Context *ctx, Xpost_Object row, int forwrite,
+            unsigned char **p, int *w)
 {
-    Xpost_Memory_File *mem;
-    unsigned int ent, adr, entsz;
-    int ret;
+    unsigned int sz = 0;
+    int c;
 
-    *err = 0;
-    ret = _row_writable(ctx, row);
-    if (ret)
+    if (xpost_object_get_type(row) != arraytype || row.comp_.sz != 3)
+        return typecheck;
+    for (c = 0; c < 3; c++)
     {
-        *err = ret;
-        return NULL;
+        Xpost_Object plane = xpost_array_get(ctx, row, c);
+
+        if (xpost_object_get_type(plane) != stringtype)
+            return typecheck;
+        if (c == 0)
+            sz = plane.comp_.sz;
+        else if (plane.comp_.sz != sz)
+            return rangecheck;
+        if (forwrite && !xpost_object_is_writeable(ctx, plane))
+            return invalidaccess;
+        if (p)
+        {
+            p[c] = (unsigned char *)xpost_string_get_pointer(ctx, plane);
+            if (!p[c])
+                return VMerror;
+        }
     }
-    mem = xpost_context_select_memory(ctx, row);
-    ent = xpost_object_get_ent(row);
-    /* the copy that lets a restore revert these writes; it may move the
-       memory file, so the address is taken after it */
-    ret = xpost_save_cow(mem, arraytype, row.comp_.sz, ent);
-    if (ret)
-    {
-        *err = ret;
-        return NULL;
-    }
-    if (!xpost_memory_table_get_addr(mem, ent, &adr) ||
-        !xpost_memory_table_get_size(mem, ent, &entsz))
-    {
-        *err = VMerror;
-        return NULL;
-    }
-    /* the bound the element mutator applies, applied once for the run:
-       the view's last element has to lie inside the entity */
-    if ((unsigned long long)(row.comp_.off + row.comp_.sz) * sizeof(Xpost_Object)
-        > entsz)
-    {
-        *err = rangecheck;
-        return NULL;
-    }
-    return (Xpost_Object *)xpost_vm_ptr(mem, adr) + row.comp_.off;
+    *w = (int)sz;
+    return 0;
 }
 
 /* Fast FillRect for grayscale (DeviceGray) array-of-strings devices such as
@@ -1426,10 +1417,10 @@ int _fillrectgray(Xpost_Context *ctx,
 /* A blend coverage as the fraction of full ink it is: 0 leaves the
    ground alone, 255 lays the colour down whole. The value is folded into
    that range because the blend below is an interpolation and only stays
-   between its endpoints while the weight does: past 255 the packed rgb
-   pixel carries the overflow across into the neighbouring channel, and
-   the alpha device wraps a fully covered pixel round to transparent. The
-   png device folds a coverage the same way. */
+   between its endpoints while the weight does: past 255 the blend runs
+   beyond the ink it was moving toward and the stored channel wraps
+   inside its byte, and the alpha device wraps a fully covered pixel
+   round to transparent. The png device folds a coverage the same way. */
 static int _coverage(Xpost_Object cov)
 {
     int c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val
@@ -1497,8 +1488,8 @@ int _blendpixgray(Xpost_Context *ctx,
     return 0;
 }
 
-/* Blend a coverage-weighted pixel for packed-integer rgb devices
-   (each row an array of r<<16|g<<8|b): per channel,
+/* Blend a coverage-weighted pixel for planar rgb devices (each row
+   three component planes): per channel,
    dst += (val - dst) * cov / 255. The text operators use this for
    glyph edge pixels when the device renders anti-aliased text. */
 static
@@ -1511,9 +1502,10 @@ int _blendpixrgb(Xpost_Context *ctx,
                  Xpost_Object y,
                  Xpost_Object devdic)
 {
-    Xpost_Object imgdata, row, pix;
-    int ix, iy, c, packed;
-    int sr, sg, sb, dr, dg, db;
+    Xpost_Object imgdata, row;
+    unsigned char *pl[3];
+    int ix, iy, c, rw, ret;
+    int src[3], k;
 
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
@@ -1528,30 +1520,25 @@ int _blendpixrgb(Xpost_Context *ctx,
     if (iy < 0 || iy >= (integer)imgdata.comp_.sz)
         return 0;
     row = xpost_array_get(ctx, imgdata, iy);
-    if (xpost_object_get_type(row) != arraytype)
-        return undefined;
-    if (ix < 0 || ix >= (integer)row.comp_.sz)
+    ret = _rgb_planes(ctx, row, 1, pl, &rw);
+    if (ret)
+        return ret;
+    if (ix < 0 || ix >= rw)
         return 0;
-    pix = xpost_array_get(ctx, row, ix);
-    packed = xpost_object_get_type(pix) == integertype ? pix.int_.val : 0;
-    sr = (int)_channel(r, 255.0);
-    sg = (int)_channel(g, 255.0);
-    sb = (int)_channel(b, 255.0);
-    dr = (packed >> 16) & 0xff;
-    dg = (packed >> 8) & 0xff;
-    db = packed & 0xff;
-    dr = _blendchannel(dr, sr, c);
-    dg = _blendchannel(dg, sg, c);
-    db = _blendchannel(db, sb, c);
-    return xpost_array_put(ctx, row, ix, xpost_int_cons(dr << 16 | dg << 8 | db));
+    src[0] = (int)_channel(r, 255.0);
+    src[1] = (int)_channel(g, 255.0);
+    src[2] = (int)_channel(b, 255.0);
+    for (k = 0; k < 3; k++)
+        pl[k][ix] = (unsigned char)_blendchannel(pl[k][ix], src[k], c);
+    return 0;
 }
 
-/* Fill a rectangle of a packed-integer rgb device (each row an array
-   of r<<16|g<<8|b). The painted rectangle is the driver contract's,
-   reached through xpost_dev_rect_normalize; the clip source is this
-   device's own -- rows from the ImgData length, columns from each row
-   array's own length. The rgb devices render continuous tone, so no
-   halftone cell applies. */
+/* Fill a rectangle of a planar rgb device (each row three component
+   planes). The painted rectangle is the driver contract's, reached
+   through xpost_dev_rect_normalize; the clip source is this device's
+   own -- rows from the ImgData length, columns from each row's own
+   plane length. The rgb devices render continuous tone, so no halftone
+   cell applies. */
 static
 int _fillrectrgb(Xpost_Context *ctx,
                  Xpost_Object r,
@@ -1564,8 +1551,8 @@ int _fillrectrgb(Xpost_Context *ctx,
                  Xpost_Object devdic)
 {
     Xpost_Object imgdata, row;
-    int height, iy, ix, iy0, iy1, ix0, ix1;
-    int packed;
+    int height, iy, iy0, iy1, ix0, ix1;
+    unsigned char chan[3];
     int ret;
 
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
@@ -1573,9 +1560,9 @@ int _fillrectrgb(Xpost_Context *ctx,
         return undefined;
     height = imgdata.comp_.sz;
 
-    packed = ((int)_channel(r, 255.0) << 16)
-           | ((int)_channel(g, 255.0) << 8)
-           |  (int)_channel(b, 255.0);
+    chan[0] = (unsigned char)(int)_channel(r, 255.0);
+    chan[1] = (unsigned char)(int)_channel(g, 255.0);
+    chan[2] = (unsigned char)(int)_channel(b, 255.0);
 
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(w), xpost_object_number(h),
@@ -1586,20 +1573,17 @@ int _fillrectrgb(Xpost_Context *ctx,
     for (iy = iy0; iy <= iy1; iy++)
     {
         int cx0 = ix0, cx1 = ix1;
-        Xpost_Object *el;
-        Xpost_Object pix;
+        unsigned char *pl[3];
+        int rw, k;
 
         row = xpost_array_get(ctx, imgdata, iy);
-        if (xpost_object_get_type(row) != arraytype)
-            return undefined;
-        if (!xpost_dev_span_clip(&cx0, &cx1, row.comp_.sz))
-            continue;
-        el = _row_elements(ctx, row, &ret);
-        if (!el)
+        ret = _rgb_planes(ctx, row, 1, pl, &rw);
+        if (ret)
             return ret;
-        pix = xpost_int_cons(packed);
-        for (ix = cx0; ix <= cx1; ix++)
-            el[ix] = pix;
+        if (!xpost_dev_span_clip(&cx0, &cx1, rw))
+            continue;
+        for (k = 0; k < 3; k++)
+            memset(pl[k] + cx0, chan[k], (size_t)(cx1 - cx0 + 1));
     }
 
     return 0;
@@ -1759,7 +1743,7 @@ int _base64(Xpost_Context *ctx, Xpost_Object S)
    and one over white: pixels that agree were painted (opaquely, the
    only kind of painting there is) and set their bit in the coverage
    mask, one row string per raster row, most significant bit first.
-   Rows are grey strings or packed-integer arrays alike. */
+   Rows are grey strings or colour planes alike. */
 static
 int _formmask(Xpost_Context *ctx,
               Xpost_Object rowsa,
@@ -1778,19 +1762,58 @@ int _formmask(Xpost_Context *ctx,
     for (y = 0; y < h; y++)
     {
         unsigned char *mp;
+        int planar, wa, wb;
 
         rowa = xpost_array_get(ctx, rowsa, y);
         rowb = xpost_array_get(ctx, rowsb, y);
-        if (xpost_object_get_type(rowa) != xpost_object_get_type(rowb)
-         || rowa.comp_.sz != rowb.comp_.sz)
+        if (xpost_object_get_type(rowa) != xpost_object_get_type(rowb))
             return typecheck;
-        w = rowa.comp_.sz;
+        /* the row's width, which a grey row is and a colour row's planes
+           are, settled before the mask row is sized from it */
+        planar = xpost_object_get_type(rowa) == arraytype;
+        if (planar)
+        {
+            ret = _rgb_planes(ctx, rowa, 0, NULL, &wa);
+            if (ret)
+                return ret;
+            ret = _rgb_planes(ctx, rowb, 0, NULL, &wb);
+            if (ret)
+                return ret;
+            if (wa != wb)
+                return typecheck;
+            w = (unsigned int)wa;
+        }
+        else if (xpost_object_get_type(rowa) == stringtype)
+        {
+            if (rowa.comp_.sz != rowb.comp_.sz)
+                return typecheck;
+            w = rowa.comp_.sz;
+        }
+        else
+            return typecheck;
         mrow = xpost_string_cons(ctx, (w + 7) / 8, NULL);
         if (xpost_object_get_type(mrow) == nulltype)
             return VMerror;
         mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
         memset(mp, 0, (w + 7) / 8);
-        if (xpost_object_get_type(rowa) == stringtype)
+        /* nothing allocates from here to the end of the comparison, so
+           the pointers into the rows and into the mask stay good */
+        if (planar)
+        {
+            unsigned char *pa[3], *pb[3];
+
+            ret = _rgb_planes(ctx, rowa, 0, pa, &wa);
+            if (ret)
+                return ret;
+            ret = _rgb_planes(ctx, rowb, 0, pb, &wb);
+            if (ret)
+                return ret;
+            for (x = 0; x < w; x++)
+                if (pa[0][x] == pb[0][x] && pa[1][x] == pb[1][x]
+                 && pa[2][x] == pb[2][x])
+                    mp[x / 8] |= 0x80 >> (x % 8);
+        }
+        else
         {
             unsigned char *pa = (unsigned char *)xpost_string_get_pointer(ctx, rowa);
             unsigned char *pb = (unsigned char *)xpost_string_get_pointer(ctx, rowb);
@@ -1799,21 +1822,6 @@ int _formmask(Xpost_Context *ctx,
                 if (pa[x] == pb[x])
                     mp[x / 8] |= 0x80 >> (x % 8);
         }
-        else if (xpost_object_get_type(rowa) == arraytype)
-        {
-            for (x = 0; x < w; x++)
-            {
-                Xpost_Object a = xpost_array_get(ctx, rowa, x);
-                Xpost_Object b = xpost_array_get(ctx, rowb, x);
-
-                if (xpost_object_get_type(a) == integertype
-                 && xpost_object_get_type(b) == integertype
-                 && a.int_.val == b.int_.val)
-                    mp[x / 8] |= 0x80 >> (x % 8);
-            }
-        }
-        else
-            return typecheck;
         ret = xpost_array_put(ctx, maskarr, y, mrow);
         if (ret)
             return ret;
@@ -1822,26 +1830,10 @@ int _formmask(Xpost_Context *ctx,
     return 0;
 }
 
-/* Put a device row through its save-copy once, before any pointer
-   into memory is taken for the pixel loop. Writing an array element
-   saves the array at the current level first, which allocates, and
-   the coding rule for device operators is that no pointer survives an
-   allocation. Touching element zero with its own value hoists that
-   copy out of the loop, so the row's storage stays put while the
-   loop writes it. The touch is a write like any other, so it reports
-   a row that refuses one. */
-static int
-_row_presave(Xpost_Context *ctx, Xpost_Object row)
-{
-    if (xpost_object_get_type(row) == arraytype && row.comp_.sz > 0)
-        return xpost_array_put(ctx, row, 0, xpost_array_get(ctx, row, 0));
-    return 0;
-}
-
 /* Replay a captured raster: covered pixels copy onto the device page
    at the integer offset, clipped to the device bounds; the caller
    gates on the clip region holding the whole raster. Grey rows copy
-   into grey rows, packed integers into packed integers. */
+   into grey rows, colour planes into colour planes. */
 static
 int _blitform(Xpost_Context *ctx,
               Xpost_Object rows,
@@ -1867,6 +1859,8 @@ int _blitform(Xpost_Context *ctx,
     {
         int dy = oy + y;
         unsigned char *mp;
+        unsigned char *sp[3], *dp[3];
+        int planar, dw;
 
         if (dy < 0 || dy >= devh)
             continue;
@@ -1875,82 +1869,47 @@ int _blitform(Xpost_Context *ctx,
         drow = xpost_array_get(ctx, imgdata, dy);
         if (xpost_object_get_type(mrow) != stringtype)
             return typecheck;
-        w = srow.comp_.sz;
-        if (mrow.comp_.sz < (unsigned int)((w + 7) / 8))
-            return rangecheck;
-        mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
-        if (xpost_object_get_type(srow) == stringtype
-         && xpost_object_get_type(drow) == stringtype)
+        if (xpost_object_get_type(srow) != xpost_object_get_type(drow))
+            return typecheck;
+        planar = xpost_object_get_type(srow) == arraytype;
+        if (planar)
         {
-            unsigned char *sp, *dp;
-            int dw = drow.comp_.sz;
-
+            ret = _rgb_planes(ctx, srow, 0, sp, &w);
+            if (ret)
+                return ret;
+            ret = _rgb_planes(ctx, drow, 1, dp, &dw);
+            if (ret)
+                return ret;
+        }
+        else if (xpost_object_get_type(srow) == stringtype)
+        {
             ret = _row_writable(ctx, drow);
             if (ret)
                 return ret;
-            sp = (unsigned char *)xpost_string_get_pointer(ctx, srow);
-            dp = (unsigned char *)xpost_string_get_pointer(ctx, drow);
-
-            for (x = 0; x < w; x++)
-            {
-                int dx = ox + x;
-
-                if (dx < 0 || dx >= dw)
-                    continue;
-                if (mp[x / 8] >> (7 - (x % 8)) & 1)
-                    dp[dx] = sp[x];
-            }
-        }
-        else if (xpost_object_get_type(srow) == arraytype
-              && xpost_object_get_type(drow) == arraytype)
-        {
-            int dw = drow.comp_.sz;
-
-            for (x = 0; x < w; x++)
-            {
-                int dx = ox + x;
-
-                if (dx < 0 || dx >= dw)
-                    continue;
-                /* the mask byte is read before the write: putting into
-                   an array saves it at the current level first, which
-                   allocates, and no pointer into memory survives an
-                   allocation */
-                mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
-                if (mp[x / 8] >> (7 - (x % 8)) & 1)
-                {
-                    ret = xpost_array_put(ctx, drow, dx,
-                                          xpost_array_get(ctx, srow, x));
-                    if (ret)
-                        return ret;
-                }
-            }
+            sp[0] = (unsigned char *)xpost_string_get_pointer(ctx, srow);
+            dp[0] = (unsigned char *)xpost_string_get_pointer(ctx, drow);
+            w = srow.comp_.sz;
+            dw = drow.comp_.sz;
         }
         else
             return typecheck;
-    }
-    return 0;
-}
-
-/* Set every pixel of a packed-integer raster (an array of row arrays)
-   to integer zero. Devices call this once from Create; initialising
-   each element from PostScript costs an interpreter loop per pixel. */
-static
-int _zerorows(Xpost_Context *ctx, Xpost_Object imgdata)
-{
-    word iy, ix;
-    int ret;
-
-    for (iy = 0; iy < imgdata.comp_.sz; iy++)
-    {
-        Xpost_Object row = xpost_array_get(ctx, imgdata, iy);
-        if (xpost_object_get_type(row) != arraytype)
-            return typecheck;
-        for (ix = 0; ix < row.comp_.sz; ix++)
+        if (mrow.comp_.sz < (unsigned int)((w + 7) / 8))
+            return rangecheck;
+        mp = (unsigned char *)xpost_string_get_pointer(ctx, mrow);
+        for (x = 0; x < w; x++)
         {
-            ret = xpost_array_put(ctx, row, ix, xpost_int_cons(0));
-            if (ret)
-                return ret;
+            int dx = ox + x;
+
+            if (dx < 0 || dx >= dw)
+                continue;
+            if (!(mp[x / 8] >> (7 - (x % 8)) & 1))
+                continue;
+            dp[0][dx] = sp[0][x];
+            if (planar)
+            {
+                dp[1][dx] = sp[1][x];
+                dp[2][dx] = sp[2][x];
+            }
         }
     }
     return 0;
@@ -2034,8 +1993,8 @@ int _writepbmrows(Xpost_Context *ctx,
     return 0;
 }
 
-/* The raster walk shared by the rgb emitters: each row's packed
-   r<<16|g<<8|b integers unpack to three bytes per pixel, written a
+/* The raster walk shared by the rgb emitters: each row's three
+   component planes interleave into three bytes per pixel, written a
    row at a time. Emitting from PostScript costs several string
    operations per pixel, which dominates page output time. */
 static
@@ -2054,22 +2013,21 @@ int _write_rgb_raster(Xpost_Context *ctx,
         return VMerror;
     for (iy = 0; iy < height; iy++)
     {
+        unsigned char *pl[3];
+        int rw, ret;
+
         row = xpost_array_get(ctx, imgdata, iy);
-        if (xpost_object_get_type(row) != arraytype
-            || (integer)row.comp_.sz != width)
+        ret = _rgb_planes(ctx, row, 0, pl, &rw);
+        if (ret || rw != width)
         {
             free(buf);
-            return typecheck;
+            return ret ? ret : typecheck;
         }
         for (ix = 0; ix < width; ix++)
         {
-            Xpost_Object pix = xpost_array_get(ctx, row, ix);
-            int packed = xpost_object_get_type(pix) == integertype
-                       ? pix.int_.val : 0;
-
-            buf[ix * 3]     = (unsigned char)((packed >> 16) & 0xff);
-            buf[ix * 3 + 1] = (unsigned char)((packed >> 8) & 0xff);
-            buf[ix * 3 + 2] = (unsigned char)(packed & 0xff);
+            buf[ix * 3]     = pl[0][ix];
+            buf[ix * 3 + 1] = pl[1][ix];
+            buf[ix * 3 + 2] = pl[2][ix];
         }
         if (_emit_write(ctx, f, buf, (size_t)width * 3) < 0)
         {
@@ -2101,14 +2059,11 @@ int _rgb_raster_target(Xpost_Context *ctx,
     if (*height == 0)
         return rangecheck;
     row = xpost_array_get(ctx, imgdata, 0);
-    if (xpost_object_get_type(row) != arraytype)
-        return typecheck;
-    *width = row.comp_.sz;
-    return 0;
+    return _rgb_planes(ctx, row, 0, NULL, width);
 }
 
-/* Emit a packed-integer rgb raster as a binary P6 PPM: header, then
-   the raster walk. */
+/* Emit a planar rgb raster as a binary P6 PPM: header, then the
+   raster walk. */
 static
 int _writeppmrows(Xpost_Context *ctx,
                   Xpost_Object imgdata,
@@ -2247,7 +2202,7 @@ _blit_row_spans(Xpost_Context *ctx, Xpost_Object cspans, int ncspans,
 /* blitdict  .blitrow  -
    write one image row straight into a raster device's page buffer.
    The dictionary carries the device raster (rows: the ImgData array,
-   packed 24-bit integer pixels or grey bytes per the packed flag),
+   three colour planes or grey bytes per the rgbrows flag),
    the axis-aligned image-to-device mapping (xoff xscale yoff yscale),
    the clip rectangle (cx0 cy0 cx1 cy1), the normalized sample row
    (buf, one byte per sample, ncomp samples per pixel, row index y of
@@ -2277,7 +2232,7 @@ int _blitrow(Xpost_Context *ctx,
     int htw = 0, hth = 0;
     unsigned char *dlut[4] = { NULL, NULL, NULL, NULL };
     int mranges[8];
-    int devw, devh, nat, packed, w, ncomp, y, cmyk, mrowb = 0;
+    int devw, devh, nat, rgbrows, w, ncomp, y, cmyk, mrowb = 0;
     double xoff, xscale, yoff, yscale, cx0, cy0, cx1, cy1;
     double ya, yb, t;
     int dy, x, c, nranges = 0;
@@ -2300,7 +2255,7 @@ int _blitrow(Xpost_Context *ctx,
     } while (0)
 
     GETI(devw); GETI(devh); GETI(nat); GETI(w); GETI(ncomp); GETI(y);
-    GETB(packed); GETB(cmyk);
+    GETB(rgbrows); GETB(cmyk);
     /* The component count indexes the per-component tables -- the plane
        pointers, the decode tables, the decoded sample vector and the
        mask range pairs -- and the native count indexes the entries of
@@ -2535,7 +2490,7 @@ int _blitrow(Xpost_Context *ctx,
                     for (dy = (int)floor(lo); dy < hi; dy++)
                     {
                         Xpost_Object row;
-                        unsigned char *rowp = NULL;
+                        unsigned char *rowp[3] = { NULL, NULL, NULL };
                         double v;
                         int dx;
 
@@ -2556,34 +2511,37 @@ int _blitrow(Xpost_Context *ctx,
                                 continue;
                         }
                         row = xpost_array_get(ctx, rows, dy);
-                        /* A row of no width is a row the device does not
-                           hold: the page shows the ground over it, and an
-                           image reaching it is dropped where every other
-                           mark that reaches it is. */
-                        if (row.comp_.sz == 0)
-                            continue;
-                        if (packed)
+                        if (rgbrows)
                         {
-                            int pret;
+                            int pret, rw;
 
-                            if (xpost_object_get_type(row) != arraytype
-                             || row.comp_.sz < (unsigned int)devw)
-                                { free(cols); return rangecheck; }
-                            pret = _row_presave(ctx, row);
+                            pret = _rgb_planes(ctx, row, 1, rowp, &rw);
                             if (pret)
                                 { free(cols); return pret; }
+                            /* A row of no width is a row the device does
+                               not hold: the page shows the ground over
+                               it, and an image reaching it is dropped
+                               where every other mark that reaches it
+                               is. */
+                            if (rw == 0)
+                                continue;
+                            if (rw < devw)
+                                { free(cols); return rangecheck; }
                         }
                         else
                         {
                             int wret;
 
+                            /* a row of no width, as above */
+                            if (row.comp_.sz == 0)
+                                continue;
                             if (xpost_object_get_type(row) != stringtype
                              || row.comp_.sz < (unsigned int)devw)
                                 { free(cols); return rangecheck; }
                             wret = _row_writable(ctx, row);
                             if (wret)
                                 { free(cols); return wret; }
-                            rowp = (unsigned char *)xpost_string_get_pointer(ctx, row);
+                            rowp[0] = (unsigned char *)xpost_string_get_pointer(ctx, row);
                         }
                         {
                         double sxstep = 1.0 / xscale;
@@ -2656,19 +2614,18 @@ int _blitrow(Xpost_Context *ctx,
                                 if (px[k] < 0) px[k] = 0;
                                 if (px[k] > 255) px[k] = 255;
                             }
-                            if (packed)
+                            if (rgbrows)
                             {
-                                int wret = xpost_array_put(ctx, row, dx,
-                                    xpost_int_cons(px[0] << 16 | px[1] << 8 | px[2]));
-                                if (wret)
-                                    { free(cols); return wret; }
+                                rowp[0][dx] = (unsigned char)px[0];
+                                rowp[1][dx] = (unsigned char)px[1];
+                                rowp[2][dx] = (unsigned char)px[2];
                             }
                             else if (htc)
-                                rowp[dx] = (256 * px[0] + 127) / 255
-                                           >= htc[(dy % hth) * htw + dx % htw]
-                                         ? 255 : 0;
+                                rowp[0][dx] = (256 * px[0] + 127) / 255
+                                              >= htc[(dy % hth) * htw + dx % htw]
+                                            ? 255 : 0;
                             else
-                                rowp[dx] = (unsigned char)px[0];
+                                rowp[0][dx] = (unsigned char)px[0];
                         }
                         }
                     }
@@ -2690,7 +2647,7 @@ int _blitrow(Xpost_Context *ctx,
     for (dy = (int)floor(ya); dy < yb; dy++)
     {
         Xpost_Object row;
-        unsigned char *rowp = NULL;
+        unsigned char *rowp[3] = { NULL, NULL, NULL };
 
         if (dy < 0)
             continue;
@@ -2703,33 +2660,35 @@ int _blitrow(Xpost_Context *ctx,
                 continue;
         }
         row = xpost_array_get(ctx, rows, dy);
-        /* A row of no width is a row the device does not hold: the page
-           shows the ground over it, and an image reaching it is dropped
-           where every other mark that reaches it is. */
-        if (row.comp_.sz == 0)
-            continue;
-        if (packed)
+        if (rgbrows)
         {
-            int pret;
+            int pret, rw;
 
-            if (xpost_object_get_type(row) != arraytype
-             || row.comp_.sz < (unsigned int)devw)
-                return rangecheck;
-            pret = _row_presave(ctx, row);
+            pret = _rgb_planes(ctx, row, 1, rowp, &rw);
             if (pret)
                 return pret;
+            /* A row of no width is a row the device does not hold: the
+               page shows the ground over it, and an image reaching it is
+               dropped where every other mark that reaches it is. */
+            if (rw == 0)
+                continue;
+            if (rw < devw)
+                return rangecheck;
         }
         else
         {
             int wret;
 
+            /* a row of no width, as above */
+            if (row.comp_.sz == 0)
+                continue;
             if (xpost_object_get_type(row) != stringtype
              || row.comp_.sz < (unsigned int)devw)
                 return rangecheck;
             wret = _row_writable(ctx, row);
             if (wret)
                 return wret;
-            rowp = (unsigned char *)xpost_string_get_pointer(ctx, row);
+            rowp[0] = (unsigned char *)xpost_string_get_pointer(ctx, row);
         }
 
         for (x = 0; x < w; x++)
@@ -2820,19 +2779,18 @@ int _blitrow(Xpost_Context *ctx,
                     {
                         if (dx < 0)
                             continue;
-                        if (packed)
+                        if (rgbrows)
                         {
-                            int wret = xpost_array_put(ctx, row, dx,
-                                            xpost_int_cons(r << 16 | g << 8 | b));
-                            if (wret)
-                                return wret;
+                            rowp[0][dx] = (unsigned char)r;
+                            rowp[1][dx] = (unsigned char)g;
+                            rowp[2][dx] = (unsigned char)b;
                         }
                         else if (htc)
-                            rowp[dx] = (256 * gray + 127) / 255
-                                       >= htc[(dy % hth) * htw + dx % htw]
-                                     ? 255 : 0;
+                            rowp[0][dx] = (256 * gray + 127) / 255
+                                          >= htc[(dy % hth) * htw + dx % htw]
+                                        ? 255 : 0;
                         else
-                            rowp[dx] = (unsigned char)gray;
+                            rowp[0][dx] = (unsigned char)gray;
                     }
                 }
             }
@@ -3645,7 +3603,6 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".fillrectrgb", (Xpost_Op_Func)_fillrectrgb, 8,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".zerorows", (Xpost_Op_Func)_zerorows, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".base64", (Xpost_Op_Func)_base64, 1, stringtype); INSTALL;
     op = xpost_operator_cons(ctx, ".formmask", (Xpost_Op_Func)_formmask, 2,
                              arraytype, arraytype); INSTALL;

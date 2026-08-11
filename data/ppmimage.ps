@@ -6,10 +6,16 @@
 
 % .xpost_PPMIMAGE, the 24-bit rgb raster class: the shared raster method
 % suite (.makerasterclass, image.ps) over three colour components per
-% pixel, an integer row per scanline holding packed r<<16|g<<8|b, and
-% emission as a raw (P6) portable pixmap. It uses the full range 0-255
-% of values and does not calculate the actual maximum value in the data
-% before transmitting; MaxVal is always 255.
+% pixel, a scanline of three component planes -- one string of one byte
+% per pixel for red, for green and for blue -- and emission as a raw
+% (P6) portable pixmap. It uses the full range 0-255 of values and does
+% not calculate the actual maximum value in the data before
+% transmitting; MaxVal is always 255.
+%
+% A plane holds one byte per pixel, so the widest page the class builds
+% is the widest string the build holds, which is the widest row the
+% grayscale class builds as well. Three components interleaved in one
+% string of the row would come to a third of that width.
 %
 % procedures (.xpost_PPMIMAGE is the Class dictionary, IMAGE an
 % instance returned by Create):
@@ -29,32 +35,36 @@
     /.ncomp 3
     /BlendPix //.internaldict /.blendpixrgb get
 
-    % an integer row per scanline; fresh arrays hold nulls, so the rows
-    % zero through the compiled helper
-    /.rowalloc { width array } bind
-    /.rowsinit { ImgData //.internaldict /.zerorows get exec } bind
+    % three component planes per scanline, red green blue in that order;
+    % a fresh string is already zero. The empty row a page held in part
+    % stands the rows it does not hold on is the same shape carrying no
+    % pixel.
+    /.rowalloc { [ width string width string width string ] } bind
+    /.rowempty { [ 0 string 0 string 0 string ] } bind
 
     % what one .rowalloc costs the memory it allocates from, as the
-    % elements and the string bytes it takes: an array row is one element
-    % per pixel and no bytes. Create prices the whole raster from this
-    % before it builds any of it.
+    % elements and the string bytes it takes: a planar row is the three
+    % elements naming its planes and one byte per pixel in each of them.
+    % Create prices the whole raster from this before it builds any of
+    % it.
     /.rowcost { % -  .  elements bytes
-        width 0
+        3 width 3 mul
     } bind
 
-    % scale each component in [0,1] to a byte and pack; unpack to bytes
-    /.packpix {
-        .chan exch
-        .chan 8 bitshift or exch
-        .chan 16 bitshift or
+    % scale each component in [0,1] to its plane's byte, and read the
+    % three back
+    /.rowput { % row x c1 c2 c3  .  -
+        .chan 4 index 2 get 4 index 3 -1 roll put
+        .chan 3 index 1 get 3 index 3 -1 roll put
+        .chan 3 -1 roll 0 get 3 1 roll put
     } bind
-    /.unpackpix {
-        dup -16 bitshift exch
-        dup -8 bitshift 16#ff and exch
-        16#ff and
+    /.rowget { % row x  .  c1 c2 c3
+        2 copy exch 0 get exch get 3 1 roll
+        2 copy exch 1 get exch get 3 1 roll
+        exch 2 get exch get
     } bind
 
-    % the rows unpack and stream through the compiled row writer
+    % the planes interleave through the compiled row writer
     /.writepage { % img file
         2 dict begin
         {/f /a}{exch def}forall

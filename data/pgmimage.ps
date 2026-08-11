@@ -29,9 +29,11 @@
     /.ncomp 1
     /BlendPix //.internaldict /.blendpixgray get
 
-    % a string row per scanline; a fresh string is already zero
+    % a string row per scanline; a fresh string is already zero. The
+    % empty row a page held in part stands the rows it does not hold on
+    % is the same shape carrying no pixel.
     /.rowalloc { width string } bind
-    /.rowsinit { } bind
+    /.rowempty { 0 string } bind
 
     % what one .rowalloc costs the memory it allocates from, as the
     % elements and the string bytes it takes: a string row is one byte
@@ -42,8 +44,12 @@
     } bind
 
     % scale a grey in [0,1] to the stored byte; a read is the byte
-    /.packpix { .chan } bind
-    /.unpackpix { } bind
+    /.rowput { % row x c1  .  -
+        .chan put
+    } bind
+    /.rowget { % row x  .  c1
+        get
+    } bind
 
     % raw (binary) format: each row string is already the raster bytes
     /.writepage { % img file

@@ -30,8 +30,9 @@
 
 /rows DEVICE /ImgData get def
 /H rows length def
-/W rows 0 get length def
-/white 16777215 def
+% a colour row is three component planes, and the pixels it holds are
+% what one of them holds
+/W rows 0 get 0 get length def
 
 % the device's compiled rectangle fill, held where naming it cannot run
 % it: an operator reached through a name is executed, and this one is
@@ -39,16 +40,25 @@
 /hold 1 dict def
 hold /compiled DEVICE /FillRect get put
 
-% -  snap  [ [ints] ... ]
-% a copy of every raster row, taken out of reach of the next painting
-/snap { [ 0 1 H 1 sub { rows exch get W array copy } for ] } bind def
+% -  snap  [ [planes] ... ]
+% a copy of every raster row, planes and all, taken out of reach of the
+% next painting
+/snap {
+  [ 0 1 H 1 sub {
+      rows exch get [ exch { dup length string copy } forall ]
+    } for ]
+} bind def
 
 % a b  differing  int
 /differing {
   /bb exch def /aa exch def /n 0 def
   0 1 H 1 sub { /r exch def
     /ar aa r get def /br bb r get def
-    0 1 W 1 sub { /c exch def ar c get br c get ne { /n n 1 add def } if } for
+    0 1 W 1 sub { /c exch def
+      ar 0 get c get br 0 get c get ne
+      ar 1 get c get br 1 get c get ne or
+      ar 2 get c get br 2 get c get ne or
+      { /n n 1 add def } if } for
   } for
   n
 } bind def
@@ -58,7 +68,11 @@ hold /compiled DEVICE /FillRect get put
 /marked {
   /aa exch def /n 0 def
   0 1 H 1 sub { /r exch def /ar aa r get def
-    0 1 W 1 sub { ar exch get white ne { /n n 1 add def } if } for
+    0 1 W 1 sub { /c exch def
+      ar 0 get c get 255 ne
+      ar 1 get c get 255 ne or
+      ar 2 get c get 255 ne or
+      { /n n 1 add def } if } for
   } for
   n
 } bind def
@@ -139,17 +153,17 @@ a marked 0 eq a b differing 0 eq and
 { (a shape wholly off the page marked the raster) bad } ifelse
 
 % --- access ---
-% A row the program has made read-only refuses the fill and keeps its
-% contents. The raster rows live in global VM, so the planted row must
-% too.
+% A row whose blue plane the program has made read-only refuses the fill
+% and keeps its contents -- all three planes of it, since a row that
+% cannot take the whole pixel takes none of it. The raster rows live in
+% global VM, so the planted row must too.
 1 setgray erasepage
 currentglobal true setglobal
-% a value no painting can produce, so a write shows even when the paint
-% and the row would otherwise agree
-/sentinel 12345 def
-/ro W array def
-0 1 W 1 sub { ro exch sentinel put } for
-/ro ro readonly def
+% a value no painting here can produce, so a write shows even when the
+% paint and the plane would otherwise agree
+/sentinel 173 def
+/mkplane { W string 0 1 W 1 sub { 1 index exch sentinel put } for } bind def
+/ro [ mkplane mkplane mkplane readonly ] def
 setglobal
 /target 20 def
 /keep rows target get def
@@ -168,7 +182,8 @@ exch
     /fails fails 1 add def } ifelse }
 { pop (a fill into a read-only row raised no error) bad } ifelse
 /clean true def
-0 1 W 1 sub { ro exch get sentinel ne { /clean false def } if } for
+ro { 0 1 W 1 sub { 1 index exch get sentinel ne { /clean false def } if } for
+     pop } forall
 clean
 { (the read-only row is unwritten) ok }
 { (the read-only row was written) bad } ifelse
