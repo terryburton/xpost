@@ -44,11 +44,6 @@
  *   host address outside a live signature has nowhere to have come from
  *   that this run understands.
  *
- *   It says nothing about a context created a second time in a process
- *   that already had one. That is a different question -- a boot from a
- *   live heap rather than a fresh one -- and it is not what an image
- *   would be written from.
- *
  *   It is blind where the two runs put this code at the same address:
  *   the difference it exists to characterise is then not there to see.
  *   That case is recognised rather than passed over -- the whole of both
@@ -60,8 +55,20 @@
  *   around them a different shape. Two images are refused unless they
  *   agree with each other and with this build.
  *
+ * THE PAIR IN ONE PROCESS. The same two boots taken one after the other
+ * in a single process answer a second question, and answer the first one
+ * without any excuse. A context created after another has lived and died
+ * boots from a heap that has already been used rather than a fresh one,
+ * so it says whether what a boot arrives at is a function of the language
+ * or of what the process did before it; and the two boots are the same
+ * load of this code at one address, so there is no relocation to allow
+ * for. Nothing in either bank may differ, down to the byte, and the
+ * comparison of the two is the same comparison as for the pair of
+ * processes -- which reads a slide of zero and requires exactly that.
+ *
  * Modes:
  *   write <path>        boot to the point above and write the image
+ *   write2 <a> <b>      two boots in this one process, an image of each
  *   compare <a> <b>     read two images and judge them
  */
 
@@ -756,32 +763,60 @@ static void _compare_global(const Image *a, const Image *b)
     free(sig);
 }
 
-static void _write(const char *path)
+/* One boot of the interpreter and the image of it, between an
+   xpost_init and an xpost_quit the caller holds. Answers whether the
+   boot reached the point the image is taken at. */
+static int _boot_and_write(const char *path)
 {
     Xpost_Context *ctx;
+    int ok;
 
-    if (!xpost_init())
-    {
-        report_failure("xpost_init");
-        return;
-    }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
                        XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, 100, 100);
     if (!ctx)
     {
         report_failure("xpost_create");
-        return;
+        return 0;
     }
 
     /* The language, and then nothing: the run's device is what would be
        made next, and it is what an image must not carry. */
     xpost_interpreter_load_language(ctx);
 
-    if (!xpost_vm_image_write(ctx, path, 1))
+    ok = xpost_vm_image_write(ctx, path, 1);
+    if (!ok)
         report_failure("cannot write the image to %s", path);
 
     xpost_destroy(ctx);
+    return ok;
+}
+
+static void _write(const char *path)
+{
+    if (!xpost_init())
+    {
+        report_failure("xpost_init");
+        return;
+    }
+    _boot_and_write(path);
+    xpost_quit();
+}
+
+/* Two boots in this one process, the second from a heap the first has
+   already been through. The second is only worth an image where the
+   first reached one: a boot that did not finish leaves nothing to
+   compare, and comparing the one image that was written against a file
+   that is not there reports a missing file rather than the boot. */
+static void _write_two(const char *pa, const char *pb)
+{
+    if (!xpost_init())
+    {
+        report_failure("xpost_init");
+        return;
+    }
+    if (_boot_and_write(pa))
+        _boot_and_write(pb);
     xpost_quit();
 }
 
@@ -832,13 +867,19 @@ int main(int argc, char **argv)
         _write(argv[2]);
         return verdict();
     }
+    if (argc == 4 && strcmp(argv[1], "write2") == 0)
+    {
+        _write_two(argv[2], argv[3]);
+        return verdict();
+    }
     if (argc == 4 && strcmp(argv[1], "compare") == 0)
     {
         _compare(argv[2], argv[3]);
         return verdict();
     }
 
-    report_failure("this was asked for something other than `write <path>` "
-                   "or `compare <a> <b>`, and so measured nothing");
+    report_failure("this was asked for something other than `write <path>`, "
+                   "`write2 <a> <b>` or `compare <a> <b>`, and so measured "
+                   "nothing");
     return verdict();
 }

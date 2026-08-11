@@ -2477,10 +2477,10 @@ static const char *_image_write_path(void)
 static void _write_image(Xpost_Context *ctx);
 
 /* How many contexts this process has created. An image is written from
-   the first and only from the first: a context created after another has
-   lived and died in the same process does not arrive at the same virtual
-   memory, and an image of it would differ from an image of a fresh boot
-   for reasons no reader could account for. */
+   the first and only from the first: the file describes the language
+   this build boots to, which is one thing and is written once, so a
+   process that has already written it spends nothing writing it again
+   from every context after. */
 static unsigned int _contexts_created = 0;
 
 /* Say that the boot files may be read, whichever way the language
@@ -2993,10 +2993,31 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     nextid = 0; /*reset process counter */
     _contexts_created++;
 
+    /* The terms the interpreter's own structures are built under: the
+       collector neither runs nor counts what is allocated, and the
+       access checks a program's writes go through are not applied to
+       structures nothing has yet been able to reach.
+
+       Per context and not per process. Every context is brought up by
+       the same steps and arrives at the same virtual memory, and it
+       does so only where each is built under the same terms: a context
+       built with the accounting live spends a collection budget on
+       start-up that a context built without it still holds, which is a
+       difference between two contexts whose memory is otherwise
+       identical.
+
+       The exemption is given back below, where the language begins to
+       load and the first thing that could reach these structures is
+       about to run -- and on every way out between here and there, so
+       that a creation which does not finish leaves the process as it
+       found it. */
+    xpost_interpreter_set_initializing(1);
+
     /* Allocate and initialize all interpreter data structures. */
     ret = initalldata(device);
     if (!ret)
     {
+        xpost_interpreter_set_initializing(0);
         return NULL;
     }
 
@@ -3009,6 +3030,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     {
         XPOST_LOG_ERR("%s recording the interpreter's configuration",
                       errorname[ret]);
+        xpost_interpreter_set_initializing(0);
         return NULL;
     }
 
@@ -3027,6 +3049,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
         if (ret)
         {
             XPOST_LOG_ERR("%s naming QUIET in systemdict", errorname[ret]);
+            xpost_interpreter_set_initializing(0);
             return NULL;
         }
     }
