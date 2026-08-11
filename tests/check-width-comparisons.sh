@@ -24,8 +24,10 @@
 #   $1  source directory
 #   $2  build directory (for the generated config header)
 set -u
-src=$1
-build=$2
+src=${1:?usage: check-width-comparisons.sh <srcroot> <buildroot>}
+build=${2:?usage: check-width-comparisons.sh <srcroot> <buildroot>}
+. "$(dirname "$0")/guard-paths.sh"
+guard_require_srcroot "$src"
 
 # The compiler the tree was built with is the one that has already had
 # its say. What is wanted here is the other one.

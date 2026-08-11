@@ -157,6 +157,13 @@ while IFS="$(printf '\t')" read -r base args; do
             "files("*)
                 rel=$(printf '%s' "$a" | grep -oE "'[^']*'" | tr -d "'")
                 echo FILE >> "$work/kinds"; echo "$src/$rel" >> "$work/values" ;;
+            "meson.current_build_dir()")
+                # the build root, which a guard needs when it reads a
+                # generated header rather than a source one. Derived from
+                # the built binary this check was handed, so it names the
+                # tree being checked rather than whichever one is current.
+                echo BUILDROOT >> "$work/kinds"
+                echo "$(dirname "$(dirname "$(dirname "$xpost")")")" >> "$work/values" ;;
             "xpost_exe")
                 echo BUILT >> "$work/kinds"; echo "$xpost" >> "$work/values" ;;
             "libxpost_lib.full_path()")
