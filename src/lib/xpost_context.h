@@ -263,6 +263,9 @@ struct _Xpost_Context {
         seed as something other than the seed it was given. */
     dword rand_next;
     unsigned int vmmode; /**< allocating in GLOBAL or LOCAL */
+    /** the allocation mode at each save level, so restore reverts it, as
+        the parameter is save/restore-subject (PLRM 8.2 restore) */
+    unsigned char vmmode_hist[256];
 
     /** The two font directories, so setglobal can rebind the name
         FontDirectory to whichever the allocation mode calls for (PLRM).

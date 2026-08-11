@@ -55,6 +55,60 @@
 #include "xpost_operator.h"
 #include "xpost_op_save.h"
 
+/* The name FontDirectory denotes the local font directory while the
+   allocation mode is local and GlobalFontDirectory while it is global
+   (PLRM), so a font defined in terms of another finds the directory its
+   own fonts are going into. Rebinding it is a write to systemdict, which
+   is read-only once the language has loaded; the write replaces an entry
+   that is already there, so it allocates nothing and is safe on the error
+   path, where setglobal is reached while an error is being reported. */
+static
+void _rebind_fontdirectory(Xpost_Context *ctx)
+{
+    Xpost_Object sd;
+    Xpost_Object fd;
+    Xpost_Object_Tag_Access access;
+    int ignore;
+
+    /* both are null until the boot file has defined them */
+    if (xpost_object_get_type(ctx->globalfontdir) != dicttype)
+        return;
+    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
+    if (xpost_object_get_type(sd) != dicttype)
+        return;
+
+    fd = (ctx->vmmode == GLOBAL) ? ctx->globalfontdir : ctx->localfontdir;
+    ignore = ctx->ignoreinvalidaccess;
+    access = xpost_object_get_access(ctx, sd);
+    ctx->ignoreinvalidaccess = 1;
+    /* Opening the window is a write to systemdict's value, so it backs
+       systemdict up to the save level it stands under before it takes
+       effect, and a level that ends here gives back the systemdict this
+       found rather than the one this made -- a program that may write
+       systemdict may redefine the language. Refused, the rebinding is
+       abandoned rather than made unrevertable: what it rebinds is a
+       convenience the PLRM describes and not something the interpreter's
+       own correctness rests on. */
+    if (xpost_object_get_type(
+            xpost_object_set_access(ctx, sd,
+                                    XPOST_OBJECT_TAG_ACCESS_UNLIMITED))
+        == invalidtype)
+    {
+        ctx->ignoreinvalidaccess = ignore;
+        XPOST_LOG_ERR("cannot open systemdict to rebind FontDirectory");
+        return;
+    }
+    /* the name is already in systemdict, so the store replaces an entry
+       rather than making one: it allocates nothing and cannot be
+       refused, which is what makes this safe on the error path */
+    XPOST_REFUSAL_IMPOSSIBLE(
+        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd));
+    /* systemdict is backed up at this level now, so shutting the window
+       writes its head and takes no further backup: it cannot be refused */
+    xpost_object_set_access(ctx, sd, access);
+    ctx->ignoreinvalidaccess = ignore;
+}
+
 /* -  save  save
    create save object representing vm contents */
 static
@@ -78,6 +132,9 @@ int Zsave(Xpost_Context *ctx)
     /* remember the packing mode at this level so restore reverts it */
     if (v.save_.lev < sizeof ctx->packing_hist)
         ctx->packing_hist[v.save_.lev] = (unsigned char)ctx->packing;
+    /* and the allocation mode, which restore reverts likewise */
+    if (v.save_.lev < sizeof ctx->vmmode_hist)
+        ctx->vmmode_hist[v.save_.lev] = (unsigned char)ctx->vmmode;
     if (!xpost_stack_push(ctx->lo, ctx->os, v))
         return stackoverflow;
     return 0;
@@ -185,61 +242,26 @@ int Vrestore(Xpost_Context *ctx,
         keep:;
         }
     }
-    return 0;
-}
 
-/* The name FontDirectory denotes the local font directory while the
-   allocation mode is local and GlobalFontDirectory while it is global
-   (PLRM), so a font defined in terms of another finds the directory its
-   own fonts are going into. Rebinding it is a write to systemdict, which
-   is read-only once the language has loaded; the write replaces an entry
-   that is already there, so it allocates nothing and is safe on the error
-   path, where setglobal is reached while an error is being reported. */
-static
-void _rebind_fontdirectory(Xpost_Context *ctx)
-{
-    Xpost_Object sd;
-    Xpost_Object fd;
-    Xpost_Object_Tag_Access access;
-    int ignore;
+    /* The allocation mode is save/restore-subject too (PLRM 8.2 restore),
+       and the name FontDirectory denotes whichever directory the mode
+       calls for, so reverting the one rebinds the other exactly as
+       setglobal does.
 
-    /* both are null until the boot file has defined them */
-    if (xpost_object_get_type(ctx->globalfontdir) != dicttype)
-        return;
-    sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
-    if (xpost_object_get_type(sd) != dicttype)
-        return;
-
-    fd = (ctx->vmmode == GLOBAL) ? ctx->globalfontdir : ctx->localfontdir;
-    ignore = ctx->ignoreinvalidaccess;
-    access = xpost_object_get_access(ctx, sd);
-    ctx->ignoreinvalidaccess = 1;
-    /* Opening the window is a write to systemdict's value, so it backs
-       systemdict up to the save level it stands under before it takes
-       effect, and a level that ends here gives back the systemdict this
-       found rather than the one this made -- a program that may write
-       systemdict may redefine the language. Refused, the rebinding is
-       abandoned rather than made unrevertable: what it rebinds is a
-       convenience the PLRM describes and not something the interpreter's
-       own correctness rests on. */
-    if (xpost_object_get_type(
-            xpost_object_set_access(ctx, sd,
-                                    XPOST_OBJECT_TAG_ACCESS_UNLIMITED))
-        == invalidtype)
+       Both come last, after the rewind and after the teardown the rewind
+       sets off: the device retirement runs a device's own release method
+       and the sweep above closes files, and each of them works in the
+       mode the level being discarded was running under. What the write
+       to systemdict here is backed up against is virtual memory already
+       rewound. */
+    if (V.save_.lev < sizeof ctx->vmmode_hist
+        && ctx->vmmode_hist[V.save_.lev] != (unsigned char)ctx->vmmode)
     {
-        ctx->ignoreinvalidaccess = ignore;
-        XPOST_LOG_ERR("cannot open systemdict to rebind FontDirectory");
-        return;
+        ctx->vmmode = ctx->vmmode_hist[V.save_.lev];
+        _rebind_fontdirectory(ctx);
     }
-    /* the name is already in systemdict, so the store replaces an entry
-       rather than making one: it allocates nothing and cannot be
-       refused, which is what makes this safe on the error path */
-    XPOST_REFUSAL_IMPOSSIBLE(
-        xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "FontDirectory"), fd));
-    /* systemdict is backed up at this level now, so shutting the window
-       writes its head and takes no further backup: it cannot be refused */
-    xpost_object_set_access(ctx, sd, access);
-    ctx->ignoreinvalidaccess = ignore;
+
+    return 0;
 }
 
 /* bool  setglobal  -

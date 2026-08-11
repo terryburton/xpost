@@ -103,6 +103,87 @@ redefseq 2 eq (a redef replaces the visible binding immediately) assert
 
 clear false setglobal
 
+% --- the allocation mode is subject to save and restore -------------------
+% PLRM 8.2 restore: restore resets the VM allocation mode to its state at
+% the time of the matching save. The name FontDirectory denotes whichever
+% font directory the mode calls for, so it follows the mode back.
+% The results are carried past the restores on the operand stack, which
+% restore leaves alone: a failure recorded in faildict inside a bracket
+% would be rewound by the restore that ends it.
+clear false setglobal
+/LocalFontDir FontDirectory def
+
+true setglobal
+save
+    false setglobal
+restore
+currentglobal
+FontDirectory GlobalFontDirectory eq
+false setglobal
+exch (restore reverts the allocation mode to global) assert
+(FontDirectory follows the reverted mode to the global directory) assert
+
+false setglobal
+save
+    true setglobal
+restore
+currentglobal not
+FontDirectory LocalFontDir eq
+false setglobal
+exch (restore reverts the allocation mode to local) assert
+(FontDirectory follows the reverted mode to the local directory) assert
+
+% a bracket that never touches the mode gives back the mode it was given
+true setglobal
+save
+restore
+currentglobal
+false setglobal
+(a bracket that leaves the mode alone restores it unchanged) assert
+
+% nested brackets each revert to their own save's mode
+false setglobal
+save
+    true setglobal
+    save
+        false setglobal
+    restore
+    currentglobal
+exch restore
+currentglobal not
+false setglobal
+exch (an inner restore reverts to the inner save's mode) assert
+(an outer restore reverts to the outer save's mode) assert
+
+% the mode a save was taken under is what comes back, whatever the bracket
+% left it at, so a bracket may be left in either mode
+true setglobal
+save
+    true setglobal
+restore
+currentglobal
+false setglobal
+(a bracket that sets the mode it was given still gives it back) assert
+
+% the reverted mode is the mode that allocates: what is made after the
+% restore goes into the bank the restore gave back, not the bracket's
+true setglobal
+save
+    false setglobal
+restore
+4 dict gcheck
+false setglobal
+(a composite made after a restore lands in the reverted bank) assert
+
+false setglobal
+save
+    true setglobal
+restore
+4 dict gcheck not
+(a composite made after a restore to local lands in local VM) assert
+
+clear false setglobal
+
 count 0 eq (operand stack is balanced) assert
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush

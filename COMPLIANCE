@@ -326,7 +326,10 @@ Level 2 operators
  [X] setoverprint, currentoverprint (recorded only)
  [X] setsystemparams, currentsystemparams, setuserparams,
      currentuserparams, setdevparams, currentdevparams (accepted;
-     the parameter sets are minimal)
+     the parameter sets are minimal, and a user parameter set inside a
+     save bracket keeps the value it was given past the restore that
+     ends the bracket, where a user parameter is defined to revert with
+     it)
  [X] deletefile, renamefile, filenameforall
  [X] fileposition, setfileposition
  [X] cleardictstack
