@@ -69,6 +69,63 @@
   matrix makepattern setpattern
   newpath 0 0 80 40 rectfill grestore } (a pattern paints) works
 
+% --- and every marking slot the device offers, called directly --------
+%
+% An operator reaches a device through some of its slots and not
+% others, and which ones depends on what the device declares: a device
+% asking for one bit of text alpha is never sent a partly covered pixel,
+% so no operator above reaches its blend. A slot nothing reaches is a
+% slot nothing checks, and an inherited one that reads a raster the
+% device does not keep answers undefined the first time anything does
+% reach it -- present and callable the whole time, which `known` cannot
+% tell from working.
+%
+% So each slot is called for itself, with the components the device
+% takes. Emit and Destroy are left out: this page is emitted below and
+% the instance is still in use.
+%
+% How many components a paint carries is the device's own answer: a
+% raster class states it, and a device that adopts whatever space the
+% paint was set in takes it from the graphics state, so the space is set
+% below to the one the count was read for.
+/dev .privatedict /.graphicsdict get /currgstate get /device get def
+/ncomp dev /.ncomp 2 copy known { get }{ pop pop
+    dev /nativecolorspace 2 copy known { get }{ pop pop /DeviceGray } ifelse
+    dup /DeviceCMYK eq { pop 4 }{ /DeviceRGB eq { 3 }{ 1 } ifelse } ifelse
+} ifelse def
+/ink { ncomp { 0.5 } repeat } def
+gsave
+ncomp 4 eq { 0 0 0 0 setcmykcolor }{
+ncomp 3 eq { 0 0 0 setrgbcolor }{ 0 setgray } ifelse } ifelse
+/slotsrun 0 def
+/callslot { % /slot {operands}  -  the slot answers when it is called
+    /cs.args exch def /cs.slot exch def
+    dev cs.slot known {
+        /slotsrun slotsrun 1 add store
+        { cs.args dev dup cs.slot get exec } cs.slot 40 string cvs works
+    } if
+} bind def
+
+/PutPix   { ink 5 5 } callslot
+/BlendPix { ink 128 5 5 } callslot
+/DrawLine { ink 1 1 8 8 } callslot
+/DrawRect { ink 1 1 4 4 } callslot
+/FillRect { ink 1 1 4 4 } callslot
+/FillPoly { ink [ [1 1] [4 1] [4 4] ] } callslot
+/Ground   { ink } callslot
+/GetPix   { 5 5 } callslot
+/Erase    { } callslot
+/Flush    { } callslot
+grestore
+
+% A slot the device does not carry is not called, so a device that lost
+% one would go quiet here rather than fail. The floor is what the
+% thinnest device in the roster carries -- the vector writers and the
+% devices that paint nothing each answer six of the marking slots -- so
+% a roster that stopped offering them is told apart from one that
+% answered.
+slotsrun 6 ge (the device offered its marking slots to be called) assert
+
 % and the page is emitted
 { showpage } (the page is emitted) works
 
