@@ -130,9 +130,19 @@ dev /FillPoly known {
 % keeping its raster elsewhere must bring its own or the name answers
 % undefined -- present, callable, and broken, which no probe with
 % `known` can tell from working.
+%
+% A read is answered wherever a mark may be aimed. PutPix drops a mark
+% that lands off the page rather than refusing it, so a read from off
+% the page is answered rather than refused: the slot is the whole of
+% what a caller has to ask a device with, and a pixel it will not answer
+% for is one the caller cannot ask about at all.
 dev /GetPix known {
     { 5 5 getpix ncomp { pop } repeat }      (GetPix answers) try
     { 3.7 4.2 getpix ncomp { pop } repeat }  (fractional GetPix) try
+    { -1 -1 getpix ncomp { pop } repeat }    (GetPix before the page) try
+    { 5000 5000 getpix ncomp { pop } repeat } (GetPix past the page) try
+    { -0.5 -0.5 getpix ncomp { pop } repeat }
+        (fractional GetPix before the page) try
 } if
 
 % the standard operators must equally survive boundary geometry
@@ -174,6 +184,75 @@ dev /GetPix known dev /PutPix known and {
 
 readable {
     (READBACK\n) print
+
+    % --- what the page shows where it holds no pixel ----------------
+    %
+    % Off the page there is nothing to hold a pixel, and a mark aimed
+    % there is dropped, so what a read answers there is the page's
+    % ground: the colour erasepage left, which is what every pixel of
+    % the page the job never covers shows.
+    %
+    % The ground is read off the device rather than named here. PLRM 8.2
+    % erases the page to grey 1.0, and what that colour comes to is the
+    % transfer function's answer in the device's own colour space and
+    % channel scale, none of which this test knows. A page just cleared
+    % holds it at every pixel, so one of them stands for it.
+    %
+    % A read that refuses answers no components, and every check below
+    % reports for itself rather than ending the run on the first of
+    % them: which read a device refuses is the diagnosis.
+    /readpix { % x y  .  [c1..cN] or [ ]
+        % the depth the read is handed, taken before the name of the
+        % place it is kept is pushed, so a read that fails is unwound to
+        % where it started whatever it left behind
+        count 2 sub /rp.depth exch def
+        { getpix ncomp array astore } stopped {
+            count rp.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+            [ ]
+        } if
+    } def
+    /eqpix { % [a] [b]  .  bool
+        2 copy length exch length eq {
+            true 0 1 3 index length 1 sub {
+                3 index 1 index get 3 index 3 -1 roll get eq and
+            } for 3 1 roll pop pop
+        }{ pop pop false } ifelse
+    } def
+
+    erasepage
+    /gr.page 2 2 readpix def
+    /gr.before -1 -1 readpix def
+    /gr.past 5000 5000 readpix def
+    gr.page length ncomp eq (the page's ground is readable) assert
+    gr.before length ncomp eq (a pixel before the page is answered) assert
+    gr.past length ncomp eq (a pixel past the page is answered) assert
+    gr.page gr.before eqpix
+        (a pixel before the page reads as the ground) assert
+    gr.page gr.past eqpix
+        (a pixel past the page reads as the ground) assert
+
+    % And it is the ground this page was cleared to, not a value the
+    % device carries: cleared through a transfer function that is not
+    % the identity, a device answering white regardless is caught.
+    %
+    % A device that screens what it stores is not held to this. What it
+    % leaves for a grey is a pattern that varies from pixel to pixel, so
+    % no single pixel of its page stands for the colour the page was
+    % cleared to, and the two readings are not comparable.
+    dev /ScreenPaint known not {
+        gsave { 0.35 mul 0.2 add } settransfer erasepage grestore
+        /gr.page 2 2 readpix def
+        /gr.before -1 -1 readpix def
+        gr.page length ncomp eq
+            (a page cleared through a transfer function is readable) assert
+        gr.page gr.before eqpix
+            (the ground read off the page is the ground it was cleared to) assert
+    } if
+
+    % the page was cleared to take those readings; the baseline mark is
+    % laid again so Emit has one to write
+    erasepage
+    newpath 10 10 moveto 90 90 lineto stroke
 
     % A component outside [0,1] is clamped, not folded. Unclamped, the
     % scale wraps the stored channel: 1.7 lands as 0.69 and -0.7 as

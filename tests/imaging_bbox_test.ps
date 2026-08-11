@@ -129,6 +129,25 @@ holdsrows screens not and {
     0 rl { 0 eq { 1 add } if } forall  99 eq
     (a box covering the middle of the page leaves 99 rows unheld) assert
 
+    % 4b. A pixel of a row the device does not hold reads as the ground.
+    % The page shows the ground over those rows and Emit lays it into
+    % the file there, so what the file carries over such a pixel is a
+    % thing the program can read back rather than a coordinate the
+    % device refuses. Nothing has painted since the page was made, so
+    % every row of it is the ground and a pixel of a held row is what a
+    % pixel of an unheld one owes.
+    /unheldread true def
+    mark { [ 10 10 device? dup /GetPix get exec ] } stopped
+        { /unheldread false def } if
+    cleartomark
+    unheldread
+    (a pixel of a row the device does not hold is answered) assert
+    unheldread {
+        [ 10 10 device? dup /GetPix get exec ]
+        [ 10 125 device? dup /GetPix get exec ] eqarray
+        (a row the device does not hold reads as the ground) assert
+    } if
+
     % 5. A mark inside the box reaches the raster it belongs to.
     0 setgray newpath 60 60 moveto 90 60 lineto 90 90 lineto 60 90 lineto
     closepath fill

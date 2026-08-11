@@ -10,10 +10,10 @@
 # provides it, gdi is not run.
 #
 # The behaviour tier skips itself where it cannot see the raster, so a
-# run in which it skipped everywhere would still pass. The count below
-# holds it to running on the devices that can witness it: a device that
-# stops reporting its pixels is a regression, not a reason to assert
-# less.
+# run in which it skipped everywhere would still pass. The devices that
+# cannot witness it are named below rather than counted: a count says
+# how many went quiet and a name says which, and a device that starts
+# answering is held to the tier it was excused from.
 #
 #   $1  path to the built xpost binary
 #   $2  path to device_contract_test.ps
@@ -23,9 +23,14 @@ script=$2
 . "$(dirname "$0")/verdict.sh"
 . "$(dirname "$0")/device-fleet.sh"
 
-# devices whose GetPix reports back what a marking method wrote
-readback_min=8
-readback=0
+# The members of the marking roster that report no pixels back, with the
+# reason each cannot: null paints nothing and bbox records a page's
+# extent rather than its pixels, so neither has a pixel to report, and
+# the vector writers keep a document rather than a raster and answer a
+# read with a fixed value. Every other member reports what a marking
+# method wrote and is asserted about.
+NO_READBACK='null bbox pdfwrite svgwrite'
+readback=
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
@@ -49,7 +54,7 @@ for dev in $devices; do
         continue
     fi
     if printf '%s\n' "$out" | grep -q '^READBACK$'; then
-        readback=$((readback + 1))
+        readback="$readback $dev"
     fi
     if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
@@ -96,11 +101,37 @@ if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a device rejected a boundary input"
     exit 1
 fi
-if [ "$readback" -lt "$readback_min" ]; then
-    echo "FAILURES: the behaviour tier ran on $readback devices, fewer than $readback_min"
-    echo "      a device that no longer reports its pixels back silently"
-    echo "      stops being asserted about; restore its GetPix"
+
+# The devices that witnessed the behaviour tier, against the roster less
+# the ones named above as unable to. A device that has quietly stopped
+# reporting its pixels reads exactly like one that never could, so the
+# reading is taken from the runs and held to what this file says it
+# should be.
+quiet=
+for dev in $devices; do
+    case " $readback " in *" $dev "*) continue ;; esac
+    quiet="$quiet $dev"
+done
+want=$(printf '%s\n' $NO_READBACK | grep . | sort | tr '\n' ' ')
+got=$(printf '%s\n' $quiet | grep . | sort | tr '\n' ' ')
+if [ "$want" != "$got" ]; then
+    for dev in $got; do
+        case " $want " in
+            *" $dev "*) ;;
+            *) echo "FAILURES: $dev reported no pixels back, and nothing here"
+               echo "      says it cannot; it has stopped being asserted about,"
+               echo "      so restore its GetPix" ;;
+        esac
+    done
+    for dev in $want; do
+        case " $got " in
+            *" $dev "*) ;;
+            *) echo "FAILURES: $dev reported its pixels back, and it is named"
+               echo "      here as a device that cannot; it can be held to the"
+               echo "      behaviour tier now" ;;
+        esac
+    done
     exit 1
 fi
-echo "SUCCESS ($readback devices witnessed the behaviour tier)"
+echo "SUCCESS ($(printf '%s' "$readback" | wc -w) devices witnessed the behaviour tier)"
 exit 0
