@@ -612,3 +612,104 @@ jobs:
             gcc -dumpmachine
             meson setup /work/build /src
             ninja -C /work/build'
+
+  # The third face of the address sanitizer, and the only one that can see
+  # a leak this tree owns but does not allocate.
+  #
+  # The two lanes at the top of this file each look away from that class
+  # for a reason of their own. The first turns leak detection off, because
+  # what it blocks on is a memory-safety error or undefined behaviour. The
+  # second turns it on and then reads the reports through suppressions
+  # naming the font configuration library and the XML parser it reads its
+  # files with -- allocations this tree reaches but did not make -- so that
+  # the leaks it does own can be held to zero. Between them, memory that
+  # this tree is answerable for because it asked a library to take it and
+  # never asked for it back is invisible: the allocation stack is the
+  # library's, so the suppression matches, and the fault is in the call
+  # that was not made rather than in the call that was.
+  #
+  # So this lane runs the suite with leak detection on and nothing
+  # suppressed, and blocks on the result. What that costs is that it
+  # answers for the platform's libraries as well as for the tree -- a
+  # library that holds an allocation to the end of the process on the
+  # runner's version and not on another turns this red for something the
+  # tree cannot fix. That is the price of the coverage, and it is paid
+  # here rather than in the counted lane above so that the count keeps
+  # meaning what it says.
+  #
+  # The fast tests rather than everything the tree runs out of itself:
+  # the two lanes above already carry the slow ones under the same
+  # runtime, and what is added here is a dimension over the suite rather
+  # than more of it. The profile wrapper is what selects them, so which
+  # tests a sanitized build can answer for stays derived from the build.
+  #
+  # No ASAN_OPTIONS here. Meson sets its own for a sanitized run and
+  # meson.build sets one option on the handful of tests whose subject is
+  # an allocation no allocator can serve; a job-level value would replace
+  # both wholesale for every test rather than adding to them.
+  leaks-unsuppressed:
+    name: leak check - nothing suppressed
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev fontconfig fonts-urw-base35 \
+          meson ninja-build llvm
+    # These lanes run the same suite, so they need the same faces: a
+    # standard name reaches findfont through fontconfig, which answers a
+    # machine carrying no fonts with nothing at all, and the name then
+    # raises invalidfont.
+    - name: Fonts
+      run: |
+        for face in Helvetica Times Courier Symbol; do
+          file=$(fc-match -f '%{file}' "$face")
+          [ -n "$file" ] || { echo "no face answers to $face"; exit 1; }
+          echo "$face -> $file"
+        done
+    - name: setup and build
+      run: |
+        meson setup builddir -Db_sanitize=address -Db_lundef=false
+        ninja -C builddir
+    # The same question the lanes above ask of themselves: a suite that
+    # passes says the tree works, and says it just as loudly on a build
+    # with no sanitizer in it. So the binary is asked, before the suite is.
+    - name: the sanitizer is in the build
+      run: |
+        ldd builddir/src/bin/xpost 2>/dev/null | grep -q asan ||
+        nm builddir/src/bin/xpost 2>/dev/null | grep -q '__asan_' || {
+          echo "builddir/src/bin/xpost carries no asan runtime;"
+          echo "this lane would run the suite with nothing watching it"
+          exit 1
+        }
+        echo "asan: present"
+    # And the other side of it: that leak detection is on. It is the
+    # sanitizer's default on this platform and nothing here turns it off,
+    # but a lane whose whole subject is leaks cannot rest on a default
+    # holding -- a run with it off is green for want of anything looking.
+    # A program that leaks on purpose is the control, and this lane is
+    # only meaningful if that program is reported.
+    - name: leak detection is on
+      run: |
+        printf '%s\n%s\n' '#include <stdlib.h>' \
+          'int main(void){ char *p = malloc(4321); p[0] = 1; return 0; }' \
+          > /tmp/leaky.c
+        gcc -fsanitize=address -o /tmp/leaky /tmp/leaky.c
+        if /tmp/leaky 2>&1 | grep -q 'LeakSanitizer: detected memory leaks'; then
+          echo "a deliberate leak is reported"
+        else
+          echo "a deliberate leak went unreported; this lane sees nothing"
+          exit 1
+        fi
+    - name: test
+      run: |
+        MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh quick \
+          --print-errorlogs
+    - uses: actions/upload-artifact@v4
+      with:
+        name: leak-unsuppressed-log
+        path: builddir/meson-logs/testlog.txt
+        retention-days: 30
+      if: always()
