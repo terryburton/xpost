@@ -280,8 +280,13 @@ H { pop dup type /nametype eq { (member ) print 60 string cvs print (\n) print }
     dup type /arraytype eq {
         { ( ) print render } forall
     }{
+    dup type /nametype eq {
+        % with its slash, so that a setting whose value is the name null
+        % is not read as one the host made nothing of
+        (/) print 40 string cvs print
+    }{
         40 string cvs print
-    } ifelse } ifelse } ifelse
+    } ifelse } ifelse } ifelse } ifelse
 } bind def
 H { % key value
     exch (value ) print 40 string cvs print ( ) print
@@ -380,6 +385,8 @@ compare_values "a run given a data directory and two resource directories" \
 .resourcepath  $inc1 $inc2
 .interactive false
 ShowpageSemantics 0
+StartDevice /null
+StartPageSize  612 792
 SUBDEVICE -
 OutputFileName -
 OutputBufferIn -
@@ -392,6 +399,8 @@ compare_values "a run given an output file and a device mode" \
 .resourcepath 
 .interactive false
 ShowpageSemantics 0
+StartDevice /null
+StartPageSize  612 792
 SUBDEVICE bgra
 OutputFileName $work/page.out
 OutputBufferIn -

@@ -100,7 +100,13 @@ userdict begin
     /dasharray []
     /dashoffset 0.0
     /currfont 1 dict
-    /device DEVICE
+    % The device a state starts on, filled in when one is installed --
+    % by the step that makes the run's own device, and by every
+    % page-device request after it. Null here because the language is
+    % read before any device is made: which device and which page are
+    % this run's and not the language's, so the modules load without one
+    % and nothing carries a device until one is installed.
+    /device null
 >> def
 end
 % the template proc lives in privatedict, off the dict stack; it freezes the

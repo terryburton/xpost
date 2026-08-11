@@ -5,7 +5,7 @@
 # A device name is a selection: -d names it on the command line and
 # setpagedevice names it from the program, and they are two spellings of
 # one thing. The names live in three files -- the option parser's list,
-# the interpreter's maker table, and the .devicemakers dictionary the
+# the names the interpreter accepts, and the .devicemakers dictionary the
 # page-device operator looks in -- and nothing made them agree, so five
 # devices were selectable with -d and unreachable by name. That is worse
 # than merely unreachable: a page-device request naming no device
@@ -50,10 +50,13 @@ awk '/_xpost_main_devices\[\] *=/ { in_t = 1; next }
      in_t && /^ *"/ { gsub(/[",]/, ""); gsub(/^ +| +$/, ""); if ($0 != "") print }' \
     "$main_c" | sort -u > "$work/cmdline"
 
-# The names the interpreter can build a maker call for.
-awk '/device_strings\[\]\[3\] *=/ { in_t = 1; next }
-     in_t && /{ *NULL/ { in_t = 0 }
-     in_t && /^ *{ *"/ { sub(/^ *{ *"/, ""); sub(/".*$/, ""); print }' \
+# The names the interpreter accepts as a device selection. What builds
+# the device is the .devicemakers dictionary below; what this list
+# answers is whether a name is a device at all, which is the question
+# xpost_create answers to its caller before any run begins.
+awk '/device_strings\[\] *=/ { in_t = 1; next }
+     in_t && /NULL/ { in_t = 0 }
+     in_t && /^ *"/ { sub(/^ *"/, ""); sub(/".*$/, ""); print }' \
     "$interp_c" | sort -u > "$work/maker"
 
 # The names setpagedevice will make.
@@ -70,7 +73,7 @@ for f in cmdline maker pagedevice; do
     fi
 done
 
-# $1 label for the roster under test, $2 its file, $3 the maker table it
+# $1 label for the roster under test, $2 its file, $3 the accepted list it
 # is held to, $4 where each lives
 report_diff() {
     missing=$(comm -23 "$3" "$2")
@@ -99,7 +102,7 @@ cmp -s "$work/pagedevice" "$work/maker" ||
 # The fourth spelling: the roster the test wrappers run. It used to be a
 # list per wrapper, which is how a whole device came to be built,
 # selectable and never once exercised; it is one file now, and this is
-# what holds it to the maker table.
+# what holds it to the names the interpreter accepts.
 #
 # Excluded from the roster, with reasons rather than by omission:
 #   gdi, gl  the Windows window devices: they need a platform that can

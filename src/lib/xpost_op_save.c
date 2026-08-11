@@ -211,6 +211,22 @@ void _rebind_fontdirectory(Xpost_Context *ctx)
         return;
 
     fd = (ctx->vmmode == GLOBAL) ? ctx->globalfontdir : ctx->localfontdir;
+    /* Back systemdict up to the save it stands under before the window
+       below is opened. A save keeps the copy a restore puts back, and it
+       takes that copy at the first write it sees; a copy taken through
+       this window is a copy of systemdict with the window open, so the
+       restore that ends the level would hand back a systemdict a program
+       may write, and a program that may write systemdict may redefine
+       the language. Refused, the write is abandoned rather than made
+       unrevertable: what it rebinds is a convenience the PLRM describes
+       and not something the interpreter's own correctness rests on. */
+    if (xpost_save_cow(xpost_context_select_memory(ctx, sd), dicttype, 0,
+                       xpost_object_get_ent(sd)) != 0)
+    {
+        XPOST_LOG_ERR("cannot back systemdict up before rebinding "
+                      "FontDirectory");
+        return;
+    }
     ignore = ctx->ignoreinvalidaccess;
     access = xpost_object_get_access(ctx, sd);
     ctx->ignoreinvalidaccess = 1;

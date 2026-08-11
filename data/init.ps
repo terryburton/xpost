@@ -561,9 +561,8 @@ end
 % the name a page larger than a device can address comes back under; a
 % page larger than the memory to hold it comes back as VMerror. The
 % report names whichever was reached rather than deciding between them,
-% since a device refuses for its own reasons. A start-up device that
-% refused says so under the name data/device.ps kept for it as it
-% refused; anything else the load ended in is read from $error.
+% since a device refuses for its own reasons. Whatever the attempt ended
+% in, the name is read from $error.
 %
 % The failure is recorded as well as printed. A start-up that produced no
 % page must not end with the status of a job that ran, or a caller
@@ -582,14 +581,14 @@ currentglobal true setglobal
 .xpostsys /.reportloadfailure {
     {
         (unable to load graphics) print
-        //.internaldict /StartDevice known {
-            //.internaldict /StartDevice get aload pop
-            % the recorded request is the device name and the page it was
-            % asked for, in that order
-            (: device ) print 3 -1 roll =print
-            ( asked for a page of ) print exch =print
-            ( by ) print =print ( pixels) print
-        } if
+        % the request is read from the settings this run has, which is
+        % where a value the invocation decided is kept, so it is there to
+        % be named whether or not the attempt reached the device
+        (: device ) print
+        /StartDevice //.xpostsys /.hostvalue get exec =print
+        ( asked for a page of ) print
+        /StartPageSize //.xpostsys /.hostvalue get exec aload pop
+        exch =print ( by ) print =print ( pixels) print
         $error /newerror get $error /errorname known and {
             (: ) print $error /errorname get =print
         } if
@@ -607,6 +606,7 @@ setglobal
     {
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
+        //.xpostsys /.startdevice get exec
     } stopped {
         //.xpostsys /.reportloadfailure get exec
         handleerror
@@ -671,6 +671,7 @@ setglobal
     {
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
+        //.xpostsys /.startdevice get exec
     } stopped {
         //.xpostsys /.reportloadfailure get exec
         quit
@@ -697,6 +698,7 @@ setglobal
     {
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
+        //.xpostsys /.startdevice get exec
     } stopped {
         //.xpostsys /.reportloadfailure get exec
         quit
@@ -720,6 +722,7 @@ setglobal
     {
         //.xpostsys /loadgraphics get exec
         //.xpostsys /.finalize get exec
+        //.xpostsys /.startdevice get exec
     } stopped {
         //.xpostsys /.reportloadfailure get exec
         quit
@@ -794,6 +797,9 @@ setglobal
 % memory does not hold, so it is not something a run can be made to do
 % again. Failure is left unreported here -- the start procedure that
 % follows meets it too, and reports it there as it does on its own.
+%
+% The language and nothing else. Which device this run has and which
+% page it is at are not language; making the device is the step below.
 /loadlanguage {
     { //.xpostsys /loadgraphics get exec
       //.xpostsys /.finalize get exec } stopped pop
@@ -802,6 +808,20 @@ setglobal
 
 /loadlanguagenographics {
     { //.xpostsys /.finalize get exec } stopped pop
+    quit
+} def
+
+% Make the device this run was started with, and run no program. The
+% counterpart of the language load above, for the same caller and for
+% the same reason: a device is made once in the life of a context, and
+% what it reaches through a handle is not virtual memory, so a device
+% made inside the bracket a job is run in would be unmade by the rewind
+% that ends the job while the state it held stayed where it was. The
+% step is idempotent -- a run that has a device keeps it -- so a start
+% procedure that has already been through this repeats nothing.
+% Failure is left unreported for the reason it is above.
+/startdevice {
+    { //.xpostsys /.startdevice get exec } stopped pop
     quit
 } def
 
@@ -856,7 +876,7 @@ setglobal
 % .finalize, before any program can shadow the operator names they call.
 [ /start /startstdin /startfilename /startfile
   /startstdinnographics /startfilenamenographics /startfilenographics
-  /loadlanguage /loadlanguagenographics ]
+  /loadlanguage /loadlanguagenographics /startdevice ]
 { dup systemdict exch known
     { dup dup systemdict exch get .privatedict 3 1 roll put systemdict exch undef }
     { pop } ifelse
@@ -1975,10 +1995,6 @@ currentglobal true setglobal
     } forall ]
     dup { dup systemdict exch get .internaldict 3 1 roll put } forall
     { systemdict exch undef } forall
-    % newdefaultdevice is the device-bootstrap string the C builds for /start. It
-    % ran during graphics loading, before this pass, and nothing calls it again,
-    % so drop it from systemdict while systemdict is still unlocked.
-    systemdict /newdefaultdevice known { systemdict /newdefaultdevice undef } if
     % The load latch and the internal draw-line flag are interpreter state a
     % program has no use for; both go into .internaldict, out of a program's
     % sight, while it is still writable here. .internaldict is sealed below, so
@@ -2035,20 +2051,11 @@ currentglobal true setglobal
     % privatedict), so only its userdict anchor remains -- drop it
     userdict /.gstatetemplate known { userdict /.gstatetemplate undef } if
     setglobal
-
-        % the reset needs a device, so it runs only when graphics has loaded;
-        % locking down without graphics leaves no graphics state to initialise.
-        % The state the interpreter's own device starts from is the one any
-        % other device would start from, so it is built the same way
-        /graphicsdict where {
-            pop
-            //.internaldict /QUIET known { }{ (graphics loaded, initialising graphics state\n)print } ifelse
-            //.xpostsys /.initdevicegstate get exec
-            % the first page starts clear. Every later one is cleared by
-            % showpage; the reset clears none of them, since it
-            % resets the graphics state and not raster memory
-            erasepage
-        } if
+    % The graphics state is not initialised here. It is initialised by
+    % the device being installed, which is what settles the parameters
+    % that describe how a device renders, and no device has been made
+    % yet: the lockdown is language work and runs whether or not this
+    % run ever has one.
     } ifelse
 } put
 setglobal

@@ -22,7 +22,7 @@
 # A name is added here in the same commit that makes the interpreter
 # settle it, and removed in the one that stops.
 
-entries 8
+entries 10
 
 # where this run found its boot files: XPOST_DATA_DIR, the directory the
 # shared library sits in, the configured data directory, or a relative
@@ -42,6 +42,16 @@ DATA_DIR
 # what showpage does when a page ends -- pause, carry on, or hand
 # control back to the caller -- as the context was created with
 ShowpageSemantics
+
+# which device this run was started with: -d, less the mode selector a
+# "device:mode" selection carries. The boot files make the device from
+# it once the language stands, and the start-up report names it when the
+# device could not be made
+StartDevice
+
+# the page this run was started at, in device pixels: -g, or the page a
+# run that named none is started at
+StartPageSize
 
 # the mode selector of a "device:mode" selection (-d raster:bgra), which
 # the raster device reads to settle its pixel format

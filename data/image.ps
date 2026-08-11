@@ -230,8 +230,8 @@ currentglobal true setglobal
 	dup 0 16 dict put
 	bind
 
-    %nb. this implementation is overridden by device.ps
-    %after calling `newdefaultdevice`
+    %nb. this implementation is overridden as a device is finished
+    %(the .completedevice step in device.ps)
     %see xpost_dev_generic.c:_fillpoly(ctx,poly,dev) for the
     %implementation in current use (10/8/2014)
 

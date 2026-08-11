@@ -210,11 +210,11 @@ setglobal
 (/dscwrite.ps) //.xpostsys /.loadmodule get exec  % distilled-ps device
 
 % Mirror the device class dictionaries into privatedict, where the makers and
-% the C drivers reach them, before the default device is made below. They stay
-% where they were defined too, for the load-time methods still to come, until
-% .finalize replaces them with local copies in privatedict and drops those
-% anchors. The device files define into the dictionary current here, which is
-% the one the language is being read into.
+% the C drivers reach them. They stay where they were defined too, for the
+% load-time methods still to come, until .finalize replaces them with local
+% copies in privatedict and drops those anchors. The device files define into
+% the dictionary current here, which is the one the language is being read
+% into.
 [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
   /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
 { dup currentdict exch known
@@ -222,19 +222,76 @@ setglobal
     { pop } ifelse
 } forall
 
-% defined in xpost_interpreter.c:setlocalconfig() from the -d selection:
-% it runs the chosen maker (newPGMIMAGEdevice, newrasterdevice, ...) at
-% the configured page size and stores the instance as the graphics
-% state's /device -- the DEVICE wrapped operator below reads it back.
+% -  .startdevice  -
+% Make the device this run was started with and install it in the
+% graphics state.
 %
-% A refusal here stops the graphics load, and the load carries the name
-% it stopped under out to the start-up report in data/init.ps.
-newdefaultdevice
-
-% the interpreter's own device takes the same finishing setpagedevice
-% gives the ones it makes; the startup page is at the device's own
-% resolution, so the point-to-device scale is 1:1
-DEVICE 1 1 .privatedict /.completedevice get exec
+% Apart from the loading above, and after it, because the two are not
+% the same kind of thing. The modules read above are the language, which
+% is the same for every run of this build. A device is not: it is the
+% one this run asked for, at the page this run asked for, and the next
+% run would want a different one. So the loading leaves the graphics
+% state carrying no device and this is what puts one there, which is
+% also what leaves a point between them at which the language stands
+% complete and nothing of the run has been decided yet.
+%
+% Which device and which page are read from the settings a run has, the
+% one place a value the invocation decided is kept.
+%
+% Once in the life of a context. The graphics state is the record of
+% that: a device already installed -- by this step or by a page-device
+% request afterwards -- is the one serving the run, and building a
+% second would leave the first holding state that is not virtual memory,
+% past the reach of both the collector and a restore.
+%
+% A refusal here is carried out to the start-up report in data/init.ps,
+% which names the device and the page this run asked for.
+%
+% Global, with the namespace it goes into: the body holds no local
+% object, reaching the local ones through the operators that answer with
+% them.
+currentglobal true setglobal
+.xpostsys /.startdevice {
+    graphicsdict /currgstate get /device 2 copy known
+        { get null ne }{ pop pop false } ifelse
+    { }{
+        % the device is a local object: a page device's parameters are
+        % written into it as the job runs, and a restore has to take
+        % them back
+        currentglobal false setglobal
+        /StartDevice //.xpostsys /.hostvalue get exec
+        % a device the build left the driver out of registers no maker,
+        % so the roster the page-device request is held to is the roster
+        % here as well
+        //.xpostsys /.devicemakers get 1 index known not
+            { /.startdevice cvx /undefined signalerror } if
+        /StartPageSize //.xpostsys /.hostvalue get exec aload pop
+        2 index //.xpostsys /.devicemakers get exch get exec
+        % the interpreter's own device takes the same finishing
+        % setpagedevice gives the ones it makes; the start-up page is at
+        % the device's own resolution, so the point-to-device scale is
+        % 1:1
+        dup 1 1 .privatedict /.completedevice get exec
+        % the template and the live state carry the device; painting and
+        % the defaultmatrix operator resolve it through them
+        .privatedict /.gstatetemplate get exec /device 2 index put
+        graphicsdict /currgstate get /device 2 index put
+        pop
+        graphicsdict /.outputdevice 3 -1 roll put
+        setglobal
+        //.internaldict /QUIET known { }{
+            (device made, initialising graphics state\n)print } ifelse
+        % the state a newly installed device starts from, which is the
+        % state any other device would start from, so it is built the
+        % same way
+        //.xpostsys /.initdevicegstate get exec
+        % the first page starts clear. Every later one is cleared by
+        % showpage; the reset clears none of them, since it resets the
+        % graphics state and not raster memory
+        erasepage
+    } ifelse
+} put
+setglobal
 
 /flushpage {
     DEVICE /Flush known {

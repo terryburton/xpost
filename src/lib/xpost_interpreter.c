@@ -2259,155 +2259,109 @@ int initalldata(const char *device)
     return 1;
 }
 
-/* FIXME remove duplication of effort here and in bin/xpost_main.c
-         (ie. there should be 1 table, not 2)
+/* The devices a run may be started with, and the whole of what the
+   interpreter accepts as a selection. Which of them this build can
+   actually make is the boot files' answer -- a device whose driver the
+   build left out registers no maker -- and a selection is held to that
+   where the device is made. What is held here is that the name is one
+   the interpreter knows at all, which is answerable before the language
+   is loaded and is therefore answerable to the caller of xpost_create
+   rather than to a run that has already begun.
 
-    Generates postscript code to initialize the selected device
+   tests/check-device-roster.sh holds this list, the option parser's, the
+   .devicemakers dictionary a page-device request is made from, and the
+   roster the test wrappers run, to naming the same devices.
 
-    currentglobal false setglobal              % allocate in local memory
-    device_requires_loading? { loadXXXdevice } if  % load if necessary
-    userdict /DEVICE 612 792 newXXXdevice put  % instantiate the device
-    setglobal                                  % reset previous allocation mode
+   FIXME remove duplication of effort here and in bin/xpost_main.c
+         (ie. there should be 1 table, not 2) */
+static const char *const device_strings[] =
+{
+    "pgm",
+    "ppm",
+    "pbm",
+    "tiff",
+    "null",
+    "bbox",
+    "xcb",
+    "gdi",
+    "gl",
+    "bgr",
+    "raster",
+    "pdfwrite",
+    "svgwrite",
+    "dscwrite",
+    "png",
+    "pngalpha",
+    "jpeg",
+    NULL
+};
 
-    initialization of the device is deferred until the start procedure has
-    initialized graphics (importantly, the ppmimage base class).
-    the loadXXXdevice operators all specialize the ppmimage base class
-    and so must wait until it is available.
+/* Which device this run selected, without the mode selector a
+   "device:mode" selection carries. Answers NULL for a name that is not a
+   device, with n left holding the length of the name examined. */
+static const char *_device_selected(const char *device, size_t *n)
+{
+    const char *colon;
+    int i;
 
-    also creates the definitions PACKAGE_DATA_DIR PACKAGE_INSTALL_DIR and EXE_DIR
- */
+    *n = 0;
+    if (!device)
+        return NULL;
+    colon = strchr(device, ':');
+    *n = colon ? (size_t)(colon - device) : strlen(device);
+    for (i = 0; device_strings[i]; i++)
+        if (strlen(device_strings[i]) == *n
+            && strncmp(device, device_strings[i], *n) == 0)
+            return device_strings[i];
+    return NULL;
+}
+
+/* What the interpreter is configured with before the language is read:
+   the build's own facts, which are the same for every run of it. What
+   this run decided goes elsewhere, with the rest of what a run decides,
+   once the language is in place to hold it.
+
+   The device selection is checked here rather than acted on. Making the
+   device needs the device classes, which arrive with the graphics
+   modules long after this; what can be answered now is whether the name
+   is one the interpreter has, and answering it now is what lets a
+   caller be told that its selection was not a device instead of
+   watching a run fail. */
 static
 int setlocalconfig(Xpost_Context *ctx,
                    Xpost_Object sd,
-                   const char *device,
-                   Xpost_Set_Size set_size,
-                   int width,
-                   int height)
+                   const char *device)
 {
-    const char *device_strings[][3] =
-    {
-        { "pgm",     "",                 "newPGMIMAGEdevice" },
-        { "ppm",     "",                 "newPPMIMAGEdevice" },
-        { "pbm",     "",                 "newPBMIMAGEdevice" },
-        { "tiff",    "",                 "newTIFFIMAGEdevice" },
-        { "null",    "",                 "newnulldevice"     },
-        { "bbox",    "",                 "newbboxdevice"     },
-        { "xcb",     "loadxcbdevice",    "newxcbdevice"      },
-        { "gdi",     "loadwin32device",  "newwin32device"    },
-        { "gl",      "loadwin32device",  "newwin32device"    },
-        { "bgr",     "loadbgrdevice",    "newbgrdevice"      },
-        { "raster",  "loadrasterdevice", "newrasterdevice"   },
-        { "pdfwrite","",                 "newPDFWRITEdevice" },
-        { "svgwrite","",                 "newSVGWRITEdevice" },
-        { "dscwrite", "",                 "newDSCWRITEdevice"  },
-        { "png",     "loadpngdevice",    "newpngdevice"      },
-        { "pngalpha", "loadpngalphadevice", "newpngalphadevice" },
-        { "jpeg",    "loadjpegdevice",   "newjpegdevice"      },
-        { NULL, NULL, NULL }
-    };
-    /* The maker is looked for in privatedict first, where the makers
-       written in PostScript live, and in systemdict otherwise, where the
-       ones a C driver registers live. That way neither has to be visible
-       to a program for this to reach it. */
-    /* The device and page asked for are recorded before the maker is
-       run, because they are what the start-up report has to name when
-       the maker refuses: a device that was never built holds nothing to
-       read the request back off, and the run that carried it is over by
-       the time anyone reads the report. They go where a program cannot
-       see them (data/init.ps seals .internaldict) and where the report
-       reaches them through a reference no program can shadow. The record
-       is built in global memory because .internaldict is a global
-       dictionary, and the device below in local, as before. */
-    const char *strtemplate = "currentglobal true setglobal "
-                        ".internaldict /StartDevice [ /%s %s ] put "
-                        "false setglobal "
-                        "%s graphicsdict /currgstate get /device %s "
-                        ".privatedict /%s 2 copy known "
-                        "{ get }{ pop pop /%s load } ifelse exec put "
-                        "graphicsdict /.outputdevice /%s put "
-                        "setglobal";
-    Xpost_Object namenewdev;
-    Xpost_Object newdevstr;
-    int i;
-    char *devstr;
-    char *subdevice;
-    char *dimensions;
-    char dimensions_buf[48]; /* holds "%d %d" for any int width/height */
-    int ret;
+    size_t n;
 
-    ctx->vmmode = GLOBAL;
-
-#ifdef _WIN32
-    ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "WIN32"), xpost_bool_cons(1));
-    if (ret)
-        return ret;
+#ifndef _WIN32
+    (void)ctx;
+    (void)sd;
 #endif
 
-    /* Parse the device string for a mode selector, "dev:mode". Which
-       device is being selected is settled here; the mode is one of the
-       run's own settings and is recorded with the rest of them. */
-    devstr = strdup(device);
-    if (!devstr)
+    if (!_device_selected(device, &n))
     {
-        ret = VMerror;
-        goto done;
+        XPOST_LOG_ERR("unknown device %.*s", (int)n, device ? device : "");
+        return undefined;
     }
-    if ((subdevice = strchr(devstr, ':')))
-        *subdevice++ = '\0';
 
-    /* define the /newdefaultdevice name called by /start */
-    for (i = 0; device_strings[i][0]; i++)
+#ifdef _WIN32
     {
-        if (strcmp(devstr, device_strings[i][0]) == 0)
-        {
-            break;
-        }
-    }
-    if (!device_strings[i][0])
-    {
-        XPOST_LOG_ERR("unknown device %s", devstr);
-        ret = undefined;
-        goto done;
-    }
-    if (set_size == XPOST_USE_SIZE){
-        snprintf(dimensions_buf, sizeof(dimensions_buf), "%d %d", width, height);
-        dimensions = dimensions_buf;
-    } else {
-        static char x[] = "612 792";
-        dimensions = x;
-    }
-    newdevstr = xpost_string_cons(ctx,
-                                  strlen(strtemplate) - 14  /* seven %s */
-                                  + strlen(device_strings[i][1])
-                                  + 2 * strlen(dimensions)
-                                  + 2 * strlen(device_strings[i][2])
-                                  + 2 * strlen(device_strings[i][0]) + 1,
-                                  NULL);
-    /* the template is written straight into the string's storage, so a
-       construction that was refused would be written through the pointer
-       a refusal answers with */
-    if (xpost_object_get_type(newdevstr) != stringtype
-        || !xpost_string_get_pointer(ctx, newdevstr))
-    {
-        ret = VMerror;
-        goto done;
-    }
-    sprintf(xpost_string_get_pointer(ctx, newdevstr), strtemplate,
-            device_strings[i][0], dimensions,
-            device_strings[i][1], dimensions, device_strings[i][2],
-            device_strings[i][2], device_strings[i][0]);
-    --newdevstr.comp_.sz; /* trim the '\0' */
+        /* the flag is a name in systemdict, which is global, so it is
+           built in global memory whatever the caller was allocating in */
+        unsigned int vmmode = ctx->vmmode;
+        int ret;
 
-    namenewdev = xpost_name_cons(ctx, "newdefaultdevice");
-    ret = xpost_dict_put(ctx, sd, namenewdev, xpost_object_cvx(newdevstr));
-    if (ret)
-        goto done;
+        ctx->vmmode = GLOBAL;
+        ret = xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "WIN32"),
+                             xpost_bool_cons(1));
+        ctx->vmmode = vmmode;
+        if (ret)
+            return ret;
+    }
+#endif
 
-    ret = 0;
-done:
-    ctx->vmmode = LOCAL;
-    free(devstr);
-    return ret;
+    return 0;
 }
 
 /*
@@ -2546,6 +2500,8 @@ static const char *const host_settings[] =
     ".resourcepath",
     ".interactive",
     "ShowpageSemantics",
+    "StartDevice",
+    "StartPageSize",
     "SUBDEVICE",
     "OutputFileName",
     "OutputBufferIn",
@@ -2633,11 +2589,16 @@ static int _record_host_config(Xpost_Context *ctx,
                                const char *outfile,
                                const char *bufferin,
                                char **bufferout,
-                               Xpost_Showpage_Semantics semantics)
+                               Xpost_Showpage_Semantics semantics,
+                               Xpost_Set_Size set_size,
+                               int width,
+                               int height)
 {
     unsigned int vmmode;
     const char *subdevice;
+    const char *selected;
     Xpost_Object o;
+    size_t n;
     int ret;
     int i;
 
@@ -2674,6 +2635,50 @@ static int _record_host_config(Xpost_Context *ctx,
        with: pause, carry on, or hand control back to the caller. */
     if ((ret = _host_put(ctx, "ShowpageSemantics",
                          xpost_int_cons(semantics))) != 0)
+        goto done;
+
+    /* Which device this run was started with, and the page it was
+       started at. The boot files make the device from these once the
+       language stands, and the start-up report names them when it could
+       not be made. The device is a name, being the key the roster of
+       makers is kept under; the page is in device pixels, which is what
+       a maker takes and what -g gives. */
+    selected = _device_selected(device, &n);
+    if (!selected)
+    {
+        /* the selection was held to being a device the interpreter has
+           before the language was read; a context that reached here
+           without one is one nothing can make a device for */
+        ret = undefined;
+        goto done;
+    }
+    /* literal: the name is data here, and an executable one would be
+       looked up rather than read wherever the maker roster is keyed by
+       it */
+    if ((ret = _host_put(ctx, "StartDevice",
+                         xpost_object_cvlit(xpost_name_cons(ctx, selected))))
+        != 0)
+        goto done;
+    o = xpost_object_cvlit(xpost_array_cons(ctx, 2));
+    if (xpost_object_get_type(o) != arraytype)
+    {
+        ret = VMerror;
+        goto done;
+    }
+    if (set_size != XPOST_USE_SIZE)
+    {
+        /* the page a caller that named none is started at (PLRM 6.2.6
+           gives the same as the standard PageSize, in points, and a
+           device the run names no resolution for is at one pixel to the
+           point) */
+        width = 612;
+        height = 792;
+    }
+    if ((ret = xpost_array_put(ctx, o, 0, xpost_int_cons(width))) != 0)
+        goto done;
+    if ((ret = xpost_array_put(ctx, o, 1, xpost_int_cons(height))) != 0)
+        goto done;
+    if ((ret = _host_put(ctx, "StartPageSize", o)) != 0)
         goto done;
 
     /* The mode selector of a "device:mode" selection, which the raster
@@ -2871,7 +2876,7 @@ XPAPI Xpost_Context *xpost_create(const char *device,
     sd = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 0);
     ud = xpost_stack_bottomup_fetch(xpost_ctx->lo, xpost_ctx->ds, 2);
 
-    ret = setlocalconfig(xpost_ctx, sd, device, set_size, width, height);
+    ret = setlocalconfig(xpost_ctx, sd, device);
     if (ret)
     {
         XPOST_LOG_ERR("%s recording the interpreter's configuration",
@@ -2910,7 +2915,8 @@ XPAPI Xpost_Context *xpost_create(const char *device,
        could not be recorded is not one to hand back: its readers would
        answer with nothing, or with what some other run left. */
     ret = _record_host_config(xpost_ctx, datadir, device, outfile,
-                              bufferin, bufferout, semantics);
+                              bufferin, bufferout, semantics,
+                              set_size, width, height);
     if (ret)
     {
         XPOST_LOG_ERR("%s recording what this run settles", errorname[ret]);
@@ -3167,6 +3173,27 @@ static int _showpage_semantic(Xpost_Context *ctx)
     return semantic.int_.val;
 }
 
+/* Run one of the boot files' start-up steps to its end, on the exec
+   stack this call leaves as it found it. The steps are the procedures
+   the boot files keep in privatedict beside the start procedures, and
+   each is idempotent, so a context that has already been through one
+   repeats nothing. */
+static void _run_startup_step(Xpost_Context *ctx, const char *proc,
+                              const char *what)
+{
+    unsigned int base = xpost_stack_count(ctx->lo, ctx->es);
+
+    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
+    push_start_proc(ctx, proc);
+    ctx->quit = 0;
+    ctx->state = C_RUN;
+    if (mainloop(ctx) != XPOST_MAINLOOP_DONE)
+        XPOST_LOG_ERR("%s did not run to its end", what);
+
+    while (xpost_stack_count(ctx->lo, ctx->es) > (int)base)
+        xpost_stack_pop(ctx->lo, ctx->es);
+}
+
 /* Load the language into the context, so that a bracket taken after
    this point encloses a program and nothing else.
 
@@ -3185,21 +3212,36 @@ static int _showpage_semantic(Xpost_Context *ctx)
    reports it there. */
 static void _load_language(Xpost_Context *ctx)
 {
-    unsigned int base = xpost_stack_count(ctx->lo, ctx->es);
-
-    xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
-    push_start_proc(ctx, ctx->skip_graphics ? "loadlanguagenographics"
-                                            : "loadlanguage");
-    ctx->quit = 0;
-    ctx->state = C_RUN;
     /* whether the language stands is read from the context afterwards,
-       which is the answer the caller acts on; this one says only how
-       the load's own run ended */
-    if (mainloop(ctx) != XPOST_MAINLOOP_DONE)
-        XPOST_LOG_ERR("the language load did not run to its end");
+       which is the answer the caller acts on; the run below says only
+       how the load's own run ended */
+    _run_startup_step(ctx, ctx->skip_graphics ? "loadlanguagenographics"
+                                              : "loadlanguage",
+                      "the language load");
+}
 
-    while (xpost_stack_count(ctx->lo, ctx->es) > (int)base)
-        xpost_stack_pop(ctx->lo, ctx->es);
+/* Make the device this run was started with, for the same reason the
+   language is loaded here: so that a bracket taken after this point
+   encloses a program and nothing else.
+
+   A device is made once in the life of a context, and what it reaches
+   its instance state through is a handle on a block that is not virtual
+   memory. A device made inside the bracket would be unmade by the rewind
+   that ends the job, taking the graphics state back to having none while
+   the block it held stayed where it was, past the reach of both the
+   collector and the rewind; the job after it would make another, and so
+   would every job after that.
+
+   The step is idempotent -- a run that has a device keeps it -- so this
+   says only when the device is made and not that it is remade. A run
+   that loads no graphics has no device to make: nothing there installs
+   one and the graphics state it locks down carries none. */
+static void _make_start_device(Xpost_Context *ctx)
+{
+    if (ctx->skip_graphics)
+        return;
+    _run_startup_step(ctx, "startdevice",
+                      "making the device the run was started with");
 }
 
 /* Rewind virtual memory to the snapshots this call took at its start.
@@ -3375,16 +3417,22 @@ XPAPI Xpost_Run_Status xpost_run(Xpost_Context *ctx, Xpost_Input_Type input_type
        bracket is taken over it, rather than a save level being pushed
        that this call has nothing to do with.
 
-       What the bracket encloses is the program. The language is loaded
-       before it is taken, so that rewinding to it rewinds what the job
-       wrote rather than what the context is made of; a context whose
-       language did not load takes no bracket at all, and its run reports
-       the failure the way a run on its own does. */
+       What the bracket encloses is the program. What the context is made
+       of is brought up before it is taken -- the language, and then the
+       device this run was started with -- so that rewinding to it rewinds
+       what the job wrote and not what it was given to write with; a
+       context whose language did not load takes no bracket at all, and
+       its run reports the failure the way a run on its own does. Both
+       steps run once in the life of the context, so this is where they
+       happen and the start procedure below finds them done. */
     if (ctx->job_snapshots
         && _showpage_semantic(ctx) != XPOST_SHOWPAGE_RETURN)
     {
         if (!ctx->sysdict_load_done)
+        {
             _load_language(ctx);
+            _make_start_device(ctx);
+        }
 
         if (ctx->sysdict_load_done)
         {

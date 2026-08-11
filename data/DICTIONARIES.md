@@ -32,9 +32,13 @@ A value the *load itself* consumes and nothing reads afterwards is not one of
 these, however it arrived. `QUIET` (the `-q` flag) guards the load-time progress
 messages and has no reader once loading is over; `GRAPHICS_LOAD_STOPPED` and
 `GRAPHICS_LOAD_DEPTH` are the graphics load's own bookkeeping, written and read
-inside it; the `newdefaultdevice` bootstrap string is run once while the device
-modules load and dropped from `systemdict` at lockdown. These are spent by the
-load that read them, and stay with the machinery that reads them.
+inside it. These are spent by the load that read them, and stay with the
+machinery that reads them.
+
+Which device this run was started with, and the page it was started at, are
+settings and not language (`StartDevice`, `StartPageSize`). The modules load
+without a device and the run's own is made from those two afterwards, which is
+what keeps the loading identical for every run of this build.
 
 ## Axis 1 — VM (local vs global), decided by lifecycle
 
@@ -130,8 +134,7 @@ surface. Three kinds of name belong:
 2. **A documented extension set** — non-PLRM names kept deliberately: the
    LaserWriter page-size prologs (`letter`, `a4`, …), the `gs`-compatible font
    directories (`GlobalFontDirectory`, `SharedFontDirectory`), print/debug
-   utilities (`=only`, `==only`, `=print`), device selection (`newdefaultdevice`
-   is *not* here — it is undef'd after load), and the multi-context and other
+   utilities (`=only`, `==only`, `=print`), and the multi-context and other
    `gs`/DPS operators. A non-standard name in `systemdict` must be on this list.
 3. **Six kept dotted operators** — internal operators that *cannot* be relocated
    into `.internaldict` because they are reached by name at a time the frozen
@@ -143,14 +146,14 @@ surface. Three kinds of name belong:
    | `.gscratch`, `.privatedict` | the accessors that reach the per-render scratch and the private local dictionary; named at run time by driver prologs and machinery the bind pass does not cover — relocating them breaks rendering (verified). |
 
 Everything else non-standard has been hidden. `QUIET`, `GRAPHICS_LOADED`,
-`USEDRAWLINE` (internal flags), `newdefaultdevice`, `.sysdictunlock`,
-`.sysdictrelock`, the `newXdevice` makers, and every other dotted C operator now
-live in `.internaldict` or `privatedict`, not `systemdict`.
+`USEDRAWLINE` (internal flags), `.sysdictunlock`, `.sysdictrelock`, the
+`newXdevice` makers, and every other dotted C operator now live in
+`.internaldict` or `privatedict`, not `systemdict`.
 
 ### Private — global machinery, sealed and hidden by the lockdown step
 
-Start-up runs in two separated stages, each a proc the start procedures call in
-turn. `loadgraphics` **loads** — it pulls in the graphics modules and nothing
+Start-up runs in three separated stages, each a proc the start procedures call
+in turn. `loadgraphics` **loads** — it pulls in the graphics modules and nothing
 else. `.finalize` **locks down** — it freezes the machinery's operator
 references, promotes the procedure-implemented standard operators to real
 operators, moves the private C operators into `.internaldict`, seals and hides
@@ -167,9 +170,22 @@ idempotent. `loadgraphics` is idempotent over a load that stopped as well:
 call raises it again, because the window on `systemdict` is a one-shot held in
 the context and a second reading would have nowhere to define.
 
+`.startdevice` **makes the run's device** — it reads `StartDevice` and
+`StartPageSize`, runs the maker the roster keeps for that device, finishes it
+the way a page-device request finishes the ones it makes, installs it in the
+graphics state template and the live state, and initialises the graphics state
+on it. It is the third stage because it is the one thing about start-up that is
+not the language: the two stages above are the same for every run of this build
+and this one is this run's alone, so between them the language stands complete
+with nothing of the run decided. Idempotent by what it makes: a graphics state
+that already carries a device keeps it, so a context makes its device once
+however many jobs it serves — a second device would leave the first holding
+state that is not virtual memory. Until it runs, the graphics state carries no
+device and a painting operator raises `undefined`.
+
 | Dictionary | VM | Lifecycle | Sealed | Reached by / holds |
 |---|---|---|---|---|
-| `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | the single private helper namespace. Reached by run-time `//.xpostsys /h get exec` (the mutually-recursive path/clip/image/graphics family + interpreter control `.finalize`/`loadgraphics`/`.loadmodule`/`.devicemakers`) and by baking `.xpostsys begin … //h exec` (the colour/shading/pattern/halftone/font-CID families) |
+| `.xpostsys` | global | static (+ `.resources` persistent) | read-only + anchor dropped | the single private helper namespace. Reached by run-time `//.xpostsys /h get exec` (the mutually-recursive path/clip/image/graphics family + interpreter control `.finalize`/`loadgraphics`/`.startdevice`/`.loadmodule`/`.devicemakers`) and by baking `.xpostsys begin … //h exec` (the colour/shading/pattern/halftone/font-CID families) |
 | `.internaldict` | global | static | read-only + anchor dropped | `1183615869 internaldict` (GS-compatible) or frozen `//`; the C operators relocated out of `systemdict`; the internal flags `QUIET`/`USEDRAWLINE`/`GRAPHICS_LOADED`/`GRAPHICS_LOAD_STOPPED`/`GRAPHICS_LOAD_DEPTH`; the `.=stringproc` anchor; the machinery rasterisers (`.fillpoly` …) |
 | `.xpostsys /.resources` | global | persistent | (member, writable) | the resource instance table; `defineresource` writes it; global-persistent per PLRM. A shallow read-only seal of `.xpostsys` correctly leaves this member writable |
 | `.xpostsys /.hostdict` | global | per-run settled | (member, writable) | **what this run settled, and nothing else** — see below. Writable for the same reason `.resources` is: the seal is shallow |
