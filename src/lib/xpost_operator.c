@@ -473,6 +473,12 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                 return null;
             }
             optab = xpost_operator_table(ctx->gl); // recalc
+            /* A row goes into virtual memory whole, and a row is wider
+               than the fields named below wherever the object it ends
+               with wants an alignment they do not reach. Cleared first,
+               so that what lands between them is a value this put there
+               rather than whatever the call stack was holding. */
+            memset(&op, 0, sizeof op);
             op.name = nm.mark_.padw;
             op.n = 1;
             op.sigadr = adr;
@@ -622,6 +628,8 @@ Xpost_Object xpost_operator_cons_wrapped(Xpost_Context *ctx,
        which lookups by name must keep finding */
     opcode = _xpost_noops;
     optab = xpost_operator_table(ctx->gl);
+    /* cleared first, for the reason the other row constructor gives */
+    memset(&op, 0, sizeof op);
     op.name = nm.mark_.padw;
     op.n = 0;
     op.sigadr = 0;
