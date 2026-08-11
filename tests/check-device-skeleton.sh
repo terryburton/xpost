@@ -441,6 +441,74 @@ if [ "$compiled" -eq 0 ]; then
     exit 1
 fi
 
+# 12. What the completion installs a compiled rasteriser under is asked
+#     once, and asked before the install.
+#
+#     Neither compiled fill serves every device. The rectangle fills
+#     write the raster as the array of row strings the base classes keep
+#     under /ImgData, so a device with a buffer of its own has nothing
+#     for them to write; the polygon fill paints in the colour spaces it
+#     knows a component count for. A device that does not match keeps
+#     what it brought, and a device given the compiled one anyway
+#     answers at its first mark rather than at load.
+#
+#     The condition belongs to the fill, not to a colour space, and
+#     writing it out beside each fill is how the two came to disagree:
+#     the colour path stated it and the grey path did not, so a device
+#     declaring DeviceGray with a buffer of its own had a working
+#     rectangle fill replaced by one that answered undefined. So the
+#     count is the rule -- one statement of each condition, ahead of
+#     every install -- rather than a check that each install has its
+#     own, which is what the two-statement form would pass.
+#
+#     This is a shape a rendering cannot show: every device here that
+#     keeps its own buffer declares DeviceRGB, so the grey path is
+#     unreached by the fleet and no page comes out different.
+#     tests/device_completion_test.ps asks what the completion does; this
+#     asks that there is one place where it is decided.
+awk '
+    /\.privatedict \/\.completedevice \{/          { on = 1 }
+    !on                                            { next }
+    /\/ImgData known/               { img++;  imgl = FNR }
+    /\/operatortype ne/             { own++;  ownl = FNR }
+    /\/\.fillrect[a-z]* get put/    { rect++; if (!rectl) rectl = FNR }
+    /\/Device[A-Za-z]* eq/          { if (!csl) csl = FNR }
+    /\/\.fillpoly get put/          { poly++; polyl = FNR }
+    /^\} bind put/                  { on = 0 }
+    END { print img+0, imgl+0, own+0, ownl+0, rect+0, rectl+0, \
+                csl+0, poly+0, polyl+0 }
+' "$src/data/device.ps" > "$work/completion"
+read -r c_img c_imgl c_own c_ownl c_rect c_rectl c_csl c_poly c_polyl \
+     < "$work/completion"
+if [ "$c_rect" -lt 2 ] || [ "$c_poly" -ne 1 ]; then
+    echo "check-device-skeleton: .completedevice installs $c_rect compiled" >&2
+    echo "rectangle fills and $c_poly polygon fill; expected both rectangle" >&2
+    echo "fills and the one polygon fill. A fill that stopped being installed" >&2
+    echo "is a device rasterising a page through the interpreter." >&2
+    fail=1
+elif [ "$c_img" -ne 1 ] || [ "$c_own" -ne 1 ]; then
+    echo "check-device-skeleton: the compiled rectangle fills are installed" >&2
+    echo "under the raster condition stated $c_img times and the condition on" >&2
+    echo "the fill the device brought stated $c_own times; expected one of" >&2
+    echo "each. Both belong to the fill rather than to a colour space, so" >&2
+    echo "both are asked once and the colour space chooses only which fill" >&2
+    echo "is installed." >&2
+    fail=1
+elif [ "$c_rectl" -lt "$c_imgl" ] || [ "$c_rectl" -lt "$c_ownl" ]; then
+    echo "check-device-skeleton: a compiled rectangle fill is installed at" >&2
+    echo "data/device.ps:$c_rectl, ahead of the conditions at line $c_imgl and" >&2
+    echo "line $c_ownl, so it lands on a device those conditions would have" >&2
+    echo "spared: one holding its raster in a buffer of its own, or one that" >&2
+    echo "brought a compiled rectangle fill already." >&2
+    fail=1
+elif [ "$c_csl" -eq 0 ] || [ "$c_csl" -gt "$c_polyl" ]; then
+    echo "check-device-skeleton: the compiled polygon fill is installed at" >&2
+    echo "data/device.ps:$c_polyl with no colour-space test ahead of it, so a" >&2
+    echo "device declaring a space that fill paints no colour in loses the" >&2
+    echo "polygon fill it brought." >&2
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
