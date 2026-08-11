@@ -349,6 +349,11 @@ endif
 # target that needs maths does not have to know which platform it is on
 m_dep = cc.find_library('m', required : false)
 
+# Whether virtual memory is backed by a mapping rather than by the
+# allocator. Windows reaches its own arrangement from inside the memory
+# file and does not consult this; elsewhere it is answered below.
+have_mmap = false
+
 if sys_windows
   bcrypt_dep = cc.find_library('bcrypt')
   gdi_dep = cc.find_library('gdi32')
@@ -448,6 +453,45 @@ else
       ''')
       config_h.set10('HAVE_GETPAGESIZE', true)
       message('getpagesize() is available()')
+  endif
+
+# memory backing
+#
+# A mapped arena grows by extending its mapping, and that is what makes
+# it worth taking: the storage a geometric growth leaves spare is never
+# written, so it costs nothing until the file reaches it. Where the
+# mapping cannot be extended the file is copied between two mappings and
+# both are held at once, which costs more than the allocator it would
+# stand in for. So both functions are asked for and the arena is mapped
+# only where both answer; a host offering just the first takes the
+# allocator, and the memory file refuses to compile on the pair being
+# split.
+  if get_option('mmap')
+    if cc.has_header('sys/mman.h') and cc.has_function('mmap',
+        prefix: '#include <sys/mman.h>')
+      if cc.has_function('mremap',
+          prefix: [ '#define _GNU_SOURCE 1', '#include <sys/mman.h>' ],
+          args: [ '-D_GNU_SOURCE' ])
+        have_mmap = true
+      else
+        message('mremap() is absent: virtual memory is backed by the allocator')
+      endif
+    else
+      message('mmap() is absent: virtual memory is backed by the allocator')
+    endif
+  endif
+
+  if have_mmap
+    # mremap is a GNU extension, and the library has to be compiled at
+    # the feature-test level the check found it at. The definition goes
+    # on the command line, where every translation unit sees it ahead of
+    # any header, rather than into a generated header that a file might
+    # include after one.
+    add_project_arguments('-D_GNU_SOURCE', language: 'c')
+    config_h.set10('HAVE_SYS_MMAN_H', true)
+    config_h.set10('HAVE_MMAP', true)
+    config_h.set10('HAVE_MREMAP', true)
+    message('virtual memory is backed by a mapping grown with mremap()')
   endif
 
 endif
@@ -3956,6 +4000,7 @@ pkgmod.generate(
 )
 
 summary({'OS': host_os,
+         'memory backing': have_mmap.to_string('mapped (mmap/mremap)', 'allocator'),
          'fontconfig': fontconfig_dep.found().to_string('yes', 'no'),
          'freetype': freetype_dep.found().to_string('yes', 'no'),
          'jpeg device': jpeg_dep.found().to_string('yes', 'no'),

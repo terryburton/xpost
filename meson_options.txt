@@ -20,7 +20,7 @@ option('large-object',
 option('mmap',
   type: 'boolean',
   value: true,
-  description: 'use of mapped memory'
+  description: 'back virtual memory with a mapping that grows in place, where the host offers both mmap and mremap, rather than with the allocator'
 )
 
 option('valgrind',
