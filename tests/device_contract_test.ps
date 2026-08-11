@@ -196,7 +196,16 @@ readable {
     % erases the page to grey 1.0, and what that colour comes to is the
     % transfer function's answer in the device's own colour space and
     % channel scale, none of which this test knows. A page just cleared
-    % holds it at every pixel, so one of them stands for it.
+    % carries it, so a pixel of one stands for it.
+    %
+    % Which pixel is not free. A device that screens what it stores
+    % leaves a grey as a pattern repeating over a cell that tiles the
+    % device plane, so what the page carries changes from pixel to pixel
+    % and two readings are comparable only at the same place in that
+    % cell. Positions a whole number of cells apart are the same place in
+    % it, on the page or off it, so the readings below are taken that way
+    % round; a device that stores what it is handed tiles the plane with
+    % a single pixel and any two positions are alike.
     %
     % A read that refuses answers no components, and every check below
     % reports for itself rather than ending the run on the first of
@@ -219,10 +228,25 @@ readable {
         }{ pop pop false } ifelse
     } def
 
+    % the cell the device tiles the plane with, and a pixel of the page
+    % with the positions a whole number of cells before and past it
+    /cellw dev /.htw 2 copy known { get }{ pop pop 1 } ifelse def
+    /cellh dev /.hth 2 copy known { get }{ pop pop 1 } ifelse def
+    cellw type /integertype ne { /cellw 1 def } if
+    cellh type /integertype ne { /cellh 1 def } if
+    cellw 1 lt { /cellw 1 def } if
+    cellh 1 lt { /cellh 1 def } if
+    /gr.x 2 def
+    /gr.y 2 def
+    /gr.beforex gr.x cellw 8 mul sub def
+    /gr.beforey gr.y cellh 8 mul sub def
+    /gr.pastx gr.x cellw 5000 mul add def
+    /gr.pasty gr.y cellh 5000 mul add def
+
     erasepage
-    /gr.page 2 2 readpix def
-    /gr.before -1 -1 readpix def
-    /gr.past 5000 5000 readpix def
+    /gr.page gr.x gr.y readpix def
+    /gr.before gr.beforex gr.beforey readpix def
+    /gr.past gr.pastx gr.pasty readpix def
     gr.page length ncomp eq (the page's ground is readable) assert
     gr.before length ncomp eq (a pixel before the page is answered) assert
     gr.past length ncomp eq (a pixel past the page is answered) assert
@@ -235,19 +259,26 @@ readable {
     % device carries: cleared through a transfer function that is not
     % the identity, a device answering white regardless is caught.
     %
-    % A device that screens what it stores is not held to this. What it
-    % leaves for a grey is a pattern that varies from pixel to pixel, so
-    % no single pixel of its page stands for the colour the page was
-    % cleared to, and the two readings are not comparable.
-    dev /ScreenPaint known not {
-        gsave { 0.35 mul 0.2 add } settransfer erasepage grestore
-        /gr.page 2 2 readpix def
-        /gr.before -1 -1 readpix def
-        gr.page length ncomp eq
-            (a page cleared through a transfer function is readable) assert
-        gr.page gr.before eqpix
-            (the ground read off the page is the ground it was cleared to) assert
-    } if
+    % A device that screens what it stores is held to this as any other
+    % is. What it leaves for the cleared page is a pattern, but the
+    % pattern is the page's, and the pixel off the page is read at the
+    % same place in the cell as the pixel on it, where the page carries
+    % one value and the device owes that one.
+    gsave { 0.35 mul 0.2 add } settransfer erasepage grestore
+    /gr.page gr.x gr.y readpix def
+    /gr.before gr.beforex gr.beforey readpix def
+    gr.page length ncomp eq
+        (a page cleared through a transfer function is readable) assert
+    gr.page gr.before eqpix
+        (the ground read off the page is the ground it was cleared to) assert
+
+    % A coordinate names the pixel it falls in, off the page as on it. A
+    % read a fraction inside a pixel is a read of that pixel and answers
+    % what it shows, not what the pixel the fraction rounds towards
+    % shows: on a device that screens, those are two different answers.
+    /gr.frac gr.beforex 0.5 add gr.beforey 0.5 add readpix def
+    gr.frac gr.before eqpix
+        (a fractional coordinate off the page reads as its own pixel) assert
 
     % the page was cleared to take those readings; the baseline mark is
     % laid again so Emit has one to write
@@ -281,6 +312,25 @@ readable {
         ncomp { 1 } repeat 3 7 3 7 drawline  3 7 getpix
         ncomp { 1.7 } repeat 4 7 4 7 drawline  4 7 getpix
         samepix (DrawLine clamps a component above the range) assert
+    } if
+
+    % --- one page, whichever method painted it ----------------------
+    % A device paints through the methods its class writes or through the
+    % compiled ones its raster shape allows, and one pixel must come out
+    % the same either way. A class that screens what it stores screens in
+    % both, off the one cell at the one position, or the page comes out
+    % in two patterns according to which method laid which part of it.
+    % Only a colour between the extremes can tell the two apart, and it
+    % is asked at two neighbouring pixels, which a screen need not answer
+    % alike.
+    dev /FillRect known {
+        ncomp { 0.55 } repeat 8 8 putpix        8 8 getpix
+        ncomp { 0.55 } repeat 8 8 0 0 fillrect  8 8 getpix
+        samepix (PutPix and FillRect leave a pixel alike) assert
+
+        ncomp { 0.55 } repeat 9 8 putpix        9 8 getpix
+        ncomp { 0.55 } repeat 9 8 0 0 fillrect  9 8 getpix
+        samepix (PutPix and FillRect leave its neighbour alike) assert
     } if
 
     % --- which pixels a marking method paints -----------------------
