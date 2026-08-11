@@ -109,11 +109,20 @@
  * grey 1.0 through the transfer function in force (PLRM 8.2) and so is
  * the page's to say rather than white by assumption. The base class
  * records it on the instance as it clears, and every device reads it
- * back through xpost_device_ground_channels() (xpost_dev_generic.h). It
- * is what a read answers wherever the device holds no pixel: outside the
- * page, over a row the device does not hold, and on a released raster.
- * A read is answered there rather than refused, because a mark aimed
- * there is dropped rather than refused.
+ * back through xpost_device_ground_scaled() (xpost_dev_generic.h), or
+ * through the xpost_device_ground_channels() face of it where the
+ * device's channels are bytes. The record is kept in the range a colour
+ * operand arrives in and each device folds it to the channel it stores,
+ * so that what a read answers is what that device's own PutPix would
+ * have written.
+ *
+ * It is what a read answers wherever the device holds no pixel to answer
+ * from: outside the page, over a row the device does not hold, on a
+ * released raster, and at every pixel of a device whose raster is a
+ * surface it cannot read back. A read is answered there rather than
+ * refused, because a mark aimed there is dropped rather than refused. A
+ * device reading back as the ground is a statement about its raster and
+ * not about the colour: a page cleared to a light grey reads light.
  *
  * Instance state: C-level device state lives in a block outside virtual
  * memory, so it is exempt from `restore` (raster memory is not part of
