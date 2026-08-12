@@ -87,6 +87,9 @@ typedef struct
 {
     int width, height;
     Xpost_Record *rec;
+    /* how many times a recorded image has been painted through this
+       device, which is what .recordplays answers */
+    unsigned int plays;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -841,6 +844,29 @@ static int _recordcost(Xpost_Context *ctx,
     return 0;
 }
 
+/* IMAGE  .recordplays  int
+   How many times this device has painted a recorded image.
+
+   An image is the one entry whose replay costs the picture rather than a
+   mark, so what a band replay of one costs is the count of bands the
+   image reaches -- and no page can say whether that is what was paid.
+   A row written twice carries what one write left, so an image played
+   again over rows it has already been played into leaves the page it
+   left the first time. The quantity is stated here for the same reason
+   .recordcost states the other one: what the mechanism is judged on is
+   not what the page shows. */
+static int _recordplays(Xpost_Context *ctx,
+                        Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)private.plays));
+    return 0;
+}
+
 /* Whether one mark leaves a run of rows the ground and nothing else: a
    rectangle at exactly the colour the page was cleared to, covering
    every row of the run and the whole width of the page.
@@ -999,10 +1025,20 @@ static int _replay_step(Xpost_Context *ctx,
                           (real)xpost_object_number(hi));
         if (ret)
             return ret;
+        private.plays++;
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+            return VMerror;
 
+        /* The walk resumes past the entry it played, as it does past a
+           mark it played. Resuming where it was looking from instead
+           would find this same entry again for every mark the rows asked
+           for had it step over, and paint the picture once for each of
+           them: the page would be the page, an image write leaving what
+           the write before it left, and the cost would follow the marks
+           the band does not want. */
         xpost_stack_push(ctx->lo, ctx->os, recdic);
         xpost_stack_push(ctx->lo, ctx->os, targetdic);
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(idx.int_.val + 1));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
         xpost_stack_push(ctx->lo, ctx->os, lo);
         xpost_stack_push(ctx->lo, ctx->os, hi);
         if (!xpost_stack_push(ctx->lo, ctx->es,
@@ -1283,6 +1319,7 @@ static int _create_cont(Xpost_Context *ctx,
 
     private.width = width;
     private.height = height;
+    private.plays = 0;
     private.rec = xpost_record_new(RECORD_NCOMP);
     if (!private.rec)
         return VMerror;
@@ -1521,6 +1558,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     _replay_step_opcode = op.mark_.padw;
     op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
                              dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordplays", (Xpost_Op_Func)_recordplays,
+                             1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordground", (Xpost_Op_Func)_recordground,
                              3, dicttype, numbertype, numbertype); INSTALL;
 
