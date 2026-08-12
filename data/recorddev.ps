@@ -190,6 +190,16 @@
         % completion carries into the default matrix is 1:1 here
         page 1 1 .privatedict /.completedevice get exec
         rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
+        % The colour the page was cleared to, carried onto the raster
+        % that paints it. That colour is what a device shows over a row
+        % it holds no pixel of, and the raster below holds no pixel of
+        % any row outside the band it is standing on, so this is the
+        % statement of what the page carries wherever the band loop
+        % paints nothing. A record takes it up as the page is cleared
+        % (/Ground above); the raster is a fresh one and has been told
+        % nothing.
+        rec /.ground known
+            { rec /.ground get aload pop page dup /Ground get exec } if
 
         banding {
             % what the page's emission keeps between bands: the file it
