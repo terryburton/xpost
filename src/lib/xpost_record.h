@@ -168,6 +168,25 @@ int xpost_record_get(const Xpost_Record *rec, size_t i,
                      const real **ops, int *nops);
 
 /**
+ * @brief The first mark from @p from on that reaches rows @p lo to @p hi.
+ *
+ * @param[in] rec the record
+ * @param[in] from the mark to start looking at
+ * @param[out] at where one was found
+ * @return 1 where there is one, 0 where no mark from there on reaches
+ *         those rows
+ *
+ * The walk a replay makes when it cannot be a loop. A device method may
+ * be a procedure and what runs a procedure is the interpreter, so such a
+ * replay returns between marks and is resumed rather than continued;
+ * what it keeps is how far it has got, and this is how it gets on. It
+ * answers by the rule xpost_record_replay plays by, so the two visit the
+ * same marks for the same rows.
+ */
+int xpost_record_next(const Xpost_Record *rec, size_t from, real lo, real hi,
+                      size_t *at);
+
+/**
  * @brief What a replay does with each mark it is given.
  *
  * Called once per mark that reaches the rows asked for, in the order

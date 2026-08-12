@@ -252,6 +252,42 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
     return 1;
 }
 
+/* Whether a mark reaches a run of rows. A mark meeting the range at all
+   is played whole: a shape has to be converted whole to be right about
+   any part of it, so the range says which marks are played and never
+   trims one. Stated once, because a replay reaches the marks two ways --
+   as the loop below, and as the step a replay that returns to its caller
+   between marks resumes with -- and the two picking different marks for
+   the same rows would paint the same page differently depending on which
+   asked. */
+static int _meets(const _Mark *m, real lo, real hi)
+{
+    return !(m->hi < lo || m->lo > hi);
+}
+
+int xpost_record_next(const Xpost_Record *rec, size_t from, real lo, real hi,
+                      size_t *at)
+{
+    const _Mark *marks;
+    size_t i, n;
+
+    /* a record short of a mark gives none of them back, on the same
+       terms as a replay of one */
+    if (!rec || !at || rec->short_of_a_mark)
+        return 0;
+    marks = _marks(rec);
+    n = _nmark(rec);
+    for (i = from; i < n; i++)
+    {
+        if (_meets(&marks[i], lo, hi))
+        {
+            *at = i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int xpost_record_replay(const Xpost_Record *rec, real lo, real hi,
                         Xpost_Record_Player player, void *data)
 {
@@ -274,10 +310,7 @@ int xpost_record_replay(const Xpost_Record *rec, real lo, real hi,
         const _Mark *m = &marks[i];
         int ret;
 
-        /* a mark reaching the range at all is played whole: a shape is
-           converted whole to be right about any part of it, so the
-           range says which marks are played and never trims one */
-        if (m->hi < lo || m->lo > hi)
+        if (!_meets(m, lo, hi))
             continue;
         ret = player(data, m->kind, vals + m->at,
                      m->nops ? vals + m->at + rec->ncomp : NULL,

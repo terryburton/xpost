@@ -210,6 +210,58 @@ int main(void)
         report_failure("a subpath separator is no vertex and reaches no row:"
                        " %d mark(s)", s.n);
 
+    /* The same run of rows, walked a mark at a time. A replay that plays
+       into a device returns to the interpreter between marks -- a method
+       may be a procedure -- so it cannot be the loop above and asks
+       instead which mark comes next. The two have to agree about every
+       range, or the same page would be painted differently depending on
+       which of them asked. The record here holds the pixel at row 10,
+       the rectangle over 20..30, the line over 40..50, the triangle over
+       60..80 and the two-subpath polygon over 100..120. */
+    {
+        size_t at;
+        real lo2, hi2;
+        int i, agree;
+
+        if (!xpost_record_next(rec, 0, -1000.0, 1000.0, &at) || at != 0)
+            report_failure("the first mark of a record is the one a walk of"
+                           " every row reaches first");
+        if (!xpost_record_next(rec, 1, 12.0, 18.0, &at))
+            /* nothing there: the walk answers so rather than running on */
+            (void)0;
+        else
+            report_failure("a walk over rows no mark reaches finds one at %d",
+                           (int)at);
+        if (!xpost_record_next(rec, 0, 45.0, 45.0, &at) || at != 2)
+            report_failure("a walk finds the line at the rows between its"
+                           " ends");
+        if (xpost_record_next(rec, 3, 45.0, 45.0, &at))
+            report_failure("a walk resumed past a mark does not find it"
+                           " again");
+
+        /* and they agree, range by range, over every row the record
+           reaches and a row either side of it */
+        agree = 1;
+        if (!xpost_record_extent(rec, &lo2, &hi2))
+            report_failure("the record reaches a row to walk");
+        for (i = (int)lo2 - 1; i <= (int)hi2 + 1; i++)
+        {
+            size_t j = 0, k = 0;
+
+            s = _play(rec, (real)i, (real)i);
+            while (xpost_record_next(rec, k, (real)i, (real)i, &at))
+            {
+                j++;
+                k = at + 1;
+            }
+            if ((int)j != s.n)
+                agree = 0;
+        }
+        if (!agree)
+            report_failure("a walk of a row finds the marks a replay of that"
+                           " row plays");
+    }
+
     /* a record refuses a mark whose operands do not fit its kind, so
        that a walk of what was written down stays inside it */
     grey[0] = 9.0; ops[0] = 1.0; ops[1] = 2.0;

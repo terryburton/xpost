@@ -284,7 +284,9 @@ static int _getpix(Xpost_Context *ctx,
 static int _replay_step(Xpost_Context *ctx,
                         Xpost_Object recdic,
                         Xpost_Object targetdic,
-                        Xpost_Object idx)
+                        Xpost_Object idx,
+                        Xpost_Object lo,
+                        Xpost_Object hi)
 {
     Xpost_Object privatestr;
     PrivateData private;
@@ -293,15 +295,24 @@ static int _replay_step(Xpost_Context *ctx,
     const real *ops;
     Xpost_Object method;
     Xpost_Object poly = null;
+    size_t at;
     int nops, i;
 
     if (!_private_get(ctx, recdic, &privatestr, &private))
         return undefined;
     if (!private.rec)
         return 0;
-    if (!xpost_record_get(private.rec, (size_t)idx.int_.val,
-                          &kind, &colour, &ops, &nops))
+    /* The rows asked for choose which marks are played, and the marks
+       between are stepped over rather than played and dropped: what
+       makes a page affordable to paint a run of rows at a time is that
+       playing it into a set of runs costs the marks each run meets
+       rather than every mark once per run. */
+    if (!xpost_record_next(private.rec, (size_t)idx.int_.val,
+                           (real)xpost_object_number(lo),
+                           (real)xpost_object_number(hi), &at))
         return 0;   /* played out */
+    if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
+        return 0;
 
     method = xpost_dict_get(ctx, targetdic, _slot(kind));
     if (xpost_object_get_type(method) == invalidtype ||
@@ -372,7 +383,9 @@ static int _replay_step(Xpost_Context *ctx,
        them */
     xpost_stack_push(ctx->lo, ctx->os, recdic);
     xpost_stack_push(ctx->lo, ctx->os, targetdic);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(idx.int_.val + 1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
+    xpost_stack_push(ctx->lo, ctx->os, lo);
+    xpost_stack_push(ctx->lo, ctx->os, hi);
 
     for (i = 0; i < RECORD_NCOMP; i++)
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(colour[i]));
@@ -401,23 +414,20 @@ static int _replay_step(Xpost_Context *ctx,
     return 0;
 }
 
-/* recdev pagedev  .replaypage  -
-   Play every mark a record holds into a device that paints, in the
-   order they were made, which is the order they were painted in and so
-   the order they must be painted in again.
+/* What a replay refuses whatever rows it is asked for, settled once
+   rather than mark by mark.
 
-   Two things about the pair are settled here rather than mark by mark.
-   A mark carries one colour value per component of the space it was
-   made in, and it is played by handing those values to a method whose
+   A mark carries one colour value per component of the space it was made
+   in, and it is played by handing those values to a method whose
    operands the receiving device's own space decides -- so a record made
    in one space and played into a device declaring another puts each
    value in the place of a different one, and paints a colour nobody
-   named. And a record played into the device holding it writes down
-   what it plays: the run it is walking grows by a mark for every mark
-   taken from it and there is no end to reach. */
-static int _replaypage(Xpost_Context *ctx,
-                       Xpost_Object recdic,
-                       Xpost_Object targetdic)
+   named. And a record played into the device holding it writes down what
+   it plays: the run it is walking grows by a mark for every mark taken
+   from it and there is no end to reach. */
+static int _replay_refuse(Xpost_Context *ctx,
+                          Xpost_Object recdic,
+                          Xpost_Object targetdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
@@ -448,14 +458,74 @@ static int _replaypage(Xpost_Context *ctx,
                       " is not the one its marks were made in", rangecheck);
         return rangecheck;
     }
+    return 0;
+}
 
+/* Start the walk: the marks that reach rows lo to hi, in the order they
+   were made, which is the order they were painted in and so the order
+   they must be painted in again. */
+static int _replay_walk(Xpost_Context *ctx,
+                        Xpost_Object recdic,
+                        Xpost_Object targetdic,
+                        Xpost_Object lo,
+                        Xpost_Object hi)
+{
     xpost_stack_push(ctx->lo, ctx->os, recdic);
     xpost_stack_push(ctx->lo, ctx->os, targetdic);
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+    xpost_stack_push(ctx->lo, ctx->os, lo);
+    xpost_stack_push(ctx->lo, ctx->os, hi);
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_operator_cons_opcode(_replay_step_opcode)))
         return execstackoverflow;
     return 0;
+}
+
+/* recdev pagedev lo hi  .replaypage  -
+   Play the marks that reach rows lo to hi into a device that paints.
+
+   The rows are a run of the page's own, and what they are for is the
+   caller's: successive runs paint a page in a raster the size of a run,
+   and the rows a window shows paint what someone is looking at. A mark
+   meeting the run at all is played whole and the device it is played
+   into keeps what it holds of it, so a shape crossing the far edge of a
+   run is played into the run beyond as well and each keeps its part. */
+static int _replaypage_rows(Xpost_Context *ctx,
+                            Xpost_Object recdic,
+                            Xpost_Object targetdic,
+                            Xpost_Object lo,
+                            Xpost_Object hi)
+{
+    int ret;
+
+    ret = _replay_refuse(ctx, recdic, targetdic);
+    if (ret)
+        return ret;
+    return _replay_walk(ctx, recdic, targetdic, lo, hi);
+}
+
+/* recdev pagedev  .replaypage  -
+   Play every mark a record holds, which is the rows its marks reach.
+   A record holding no mark paints nothing and reaches no row, so there
+   is no run to name and nothing to walk. */
+static int _replaypage(Xpost_Context *ctx,
+                       Xpost_Object recdic,
+                       Xpost_Object targetdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    real lo, hi;
+    int ret;
+
+    ret = _replay_refuse(ctx, recdic, targetdic);
+    if (ret)
+        return ret;
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec || !xpost_record_extent(private.rec, &lo, &hi))
+        return 0;
+    return _replay_walk(ctx, recdic, targetdic,
+                        xpost_real_cons(lo), xpost_real_cons(hi));
 }
 
 /* create an instance of the device, using the class .copydict procedure */
@@ -721,9 +791,14 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
        puts an operator there is the relocation pass that runs once,
        during start-up, before any device has been made. */
     op = xpost_operator_cons(ctx, ".replaypage", (Xpost_Op_Func)_replaypage, 2,
-                             dicttype, dicttype); INSTALL;
-    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 3,
-                             dicttype, dicttype, integertype);
+                             dicttype, dicttype);
+    op = xpost_operator_cons(ctx, ".replaypage",
+                             (Xpost_Op_Func)_replaypage_rows, 4,
+                             dicttype, dicttype, numbertype, numbertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 5,
+                             dicttype, dicttype, integertype,
+                             numbertype, numbertype);
     _replay_step_opcode = op.mark_.padw;
 
     return 0;

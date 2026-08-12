@@ -1,0 +1,225 @@
+% One page, painted whole and painted again a run of rows at a time.
+% run-region-replay-test.sh runs this file once through a device that
+% paints, for the page rendered whole, and once through the device that
+% writes down what it was asked to paint, which plays what it wrote into
+% one raster per run of rows and puts each out. The claim is that the
+% page assembled from those runs is the page painted whole, byte for
+% byte, which is what a band loop rests on: the loop is nothing but
+% "replay a region, then the next, and expect the page".
+%
+% The page reaches all five kinds of mark a record holds -- the clear as
+% a rectangle, two fills, three strokes and three lines of text -- and it
+% is laid out around the boundaries between the runs rather than
+% anywhere. Every boundary has a polygon and a line across it and glyphs
+% cut through by it, and the clear crosses all of them. A page whose
+% marks each fell inside one run would be a page on which no run had an
+% edge to be wrong about, and every arrangement of edges would pass.
+%
+% The runs of rows are stated once, here, and reported to the wrapper
+% with the file each was put out to, so that what the wrapper assembles
+% is what this played rather than what it assumed. The second set leaves
+% a run of the page out: the same page through the same machinery with
+% rows 396 to 493 belonging to no run, which the wrapper requires to
+% differ from the whole page over those rows and to match it everywhere
+% else. Without it, a comparison that covered the page would say nothing
+% about whether covering it mattered.
+%
+% What the record gave each run is reported too, by playing the same run
+% into a device that counts instead of painting. The pixels alone cannot
+% tell a replay that honours its rows from one that plays every mark
+% every time, because the raster a run is played into holds only its own
+% rows and drops the rest either way. The counts can: a run is required
+% to receive marks, to receive fewer than the whole record holds, and --
+% across the runs -- to receive a rectangle, a line and a polygon more
+% often than the record holds them, which is what a mark crossing a
+% boundary looks like from here.
+
+% A page of a size the runs below divide evenly, and small enough that
+% painting it nine times -- whole, and once per run of two sets -- is
+% cheap. Nothing here depends on the size beyond the coordinates the
+% marks are placed at; the wrapper reads the page it was given out of
+% what this reports and what the pages weigh.
+<< /PageSize [306 396] >> setpagedevice
+
+/PW DEVICE /width get def
+/PH DEVICE /height get def
+
+% Device rows run down from the head of the page and default user space
+% runs up from its foot, so the device row r is the user y PH - r. The
+% boundaries between the four runs below are the device rows 99, 198 and
+% 297, which are the user y 297, 198 and 99.
+%
+% Each run is the rows it holds and the file its page goes to.
+/bands [
+    [   0 99 (rr-cover-0.ppm) ]
+    [  99 99 (rr-cover-1.ppm) ]
+    [ 198 99 (rr-cover-2.ppm) ]
+    [ 297 99 (rr-cover-3.ppm) ]
+] def
+
+% The same page in runs that do not cover it: rows 198 to 246 are in no
+% run at all.
+/gapbands [
+    [   0  99 (rr-gap-0.ppm) ]
+    [  99  99 (rr-gap-1.ppm) ]
+    [ 247 149 (rr-gap-2.ppm) ]
+] def
+
+/paint {
+    % A fill with a hole, across the first boundary. Its outer and inner
+    % subpaths both cross device row 99, so the polygon written down
+    % reaches both runs and each has an edge through the middle of it.
+    gsave
+        0.2 setgray
+        newpath
+        50 270 moveto 130 270 lineto 130 330 lineto 50 330 lineto closepath
+        70 285 moveto 70 315 lineto 110 315 lineto 110 285 lineto closepath
+        eofill
+    grestore
+
+    % A fill under the other winding rule, across the second boundary
+    % (device row 198, user y 198).
+    gsave
+        0.6 0 0 setrgbcolor
+        newpath
+        150 178 moveto 230 178 lineto 230 218 lineto 150 218 lineto closepath
+        170 193 moveto 170 203 lineto 210 203 lineto 210 193 lineto closepath
+        fill
+    grestore
+
+    % Hairline strokes across each boundary in turn. A stroke of no width
+    % is plotted segment by segment, and a segment is written down with
+    % the rows between its ends, so one crossing a boundary is played
+    % into the run either side of it.
+    gsave
+        0 setgray
+        0 setlinewidth
+        newpath 40 320 moveto 150 280 lineto stroke
+        newpath 175 215 moveto 280 180 lineto stroke
+        newpath 40 115 moveto 160 85 lineto 250 125 lineto stroke
+    grestore
+
+    % Text, for the glyph pixels: a pixel is written down at the one row
+    % it lands on, so a glyph never crosses a boundary the way a shape
+    % does -- it is cut by one, and the halves belong to different runs.
+    % The first line sits across device row 99; the other two put glyphs
+    % well inside the third and fourth runs, so that every run receives a
+    % mark that is not the page clear.
+    gsave
+        0 setgray
+        /Times-Roman findfont 18 scalefont setfont
+        40 292 moveto (Region) show
+        40 130 moveto (Replay) show
+        40 50 moveto (Bands) show
+    grestore
+} bind def
+
+paint
+
+% putpix blendpix drawline fillrect fillpoly, and the subpath separators
+% the polygons carried
+/marks [ 0 0 0 0 0 0 ] def
+/bump { marks exch 2 copy get 1 add put } bind def
+/clearmarks { 0 1 5 { marks exch 0 put } for } bind def
+
+% A device that takes every mark and counts it: the operands are the
+% device's colour components, then the call's own, then the instance.
+/counter <<
+    /nativecolorspace /DeviceRGB
+    /PutPix   { 6 { pop } repeat 0 bump } bind
+    /BlendPix { 7 { pop } repeat 1 bump } bind
+    /DrawLine { 8 { pop } repeat 2 bump } bind
+    /FillRect { 8 { pop } repeat 3 bump } bind
+    /FillPoly { % r g b poly IMAGE  .  -
+        pop
+        { null eq { 5 bump } if } forall
+        pop pop pop
+        4 bump
+    } bind
+>> def
+
+/replaypage 1183615869 internaldict /.replaypage get def
+
+% label top rows  countrows  -
+% What the record gives a run of rows, counted by playing that run into
+% the device above. A run is named here by the rows it was asked for, so
+% that a line here and a line of the wrapper's arithmetic are about the
+% same rows.
+/countrows { % label top rows  .  -
+    /ct.rows exch def
+    /ct.top exch def
+    /ct.label exch def
+    clearmarks
+    DEVICE counter ct.top ct.top ct.rows add 1 sub replaypage
+    (COUNTS ) print ct.label print ( ) print
+    marks { 20 string cvs print ( ) print } forall
+    (\n) print
+} bind def
+
+% top rows  mkband  dev
+% A raster holding one run of the page's rows. The run is left where a
+% page device leaves it for the device it is about to make, and Create
+% takes it from there.
+/mkband { % top rows  .  dev
+    /bd.rows exch def
+    /bd.top exch def
+    graphicsdict /.rasterband [ bd.top bd.rows ] put
+    /bd.dev PW PH .privatedict /newPPMIMAGEdevice get exec def
+    bd.dev 1 1 .privatedict /.completedevice get exec
+    % What a row this device does not hold shows. erasepage settles it on
+    % a device the page device made, and this one is made by hand, so it
+    % is settled by hand -- to a colour nothing on the page paints, so
+    % that a row put out in it is a row this device was not holding and
+    % says so.
+    1 0 1 bd.dev dup /Ground get exec
+    bd.dev
+} bind def
+
+% set top rows file  playband  -
+% Play the marks that reach one run of rows into a raster holding that
+% run, and put its page out. One device per run, made and destroyed
+% around it, which is what a band loop does.
+/playband { % set top rows file  .  -
+    /pb.file exch def
+    /pb.rows exch def
+    /pb.top exch def
+    /pb.set exch def
+    /pb.dev pb.top pb.rows mkband def
+    pb.dev /.outputfile pb.file put
+    DEVICE pb.dev pb.top pb.top pb.rows add 1 sub replaypage
+    pb.dev dup /Emit get exec
+    pb.dev dup /Destroy get exec
+    (BAND ) print pb.set print ( ) print
+    pb.top 20 string cvs print ( ) print
+    pb.rows 20 string cvs print ( ) print
+    pb.file print (\n) print
+} bind def
+
+% set ranges  playset  -
+/playset { % set ranges  .  -
+    /ps.ranges exch def
+    /ps.set exch def
+    ps.ranges {
+        /ps.range exch def
+        ps.set ps.range aload pop playband
+    } forall
+} bind def
+
+% A device that paints carries no record to ask about and this is
+% skipped; the wrapper holds the two runs to answering differently here
+% and identically on the page.
+DEVICE /.playpage known {
+    (PAGE ) print PW 20 string cvs print ( ) print PH 20 string cvs print
+    (\n) print
+
+    (whole) 0 PH countrows
+    0 1 bands length 1 sub {
+        /bi exch def
+        bi 20 string cvs bands bi get 0 get bands bi get 1 get countrows
+    } for
+
+    (cover) bands playset
+    (gap) gapbands playset
+} if
+
+showpage

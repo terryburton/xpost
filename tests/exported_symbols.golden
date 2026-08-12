@@ -364,6 +364,7 @@ xpost_record_free
 xpost_record_get
 xpost_record_mark
 xpost_record_new
+xpost_record_next
 xpost_record_replay
 xpost_renameat_beneath
 xpost_run
