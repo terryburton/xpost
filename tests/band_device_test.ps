@@ -1,0 +1,206 @@
+% One page, put out through every device a record can be played into,
+% in bands and whole and by a device that never had a record at all.
+%
+% run-band-device-test.sh runs this file once per selection: -d ppm and
+% -d record:ppm, -d pgm and -d record:pgm, -d tiff and -d record:tiff.
+% The device that records is chosen with the device that paints its page
+% beside it, so what this covers is that choice: three devices and two
+% colour spaces, where a record was wired to one class and every other
+% device's banding was driven by hand.
+%
+% The claim is the one doc/NEWINTERNALS makes for banding anywhere, asked
+% of each of them:
+%
+%   The bytes. The page assembled from bands is the page the same record
+%   puts out whole, and both are the page a device that paints as it goes
+%   paints, byte for byte, at two page heights and three band heights
+%   including a band of one row.
+%
+%   The marks each band was given. A mark played into a run of rows it
+%   does not reach paints nothing, so a replay handed the whole page for
+%   every band puts out exactly the page a replay handed each band's own
+%   rows puts out -- and no comparison of pages can tell them apart. What
+%   tells them apart is how many marks each band was played, which the
+%   record counts (.recordplayed): the bands must differ from one
+%   another, none of them may meet every mark the page has, and their
+%   total must be a fraction of the marks times the bands.
+%
+% The two are counted at the same moment, in the class's row writer,
+% which a device puts a run of finished rows through once per band.
+
+/W 200 def
+/heights [ 120 300 ] def
+% Rows a band holds. One row a band is what puts a boundary between
+% bands on every row of the page, so every mark whose reach ends part
+% way down a row is asked about; 64 divides neither height.
+/bandrows [ 1 7 64 ] def
+
+/ID 1183615869 internaldict def
+/num { 20 string cvs } bind def
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+
+% Which run this is. A record has a page to play; a device that paints
+% holds its page whole, which is the answer the bands are held against.
+/banding DEVICE /.playpage known def
+/tag banding { (rec) }{ (dir) } ifelse def
+
+% The class a page ends up in: the one the record plays into, or this
+% device itself. What a row of it costs is asked of it, because that is
+% what the band loop divides its budget by, and a band height stated in
+% rows here has to be the height that loop arrives at.
+/cls banding { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
+/rowbytes 2 dict begin /width W def cls /.rowcost get exec end exch pop def
+
+% What the class's row writer was handed, and what the record had been
+% played by the time it was handed it. Wrapped here, before any raster
+% is made from the class, so every device the run makes carries it.
+/wbn 0 def          % runs of rows handed over
+/wbrows 0 def       % rows in them
+/wbsum 0 def        % marks played
+/wbmax 0 def
+/wbmin 0 def
+/wbprev 0 def
+/wbreset { /wbn 0 store /wbrows 0 store /wbsum 0 store
+           /wbmax 0 store /wbmin 0 store /wbprev 0 store } bind def
+/wbinner cls /.writeband get def
+banding {
+    cls /.writeband { % rows file  .  -
+        /wbn wbn 1 add store
+        1 index length /wbrows exch wbrows add store
+        recdev ID /.recordplayed get exec
+        dup wbprev sub                          % played delta
+        exch /wbprev exch store
+        dup wbsum add /wbsum exch store
+        dup wbmax gt { dup /wbmax exch store } if
+        wbn 1 eq { dup /wbmin exch store } if
+        dup wbmin lt { /wbmin exch store }{ pop } ifelse
+        wbinner
+    } put
+} if
+
+% h  paint  -
+% A page reaching all five kinds of mark, text and a sampled image.
+% Some of it is confined to a third of the page and some crosses the
+% whole of it, so that what a band meets depends on which band it is:
+% a page every mark reached everywhere would meet every band and say
+% nothing about which rows a band was given.
+/paint { % h  .  -
+    /ph exch store
+
+    % a fill with a hole, over the middle third
+    gsave
+        0.2 setgray
+        newpath
+        20 ph 0.38 mul moveto 180 ph 0.38 mul lineto
+        180 ph 0.60 mul lineto 20 ph 0.60 mul lineto closepath
+        60 ph 0.44 mul moveto 60 ph 0.54 mul lineto
+        140 ph 0.54 mul lineto 140 ph 0.44 mul lineto closepath
+        eofill
+    grestore
+
+    % a fill under the other winding rule, low on the page
+    gsave
+        0.6 0 0 setrgbcolor
+        newpath
+        30 ph 0.06 mul moveto 170 ph 0.06 mul lineto
+        170 ph 0.18 mul lineto 30 ph 0.18 mul lineto closepath fill
+    grestore
+
+    % one stroke down the whole length of the page, so no band is left
+    % showing nothing but the ground, and two short ones that are not
+    gsave
+        0 setgray
+        0 setlinewidth
+        newpath 8 2 moveto 192 ph 2 sub lineto stroke
+        1 setlinewidth
+        0 0 0.8 setrgbcolor
+        newpath 20 ph 0.24 mul moveto 180 ph 0.30 mul lineto stroke
+        newpath 20 ph 0.90 mul moveto 180 ph 0.84 mul lineto stroke
+    grestore
+
+    % text, for the glyph pixels a boundary between bands cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 20 scalefont setfont
+        16 ph 0.68 mul moveto (Bands) show
+    grestore
+
+    % a sampled image, which a record holds as one entry and plays for
+    % the rows a band covers rather than as a mark per sample
+    gsave
+        /DeviceGray setcolorspace
+        24 ph 0.72 mul translate
+        150 ph 0.12 mul scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+/wholename { % h  .  name
+    (whole-) exch num join (-) join tag join (.out) join
+} bind def
+/bandname { % h b  .  name
+    /bn.b exch store
+    (band-) exch num join (-) join bn.b num join (-) join tag join
+    (.out) join
+} bind def
+
+% h rows file  transmit  -
+% Paint one page and put it out. rows is the band the record is to hold,
+% or 0 for the page held whole; a device with no record to play takes
+% the page whole whatever is asked.
+/transmit { % h rows file  .  -
+    /tr.file exch store
+    /tr.rows exch store
+    /tr.h exch store
+    << /PageSize [W tr.h] /OutputFile tr.file >> setpagedevice
+    % the device this page goes to, named while it is the current one:
+    % the row writer wrapped above reads the record through it, and by
+    % then the page machinery has moved on
+    /recdev DEVICE store
+    banding tr.rows 0 gt and
+        { DEVICE /.bandbytes tr.rows rowbytes mul put }
+        { DEVICE /.bandbytes 1000000000 put } ifelse
+    wbreset
+    tr.h paint
+    showpage
+} bind def
+
+(\nNCOMP ) print cls /.ncomp get num print (\n) print
+(\nROWBYTES ) print rowbytes num print (\n) print
+(\nPLAY ) print banding { (yes) }{ (no) } ifelse print (\n) print
+
+heights {
+    /hh exch def
+    % The page whole, and with it how many marks the page comes to: a
+    % replay into one band meets every mark there is, so what it played
+    % is the count each band's own is read against. It is this page's
+    % and not the job's -- a record is cleared by the rectangle that
+    % clears the page -- and the device is still the one that played it.
+    hh 0 hh wholename transmit
+    (\nWHOLE ) print hh num print ( ) print hh wholename print ( ) print
+    banding { DEVICE ID /.recordplayed get exec num }{ (0) } ifelse
+    print (\n) print
+    banding {
+        bandrows {
+            /bb exch def
+            hh bb hh bb bandname transmit
+            (\nBAND ) print hh num print ( ) print bb num print ( ) print
+            hh bb bandname print ( ) print
+            wbn num print ( ) print wbrows num print ( ) print
+            wbsum num print ( ) print wbmax num print ( ) print
+            wbmin num print (\n) print
+        } forall
+    } if
+} forall
+
+quit

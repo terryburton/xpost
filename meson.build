@@ -3397,6 +3397,24 @@ test('page-lifetime',
   suite: cost_fast,
   timeout: 120)
 
+# ... and all of it reached from a device selection rather than from a
+# test driving the machinery by hand. A record is played into the device
+# the run named beside it (-d record:pgm), so this renders one page
+# through every device a record can be played into -- in bands, whole,
+# and by that device with no record at all -- and requires the three to
+# be the same bytes. Two colour spaces, because a mark carries one value
+# per component of the space it was made in and a record recording in
+# the wrong one paints a colour nobody named. And the marks each band
+# was played, because a replay handed the whole page for every band
+# paints this same page: the pixels cannot see the difference between
+# the bound and no bound at all, and the count can.
+test('band-device',
+  find_program('tests/run-band-device-test.sh'),
+  args: [ xpost_exe, files('tests/band_device_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.
