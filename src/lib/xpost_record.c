@@ -40,6 +40,7 @@ typedef struct
 struct _Xpost_Record
 {
     int ncomp;
+    int short_of_a_mark;        /* a mark was given and could not be held */
     Xpost_String_Buffer mark;   /* a run of _Mark */
     Xpost_String_Buffer val;    /* colour and operands, run together */
 };
@@ -156,6 +157,11 @@ int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
 
     if (!rec || !colour || (nops > 0 && !ops))
         return 0;
+    /* a record already short of a mark describes a page it cannot
+       reproduce, and adding to it would only make the gap harder to
+       see */
+    if (rec->short_of_a_mark)
+        return 0;
     fixed = _fixed_nops(kind);
     if (fixed >= 0)
     {
@@ -181,19 +187,25 @@ int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
     _extent(kind, ops, nops, &m2.lo, &m2.hi);
 
     if (xpost_strbuf_append(&rec->val, colour,
-                            (size_t)rec->ncomp * sizeof *colour))
+                            (size_t)rec->ncomp * sizeof *colour) ||
+        (nops > 0 &&
+         xpost_strbuf_append(&rec->val, ops, (size_t)nops * sizeof *ops)) ||
+        xpost_strbuf_append(&rec->mark, &m2, sizeof m2))
+    {
+        rec->short_of_a_mark = 1;
         return 0;
-    if (nops > 0 &&
-        xpost_strbuf_append(&rec->val, ops, (size_t)nops * sizeof *ops))
-        return 0;
-    if (xpost_strbuf_append(&rec->mark, &m2, sizeof m2))
-        return 0;
+    }
     return 1;
 }
 
 size_t xpost_record_count(const Xpost_Record *rec)
 {
     return rec ? _nmark(rec) : 0;
+}
+
+int xpost_record_failed(const Xpost_Record *rec)
+{
+    return rec ? rec->short_of_a_mark : 0;
 }
 
 int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
@@ -224,6 +236,11 @@ int xpost_record_replay(const Xpost_Record *rec, real lo, real hi,
 
     if (!rec || !player)
         return 0;
+    /* what is played back has to be the whole of what was recorded: a
+       record missing a mark would paint a page missing one, and a page
+       missing a mark looks like a page */
+    if (rec->short_of_a_mark)
+        return VMerror;
     marks = _marks(rec);
     vals = _vals(rec);
     n = _nmark(rec);

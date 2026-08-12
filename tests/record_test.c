@@ -195,6 +195,15 @@ int main(void)
     if (xpost_record_count(rec) != 4)
         report_failure("a refused mark is not written down");
 
+    /* A record that could not hold a mark describes a page it cannot
+       reproduce. Nothing here can exhaust memory to order, so what is
+       held is the rule that follows from it: a record reporting itself
+       short refuses to be played, so a caller cannot paint a page that
+       is quietly missing something. */
+    if (xpost_record_failed(rec))
+        report_failure("a record given only marks it could hold reports"
+                       " itself whole");
+
     xpost_record_free(rec);
     xpost_record_free(NULL);   /* nothing is not something to give up */
 

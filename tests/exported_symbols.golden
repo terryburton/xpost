@@ -358,6 +358,7 @@ xpost_real_cons
 xpost_realpath
 xpost_record_count
 xpost_record_extent
+xpost_record_failed
 xpost_record_free
 xpost_record_mark
 xpost_record_new

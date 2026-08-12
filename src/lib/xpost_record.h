@@ -89,6 +89,13 @@ void xpost_record_free(Xpost_Record *rec);
  * @param[in] nops how many, which the kind settles except for a polygon
  * @return 1, or 0 where there is no memory to hold it
  *
+ * A record that could not hold a mark is short of one, and a page
+ * played back from it would be missing what it could not hold. So the
+ * failure sticks: the record remembers it, every later mark is refused
+ * as well, and every replay refuses. A caller that ignores this return
+ * therefore cannot go on to emit a page that is quietly wrong -- it
+ * gets nothing rather than something short.
+ *
  * The values are kept in the type a coordinate arrives in rather than
  * a wider one: a record exists to be smaller than the page it draws,
  * and widening every value would halve how much page a record buys.
@@ -105,6 +112,18 @@ int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
  * @brief How many marks a record holds.
  */
 size_t xpost_record_count(const Xpost_Record *rec);
+
+/**
+ * @brief Whether a mark was ever refused for want of memory.
+ *
+ * @return 1 where the record is short of a mark it was given, 0 where
+ *         it holds everything it was given
+ *
+ * A record answering 1 describes a page it cannot reproduce, and every
+ * replay of it refuses. The answer is asked for by whoever is about to
+ * emit, so that a page is refused where it cannot be painted whole.
+ */
+int xpost_record_failed(const Xpost_Record *rec);
 
 /**
  * @brief The rows a record's marks reach, or zero where it holds none.
@@ -131,7 +150,9 @@ typedef int (*Xpost_Record_Player)(void *data, Xpost_Record_Kind kind,
 /**
  * @brief Play back the marks that reach rows @p lo to @p hi inclusive.
  *
- * @return 0, or what the player returned when it stopped
+ * @return 0, what the player returned when it stopped, or VMerror
+ *         where the record is short of a mark it was given and so
+ *         describes a page it cannot reproduce
  *
  * A mark that reaches the range at all is played whole. A shape has to
  * be converted whole to be right about any part of it, so the range
