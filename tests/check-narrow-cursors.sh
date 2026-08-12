@@ -476,7 +476,7 @@ awk -F: '
 while IFS="$(printf '\t')" read -r df dl who; do
     [ -n "${who:-}" ] || continue
     # a word-typed declaration of that name anywhere in the same file
-    if guard_c_source "$df" | grep -qE ":[[:space:]]*(register[[:space:]]+)?word[[:space:]]+[^;]*\<$who\>[ ,;]"; then
+    if guard_c_source "$df" | grep -qE ":[[:space:]]*(register[[:space:]]+)?word[[:space:]]+[^;]*(^|[^A-Za-z0-9_])$who[ ,;]"; then
         echo "FAILURES: ${df#$tree/}:$dl holds the record table's length in '$who',"
         echo "      which is declared a word. The table is 2*sz+1 records and"
         echo "      the size it is derived from fills the field on its own."

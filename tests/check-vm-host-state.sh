@@ -318,6 +318,21 @@ fi
 
 awk -F'\t' -v singletons="$work/singletons" '
 FILENAME == singletons { shared[$1] = $2; next }
+# The storage and type qualifiers a declaration may carry, taken off
+# whatever else it says. Word boundaries are not written here because
+# not every awk has them: the name is bounded by the characters either
+# side of it instead, and the pass is repeated because two qualifiers
+# in a row share the character between them and one pass takes only the
+# first of the pair.
+function strip_qualifiers(t,   was) {
+    t = " " t " "
+    do {
+        was = t
+        gsub(/[^A-Za-z0-9_](const|static|volatile|register|extern)[^A-Za-z0-9_]/, " ", t)
+    } while (t != was)
+    return t
+}
+
 function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
 function declared_type(id,   k) {
     k = base "|" id
@@ -370,7 +385,7 @@ function harvest(code,   c, d, t, id) {
         sub(/^.*[ \t*]/, "", id)
         t = d
         sub(/[ \t*]*[A-Za-z_][A-Za-z0-9_]*[ \t]*(\[[^]]*\])?[ \t]*[;,=)].*$/, "", t)
-        gsub(/\<(const|static|volatile|register|extern)\>/, "", t)
+        t = strip_qualifiers(t)
         t = trim(t)
         if (id != "" && t != "" && !keyword(t)) {
             decl[base "|" id] = t
@@ -414,7 +429,7 @@ function derive(code,   t, id) {
     if (match(code, /\([ \t]*(const[ \t]+)?(struct[ \t]+|union[ \t]+)?(unsigned[ \t]+|signed[ \t]+)?[A-Za-z_][A-Za-z0-9_]*([ \t]+(int|char|long|short|double))?[ \t]*\*+[ \t]*\)[ \t]*xpost_(vm|ent)_ptr/)) {
         t = substr(code, RSTART, RLENGTH)
         sub(/^\([ \t]*/, "", t); sub(/[ \t]*\*+[ \t]*\).*$/, "", t)
-        gsub(/\<const\>/, "", t)
+        t = strip_qualifiers(t)
         print "derived\t" base ":" ln "\t" trim(t); return
     }
     if (code ~ /memset[ \t]*\([ \t]*xpost_(vm|ent)_ptr/) {
@@ -435,7 +450,7 @@ function derive(code,   t, id) {
     }
     if (match(code, /^(const[ \t]+)?(struct[ \t]+|union[ \t]+)?(unsigned[ \t]+|signed[ \t]+)?[A-Za-z_][A-Za-z0-9_]*([ \t]+(int|char|long|short|double))?[ \t]*\*+[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*xpost_(vm|ent)_ptr/)) {
         t = substr(code, RSTART, RLENGTH); sub(/\*.*$/, "", t)
-        gsub(/\<const\>/, "", t)
+        t = strip_qualifiers(t)
         print "derived\t" base ":" ln "\t" trim(t); return
     }
     if (match(code, /(^|[^A-Za-z0-9_])\**[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*xpost_(vm|ent)_ptr/)) {
