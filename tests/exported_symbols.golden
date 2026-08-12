@@ -360,6 +360,7 @@ xpost_quit
 xpost_real_cons
 xpost_realpath
 xpost_record_bytes
+xpost_record_clear
 xpost_record_count
 xpost_record_extent
 xpost_record_failed

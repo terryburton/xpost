@@ -474,6 +474,29 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
     return first < last;
 }
 
+void xpost_record_clear(Xpost_Record *rec)
+{
+    size_t i, n;
+
+    if (!rec)
+        return;
+    /* a record short of a mark answers every replay with the refusal,
+       and the refusal is the one thing here that is not a mark of the
+       page in hand */
+    if (rec->short_of_a_mark)
+        return;
+    n = _nimg(rec);
+    for (i = 0; i < n; i++)
+        _image_free(&_imgs(rec)[i]);
+    /* the runs keep what they took: a record is filled again by the page
+       after, and what it costs is then the largest page rather than the
+       sum of them */
+    rec->mark.len = 0;
+    rec->val.len = 0;
+    rec->img.len = 0;
+    rec->imgbytes = 0;
+}
+
 size_t xpost_record_count(const Xpost_Record *rec)
 {
     return rec ? _nmark(rec) : 0;

@@ -145,6 +145,23 @@ static int _private_get(Xpost_Context *ctx, Xpost_Object devdic,
                                  private, sizeof *private);
 }
 
+/* Whether a rectangle covers every pixel of the page.
+ *
+ * The pixels it covers are taken from its operands by the normaliser the
+ * fill itself takes them from, so what counts as covering here and what
+ * the fill paints there are one statement rather than two that agree on
+ * the cases anyone tried.
+ */
+static int _covers_page(const real *ops, int width, int height)
+{
+    int x0, y0, x1, y1;
+
+    xpost_dev_rect_normalize((double)ops[0], (double)ops[1],
+                             (double)ops[2], (double)ops[3],
+                             &x0, &y0, &x1, &y1);
+    return x0 <= 0 && y0 <= 0 && x1 >= width - 1 && y1 >= height - 1;
+}
+
 /* Write one mark down. The colour is the three components the device's
    space takes, in the range they arrived in: folding one to a channel
    is the painting device's business and is done when the mark is
@@ -168,6 +185,24 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
     /* a released record takes no marks, as a released raster takes none */
     if (!private.rec)
         return 0;
+
+    /* A rectangle covering the page paints over every mark before it, so
+       none of them is on the page any longer and the record gives them
+       up: what it holds from here is the page this rectangle begins.
+       This is where a page boundary reaches a recorder. Clearing the
+       page arrives as a rectangle covering it -- the class declares no
+       Erase, which is the rule that keeps a record complete -- and a
+       page is cleared as it starts, so a record's lifetime is a page's
+       and not a job's (doc/NEWINTERNALS).
+
+       Reading the boundary off the marks rather than off the emission is
+       what keeps a page put out twice right: copypage transmits a page
+       without erasing it (PLRM 8.2), and the page after it is the same
+       page with more on it, so the marks before it are still the page's
+       and are still held. */
+    if (kind == XPOST_RECORD_FILLRECT && nops == 4
+        && _covers_page(ops, private.width, private.height))
+        xpost_record_clear(private.rec);
 
     if (!xpost_record_mark(private.rec, kind, colour, ops, nops))
         return VMerror;

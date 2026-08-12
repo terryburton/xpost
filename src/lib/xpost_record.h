@@ -249,6 +249,32 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
                             real lo, real hi, int *y0, int *y1);
 
 /**
+ * @brief Give up the marks a record holds, keeping the record.
+ *
+ * What a record describes is a page, and a page ends. A record given up
+ * at that boundary costs the drawing on one page; one that is not costs
+ * the drawing on every page a job has drawn so far, and a replay of it
+ * plays them all -- once per band -- to paint the last of them.
+ *
+ * When a page ends is the caller's to say, and this says nothing about
+ * it. The device holding a record ends a page where the page it
+ * describes is painted over whole, which is the one moment at which
+ * every mark before it stops being part of the page.
+ *
+ * The buffers the marks were held in are kept and filled again, so the
+ * page after does not buy its storage a second time. What that leaves
+ * is a record costing the largest page a job has drawn rather than the
+ * page in hand, which is the quantity a caller comparing a record
+ * against a raster wants.
+ *
+ * A record short of a mark it was given is not emptied. All it has to
+ * say about the page it could not hold is that it could not hold it,
+ * and every replay of it refuses on that ground; giving that up would
+ * turn a page refused into a page quietly missing something.
+ */
+void xpost_record_clear(Xpost_Record *rec);
+
+/**
  * @brief How many marks a record holds.
  */
 size_t xpost_record_count(const Xpost_Record *rec);
