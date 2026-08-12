@@ -106,6 +106,9 @@ typedef struct
     /* how many times a recorded image has been painted through this
        device, which is what .recordplays answers */
     unsigned int plays;
+    /* and how many recorded marks have been played through it, which is
+       what .recordplayed answers */
+    unsigned int played;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -1015,6 +1018,29 @@ static int _recordplays(Xpost_Context *ctx,
     return 0;
 }
 
+/* IMAGE  .recordplayed  int
+   How many recorded marks this device has played.
+
+   What a page put out a run of rows at a time costs is the marks each
+   run meets rather than every mark once per run, and no page can say
+   which it paid: a mark played into a run of rows it does not reach
+   paints nothing, so a replay handed the whole page for every band puts
+   out the page a replay handed each band's own rows puts out. The
+   quantity is stated here for the same reason .recordcost and
+   .recordplays state theirs -- what the mechanism is judged on is not
+   what the page shows. */
+static int _recordplayed(Xpost_Context *ctx,
+                         Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)private.played));
+    return 0;
+}
+
 /* Whether one mark leaves a run of rows the ground and nothing else: a
    rectangle at exactly the colour the page was cleared to, covering
    every row of the run and the whole width of the page.
@@ -1206,6 +1232,14 @@ static int _replay_step(Xpost_Context *ctx,
                       undefined);
         return undefined;
     }
+
+    /* One more mark played, which is what .recordplayed answers. Counted
+       here, where the call about to be made is known to be one the
+       target offers, so what the count says is marks made and not marks
+       looked at. */
+    private.played++;
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
 
     /* A polygon is given back as a run of coordinates and the device
        takes an array, so the array is built here. It is built in local
@@ -1490,6 +1524,7 @@ static int _create_cont(Xpost_Context *ctx,
     private.height = height;
     private.ncomp = ncomp.int_.val;
     private.plays = 0;
+    private.played = 0;
     private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
@@ -1869,6 +1904,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
                              dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordplays", (Xpost_Op_Func)_recordplays,
+                             1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordplayed", (Xpost_Op_Func)_recordplayed,
                              1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordground", (Xpost_Op_Func)_recordground,
                              3, dicttype, numbertype, numbertype); INSTALL;
