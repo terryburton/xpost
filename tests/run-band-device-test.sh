@@ -86,11 +86,16 @@ field() { sed -n "s/^$2 //p" "$work/$1.log"; }
 
 # The devices a record can be played into. Each is rendered twice: once
 # with the record between the page and it, and once by itself.
+#
+# Selecting one of these by name selects banding, so the run that wants
+# the device by itself asks for the mode that holds the page whole. The
+# comparison is between the two routes, and naming the device alone
+# would now name the same route twice.
 formats='ppm pgm tiff'
 
 for f in $formats; do
     render "record:$f" "rec-$f" || fail=1
-    render "$f" "dir-$f" || fail=1
+    render "$f:whole" "dir-$f" || fail=1
 done
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a page could not be rendered"

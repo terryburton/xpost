@@ -60,7 +60,13 @@ for dev in $devices; do
 done
 
 for dev in $devices; do
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    # The question here is what the device holds and whether it survives
+    # a restore, and it is asked by reading a pixel back. A device that
+    # bands is asked for the page whole: a record holds no pixel and
+    # answers the ground, which would read as a device that lost its
+    # raster rather than as one that never had one.
+    out=$("$xpost" -q $ns -d "$(fleet_whole "$dev")" -o "$work/out.$dev" \
+          "$script" </dev/null 2>&1)
     st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;

@@ -163,6 +163,50 @@ if ! grep -q 'DEVICE_FLEET_ALL' "$smoke"; then
     fail=1
 fi
 
+# ---------------------------------------------------------------------
+# The devices that band, which are written down three times
+#
+# Selecting one of these selects banding, and the selection is settled
+# before any boot file is read -- so the list exists in C as well as in
+# the recording class's own roster, and a third time in the test fleet
+# that wrappers ask for the page-whole spelling through. Three copies of
+# one fact is three chances for it to drift, and this is where they are
+# held to each other.
+( . "$fleet"; for v in $DEVICE_FLEET_BANDS; do echo "$v"; done ) \
+    2>/dev/null | sort -u > "$work/bands-fleet"
+if [ ! -s "$work/bands-fleet" ]; then
+    echo "FAIL: DEVICE_FLEET_BANDS is empty or unset in tests/device-fleet.sh"
+    fail=1
+fi
+
+sed -n '/^static const char \*const bands_by_default\[\] =/,/^};/p' \
+    "$src/src/lib/xpost_interpreter.c" \
+    | sed -n 's/^  *"\([a-z0-9]*\)",$/\1/p' | sort -u > "$work/bands-c"
+if [ ! -s "$work/bands-c" ]; then
+    echo "FAIL: no bands_by_default table found in src/lib/xpost_interpreter.c"
+    fail=1
+fi
+
+sed -n '/\/\.playtargets </,/>>/p' "$src/data/recorddev.ps" \
+    | sed -n 's|^  *//*\([a-z0-9]*\) /\..*$|\1|p' | sort -u \
+    > "$work/bands-ps"
+if [ ! -s "$work/bands-ps" ]; then
+    echo "FAIL: no .playtargets roster found in data/recorddev.ps"
+    fail=1
+fi
+
+for pair in 'bands-c:the C table the selection is rewritten from' \
+            'bands-ps:the recording class roster in data/recorddev.ps'; do
+    other=${pair%%:*}
+    what=${pair#*:}
+    if [ -s "$work/bands-fleet" ] && [ -s "$work/$other" ] \
+       && ! cmp -s "$work/bands-fleet" "$work/$other"; then
+        echo "FAIL: DEVICE_FLEET_BANDS and $what name different devices:"
+        diff "$work/bands-fleet" "$work/$other" | sed 's/^/      /' | head -8
+        fail=1
+    fi
+done
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the device rosters disagree"
     exit 1

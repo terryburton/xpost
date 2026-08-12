@@ -2561,6 +2561,7 @@ static const char *const host_settings[] =
     ".interactive",
     "ShowpageSemantics",
     "StartDevice",
+    "StartDeviceAsked",
     "StartPageSize",
     "SUBDEVICE",
     "OutputFileName",
@@ -2787,6 +2788,15 @@ static int _record_host_config(Xpost_Context *ctx,
        it */
     if ((ret = _host_put(ctx, "StartDevice",
                          xpost_object_cvlit(xpost_name_cons(ctx, selected))))
+        != 0)
+        goto done;
+    /* The device the run asked for, which is the one to name back at it.
+       A selection given banding is made through another device, and a
+       caller told about a device it never named is being told about a
+       choice made on its behalf. */
+    if ((ret = _host_put(ctx, "StartDeviceAsked",
+                         xpost_object_cvlit(
+                             xpost_name_cons(ctx, banded ? banded : selected))))
         != 0)
         goto done;
     if (!_reusable(ctx, "StartPageSize", arraytype, 2, &o))

@@ -84,6 +84,28 @@ DEVICE_FLEET_LIFETIME='pgm null bbox raster bgr png jpeg pdfwrite svgwrite
 DEVICE_FLEET_MARKING='pgm ppm pbm null bbox raster bgr png pngalpha jpeg
                       pdfwrite svgwrite record'
 
+# The devices that hold a band of the page rather than the page, which
+# selecting by name selects. A wrapper whose question is about the
+# raster -- what a pixel reads back as, what a device holds -- asks for
+# the mode that holds the page whole instead, since a record holds no
+# pixel to answer from and answers the ground.
+#
+# tests/check-device-roster.sh holds this list, the C table the
+# selection is rewritten from, and the recording class's own roster to
+# naming the same devices.
+DEVICE_FLEET_BANDS='pgm ppm pbm tiff png jpeg'
+
+# fleet_whole DEVICE
+#
+# The selection that holds DEVICE's page whole: the device itself where
+# it does not band, and the mode that turns banding off where it does.
+fleet_whole() {
+    case " $DEVICE_FLEET_BANDS " in
+        *" $1 "*) printf '%s:whole\n' "$1" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 # fleet_each FUNCTION ITEM...
 #
 # Runs FUNCTION once per item and replays each run's output in the order

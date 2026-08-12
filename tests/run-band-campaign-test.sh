@@ -141,7 +141,8 @@ field() { sed -n "s/^$2 //p" "$work/$1.log" 2>/dev/null; }
 # Sets ask_nc, ask_row and ask_where.
 askdev() {  # $1 selection
     mkdir -p "$work/ask"
-    a_line=$( cd "$work/ask" && "$xpost" -q $ns -d "$1" -o /dev/null \
+    a_line=$( cd "$work/ask" && "$xpost" -q $ns -d "$(whole "$1")" \
+              -o /dev/null \
               -DASK=1 "$script" </dev/null 2>&1 ) || return 1
     a_line=$(printf '%s\n' "$a_line" | sed -n 's/^DEV //p' | head -1)
     [ -n "${a_line:-}" ] || return 1
@@ -166,6 +167,19 @@ askdev() {  # $1 selection
 BANDERS='pgm ppm pbm tiff png jpeg'
 KEEPERS='raster bgr pdfwrite dscwrite svgwrite'
 
+# The selection that reaches one of these devices without the record
+# that selecting it by name now puts in front of it. What this campaign
+# compares is the two routes; without this both spellings would name the
+# same route and every comparison would be a page against itself. A
+# selection that already names a mode, "record:pgm" among them, is left
+# as it is.
+whole() {
+    case " $BANDERS " in
+        *" $1 "*) printf '%s:whole\n' "$1" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 probe=$work/probe.ps
 cat > "$probe" <<'EOF'
 (\nDECL ) print DEVICE /BandedPage known { (yes) }{ (no) } ifelse print (\n) print
@@ -179,7 +193,8 @@ EOF
 # $1 device selection, $2 field; prints the answer, or nothing where the
 # selection was refused
 asks() {
-    a_out=$("$xpost" -q $ns -d "$1" -o /dev/null "$probe" </dev/null 2>&1) \
+    a_out=$("$xpost" -q $ns -d "$(whole "$1")" -o /dev/null "$probe" \
+            </dev/null 2>&1) \
         || return 1
     printf '%s\n' "$a_out" | sed -n "s/^$2 //p" | head -1
 }
@@ -315,8 +330,12 @@ if [ "$sab" -eq 0 ]; then
         rm -rf "$work/nb-$1"
         mkdir -p "$work/nb-$1"
         for n in 1 2; do
-            ( cd "$work/nb-$1" && "$xpost" -q $ns -d "$1" -o /dev/null \
-              -DNOBAND=$n "$script" </dev/null >"n$n.log" 2>&1 ) || return 1
+            # the device itself, since what is put about here is the
+            # band loop's own state and what is asked is whether the
+            # device notices it
+            ( cd "$work/nb-$1" && "$xpost" -q $ns -d "$(whole "$1")" \
+              -o /dev/null -DNOBAND=$n "$script" </dev/null \
+              >"n$n.log" 2>&1 ) || return 1
             mv "$work/nb-$1/noband.out" "$work/nb-$1/page$n.out" 2>/dev/null
         done
         n_a=$(sed -n 's/^NB //p' "$work/nb-$1/n1.log" | head -1)
@@ -441,7 +460,7 @@ for d in $matrixdevs; do
         bset=''
         [ "$buffered" = yes ] && [ "$p" = 2 ] && bset='-DBSET=1'
         if [ "$wantdir" = yes ]; then
-            render "$d" "$d" "$d" -DPAGE=$p $bset $sabarg || {
+            render "$(whole "$d")" "$d" "$d" -DPAGE=$p $bset $sabarg || {
                 note "$d could not put out page $p"
                 continue
             }
@@ -710,8 +729,8 @@ for d in $matrixdevs; do
         rm -f "$work/$d-mp.log"
         mpok=yes
         for h in $HEIGHTS; do
-            render "$d" "$d" "$d-mp" -DPAGE=3 -DMPH=$h -DMPB=0 || mpok=no
-            render "$d" "$d" "$d-mp" -DPAGE=3 -DMPH=$h -DMPB=7 || mpok=no
+            render "$(whole "$d")" "$d" "$d-mp" -DPAGE=3 -DMPH=$h -DMPB=0 || mpok=no
+            render "$(whole "$d")" "$d" "$d-mp" -DPAGE=3 -DMPH=$h -DMPB=7 || mpok=no
             if [ "$isrec" = yes ]; then
                 for b in 0 $MPBANDS; do
                     render "record:$d" "$d" "$d-mp" \

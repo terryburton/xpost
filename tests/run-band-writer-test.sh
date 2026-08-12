@@ -50,6 +50,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # The runs below are started in the directory the pages are written to,
 # so what they were handed has to name the same thing from there.
@@ -81,7 +82,11 @@ note() {
 run() {  # $1 device; $2... -Dname=value
     r_dev=$1
     shift
-    out=$( cd "$work" && "$xpost" -q $ns -d "$r_dev" -o /dev/null "$@" \
+    # The subject here is the writer of the device itself, driven a band
+    # at a time by hand, so the device is asked for without the record
+    # that selecting it by name would otherwise put in front of it.
+    out=$( cd "$work" && "$xpost" -q $ns -d "$(fleet_whole "$r_dev")" \
+           -o /dev/null "$@" \
            "$script" </dev/null 2>&1 )
     r_st=$?
     verdict_run "$r_st" "$out" "the $r_dev run" || return 1
@@ -105,7 +110,8 @@ quit
 EOF
 
 says() {  # $1 device; prints yes/no, or nothing where the device is absent
-    s_out=$("$xpost" -q $ns -d "$1" -o /dev/null "$decl" </dev/null 2>&1) \
+    s_out=$("$xpost" -q $ns -d "$(fleet_whole "$1")" -o /dev/null "$decl" \
+            </dev/null 2>&1) \
         || return 1
     printf '%s\n' "$s_out" | tr -s '-' '\n' | sed -n 's/^DECL //p' | head -1
 }
@@ -249,7 +255,7 @@ fi
 if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
     peak() {  # $1 device; $2 height; $3 band
         p_out=$( cd "$work" && /usr/bin/time -f '%M' \
-                 "$xpost" -q $ns -d "$1" -o /dev/null \
+                 "$xpost" -q $ns -d "$(fleet_whole "$1")" -o /dev/null \
                  -DTAG=4 -DCHECK=0 -DPW=1000 -DPH="$2" -DBAND="$3" "$script" \
                  </dev/null 2>&1 >/dev/null )
         printf '%s\n' "$p_out" | tail -1

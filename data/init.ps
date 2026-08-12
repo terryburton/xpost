@@ -580,8 +580,14 @@ currentglobal true setglobal
         % the request is read from the settings this run has, which is
         % where a value the invocation decided is kept, so it is there to
         % be named whether or not the attempt reached the device
+        % the device the run asked for rather than the one its page was
+        % given to: a selection that can arrive a band at a time is made
+        % through the recording class, and naming that back at a caller
+        % would be reporting a choice made on its behalf
         (: device ) print
-        /StartDevice //.xpostsys /.hostvalue get exec =print
+        /StartDeviceAsked //.xpostsys /.hostvalue get exec
+        dup null eq { pop /StartDevice //.xpostsys /.hostvalue get exec } if
+        =print
         ( asked for a page of ) print
         /StartPageSize //.xpostsys /.hostvalue get exec aload pop
         exch =print ( by ) print =print ( pixels) print
