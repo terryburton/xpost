@@ -3362,6 +3362,24 @@ test('band-format',
   suite: cost_fast,
   timeout: 300)
 
+# ... and the same loop driving the devices that keep their raster in a
+# buffer of their own and write it through a library: the PNG writers and
+# the JPEG one. Their pages are encoded, so the bytes are compared and
+# the pixels those bytes decode to are compared beside them; their
+# rasters are outside the memory the interpreter reports on, so what
+# holds the bound is the peak resident size of the process. The band
+# heights are chosen for the seams -- a PNG row is filtered against the
+# row before it and a JPEG scanline goes into a unit of eight or sixteen
+# rows, so a writer that dropped what it held between bands would be
+# wrong only where two bands meet, and at a band of one row every row of
+# the page is such a place.
+test('band-writer',
+  find_program('tests/run-band-writer-test.sh'),
+  args: [ xpost_exe, files('tests/band_writer_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
+  timeout: 300)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

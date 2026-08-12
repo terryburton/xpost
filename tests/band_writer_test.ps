@@ -1,0 +1,366 @@
+% One page written a band at a time by a device that keeps its raster in
+% a buffer of its own, and the same page written whole.
+%
+% run-band-writer-test.sh runs this file once per such device, once for
+% the whole page and once per band height. What the two routes differ in
+% is only how much of the page a device holds at once: the same marks
+% are offered to each, and the file each produces has to be the same
+% file. Both halves of that are checked here and neither implies the
+% other -- the bytes, and the pixels those bytes decode to, since these
+% formats are encoded and a file can differ from another while standing
+% for the same picture, or agree in length while standing for a
+% different one.
+%
+% The seams are the whole of what is being asked about. A PNG row is
+% filtered against the row before it and a JPEG scanline goes into a
+% unit of eight or sixteen rows, so a writer that lost what it was
+% holding between one band and the next would be wrong at the row where
+% one band meets the next and right everywhere else. So bands that
+% divide the page are run, and bands that do not, and a band of one row
+% -- at which every row of the page is a seam.
+%
+% The marks are offered whole to every band and each band keeps what
+% lands on the rows it holds, which is what a replay does to a record.
+% What each band took is counted as well, down one column of the page: a
+% device that quietly held the whole page would paint the same pixels,
+% so no comparison of pages can see that, and this count and the memory
+% the wrapper measures are what can.
+%
+%   -DBAND=n   the band height this run drives, or 0 for the whole page
+%   -DTAG=n    which page is painted: 1 the five marking kinds with
+%              text, 2 a sampled image, 3 marks confined to the middle
+%              of the page with the bands they never reach passed over,
+%              4 the cheapest page there is, for weighing the run,
+%              5 marks over part of the page and no clearing of it
+%   -DPW=n     the page's width
+%   -DPH=n     the page's height
+%   -DCHECK=n  1 to read the page back and decode what was written
+%   -DSECOND=n 1 to write a second page through the same device, which
+%              is the page a job's second showpage puts out
+
+/PW where { pop }{ /PW 128 def } ifelse
+/PH where { pop }{ /PH 96 def } ifelse
+/W PW def
+/H PH def
+% the column the counts are read down: away from the page's edges, and
+% crossed by something on every page below
+/CX 40 def
+
+/BAND where { pop }{ /BAND 8 def } ifelse
+/TAG where { pop }{ /TAG 1 def } ifelse
+/CHECK where { pop }{ /CHECK 1 def } ifelse
+/SECOND where { pop }{ /SECOND 0 def } ifelse
+
+/failcount 0 def
+/assert { % bool string  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse
+} bind def
+/num { 20 string cvs } bind def
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+
+% ---- the pages ----
+% Between them these reach all five marking kinds and the sampled image.
+% erasepage covers the page in one rectangle; a fill and an eofill arrive
+% as polygons; a hairline stroke walks a line; a glyph's interior is
+% whole pixels and its edges are coverage-weighted blends; and an image
+% painted into a device that keeps no rows the interpreter can see
+% arrives as marks rather than through the row writer.
+%
+% Everything is laid out against the page's height so that whatever the
+% band height is, the marks cross the boundaries between bands rather
+% than sitting inside one.
+
+/drawmarks {
+    erasepage
+    % a fill with a hole in it, across the middle of the page
+    gsave
+        0.2 setgray
+        newpath
+        14 H 0.31 mul moveto 114 H 0.31 mul lineto
+        114 H 0.69 mul lineto 14 H 0.69 mul lineto closepath
+        40 H 0.42 mul moveto 40 H 0.58 mul lineto
+        88 H 0.58 mul lineto 88 H 0.42 mul lineto closepath
+        eofill
+    grestore
+    % a fill under the other winding rule, low on the page
+    gsave
+        0.7 0.1 0.1 setrgbcolor
+        newpath 20 H 0.06 mul moveto 108 H 0.06 mul lineto
+        108 H 0.23 mul lineto 20 H 0.23 mul lineto closepath
+        fill
+    grestore
+    % hairlines down the length of the page, so every band has one across it
+    gsave
+        0 setgray 0 setlinewidth
+        newpath 6 4 moveto 122 H 4 sub lineto stroke
+        newpath 122 4 moveto 6 H 4 sub lineto stroke
+    grestore
+    % text, for the glyph pixels a boundary between bands cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 17 scalefont setfont
+        10 H 0.75 mul moveto (Seams) show
+    grestore
+} bind def
+
+/drawimage {
+    erasepage
+    gsave
+        /DeviceGray setcolorspace
+        8 H 0.08 mul translate
+        112 H 0.84 mul scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+% Marks confined to the middle of the page, and nothing above or below
+% them. The band loop below passes over the bands they never reach, so
+% those rows are never held by any raster and the page carries the ground
+% over them -- which the emission that next has rows of its own to write
+% is what lays down.
+/MIDLO H 4 idiv def
+/MIDHI H 4 idiv 3 mul def
+/drawmiddle {
+    erasepage
+    gsave
+        0.35 0.35 0.9 setrgbcolor
+        newpath
+        10 MIDLO 2 add moveto 118 MIDLO 2 add lineto
+        118 MIDHI 2 sub lineto 10 MIDHI 2 sub lineto closepath
+        fill
+    grestore
+} bind def
+
+% The cheapest page that covers the raster: what the memory runs paint,
+% so that what they weigh is the raster and not the drawing.
+/drawplain {
+    erasepage
+    gsave
+        0.2 setgray
+        newpath 4 4 moveto W 4 sub 4 lineto W 4 sub H 4 sub lineto
+        4 H 4 sub lineto closepath fill
+    grestore
+} bind def
+
+% Marks over part of the page, and no erasepage anywhere in it.
+%
+% Every page above begins by covering itself, which hides the one thing
+% a raster standing for one run of rows after another has to get right:
+% that each run starts as a raster fresh from Create would. A run coming
+% up still carrying the run before's ink is painted over by the clearing
+% and never seen. Here nothing covers the page, so most of it is the
+% raster as it was made -- and ink no run put there shows.
+/drawnoclear {
+    gsave
+        0.15 0.15 0.6 setrgbcolor
+        newpath
+        16 H 0.60 mul moveto 112 H 0.60 mul lineto
+        112 H 0.78 mul lineto 16 H 0.78 mul lineto closepath
+        fill
+    grestore
+    gsave
+        0 setgray
+        /Times-Roman findfont 15 scalefont setfont
+        14 H 0.30 mul moveto (Fresh) show
+    grestore
+} bind def
+
+/paint [ /drawmarks /drawimage /drawmiddle /drawplain /drawnoclear ]
+    TAG 1 sub get load def
+
+% Whether a run of the page's rows is one this page reaches at all. Only
+% the third page holds any back; the others are painted into every band
+% they are offered.
+/reached { % lo hi  .  bool
+    TAG 3 eq {
+        exch MIDHI gt exch MIDLO lt or not
+    }{ pop pop true } ifelse
+} bind def
+
+% ---- what a device is holding, read back ----
+% Down one column, how many of a run of the page's rows carry something
+% other than the ground. It is read through the device's own GetPix,
+% which answers the ground wherever the device holds no pixel -- so what
+% this counts is what the device took, not what it was offered.
+/inked { % lo hi  .  n
+    /ik.hi exch store /ik.lo exch store
+    /ik.n 0 store
+    ik.lo 1 ik.hi {
+        /ik.y exch store
+        CX ik.y DEVICE dup /GetPix get exec
+        255 eq exch 255 eq and exch 255 eq and
+        { }{ /ik.n ik.n 1 add store } ifelse
+    } for
+    ik.n
+} bind def
+
+% ---- reading a written page back ----
+% The file the run produced, decoded to its pixels through this
+% interpreter's own filters: a PNG through the flate decoder with the
+% row filters undone (PLRM Table 3.20, predictor 15), a JPEG through the
+% DCT decoder. Which it is is read off the file's first byte rather than
+% told, so nothing here has to be kept in step with what the wrapper
+% selected.
+
+/readfile { % name  .  string
+    (r) file
+    dup 65535 string readstring
+    { false (the page written is larger than one string holds) assert } if
+    exch closefile
+} bind def
+
+/be32 { % string i  .  int
+    /be.i exch store /be.s exch store
+    be.s be.i get 16777216 mul
+    be.s be.i 1 add get 65536 mul add
+    be.s be.i 2 add get 256 mul add
+    be.s be.i 3 add get add
+} bind def
+
+% Every IDAT payload of a PNG, run together into the one zlib stream
+% they are, and inflated with the row filters undone. The image header
+% is the first chunk and its layout is fixed: the extent at byte 16, the
+% colour type at byte 25.
+/pngpixels { % file-string  .  pixels
+    /pg.d exch store
+    /pg.w pg.d 16 be32 store
+    /pg.n pg.d 25 get 6 eq { 4 }{ 3 } ifelse store
+    /pg.buf 65535 string store
+    /pg.len 0 store
+    /pg.pos 8 store
+    {
+        pg.pos 8 add pg.d length gt { exit } if
+        /pg.clen pg.d pg.pos be32 store
+        pg.d pg.pos 4 add 4 getinterval (IDAT) eq {
+            pg.buf pg.len
+            pg.d pg.pos 8 add pg.clen getinterval putinterval
+            /pg.len pg.len pg.clen add store
+        } if
+        /pg.pos pg.pos pg.clen add 12 add store
+    } loop
+    pg.buf 0 pg.len getinterval
+    << /Predictor 15 /Colors pg.n /BitsPerComponent 8 /Columns pg.w >>
+    /FlateDecode filter
+    65535 string readstring pop
+} bind def
+
+/jpegpixels { % file-string  .  pixels
+    /DCTDecode filter 65535 string readstring pop
+} bind def
+
+/pixels { % name  .  pixels
+    readfile
+    dup 0 get 137 eq { pngpixels }{ jpegpixels } ifelse
+} bind def
+
+/firstdiff { % a b  .  index-or--1
+    /fd.b exch store /fd.a exch store
+    /fd.i -1 store
+    0 1 fd.a length 1 sub {
+        /fd.j exch store
+        fd.a fd.j get fd.b fd.j get ne { /fd.i fd.j store exit } if
+    } for
+    fd.i
+} bind def
+
+% ---- the two routes ----
+/name { % band  .  string
+    TAG num (-) join exch num join (-) join W num join
+    (-) join H num join (.out) join
+} bind def
+
+% One page, put out a band at a time: one raster standing for one run of
+% the page's rows after another, the marks offered to each run, and the
+% rows of each run written as they are finished. What each run took is
+% counted down one column as it goes.
+/bandpage { % outfile  .  -
+    DEVICE /.outputfile 3 -1 roll put
+    /total 0 def
+    /nbands 0 def
+    /passed 0 def
+    /outside 0 def
+    0 BAND H 1 sub {
+        /top exch def
+        /rows BAND H top sub 2 copy gt { exch } if pop def
+        top top rows add 1 sub reached {
+            top rows DEVICE dup /.moveband get exec
+            paint
+            CHECK 0 gt {
+                % a row this device is not holding answers the ground,
+                % which is what says the raster is standing on the run
+                % rather than on the page
+                top 0 gt {
+                    0 top 1 sub inked 0 ne { /outside outside 1 add def } if
+                } if
+                top rows add H lt {
+                    top rows add H 1 sub inked 0 ne
+                        { /outside outside 1 add def } if
+                } if
+                /total total top top rows add 1 sub inked add def
+            } if
+            /nbands nbands 1 add def
+            DEVICE dup /Emit get exec
+        }{ /passed passed 1 add def } ifelse
+    } for
+    % and the call that holds nothing, which says the page is finished
+    0 0 DEVICE dup /.moveband get exec
+    DEVICE dup /Emit get exec
+} bind def
+
+BAND 0 gt {
+    graphicsdict /.rasterband [ 0 BAND ] put
+    << /PageSize [W H] >> setpagedevice
+    DEVICE /.bandpage 4 dict put
+    BAND name bandpage
+    % ... and a second page through the same device, which is what a
+    % job's second showpage puts out. A page finished stays finished, so
+    % what begins this one is the move onto its first run of rows.
+    SECOND 0 gt { BAND name (2) join bandpage } if
+    (BANDS ) print nbands num print ( ) print passed num print
+        ( ) print total num print (\n) print
+    CHECK 0 gt {
+        outside 0 eq
+            (a row outside the run the raster stands on carries ink) assert
+
+        % ... and the pixels the two files decode to. The page written
+        % whole was written by an earlier run of this file.
+        /pa 0 name pixels def
+        /pb BAND name pixels def
+        pa length 0 gt (the page written whole decodes to no pixels) assert
+        pa length pb length eq
+            (the two pages decode to different numbers of pixels) assert
+        (DECODED ) print pa length num print (\n) print
+        pa length pb length eq {
+            /d pa pb firstdiff def
+            (PIXELS ) print d num print ( ) print
+            d 0 ge { d pa length H idiv idiv num print }{ (-1) print } ifelse
+            (\n) print
+            d 0 lt (the page written in bands does not decode to the
+pixels of the page written whole) assert
+        } if
+    } if
+}{
+    << /PageSize [W H] >> setpagedevice
+    DEVICE /.outputfile 0 name put
+    paint
+    CHECK 0 gt { /total 0 H 1 sub inked def }{ /total 0 def } ifelse
+    DEVICE dup /Emit get exec
+    (WHOLE ) print total num print (\n) print
+} ifelse
+
+(PAGE ) print W num print ( ) print H num print ( ) print
+    TAG num print ( ) print BAND num print (\n) print
+failcount 0 eq { (SUCCESS\n) print }{ (FAILURES: ) print
+    failcount num print (\n) print } ifelse
+quit
