@@ -1207,14 +1207,6 @@ static int _recordground(Xpost_Context *ctx,
     return 0;
 }
 
-/* Play one mark into the device that paints, then come back for the
-   next.
- *
- * A device method may be a procedure, and what runs a procedure is the
- * interpreter, so a mark is played by leaving the call on the stacks
- * and returning: the method runs, and this continuation runs after it
- * with the walk's own operands where the call left them.
- */
 /* Put a cell on the device that paints. It is what playing a screen
    entry comes to, and what a raster is given before it is moved onto
    its first band. */
@@ -1336,6 +1328,124 @@ static int _recordscreen(Xpost_Context *ctx,
     return 0;
 }
 
+/* A polygon mark's coordinates as the array a device method takes.
+ *
+ * It is built in local memory whatever the run was allocating in: it
+ * lives as long as the call it is made for, and global memory is not
+ * collected. One array per mark, and one two-element array per vertex
+ * inside it -- the shape the method's operand is, which is not a shape
+ * a run of coordinates can be lent. It is not carried from one mark to
+ * the next either: the length differs mark by mark, and a method is
+ * given its operand to keep for as long as it wants it, so an array
+ * handed to two calls is an array the first of them may still be
+ * holding. */
+static int _play_poly(Xpost_Context *ctx, const real *ops,
+                      Xpost_Object *poly)
+{
+    unsigned int mode = ctx->vmmode;
+    int n = (int)ops[0];
+    int i;
+
+    ctx->vmmode = LOCAL;
+    *poly = xpost_array_cons(ctx, (unsigned int)n);
+    if (xpost_object_get_type(*poly) != arraytype)
+    {
+        ctx->vmmode = mode;
+        return VMerror;
+    }
+    for (i = 0; i < n; i++)
+    {
+        Xpost_Object pair;
+        int ret;
+
+        if (ops[1 + 2 * i] == XPOST_PATH_BREAK)
+        {
+            ret = xpost_array_put(ctx, *poly, i, null);
+            if (ret)
+            {
+                ctx->vmmode = mode;
+                return ret;
+            }
+            continue;
+        }
+        pair = xpost_array_cons(ctx, 2);
+        if (xpost_object_get_type(pair) != arraytype)
+        {
+            ctx->vmmode = mode;
+            return VMerror;
+        }
+        ret = xpost_array_put(ctx, pair, 0, xpost_real_cons(ops[1 + 2 * i]));
+        if (!ret)
+            ret = xpost_array_put(ctx, pair, 1,
+                                  xpost_real_cons(ops[2 + 2 * i]));
+        if (!ret)
+            ret = xpost_array_put(ctx, *poly, i, pair);
+        if (ret)
+        {
+            ctx->vmmode = mode;
+            return ret;
+        }
+    }
+    ctx->vmmode = mode;
+    return 0;
+}
+
+/* Whether an object is the walk's own continuation, which is how the
+   loop below tells an execution stack a call left alone from one it
+   left work on. */
+static int _is_replay_cont(Xpost_Object o)
+{
+    return xpost_object_get_type(o) == operatortype
+        && o.mark_.padw == _replay_step_opcode;
+}
+
+/* How many marks one call plays before handing the interpreter back.
+ *
+ * The loop below is bounded rather than open, and what bounds it is
+ * what returning is for. Between two evaluation steps the interpreter
+ * takes the collection a run has asked for and the interrupt an outside
+ * caller has raised; neither can be taken while this is running, so a
+ * band played in one go is a band during which memory is not reclaimed
+ * and a request to stop is not heard. A batch this size leaves the
+ * round trip at a fifth of a per cent of the marks and holds both to
+ * the length of one batch. A collection asked for inside a batch ends
+ * it early besides, since that is the one of the two that a long band
+ * can be made to need. */
+#define XPOST_REPLAY_BATCH 512
+
+/* Play the marks that reach the rows asked for, from the one at @p idx
+ * on, into the device that paints.
+ *
+ * A mark is played by calling the target's method for its kind. Where
+ * that method is a compiled operator the call is made here, in a loop:
+ * the operands go on the operand stack, which is where an operator
+ * takes them from and where its declared shape is checked, and the
+ * operator is run without going round the interpreter for it. What that
+ * saves is not the call but the journey -- a mark played by leaving the
+ * call on the stacks and returning costs two evaluation steps, and with
+ * them a fresh look at this device's state and at the target's method
+ * table, for every mark on the page.
+ *
+ * Where the method is not an operator the loop cannot make the call: a
+ * device method may be a procedure, and what runs a procedure is the
+ * interpreter. Such a mark is played by leaving the call on the stacks
+ * and returning, and the walk resumes here afterwards and goes back to
+ * looping. The same applies to a method that is an operator and leaves
+ * work behind it: an operator may put a continuation of its own on the
+ * execution stack, and the marks after it must be played after that
+ * work rather than before it. So the walk's own continuation goes on
+ * the execution stack before each call and is taken off again after it
+ * -- if it is still on top, nothing was left and the loop goes on; if
+ * it is not, the interpreter has been given something to do and this
+ * returns to let it, with the continuation already sitting under the
+ * work in the right place.
+ *
+ * The walk's operands sit on the operand stack for the whole batch
+ * rather than being pushed and dropped per mark. The method consumes
+ * what it was given and leaves them where they were, so the only one
+ * that changes is the place in the record, which is written over in
+ * place as each mark is played.
+ */
 static int _replay_step(Xpost_Context *ctx,
                         Xpost_Object recdic,
                         Xpost_Object targetdic,
@@ -1345,236 +1455,282 @@ static int _replay_step(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    Xpost_Record_Kind kind;
-    const real *colour;
-    const real *ops;
-    Xpost_Object method;
-    Xpost_Object poly = null;
-    size_t at;
-    int nops, i, nrows;
+    Xpost_Object caller = ctx->currentobject;
+    Xpost_Object cont;
+    /* the target's method for each of the five marking kinds, looked up
+       as each kind is first met and kept for the batch: the table is the
+       target's and does not change while its own methods are running */
+    Xpost_Object method[5];
+    char looked[5];
+    real rlo, rhi;
+    size_t from;
+    int batch, k;
+    int ret = 0;
 
     if (!_private_get(ctx, recdic, &privatestr, &private))
         return undefined;
     if (!private.rec)
         return 0;
-    /* The rows asked for choose which marks are played, and the marks
-       between are stepped over rather than played and dropped: what
-       makes a page affordable to paint a run of rows at a time is that
-       playing it into a set of runs costs the marks each run meets
-       rather than every mark once per run. */
-    if (!xpost_record_next(private.rec, (size_t)idx.int_.val,
-                           (real)xpost_object_number(lo),
-                           (real)xpost_object_number(hi), &at))
-        return 0;   /* played out */
-    if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
-        return 0;
 
-    /* An image is not one of the marking calls and is not made by
-       calling one: its rows are written into the target's raster
-       through the writer that wrote them the first time. Nothing is
-       left on the stacks for a method to consume, so the walk goes
-       straight on.
+    memset(looked, 0, sizeof looked);
+    cont = xpost_operator_cons_opcode(_replay_step_opcode);
+    rlo = (real)xpost_object_number(lo);
+    rhi = (real)xpost_object_number(hi);
+    from = (size_t)idx.int_.val;
 
-       The rows painted are the whole of the target's page. A replay
-       into part of it hands that part down here instead, and the entry
-       writes the rows meeting it -- which is where a band enters. */
-    if (kind == XPOST_RECORD_IMAGE)
-    {
-        const Xpost_Record_Image *img;
-        Xpost_Object dims;
-        int ret;
-
-        img = xpost_record_image_get(private.rec,
-                                     nops > 0 ? (size_t)ops[0] : (size_t)-1);
-        if (!img)
-        {
-            XPOST_LOG_ERR("%d a recorded image names no entry", undefined);
-            return undefined;
-        }
-        dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
-        if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
-            return typecheck;
-        /* an image is held to the rows asked for the same way a mark is:
-           the replay chooses the sample rows that reach them and narrows
-           the region it paints to them, so a run of rows takes only its
-           own part of an image that crosses it */
-        ret = _play_image(ctx, img, targetdic,
-                          (real)xpost_object_number(lo),
-                          (real)xpost_object_number(hi), &nrows);
-        if (ret)
-            return ret;
-        private.plays++;
-        private.imgrows += (unsigned int)nrows;
-        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
-            return VMerror;
-
-        /* The walk resumes past the entry it played, as it does past a
-           mark it played. Resuming where it was looking from instead
-           would find this same entry again for every mark the rows asked
-           for had it step over, and paint the picture once for each of
-           them: the page would be the page, an image write leaving what
-           the write before it left, and the cost would follow the marks
-           the band does not want. */
-        xpost_stack_push(ctx->lo, ctx->os, recdic);
-        xpost_stack_push(ctx->lo, ctx->os, targetdic);
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
-        xpost_stack_push(ctx->lo, ctx->os, lo);
-        xpost_stack_push(ctx->lo, ctx->os, hi);
-        if (!xpost_stack_push(ctx->lo, ctx->es,
-                              xpost_operator_cons_opcode(_replay_step_opcode)))
-            return execstackoverflow;
-        return 0;
-    }
-
-    /* A screen is not a mark and paints nothing. It says what the marks
-       after it were made under, and playing it is putting that back on
-       the device about to paint them, so that each mark is screened by
-       the screen it was made under rather than by whichever one the
-       target happens to hold when the page is put out.
-
-       Every run of rows passes through the same screens in the same
-       order, a screen being met by every range, so the pixels a band
-       paints are the pixels the whole page would have carried there. */
-    if (kind == XPOST_RECORD_SCREEN)
-    {
-        const unsigned char *cell;
-        int w = 0, h = 0;
-        int ret;
-
-        cell = xpost_record_screen_get(private.rec,
-                                       nops > 0 ? (size_t)ops[0] : (size_t)-1,
-                                       &w, &h);
-        if (!cell)
-        {
-            XPOST_LOG_ERR("%d a recorded screen names no entry", undefined);
-            return undefined;
-        }
-        ret = _install_screen(ctx, targetdic, cell, w, h);
-        if (ret)
-            return ret;
-
-        /* the walk resumes past the entry it played, as it does past a
-           mark and past an image */
-        xpost_stack_push(ctx->lo, ctx->os, recdic);
-        xpost_stack_push(ctx->lo, ctx->os, targetdic);
-        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
-        xpost_stack_push(ctx->lo, ctx->os, lo);
-        xpost_stack_push(ctx->lo, ctx->os, hi);
-        if (!xpost_stack_push(ctx->lo, ctx->es,
-                              xpost_operator_cons_opcode(_replay_step_opcode)))
-            return execstackoverflow;
-        return 0;
-    }
-
-    method = xpost_dict_get(ctx, targetdic, _slot(kind));
-    if (xpost_object_get_type(method) == invalidtype ||
-        xpost_object_get_type(method) == nulltype)
-    {
-        /* the device being played into does not offer one of the five
-           marking methods a record holds, so the mark cannot be made */
-        XPOST_LOG_ERR("%d a recorded mark has no method to play it into",
-                      undefined);
-        return undefined;
-    }
-
-    /* One more mark played, which is what .recordplayed answers. Counted
-       here, where the call about to be made is known to be one the
-       target offers, so what the count says is marks made and not marks
-       looked at. */
-    private.played++;
-    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
-        return VMerror;
-
-    /* A polygon is given back as a run of coordinates and the device
-       takes an array, so the array is built here. It is built in local
-       memory whatever the run was allocating in: it lives as long as
-       the call it is made for, and global memory is not collected. */
-    if (kind == XPOST_RECORD_FILLPOLY)
-    {
-        unsigned int mode = ctx->vmmode;
-        int n = (int)ops[0];
-
-        ctx->vmmode = LOCAL;
-        poly = xpost_array_cons(ctx, (unsigned int)n);
-        if (xpost_object_get_type(poly) != arraytype)
-        {
-            ctx->vmmode = mode;
-            return VMerror;
-        }
-        for (i = 0; i < n; i++)
-        {
-            Xpost_Object pair;
-            int ret;
-
-            if (ops[1 + 2 * i] == XPOST_PATH_BREAK)
-            {
-                ret = xpost_array_put(ctx, poly, i, null);
-                if (ret)
-                {
-                    ctx->vmmode = mode;
-                    return ret;
-                }
-                continue;
-            }
-            pair = xpost_array_cons(ctx, 2);
-            if (xpost_object_get_type(pair) != arraytype)
-            {
-                ctx->vmmode = mode;
-                return VMerror;
-            }
-            ret = xpost_array_put(ctx, pair, 0,
-                                  xpost_real_cons(ops[1 + 2 * i]));
-            if (!ret)
-                ret = xpost_array_put(ctx, pair, 1,
-                                      xpost_real_cons(ops[2 + 2 * i]));
-            if (!ret)
-                ret = xpost_array_put(ctx, poly, i, pair);
-            if (ret)
-            {
-                ctx->vmmode = mode;
-                return ret;
-            }
-        }
-        ctx->vmmode = mode;
-    }
-
-    /* the walk's own operands, under the call's: the method consumes
-       what it was given and leaves these where this continuation reads
-       them */
+    /* The walk's own operands, which every return below leaves in place
+       for the continuation to be resumed with. They go on once for the
+       batch rather than once for each mark, the marks being played over
+       the top of them. */
     xpost_stack_push(ctx->lo, ctx->os, recdic);
     xpost_stack_push(ctx->lo, ctx->os, targetdic);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)from));
     xpost_stack_push(ctx->lo, ctx->os, lo);
     xpost_stack_push(ctx->lo, ctx->os, hi);
+    /* a push the stack would not take leaves the walk standing on
+       operands that are not there; the run is told about it at the next
+       evaluation step, and nothing is played in the meantime */
+    if (ctx->lo->push_refused)
+        return 0;
 
-    /* the colour it was made with, one value per component of the space
-       it was made in, which is the space the device being played into
-       declares and so the operands its method takes */
-    for (i = 0; i < private.ncomp; i++)
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(colour[i]));
-    if (kind == XPOST_RECORD_FILLPOLY)
-        xpost_stack_push(ctx->lo, ctx->os, poly);
-    else
-        for (i = 0; i < nops; i++)
-            xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(ops[i]));
-    xpost_stack_push(ctx->lo, ctx->os, targetdic);
+    for (batch = 0; batch < XPOST_REPLAY_BATCH; batch++)
+    {
+        Xpost_Record_Kind kind;
+        const real *colour;
+        const real *ops;
+        Xpost_Object m;
+        Xpost_Object poly = null;
+        size_t at;
+        int nops, i;
 
-    /* the continuation goes on first, so the call runs before it */
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(_replay_step_opcode)))
-        return execstackoverflow;
-    if (xpost_object_get_type(method) == operatortype)
-    {
-        if (!xpost_stack_push(ctx->lo, ctx->es, method))
-            return execstackoverflow;
+        /* The rows asked for choose which marks are played, and the
+           marks between are stepped over rather than played and
+           dropped: what makes a page affordable to paint a run of rows
+           at a time is that playing it into a set of runs costs the
+           marks each run meets rather than every mark once per run.
+
+           Nothing further reaching those rows, or an entry that cannot
+           be read: either way the walk is over and its operands go
+           back. */
+        if (!xpost_record_next(private.rec, from, rlo, rhi, &at))
+            goto refused;
+        if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
+            goto refused;
+
+        /* Every entry played moves the walk past itself, whether it was
+           a mark, a picture or a screen. Resuming where it was looking
+           from instead would find the same entry again for every mark
+           the rows asked for had it step over.
+
+           Written over the operand the continuation reads it from, the
+           third of the five the walk stands on. There is no reaching
+           for a place the stack does not have: the five went on above,
+           the push that would not have taken them was answered there,
+           and each turn of the loop leaves them where it found them --
+           a method takes the operands its own shape states and this
+           returns rather than looping past a method whose shape is not
+           stated. */
+        from = at + 1;
+        XPOST_REFUSAL_IMPOSSIBLE(
+            xpost_stack_topdown_replace(ctx->lo, ctx->os, 2,
+                                        xpost_int_cons((integer)from)));
+
+        /* An image is not one of the marking calls and is not made by
+           calling one: its rows are written into the target's raster
+           through the writer that wrote them the first time. Nothing is
+           left on the stacks for a method to consume, so the loop goes
+           straight on to the next entry rather than round the
+           interpreter.
+
+           The rows painted are the whole of the target's page. A replay
+           into part of it hands that part down here instead, and the
+           entry writes the rows meeting it -- which is where a band
+           enters. */
+        if (kind == XPOST_RECORD_IMAGE)
+        {
+            const Xpost_Record_Image *img;
+            Xpost_Object dims;
+            int nrows;
+
+            img = xpost_record_image_get(private.rec,
+                                         nops > 0 ? (size_t)ops[0]
+                                                  : (size_t)-1);
+            if (!img)
+            {
+                XPOST_LOG_ERR("%d a recorded image names no entry", undefined);
+                ret = undefined;
+                goto refused;
+            }
+            dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
+            if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
+            {
+                ret = typecheck;
+                goto refused;
+            }
+            /* an image is held to the rows asked for the same way a mark
+               is: the replay chooses the sample rows that reach them and
+               narrows the region it paints to them, so a run of rows
+               takes only its own part of an image that crosses it */
+            ret = _play_image(ctx, img, targetdic, rlo, rhi, &nrows);
+            if (ret)
+                goto refused;
+            private.plays++;
+            private.imgrows += (unsigned int)nrows;
+            continue;
+        }
+
+        /* A screen is not a mark and paints nothing. It says what the
+           marks after it were made under, and playing it is putting that
+           back on the device about to paint them, so that each mark is
+           screened by the screen it was made under rather than by
+           whichever one the target happens to hold when the page is put
+           out.
+
+           Every run of rows passes through the same screens in the same
+           order, a screen being met by every range, so the pixels a band
+           paints are the pixels the whole page would have carried
+           there. */
+        if (kind == XPOST_RECORD_SCREEN)
+        {
+            const unsigned char *cell;
+            int w = 0, h = 0;
+
+            cell = xpost_record_screen_get(private.rec,
+                                           nops > 0 ? (size_t)ops[0]
+                                                    : (size_t)-1,
+                                           &w, &h);
+            if (!cell)
+            {
+                XPOST_LOG_ERR("%d a recorded screen names no entry",
+                              undefined);
+                ret = undefined;
+                goto refused;
+            }
+            ret = _install_screen(ctx, targetdic, cell, w, h);
+            if (ret)
+                goto refused;
+            continue;
+        }
+
+        if ((int)kind < 0 || (int)kind >= (int)(sizeof looked / sizeof *looked))
+        {
+            XPOST_LOG_ERR("%d a recorded mark is of no kind a record holds",
+                          undefined);
+            ret = undefined;
+            goto refused;
+        }
+        if (!looked[(int)kind])
+        {
+            method[(int)kind] = xpost_dict_get(ctx, targetdic, _slot(kind));
+            looked[(int)kind] = 1;
+        }
+        m = method[(int)kind];
+        if (xpost_object_get_type(m) == invalidtype ||
+            xpost_object_get_type(m) == nulltype)
+        {
+            /* the device being played into does not offer one of the
+               five marking methods a record holds, so the mark cannot be
+               made */
+            XPOST_LOG_ERR("%d a recorded mark has no method to play it into",
+                          undefined);
+            ret = undefined;
+            goto refused;
+        }
+
+        /* One more mark played, which is what .recordplayed answers.
+           Counted here, where the call about to be made is known to be
+           one the target offers, so what the count says is marks made
+           and not marks looked at. */
+        private.played++;
+
+        if (kind == XPOST_RECORD_FILLPOLY)
+        {
+            ret = _play_poly(ctx, ops, &poly);
+            if (ret)
+                goto refused;
+        }
+
+        /* the colour it was made with, one value per component of the
+           space it was made in, which is the space the device being
+           played into declares and so the operands its method takes */
+        for (i = 0; i < private.ncomp; i++)
+            xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(colour[i]));
+        if (kind == XPOST_RECORD_FILLPOLY)
+            xpost_stack_push(ctx->lo, ctx->os, poly);
+        else
+            for (i = 0; i < nops; i++)
+                xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(ops[i]));
+        xpost_stack_push(ctx->lo, ctx->os, targetdic);
+
+        /* the continuation goes on first, so that the call runs before
+           it and anything the call leaves behind runs before it too */
+        if (!xpost_stack_push(ctx->lo, ctx->es, cont))
+        {
+            ret = execstackoverflow;
+            goto done;
+        }
+
+        if (xpost_object_get_type(m) != operatortype)
+        {
+            /* a method that is a procedure, which only the interpreter
+               runs: the call is left on the stacks and this returns */
+            xpost_stack_push(ctx->lo, ctx->os, m);
+            if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
+                ret = execstackoverflow;
+            goto done;
+        }
+
+        /* The mark is made from here. The operator is named as the
+           object being executed for the length of the call, so that an
+           error raised inside it is reported against the method and
+           unwinds onto the method's own operands, which is what an error
+           from a mark played by the interpreter does. */
+        ctx->currentobject = m;
+        ret = xpost_operator_exec(ctx, m.mark_.padw);
+        if (ret)
+            goto done;  /* the method is left named, for the error */
+        ctx->currentobject = caller;
+
+        /* Whether the call left the interpreter something to do. The
+           walk's continuation was put on before the call, so work left
+           behind sits above it and this returns to let the interpreter
+           reach both in that order; an untouched execution stack still
+           has the continuation on top and the loop takes it back off and
+           goes on to the next mark. */
+        if (!_is_replay_cont(xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0)))
+            goto done;
+        (void)xpost_stack_pop(ctx->lo, ctx->es);
+
+        /* A collection the run has asked for is taken between evaluation
+           steps and not inside this, so a batch that has been asked for
+           one ends here and the interpreter takes it before the walk is
+           resumed. */
+        if ((ctx->lo && ctx->lo->garbage_collect_pending) ||
+            (ctx->gl && ctx->gl->garbage_collect_pending))
+            break;
     }
-    else
-    {
-        xpost_stack_push(ctx->lo, ctx->os, method);
-        if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
-            return execstackoverflow;
-    }
-    return 0;
+
+    /* the batch is full, or a collection is waiting: the walk goes back
+       on to be resumed, standing on the operands it was left with */
+    if (!xpost_stack_push(ctx->lo, ctx->es, cont))
+        ret = execstackoverflow;
+
+    goto done;
+
+  refused:
+    /* Nothing was played for this entry and nothing will be: the walk's
+       operands come back off, so that a caller reached by the error
+       finds the stack the entry point left rather than the walk's own
+       working state. An error raised by a method that did run leaves
+       them where they are, which is where a mark played by the
+       interpreter leaves them. */
+    for (k = 0; k < 5; k++)
+        (void)xpost_stack_pop(ctx->lo, ctx->os);
+
+  done:
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return ret ? ret : VMerror;
+    return ret;
 }
 
 /* What a replay refuses whatever rows it is asked for, settled once
