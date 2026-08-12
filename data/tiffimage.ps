@@ -13,24 +13,28 @@
 /.xpost_TIFFIMAGE .xpost_PPMIMAGE dup length 2 add dict copy def
 
 % This class is a copy of one whose page may arrive a band at a time,
-% and a copy carries what it was copied from: a device says whether its
-% page may arrive in bands and the safe answer is silence, so a class
-% that has not thought about it has to say nothing rather than inherit a
-% yes. This one has not.
+% and it keeps that answer, having earned it rather than inherited it.
+% What stood in the way is that the header promises where the strip
+% begins and how long it runs before a single row of it has been
+% written, and both promises are keepable ahead of the rows.
 %
-% What it does have below is its page written as three parts rather than
-% as one writer: what precedes the strip, what takes the strip's rows,
-% and what follows it. The strip begins immediately after the header, so
-% where it begins is known before anything is written; how long it runs
-% is settled by the file rather than by the rows. A seekable file takes
-% the strip compressed with the directory after it and patches the
-% header's pointer once the strip has ended, so no length is promised in
-% advance at all; the standard output, which cannot be seeked back over,
+% The page stays one strip whatever it arrives in. A strip per band
+% would put one more entry in the directory for each of them and change
+% the file, and the whole claim here is that a page put out a band at a
+% time is the page put out whole, byte for byte; a band is a run of rows
+% within the one strip and nothing in the file says where the runs fell.
+%
+% The strip begins immediately after the header, so where it begins is
+% known before anything is written. How long it runs is settled two
+% ways, and which applies is settled by the file rather than by the
+% rows: a seekable file takes the strip compressed and the directory
+% after it, so the length is not promised in advance at all -- the
+% header's pointer to the directory is patched once the strip has
+% ended -- while the standard output, which cannot be seeked back over,
 % takes the strip uncompressed, and an uncompressed strip's length
-% follows from the page's own extent.
+% follows from the page's own extent (doc/NEWINTERNALS).
 %
 % The portable-map header is not this format's, so what builds one goes.
-.xpost_TIFFIMAGE /BandedPage undef
 .xpost_TIFFIMAGE /.pnmmagic undef
 .xpost_TIFFIMAGE /.pnmmaxval undef
 
@@ -122,7 +126,9 @@
 } put
 
 % the page whole: the header, the strip, and what follows it, through
-% the same three, so nothing about this format is said in two places
+% the same three a page arriving in bands goes out through, so the two
+% carry the same bytes because they are the same bytes rather than
+% because two writers agree
 .xpost_TIFFIMAGE /.writepage { % img file
     3 dict begin
     {/f /a}{exch def}forall

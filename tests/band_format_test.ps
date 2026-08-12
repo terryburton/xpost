@@ -1,0 +1,260 @@
+% One page put out a band at a time, and the same page put out whole,
+% through the two raster classes whose emission is not raw rows: the
+% bilevel one, which packs its rows to bits and screens every grey
+% against the halftone cell under the pixel, and the TIFF one, whose
+% header promises where the strip begins and how long it runs before a
+% row of it is written.
+%
+% run-band-format-test.sh runs this file once per device. What it claims
+% is what doc/NEWINTERNALS claims for any device taking its page in bands:
+%
+%   The bytes. The page assembled from bands is the page a raster
+%   holding all of it paints, byte for byte, at several band heights
+%   including a band of one row. One row a band is what catches a screen
+%   phased on the band rather than on the page: a band deep enough to
+%   hold a cell of the screen and the marks either side of it agrees with
+%   the whole page whatever it phased on, and a band of one row does not.
+%
+%   The bound. A loop that quietly held the whole page anyway paints the
+%   same bytes, so the bytes cannot see it. The growth of the global half
+%   of virtual memory across the page can, and it is reported for both
+%   routes at two page heights so that what is compared is a slope
+%   against a slope.
+%
+%   The rows reached the writer as they were finished. A device that
+%   collected the page and wrote it at the end would pass both of the
+%   above. So the class's row writer is wrapped before any raster is made
+%   from it, and the run counts the calls and the rows: a page put out in
+%   n bands must reach the writer in n pieces and one page's worth of
+%   rows, and a page put out whole in one piece.
+%
+% The marks are offered whole to every band and each band keeps what
+% lands on the rows it holds, which is what a replay of a record does.
+% They cover the five kinds of mark a device can be asked for, text --
+% whose glyph edges arrive as coverage on the colour class and as whole
+% pixels on the bilevel one -- and a sampled image, which reaches a
+% device that keeps rows by being written into them rather than through
+% any marking call.
+
+/W 240 def
+/heights [ 120 240 ] def
+
+% Band heights, against a page of 120 rows and one of 240: none of them
+% covers either page, and the first is the one that puts a boundary
+% between bands on every row of it.
+/bands [ 1 7 64 ] def
+% ... and the taller page is put out at one band height only, since what
+% two heights are for is the slope of what is held rather than more
+% arrangements of marks.
+/tallband 64 def
+
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+/num { 20 string cvs } bind def
+
+/DEV DEVICE /nativecolorspace get /DeviceGray eq { (pbm) }{ (tiff) } ifelse def
+/cls .privatedict
+    DEV (pbm) eq { /.xpost_PBMIMAGE }{ /.xpost_TIFFIMAGE } ifelse get def
+
+% -  gvm  int
+% What the global half of virtual memory has taken. Raster memory is
+% taken from it (PLRM 3.7.3), and it only grows -- an allocation given up
+% goes on a free list and the count stays -- so the difference across a
+% page is what that page took.
+/gvm {
+    currentglobal true setglobal
+    vmstatus pop exch pop
+    exch setglobal
+} bind def
+
+% How the page reached the writer. The class's row writer is wrapped
+% here, before any raster is copied from the class, so every device the
+% run makes carries the count: one call per run of rows handed over, and
+% the rows in it.
+/callsout [ 0 ] def
+/rowsout [ 0 ] def
+/innerband cls /.writeband get def
+cls /.writeband { % rows file  .  -
+    callsout 0 callsout 0 get 1 add put
+    1 index length
+    rowsout 0 3 -1 roll rowsout 0 get add put
+    innerband
+} put
+
+% h  paint  -
+% A page reaching all five kinds of mark and a sampled image, laid out
+% against the page's height so that whatever the height is the marks
+% cross the boundaries between bands rather than sitting inside one.
+/paint { % h  .  -
+    /ph exch store
+    erasepage
+
+    % a fill with a hole, over the middle of the page: a mid grey, so
+    % that what the bilevel class stores for it is the screen's pattern
+    % rather than solid ink
+    gsave
+        0.45 setgray
+        newpath
+        30 ph 0.30 mul moveto 200 ph 0.30 mul lineto
+        200 ph 0.55 mul lineto 30 ph 0.55 mul lineto closepath
+        70 ph 0.36 mul moveto 70 ph 0.49 mul lineto
+        160 ph 0.49 mul lineto 160 ph 0.36 mul lineto closepath
+        eofill
+    grestore
+
+    % a fill under the other winding rule, low on the page
+    gsave
+        0.6 0 0 setrgbcolor
+        newpath
+        40 ph 0.06 mul moveto 190 ph 0.06 mul lineto
+        190 ph 0.20 mul lineto 40 ph 0.20 mul lineto closepath fill
+    grestore
+
+    % strokes down the length of it, so that every band has one across it
+    gsave
+        0 setgray
+        0 setlinewidth
+        newpath 10 5 moveto 230 ph 5 sub lineto stroke
+        newpath 230 5 moveto 10 ph 5 sub lineto stroke
+        1 setlinewidth
+        0 0 0.8 setrgbcolor
+        newpath 120 ph 0.02 mul moveto 120 ph 0.98 mul lineto stroke
+    grestore
+
+    % text, for the glyph pixels a boundary cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 22 scalefont setfont
+        20 ph 0.70 mul moveto (Bands) show
+        20 ph 0.80 mul moveto (Bound) show
+    grestore
+
+    % a sampled image, written into the rows of a device that keeps
+    % them. It is magnified well past a band's height, so every band it
+    % reaches is a band it is written into for part of itself.
+    gsave
+        /DeviceGray setcolorspace
+        30 ph 0.60 mul translate
+        180 ph 0.08 mul scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+% kind h  name  string
+/name { % kind h  .  string
+    /nm.h exch store /nm.k exch store
+    nm.k (-) join nm.h num join (-) join DEV join (.out) join
+} bind def
+
+/wholename { % h  .  string
+    (whole) exch name
+} bind def
+
+% -  count0  -
+/count0 { callsout 0 0 put rowsout 0 0 put } bind def
+
+% kind h nbands  report  -
+% What the writer was handed: how many runs of rows it was called with,
+% and how many rows in all, against the number of bands the page was put
+% out in. A device that collected the page and wrote it at the end shows
+% one call whatever the bands.
+/report { % kind h nbands  .  -
+    /rp.n exch store /rp.h exch store /rp.k exch store
+    (CALLS ) print rp.k print ( ) print rp.h num print ( ) print
+    rp.n num print ( ) print callsout 0 get num print ( ) print
+    rowsout 0 get num print (\n) print
+} bind def
+
+% h b  bandname  string
+% The name a banded page goes to, said in one place so that what the
+% wrapper compares is the file this run wrote.
+/bandname { % h b  .  string
+    /bn.b exch store /bn.h exch store
+    (band-) bn.h num join (-) join bn.b num join (-) join DEV join
+    (.out) join
+} bind def
+
+% h  whole  -
+% The page in one raster, put out the way a page has always been put out.
+/whole { % h  .  -
+    /wh.h exch store
+    count0
+    /wh.before gvm store
+    << /PageSize [W wh.h] >> setpagedevice
+    DEVICE /.outputfile wh.h wholename put
+    wh.h paint
+    DEVICE dup /Emit get exec
+    /wh.after gvm store
+    (MEM whole ) print wh.h num print ( ) print
+    wh.after wh.before sub num print (\n) print
+    (whole) wh.h 1 report
+} bind def
+
+% h b  banded  -
+% The same page in a raster holding b rows: the run of rows the device
+% holds is left for it where a page device leaves one, the marks are
+% offered to each run in turn, and the rows of each go out as that run
+% is finished.
+/banded { % h b  .  -
+    /bd.b exch store
+    /bd.h exch store
+    count0
+    /bd.before gvm store
+    graphicsdict /.rasterband [ 0 bd.b ] put
+    << /PageSize [W bd.h] >> setpagedevice
+    DEVICE /.outputfile bd.h bd.b bandname put
+    % what the page's emission keeps between bands: the file it is going
+    % to and how far down the page it has reached
+    DEVICE /.bandpage 4 dict put
+    /bd.n 0 store
+    0 bd.b bd.h 1 sub {
+        /bd.top exch store
+        /bd.rows bd.b bd.h bd.top sub 2 copy gt { exch } if pop store
+        bd.top 0 gt {
+            bd.top bd.rows DEVICE dup /.moveband get exec
+        } if
+        bd.h paint
+        DEVICE dup /Emit get exec
+        /bd.n bd.n 1 add store
+    } for
+    % and the call that holds nothing, which says the page is finished
+    0 0 DEVICE dup /.moveband get exec
+    DEVICE dup /Emit get exec
+    /bd.after gvm store
+    (MEM band ) print bd.h num print ( ) print
+    bd.after bd.before sub num print (\n) print
+    (band) bd.h bd.n report
+} bind def
+
+(DEVICE ) print DEV print (\n) print
+(PAGE ) print W num print (\n) print
+
+% A page painted and thrown away first: the fonts and the tables the
+% marks above build are built once, and a measurement taken across the
+% first page of a run would carry them.
+heights 0 get whole
+
+heights {
+    /hh exch store
+    hh whole
+    (WHOLE ) print hh num print ( ) print hh wholename print (\n) print
+    bands {
+        /bb exch store
+        hh heights 0 get eq bb tallband eq or {
+            hh bb banded
+            (BAND ) print hh num print ( ) print bb num print ( ) print
+            hh bb bandname print (\n) print
+        } if
+    } forall
+} forall
+
+quit

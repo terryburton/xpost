@@ -15,12 +15,13 @@
 .xpost_PBMIMAGE /TextAlphaBits 1 put
 
 % This class is a copy of one whose page may arrive a band at a time,
-% and a copy carries what it was copied from: a device says whether its
-% page may arrive in bands and the safe answer is silence, so a class
-% that has not thought about it has to say nothing rather than inherit a
-% yes. This one has not said it.
-.xpost_PBMIMAGE /BandedPage undef
-
+% and it keeps that answer, having earned it rather than inherited it:
+% the bilevel header states the page's own extent and goes out ahead of
+% any row, the packed rows below are written a run at a time, and the
+% screen a grey passes through is a function of the pixel's position on
+% the page, so a row carries the same bits whichever run of rows it
+% arrives in (doc/NEWINTERNALS).
+%
 % The header is the bilevel one: the magic names the format and a
 % sample is one bit, so there is no top of a value range to state.
 .xpost_PBMIMAGE /.pnmmagic (P4\n) put

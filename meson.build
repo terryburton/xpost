@@ -3345,6 +3345,23 @@ test('band-sparse',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the two classes whose emission is not raw rows, each of which
+# had a reason of its own for not taking its page in bands: the bilevel
+# one screens every grey against the cell under the pixel, so a screen
+# phased on the band rather than on the page dithers differently and does
+# so invisibly at any band deeper than a cell; the TIFF one promises in
+# its header where the strip begins and how long it runs before a row of
+# it exists. This puts a page of every kind of mark, text and a sampled
+# image out through each of them in bands of one row and of many, and
+# requires the page held whole, the bound on what is held, and the rows
+# reaching the writer as the bands finish rather than at the end.
+test('band-format',
+  find_program('tests/run-band-format-test.sh'),
+  args: [ xpost_exe, files('tests/band_format_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

@@ -29,7 +29,9 @@
 #   Which classes say their page may arrive in bands. The answer defaults
 #   to no, and the two classes that derive from the two that say yes do
 #   so by dict copy -- so the way this rule breaks is by inheritance,
-#   silently, and the roster is checked rather than assumed.
+#   silently, and the roster is checked rather than assumed. The derived
+#   two say yes here because each has earned it and not because it was
+#   copied; what holds their pages to it is tests/run-band-format-test.sh.
 #
 #   A grayscale page put out band by band. The colour class is the one
 #   the record plays into, so nothing above reaches the grayscale one;
@@ -237,7 +239,7 @@ fi
 # ---- what a class says about taking its page in bands ----
 decl() { field DECL | awk -v c="$1" '$1 == c { print $2 }'; }
 for c in .xpost_PGMIMAGE:yes .xpost_PPMIMAGE:yes \
-         .xpost_PBMIMAGE:no .xpost_TIFFIMAGE:no; do
+         .xpost_PBMIMAGE:yes .xpost_TIFFIMAGE:yes; do
     cls=${c%%:*}; want=${c#*:}
     got=$(decl "$cls")
     if [ -z "${got:-}" ]; then
