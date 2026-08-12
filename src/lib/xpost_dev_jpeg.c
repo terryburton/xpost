@@ -96,10 +96,29 @@ typedef char xpost_jpeg_block_precedes_the_raster[
     offsetof(Xpost_Jpeg_Buffer, data)
     == offsetof(Xpost_Jpeg_Buffer, block) + sizeof(void *) ? 1 : -1];
 
+/* The compressor a page is written through, and the error manager it
+   reports a fatal condition through. The two are kept together because
+   the compressor holds the manager's address and the manager holds the
+   landing a fatal condition returns to, so neither may move while a
+   page is being written. */
+typedef struct
+{
+    struct jpeg_compress_struct cinfo;
+    struct _JPEG_error_mgr jerr;
+} Xpost_Jpeg_Writer;
+
 /* A JPEG stream holds exactly one image, so the file a page is
    compressed into belongs to the page and not to the device: it is
-   opened when a page is emitted and closed before that emit returns.
-   What the instance keeps between pages is the raster. */
+   opened as a page begins and closed as it ends. What the instance
+   keeps between pages is the raster.
+
+   A page arriving a band at a time is compressed across several Emit
+   calls (doc/NEWINTERNALS), and the file and the compressor outlive each
+   of them -- which is the whole of what makes a band of any height
+   right. A scanline goes into a unit of eight or sixteen rows, and the
+   compressor holds the part of a unit it has not filled between one
+   call and the next for as long as it is alive, so the device keeps the
+   compressor rather than choosing a band height to suit it. */
 typedef struct
 {
     int width;
@@ -108,6 +127,22 @@ typedef struct
      * add additional members to private struct
      */
     Xpost_Jpeg_Buffer *buf;
+    /* the run of the page's rows the raster stands for, and how far
+       down the page the file has been written */
+    Xpost_Dev_Band band;
+    FILE *file;
+    /* The compressor, held by its address rather than in this struct.
+       What is written here is copied in and out of a string the
+       interpreter holds (xpost_dev_private_get/put), so a member of it
+       has no address that lasts from one call to the next -- and a
+       compressor is reached by address: its error manager is what a
+       fatal condition longjmps through, and the library is given the
+       one address for the length of a page. */
+    Xpost_Jpeg_Writer *out;
+    /* one row of the page's ground, for the rows this device is not
+       holding: compressed where a device holding the whole page would
+       have compressed what erasepage left there */
+    unsigned char *ground;
     /* the device allocated buf and has not handed it to the client
        through OutputBufferOut, so Destroy frees it */
     int bufowned;
@@ -119,6 +154,7 @@ static Xpost_Object nameheight;
 static Xpost_Object namedotcopydict;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object nameDeviceRGB;
+static Xpost_Object namedotbandpage;
 
 
 static unsigned int _create_cont_opcode;
@@ -147,6 +183,34 @@ _JPEGErrorHandler2(j_common_ptr cinfo, int msg_level)
 {
    (void)cinfo;
    (void)msg_level;
+}
+
+/* Leave a run of the buffer's own rows as a raster fresh from Create:
+   white, this format carrying no transparency.
+
+   Create lays the whole buffer down this way, and so does every move to
+   another run of the page's rows -- a raster standing for one run after
+   another has to start each run as a fresh raster would, or what the
+   run before painted shows through wherever this one paints nothing.
+   The rows are the buffer's, not the page's, since what moves is which
+   of the page's rows they stand for. */
+static void _clear(PrivateData *p, int from, int to)
+{
+    Xpost_Jpeg_Pixel init;
+    Xpost_Dev_Raster_Offset i, n;
+
+    if (from < 0)
+        from = 0;
+    if (to > p->band.bufrows - 1)
+        to = p->band.bufrows - 1;
+    if (from > to)
+        return;
+
+    init.red = init.green = init.blue = 255;
+    i = xpost_dev_raster_offset(0, from, p->width);
+    n = xpost_dev_raster_offset(0, to + 1, p->width);
+    for (; i < n; i++)
+        p->buf->data[i] = init;
 }
 
 /* create an instance of the device
@@ -195,11 +259,11 @@ int _create_cont(Xpost_Context *ctx,
     int ret;
     //printf("create_cont\n");
 
-    /* The page the program asked for, as the extent of the buffer that
-       will hold it. Every device here holds a whole page in one block,
-       so the two carry the same numbers; a page naming an extent no
-       buffer's row arithmetic carries is refused before anything is
-       built for it. */
+    /* The page the program asked for, as the extent the buffer's row
+       arithmetic is done in; a page naming an extent that arithmetic
+       does not carry is refused before anything is built for it. How
+       many of the page's rows the buffer holds is settled below and is
+       a separate question. */
     if (!xpost_dev_buffer_extent(w.int_.val, &width)
      || !xpost_dev_buffer_extent(h.int_.val, &height))
     {
@@ -217,6 +281,9 @@ int _create_cont(Xpost_Context *ctx,
 
     private.width = width;
     private.height = height;
+    private.file = NULL;
+    private.out = NULL;
+    private.ground = NULL;
 
     /*
      *
@@ -224,17 +291,30 @@ int _create_cont(Xpost_Context *ctx,
      *
      */
 
+    /* The run of the page's rows this device is to hold. A baseline
+       JPEG is written in one pass, so a row compressed is a row given
+       up and the device need hold no more of the page than the run it
+       is working on -- except where the raster is one an embedder asked
+       for, which is the whole page by the contract it asked under
+       (XPOST_OUTPUT_BUFFEROUT, xpost.h). The run still says which rows
+       take marks either way. */
+    xpost_dev_band_take(ctx, height,
+                        xpost_object_get_type(
+                            xpost_context_host_setting(ctx, "OutputBufferOut"))
+                        == stringtype,
+                        &private.band);
+
     /* allocate buffer header and array */
     {
         size_t bytes;
 
-        if (!xpost_device_raster_bytes(width, height,
+        if (!xpost_device_raster_bytes(width, private.band.bufrows,
                                        sizeof(Xpost_Jpeg_Pixel),
                                        sizeof(Xpost_Jpeg_Buffer), &bytes))
         {
             XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger than"
                           " this platform addresses", limitcheck,
-                          width, height);
+                          width, private.band.bufrows);
             return limitcheck;
         }
         private.buf = xpost_device_raster_block(bytes);
@@ -253,15 +333,7 @@ int _create_cont(Xpost_Context *ctx,
 
     /* the page starts white; this format carries no transparency, so a
        pixel the job never marks is written out as it stands here */
-    {
-        Xpost_Dev_Raster_Offset i, n;
-        Xpost_Jpeg_Pixel init;
-
-        n = (Xpost_Dev_Raster_Offset)width * (Xpost_Dev_Raster_Offset)height;
-        init.red = init.green = init.blue = 255;
-        for (i = 0; i < n; i++)
-            private.buf->data[i] = init;
-    }
+    _clear(&private, 0, private.band.bufrows - 1);
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -308,7 +380,7 @@ int _blendpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, c, ix, iy;
+    int r, g, b, c, ix, iy, by;
 
     r = xpost_dev_num_to_byte(red);
     g = xpost_dev_num_to_byte(green);
@@ -326,8 +398,8 @@ int _blendpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    if ((ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+    by = xpost_dev_band_row(&private.band, iy);
+    if ((ix < 0) || (ix >= private.width) || (by < 0))
         return 0;
 
     if (c <= 0)
@@ -337,7 +409,7 @@ int _blendpix(Xpost_Context *ctx,
 
     {
         Xpost_Jpeg_Pixel *p = &private.buf->data
-            [xpost_dev_raster_offset(ix, iy, private.width)];
+            [xpost_dev_raster_offset(ix, by, private.width)];
 
         p->red = (unsigned char)_blendchannel(p->red, r, c);
         p->green = (unsigned char)_blendchannel(p->green, g, c);
@@ -361,7 +433,7 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, ix, iy;
+    int r, g, b, ix, iy, by;
 
     /* fold numbers per the driver contract */
     r = xpost_dev_num_to_byte(red);
@@ -378,9 +450,11 @@ int _putpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    /* check bounds */
-    if ((ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+    /* check bounds: the columns of the page, and the rows of it this
+       device is holding -- a mark aimed at a row it is not holding is
+       dropped where a mark off the page is dropped */
+    by = xpost_dev_band_row(&private.band, iy);
+    if ((ix < 0) || (ix >= private.width) || (by < 0))
         return 0;
 
     {
@@ -388,7 +462,7 @@ int _putpix(Xpost_Context *ctx,
         pixel.blue = b;
         pixel.green = g;
         pixel.red = r;
-        private.buf->data[xpost_dev_raster_offset(ix, iy, private.width)]
+        private.buf->data[xpost_dev_raster_offset(ix, by, private.width)]
             = pixel;
     }
 
@@ -444,11 +518,16 @@ int _fillrect(Xpost_Context *ctx,
     if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
                              private.width, private.height))
         return 0;
+    /* ... and then to the rows this device is holding */
+    if (!xpost_dev_band_clip(&private.band, &y0, &y1))
+        return 0;
 
     for (iy = y0; iy <= y1; iy++)
     {
         Xpost_Jpeg_Pixel *row = private.buf->data
-                              + xpost_dev_raster_offset(0, iy, private.width);
+                              + xpost_dev_raster_offset(
+                                    0, xpost_dev_band_row(&private.band, iy),
+                                    private.width);
 
         for (ix = x0; ix <= x1; ix++)
             row[ix] = pixel;
@@ -462,7 +541,10 @@ int _fillrect(Xpost_Context *ctx,
    row array, which this device does not have, so the inherited method
    would answer undefined; a slot the class dictionary offers has to
    work. A pixel outside the raster reads as the page's ground, and so
-   does every pixel of an instance whose buffer has been released. */
+   does every pixel of an instance whose buffer has been released, and
+   every pixel of a row this device is not holding -- which is what the
+   file carries there, so the read agrees with the page rather than
+   refusing a pixel the page has. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -471,7 +553,7 @@ int _getpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int ix, iy, r, g, b;
+    int ix, iy, by, r, g, b;
 
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
@@ -480,14 +562,14 @@ int _getpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    by = private.buf ? xpost_dev_band_row(&private.band, iy) : -1;
     if (!private.buf ||
-        (ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+        (ix < 0) || (ix >= private.width) || (by < 0))
         xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
     else
     {
         Xpost_Jpeg_Pixel pixel = private.buf->data
-            [xpost_dev_raster_offset(ix, iy, private.width)];
+            [xpost_dev_raster_offset(ix, by, private.width)];
 
         r = pixel.red; g = pixel.green; b = pixel.blue;
     }
@@ -499,38 +581,82 @@ int _getpix(Xpost_Context *ctx,
     return 0;
 }
 
-/* Write the page: one JPEG image, whole, into the file settled for this
-   page. The file is opened here and closed here, so a job's second page
-   is a second file rather than an append to a stream that holds one
-   image. */
-static
-int _emit(Xpost_Context *ctx,
-          Xpost_Object devdic)
+/* Give up what a page was being compressed through, whether it was
+   finished or not. Everything the compressor was given goes back here,
+   so a page abandoned part way costs the same as one written to the end
+   -- and the page ends here too, there being no compressor left to
+   write any more of it with.
+
+   The file is the one thing left: it is the page machinery that named
+   it, and it is given back by the method that writes the page, where it
+   was opened (tests/check-page-output.sh). What says it is to be given
+   back is the page ending, which is what this records. */
+static void _stream_drop(PrivateData *p)
 {
-    struct jpeg_compress_struct cinfo;
-    struct _JPEG_error_mgr jerr;
+    p->band.open = 0;
+    p->band.done = 1;
+    if (p->out)
+    {
+        jpeg_destroy_compress(&p->out->cinfo);
+        free(p->out);
+    }
+    p->out = NULL;
+    free(p->ground);
+    p->ground = NULL;
+}
+
+/* Start the stream this page is compressed through: the file the page
+   machinery settled the name of, the compressor that fills it, and one
+   row of the page's ground for the rows this device is not holding.
+
+   The compressor is told the page's extent and not the run of rows the
+   call that opened the stream happens to be holding, so a page written
+   a band at a time carries at its head what a page written whole
+   carries.
+
+   The file is opened by the caller and is already this device's; what
+   is made here is everything that writes through it. */
+static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
+                        PrivateData *p)
+{
     Xpost_Object ud;
     Xpost_Object quality_o;
-    Xpost_Object privatestr;
-    PrivateData private;
-    FILE *f;
-    unsigned char *data;
-    JSAMPROW *jbuf;
+    size_t bytes;
     int quality;
+    int r, g, b;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* a released instance has no raster to compress */
-    if (!private.buf)
-        return 0;
-
-    f = xpost_device_page_open(ctx, devdic);
-    if (!f)
+    /* the ground is asked for in this device's own pixels, through the
+       arithmetic the raster itself was sized by */
+    if (!xpost_device_raster_bytes(p->width, 1, sizeof(Xpost_Jpeg_Pixel),
+                                   0, &bytes))
     {
-        XPOST_LOG_ERR("cannot open the file this JPEG page is written to");
-        return ioerror;
+        _stream_drop(p);
+        return limitcheck;
+    }
+    p->ground = xpost_device_raster_block(bytes);
+    if (!p->ground)
+    {
+        _stream_drop(p);
+        return VMerror;
+    }
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
+    {
+        Xpost_Jpeg_Pixel px;
+        Xpost_Dev_Raster_Offset i, n;
+
+        px.red = (unsigned char)r;
+        px.green = (unsigned char)g;
+        px.blue = (unsigned char)b;
+        n = xpost_dev_raster_offset(0, 1, p->width);
+        for (i = 0; i < n; i++)
+            ((Xpost_Jpeg_Pixel *)p->ground)[i] = px;
+    }
+
+    p->out = calloc(1, sizeof(*p->out));
+    if (!p->out)
+    {
+        _stream_drop(p);
+        return VMerror;
     }
 
     ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
@@ -542,64 +668,314 @@ int _emit(Xpost_Context *ctx,
         quality = quality_o.int_.val;
     XPOST_LOG_INFO("JPEG quality: %d", quality);
 
-    memset(&cinfo, 0, sizeof(cinfo));
-    cinfo.err = jpeg_std_error(&(jerr.pub));
-    jerr.pub.error_exit = _JPEGFatalErrorHandler;
-    jerr.pub.emit_message = _JPEGErrorHandler2;
-    jerr.pub.output_message = _JPEGErrorHandler;
-    if (setjmp(jerr.setjmp_buffer))
+    p->out->cinfo.err = jpeg_std_error(&(p->out->jerr.pub));
+    p->out->jerr.pub.error_exit = _JPEGFatalErrorHandler;
+    p->out->jerr.pub.emit_message = _JPEGErrorHandler2;
+    p->out->jerr.pub.output_message = _JPEGErrorHandler;
+    /* the library reports a fatal condition by longjmp, and it may only
+       be aimed at a call still on the stack: every call into it below
+       sets its own landing, and each releases what the compressor was
+       given */
+    if (setjmp(p->out->jerr.setjmp_buffer))
     {
-        jpeg_destroy_compress(&cinfo);
-        xpost_device_page_close(f);
+        _stream_drop(p);
         return undefined;
     }
-    jpeg_create_compress(&cinfo);
-    jpeg_stdio_dest(&cinfo, f);
-    cinfo.image_width = private.width;
-    cinfo.image_height = private.height;
-    cinfo.input_components = 3;
-    cinfo.in_color_space = JCS_RGB;
-    cinfo.optimize_coding = FALSE;
-    cinfo.dct_method = JDCT_ISLOW; /* JDCT_FLOAT JDCT_IFAST(quality loss) */
+    jpeg_create_compress(&p->out->cinfo);
+    jpeg_stdio_dest(&p->out->cinfo, p->file);
+    p->out->cinfo.image_width = p->width;
+    p->out->cinfo.image_height = p->height;
+    p->out->cinfo.input_components = 3;
+    p->out->cinfo.in_color_space = JCS_RGB;
+    /* One pass over the page: the coder that chooses its own Huffman
+       tables reads every block before it writes any, which is the page
+       held in the compressor whatever this device holds. */
+    p->out->cinfo.optimize_coding = FALSE;
+    p->out->cinfo.dct_method = JDCT_ISLOW; /* JDCT_FLOAT JDCT_IFAST(quality loss) */
     if (quality < 60)
-        cinfo.dct_method = JDCT_IFAST;
-    jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, quality, TRUE);
+        p->out->cinfo.dct_method = JDCT_IFAST;
+    jpeg_set_defaults(&p->out->cinfo);
+    jpeg_set_quality(&p->out->cinfo, quality, TRUE);
     if (quality >= 90)
     {
-        cinfo.comp_info[0].h_samp_factor = 1;
-        cinfo.comp_info[0].v_samp_factor = 1;
-        cinfo.comp_info[1].h_samp_factor = 1;
-        cinfo.comp_info[1].v_samp_factor = 1;
-        cinfo.comp_info[2].h_samp_factor = 1;
-        cinfo.comp_info[2].v_samp_factor = 1;
+        p->out->cinfo.comp_info[0].h_samp_factor = 1;
+        p->out->cinfo.comp_info[0].v_samp_factor = 1;
+        p->out->cinfo.comp_info[1].h_samp_factor = 1;
+        p->out->cinfo.comp_info[1].v_samp_factor = 1;
+        p->out->cinfo.comp_info[2].h_samp_factor = 1;
+        p->out->cinfo.comp_info[2].v_samp_factor = 1;
     }
-    jpeg_start_compress(&cinfo, TRUE);
-    /* a row at a time, stepping by the bytes one row of the buffer
-       holds: the step is counted in the width a size is expressed in,
-       which a row of a wide page runs past when counted in an int */
-    data = (unsigned char *)private.buf->data;
-    while (cinfo.next_scanline < cinfo.image_height)
+    jpeg_start_compress(&p->out->cinfo, TRUE);
+
+    p->band.open = 1;
+    return 0;
+}
+
+/* Lay the page's ground over the whole buffer.
+
+   For a device holding every row of the page while its marks arrive a
+   run at a time. Such a device writes its file from what the buffer
+   holds, so a row no run ever reaches is written from the buffer as
+   well -- and what the page carries there is the ground, not the white
+   a fresh raster starts on. It is laid once per page, before the first
+   run is painted, so that a run that is painted overwrites it.
+
+   A device whose buffer is the size of a band needs none of this: a row
+   it is not holding is written from the ground row its emission keeps,
+   there being no buffer row to write it from. */
+static void _prime(Xpost_Context *ctx, Xpost_Object devdic, PrivateData *p)
+{
+    Xpost_Jpeg_Pixel px;
+    Xpost_Dev_Raster_Offset i, n;
+    int r, g, b;
+
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
+    px.red = (unsigned char)r;
+    px.green = (unsigned char)g;
+    px.blue = (unsigned char)b;
+    n = xpost_dev_raster_offset(0, p->band.bufrows, p->width);
+    for (i = 0; i < n; i++)
+        p->buf->data[i] = px;
+    p->band.primed = 1;
+}
+
+/* Begin a page: nothing of it written and no stream open for it. What
+   the raster holds is not touched -- the marks of the page about to be
+   written are already on it by the time anything here runs. */
+static void _page_begin(PrivateData *p)
+{
+    p->band.next = 0;
+    p->band.primed = 0;
+    p->band.open = 0;
+    p->band.done = 0;
+}
+
+/* The row of the page at @p y as the compressor wants it: the buffer's,
+   where this device is holding that row, and the ground where it is
+   not. The compressor is handed the same rows either way and does not
+   have to know the difference. */
+static JSAMPROW _page_row(PrivateData *p, int y)
+{
+    int by = xpost_dev_band_stored(&p->band, y);
+
+    if (by < 0)
+        return (JSAMPROW)p->ground;
+    return (JSAMPROW)(p->buf->data
+                      + xpost_dev_raster_offset(0, by, p->width));
+}
+
+/* Give the compressor the page's rows from where the file has reached
+   down to @p to, and remember where that leaves it.
+
+   A scanline goes into a unit of eight or sixteen rows, so a run of
+   rows that is not a whole number of those leaves the compressor
+   holding the part it cannot code yet. It holds that part itself, for
+   as long as it is alive, and this device keeps it alive for the length
+   of the page -- so a band may be any height at all, one row included,
+   and the file is the file a page handed over whole produces. Choosing
+   a band height to suit the unit would be the other answer and it is
+   not needed here. */
+static int _write_rows(PrivateData *p, int to)
+{
+    if (setjmp(p->out->jerr.setjmp_buffer))
     {
-        jbuf = (JSAMPROW *) (&data);
-        jpeg_write_scanlines(&cinfo, jbuf, 1);
-        data += (Xpost_Dev_Raster_Offset)private.width
-              * sizeof(Xpost_Jpeg_Pixel);
+        _stream_drop(p);
+        return undefined;
     }
-    jpeg_finish_compress(&cinfo);
-    jpeg_destroy_compress(&cinfo);
-    xpost_device_page_close(f);
+
+    while (p->band.next <= to
+           && p->out->cinfo.next_scanline < p->out->cinfo.image_height)
+    {
+        JSAMPROW row = _page_row(p, p->band.next);
+
+        jpeg_write_scanlines(&p->out->cinfo, &row, 1);
+        p->band.next++;
+    }
+    return 0;
+}
+
+/* Finish the image and close the file behind it. A page finished stays
+   finished: what says so is recorded before this returns, so a further
+   call writes nothing rather than a second page into the same file. */
+static int _stream_finish(PrivateData *p)
+{
+    if (setjmp(p->out->jerr.setjmp_buffer))
+    {
+        _stream_drop(p);
+        return undefined;
+    }
+    jpeg_finish_compress(&p->out->cinfo);
+    _stream_drop(p);
+    return 0;
+}
+
+/* Write the page, or as much of it as this device is holding.
+
+   A page not arriving in bands is compressed by the one call that puts
+   it out: every row goes to the compressor and the image is finished. A
+   page arriving in bands reaches here once per band, holding the rows
+   of that band, and once more at the end holding nothing, which is what
+   says the page is finished -- so a call writes what it can, from where
+   the file has reached to the last row it is holding, and keeps the
+   compressor open for what the next call brings. The rows between,
+   which are the bands nothing painted into, go out as the page's
+   ground.
+
+   What says a page is arriving that way is /.bandpage, which the band
+   loop leaves on the device (data/image.ps); a device carrying none
+   takes the whole page as it always did, so one cannot be handed part
+   of a page by accident -- and each call is then a page of its own,
+   which is how a job's second page comes to be a second file. A page
+   arriving in bands is finished once: a further call for the same page
+   writes nothing rather than a second page into the same file, and what
+   begins the page after it is the move onto that page's first run of
+   rows. */
+static
+int _emit(Xpost_Context *ctx,
+          Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int banded, last, ret;
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    /* a released instance has no raster to compress */
+    if (!private.buf)
+        return 0;
+
+    banded = xpost_object_get_type(
+                 xpost_dict_get(ctx, devdic, namedotbandpage)) != invalidtype;
+
+    if (!banded)
+    {
+        /* Each call is a page of its own. A stream still open here
+           belonged to a page that was arriving in bands and stopped
+           doing so, and it is given up rather than left behind: what
+           follows opens another. */
+        if (private.band.open)
+        {
+            _stream_drop(&private);
+            if (private.file)
+            {
+                xpost_device_page_close(private.file);
+                private.file = NULL;
+            }
+        }
+        _page_begin(&private);
+    }
+    else if (private.band.done)
+        return 0;
+
+    /* the last of the page's rows this call can give the file */
+    last = (!banded || private.band.rows == 0)
+         ? private.height - 1
+         : private.band.top + private.band.rows - 1;
+
+    ret = 0;
+    if (!private.band.open)
+    {
+        /* The file this page goes to, opened here because its name was
+           settled for this page: the page machinery puts the settled
+           name on the device and this is the method that writes the
+           page (tests/check-page-output.sh). */
+        private.file = xpost_device_page_open(ctx, devdic);
+        if (!private.file)
+        {
+            XPOST_LOG_ERR("cannot open the file this page is compressed to");
+            ret = ioerror;
+        }
+        else
+            ret = _stream_open(ctx, devdic, &private);
+    }
+    if (!ret)
+        ret = _write_rows(&private, last);
+    if (!ret && private.band.next >= private.height)
+        ret = _stream_finish(&private);
+    /* The file goes back with the page that was being written through
+       it, finished or refused; a page still being written keeps it for
+       the call that brings the next band. */
+    if (private.band.done && private.file)
+    {
+        xpost_device_page_close(private.file);
+        private.file = NULL;
+    }
+    if (ret)
+    {
+        /* what the stream came to is recorded whether it was written or
+           refused: a page that could not be written is one this device
+           must not go on writing */
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+            return VMerror;
+        return ret;
+    }
 
     /* pass data back to client application; the raster then belongs to
        the client, which gives the block it sits in back through the
-       release entry point, so Destroy must leave it alone from here on */
-    if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
-    {
+       release entry point, so Destroy must leave it alone from here on.
+       Only a finished page is handed over, and only a device holding
+       every row of it has one -- which is what Create gives a device an
+       embedder asked a raster of. */
+    if (private.band.done
+        && xpost_dev_output_buffer_handoff(ctx,
+                                           (unsigned char *)private.buf->data))
         private.bufowned = 0;
-        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-            return VMerror;
-    }
 
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
+
+    return 0;
+}
+
+/* Move the raster onto another run of the page's rows.
+
+   The rows are the ones Create made: one raster the size of a band,
+   standing for one run of the page after another, which is what bounds
+   what a page costs to put out. A raster per band would be the shorter
+   way to say this and it bounds nothing, since nothing gives the band
+   before's memory back.
+
+   The run given up is not written anywhere here. Where the file has
+   reached is the emission's business and it has already had these rows;
+   what this does is say which rows the raster stands for next, and
+   leave them as a raster fresh from Create would be -- a row still
+   carrying the run before's ink shows it wherever this run paints
+   nothing. A device holding every row of the page moves nothing and
+   clears the run it is about to take marks for. */
+static
+int _moveband(Xpost_Context *ctx,
+              Xpost_Object top,
+              Xpost_Object rows,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if (!private.buf)
+        return 0;
+
+    xpost_dev_band_move(&private.band, private.height,
+                        xpost_dev_num_to_int(top),
+                        xpost_dev_num_to_int(rows));
+    /* rows put in front of a device whose page is finished are the next
+       page's: this is where a job's second page begins */
+    if (private.band.done && private.band.rows > 0)
+        _page_begin(&private);
+    /* and where a device holding every row of the page lays the ground
+       over the rows no run of them is going to reach */
+    if (private.band.whole && private.band.rows > 0 && !private.band.primed)
+        _prime(ctx, devdic, &private);
+    _clear(&private, private.band.top - private.band.origin,
+           private.band.top - private.band.origin + private.band.rows - 1);
+
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
     return 0;
 }
 
@@ -614,9 +990,29 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* the raster is all the instance holds: each page's file was closed
-       as that page was written. A raster handed to the client is the
-       client's to give back */
+    /* A page still being compressed is finished here rather than left
+       truncated: the rows it has not been given are the ones this device
+       is not holding, which the ground stands for, and that is what the
+       call at the end of a band loop would have written. A device
+       retired part way through a page -- by an error, or by a restore
+       past the setpagedevice that installed it -- then leaves an image
+       a reader can open. */
+    if (private.band.open && private.buf)
+    {
+        int last = private.height - 1;
+
+        if (!_write_rows(&private, last))
+            (void)_stream_finish(&private);
+    }
+    _stream_drop(&private);
+    if (private.file)
+    {
+        xpost_device_page_close(private.file);
+        private.file = NULL;
+    }
+
+    /* the raster is the rest of what the instance holds. A raster handed
+       to the client is the client's to give back */
     if (private.bufowned)
         free(private.buf);
     private.buf = NULL;
@@ -694,7 +1090,12 @@ int loadjpegdevicecont(Xpost_Context *ctx,
         { "GetPix", "jpegGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
         { "BlendPix", "jpegBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
         { "Emit", "jpegEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
-        { "Destroy", "jpegDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+        { "Destroy", "jpegDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE },
+        /* the raster is this device's own, so the run of rows it stands
+           for moves within it and not within the base class's array of
+           rows: the inherited .moveband reaches for rows this instance
+           does not carry and would answer undefined */
+        { ".moveband", "jpegMoveBand", (Xpost_Op_Func)_moveband, XPOST_DEV_M_BAND }
     };
 
     Xpost_Object userdict;
@@ -702,6 +1103,21 @@ int loadjpegdevicecont(Xpost_Context *ctx,
     int ret;
 
     ret = xpost_dict_put(ctx, classdic, namenativecolorspace, nameDeviceRGB);
+    if (ret)
+        return ret;
+
+    /* This device's page may arrive a band at a time: the compressor
+       takes one scanline per call and holds between calls the part of a
+       coding unit it cannot finish, so a row goes out the moment it is
+       finished and nothing written has to be revisited.
+
+       Said here rather than inherited. The class is a copy of the
+       colour raster class, which says it, and a copy carries what it
+       was copied from -- so a device that had never considered the
+       question would say yes by inheritance. Saying it again is what
+       makes the answer this device's own (doc/NEWINTERNALS). */
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
+                         xpost_bool_cons(1));
     if (ret)
         return ret;
 
@@ -755,6 +1171,8 @@ int xpost_oper_init_jpeg_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameDeviceRGB = xpost_name_cons(ctx, "DeviceRGB"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotbandpage = xpost_name_cons(ctx, ".bandpage"))) == invalidtype)
         return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
