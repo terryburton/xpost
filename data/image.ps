@@ -626,17 +626,40 @@ currentglobal true setglobal
 
     % file  .writehead  -
     % The header a raw portable map carries ahead of its rows: the magic
-    % naming the format, the extent in pixels, and the top of the value
-    % range, which is the full 255 whatever the page holds. The extent
-    % is the page's own -- one page is being written whatever it arrives
-    % in -- so a page put out a band at a time carries at its head the
-    % bytes a page put out whole carries.
+    % naming the format, the extent in pixels, and, where the format has
+    % one, the top of the value range -- the full 255 whatever the page
+    % holds. A bilevel map's sample is one bit and states no range. The
+    % extent is the page's own -- one page is being written whatever it
+    % arrives in -- so a page put out a band at a time carries at its
+    % head the bytes a page put out whole carries.
+    /.pnmmaxval (255\n)
     /.writehead { % file  .  -
         dup .pnmmagic writestring
         dup width 20 string cvs writestring
         dup ( ) writestring
         dup height 20 string cvs writestring
-        (\n255\n) writestring
+        dup (\n) writestring
+        .pnmmaxval writestring
+    } bind
+
+    % file  .bandsink  sink
+    % Where the rows of the page go. For a format whose rows are the
+    % bytes it carries that is the file itself; a format that frames its
+    % rows in something else answers whatever takes them -- a compressed
+    % strip is the filter that compresses it -- and .writetail below is
+    % what finishes that off. The file stays the one the header went to
+    % and the one that is closed behind the page.
+    /.bandsink { % file  .  sink
+    } bind
+
+    % sink file  .writetail  -
+    % What the format carries after its rows: nothing, where the header
+    % ahead of them said all there was to say. A format whose header
+    % points at rows it has not written yet finishes here instead, which
+    % is the first moment the rows are all written and their extent is
+    % known.
+    /.writetail { % sink file  .  -
+        pop pop
     } bind
 
     % lo hi  .bandwrite  -
@@ -677,7 +700,7 @@ currentglobal true setglobal
                 .bandout exch .bandi exch put
             } for
             .bandout 0 .bandn getinterval
-            .bandpage /file get
+            .bandpage /sink get
             .writeband
             /.bandlo .bandlo .bandn add def
         } loop
@@ -697,14 +720,16 @@ currentglobal true setglobal
     % The file is opened and its header written before the first row
     % goes out, and closed by the call that finds nothing held: a call
     % holding no row is the last one, and what the page has left of its
-    % rows goes out as the ground. A page finished stays finished, so a
-    % further call writes nothing rather than a second page into the
-    % same file.
+    % rows goes out as the ground. Whatever the format carries after its
+    % rows is written by that same call, which is the first moment every
+    % row has gone. A page finished stays finished, so a further call
+    % writes nothing rather than a second page into the same file.
     /.emitband { % -  .  -
         .bandpage /done known not {
             .bandpage /file known not {
                 .bandpage /file .outputfile (w) file put
                 .bandpage /file get .writehead
+                .bandpage /sink .bandpage /file get .bandsink put
                 .bandpage /next 0 put
             } if
             % the first row this device holds at or after the row the
@@ -718,6 +743,7 @@ currentglobal true setglobal
             .bandat height ge {
                 .bandpage /next get height 1 sub .bandwrite
                 .bandpage /next height put
+                .bandpage /sink get .bandpage /file get .writetail
                 .bandpage /file get
                 dup (%stdout) (w) file ne { closefile }{ pop } ifelse
                 .bandpage /done true put

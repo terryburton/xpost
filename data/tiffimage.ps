@@ -16,22 +16,64 @@
 % and a copy carries what it was copied from: a device says whether its
 % page may arrive in bands and the safe answer is silence, so a class
 % that has not thought about it has to say nothing rather than inherit a
-% yes. This one has not -- its header states where the strip is and how
-% long, which is a reason to plan the strips before the rows go out
-% rather than a reason it cannot -- and the portable-map header it would
-% otherwise be handed goes with the answer.
+% yes. This one has not.
+%
+% What it does have below is its page written as three parts rather than
+% as one writer: what precedes the strip, what takes the strip's rows,
+% and what follows it. The strip begins immediately after the header, so
+% where it begins is known before anything is written; how long it runs
+% is settled by the file rather than by the rows. A seekable file takes
+% the strip compressed with the directory after it and patches the
+% header's pointer once the strip has ended, so no length is promised in
+% advance at all; the standard output, which cannot be seeked back over,
+% takes the strip uncompressed, and an uncompressed strip's length
+% follows from the page's own extent.
+%
+% The portable-map header is not this format's, so what builds one goes.
 .xpost_TIFFIMAGE /BandedPage undef
 .xpost_TIFFIMAGE /.pnmmagic undef
+.xpost_TIFFIMAGE /.pnmmaxval undef
 
-% emission frames the rows as a TIFF; the Emit dispatch itself is
-% inherited
-.xpost_TIFFIMAGE /.writepage { % img file
-    12 dict begin
-    {/f /a}{exch def}forall
-    % the page's extent: its rows, and the pixels one component plane of
-    % the first of them holds
-    /w a 0 get 0 get length def
-    /h a length def
+% file  .writehead  -
+% what precedes the strip: the byte order, the format's own number, and
+% where the directory begins. A seekable file writes a placeholder there
+% and .writetail patches in the answer; the standard output states the
+% answer up front, an uncompressed strip of the page's extent being the
+% only thing that can lie between.
+.xpost_TIFFIMAGE /.writehead { % file  .  -
+    8 dict begin
+    /f exch def
+    /hdr 8 string def
+    /hp 0 def
+    /b1 { hdr hp 3 -1 roll put /hp hp 1 add def } def
+    /b2 { dup 256 mod b1 256 idiv b1 } def
+    /b4 { dup 65536 mod b2 65536 idiv b2 } def
+    16#49 b1 16#49 b1 42 b2
+    f (%stdout)(w) file ne
+        { 0 b4 }
+        { 8 width height mul 3 mul add b4 } ifelse
+    f hdr 0 8 getinterval writestring
+    end
+} put
+
+% file  .bandsink  sink
+% where the rows of the strip go: through the compressor on a seekable
+% file, whose strip is written before its length is stated, and into the
+% file itself on the standard output, whose strip is stated before it is
+% written and so cannot be compressed.
+.xpost_TIFFIMAGE /.bandsink { % file  .  sink
+    dup (%stdout)(w) file ne { /LZWEncode filter } if
+} put
+
+% sink file  .writetail  -
+% what follows the strip: the image file directory, and on a seekable
+% file the pointer to it patched into the header the rows were written
+% over. The strip has ended by now, so its length is known however it
+% was written, and the entries take the page's own extent rather than
+% the rows of any one run.
+.xpost_TIFFIMAGE /.writetail { % sink file  .  -
+    16 dict begin
+    {/f /snk}{exch def}forall
     /hdr 200 string def
     /hp 0 def
     /b1 { hdr hp 3 -1 roll put /hp hp 1 add def } def
@@ -47,14 +89,14 @@
         /sl exch def /cmp exch def /ifd exch def
         /hp 0 def
         12 b2
-        256 3 1 w tg                % ImageWidth
-        257 3 1 h tg                % ImageLength
+        256 3 1 width tg            % ImageWidth
+        257 3 1 height tg           % ImageLength
         258 3 3 ifd 150 add tg      % BitsPerSample, offset
         259 3 1 cmp tg              % Compression
         262 3 1 2 tg                % PhotometricInterpretation: RGB
         273 4 1 8 tg                % StripOffsets
         277 3 1 3 tg                % SamplesPerPixel
-        278 3 1 h tg                % RowsPerStrip
+        278 3 1 height tg           % RowsPerStrip
         279 4 1 sl tg               % StripByteCounts
         282 5 1 ifd 156 add tg      % XResolution, offset
         283 5 1 ifd 164 add tg      % YResolution, offset
@@ -66,28 +108,29 @@
         f hdr 0 hp getinterval writestring
     } def
     f (%stdout)(w) file ne {
-        % a seekable target takes the strip compressed: the directory
-        % follows the strip and its offset patches into the header
-        % once the strip's length is known
-        16#49 b1 16#49 b1 42 b2 0 b4
-        f hdr 0 8 getinterval writestring
-        /e f /LZWEncode filter def
-        a e //.internaldict /.writergbrows get exec
-        e closefile
+        snk closefile
         /sl f fileposition 8 sub def
         8 sl add 5 sl ifdbuild
         f 4 setfileposition
         /hp 0 def 8 sl add b4
         f hdr 0 4 getinterval writestring
-        f closefile
     }{
-        % the standard output cannot seek back: the strip goes
-        % uncompressed, its length known up front
-        16#49 b1 16#49 b1 42 b2 w h mul 3 mul 8 add b4
-        f hdr 0 8 getinterval writestring
-        a f //.internaldict /.writergbrows get exec
-        8 w h mul 3 mul add 1 w h mul 3 mul ifdbuild
+        /sl width height mul 3 mul def
+        8 sl add 1 sl ifdbuild
     } ifelse
+    end
+} put
+
+% the page whole: the header, the strip, and what follows it, through
+% the same three, so nothing about this format is said in two places
+.xpost_TIFFIMAGE /.writepage { % img file
+    3 dict begin
+    {/f /a}{exch def}forall
+    f .writehead
+    /snk f .bandsink def
+    a snk .writeband
+    snk f .writetail
+    f (%stdout)(w) file ne { f closefile } if
     end
 } put
 

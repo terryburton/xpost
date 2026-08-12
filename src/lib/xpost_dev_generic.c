@@ -2012,19 +2012,25 @@ int _emit_write(Xpost_Context *ctx, Xpost_File *f,
     return xpost_file_write((const char *)buf, 1, (int)len, f) == (int)len ? 0 : -1;
 }
 
-/* Emit a grayscale array-of-strings raster as a binary P4 PBM:
-   header, then each row's bytes thresholded at half coverage (black
-   below 128) and packed most significant bit first. */
+/* Emit the packed bytes of a run of grayscale array-of-strings rows as
+   a binary PBM's raster: each row's bytes thresholded at half coverage
+   (black below 128) and packed most significant bit first, one row to
+   the next byte boundary as the format wants.
+
+   The rows alone, and not the header that frames them: the header
+   names the whole page's extent, which a run of its rows does not
+   carry, so it is written where that extent is known (.writehead,
+   data/image.ps). A page put out at once and a page put out a band at
+   a time then reach the same bytes through this one walk. */
 static
-int _writepbmrows(Xpost_Context *ctx,
+int _writebitrows(Xpost_Context *ctx,
                   Xpost_Object imgdata,
                   Xpost_Object F)
 {
     Xpost_File *f;
     Xpost_Object row;
     unsigned char *buf;
-    char head[32];
-    int width, height, rb, iy, ix, hn;
+    int width, height, rb, iy, ix;
 
     if (!xpost_file_get_status(ctx->lo, F))
         return ioerror;
@@ -2040,10 +2046,6 @@ int _writepbmrows(Xpost_Context *ctx,
         return typecheck;
     width = row.comp_.sz;
     rb = (width + 7) / 8;
-
-    hn = snprintf(head, sizeof head, "P4\n%d %d\n", width, height);
-    if (_emit_write(ctx, f, (unsigned char *)head, (size_t)hn) < 0)
-        return ioerror;
 
     buf = malloc((size_t)rb);
     if (!buf)
@@ -3711,7 +3713,7 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              arraytype, arraytype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 2,
                              arraytype, filetype); INSTALL;
-    op = xpost_operator_cons(ctx, ".writepbmrows", (Xpost_Op_Func)_writepbmrows, 2,
+    op = xpost_operator_cons(ctx, ".writebitrows", (Xpost_Op_Func)_writebitrows, 2,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 2,
                              arraytype, filetype); INSTALL;

@@ -18,11 +18,16 @@
 % and a copy carries what it was copied from: a device says whether its
 % page may arrive in bands and the safe answer is silence, so a class
 % that has not thought about it has to say nothing rather than inherit a
-% yes. This one has not -- its rows are packed at emission and its
-% header is the bilevel one, neither of which the rows below write --
-% and the header it would otherwise be handed goes with the answer.
+% yes. This one has not: every grey it stores passes through the screen,
+% and what a screening class leaves over a row it does not hold is a
+% pattern that repeats down the page rather than the one row it has to
+% show there.
 .xpost_PBMIMAGE /BandedPage undef
-.xpost_PBMIMAGE /.pnmmagic undef
+
+% The header is the bilevel one: the magic names the format and a
+% sample is one bit, so there is no top of a value range to state.
+.xpost_PBMIMAGE /.pnmmagic (P4\n) put
+.xpost_PBMIMAGE /.pnmmaxval () put
 
 % every grey painted screens through the halftone in force
 .xpost_PBMIMAGE /ScreenPaint true put
@@ -50,16 +55,11 @@
     } if
 } put
 
-% emission thresholds and packs through the compiled row writer; the
-% Emit dispatch itself is inherited
-.xpost_PBMIMAGE /.writepage { % img file
-    2 dict begin
-    {/f /a}{exch def}forall
-    a f //.internaldict /.writepbmrows get exec
-    f (%stdout)(w)file ne {
-        f closefile
-    } if
-    end
+% emission thresholds and packs through the compiled row writer, a run
+% of the page's rows at a time; the header ahead of them and the Emit
+% dispatch that calls both are inherited
+.xpost_PBMIMAGE /.writeband { % rows file  .  -
+    //.internaldict /.writebitrows get exec
 } put
 
 //.internaldict /QUIET known { }{ (eof pbmimage.ps\n)print } ifelse
