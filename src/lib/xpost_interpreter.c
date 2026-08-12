@@ -2234,6 +2234,48 @@ static const char *const device_strings[] =
     NULL
 };
 
+/* The devices whose page may arrive a band at a time and which a record
+   can be played into, so that selecting one selects banding.
+
+   Kept here as well as in the recording class's own roster
+   (.playtargets, data/recorddev.ps) because a selection is settled
+   before any boot file is read: what a run is started with has to be
+   answerable to the caller of xpost_create, and the roster is a
+   dictionary that does not exist yet. tests/check-device-roster.sh holds
+   the two to naming the same devices, so the duplication cannot drift.
+
+   The mode selector a run may write after a colon is what turns this
+   off: a selection naming a mode is the caller having asked for
+   something specific, and is left alone. */
+static const char *const bands_by_default[] =
+{
+    "pgm",
+    "ppm",
+    "pbm",
+    "tiff",
+    "png",
+    "jpeg",
+    NULL
+};
+
+/* The mode a selection carries that says to hold the page whole. It is
+   spelled as a mode rather than as an option of its own because the
+   thing it turns off is chosen by the device selection, and a run
+   comparing the two ways wants to change one word rather than to add
+   and remove a flag. */
+#define XPOST_WHOLE_PAGE_MODE "whole"
+
+static int _bands_by_default(const char *name, size_t n)
+{
+    int i;
+
+    for (i = 0; bands_by_default[i]; i++)
+        if (strlen(bands_by_default[i]) == n
+            && strncmp(name, bands_by_default[i], n) == 0)
+            return 1;
+    return 0;
+}
+
 /* Which device this run selected, without the mode selector a
    "device:mode" selection carries. Answers NULL for a name that is not a
    device, with n left holding the length of the name examined. */
@@ -2663,6 +2705,9 @@ static int _record_host_config(Xpost_Context *ctx,
     unsigned int vmmode;
     const char *subdevice;
     const char *selected;
+    /* the device a selection given banding was made for, which becomes
+       the mode the recording class is told to paint through */
+    const char *banded = NULL;
     Xpost_Object o;
     size_t n;
     int ret;
@@ -2717,6 +2762,26 @@ static int _record_host_config(Xpost_Context *ctx,
         ret = undefined;
         goto done;
     }
+    /* A device that can take its page a band at a time is given to the
+       recording class to paint, which is what makes banding what a run
+       gets without asking for it. What that costs a page small enough
+       not to need it is nothing beyond the record itself: the band
+       height follows the budget, so a page fitting inside one band is
+       played into a raster of the whole page and comes out as it always
+       did (.playpage, data/recorddev.ps).
+
+       A selection that names a mode is left alone, which is how a run
+       says otherwise: "pgm:whole" holds the page whole, and
+       "record:pgm" asks for the record by name. Naming the mode rather
+       than adding an option is what lets the two be compared by
+       changing one word. */
+    subdevice = device ? strchr(device, ':') : NULL;
+    if (!subdevice && _bands_by_default(selected, n))
+    {
+        banded = selected;
+        selected = "record";
+    }
+
     /* literal: the name is data here, and an executable one would be
        looked up rather than read wherever the maker roster is keyed by
        it */
@@ -2750,10 +2815,27 @@ static int _record_host_config(Xpost_Context *ctx,
         goto done;
 
     /* The mode selector of a "device:mode" selection, which the raster
-       device reads to settle its pixel format. */
-    subdevice = device ? strchr(device, ':') : NULL;
-    if ((ret = _host_put_string(ctx, "SUBDEVICE",
-                                subdevice ? subdevice + 1 : NULL)) != 0)
+       device reads to settle its pixel format and the recording class
+       reads to settle which device paints its page. A selection given
+       banding above names no mode of its own, so the device it was
+       given for is the mode the record is told.
+
+       The mode that holds the page whole is consumed here rather than
+       passed on: it says which of two routes to take, and the device it
+       reaches has no use for it. */
+    if (banded)
+    {
+        if ((ret = _host_put_string(ctx, "SUBDEVICE", banded)) != 0)
+            goto done;
+    }
+    else if (subdevice
+             && strcmp(subdevice + 1, XPOST_WHOLE_PAGE_MODE) == 0)
+    {
+        if ((ret = _host_put_string(ctx, "SUBDEVICE", NULL)) != 0)
+            goto done;
+    }
+    else if ((ret = _host_put_string(ctx, "SUBDEVICE",
+                                     subdevice ? subdevice + 1 : NULL)) != 0)
         goto done;
 
     /* Where this run's pages go when the page device names nothing and

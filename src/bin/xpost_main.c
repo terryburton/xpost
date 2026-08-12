@@ -189,10 +189,15 @@ _xpost_main_usage(const char *filename)
     while (_xpost_main_devices[i])
         printf("\t%s\n", _xpost_main_devices[i++]);
     printf("\n");
+    printf("  A device whose page may arrive a band at a time holds a\n");
+    printf("  band of it rather than the page: pgm, ppm, pbm, tiff, png\n");
+    printf("  and jpeg. A page small enough to fit one band is held\n");
+    printf("  whole, so this costs a small page nothing.\n");
+    printf("\n");
     printf("  A device may be given a mode after a colon:\n");
-    printf("\trecord:DEVICE   write the page down and paint it through\n");
-    printf("\t                DEVICE (pgm, ppm, tiff), which holds a band\n");
-    printf("\t                of the page at a time rather than the page\n");
+    printf("\tDEVICE:whole    hold the whole page rather than a band of\n");
+    printf("\t                it, which is what to compare against\n");
+    printf("\trecord:DEVICE   the same banding asked for by name\n");
     printf("\traster:FORMAT   the pixel format a lent framebuffer is in\n");
     printf("\t                (rgb, argb, bgr, bgra)\n");
 }
