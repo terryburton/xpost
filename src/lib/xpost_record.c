@@ -9,6 +9,7 @@
 # include "config.h"
 #endif
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,6 +45,8 @@ struct _Xpost_Record
     int short_of_a_mark;        /* a mark was given and could not be held */
     Xpost_String_Buffer mark;   /* a run of _Mark */
     Xpost_String_Buffer val;    /* colour and operands, run together */
+    Xpost_String_Buffer img;    /* a run of Xpost_Record_Image */
+    size_t imgbytes;            /* what the copies they point at cost */
 };
 
 static _Mark *_marks(const Xpost_Record *rec)
@@ -61,6 +64,16 @@ static size_t _nmark(const Xpost_Record *rec)
     return rec->mark.len / sizeof(_Mark);
 }
 
+static Xpost_Record_Image *_imgs(const Xpost_Record *rec)
+{
+    return (Xpost_Record_Image *)rec->img.s;
+}
+
+static size_t _nimg(const Xpost_Record *rec)
+{
+    return rec->img.len / sizeof(Xpost_Record_Image);
+}
+
 Xpost_Record *xpost_record_new(int ncomp)
 {
     Xpost_Record *rec;
@@ -71,10 +84,12 @@ Xpost_Record *xpost_record_new(int ncomp)
     if (!rec)
         return NULL;
     if (xpost_strbuf_init(&rec->mark, 0) ||
-        xpost_strbuf_init(&rec->val, 0))
+        xpost_strbuf_init(&rec->val, 0) ||
+        xpost_strbuf_init(&rec->img, 0))
     {
         xpost_strbuf_free(&rec->mark);
         xpost_strbuf_free(&rec->val);
+        xpost_strbuf_free(&rec->img);
         free(rec);
         return NULL;
     }
@@ -82,12 +97,33 @@ Xpost_Record *xpost_record_new(int ncomp)
     return rec;
 }
 
+/* Give up the copies one image entry was made from. Every pointer in it
+   is the record's own, so there is nothing here a caller still holds. */
+static void _image_free(Xpost_Record_Image *img)
+{
+    free((void *)img->samples);
+    free((void *)img->lut);
+    free((void *)img->dluts);
+    free((void *)img->tlut);
+    free((void *)img->tlutrgb);
+    free((void *)img->mbits);
+    free((void *)img->mranges);
+    free((void *)img->cspans);
+    memset(img, 0, sizeof *img);
+}
+
 void xpost_record_free(Xpost_Record *rec)
 {
+    size_t i, n;
+
     if (!rec)
         return;
+    n = _nimg(rec);
+    for (i = 0; i < n; i++)
+        _image_free(&_imgs(rec)[i]);
     xpost_strbuf_free(&rec->mark);
     xpost_strbuf_free(&rec->val);
+    xpost_strbuf_free(&rec->img);
     free(rec);
 }
 
@@ -101,7 +137,10 @@ static int _fixed_nops(Xpost_Record_Kind kind)
         case XPOST_RECORD_BLENDPIX: return 3;
         case XPOST_RECORD_DRAWLINE: return 4;
         case XPOST_RECORD_FILLRECT: return 4;
-        case XPOST_RECORD_FILLPOLY: return -1;
+        /* a polygon states its own length, and an image is not written
+           down through xpost_record_mark at all */
+        case XPOST_RECORD_FILLPOLY:
+        case XPOST_RECORD_IMAGE:    return -1;
     }
     return -1;
 }
@@ -149,17 +188,71 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
                 else if (y > *hi) *hi = y;
             }
             return;
+        case XPOST_RECORD_IMAGE:
+            /* an image's reach follows the transform that places it and
+               is taken where it is written down, not from the one
+               operand -- which names the entry rather than describing
+               it */
+            *lo = *hi = 0.0;
+            return;
     }
     *lo = a < b ? a : b;
     *hi = a < b ? b : a;
+}
+
+/* The rows an image can be written into: the box its transform puts it
+   in, met with the region its rows are written through.
+
+   The low end is taken down to the row the first write lands in. A
+   write starts at the row the box's edge falls inside, so a reach
+   stated from the edge itself would leave a range meeting that row
+   judging the image not to reach it -- and a mark judged not to reach a
+   band is simply absent from the page, which is wrong output rather
+   than slow output. Erring the other way costs a visit. */
+static void _image_extent(const Xpost_Record_Image *img, real *lo, real *hi)
+{
+    real a = img->yoff;
+    real b = img->yoff + (real)img->height * img->yscale;
+    real t;
+
+    if (a > b) { t = a; a = b; b = t; }
+    if (a < img->cy0) a = img->cy0;
+    if (b > img->cy1) b = img->cy1;
+    *lo = (real)floor((double)a);
+    *hi = b < *lo ? *lo : b;
+}
+
+/* Put one entry into the two runs: its values first, so that a mark is
+   only written once there is somewhere for it to point at. */
+static int _put(Xpost_Record *rec, Xpost_Record_Kind kind,
+                const real *colour, const real *ops, int nops,
+                real lo, real hi)
+{
+    _Mark m2;
+
+    m2.kind = kind;
+    m2.at = rec->val.len / sizeof(real);
+    m2.nops = nops;
+    m2.lo = lo;
+    m2.hi = hi;
+
+    if (xpost_strbuf_append(&rec->val, colour,
+                            (size_t)rec->ncomp * sizeof *colour) ||
+        (nops > 0 &&
+         xpost_strbuf_append(&rec->val, ops, (size_t)nops * sizeof *ops)) ||
+        xpost_strbuf_append(&rec->mark, &m2, sizeof m2))
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    return 1;
 }
 
 int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
                       const real *colour, const real *ops, int nops)
 {
     int fixed;
-    size_t need;
-    _Mark m2;
+    real lo, hi;
 
     if (!rec || !colour || (nops > 0 && !ops))
         return 0;
@@ -184,29 +277,207 @@ int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
     else
         return 0;
 
-    /* the values go down first, so that a mark is only written once
-       there is somewhere for it to point at */
-    need = rec->val.len / sizeof(real);
-    m2.kind = kind;
-    m2.at = need;
-    m2.nops = nops;
-    _extent(kind, ops, nops, &m2.lo, &m2.hi);
+    _extent(kind, ops, nops, &lo, &hi);
+    return _put(rec, kind, colour, ops, nops, lo, hi);
+}
 
-    if (xpost_strbuf_append(&rec->val, colour,
-                            (size_t)rec->ncomp * sizeof *colour) ||
-        (nops > 0 &&
-         xpost_strbuf_append(&rec->val, ops, (size_t)nops * sizeof *ops)) ||
-        xpost_strbuf_append(&rec->mark, &m2, sizeof m2))
+/* Copy what a caller owns into memory the record owns, counting what it
+   cost. Nothing asked for and nothing available both answer NULL, which
+   a caller tells apart by what it asked for. */
+static void *_take(const void *p, size_t n, size_t *cost)
+{
+    void *q;
+
+    if (!p || !n)
+        return NULL;
+    q = malloc(n);
+    if (!q)
+        return NULL;
+    memcpy(q, p, n);
+    *cost += n;
+    return q;
+}
+
+/* Copy the sample rows into one block the record owns. They arrive as a
+   run pointer apiece because that is how the painter holds them -- a
+   buffer it refills per row -- and they are laid end to end here so
+   that the entry holds one thing rather than a list of them. */
+static unsigned char *_take_rows(const unsigned char *const *rows, int nrows,
+                                 size_t each, size_t *cost)
+{
+    unsigned char *block;
+    int i;
+
+    if (!rows || nrows < 1 || !each)
+        return NULL;
+    block = malloc((size_t)nrows * each);
+    if (!block)
+        return NULL;
+    for (i = 0; i < nrows; i++)
     {
+        if (!rows[i])
+        {
+            free(block);
+            return NULL;
+        }
+        memcpy(block + (size_t)i * each, rows[i], each);
+    }
+    *cost += (size_t)nrows * each;
+    return block;
+}
+
+int xpost_record_image(Xpost_Record *rec, const Xpost_Record_Image *src,
+                       const unsigned char *const *rows, int nrows)
+{
+    Xpost_Record_Image img;
+    real *colour;
+    real idx;
+    real lo, hi;
+    size_t cost = 0;
+    int ok;
+
+    if (!rec || !src || rec->short_of_a_mark)
+        return 0;
+    /* what the row writer indexes with is bounded here, once, rather
+       than on the way past every sample */
+    if (src->width < 1 || src->height < 1
+     || src->ncomp < 1 || src->ncomp > 4
+     || src->nat < 1 || src->nat > 3
+     || (src->mbits && src->mrowb < 1)
+     || src->nranges < 0 || src->nranges > 8
+     || (src->nranges && !src->mranges)
+     || src->nspan < 0 || (src->nspan && !src->cspans))
+        return 0;
+    if (nrows != src->height * (src->planar ? src->ncomp : 1))
+        return 0;
+
+    img = *src;
+    img.samples = _take_rows(rows, nrows,
+                             (size_t)src->width
+                             * (src->planar ? 1u : (size_t)src->ncomp),
+                             &cost);
+    img.lut = _take(src->lut, 256u * (size_t)src->nat, &cost);
+    img.dluts = _take(src->dluts, 256u * (size_t)src->ncomp, &cost);
+    img.tlut = _take(src->tlut, 256u, &cost);
+    img.tlutrgb = _take(src->tlutrgb, 3u * 256u, &cost);
+    img.mbits = _take(src->mbits,
+                      (size_t)src->mrowb * (size_t)src->height, &cost);
+    img.mranges = _take(src->mranges,
+                        (size_t)src->nranges * sizeof *src->mranges, &cost);
+    img.cspans = _take(src->cspans,
+                       4u * (size_t)src->nspan * sizeof *src->cspans, &cost);
+
+    ok = img.samples != NULL
+      && (!src->lut || img.lut)
+      && (!src->dluts || img.dluts)
+      && (!src->tlut || img.tlut)
+      && (!src->tlutrgb || img.tlutrgb)
+      && (!src->mbits || img.mbits)
+      && (!src->nranges || img.mranges)
+      && (!src->nspan || img.cspans);
+    if (!ok)
+    {
+        _image_free(&img);
         rec->short_of_a_mark = 1;
         return 0;
     }
-    return 1;
+
+    /* the colour a mark carries is one value per component of the
+       device's space; an image carries its colours in its samples, so
+       the place is filled with zeros and every mark's values stay laid
+       out the same way */
+    colour = calloc((size_t)rec->ncomp, sizeof *colour);
+    if (!colour)
+    {
+        _image_free(&img);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+
+    idx = (real)_nimg(rec);
+    if (xpost_strbuf_append(&rec->img, &img, sizeof img))
+    {
+        free(colour);
+        _image_free(&img);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    /* the run holds the entry now, so what it points at is the
+       record's to give up and no longer this call's */
+    rec->imgbytes += cost;
+
+    _image_extent(&img, &lo, &hi);
+    ok = _put(rec, XPOST_RECORD_IMAGE, colour, &idx, 1, lo, hi);
+    free(colour);
+    return ok;
+}
+
+size_t xpost_record_image_count(const Xpost_Record *rec)
+{
+    return rec ? _nimg(rec) : 0;
+}
+
+const Xpost_Record_Image *xpost_record_image_get(const Xpost_Record *rec,
+                                                 size_t i)
+{
+    if (!rec || i >= _nimg(rec))
+        return NULL;
+    return &_imgs(rec)[i];
+}
+
+int xpost_record_image_rows(const Xpost_Record_Image *img,
+                            real lo, real hi, int *y0, int *y1)
+{
+    double s, a, b, t;
+    int first, last;
+
+    if (!img || !y0 || !y1)
+        return 0;
+    s = (double)img->yscale;
+    /* a transform putting every row in the same place writes nothing;
+       answering the whole image there costs a pass and cannot lose one */
+    if (s > -1e-9 && s < 1e-9)
+    {
+        *y0 = 0;
+        *y1 = img->height;
+        return img->height > 0;
+    }
+    /* where the range's two edges fall in the image's own rows. A row
+       is a whole one either side of that, since a row magnified with
+       its neighbours blended reaches half a row beyond its own band at
+       each end and the last row reaches a whole one. */
+    a = ((double)lo - (double)img->yoff) / s;
+    b = ((double)hi + 1.0 - (double)img->yoff) / s;
+    if (a > b) { t = a; a = b; b = t; }
+    a -= 2.0;
+    b += 2.0;
+    *y0 = *y1 = 0;
+    if (b < 0.0 || a > (double)img->height)
+        return 0;
+    /* brought inside the image before it is counted in rows, so that a
+       range far off the page does not name a row number no int holds */
+    if (a < 0.0) a = 0.0;
+    if (b > (double)img->height) b = (double)img->height;
+    first = (int)floor(a);
+    last = (int)ceil(b);
+    *y0 = first;
+    *y1 = last;
+    return first < last;
 }
 
 size_t xpost_record_count(const Xpost_Record *rec)
 {
     return rec ? _nmark(rec) : 0;
+}
+
+size_t xpost_record_bytes(const Xpost_Record *rec)
+{
+    if (!rec)
+        return 0;
+    /* what the runs have taken rather than what they have filled: a
+       record is compared against a raster it would save holding, and
+       what a raster costs is what was allocated for it */
+    return rec->mark.cap + rec->val.cap + rec->img.cap + rec->imgbytes;
 }
 
 int xpost_record_failed(const Xpost_Record *rec)

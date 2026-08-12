@@ -357,11 +357,16 @@ xpost_putenv
 xpost_quit
 xpost_real_cons
 xpost_realpath
+xpost_record_bytes
 xpost_record_count
 xpost_record_extent
 xpost_record_failed
 xpost_record_free
 xpost_record_get
+xpost_record_image
+xpost_record_image_count
+xpost_record_image_get
+xpost_record_image_rows
 xpost_record_mark
 xpost_record_new
 xpost_record_next

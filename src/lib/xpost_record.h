@@ -27,6 +27,13 @@
  * of the device's space, and that kind's own operands. A record is
  * therefore a flat run of those and not a tree.
  *
+ * A sampled image is held whole, as one entry the run names, and is the
+ * one place a record is higher-level than the calls a device receives.
+ * It has to be: a device holding no rows is painted an image a
+ * rectangle at a time, so the five alone would hold a picture at tens
+ * of bytes a sample against the one to three bytes a pixel of the page
+ * the record exists to avoid holding.
+ *
  * Every mark says where it reaches in y when it is written down, and a
  * replay is given a row range, so a replay visits the marks that reach
  * into that range and steps over the rest. Playing a page of n marks
@@ -64,14 +71,23 @@
     in both coordinates, xpost_op_path.h). The separators are part of the
     shape and not decoration: the interior of a path with a hole is
     settled by scanning its subpaths together, so a polygon written down
-    without them replays as a different region. */
+    without them replays as a different region.
+
+    A sampled image is the sixth and is not one of the marking calls: a
+    device without rows of its own is painted an image one rectangle per
+    sample, so a record built from the five alone would hold a thousand
+    by thousand image as a million marks of tens of bytes each against
+    the one to three bytes a pixel the page it is escaping costs. It
+    carries an index into the images the record holds instead of
+    operands of its own. */
 typedef enum
 {
     XPOST_RECORD_PUTPIX,   /**< x y */
     XPOST_RECORD_BLENDPIX, /**< cov x y */
     XPOST_RECORD_DRAWLINE, /**< x1 y1 x2 y2 */
     XPOST_RECORD_FILLRECT, /**< x y w h */
-    XPOST_RECORD_FILLPOLY  /**< n, then n pairs of x y */
+    XPOST_RECORD_FILLPOLY, /**< n, then n pairs of x y */
+    XPOST_RECORD_IMAGE     /**< which of the record's images */
 } Xpost_Record_Kind;
 
 typedef struct _Xpost_Record Xpost_Record;
@@ -117,9 +133,135 @@ int xpost_record_mark(Xpost_Record *rec, Xpost_Record_Kind kind,
                       const real *colour, const real *ops, int nops);
 
 /**
+ * @brief A sampled image, where it is put, and what decodes it.
+ *
+ * The samples are the normalized rows the image collectors produce --
+ * one byte per component per sample, whatever depth the program's data
+ * source had -- and everything beside them is the result of the colour
+ * setup the painter bakes before it writes a row, not the state that
+ * setup was derived from. A replay happens when the page is put out,
+ * by which time the graphics state that decoded the image is gone:
+ * transfer functions, the current colour space and the space's
+ * conversion have all moved on, and there is no re-deriving them. What
+ * is kept is what a row write reads, which is these tables.
+ *
+ *   samples   the one block the record made of the rows it was handed:
+ *             height runs of width x ncomp bytes, or, where the rows
+ *             are planar, height x ncomp runs of width bytes, a row's
+ *             planes together. It is the record's and is filled in by
+ *             the record; what a caller hands over is the rows.
+ *   lut       one-component spaces bake decode, conversion and transfer
+ *             into 256 entries of nat bytes, and nothing else is read.
+ *   dluts     otherwise, ncomp runs of 256 decode entries, converted at
+ *             the write and passed through tlut (and, where the device
+ *             takes three, through the three channel transfers) after.
+ *   mbits     one bit per sample in rows of mrowb bytes, a set bit
+ *             leaving the pixel alone; mranges pairs of raw sample
+ *             values, a pixel inside every one of them left alone.
+ *   cspans    quads of x0 y0 x1 y1 in device space: the region resolved
+ *             above the device where it was not a rectangle.
+ *
+ * A pointer that is not given is NULL and the thing it names is not
+ * read. Nothing here is held by reference: what a caller hands over is
+ * copied, since a record outlives the job that made it.
+ */
+typedef struct
+{
+    int width, height;   /**< the sample grid the rows hold */
+    int ncomp;           /**< components a sample carries */
+    int nat;             /**< values a device pixel takes: 1 or 3 */
+    int planar;          /**< rows hold planes rather than pixels */
+    int rgbrows;         /**< the device row is three colour planes */
+    int cmyk;            /**< four components convert by complement */
+    int interp;          /**< blend between samples where magnified */
+    real xoff, xscale;   /**< where a sample column lands, and how wide */
+    real yoff, yscale;   /**< where a sample row lands, and how tall */
+    real cx0, cy0;       /**< the region the rows are written through */
+    real cx1, cy1;
+    const unsigned char *samples;
+    const unsigned char *lut;      /**< 256 entries of nat bytes */
+    const unsigned char *dluts;    /**< ncomp runs of 256 */
+    const unsigned char *tlut;     /**< 256 */
+    const unsigned char *tlutrgb;  /**< three runs of 256 */
+    const unsigned char *mbits;    /**< height runs of mrowb bytes */
+    int mrowb;
+    const int *mranges;            /**< nranges raw values */
+    int nranges;
+    const real *cspans;            /**< nspan quads */
+    int nspan;
+} Xpost_Record_Image;
+
+/**
+ * @brief Write one sampled image down, and a mark naming it.
+ *
+ * @param[in] img everything about the image but its samples; its
+ *                @c samples field is the record's to fill and is not
+ *                read here
+ * @param[in] rows the sample rows, @p nrows runs of width bytes where
+ *                 the rows are planar and width x ncomp bytes where
+ *                 they are not, a row's planes adjacent
+ * @param[in] nrows height, or height x ncomp where the rows are planar
+ * @return 1, or 0 where there is no memory to hold it, on the same
+ *         terms as a mark: the record is then short of a mark and every
+ *         replay of it refuses.
+ *
+ * Everything handed here is copied. A record outlives the job that made
+ * it -- pages either side of the one on screen are held so that moving
+ * back is as cheap as moving forward -- so it may hold nothing
+ * belonging to the run, and the rows in particular are the painter's
+ * own scratch buffers, refilled for the row after.
+ *
+ * What that costs is the image, at one byte per component per sample:
+ * bounded by the picture the job is holding anyway rather than by the
+ * page, which is the whole reason an image is one entry here.
+ */
+int xpost_record_image(Xpost_Record *rec, const Xpost_Record_Image *img,
+                       const unsigned char *const *rows, int nrows);
+
+/**
+ * @brief How many images a record holds.
+ */
+size_t xpost_record_image_count(const Xpost_Record *rec);
+
+/**
+ * @brief The image at @p i, as it was written down, or NULL.
+ *
+ * What comes back points into the record and is good until the next
+ * image is written down.
+ */
+const Xpost_Record_Image *xpost_record_image_get(const Xpost_Record *rec,
+                                                 size_t i);
+
+/**
+ * @brief Which of an image's rows reach device rows @p lo to @p hi.
+ *
+ * @param[out] y0 the first sample row to write, @p y1 one past the last
+ * @return 1 where some row reaches the range, 0 where none does
+ *
+ * An image is clipped to a run of rows the way a shape is: by choosing
+ * what to paint rather than by trimming what was recorded. Which rows
+ * to choose is what the placing transform decides, and this is that
+ * question asked of it. The answer errs outward -- a row written that
+ * the region then rejects costs a pass over it, a row not written is
+ * missing from the page.
+ */
+int xpost_record_image_rows(const Xpost_Record_Image *img,
+                            real lo, real hi, int *y0, int *y1);
+
+/**
  * @brief How many marks a record holds.
  */
 size_t xpost_record_count(const Xpost_Record *rec);
+
+/**
+ * @brief What a record costs, in bytes.
+ *
+ * The marks, their values, and the images they name. It is the quantity
+ * the whole mechanism is judged on: a record is worth holding while it
+ * is smaller than the raster it saves holding, and that is a comparison
+ * rather than a guess.
+ */
+size_t xpost_record_bytes(const Xpost_Record *rec);
 
 /**
  * @brief Whether a mark was ever refused for want of memory.
@@ -150,6 +292,9 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi);
  * @param[out] ops its own operands, or NULL where the kind has none
  * @param[out] nops how many
  * @return 1, or 0 where the record holds no mark there
+ *
+ * An image's one operand is which of the record's images it names, and
+ * its colour values are zero: what colours it is in its samples.
  *
  * What comes back points into the record and is good until the next
  * mark is written down. A record short of a mark it was given gives

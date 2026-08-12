@@ -276,6 +276,136 @@ int main(void)
     if (xpost_record_count(rec) != 5)
         report_failure("a refused mark is not written down");
 
+    /* An image is one entry rather than one mark a sample. The five
+       marking kinds are the wrong shape for it: a device holding no
+       rows of its own is painted an image a rectangle at a time, and a
+       record of those costs tens of bytes a sample against the one to
+       three bytes a pixel of the page it exists to avoid holding.
+       This one is four samples across and three rows down, placed ten
+       device rows to the sample row from row 300. */
+    {
+        unsigned char rows[3][4];
+        const unsigned char *run[3];
+        Xpost_Record_Image img;
+        const Xpost_Record_Image *back;
+        size_t before;
+        int y0, y1, k;
+
+        memset(&img, 0, sizeof img);
+        for (k = 0; k < 3; k++)
+        {
+            rows[k][0] = (unsigned char)(10 * k);
+            rows[k][1] = (unsigned char)(10 * k + 1);
+            rows[k][2] = (unsigned char)(10 * k + 2);
+            rows[k][3] = (unsigned char)(10 * k + 3);
+            run[k] = rows[k];
+        }
+        img.width = 4;
+        img.height = 3;
+        img.ncomp = 1;
+        img.nat = 1;
+        img.yoff = 300.0;
+        img.yscale = 10.0;
+        img.xoff = 0.0;
+        img.xscale = 1.0;
+        img.cx0 = 0.0;
+        img.cy0 = 0.0;
+        img.cx1 = 1000.0;
+        img.cy1 = 1000.0;
+
+        before = xpost_record_bytes(rec);
+        if (!xpost_record_image(rec, &img, run, 3))
+            report_failure("an image is written down");
+        if (xpost_record_image_count(rec) != 1)
+            report_failure("the record holds the one image made");
+        if (xpost_record_count(rec) != 6)
+            report_failure("an image is one mark in the run, not one a"
+                           " sample");
+        if (xpost_record_bytes(rec) <= before)
+            report_failure("an image costs the record something");
+
+        /* The samples are the painter's own buffers, refilled for the
+           row after, and a record outlives the job that made it. So
+           what it holds has to be its own: the rows are overwritten
+           here and what was written down does not change. */
+        back = xpost_record_image_get(rec, 0);
+        memset(rows, 0xee, sizeof rows);
+        if (!back)
+            report_failure("the image comes back");
+        else if (back->samples == rows[0])
+            report_failure("an image references the rows it was handed"
+                           " rather than copying them");
+        else if (back->samples[0] != 0 || back->samples[4] != 10
+              || back->samples[11] != 23)
+            report_failure("an image comes back with the samples it was"
+                           " written down with");
+
+        /* it is met where it is placed, and not above or below it */
+        s = _play(rec, 300.0, 330.0);
+        if (s.n != 1 || s.kind[0] != XPOST_RECORD_IMAGE)
+            report_failure("an image is met by the rows it is placed"
+                           " over: %d mark(s)", s.n);
+        else if (s.op0[0] != 0.0)
+            report_failure("an image names the entry it was written to");
+        s = _play(rec, 200.0, 299.0);
+        if (s.n != 0)
+            report_failure("an image is not met above where it is placed:"
+                           " %d mark(s)", s.n);
+        s = _play(rec, 331.0, 400.0);
+        if (s.n != 0)
+            report_failure("an image is not met below where it is placed:"
+                           " %d mark(s)", s.n);
+
+        /* An image is clipped to a run of rows by choosing which of its
+           own rows to write, which is what the placing transform
+           decides. Every row for the whole of it; the rows over that
+           part of the page for a part of it; none where the run is
+           somewhere else entirely. The answer errs outward, so what is
+           held is that it covers what it must rather than that it
+           covers nothing more. */
+        if (!xpost_record_image_rows(back, 0.0, 1000.0, &y0, &y1)
+         || y0 != 0 || y1 != 3)
+            report_failure("a run covering the page writes every row of"
+                           " an image: %d..%d", y0, y1);
+        if (!xpost_record_image_rows(back, 310.0, 319.0, &y0, &y1)
+         || y0 > 1 || y1 < 2)
+            report_failure("a run over one sample row writes that row:"
+                           " %d..%d", y0, y1);
+        if (xpost_record_image_rows(back, 0.0, 100.0, &y0, &y1))
+            report_failure("a run above an image writes none of its rows:"
+                           " %d..%d", y0, y1);
+        if (xpost_record_image_rows(back, 500.0, 600.0, &y0, &y1))
+            report_failure("a run below an image writes none of its rows:"
+                           " %d..%d", y0, y1);
+
+        /* the same image placed the other way up: a transform running
+           backwards puts the last sample row at the top, and the rows a
+           range wants follow the transform rather than the order they
+           were given in */
+        {
+            Xpost_Record_Image flip = *back;
+
+            flip.yoff = 330.0;
+            flip.yscale = -10.0;
+            if (!xpost_record_image_rows(&flip, 300.0, 309.0, &y0, &y1)
+             || y0 > 2 || y1 < 3)
+                report_failure("a run at the top of an image placed the"
+                               " other way up writes its last row: %d..%d",
+                               y0, y1);
+            if (xpost_record_image_rows(&flip, 500.0, 600.0, &y0, &y1))
+                report_failure("a run off an image placed the other way up"
+                               " writes none of its rows");
+        }
+
+        /* an image the record cannot index is refused rather than
+           written down half way, on the same terms as a malformed mark */
+        if (xpost_record_image(rec, &img, run, 2))
+            report_failure("an image needs as many rows as it says it"
+                           " has");
+        if (xpost_record_image_count(rec) != 1)
+            report_failure("a refused image is not written down");
+    }
+
     /* A record that could not hold a mark describes a page it cannot
        reproduce. Nothing here can exhaust memory to order, so what is
        held is the rule that follows from it: a record reporting itself
