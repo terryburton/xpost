@@ -1,0 +1,192 @@
+% One page of sampled images, painted twice: directly by a device that
+% paints, and through a device that writes down what it was asked to
+% paint and plays it back into one. run-record-image-test.sh runs this
+% file once per device and requires the two pages to be the same bytes.
+%
+% An image is the one thing a record of the five marking kinds is the
+% wrong shape for. A device keeping its raster as rows the interpreter
+% can see has an image written into those rows; a device without them is
+% painted one rectangle of one pixel per sample. A recorder has no such
+% rows by design -- holding them is holding the page -- so a record built
+% from the five alone would hold a thousand by thousand image as a
+% million marks of tens of bytes each, against the one to three bytes a
+% pixel of the page it exists to avoid holding. It holds one entry
+% instead (doc/NEWINTERNALS).
+%
+% What the page is for is reaching every route into that entry, since
+% each carries something different into it:
+%
+%   one component     decode, colour conversion and transfer baked into
+%                     a single table of 256 entries
+%   three components  a decode table per component, converted where the
+%                     row is written and passed through the transfer
+%                     tables after
+%   a plane at a time a row of samples per component rather than one row
+%                     of pixels, which is a different thing for a record
+%                     to lay end to end and a different thing to give
+%                     back
+%   magnified         the samples blended between rows rather than
+%                     stepped, which reads the row before the one in
+%                     hand and so says whether the rows came back in
+%                     order
+%   a shaped clip     a region that is not a rectangle, resolved into
+%                     spans that clamp each row write
+%   colour-key mask   sample ranges that leave a pixel unpainted
+%   explicit mask     a bit per sample that leaves a pixel unpainted
+%   reduced           more samples than device pixels, which takes the
+%                     stepped path whatever was asked for
+%
+% The counts come from the record itself: how many marks it holds, how
+% many of them are images, and what it costs. A page comparison alone
+% would pass with the images absent from both sides, and would pass just
+% as well with every image expanded back into a rectangle per sample --
+% which is the one outcome this whole mechanism exists to avoid.
+
+% --- one component: an 8-bit grey image, magnified ---
+gsave
+  36 620 translate
+  120 120 scale
+  8 8 8 [ 8 0 0 -8 0 8 ]
+  { <001133557799bbdd 113355 7799bbddff 33557799 bbddff00 557799bb ddff0011
+     7799bbdd ff001133 99bbddff 00113355 bbddff00 11335577 ddff0011 33557799> }
+  image
+grestore
+
+% --- three components, through a decode table each ---
+gsave
+  176 620 translate
+  120 120 scale
+  4 4 8 [ 4 0 0 -4 0 4 ]
+  { <ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 804020 204080
+     102030 302010 c0c0c0 404040 ff8000 0080ff 80ff00 8000ff> }
+  false 3 colorimage
+grestore
+
+% --- three components a plane at a time, which is a row of samples per
+%     component rather than one row of pixels ---
+gsave
+  456 620 translate
+  120 120 scale
+  4 4 8 [ 4 0 0 -4 0 4 ]
+  { <ff00ff0000ff00ff ff00ff0000ff00ff> }
+  { <00ff00ffff00ff00 0000ffffffff0000> }
+  { <0000ffffffff0000 00ff00ffff00ff00> }
+  true 3 colorimage
+grestore
+
+% --- magnified with the samples blended, which reads the row before ---
+gsave
+  316 620 translate
+  120 120 scale
+  << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+     /ImageMatrix [ 4 0 0 -4 0 4 ]
+     /Decode [ 0 1 ]
+     /Interpolate true
+     /DataSource < 00 40 80 c0 40 80 c0 ff 80 c0 ff 40 c0 ff 40 00 >
+  >> image
+grestore
+
+% --- under a region that is not a rectangle ---
+gsave
+  36 470 translate
+  newpath 60 60 55 0 360 arc clip
+  120 120 scale
+  8 8 8 [ 8 0 0 -8 0 8 ]
+  { <ff00ff00ff00ff00 00ff00ff00ff00ff ff00ff00ff00ff00 00ff00ff00ff00ff
+     ff00ff00ff00ff00 00ff00ff00ff00ff ff00ff00ff00ff00 00ff00ff00ff00ff> }
+  image
+grestore
+
+% --- a colour-key mask: samples inside the ranges leave the page alone ---
+gsave
+  176 470 translate
+  0 0 1 setrgbcolor 0 0 120 120 rectfill
+  120 120 scale
+  << /ImageType 4 /Width 4 /Height 4 /BitsPerComponent 8
+     /ImageMatrix [ 4 0 0 -4 0 4 ]
+     /Decode [ 0 1 0 1 0 1 ]
+     /MaskColor [ 0 0 0 ]
+     /DataSource < ff0000 000000 0000ff ffff00
+                   000000 00ff00 ffffff 000000
+                   00ffff ff00ff 000000 808080
+                   000000 c0c0c0 404040 000000 >
+  >> image
+grestore
+
+% --- an explicit mask over the same grid ---
+gsave
+  316 470 translate
+  1 0 0 setrgbcolor 0 0 120 120 rectfill
+  % the samples are one component, so the space they are read in is the
+  % one-component one
+  0 setgray
+  120 120 scale
+  << /ImageType 3
+     /InterleaveType 3
+     /DataDict << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+                  /ImageMatrix [ 4 0 0 -4 0 4 ]
+                  /Decode [ 0 1 ]
+                  /DataSource < 20 50 80 b0 50 80 b0 e0 80 b0 e0 20 b0 e0 20 50 >
+               >>
+     /MaskDict << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 1
+                  /ImageMatrix [ 4 0 0 -4 0 4 ]
+                  /Decode [ 0 1 ]
+                  /DataSource < 90 60 >
+               >>
+  >> image
+grestore
+
+% --- a picture at production shape: more samples than device pixels,
+%     which is what makes the size of a record worth measuring ---
+/bigw 180 def
+/bigh 180 def
+/bigrow bigw string def
+/bigy 0 def
+/bigsrc {
+    0 1 bigw 1 sub { /i exch def
+        bigrow i i bigy add dup 2 mul add 255 and put
+    } for
+    /bigy bigy 1 add def
+    bigrow
+} bind def
+gsave
+  36 180 translate
+  bigw 2 div bigh 2 div scale
+  bigw bigh 8 [ bigw 0 0 bigh neg 0 bigh ] { bigsrc } image
+grestore
+
+% What the record holds, where there is one to ask. A device that paints
+% carries no such method and this is skipped; the wrapper holds the two
+% runs to answering differently here and identically on the page.
+DEVICE /.playpage known {
+    DEVICE 1183615869 internaldict /.recordcost get exec
+    /recbytes exch def
+    /recimages exch def
+    /recmarks exch def
+    (RECORD ) print
+    recmarks 20 string cvs print ( ) print
+    recimages 20 string cvs print ( ) print
+    recbytes 20 string cvs print
+    (\n) print
+
+    % What the page would have cost as pixels, which is what the record
+    % is worth holding instead of. The device's own extent says it, so a
+    % page of another size does not have to be re-stated here.
+    /rasterbytes DEVICE /dimensions get 0 get
+                 DEVICE /dimensions get 1 get mul 3 mul def
+    (RASTER ) print rasterbytes 20 string cvs print (\n) print
+
+    recimages 8 lt
+    { (FAIL: the page did not reach every route into an image entry\n) print }
+    if
+    recmarks 200 gt
+    { (FAIL: the record holds more marks than a page of eight images and\n)
+      print
+      (FAIL: a page clear can account for, so an image was expanded\n) print }
+    if
+    recbytes rasterbytes ge
+    { (FAIL: the record costs at least what the raster it saves does\n) print }
+    if
+} if
+
+showpage

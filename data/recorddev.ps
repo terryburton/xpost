@@ -19,6 +19,18 @@
 % into the five it does hold. tests/check-device-skeleton.sh holds this
 % dictionary to that.
 %
+% A sampled image is the one thing the five are the wrong shape for, and
+% it does not arrive as a device method either. The image painter
+% (data/paint.ps) writes an image into the rows of a device that keeps
+% them and paints one a rectangle per sample into a device that does
+% not; a record of the second would cost tens of bytes a sample against
+% the one to three bytes a pixel of the page it exists to avoid holding.
+% So the painter looks for /.recordimage on the device instead, and
+% hands the whole image -- its rows, the transform placing them and the
+% colour tables it baked -- to whatever it finds. The driver puts this
+% class's there. It is not dispatched as a marking call and takes none
+% of them away from the record.
+%
 % /NoOutput keeps the methods the class brought: the device completion
 % (data/device.ps) replaces a device's polygon fill with the compiled
 % scan conversion, which would paint spans into a device that has no

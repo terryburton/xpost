@@ -2295,10 +2295,24 @@ _blit_row_spans(Xpost_Context *ctx, Xpost_Object cspans, int ncspans,
    of mrowb bytes (set = leave unpainted), and mranges, raw min,max
    pairs (a pixel inside every range is left unpainted). Pixels cover
    device pixels by the any-part-of-pixel rule, the high edge
-   exclusive, matching the rectangle fills this replaces. */
-static
-int _blitrow(Xpost_Context *ctx,
-             Xpost_Object dict)
+   exclusive, matching the rectangle fills this replaces.
+
+   It is reachable as a function too (xpost_dev_generic.h), so that a
+   page played back from a record writes its image rows through this
+   same writer rather than a second one that would round its own way. */
+double xpost_dev_dict_number(Xpost_Context *ctx, Xpost_Object dict,
+                             Xpost_Object key, double dflt)
+{
+    Xpost_Object o = xpost_dict_get(ctx, dict, key);
+    int t = xpost_object_get_type(o);
+
+    if (t == integertype || t == realtype)
+        return xpost_object_number(o);
+    return dflt;
+}
+
+int xpost_dev_blit_row(Xpost_Context *ctx,
+                       Xpost_Object dict)
 {
     Xpost_Object rows, bufo, luto, dlutso, tluto, mbitso, mrangeso;
     Xpost_Object tro, tgo, tbo;
@@ -3674,7 +3688,7 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              arraytype, integertype, integertype); INSTALL;
     op = xpost_operator_cons(ctx, ".pathspanparts", (Xpost_Op_Func)_pathspanparts, 2,
                              stringtype, booleantype); INSTALL;
-    op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)_blitrow, 1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".blitrow", (Xpost_Op_Func)xpost_dev_blit_row, 1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".rectspan", (Xpost_Op_Func)_rectspan, 6,
             numbertype, numbertype, numbertype, numbertype,
             numbertype, numbertype); INSTALL;

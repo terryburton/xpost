@@ -152,6 +152,39 @@ void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
                                   int *r, int *g, int *b);
 
 /**
+ * @brief write one sample row of an image straight into a device raster
+ *
+ * The .blitrow operator, reached as a function. What the dictionary
+ * carries is described where it is implemented: the device's rows, the
+ * axis-aligned mapping that places the image, the region the writes go
+ * through, the row of samples, and the colour tables the painter baked
+ * before it started.
+ *
+ * It is a function as well as an operator so that a page played back
+ * from a record paints its images through the same writer that painted
+ * them the first time. A second implementation of sampling would be a
+ * second set of rounding decisions, and a replay is held to the bytes
+ * the direct painting produced.
+ */
+int xpost_dev_blit_row(Xpost_Context *ctx, Xpost_Object dict);
+
+/**
+ * @brief a number that dictionary carries under @p key, or @p dflt
+ *
+ * The blit dictionary's operands are numbers, and a number reaches a
+ * device as either of the two numeric types. This reads one the way the
+ * row writer reads its own, so that a caller building such a dictionary
+ * or taking one apart -- a record writing an image down and playing it
+ * back is both -- puts the same value in the writer's hands.
+ *
+ * A key the dictionary does not carry, or carries something other than
+ * a number under, answers @p dflt: which is what the writer makes of an
+ * operand that is not there.
+ */
+double xpost_dev_dict_number(Xpost_Context *ctx, Xpost_Object dict,
+                             Xpost_Object key, double dflt);
+
+/**
  * @brief report what to allocate for a raster of @p w by @p h pixels of
  *        @p pixel bytes each, or refuse a buffer this platform cannot address
  *

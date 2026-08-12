@@ -3302,6 +3302,20 @@ test('region-replay',
   suite: cost_fast,
   timeout: 120)
 
+# The same claim for the one mark a record cannot hold as a marking call.
+# An image reaches a device without rows of its own one rectangle per
+# sample, so a record built from the marking calls alone would be tens of
+# times larger than the page it exists to avoid holding; it holds one
+# entry per image instead. This renders a page of images both ways and
+# requires the same bytes, the record to hold an entry per image rather
+# than a mark per sample, and the record to cost less than the raster.
+test('record-image',
+  find_program('tests/run-record-image-test.sh'),
+  args: [ xpost_exe, files('tests/record_image_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

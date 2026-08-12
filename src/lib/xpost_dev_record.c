@@ -97,6 +97,34 @@ static Xpost_Object namedotplaypage;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object nameslot[5];
 
+/* The keys of the blit dictionary the image painter builds, which is
+   what an image entry is written from and what one is played back
+   through. They are taken up once, at start-up, because both directions
+   walk the whole set and a lookup by text on the way past every one of
+   them would be the walk's cost rather than its content. */
+enum
+{
+    BK_ROWS, BK_DEVW, BK_DEVH, BK_NAT, BK_RGBROWS, BK_CMYK,
+    BK_W, BK_NCOMP, BK_BUF, BK_BUFS, BK_XOFF, BK_XSCALE, BK_YOFF,
+    BK_YSCALE, BK_CX0, BK_CY0, BK_CX1, BK_CY1, BK_CSPANS, BK_MBITS,
+    BK_MROWB, BK_MRANGES, BK_LUT, BK_DLUTS, BK_TLUT, BK_TLUTR,
+    BK_TLUTG, BK_TLUTB, BK_INTERP, BK_PREV, BK_PREVS, BK_Y, BK_LAST,
+    BK_HTCELL, BK_HTW, BK_HTH, BK_IMGDATA, BK_DIMENSIONS,
+    BK_COUNT
+};
+
+static const char *const _bdname[BK_COUNT] =
+{
+    "rows", "devw", "devh", "nat", "rgbrows", "cmyk",
+    "w", "ncomp", "buf", "bufs", "xoff", "xscale", "yoff",
+    "yscale", "cx0", "cy0", "cx1", "cy1", "cspans", "mbits",
+    "mrowb", "mranges", "lut", "dluts", "tlut", "tlutr",
+    "tlutg", "tlutb", "interp", "prev", "prevs", "y", "last",
+    ".htcell", ".htw", ".hth", "ImgData", "dimensions"
+};
+
+static Xpost_Object namebdkey[BK_COUNT];
+
 static unsigned int _create_cont_opcode;
 static unsigned int _replay_step_opcode;
 static unsigned int _loadrecorddevicecont_opcode;
@@ -273,6 +301,510 @@ static int _getpix(Xpost_Context *ctx,
     return 0;
 }
 
+/* What the blit dictionary carries, read out by key. A key it does not
+   carry answers the default, which is what the row writer makes of one
+   that is absent. */
+static Xpost_Object _bdget(Xpost_Context *ctx, Xpost_Object bd, int k)
+{
+    return xpost_dict_get(ctx, bd, namebdkey[k]);
+}
+
+static int _bdint(Xpost_Context *ctx, Xpost_Object bd, int k, int dflt)
+{
+    Xpost_Object o = _bdget(ctx, bd, k);
+    int t = xpost_object_get_type(o);
+
+    if (t == integertype || t == booleantype)
+        return o.int_.val;
+    return dflt;
+}
+
+static real _bdreal(Xpost_Context *ctx, Xpost_Object bd, int k, real dflt)
+{
+    return (real)xpost_dev_dict_number(ctx, bd, namebdkey[k], (double)dflt);
+}
+
+/* A string the dictionary carries, as bytes, or nothing where it does
+   not carry one long enough to be read as far as it will be read. */
+static const unsigned char *_bdstr(Xpost_Context *ctx, Xpost_Object bd,
+                                   int k, unsigned int need)
+{
+    Xpost_Object o = _bdget(ctx, bd, k);
+
+    if (xpost_object_get_type(o) != stringtype || o.comp_.sz < need)
+        return NULL;
+    return (const unsigned char *)xpost_string_get_pointer(ctx, o);
+}
+
+/* blitdict rows IMAGE  .recordimage  -
+   Write a sampled image down as one entry, rather than as the run of
+   one-pixel rectangles a device holding no rows of its own would
+   otherwise be painted it a sample at a time.
+ *
+ * What arrives is the dictionary the image painter builds before it
+ * writes its first row and the rows it would have written: the
+ * transform placing the image, the region resolved above the device,
+ * and the colour tables the painter baked out of the graphics state.
+ * The tables are what is kept rather than the state they came from --
+ * a replay happens when the page is put out, by which time the
+ * transfer functions and the colour space that decoded the image have
+ * moved on, and there is no asking them again.
+ */
+static int _recordimage(Xpost_Context *ctx,
+                        Xpost_Object bd,
+                        Xpost_Object rows,
+                        Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    Xpost_Record_Image img;
+    Xpost_Object o;
+    const unsigned char **runs = NULL;
+    unsigned char dl[4 * 256];
+    unsigned char tl[3 * 256];
+    int mranges[8];
+    real *cspans = NULL;
+    unsigned int nrun;
+    int i, ret = 0;
+
+    memset(&img, 0, sizeof img);
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    /* a released record takes an image as it takes a mark: not at all */
+    if (!private.rec)
+        return 0;
+
+    img.width = _bdint(ctx, bd, BK_W, 0);
+    img.ncomp = _bdint(ctx, bd, BK_NCOMP, 0);
+    img.nat = _bdint(ctx, bd, BK_NAT, 0);
+    img.rgbrows = _bdint(ctx, bd, BK_RGBROWS, 0);
+    img.cmyk = _bdint(ctx, bd, BK_CMYK, 0);
+    img.interp = _bdint(ctx, bd, BK_INTERP, 0);
+    img.xoff = _bdreal(ctx, bd, BK_XOFF, 0);
+    img.xscale = _bdreal(ctx, bd, BK_XSCALE, 1);
+    img.yoff = _bdreal(ctx, bd, BK_YOFF, 0);
+    img.yscale = _bdreal(ctx, bd, BK_YSCALE, 1);
+    img.cx0 = _bdreal(ctx, bd, BK_CX0, 0);
+    img.cy0 = _bdreal(ctx, bd, BK_CY0, 0);
+    img.cx1 = _bdreal(ctx, bd, BK_CX1, 0);
+    img.cy1 = _bdreal(ctx, bd, BK_CY1, 0);
+    img.mrowb = _bdint(ctx, bd, BK_MROWB, 0);
+
+    /* one buffer a component says the rows come a plane at a time, and
+       the run handed over is then a plane rather than a row */
+    img.planar = xpost_object_get_type(_bdget(ctx, bd, BK_BUFS)) == arraytype;
+    if (img.ncomp < 1 || img.ncomp > 4 || img.width < 1
+     || img.nat < 1 || img.nat > 3)
+        return rangecheck;
+
+    if (xpost_object_get_type(rows) != arraytype)
+        return typecheck;
+    nrun = rows.comp_.sz;
+    if (nrun < 1)
+        return rangecheck;
+    img.height = (int)(img.planar ? nrun / (unsigned int)img.ncomp : nrun);
+    if (img.height < 1)
+        return rangecheck;
+
+    /* The rows are the painter's own buffers, refilled for the row
+       after, so what is handed over is where each one is now and the
+       record takes its own copy. */
+    runs = malloc((size_t)nrun * sizeof *runs);
+    if (!runs)
+        return VMerror;
+    for (i = 0; i < (int)nrun; i++)
+    {
+        unsigned int need = (unsigned int)img.width
+                          * (img.planar ? 1u : (unsigned int)img.ncomp);
+
+        o = xpost_array_get(ctx, rows, i);
+        if (xpost_object_get_type(o) != stringtype || o.comp_.sz < need)
+        {
+            ret = typecheck;
+            goto out;
+        }
+        runs[i] = (const unsigned char *)xpost_string_get_pointer(ctx, o);
+    }
+
+    /* the tables the painter baked: one for a single-component space,
+       which has everything in it, or per-component decode with the
+       transfer applied after the conversion */
+    img.lut = img.ncomp == 1
+        ? _bdstr(ctx, bd, BK_LUT, 256u * (unsigned int)img.nat) : NULL;
+    if (img.ncomp == 1 && !img.lut)
+    {
+        /* an entry with no table to decode by is one the writer would
+           refuse when it came to be played, which is a page short of a
+           mark rather than a call that failed */
+        ret = typecheck;
+        goto out;
+    }
+    if (img.ncomp > 1)
+    {
+        o = _bdget(ctx, bd, BK_DLUTS);
+        if (xpost_object_get_type(o) != arraytype
+         || o.comp_.sz < (unsigned int)img.ncomp)
+        {
+            ret = typecheck;
+            goto out;
+        }
+        for (i = 0; i < img.ncomp; i++)
+        {
+            Xpost_Object d = xpost_array_get(ctx, o, i);
+
+            if (xpost_object_get_type(d) != stringtype || d.comp_.sz < 256)
+            {
+                ret = typecheck;
+                goto out;
+            }
+            memcpy(dl + i * 256, xpost_string_get_pointer(ctx, d), 256);
+        }
+        img.dluts = dl;
+    }
+    img.tlut = _bdstr(ctx, bd, BK_TLUT, 256u);
+    if (img.ncomp > 1 && !img.tlut)
+    {
+        ret = typecheck;
+        goto out;
+    }
+    if (img.nat == 3)
+    {
+        const unsigned char *p;
+        int k;
+
+        for (k = 0; k < 3; k++)
+        {
+            p = _bdstr(ctx, bd, BK_TLUTR + k, 256u);
+            if (!p)
+                break;
+            memcpy(tl + k * 256, p, 256);
+        }
+        if (k == 3)
+            img.tlutrgb = tl;
+    }
+
+    img.mbits = img.mrowb > 0
+        ? _bdstr(ctx, bd, BK_MBITS,
+                 (unsigned int)img.mrowb * (unsigned int)img.height) : NULL;
+    if (!img.mbits)
+        img.mrowb = 0;
+
+    o = _bdget(ctx, bd, BK_MRANGES);
+    if (xpost_object_get_type(o) == arraytype && o.comp_.sz <= 8)
+    {
+        for (i = 0; i < (int)o.comp_.sz; i++)
+            mranges[i] = (int)xpost_object_number(xpost_array_get(ctx, o, i));
+        img.nranges = (int)o.comp_.sz;
+        img.mranges = mranges;
+    }
+
+    o = _bdget(ctx, bd, BK_CSPANS);
+    if (xpost_object_get_type(o) == arraytype && o.comp_.sz >= 4)
+    {
+        img.nspan = (int)(o.comp_.sz / 4);
+        cspans = malloc((size_t)img.nspan * 4 * sizeof *cspans);
+        if (!cspans)
+        {
+            ret = VMerror;
+            goto out;
+        }
+        for (i = 0; i < img.nspan * 4; i++)
+            cspans[i] = (real)xpost_object_number(xpost_array_get(ctx, o, i));
+        img.cspans = cspans;
+    }
+
+    if (!xpost_record_image(private.rec, &img, runs, (int)nrun))
+        ret = VMerror;
+
+out:
+    free(cspans);
+    free(runs);
+    return ret;
+}
+
+/* Paint an image entry into the device that paints, for device rows
+   @p lo to @p hi.
+ *
+ * The rows are written through the same writer that wrote them the
+ * first time, driven against the target's raster: a second
+ * implementation of sampling would be a second set of rounding
+ * decisions and the two pages would part company somewhere nobody
+ * looked.
+ *
+ * The run of rows is clipped to by choosing which of the image's rows
+ * to write and by narrowing the region they are written through -- not
+ * by trimming what was recorded, which would leave a record that could
+ * only be played back one way.
+ */
+static int _play_image(Xpost_Context *ctx,
+                       const Xpost_Record_Image *img,
+                       Xpost_Object targetdic,
+                       real lo, real hi)
+{
+    Xpost_Object bd, rows, dims;
+    Xpost_Object buf = null, prev = null;
+    Xpost_Object bufs = null, prevs = null;
+    unsigned int mode = ctx->vmmode;
+    unsigned int rowbytes;
+    real cy0, cy1;
+    int devh, y, y0, y1, c;
+    int ret = 0;
+
+    rows = xpost_dict_get(ctx, targetdic, namebdkey[BK_IMGDATA]);
+    if (xpost_object_get_type(rows) != arraytype)
+    {
+        /* the device being played into keeps no rows an image can be
+           written into, so this mark cannot be made -- the same answer
+           as a device missing one of the marking methods */
+        XPOST_LOG_ERR("%d a recorded image has no rows to play it into",
+                      undefined);
+        return undefined;
+    }
+    dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
+    if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
+        return typecheck;
+    devh = (int)xpost_object_number(xpost_array_get(ctx, dims, 1));
+
+    if (!xpost_record_image_rows(img, lo, hi, &y0, &y1))
+        return 0;
+    cy0 = img->cy0 < lo ? lo : img->cy0;
+    cy1 = img->cy1 > hi + 1 ? hi + 1 : img->cy1;
+
+    rowbytes = (unsigned int)img->width
+             * (img->planar ? 1u : (unsigned int)img->ncomp);
+
+    /* Built in local memory whatever the run was allocating in: it
+       lives as long as this call, and global memory is not collected. */
+    ctx->vmmode = LOCAL;
+    bd = xpost_dict_cons(ctx, 40);
+    if (xpost_object_get_type(bd) != dicttype)
+    {
+        ctx->vmmode = mode;
+        return VMerror;
+    }
+
+#define PUT(k, v) do { \
+        ret = xpost_dict_put(ctx, bd, namebdkey[k], (v)); \
+        if (ret) goto out; \
+    } while (0)
+#define PUTSTR(k, p, n) do { \
+        Xpost_Object s_ = xpost_string_cons(ctx, (unsigned int)(n), \
+                                            (const char *)(p)); \
+        if (xpost_object_get_type(s_) != stringtype) \
+            { ret = VMerror; goto out; } \
+        PUT(k, s_); \
+    } while (0)
+
+    PUT(BK_ROWS, rows);
+    PUT(BK_DEVW, xpost_array_get(ctx, dims, 0));
+    PUT(BK_DEVH, xpost_int_cons(devh));
+    PUT(BK_NAT, xpost_int_cons(img->nat));
+    PUT(BK_RGBROWS, xpost_bool_cons(img->rgbrows));
+    PUT(BK_CMYK, xpost_bool_cons(img->cmyk));
+    PUT(BK_W, xpost_int_cons(img->width));
+    PUT(BK_NCOMP, xpost_int_cons(img->ncomp));
+    PUT(BK_XOFF, xpost_real_cons(img->xoff));
+    PUT(BK_XSCALE, xpost_real_cons(img->xscale));
+    PUT(BK_YOFF, xpost_real_cons(img->yoff));
+    PUT(BK_YSCALE, xpost_real_cons(img->yscale));
+    PUT(BK_CX0, xpost_real_cons(img->cx0));
+    PUT(BK_CY0, xpost_real_cons(cy0));
+    PUT(BK_CX1, xpost_real_cons(img->cx1));
+    PUT(BK_CY1, xpost_real_cons(cy1));
+
+    if (img->lut)
+        PUTSTR(BK_LUT, img->lut, 256 * img->nat);
+    if (img->dluts)
+    {
+        Xpost_Object a = xpost_array_cons(ctx, (unsigned int)img->ncomp);
+
+        if (xpost_object_get_type(a) != arraytype)
+            { ret = VMerror; goto out; }
+        for (c = 0; c < img->ncomp; c++)
+        {
+            Xpost_Object s = xpost_string_cons(ctx, 256,
+                (const char *)(img->dluts + c * 256));
+
+            if (xpost_object_get_type(s) != stringtype)
+                { ret = VMerror; goto out; }
+            ret = xpost_array_put(ctx, a, c, s);
+            if (ret)
+                goto out;
+        }
+        PUT(BK_DLUTS, a);
+    }
+    if (img->tlut)
+        PUTSTR(BK_TLUT, img->tlut, 256);
+    if (img->tlutrgb)
+    {
+        PUTSTR(BK_TLUTR, img->tlutrgb, 256);
+        PUTSTR(BK_TLUTG, img->tlutrgb + 256, 256);
+        PUTSTR(BK_TLUTB, img->tlutrgb + 512, 256);
+    }
+    if (img->mbits)
+    {
+        PUTSTR(BK_MBITS, img->mbits, (size_t)img->mrowb * img->height);
+        PUT(BK_MROWB, xpost_int_cons(img->mrowb));
+    }
+    if (img->nranges)
+    {
+        Xpost_Object a = xpost_array_cons(ctx, (unsigned int)img->nranges);
+
+        if (xpost_object_get_type(a) != arraytype)
+            { ret = VMerror; goto out; }
+        for (c = 0; c < img->nranges; c++)
+        {
+            ret = xpost_array_put(ctx, a, c, xpost_int_cons(img->mranges[c]));
+            if (ret)
+                goto out;
+        }
+        PUT(BK_MRANGES, a);
+    }
+    if (img->nspan)
+    {
+        Xpost_Object a = xpost_array_cons(ctx, (unsigned int)img->nspan * 4);
+
+        if (xpost_object_get_type(a) != arraytype)
+            { ret = VMerror; goto out; }
+        for (c = 0; c < img->nspan * 4; c++)
+        {
+            ret = xpost_array_put(ctx, a, c,
+                                  xpost_real_cons(img->cspans[c]));
+            if (ret)
+                goto out;
+        }
+        PUT(BK_CSPANS, a);
+    }
+    /* the screen a bilevel device thresholds through is that device's
+       and not the image's, so it is taken from the one being painted */
+    if (xpost_object_get_type(
+            xpost_dict_get(ctx, targetdic, namebdkey[BK_HTCELL])) == stringtype)
+    {
+        PUT(BK_HTCELL, xpost_dict_get(ctx, targetdic, namebdkey[BK_HTCELL]));
+        PUT(BK_HTW, xpost_dict_get(ctx, targetdic, namebdkey[BK_HTW]));
+        PUT(BK_HTH, xpost_dict_get(ctx, targetdic, namebdkey[BK_HTH]));
+    }
+
+    /* the row in hand, and -- where the samples are blended -- the row
+       before it. The first row blends with itself, which is what the
+       painting did with the first row it had. */
+    if (img->planar)
+    {
+        bufs = xpost_array_cons(ctx, (unsigned int)img->ncomp);
+        if (img->interp)
+            prevs = xpost_array_cons(ctx, (unsigned int)img->ncomp);
+        if (xpost_object_get_type(bufs) != arraytype
+         || (img->interp && xpost_object_get_type(prevs) != arraytype))
+            { ret = VMerror; goto out; }
+        for (c = 0; c < img->ncomp; c++)
+        {
+            Xpost_Object s = xpost_string_cons(ctx, rowbytes, NULL);
+            Xpost_Object p = img->interp
+                ? xpost_string_cons(ctx, rowbytes, NULL) : null;
+
+            if (xpost_object_get_type(s) != stringtype
+             || (img->interp && xpost_object_get_type(p) != stringtype))
+                { ret = VMerror; goto out; }
+            ret = xpost_array_put(ctx, bufs, c, s);
+            if (!ret && img->interp)
+                ret = xpost_array_put(ctx, prevs, c, p);
+            if (ret)
+                goto out;
+        }
+        PUT(BK_BUFS, bufs);
+        if (img->interp)
+            PUT(BK_PREVS, prevs);
+    }
+    else
+    {
+        buf = xpost_string_cons(ctx, rowbytes, NULL);
+        if (xpost_object_get_type(buf) != stringtype)
+            { ret = VMerror; goto out; }
+        PUT(BK_BUF, buf);
+        if (img->interp)
+        {
+            prev = xpost_string_cons(ctx, rowbytes, NULL);
+            if (xpost_object_get_type(prev) != stringtype)
+                { ret = VMerror; goto out; }
+            PUT(BK_PREV, prev);
+        }
+    }
+    if (img->interp)
+        PUT(BK_INTERP, xpost_bool_cons(1));
+
+    /* the two the loop restates, put here so that the dictionary has
+       the shape it will keep before any row buffer is filled: a key
+       arriving later could grow it, and what a row was written into is
+       read back by where it is rather than by where it was */
+    PUT(BK_Y, xpost_int_cons(0));
+    if (img->interp)
+        PUT(BK_LAST, xpost_bool_cons(0));
+
+    for (y = y0; y < y1; y++)
+    {
+        int p = y > 0 ? y - 1 : 0;
+
+        if (img->planar)
+        {
+            for (c = 0; c < img->ncomp; c++)
+            {
+                memcpy(xpost_string_get_pointer(ctx,
+                           xpost_array_get(ctx, bufs, c)),
+                       img->samples + ((size_t)y * img->ncomp + c) * rowbytes,
+                       rowbytes);
+                if (img->interp)
+                    memcpy(xpost_string_get_pointer(ctx,
+                               xpost_array_get(ctx, prevs, c)),
+                           img->samples
+                           + ((size_t)p * img->ncomp + c) * rowbytes,
+                           rowbytes);
+            }
+        }
+        else
+        {
+            memcpy(xpost_string_get_pointer(ctx, buf),
+                   img->samples + (size_t)y * rowbytes, rowbytes);
+            if (img->interp)
+                memcpy(xpost_string_get_pointer(ctx, prev),
+                       img->samples + (size_t)p * rowbytes, rowbytes);
+        }
+        PUT(BK_Y, xpost_int_cons(y));
+        if (img->interp)
+            PUT(BK_LAST, xpost_bool_cons(y == img->height - 1));
+        ret = xpost_dev_blit_row(ctx, bd);
+        if (ret)
+            goto out;
+    }
+
+#undef PUTSTR
+#undef PUT
+out:
+    ctx->vmmode = mode;
+    return ret;
+}
+
+/* IMAGE  .recordcost  marks images bytes
+   What a record holds and what holding it costs. The mechanism is worth
+   having exactly while a record is smaller than the raster it saves
+   holding, which is a measurement and not a guess, and this is where
+   the measurement is taken. */
+static int _recordcost(Xpost_Context *ctx,
+                       Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)xpost_record_count(private.rec)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)xpost_record_image_count(private.rec)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)xpost_record_bytes(private.rec)));
+    return 0;
+}
+
 /* Play one mark into the device that paints, then come back for the
    next.
  *
@@ -313,6 +845,46 @@ static int _replay_step(Xpost_Context *ctx,
         return 0;   /* played out */
     if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
         return 0;
+
+    /* An image is not one of the marking calls and is not made by
+       calling one: its rows are written into the target's raster
+       through the writer that wrote them the first time. Nothing is
+       left on the stacks for a method to consume, so the walk goes
+       straight on.
+
+       The rows painted are the whole of the target's page. A replay
+       into part of it hands that part down here instead, and the entry
+       writes the rows meeting it -- which is where a band enters. */
+    if (kind == XPOST_RECORD_IMAGE)
+    {
+        const Xpost_Record_Image *img;
+        Xpost_Object dims;
+        int ret;
+
+        img = xpost_record_image_get(private.rec,
+                                     nops > 0 ? (size_t)ops[0] : (size_t)-1);
+        if (!img)
+        {
+            XPOST_LOG_ERR("%d a recorded image names no entry", undefined);
+            return undefined;
+        }
+        dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
+        if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
+            return typecheck;
+        ret = _play_image(ctx, img, targetdic, (real)0,
+                          (real)xpost_object_number(
+                              xpost_array_get(ctx, dims, 1)) - 1);
+        if (ret)
+            return ret;
+
+        xpost_stack_push(ctx->lo, ctx->os, recdic);
+        xpost_stack_push(ctx->lo, ctx->os, targetdic);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(idx.int_.val + 1));
+        if (!xpost_stack_push(ctx->lo, ctx->es,
+                              xpost_operator_cons_opcode(_replay_step_opcode)))
+            return execstackoverflow;
+        return 0;
+    }
 
     method = xpost_dict_get(ctx, targetdic, _slot(kind));
     if (xpost_object_get_type(method) == invalidtype ||
@@ -733,6 +1305,21 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* How a sampled image reaches the record. It is not one of the
+       device methods and is not dispatched as one: the image painter
+       looks for it, and finding it writes the image down instead of
+       painting it a rectangle per sample into a device that keeps no
+       rows. A device method here would be a marking call the record
+       holds no entry for, which is the one thing this class must not
+       declare (tests/check-device-skeleton.sh). */
+    op = xpost_operator_cons(ctx, "recordImage",
+                             (Xpost_Op_Func)_recordimage, 3,
+                             dicttype, arraytype, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, ".recordimage"), op);
+    if (ret)
+        return ret;
+
     userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
 
     ret = xpost_dict_put(ctx, userdict,
@@ -756,6 +1343,7 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
 {
     Xpost_Operator *optab;
     Xpost_Object n,op;
+    int i;
 
     /* factor-out name lookups from the operators (optimization) */
     if (xpost_object_get_type((namePrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
@@ -780,6 +1368,10 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
         return VMerror;
     if (xpost_object_get_type((nameslot[XPOST_RECORD_FILLPOLY] = xpost_name_cons(ctx, "FillPoly"))) == invalidtype)
         return VMerror;
+    for (i = 0; i < BK_COUNT; i++)
+        if (xpost_object_get_type((namebdkey[i] = xpost_name_cons(ctx, _bdname[i])))
+            == invalidtype)
+            return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
     op = xpost_operator_cons(ctx, "loadrecorddevice", (Xpost_Op_Func)loadrecorddevice, 0); INSTALL;
@@ -800,6 +1392,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              dicttype, dicttype, integertype,
                              numbertype, numbertype);
     _replay_step_opcode = op.mark_.padw;
+    op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
+                             dicttype); INSTALL;
 
     return 0;
 }

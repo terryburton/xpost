@@ -164,6 +164,7 @@ tests/global_vm_invariant_test.ps \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
+tests/record_image_test.ps \
 tests/record_replay_test.ps \
 tests/region_replay_test.ps \
 tests/graphics_load_stop_test.c \
@@ -298,6 +299,7 @@ tests/run-filenameforall-large-test.sh \
 tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
+tests/run-record-image-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \

@@ -93,6 +93,8 @@ xpost_create
 xpost_ctx
 xpost_data_dir_get
 xpost_destroy
+xpost_dev_blit_row
+xpost_dev_dict_number
 xpost_dev_jpeg_options_set
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num

@@ -832,8 +832,17 @@
         % interpreter's own machinery; RGB and CMYK samples take
         % per-component decode tables, convert in the operator and
         % pass through the transfer table after
+        %
+        % A device that writes down what it is asked to paint takes the
+        % same route as far as the rows, and is handed the rows and the
+        % dictionary describing them instead of having them written into
+        % a raster it does not keep. It has to be: the other route paints
+        % a device without rows one rectangle per sample, and a page
+        % written down that way costs tens of bytes a sample against the
+        % one to three bytes a pixel of the page being escaped.
         /blitok false def
-        DEVICE /ImgData known {
+        /blitrec DEVICE /.recordimage known def
+        DEVICE /ImgData known blitrec or {
             DEVICE /nativecolorspace get
             dup /DeviceRGB eq exch /DeviceGray eq or {
                 /m mat matrix invertmatrix matrix currentmatrix
@@ -910,7 +919,7 @@
                 } for
             } ifelse
             /bd 24 dict def
-            bd /rows DEVICE /ImgData get put
+            blitrec not { bd /rows DEVICE /ImgData get put } if
             bd /devw DEVICE /dimensions get 0 get put
             bd /devh DEVICE /dimensions get 1 get put
             bd /nat nat put
@@ -951,23 +960,37 @@
             /interpok interp def
             interpok {
                 bd /interp true put
-                multi {
-                    /pbufs [ ncomp { width string } repeat ] def
-                    bd /prevs pbufs put
-                }{
-                    /pbuf rowsamples string def
-                    bd /prev pbuf put
-                } ifelse
-                % keep this row's samples for the next call's blend
-                /.keeprow {
+                % A device that writes the image down is handed every row
+                % and blends them where it plays them, so the buffer a
+                % blend reads the row before from is the player's and is
+                % not made here.
+                blitrec not {
                     multi {
-                        0 1 ncomp 1 sub { /c exch def
-                            pbufs c get 0 bufs c get putinterval
-                        } for
+                        /pbufs [ ncomp { width string } repeat ] def
+                        bd /prevs pbufs put
                     }{
-                        pbuf 0 buf putinterval
+                        /pbuf rowsamples string def
+                        bd /prev pbuf put
                     } ifelse
-                } def
+                    % keep this row's samples for the next call's blend
+                    /.keeprow {
+                        multi {
+                            0 1 ncomp 1 sub { /c exch def
+                                pbufs c get 0 bufs c get putinterval
+                            } for
+                        }{
+                            pbuf 0 buf putinterval
+                        } ifelse
+                    } def
+                } if
+            } if
+            % the rows to hand over, where they are being written down
+            % rather than written into a raster: each is the painter's
+            % own buffer, refilled for the row after, so each is taken
+            % as it stands
+            blitrec {
+                /recrows multi { height ncomp mul }{ height } ifelse
+                    array def
             } if
             0 1 height 1 sub { /y exch def
                 multi {
@@ -982,14 +1005,26 @@
                 }{
                     //.xpostsys /.fill get exec //.xpostsys /.rownorm get exec
                 } ifelse
-                bd /y y put
-                interpok {
-                    y 0 eq { .keeprow } if
-                    bd /last y height 1 sub eq put
-                } if
-                bd .blitrow
-                interpok { .keeprow } if
+                blitrec {
+                    multi {
+                        0 1 ncomp 1 sub { /c exch def
+                            recrows y ncomp mul c add
+                                bufs c get dup length string copy put
+                        } for
+                    }{
+                        recrows y buf dup length string copy put
+                    } ifelse
+                }{
+                    bd /y y put
+                    interpok {
+                        y 0 eq { .keeprow } if
+                        bd /last y height 1 sub eq put
+                    } if
+                    bd .blitrow
+                    interpok { .keeprow } if
+                } ifelse
             } for
+            blitrec { bd recrows DEVICE dup /.recordimage get exec } if
             % A row written here goes straight into the raster and passes
             % none of the painting operators, so what it leaves on the
             % page is recorded here instead. What it leaves is the box the

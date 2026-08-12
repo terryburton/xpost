@@ -18,11 +18,15 @@
 %   BlendPix   a glyph's partly covered edge pixels, which is what the
 %              device asking for more than one bit of text alpha gets.
 %
-% There is deliberately no image on it. An image reaches a device that
-% holds its raster as rows the interpreter can see by being written into
-% those rows, and a device without them one sample at a time, so a page
-% with an image on it would be recorded through a route this mechanism
-% does not yet hold (doc/NEWINTERNALS).
+% There is deliberately no image on it. An image is not one of the five
+% and is not recorded as one: it is written down whole, as an entry the
+% run names, because a device holding no rows of its own is painted an
+% image a rectangle per sample and a record of those would be tens of
+% times larger than the page it exists to avoid holding. That entry is
+% held to the same byte claim on a page of its own
+% (tests/record_image_test.ps), which is also where the record's size is
+% measured against the page's; here the counts below stay a statement
+% about the marking calls alone.
 %
 % The counts are read by playing the record into a device that counts
 % instead of painting, which is the only way to see what was written
