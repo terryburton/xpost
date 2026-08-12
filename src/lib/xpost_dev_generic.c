@@ -139,6 +139,18 @@ int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
     return 1;
 }
 
+/* The block a raster of @p bytes sits in, or NULL for a count no
+   allocator hands out. A size expresses a raster that a machine does not
+   hold: half the address space is more than any of them gives to one
+   page, and a request that large is answered here rather than put to an
+   allocator, so that the refusal names the page it came from. */
+void *xpost_device_raster_block(size_t bytes)
+{
+    if (bytes > SIZE_MAX / 2)
+        return NULL;
+    return malloc(bytes);
+}
+
 void xpost_device_ground_scaled(Xpost_Context *ctx, Xpost_Object devdic,
                                 double scale, int *r, int *g, int *b)
 {

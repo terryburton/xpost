@@ -1,24 +1,27 @@
-# The library's exported symbol set, one name per line, C-collation sorted.
+#
+#
 #
 # Checked by tests/check-exported-symbols.sh: an addition is a deliberate
-# act recorded here in the same commit, and a removal breaks a consumer.
-#
-# The reserved-exception lines at the end name the exports that begin with
-# an underscore. C99 7.1.3 reserves every file-scope identifier that does,
-# so exporting one is a collision waiting on a libc that uses the same
-# name. These four predate the rule and are recorded rather than renamed;
-# the list may shrink and may not grow.
-#
 # The conditional lines at the end name entry points a build has only if
+# The library's exported symbol set, one name per line, C-collation sorted.
+# The reserved-exception lines at the end name the exports that begin with
+# act recorded here in the same commit, and a removal breaks a consumer.
+# an underscore. C99 7.1.3 reserves every file-scope identifier that does,
 # it was configured for them: each is a display device compiled for one
-# windowing system and absent everywhere else. They are neither required
+# name. These four predate the rule and are recorded rather than renamed;
 # nor refused. tests/check-device-roster.sh is what holds the device set.
+# so exporting one is a collision waiting on a libc that uses the same
+# the list may shrink and may not grow.
+# windowing system and absent everywhere else. They are neither required
 DEBUGLOAD
 _currentpoint
 _xpost_garbage_diag_verify
 _xpost_garbage_diag_xbank
 _xpost_interpreter_is_tracing
 a85_methods
+conditional xpost_free_repoison
+conditional xpost_oper_init_win32_device_ops
+conditional xpost_oper_init_xcb_device_ops
 dct_methods
 disk_methods
 echooff
@@ -55,6 +58,10 @@ mainloop
 mark
 memory_methods
 null
+reserved-exception _currentpoint
+reserved-exception _xpost_garbage_diag_verify
+reserved-exception _xpost_garbage_diag_xbank
+reserved-exception _xpost_interpreter_is_tracing
 rle_methods
 rsd_methods
 subfile_methods
@@ -94,6 +101,7 @@ xpost_device_ground_channels
 xpost_device_ground_scaled
 xpost_device_page_close
 xpost_device_page_open
+xpost_device_raster_block
 xpost_device_raster_bytes
 xpost_device_retire_restored
 xpost_dict_capacity_memory
@@ -327,10 +335,10 @@ xpost_oper_init_stack_ops
 xpost_oper_init_string_ops
 xpost_oper_init_token_ops
 xpost_oper_init_type_ops
-xpost_operator_count
 xpost_operator_cons
 xpost_operator_cons_opcode
 xpost_operator_cons_wrapped
+xpost_operator_count
 xpost_operator_dump
 xpost_operator_exec
 xpost_operator_init_optab
@@ -393,12 +401,3 @@ xpost_vm_image_refused
 xpost_vm_image_row_field_name
 xpost_vm_image_stamp_name
 xpost_vm_image_write
-
-reserved-exception _currentpoint
-reserved-exception _xpost_garbage_diag_verify
-reserved-exception _xpost_garbage_diag_xbank
-reserved-exception _xpost_interpreter_is_tracing
-
-conditional xpost_free_repoison
-conditional xpost_oper_init_win32_device_ops
-conditional xpost_oper_init_xcb_device_ops

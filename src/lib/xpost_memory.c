@@ -723,8 +723,6 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
 void
 xpost_memory_file_dump(const Xpost_Memory_File *mem)
 {
-    int u,v;
-
     if (!mem)
     {
         XPOST_LOG_ERR("%d mem pointer is NULL", VMerror);
@@ -740,45 +738,10 @@ xpost_memory_file_dump(const Xpost_Memory_File *mem)
             mem->max, mem->max,
             mem->start);
 
-    /* The header above is the whole of what this reports. The rest is
-       the hex-and-character dump of every byte the file holds, and
-       nothing reaches it: the return is above it. It is parked here
-       beside the header it would follow; a reader meeting it should
-       read it as not yet enabled rather than as something left
-       behind. */
-    return;
-
-    for (u = 0; u < (int)mem->used; u++)
-    {
-        if (u%16 == 0)
-        {
-            if (u != 0)
-            {
-                for (v = u - 16; v < u; v++)
-                {
-                    XPOST_LOG_DUMP("%c",
-                        isprint(mem->base[v]) ?
-                        mem->base[v] : '.');
-                }
-            }
-            XPOST_LOG_DUMP("\n%06u %04x: ", u, u);
-        }
-        XPOST_LOG_DUMP("%02x ", mem->base[u]);
-    }
-
-    if ((u-1)%16 != 0)
-    { /* did not print in the last iteration of the loop */
-        for (v = u; v%16 != 0; v++)
-        {
-            XPOST_LOG_DUMP("   ");
-        }
-        for (v = u - (u % 16); v < u; v++)
-        {
-            XPOST_LOG_DUMP("%c",
-                    isprint(mem->base[v]) ?
-                    mem->base[v] : '.');
-        }
-    }
+    /* The header above is the whole of what this reports. A
+       hex-and-character dump of every byte the file holds would follow
+       it, and is not made: a memory file runs to megabytes and the
+       header is what a reader of a log wants. */
 
     XPOST_LOG_DUMP("\n");
 }

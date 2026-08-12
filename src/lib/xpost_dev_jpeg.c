@@ -237,7 +237,7 @@ int _create_cont(Xpost_Context *ctx,
                           width, height);
             return limitcheck;
         }
-        private.buf = malloc(bytes);
+        private.buf = xpost_device_raster_block(bytes);
     }
     /* the size was one this platform expresses and addresses; whether
        the memory for it is there is the machine's answer, and a page the

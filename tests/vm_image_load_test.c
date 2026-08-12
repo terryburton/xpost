@@ -207,8 +207,21 @@ static int _read(const char *path, Image *im)
         fclose(f);
         return 0;
     }
+    /* an image carries a magic and a digest, so a file with room for
+       neither is no image; refusing it here makes the allocation below
+       exactly the file's length rather than a length or a stand-in */
+    if (len <= 0)
+    {
+        report_failure("the image %s is empty", path);
+        fclose(f);
+        return 0;
+    }
     im->len = (size_t)len;
-    im->bytes = malloc(im->len ? im->len : 1);
+    /* One byte more than the image, kept spare: a damage that lengthens
+       an image lengthens it by one, and having the room already means
+       the bytes never move and the buffer is never shorter than the
+       length the image carries. */
+    im->bytes = malloc(im->len + 1);
     if (!im->bytes || fread(im->bytes, 1, im->len, f) != im->len)
     {
         report_failure("cannot read the image %s", path);
@@ -293,10 +306,18 @@ static size_t _rows(const Image *im, unsigned int bank)
    the file and covers every byte before it, so a damage that means to be
    met by a check further in has to leave the file answering for itself,
    and one that means to be met by the digest has to not. */
-static void _reseal(Image *im, size_t len)
+static void _reseal(Image *im)
 {
     unsigned int h = XPOST_VM_IMAGE_DIGEST_SEED;
+    size_t len = im->len;
     size_t i;
+
+    /* The digest goes in the last four bytes of the image, so an image
+       with no room for one names no place to put it. The length an
+       image carries is the length of the image, whatever the buffer it
+       was read into has since become, so it is the one bound here. */
+    if (len < sizeof h)
+        return;
 
     for (i = 0; i + sizeof h <= len; i++)
     {
@@ -520,31 +541,17 @@ static void _damage(const char *in, const char *out, unsigned int which)
                     return;
                 }
                 len -= 64;
+                im.len = len;
                 break;
             case DAMAGE_LONG:
-            {
-                unsigned char *grown = realloc(im.bytes, len + 1);
-
-                if (!grown)
-                {
-                    report_failure("cannot lengthen the image");
-                    free(im.bytes);
-                    return;
-                }
-                im.bytes = grown;
                 im.bytes[len] = 0;
                 len++;
-                break;
-            }
-            default:
-                _put_u32(im.bytes + XPOST_VM_IMAGE_MAGIC_LEN
-                         + (which - DAMAGE_STAMP) * sizeof(unsigned int),
-                         im.stamp[which - DAMAGE_STAMP] ^ 0x5a5a5a5au);
+                im.len = len;
                 break;
         }
         /* left answering for itself, so that the check written for this
            damage is what meets it */
-        _reseal(&im, len);
+        _reseal(&im);
     }
 
     f = fopen(out, "wb");
@@ -554,8 +561,14 @@ static void _damage(const char *in, const char *out, unsigned int which)
         free(im.bytes);
         return;
     }
-    if (fwrite(im.bytes, 1, len, f) != len || fclose(f) != 0)
-        report_failure("cannot write a damaged image to %s", out);
+    /* the stream is closed whichever way the write went, so a failed
+       write gives it up rather than holding it to the end of the run */
+    {
+        int wrote = fwrite(im.bytes, 1, len, f) == len;
+
+        if (fclose(f) != 0 || !wrote)
+            report_failure("cannot write a damaged image to %s", out);
+    }
     free(im.bytes);
 }
 

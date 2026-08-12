@@ -1878,61 +1878,11 @@ void _onerror(Xpost_Context *ctx,
 static
 Xpost_Context *_switch_context(Xpost_Context *ctx)
 {
-    int i;
-
-    /* One context executes, so the next one to execute is this one. The
-       rest of this function is the scan across the context table -- the
-       next entry in C_RUN, wrapping at the end, moving the entries it
-       passes out of C_WAIT and C_IOBLOCK so a wait condition is retried
-       -- and nothing reaches it: the return is above it. It is parked
-       here beside the choice it would make; a reader meeting it should
-       read it as not yet enabled rather than as something left behind. */
-    return ctx;
-
-    /* return next context to execute */
-    printf("--switching contexts--\n");
-    /*putchar('.'); fflush(0); */
-    for (i = (ctx - itpdata->ctab) + 1; i < MAXCONTEXT; i++)
-    {
-        /*printf("--%d-- %d\n", itpdata->ctab[i].id, itpdata->ctab[i].state); */
-        if (itpdata->ctab[i].state == C_RUN)
-        {
-            return &itpdata->ctab[i];
-        }
-        if (itpdata->ctab[i].state == C_WAIT || itpdata->ctab[i].state == C_IOBLOCK)
-        {
-            itpdata->ctab[i].state = C_RUN;
-        }
-    }
-    for (i = 0; i <= ctx-itpdata->ctab; i++)
-    {
-        /*printf("--%d-- %d\n", itpdata->ctab[i].id, itpdata->ctab[i].state); */
-        if (itpdata->ctab[i].state == C_RUN)
-        {
-            return &itpdata->ctab[i];
-        }
-        if (itpdata->ctab[i].state == C_WAIT || itpdata->ctab[i].state == C_IOBLOCK)
-        {
-            itpdata->ctab[i].state = C_RUN;
-        }
-    }
-    for (i = (ctx - itpdata->ctab) + 1; i < MAXCONTEXT; i++)
-    {
-        /*printf("--%d-- %d\n", itpdata->ctab[i].id, itpdata->ctab[i].state); */
-        if (itpdata->ctab[i].state == C_RUN)
-        {
-            return &itpdata->ctab[i];
-        }
-    }
-    for (i = 0; i <= ctx-itpdata->ctab; i++)
-    {
-        /*printf("--%d-- %d\n", itpdata->ctab[i].id, itpdata->ctab[i].state); */
-        if (itpdata->ctab[i].state == C_RUN)
-        {
-            return &itpdata->ctab[i];
-        }
-    }
-
+    /* One context executes, so the next one to execute is this one.
+       Scheduling across the context table -- taking the next entry in
+       C_RUN, wrapping at the end, and moving the entries passed over
+       out of C_WAIT and C_IOBLOCK so that a wait condition is retried
+       -- is what this would do if more than one context ever ran. */
     return ctx;
 }
 

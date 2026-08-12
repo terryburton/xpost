@@ -193,6 +193,19 @@ int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
                               size_t *bytes);
 
 /**
+ * @brief The block a raster of that many bytes sits in.
+ *
+ * A size expresses a raster no machine holds, so a count above half the
+ * address space is answered here rather than put to an allocator: the
+ * refusal then names the page it came from, and the devices that keep a
+ * buffer of their own take their block the one way.
+ *
+ * @param[in] bytes what the raster and whatever sits in front of it come to
+ * @return the block, or NULL for a count no allocator hands out
+ */
+void *xpost_device_raster_block(size_t bytes);
+
+/**
  * @}
  */
 

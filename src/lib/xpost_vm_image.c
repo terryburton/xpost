@@ -865,13 +865,19 @@ static unsigned char *_slurp(const char *path, size_t *len)
     f = xpost_diskfile_fopen(path, "rb", 1, &err);
     if (!f)
         return NULL;
-    if (fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 ||
+    /* An empty file is refused here rather than carried as a buffer of
+       one byte holding nothing: an image answers for itself with a
+       digest and names itself with a magic, so a file with room for
+       neither is not a short image but no image at all, and the
+       allocation below is then exactly the file's length rather than a
+       length or a stand-in for one. */
+    if (fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) <= 0 ||
         fseek(f, 0, SEEK_SET) != 0)
     {
         fclose(f);
         return NULL;
     }
-    buf = malloc((size_t)n ? (size_t)n : 1);
+    buf = malloc((size_t)n);
     if (!buf)
     {
         fclose(f);

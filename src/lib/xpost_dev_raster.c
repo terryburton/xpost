@@ -275,7 +275,7 @@ int _create_cont(Xpost_Context *ctx,
     {
         /* allocate buffer header and array; the size covers both, and
            the memory to hold it is the machine's to give or refuse */
-        private.buf = malloc(bytes);
+        private.buf = xpost_device_raster_block(bytes);
         if (!private.buf)
             return VMerror;
         private.buf->height = height;
