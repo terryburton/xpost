@@ -151,8 +151,21 @@
     % what refuses such a page is the raster built here, and the refusal
     % arrives when the page is put out rather than when the device is
     % made.
+    %
+    % One raster for the job's pages, and not one for each of them. The
+    % same argument that makes the band loop move one raster from run to
+    % run makes this device keep one from page to page: a raster comes
+    % out of the half of virtual memory nothing here gives back, so a
+    % raster per page leaves every page's rows behind and a job of n
+    % pages ends holding n pages. So the raster is kept on the device
+    % that made it, under /.playdev, and the page after stands on it --
+    % starting each page as a raster fresh from Create would, which is
+    % what .moveband does for a run of rows and is asked of it here for
+    % the same reason. It is made again only where it could not stand for
+    % the page in hand: a page of another size, or a band grid of another
+    % height, is a different raster and not this one moved.
     /.playpage { % IMAGE  .  -
-    12 dict begin
+    16 dict begin
         /rec exch def
         /pw rec /width get def
         /ph rec /height get def
@@ -185,12 +198,29 @@
         % device leaves it for the device it is about to make, and Create
         % takes it from there; a page held whole names no run and Create
         % holds every row.
+        %
+        % The raster this device kept from the page before stands for
+        % this page where it can stand for it at all: the extent it was
+        % made at and the band grid it was made for both have to be this
+        % page's, since a raster made for another page holds the wrong
+        % rows and there is no moving it onto rows it never took.
         /banding bandrows ph lt def
-        banding { graphicsdict /.rasterband [ 0 bandrows ] put } if
-        /page pw ph cls dup /Create get exec def
-        % the record's marks are in device space already, so the scale a
-        % completion carries into the default matrix is 1:1 here
-        page 1 1 .privatedict /.completedevice get exec
+        /kept rec /.playdev known {
+            rec /.playdev get /dimensions get aload pop
+            ph eq exch pw eq and
+            rec /.playrows get bandrows eq and
+        }{ false } ifelse def
+        kept {
+            /page rec /.playdev get def
+        }{
+            banding { graphicsdict /.rasterband [ 0 bandrows ] put } if
+            /page pw ph cls dup /Create get exec def
+            % the record's marks are in device space already, so the scale a
+            % completion carries into the default matrix is 1:1 here
+            page 1 1 .privatedict /.completedevice get exec
+            rec /.playdev page put
+            rec /.playrows bandrows put
+        } ifelse
         rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
         % The colour the page was cleared to, carried onto the raster
         % that paints it. That colour is what a device shows over a row
@@ -198,14 +228,17 @@
         % any row outside the band it is standing on, so this is the
         % statement of what the page carries wherever the band loop
         % paints nothing. A record takes it up as the page is cleared
-        % (/Ground above); the raster is a fresh one and has been told
-        % nothing.
+        % (/Ground above); a raster fresh from Create has been told
+        % nothing, and one that stood for the page before was told what
+        % that page was cleared to.
         rec /.ground known
             { rec /.ground get aload pop page dup /Ground get exec } if
 
         banding {
             % what the page's emission keeps between bands: the file it
-            % is going to and how far down the page it has got
+            % is going to and how far down the page it has got. It is
+            % this page's and not the page before's, so a raster standing
+            % again is given a fresh one.
             page /.bandpage 4 dict put
             0 bandrows ph 1 sub {
                 /top exch def
@@ -224,7 +257,13 @@
                 % file gets the rows a painted band would have given it,
                 % in the order it has always got them.
                 rec top bot //.internaldict /.recordground get exec not {
-                    top 0 gt { top rows page dup /.moveband get exec } if
+                    % Every run the raster stands on it is moved onto,
+                    % the first of them included: what a move does beyond
+                    % choosing the rows is leave them as rows fresh from
+                    % Create, and a raster that stood for the page before
+                    % needs that of its first run exactly as it needs it
+                    % of the rest.
+                    top rows page dup /.moveband get exec
                     rec page top bot
                         //.internaldict /.replaypage get exec
                     page dup /Emit get exec
@@ -234,10 +273,18 @@
             % finished and closes the file behind it
             0 0 page dup /.moveband get exec
         }{
+            % A page held whole is one run of rows, and a raster standing
+            % for the page before still carries that page's ink, so the
+            % run is moved onto for this page as a band's is: what a move
+            % does beyond choosing the rows is leave them as rows fresh
+            % from Create. The first page moves onto it too, where it has
+            % nothing to clear away, so that what a page costs is the
+            % same on the first as on the rest and a job's memory is flat
+            % rather than flat after one page.
+            0 ph page dup /.moveband get exec
             rec page //.internaldict /.replaypage get exec
         } ifelse
         page dup /Emit get exec
-        page dup /Destroy get exec
     end } bind
 >> def
 
