@@ -147,6 +147,7 @@
  */
 
 #include "xpost_handle.h"
+#include "xpost_array.h" /* the run of rows a device is asked to hold */
 
 /* fold a numeric operand (integertype or realtype) to an int,
    truncating toward zero */
@@ -356,6 +357,184 @@ xpost_dev_raster_offset(int x, int y, int stride)
 }
 
 /*
+ * The run of the page's rows a device with a buffer of its own holds.
+ *
+ * A raster costs width times height whatever is painted on it, and what
+ * bounds that is holding one run of the page's rows at a time and
+ * putting each run out as it is finished (doc/NEWINTERNALS). The run a
+ * device is to start on is left for it in the graphics dictionary under
+ * /.rasterband, which Create takes; from then on the buffer stands for
+ * one run after another and a mark aimed at a row outside the run is
+ * dropped where a mark off the page is dropped.
+ *
+ * Four numbers rather than one, because they answer different
+ * questions and a device that conflates any two of them is wrong about
+ * a page:
+ *
+ *   top, rows   the run of the page this device is holding now. It
+ *               moves. Whether a mark lands is asked of this.
+ *   bufrows     the rows the buffer has. It does not move, and it is
+ *               what the bound is a bound on.
+ *   origin      the page row the buffer's first row stands for. It is
+ *               the top of the run for a buffer smaller than the page,
+ *               and the top of the page for one holding all of it --
+ *               a device may be asked for a run while holding every
+ *               row, and then the run says which marks it takes and
+ *               not where they go.
+ *
+ * The stream a page is written to belongs to the page rather than to
+ * the device, and a page arriving a band at a time outlives every run
+ * the device stands for while it is written, so where the file has
+ * reached is kept here too rather than beside the rows.
+ */
+typedef struct
+{
+    int top;
+    int rows;
+    int bufrows;
+    int origin;
+    int next;                /* the page row the file has been given up to */
+    unsigned int whole : 1;  /* the buffer has every row of the page */
+    unsigned int primed : 1; /* the rows no run will reach carry the ground */
+    unsigned int open : 1;   /* a stream has been started for this page */
+    unsigned int done : 1;   /* the page has been finished */
+} Xpost_Dev_Band;
+
+/* Hold a run to the page there is and to the buffer there is, and say
+   where the buffer's first row sits. A run naming rows the page does
+   not have, or more rows than the buffer holds, is cut to what it can
+   be rather than followed off the end of either. */
+static inline void
+xpost_dev_band_move(Xpost_Dev_Band *b, int height, int top, int rows)
+{
+    if (top < 0 || top > height)
+        top = 0;
+    if (rows < 0)
+        rows = 0;
+    if (top + rows > height)
+        rows = height - top;
+    if (rows > b->bufrows)
+        rows = b->bufrows;
+    b->top = top;
+    b->rows = rows;
+    b->whole = b->bufrows >= height;
+    b->origin = b->whole ? 0 : top;
+}
+
+/* The buffer row page row @p y is held in, or -1 for a row this device
+   is not holding. Every marking method asks this before it reaches the
+   memory: a row outside the run has no storage here, whether because
+   the buffer is smaller than the page or because the device has been
+   asked to take marks for part of it. */
+static inline int
+xpost_dev_band_row(const Xpost_Dev_Band *b, int y)
+{
+    if (y < b->top || y >= b->top + b->rows)
+        return -1;
+    return y - b->origin;
+}
+
+/* The buffer row page row @p y is stored in, or -1 where the buffer has
+   no row for it.
+ *
+ * This is the other of the two readings, and an emission wants this one:
+ * which of the page's rows there are pixels to write. A buffer holding
+ * every row of the page has them for every row, whatever run of them the
+ * device is taking marks for at this moment -- the runs before this one
+ * painted into the same buffer and their rows are still there. A buffer
+ * the size of a band has them only for the run it is standing on, every
+ * other row of the page having been given up or not yet reached.
+ *
+ * xpost_dev_band_row() is the reading a marking method wants: where a
+ * mark may land. The two differ exactly where a device holds more of the
+ * page than it is being offered marks for, and writing the file from the
+ * marking method's reading would put the ground over every row but the
+ * band in hand.
+ */
+static inline int
+xpost_dev_band_stored(const Xpost_Dev_Band *b, int y)
+{
+    if (b->whole)
+        return (y >= 0 && y < b->bufrows) ? y : -1;
+    return xpost_dev_band_row(b, y);
+}
+
+/* Cut a run of the page's rows to the ones this device is holding,
+   answering zero where none of it is held. It is the row half of what
+   xpost_dev_rect_clip() does against the page, applied after it: a
+   rectangle is held to the page first and to the rows there are for it
+   second. */
+static inline int
+xpost_dev_band_clip(const Xpost_Dev_Band *b, int *y0, int *y1)
+{
+    if (*y0 < b->top)
+        *y0 = b->top;
+    if (*y1 > b->top + b->rows - 1)
+        *y1 = b->top + b->rows - 1;
+    return *y0 <= *y1;
+}
+
+/*
+ * Take the run of rows the device about to be made is asked to hold.
+ *
+ * The run is left in the graphics dictionary by whatever is making the
+ * device -- the band loop that puts a page out a run at a time, and the
+ * page-device request that carries an imaging bounding box, which PLRM
+ * 6.2 lets a device answer by holding no more of the page than the box
+ * reaches. A device asked for nothing holds the page, which is what a
+ * device that has not been asked expects.
+ *
+ * Taken, and not merely read: a device that holds its page some other
+ * way never asks, and the next device made must not inherit a run that
+ * was not asked of it.
+ *
+ * @p wholepage says this device cannot give a row up before the page is
+ * complete -- because its writer goes over the page more than once, or
+ * because the raster is one an embedder asked for and holds. Such a
+ * device is still told which rows to take marks for, since that is what
+ * a caller playing a page back band by band relies on, but it holds
+ * every row of the page and banding it bounds nothing. Saying so here
+ * is what keeps the two questions apart: which rows a mark may land on,
+ * and how many rows there are to land in.
+ */
+static inline void
+xpost_dev_band_take(Xpost_Context *ctx, int height, int wholepage,
+                    Xpost_Dev_Band *b)
+{
+    Xpost_Object gd, run, key;
+    int top = 0, rows = height;
+
+    b->bufrows = height;
+    b->next = 0;
+    b->primed = 0;
+    b->open = 0;
+    b->done = 0;
+
+    gd = xpost_dict_get(ctx, ctx->privatedict,
+                        xpost_name_cons(ctx, ".graphicsdict"));
+    key = xpost_name_cons(ctx, ".rasterband");
+    if (xpost_object_get_type(gd) == dicttype)
+    {
+        run = xpost_dict_get(ctx, gd, key);
+        if (xpost_object_get_type(run) == arraytype && run.comp_.sz >= 2)
+        {
+            top = (int)xpost_object_number(xpost_array_get(ctx, run, 0));
+            rows = (int)xpost_object_number(xpost_array_get(ctx, run, 1));
+            if (top < 0 || top >= height)
+                top = 0;
+            if (rows < 1)
+                rows = 1;
+            if (top + rows > height)
+                rows = height - top;
+            if (!wholepage)
+                b->bufrows = rows;
+            (void)xpost_dict_undef(ctx, gd, key);
+        }
+    }
+    xpost_dev_band_move(b, height, top, rows);
+}
+
+/*
  * The pixels DrawLine paints, walked one at a time.
  *
  * DrawLine paints the pixels whose centres the segment covers along its
@@ -533,6 +712,7 @@ typedef enum
     XPOST_DEV_M_RECT,     /*    <colour> x y w h IMAGE  ->  -       */
     XPOST_DEV_M_BLEND,    /*  <colour> cov x y IMAGE  ->  -         */
     XPOST_DEV_M_POLY,     /*     <colour> polygon IMAGE  ->  -      */
+    XPOST_DEV_M_BAND,     /*          top rows IMAGE  ->  -         */
     XPOST_DEV_M_PAGE      /*                     IMAGE  ->  -       */
 } Xpost_Dev_Method_Kind;
 
@@ -584,6 +764,7 @@ xpost_dev_method_cons(Xpost_Context *ctx,
         case XPOST_DEV_M_RECT:   n = ncomp + 4; break;
         case XPOST_DEV_M_BLEND:  n = ncomp + 3; break;
         case XPOST_DEV_M_POLY:   n = ncomp; poly = 1; break;
+        case XPOST_DEV_M_BAND:   n = 2; break;
         case XPOST_DEV_M_PAGE:   n = 0; break;
     }
 
