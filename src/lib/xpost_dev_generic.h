@@ -169,6 +169,27 @@ void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
 int xpost_dev_blit_row(Xpost_Context *ctx, Xpost_Object dict);
 
 /**
+ * @brief the threshold cell a screening device paints through
+ *
+ * @param[out] w the cell's width, @p h its height
+ * @return the w x h thresholds, or NULL where the device carries no
+ *         usable cell
+ *
+ * A device that renders a grey as a pattern of pixels carries
+ * .htcell/.htw/.hth, and every grey written compares against the
+ * threshold under its pixel. The dimensions come out of a dictionary a
+ * program can build, so they are held against the cell's own length
+ * here rather than trusted.
+ *
+ * It is shared so that a device recording a page for such a device
+ * reads the screen by the same rule the device paints by: a recorder
+ * that took a cell the painter would have refused would write down a
+ * screen no page was ever painted under.
+ */
+const unsigned char *xpost_dev_ht_cell(Xpost_Context *ctx,
+                                       Xpost_Object devdic, int *w, int *h);
+
+/**
  * @brief a number that dictionary carries under @p key, or @p dflt
  *
  * The blit dictionary's operands are numbers, and a number reaches a

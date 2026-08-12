@@ -1323,8 +1323,8 @@ _channel(Xpost_Object v, double max)
 /* The device's halftone threshold cell, when paint screens through
    one: a bilevel device carries .htcell/.htw/.hth and every grey
    written compares against the threshold under its pixel. */
-static const unsigned char *
-_ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
+const unsigned char *
+xpost_dev_ht_cell(Xpost_Context *ctx, Xpost_Object devdic, int *w, int *h)
 {
     Xpost_Object c = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htcell"));
     Xpost_Object wo = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, ".htw"));
@@ -1449,7 +1449,7 @@ int _fillrectgray(Xpost_Context *ctx,
     const unsigned char *cell;
     int hw = 0, hh = 0;
 
-    cell = _ht_cell(ctx, devdic, &hw, &hh);
+    cell = xpost_dev_ht_cell(ctx, devdic, &hw, &hh);
     imgdata = xpost_dict_get(ctx, devdic, nameImgData);
     if (xpost_object_get_type(imgdata) != arraytype)
         return undefined;
@@ -2530,7 +2530,7 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
        copies the cell into the blit dictionary when the device has
        one. Fetched ahead of both writers so the interpolated path,
        which returns before the stepped one, screens through it too */
-    htc = _ht_cell(ctx, dict, &htw, &hth);
+    htc = xpost_dev_ht_cell(ctx, dict, &htw, &hth);
 
     /* Where the pixels go: the rows a device keeps, or the device
        itself where it keeps none. A device named here has to declare a
