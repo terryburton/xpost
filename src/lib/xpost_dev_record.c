@@ -94,6 +94,7 @@ static Xpost_Object namewidth;
 static Xpost_Object nameheight;
 static Xpost_Object namedotcopydict;
 static Xpost_Object namedotplaypage;
+static Xpost_Object namedotground;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object nameslot[5];
 
@@ -805,6 +806,89 @@ static int _recordcost(Xpost_Context *ctx,
     return 0;
 }
 
+/* Whether one mark leaves a run of rows the ground and nothing else: a
+   rectangle at exactly the colour the page was cleared to, covering
+   every row of the run and the whole width of the page.
+
+   The pixels it covers are taken from its operands by the normaliser
+   the fill itself takes them from, so what counts as covering here and
+   what the fill paints there are one statement rather than two that
+   agree on the cases anyone tried.
+
+   The colour is compared as it was written down, before any fold to a
+   stored channel. Two colours a fold would bring to one byte are
+   answered no here, which costs a pass over the rows rather than a page
+   that is missing what they held. */
+static int _grounds(Xpost_Context *ctx, Xpost_Object devdic,
+                    const Xpost_Record *rec, size_t at,
+                    real lo, real hi, int width)
+{
+    Xpost_Object ground;
+    Xpost_Record_Kind kind;
+    const real *colour;
+    const real *ops;
+    int nops, i, x0, y0, x1, y1;
+
+    ground = xpost_dict_get(ctx, devdic, namedotground);
+    if (xpost_object_get_type(ground) != arraytype ||
+        ground.comp_.sz < RECORD_NCOMP)
+        return 0;   /* a page that was never cleared has no ground */
+    if (!xpost_record_get(rec, at, &kind, &colour, &ops, &nops))
+        return 0;
+    if (kind != XPOST_RECORD_FILLRECT || nops < 4)
+        return 0;
+    for (i = 0; i < RECORD_NCOMP; i++)
+        if ((real)xpost_object_number(xpost_array_get(ctx, ground, i))
+            != colour[i])
+            return 0;
+    xpost_dev_rect_normalize((double)ops[0], (double)ops[1],
+                             (double)ops[2], (double)ops[3],
+                             &x0, &y0, &x1, &y1);
+    return x0 <= 0 && x1 >= width - 1
+        && (double)y0 <= (double)lo && (double)y1 >= (double)hi;
+}
+
+/* recdev lo hi  .recordground  bool
+   Whether a run of the page's rows comes to nothing but the ground.
+
+   A run that does need not be painted at all: the ground is what a
+   device holding no pixel over a row answers, and what an emitted page
+   carries there, so leaving such a run unpainted puts out the page
+   painting it would have put out. The band loop asks this of each band
+   and passes over the ones that answer yes (data/recorddev.ps).
+
+   What decides it is the last mark reaching the run, since everything
+   before it is painted over wherever it covers and nothing follows it.
+   A run no mark reaches at all is not the ground: what a device shows
+   over such a run is its raster as it was made, which is the ground
+   only where the page was cleared to it, and a record says a page was
+   cleared by holding the rectangle that cleared it.
+
+   The answer is no wherever anything here is not as it should be, that
+   being the direction that costs a pass over rows rather than a page
+   missing what those rows held. */
+static int _recordground(Xpost_Context *ctx,
+                         Xpost_Object devdic,
+                         Xpost_Object lo,
+                         Xpost_Object hi)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    size_t at;
+    int answer = 0;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    if (private.rec && private.width > 0 &&
+        xpost_record_last(private.rec, (real)xpost_object_number(lo),
+                          (real)xpost_object_number(hi), &at))
+        answer = _grounds(ctx, devdic, private.rec, at,
+                          (real)xpost_object_number(lo),
+                          (real)xpost_object_number(hi), private.width);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(answer));
+    return 0;
+}
+
 /* Play one mark into the device that paints, then come back for the
    next.
  *
@@ -1362,6 +1446,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
         return VMerror;
     if (xpost_object_get_type((namedotplaypage = xpost_name_cons(ctx, ".playpage"))) == invalidtype)
         return VMerror;
+    if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
+        return VMerror;
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameslot[XPOST_RECORD_PUTPIX] = xpost_name_cons(ctx, "PutPix"))) == invalidtype)
@@ -1400,6 +1486,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     _replay_step_opcode = op.mark_.padw;
     op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
                              dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordground", (Xpost_Op_Func)_recordground,
+                             3, dicttype, numbertype, numbertype); INSTALL;
 
     return 0;
 }

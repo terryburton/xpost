@@ -285,6 +285,29 @@ int xpost_record_failed(const Xpost_Record *rec);
 int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi);
 
 /**
+ * @brief The last mark reaching rows @p lo to @p hi.
+ *
+ * @param[out] at where it was found
+ * @return 1 where some mark reaches those rows, 0 where none does
+ *
+ * The mark that had the last word over the run, which is what a caller
+ * asking what those rows come to has to start from: everything painted
+ * before it is painted over wherever it covers, and nothing is painted
+ * after it at all. It answers by the rule a replay plays by, so the
+ * mark it names is one the replay would play.
+ *
+ * What a caller does with that is its own. A band loop asks it whether
+ * a band comes to nothing but the colour the page was cleared to, since
+ * such a band need not be painted: the ground is what a device holding
+ * no pixel over a row answers and what an emitted page carries there,
+ * so leaving those rows alone puts out the page painting them would
+ * have put out. Whether a mark leaves a run like that is a question
+ * about colour and about the page's width, which is the asking device's
+ * to settle and not this record's.
+ */
+int xpost_record_last(const Xpost_Record *rec, real lo, real hi, size_t *at);
+
+/**
  * @brief The mark at @p i, as it was written down.
  *
  * @param[out] kind which marking call

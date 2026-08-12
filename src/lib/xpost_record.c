@@ -559,6 +559,30 @@ static int _meets(const _Mark *m, real lo, real hi)
           || floor((double)m->lo) > (double)hi);
 }
 
+int xpost_record_last(const Xpost_Record *rec, real lo, real hi, size_t *at)
+{
+    const _Mark *marks;
+    size_t n;
+
+    /* a record short of a mark gives none of them back, on the same
+       terms as a replay of one */
+    if (!rec || !at || rec->short_of_a_mark)
+        return 0;
+    marks = _marks(rec);
+    n = _nmark(rec);
+    /* backwards, stopping at the first one found: what is being asked
+       is which mark had the last word over the run, and a run with
+       anything in it is answered from near the end of the record rather
+       than from a pass over the whole of it */
+    while (n--)
+        if (_meets(&marks[n], lo, hi))
+        {
+            *at = n;
+            return 1;
+        }
+    return 0;
+}
+
 int xpost_record_next(const Xpost_Record *rec, size_t from, real lo, real hi,
                       size_t *at)
 {
