@@ -85,10 +85,16 @@ typedef char xpost_png_block_precedes_the_raster[
     == offsetof(Xpost_Png_Buffer, block) + sizeof(void *) ? 1 : -1];
 
 /* A PNG stream holds exactly one image, so the file and the writer that
-   fills it belong to the page and not to the device: both are made when
-   a page is emitted and finished before that emit returns. What the
-   instance keeps between pages is the raster and the two settings the
-   pages are written under. */
+   fills it belong to the page and not to the device: both are made as a
+   page begins and finished as it ends. What the instance keeps between
+   pages is the raster and the two settings the pages are written under.
+
+   A page arriving a band at a time is written across several Emit calls
+   (doc/NEWINTERNALS), and the file and the writer outlive each of them --
+   which is the whole of what makes the filter right at a band's edge. A
+   PNG row is filtered against the row before it, and the writer holds
+   that row for as long as it is alive, so the device keeps the writer
+   rather than keeping the row. */
 typedef struct
 {
     int width;
@@ -97,6 +103,16 @@ typedef struct
      * add additional members to private struct
      */
     Xpost_Png_Buffer *buf;
+    /* the run of the page's rows the raster stands for, and how far
+       down the page the file has been written */
+    Xpost_Dev_Band band;
+    FILE *file;
+    png_structp png;
+    png_infop info;
+    /* one row of the page's ground, for the rows this device is not
+       holding: written to the file where a device holding the whole
+       page would have written what erasepage left there */
+    unsigned char *ground;
     unsigned int interlaced : 1;
     unsigned int alpha : 1;
     /* the device allocated buf and has not handed it to the client
@@ -110,6 +126,7 @@ static Xpost_Object nameheight;
 static Xpost_Object namedotcopydict;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object nameDeviceRGB;
+static Xpost_Object namedotbandpage;
 
 
 static unsigned int _create_cont_opcode;
@@ -146,6 +163,35 @@ int _create(Xpost_Context *ctx,
     return 0;
 }
 
+/* Leave a run of the buffer's own rows as a raster fresh from Create:
+   opaque white, or the transparent white the alpha device starts on.
+
+   Create lays the whole buffer down this way, and so does every move to
+   another run of the page's rows -- a raster standing for one run after
+   another has to start each run as a fresh raster would, or what the
+   run before painted shows through wherever this one paints nothing.
+   The rows are the buffer's, not the page's, since what moves is which
+   of the page's rows they stand for. */
+static void _clear(PrivateData *p, int from, int to)
+{
+    Xpost_Png_Pixel init;
+    Xpost_Dev_Raster_Offset i, n;
+
+    if (from < 0)
+        from = 0;
+    if (to > p->band.bufrows - 1)
+        to = p->band.bufrows - 1;
+    if (from > to)
+        return;
+
+    init.red = init.green = init.blue = 255;
+    init.alpha = p->alpha ? 0 : 255;
+    i = xpost_dev_raster_offset(0, from, p->width);
+    n = xpost_dev_raster_offset(0, to + 1, p->width);
+    for (; i < n; i++)
+        p->buf->data[i] = init;
+}
+
 /* initialize the C-level data
    and define in the device instance */
 static
@@ -162,11 +208,11 @@ int _create_cont(Xpost_Context *ctx,
     int ret;
     //printf("create_cont\n");
 
-    /* The page the program asked for, as the extent of the buffer that
-       will hold it. Every device here holds a whole page in one block,
-       so the two carry the same numbers; a page naming an extent no
-       buffer's row arithmetic carries is refused before anything is
-       built for it. */
+    /* The page the program asked for, as the extent the buffer's row
+       arithmetic is done in; a page naming an extent that arithmetic
+       does not carry is refused before anything is built for it. How
+       many of the page's rows the buffer holds is settled below and is
+       a separate question. */
     if (!xpost_dev_buffer_extent(w.int_.val, &width)
      || !xpost_dev_buffer_extent(h.int_.val, &height))
     {
@@ -184,6 +230,10 @@ int _create_cont(Xpost_Context *ctx,
 
     private.width = width;
     private.height = height;
+    private.file = NULL;
+    private.png = NULL;
+    private.info = NULL;
+    private.ground = NULL;
     {
         Xpost_Object alpha_o = xpost_dict_get(ctx, devdic,
                                               xpost_name_cons(ctx, "AlphaChannel"));
@@ -219,17 +269,33 @@ int _create_cont(Xpost_Context *ctx,
     XPOST_LOG_INFO("PNG interlacing: %s",
                    (private.interlaced == PNG_INTERLACE_ADAM7) ? "Adam7" : "none");
 
+    /* The run of the page's rows this device is to hold. It is held
+       whole where no row of it can be given up before the page is
+       complete: an interlaced image is written in seven passes over the
+       page, so every row is wanted again after the last one has been
+       written, and a raster an embedder asked for is the whole page by
+       the contract it asked under (XPOST_OUTPUT_BUFFEROUT, xpost.h).
+       Either way the run still says which rows take marks, so a caller
+       playing a page back a band at a time gets the page it would have
+       got; what it does not get is the bound. */
+    xpost_dev_band_take(ctx, height,
+                        private.interlaced == PNG_INTERLACE_ADAM7
+                        || xpost_object_get_type(
+                               xpost_context_host_setting(ctx, "OutputBufferOut"))
+                           == stringtype,
+                        &private.band);
+
     /* allocate buffer header and array */
     {
         size_t bytes;
 
-        if (!xpost_device_raster_bytes(width, height,
+        if (!xpost_device_raster_bytes(width, private.band.bufrows,
                                        sizeof(Xpost_Png_Pixel),
                                        sizeof(Xpost_Png_Buffer), &bytes))
         {
             XPOST_LOG_ERR("%d a raster for a page of %dx%d is larger than"
                           " this platform addresses", limitcheck,
-                          width, height);
+                          width, private.band.bufrows);
             return limitcheck;
         }
         private.buf = xpost_device_raster_block(bytes);
@@ -249,16 +315,7 @@ int _create_cont(Xpost_Context *ctx,
     /* the page starts opaque white; the alpha device starts fully
        transparent, so only marks made by the job carry opacity and an
        erased page is see-through */
-    {
-        Xpost_Dev_Raster_Offset i, n;
-        Xpost_Png_Pixel init;
-
-        n = (Xpost_Dev_Raster_Offset)width * (Xpost_Dev_Raster_Offset)height;
-        init.red = init.green = init.blue = 255;
-        init.alpha = private.alpha ? 0 : 255;
-        for (i = 0; i < n; i++)
-            private.buf->data[i] = init;
-    }
+    _clear(&private, 0, private.band.bufrows - 1);
 
     /* save private data struct in string */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
@@ -285,7 +342,7 @@ int _putpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, ix, iy;
+    int r, g, b, ix, iy, by;
 
     /* fold numbers per the driver contract */
     r = xpost_dev_num_to_byte(red);
@@ -303,9 +360,11 @@ int _putpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    /* check bounds */
-    if ((ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+    /* check bounds: the columns of the page, and the rows of it this
+       device is holding -- a mark aimed at a row it is not holding is
+       dropped where a mark off the page is dropped */
+    by = xpost_dev_band_row(&private.band, iy);
+    if ((ix < 0) || (ix >= private.width) || (by < 0))
         return 0;
 
     {
@@ -314,7 +373,7 @@ int _putpix(Xpost_Context *ctx,
         pixel.green = g;
         pixel.red = r;
         pixel.alpha = 255;
-        private.buf->data[xpost_dev_raster_offset(ix, iy, private.width)]
+        private.buf->data[xpost_dev_raster_offset(ix, by, private.width)]
             = pixel;
     }
 
@@ -329,10 +388,13 @@ int _putpix(Xpost_Context *ctx,
    row array, which this device does not have, so the inherited method
    would answer undefined; a slot the class dictionary offers has to
    work. A pixel outside the raster reads as the page's ground, and so
-   does every pixel of an instance whose buffer has been released. The
-   alpha device clears its page through /Erase and so records no ground;
-   what it reads is the white that erase leaves under the transparency,
-   which is the answer for a device that has none recorded. */
+   does every pixel of an instance whose buffer has been released, and
+   every pixel of a row this device is not holding -- which is what the
+   file carries there, so the read agrees with the page rather than
+   refusing a pixel the page has. The alpha device clears its page
+   through /Erase and so records no ground; what it reads is the white
+   that erase leaves under the transparency, which is the answer for a
+   device that has none recorded. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -341,7 +403,7 @@ int _getpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int ix, iy, r, g, b;
+    int ix, iy, by, r, g, b;
 
     ix = xpost_dev_num_to_int(x);
     iy = xpost_dev_num_to_int(y);
@@ -350,14 +412,14 @@ int _getpix(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
+    by = private.buf ? xpost_dev_band_row(&private.band, iy) : -1;
     if (!private.buf ||
-        (ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+        (ix < 0) || (ix >= private.width) || (by < 0))
         xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
     else
     {
         Xpost_Png_Pixel pixel = private.buf->data
-            [xpost_dev_raster_offset(ix, iy, private.width)];
+            [xpost_dev_raster_offset(ix, by, private.width)];
 
         r = pixel.red; g = pixel.green; b = pixel.blue;
     }
@@ -400,7 +462,7 @@ int _blendpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b, c, ix, iy;
+    int r, g, b, c, ix, iy, by;
 
     r = xpost_dev_num_to_byte(red);
     g = xpost_dev_num_to_byte(green);
@@ -417,13 +479,13 @@ int _blendpix(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    if ((ix < 0) || (ix >= private.width) ||
-        (iy < 0) || (iy >= private.height))
+    by = xpost_dev_band_row(&private.band, iy);
+    if ((ix < 0) || (ix >= private.width) || (by < 0))
         return 0;
 
     {
         Xpost_Png_Pixel *p = &private.buf->data
-            [xpost_dev_raster_offset(ix, iy, private.width)];
+            [xpost_dev_raster_offset(ix, by, private.width)];
         int da = p->alpha;
         int oa = c + (da * (255 - c) + 127) / 255;
 
@@ -473,18 +535,23 @@ int _fillrect(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    /* the contract's rectangle: inclusive span, clipped to the device */
+    /* the contract's rectangle: inclusive span, clipped to the device,
+       and then to the rows this device is holding */
     xpost_dev_rect_normalize(xpost_object_number(x), xpost_object_number(y),
                              xpost_object_number(w), xpost_object_number(h),
                              &x0, &y0, &x1, &y1);
     if (!xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
                              private.width, private.height))
         return 0;
+    if (!xpost_dev_band_clip(&private.band, &y0, &y1))
+        return 0;
 
     for (iy = y0; iy <= y1; iy++)
     {
         Xpost_Png_Pixel *row = private.buf->data
-                             + xpost_dev_raster_offset(0, iy, private.width);
+                             + xpost_dev_raster_offset(
+                                   0, xpost_dev_band_row(&private.band, iy),
+                                   private.width);
         for (ix = x0; ix <= x1; ix++)
             row[ix] = pixel;
     }
@@ -492,42 +559,77 @@ int _fillrect(Xpost_Context *ctx,
     return 0;
 }
 
-/* Write the page: one PNG image, whole, into the file settled for this
-   page. The file and the writer are made here and finished here, so a
-   job's second page is a second file rather than an append to a stream
-   that holds one image. */
-static
-int _emit(Xpost_Context *ctx,
-          Xpost_Object devdic)
+/* Give up what a page was being written through, whether it was
+   finished or not. Everything the writer was given goes back here, so a
+   page abandoned part way costs the same as one written to the end --
+   and the page ends here too, there being no writer left to write any
+   more of it with.
+
+   The file is the one thing left: it is the page machinery that named
+   it, and it is given back by the method that writes the page, where it
+   was opened (tests/check-page-output.sh). What says it is to be given
+   back is the page ending, which is what this records. */
+static void _stream_drop(PrivateData *p)
 {
-    Xpost_Object privatestr;
-    PrivateData private;
+    p->band.open = 0;
+    p->band.done = 1;
+    if (p->png)
+        png_destroy_write_struct(&p->png, p->info ? &p->info : NULL);
+    p->png = NULL;
+    p->info = NULL;
+    free(p->ground);
+    p->ground = NULL;
+}
+
+/* Start the stream this page is written through: the file the page
+   machinery settled the name of, the writer that fills it, and one row
+   of the page's ground for the rows this device is not holding.
+
+   The header goes out before the first row and names the page rather
+   than whatever run of rows the call that opened the stream happened to
+   be holding, so a page written a band at a time carries at its head
+   the bytes a page written whole carries.
+
+   The file is opened by the caller and is already this device's; what
+   is made here is everything that writes through it. */
+static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
+                        PrivateData *p)
+{
     Xpost_Object ud;
     Xpost_Object compression_level_o;
-    FILE *f;
-    png_structp png_ptr;
-    png_infop info_ptr = NULL;
     png_color_8 sig_bit;
-    unsigned char *data;
-    png_bytep row_ptr;
     int compression_level;
-    int num_passes = 1;
-    int pass;
-    int y;
+    size_t bytes;
+    int r, g, b;
 
-    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
-                               &privatestr, &private, sizeof(private)))
-        return undefined;
-
-    /* a released instance has no raster to write */
-    if (!private.buf)
-        return 0;
-
-    f = xpost_device_page_open(ctx, devdic);
-    if (!f)
+    /* the ground is asked for in this device's own pixels, through the
+       arithmetic the raster itself was sized by */
+    if (!xpost_device_raster_bytes(p->width, 1, sizeof(Xpost_Png_Pixel),
+                                   0, &bytes))
     {
-        XPOST_LOG_ERR("cannot open the file this PNG page is written to");
-        return ioerror;
+        _stream_drop(p);
+        return limitcheck;
+    }
+    p->ground = xpost_device_raster_block(bytes);
+    if (!p->ground)
+    {
+        _stream_drop(p);
+        return VMerror;
+    }
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
+    {
+        Xpost_Png_Pixel px;
+        Xpost_Dev_Raster_Offset i, n;
+
+        px.red = (unsigned char)r;
+        px.green = (unsigned char)g;
+        px.blue = (unsigned char)b;
+        /* the alpha device's erased page is see-through, and a row it
+           never held is a row it never marked */
+        px.alpha = p->alpha ? 0 : 255;
+        n = xpost_dev_raster_offset(0, 1, p->width);
+        for (i = 0; i < n; i++)
+            ((Xpost_Png_Pixel *)p->ground)[i] = px;
     }
 
     ud = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
@@ -539,96 +641,360 @@ int _emit(Xpost_Context *ctx,
         compression_level = compression_level_o.int_.val;
     XPOST_LOG_INFO("PNG compresion level: %d", compression_level);
 
-    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png_ptr)
+    p->png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!p->png)
     {
-        xpost_device_page_close(f);
+        _stream_drop(p);
         return VMerror;
     }
-    info_ptr = png_create_info_struct(png_ptr);
-    if (!info_ptr)
+    p->info = png_create_info_struct(p->png);
+    if (!p->info)
     {
-        png_destroy_write_struct(&png_ptr, NULL);
-        xpost_device_page_close(f);
+        _stream_drop(p);
         return VMerror;
     }
 
-    /* libpng reports errors by longjmp: aim it at this call, which is
-       also where everything it was given is released */
-    if (setjmp(png_jmpbuf(png_ptr)))
+    /* libpng reports errors by longjmp, and it may only be aimed at a
+       call still on the stack: every call into the library below sets
+       its own landing, and each releases what the writer was given */
+    if (setjmp(png_jmpbuf(p->png)))
     {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        xpost_device_page_close(f);
+        _stream_drop(p);
         return ioerror;
     }
 
-    png_init_io(png_ptr, f);
-    png_set_IHDR(png_ptr, info_ptr,
-                 private.width, private.height, 8,
-                 private.alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
-                 private.interlaced,
+    png_init_io(p->png, p->file);
+    png_set_IHDR(p->png, p->info,
+                 p->width, p->height, 8,
+                 p->alpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
+                 p->interlaced,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
     sig_bit.red = 8;
     sig_bit.green = 8;
     sig_bit.blue = 8;
     sig_bit.alpha = 8;
-    png_set_sBIT(png_ptr, info_ptr, &sig_bit);
+    png_set_sBIT(p->png, p->info, &sig_bit);
 
-    png_set_compression_level(png_ptr, compression_level);
-    png_write_info(png_ptr, info_ptr);
-    png_set_shift(png_ptr, &sig_bit);
-    png_set_packing(png_ptr);
-    if (!private.alpha)
+    png_set_compression_level(p->png, compression_level);
+    png_write_info(p->png, p->info);
+    png_set_shift(p->png, &sig_bit);
+    png_set_packing(p->png);
+    if (!p->alpha)
         /* rows carry a fourth byte per pixel; skip it when writing RGB */
-        png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
+        png_set_filler(p->png, 0, PNG_FILLER_AFTER);
 
-#ifdef PNG_WRITE_INTERLACING_SUPPORTED
-    num_passes = png_set_interlace_handling(png_ptr);
-#endif
+    p->band.open = 1;
+    return 0;
+}
 
-    /* a row at a time, stepping by the bytes one row of the buffer
-       holds: the step is counted in the width a size is expressed in,
-       which a row of a wide page runs past when counted in an int */
-    for (pass = 0; pass < num_passes; pass++)
+/* Lay the page's ground over the whole buffer.
+
+   For a device holding every row of the page while its marks arrive a
+   run at a time. Such a device writes its file from what the buffer
+   holds, so a row no run ever reaches is written from the buffer as
+   well -- and what the page carries there is the ground, not the white
+   a fresh raster starts on. It is laid once per page, before the first
+   run is painted, so that a run that is painted overwrites it.
+
+   A device whose buffer is the size of a band needs none of this: a row
+   it is not holding is written from the ground row its emission keeps,
+   there being no buffer row to write it from. */
+static void _prime(Xpost_Context *ctx, Xpost_Object devdic, PrivateData *p)
+{
+    Xpost_Png_Pixel px;
+    Xpost_Dev_Raster_Offset i, n;
+    int r, g, b;
+
+    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
+    px.red = (unsigned char)r;
+    px.green = (unsigned char)g;
+    px.blue = (unsigned char)b;
+    px.alpha = p->alpha ? 0 : 255;
+    n = xpost_dev_raster_offset(0, p->band.bufrows, p->width);
+    for (i = 0; i < n; i++)
+        p->buf->data[i] = px;
+    p->band.primed = 1;
+}
+
+/* Begin a page: nothing of it written and no stream open for it. What
+   the raster holds is not touched -- the marks of the page about to be
+   written are already on it by the time anything here runs. */
+static void _page_begin(PrivateData *p)
+{
+    p->band.next = 0;
+    p->band.primed = 0;
+    p->band.open = 0;
+    p->band.done = 0;
+}
+
+/* The row of the page at @p y as the writer wants it: the buffer's,
+   where this device is holding that row, and the ground where it is
+   not. A writer is handed the same rows either way and does not have to
+   know the difference. */
+static png_bytep _page_row(PrivateData *p, int y)
+{
+    int by = xpost_dev_band_stored(&p->band, y);
+
+    if (by < 0)
+        return (png_bytep)p->ground;
+    return (png_bytep)(p->buf->data
+                       + xpost_dev_raster_offset(0, by, p->width));
+}
+
+/* Give the writer the page's rows from where the file has reached down
+   to @p to, and remember where that leaves it.
+
+   The rows go out in order and none of them is revisited. What a PNG
+   row's filter is taken against is the row before it, and the writer
+   holds that row itself for as long as it is alive -- so a band's first
+   row is filtered against the last row of the band before it without
+   this device keeping either, which is what makes the seam between two
+   bands the same bytes as the middle of a page written whole.
+
+   An interlaced image is the exception and is written by the caller
+   that has every row: the passes go over the page again and again, so
+   nothing can be given up until the page is done. */
+static int _write_rows(PrivateData *p, int to)
+{
+    if (setjmp(png_jmpbuf(p->png)))
     {
-        data = (unsigned char *)private.buf->data;
-        for (y = 0; y < private.height; y++)
-        {
-            row_ptr = (png_bytep)data;
-            png_write_rows(png_ptr, &row_ptr, 1);
-            data += (Xpost_Dev_Raster_Offset)private.width
-                  * sizeof(Xpost_Png_Pixel);
-        }
+        _stream_drop(p);
+        return ioerror;
     }
 
-    png_write_end(png_ptr, info_ptr);
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-    xpost_device_page_close(f);
+#ifdef PNG_WRITE_INTERLACING_SUPPORTED
+    if (p->interlaced != PNG_INTERLACE_NONE)
+    {
+        int passes = png_set_interlace_handling(p->png);
+        int pass, y;
+
+        for (pass = 0; pass < passes; pass++)
+            for (y = 0; y < p->height; y++)
+            {
+                png_bytep row = _page_row(p, y);
+
+                png_write_rows(p->png, &row, 1);
+            }
+        p->band.next = p->height;
+        return 0;
+    }
+#endif
+
+    while (p->band.next <= to)
+    {
+        png_bytep row = _page_row(p, p->band.next);
+
+        png_write_rows(p->png, &row, 1);
+        p->band.next++;
+    }
+    return 0;
+}
+
+/* Finish the image and close the file behind it. A page finished stays
+   finished: what says so is recorded before this returns, so a further
+   call writes nothing rather than a second page into the same file. */
+static int _stream_finish(PrivateData *p)
+{
+    if (setjmp(png_jmpbuf(p->png)))
+    {
+        _stream_drop(p);
+        return ioerror;
+    }
+    png_write_end(p->png, p->info);
+    _stream_drop(p);
+    return 0;
+}
+
+/* Write the page, or as much of it as this device is holding.
+
+   A page not arriving in bands is written by the one call that puts it
+   out: every row goes to the file and the image is finished. A page
+   arriving in bands reaches here once per band, holding the rows of
+   that band, and once more at the end holding nothing, which is what
+   says the page is finished -- so a call writes what it can, from where
+   the file has reached to the last row it is holding, and keeps the
+   stream open for what the next call brings. The rows between, which
+   are the bands nothing painted into, go out as the page's ground.
+
+   What says a page is arriving that way is /.bandpage, which the band
+   loop leaves on the device (data/image.ps); a device carrying none
+   takes the whole page as it always did, so one cannot be handed part
+   of a page by accident -- and each call is then a page of its own,
+   which is how a job's second page comes to be a second file. A page
+   arriving in bands is finished once: a further call for the same page
+   writes nothing rather than a second page into the same file, and what
+   begins the page after it is the move onto that page's first run of
+   rows. */
+static
+int _emit(Xpost_Context *ctx,
+          Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    int banded, last, ret;
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    /* a released instance has no raster to write */
+    if (!private.buf)
+        return 0;
+
+    banded = xpost_object_get_type(
+                 xpost_dict_get(ctx, devdic, namedotbandpage)) != invalidtype;
+
+    if (!banded)
+    {
+        /* Each call is a page of its own. A stream still open here
+           belonged to a page that was arriving in bands and stopped
+           doing so, and it is given up rather than left behind: what
+           follows opens another. */
+        if (private.band.open)
+        {
+            _stream_drop(&private);
+            if (private.file)
+            {
+                xpost_device_page_close(private.file);
+                private.file = NULL;
+            }
+        }
+        _page_begin(&private);
+    }
+    else if (private.band.done)
+        return 0;
+
+    /* An interlaced image is written in seven passes over the page, so
+       no row of it can be given up before the last band has been
+       painted: such a device holds every row (Create) and writes them
+       all at the call that finds nothing held. */
+    if (banded && private.interlaced != PNG_INTERLACE_NONE
+        && private.band.rows != 0)
+        return 0;
+
+    /* the last of the page's rows this call can give the file */
+    last = (!banded || private.band.rows == 0)
+         ? private.height - 1
+         : private.band.top + private.band.rows - 1;
+
+    ret = 0;
+    if (!private.band.open)
+    {
+        /* The file this page goes to, opened here because its name was
+           settled for this page: the page machinery puts the settled
+           name on the device and this is the method that writes the
+           page (tests/check-page-output.sh). */
+        private.file = xpost_device_page_open(ctx, devdic);
+        if (!private.file)
+        {
+            XPOST_LOG_ERR("cannot open the file this page is written to");
+            ret = ioerror;
+        }
+        else
+            ret = _stream_open(ctx, devdic, &private);
+    }
+    if (!ret)
+        ret = _write_rows(&private, last);
+    if (!ret && private.band.next >= private.height)
+        ret = _stream_finish(&private);
+    /* The file goes back with the page that was being written through
+       it, finished or refused; a page still being written keeps it for
+       the call that brings the next band. */
+    if (private.band.done && private.file)
+    {
+        xpost_device_page_close(private.file);
+        private.file = NULL;
+    }
+    if (ret)
+    {
+        /* what the stream came to is recorded whether it was written or
+           refused: a page that could not be written is one this device
+           must not go on writing */
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+            return VMerror;
+        return ret;
+    }
 
     /* pass data back to client application; the raster then belongs to
        the client, which gives the block it sits in back through the
-       release entry point, so Destroy must leave it alone from here on */
-    if (xpost_dev_output_buffer_handoff(ctx, (unsigned char *)private.buf->data))
-    {
+       release entry point, so Destroy must leave it alone from here on.
+       Only a finished page is handed over, and only a device holding
+       every row of it has one -- which is what Create gives a device an
+       embedder asked a raster of. */
+    if (private.band.done
+        && xpost_dev_output_buffer_handoff(ctx,
+                                           (unsigned char *)private.buf->data))
         private.bufowned = 0;
-        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-            return VMerror;
-    }
+
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
 
     return 0;
 }
 
+/* Move the raster onto another run of the page's rows.
+
+   The rows are the ones Create made: one raster the size of a band,
+   standing for one run of the page after another, which is what bounds
+   what a page costs to put out. A raster per band would be the shorter
+   way to say this and it bounds nothing, since nothing gives the band
+   before's memory back.
+
+   The run given up is not written anywhere here. Where the file has
+   reached is the emission's business and it has already had these rows;
+   what this does is say which rows the raster stands for next, and
+   leave them as a raster fresh from Create would be -- a row still
+   carrying the run before's ink shows it wherever this run paints
+   nothing. A device holding every row of the page moves nothing and
+   clears the run it is about to take marks for. */
+static
+int _moveband(Xpost_Context *ctx,
+              Xpost_Object top,
+              Xpost_Object rows,
+              Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!xpost_dev_private_get(ctx, devdic, namePrivate,
+                               &privatestr, &private, sizeof(private)))
+        return undefined;
+
+    if (!private.buf)
+        return 0;
+
+    xpost_dev_band_move(&private.band, private.height,
+                        xpost_dev_num_to_int(top),
+                        xpost_dev_num_to_int(rows));
+    /* rows put in front of a device whose page is finished are the next
+       page's: this is where a job's second page begins */
+    if (private.band.done && private.band.rows > 0)
+        _page_begin(&private);
+    /* and where a device holding every row of the page lays the ground
+       over the rows no run of them is going to reach */
+    if (private.band.whole && private.band.rows > 0 && !private.band.primed)
+        _prime(ctx, devdic, &private);
+    _clear(&private, private.band.top - private.band.origin,
+           private.band.top - private.band.origin + private.band.rows - 1);
+
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
+    return 0;
+}
+
 /* clear the page to fully transparent: the alpha device's erasepage.
-   An explicit white fill stays opaque; only the page reset is clear. */
+   An explicit white fill stays opaque; only the page reset is clear.
+   PLRM 8.2 erases the entire page, and what a device holding part of
+   one can do about the rest is show the ground over it, which is what
+   its emission writes there: so what is cleared here is the rows this
+   device is holding. */
 static
 int _erase(Xpost_Context *ctx,
            Xpost_Object devdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
-    Xpost_Dev_Raster_Offset i, n;
-    Xpost_Png_Pixel init;
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -638,12 +1004,8 @@ int _erase(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    init.red = init.green = init.blue = 255;
-    init.alpha = 0;
-    n = (Xpost_Dev_Raster_Offset)private.width
-      * (Xpost_Dev_Raster_Offset)private.height;
-    for (i = 0; i < n; i++)
-        private.buf->data[i] = init;
+    _clear(&private, private.band.top - private.band.origin,
+           private.band.top - private.band.origin + private.band.rows - 1);
 
     return 0;
 }
@@ -659,9 +1021,29 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* the raster is all the instance holds: each page's file and writer
-       were finished as that page was written. A raster handed to the
-       client is the client's to give back */
+    /* A page still being written is finished here rather than left
+       truncated: the rows it has not been given are the ones this device
+       is not holding, which the ground stands for, and that is what the
+       call at the end of a band loop would have written. A device
+       retired part way through a page -- by an error, or by a restore
+       past the setpagedevice that installed it -- then leaves an image
+       a reader can open. */
+    if (private.band.open && private.buf)
+    {
+        int last = private.height - 1;
+
+        if (!_write_rows(&private, last))
+            (void)_stream_finish(&private);
+    }
+    _stream_drop(&private);
+    if (private.file)
+    {
+        xpost_device_page_close(private.file);
+        private.file = NULL;
+    }
+
+    /* the raster is the rest of what the instance holds. A raster handed
+       to the client is the client's to give back */
     if (private.bufowned)
         free(private.buf);
     private.buf = NULL;
@@ -779,7 +1161,12 @@ int _loaddevicecont_common(Xpost_Context *ctx,
         { "FillRect", "pngFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT   },
         { "BlendPix", "pngBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND  },
         { "Emit",     "pngEmit",     (Xpost_Op_Func)_emit,     XPOST_DEV_M_PAGE   },
-        { "Destroy",  "pngDestroy",  (Xpost_Op_Func)_destroy,  XPOST_DEV_M_PAGE   }
+        { "Destroy",  "pngDestroy",  (Xpost_Op_Func)_destroy,  XPOST_DEV_M_PAGE   },
+        /* the raster is this device's own, so the run of rows it stands
+           for moves within it and not within the base class's array of
+           rows: the inherited .moveband reaches for rows this instance
+           does not carry and would answer undefined */
+        { ".moveband", "pngMoveBand", (Xpost_Op_Func)_moveband, XPOST_DEV_M_BAND }
     };
     /* the alpha device clears to transparent rather than to white, so
        it answers erasepage itself */
@@ -793,6 +1180,21 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     int ret;
 
     ret = xpost_dict_put(ctx, classdic, namenativecolorspace, nameDeviceRGB);
+    if (ret)
+        return ret;
+
+    /* This device's page may arrive a band at a time: the writer takes
+       one row per call and holds between calls what it needs of the row
+       before, so a row goes out the moment it is finished and nothing
+       written has to be revisited.
+
+       Said here rather than inherited. The class is a copy of the
+       colour raster class, which says it, and a copy carries what it
+       was copied from -- so a device that had never considered the
+       question would say yes by inheritance. Saying it again is what
+       makes the answer this device's own (doc/NEWINTERNALS). */
+    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
+                         xpost_bool_cons(1));
     if (ret)
         return ret;
 
@@ -872,6 +1274,8 @@ int xpost_oper_init_png_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameDeviceRGB = xpost_name_cons(ctx, "DeviceRGB"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotbandpage = xpost_name_cons(ctx, ".bandpage"))) == invalidtype)
         return VMerror;
 
     optab = xpost_operator_table(ctx->gl);
