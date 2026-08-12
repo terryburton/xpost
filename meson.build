@@ -3490,6 +3490,22 @@ test('band-campaign',
   suite: cost_veryslow,
   timeout: 900)
 
+# What the band loop charges, which nothing else in the suite can see: a
+# page put out in bands carries the same bytes as the same page put out
+# whole and plays the same marks however long it takes over them, so the
+# price shows on the clock or nowhere. The page it is read against is
+# small text, which is the one shape whose cost is its marks -- a page
+# drawing in a loop is charged for the loop, and one built that way sat
+# green while a replay went round the interpreter for every mark on the
+# page. The wrapper says the rest, and breaks each of its three checks
+# on purpose at the end to show they are looking at something.
+test('band-replay-cost',
+  find_program('tests/run-band-replay-cost-test.sh'),
+  args: [ xpost_exe, files('tests/band_replay_cost_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
+  timeout: 300)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

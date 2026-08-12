@@ -170,6 +170,7 @@ tests/band_format_test.ps \
 tests/band_writer_test.ps \
 tests/band_device_test.ps \
 tests/band_campaign_test.ps \
+tests/band_replay_cost_test.ps \
 tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_span_test.ps \
@@ -318,6 +319,7 @@ tests/run-band-format-test.sh \
 tests/run-band-writer-test.sh \
 tests/run-band-device-test.sh \
 tests/run-band-campaign-test.sh \
+tests/run-band-replay-cost-test.sh \
 tests/run-page-lifetime-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \

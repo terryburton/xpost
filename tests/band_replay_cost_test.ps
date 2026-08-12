@@ -1,0 +1,51 @@
+% A page whose cost is the marks it makes, run through
+% run-band-replay-cost-test.sh once into a device holding the whole
+% page and once into the band loop.
+%
+% What the wrapper compares is what the two runs charge the
+% interpreter, so this page has to be one whose charge is the marks.
+% That is not what a page drawing in a loop is. A loop of rectangle
+% fills spends its time in the program and in the fill machinery above
+% the device -- a hundred and sixty thousand of them here came to
+% within five per cent of each other whichever way the page was put
+% out, because the marks are a twentieth of what the page costs and a
+% difference in what a mark costs cannot show through that. A page
+% built that way says nothing about the replay and would report
+% everything is well while the replay got twenty times slower.
+%
+% Small text is the opposite shape. A glyph is painted pixel by pixel
+% against the ground it lands on, so one show of one string is a few
+% operators of program and some thousands of marks, and the glyphs are
+% cached -- the second line costs its marks and nothing else. That
+% makes the marks nearly the whole of the page, which is the only
+% arrangement in which the two runs differ by what a mark costs.
+%
+% The page reports the interpreter time it took, taken after showpage
+% because the band loop runs there: the marks are played back when the
+% page is put out, so a reading taken before it would be taken before
+% the thing being measured had happened. Process startup is outside the
+% reading, being the same for both runs and no part of either.
+
+/t0 usertime def
+
+/Helvetica 8 selectfont
+
+% one line of the page, as bytes, so that building it is not part of
+% what is being measured
+/line 90 string def
+0 1 line length 1 sub { line exch 65 put } for
+
+% Enough lines that the reading is tens of times the clock's own
+% resolution, and the same lines over again so that no part of the
+% total is one-off font work.
+1 1 5 {
+    pop
+    0 8 780 {
+        /y exch def
+        4 y moveto line show
+    } for
+} for
+
+showpage
+
+(COST ) print usertime t0 sub 20 string cvs print (\n) print
