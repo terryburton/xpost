@@ -2248,6 +2248,159 @@ _blit_decode_row(const unsigned char *src, unsigned char *const *planes,
 #undef DECSAMP
 }
 
+/* Where the pixels a blit works out end up.
+ *
+ * A device that keeps its page as rows the interpreter can see is
+ * written into: the row a device row names is taken up once and each
+ * run of columns is stored into it. A device that keeps its raster in
+ * a buffer of its own has no such rows, and is painted through the
+ * rectangle fill it declares -- one call per run of columns, carrying
+ * the columns the row write would have covered.
+ *
+ * The sampling is the same either way. Which pixels a sample covers,
+ * which colour it comes to and which columns a mask or a clip leaves
+ * are all worked out above this, so the two routes are the tail of one
+ * writer rather than two writers that would round their own ways.
+ *
+ * What a span costs differs, and follows from the route rather than
+ * hiding inside it: a row write covers a run of columns at the cost of
+ * the bytes, and a fill call costs a call. The interpolated path blends
+ * per device pixel, so its runs are one column each and the second
+ * route pays a call for every pixel it paints.
+ */
+struct _blit_out
+{
+    Xpost_Context *ctx;
+    /* the rows a device keeps, where it keeps any */
+    Xpost_Object rows;
+    int haverows;
+    /* the device the fill is asked of, where it keeps none, and the
+       compiled rectangle fill it declares */
+    Xpost_Object devdic;
+    unsigned int fillrect;
+    /* how many components that fill takes, which is the device's
+       colour space and not the shape of any row */
+    int ncomp;
+    int devw;
+    /* the rows hold three planes rather than one grey byte */
+    int rgbrows;
+    /* the screen a device that thresholds every grey stores through */
+    const unsigned char *htc;
+    int htw, hth;
+    /* the row in hand, where the rows are written into */
+    unsigned char *rowp[3];
+};
+
+/* Take up the device row about to be painted. Answers 0 in *paint where
+   the device holds no pixel over it: the page shows the ground there,
+   and an image reaching such a row is dropped where every other mark
+   that reaches it is. */
+static int
+_blit_out_row(struct _blit_out *o, int dy, int *paint)
+{
+    Xpost_Object row;
+    int ret, rw;
+
+    *paint = 1;
+    if (!o->haverows)
+        return 0;
+    row = xpost_array_get(o->ctx, o->rows, dy);
+    if (o->rgbrows)
+    {
+        ret = _rgb_planes(o->ctx, row, 1, o->rowp, &rw);
+        if (ret)
+            return ret;
+        if (rw == 0)
+        {
+            *paint = 0;
+            return 0;
+        }
+    }
+    else
+    {
+        if (row.comp_.sz == 0)
+        {
+            *paint = 0;
+            return 0;
+        }
+        ret = _gray_row(o->ctx, row, 1, &o->rowp[0], &rw);
+        if (ret)
+            return ret;
+    }
+    if (rw < o->devw)
+        return rangecheck;
+    return 0;
+}
+
+/* Paint columns [dx0, dx1) of one device row in one colour: the three
+   channels where the device paints in three, the grey where it paints
+   in one.
+ *
+ * Through the device's own fill, where there are no rows, the colour is
+ * handed over as the components that method takes -- numbers in [0,1],
+ * which it folds to the channel it stores. Each is given at the middle
+ * of the byte the sampling arrived at, that being the value the fold
+ * answers with exactly that byte whatever scale the device keeps its
+ * channels at. A device that thresholds what it stores does it in that
+ * fill, which is where the screen it thresholds through is; the cell
+ * below is the one a device written into by row states, and belongs to
+ * this write.
+ */
+static int
+_blit_out_span(struct _blit_out *o, int dy, int dx0, int dx1,
+               int r, int g, int b, int gray)
+{
+    int dx;
+
+    if (dx0 < 0)
+        dx0 = 0;
+    if (dx1 > o->devw)
+        dx1 = o->devw;
+    if (dx1 <= dx0)
+        return 0;
+
+    if (!o->haverows)
+    {
+        Xpost_Context *ctx = o->ctx;
+
+#define COMP(v) xpost_real_cons((real)(((v) + 0.5) / 255.0))
+        if (o->ncomp == 3)
+        {
+            xpost_stack_push(ctx->lo, ctx->os, COMP(r));
+            xpost_stack_push(ctx->lo, ctx->os, COMP(g));
+            xpost_stack_push(ctx->lo, ctx->os, COMP(b));
+        }
+        else
+            xpost_stack_push(ctx->lo, ctx->os, COMP(gray));
+#undef COMP
+        /* the contract's rectangle is an inclusive span, so a run of n
+           columns on one row is w = n-1 and h = 0 */
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(dx0));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(dy));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(dx1 - dx0 - 1));
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
+        xpost_stack_push(ctx->lo, ctx->os, o->devdic);
+        return xpost_operator_exec(ctx, o->fillrect);
+    }
+
+    for (dx = dx0; dx < dx1; dx++)
+    {
+        if (o->rgbrows)
+        {
+            o->rowp[0][dx] = (unsigned char)r;
+            o->rowp[1][dx] = (unsigned char)g;
+            o->rowp[2][dx] = (unsigned char)b;
+        }
+        else if (o->htc)
+            o->rowp[0][dx] = (256 * gray + 127) / 255
+                             >= o->htc[(dy % o->hth) * o->htw + dx % o->htw]
+                           ? 255 : 0;
+        else
+            o->rowp[0][dx] = (unsigned char)gray;
+    }
+    return 0;
+}
+
 /* collect the resolved clip spans overlapping one device row as
    x-intervals; shared by the stepped and interpolated writers */
 static int
@@ -2283,9 +2436,12 @@ _blit_row_spans(Xpost_Context *ctx, Xpost_Object cspans, int ncspans,
 }
 
 /* blitdict  .blitrow  -
-   write one image row straight into a raster device's page buffer.
-   The dictionary carries the device raster (rows: the ImgData array,
-   three colour planes or grey bytes per the rgbrows flag),
+   write one image row into the page of the device the dictionary names.
+   The dictionary carries either the device raster (rows: the ImgData
+   array, three colour planes or grey bytes per the rgbrows flag) or,
+   for a device that keeps its raster in a buffer of its own, that
+   device itself (dev), whose compiled rectangle fill is then called
+   once per run of columns;
    the axis-aligned image-to-device mapping (xoff xscale yoff yscale),
    the clip rectangle (cx0 cy0 cx1 cy1), the normalized sample row
    (buf, one byte per sample, ncomp samples per pixel, row index y of
@@ -2316,9 +2472,10 @@ double xpost_dev_dict_number(Xpost_Context *ctx, Xpost_Object dict,
 int xpost_dev_blit_row(Xpost_Context *ctx,
                        Xpost_Object dict)
 {
-    Xpost_Object rows, bufo, luto, dlutso, tluto, mbitso, mrangeso;
+    Xpost_Object bufo, luto, dlutso, tluto, mbitso, mrangeso;
     Xpost_Object tro, tgo, tbo;
     Xpost_Object cspans;
+    struct _blit_out out;
     unsigned char *plane[4] = { NULL, NULL, NULL, NULL };
     int ncspans = 0, have_cspans = 0, have_planes = 0;
     double ivl[512][2];
@@ -2375,9 +2532,36 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
        which returns before the stepped one, screens through it too */
     htc = _ht_cell(ctx, dict, &htw, &hth);
 
-    rows = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "rows"));
-    if (xpost_object_get_type(rows) != arraytype)
-        return typecheck;
+    /* Where the pixels go: the rows a device keeps, or the device
+       itself where it keeps none. A device named here has to declare a
+       compiled rectangle fill, since what runs a method written as a
+       procedure is the interpreter and nothing here can call one. */
+    memset(&out, 0, sizeof out);
+    out.ctx = ctx;
+    out.devw = devw;
+    out.rgbrows = rgbrows;
+    out.ncomp = nat == 3 ? 3 : 1;
+    out.htc = htc;
+    out.htw = htw;
+    out.hth = hth;
+    out.rows = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "rows"));
+    if (xpost_object_get_type(out.rows) == arraytype)
+        out.haverows = 1;
+    else
+    {
+        Xpost_Object fr;
+
+        out.devdic = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "dev"));
+        if (xpost_object_get_type(out.devdic) != dicttype)
+            return typecheck;
+        fr = xpost_dict_get(ctx, out.devdic, nameFillRect);
+        if (xpost_object_get_type(fr) != operatortype)
+            return typecheck;
+        out.fillrect = fr.mark_.padw;
+        /* the screen is the device's own and it thresholds through it
+           in the fill below, so nothing is thresholded here */
+        out.htc = NULL;
+    }
     /* planar sources deliver one row buffer per component */
     {
         Xpost_Object bufso = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, "bufs"));
@@ -2586,10 +2770,8 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
 
                     for (dy = (int)floor(lo); dy < hi; dy++)
                     {
-                        Xpost_Object row;
-                        unsigned char *rowp[3] = { NULL, NULL, NULL };
                         double v;
-                        int dx;
+                        int dx, rret, paint;
 
                         if (dy < 0 || dy >= devh)
                             continue;
@@ -2607,37 +2789,11 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
                             if (nivl == 0)
                                 continue;
                         }
-                        row = xpost_array_get(ctx, rows, dy);
-                        if (rgbrows)
-                        {
-                            int pret, rw;
-
-                            pret = _rgb_planes(ctx, row, 1, rowp, &rw);
-                            if (pret)
-                                { free(cols); return pret; }
-                            /* A row of no width is a row the device does
-                               not hold: the page shows the ground over
-                               it, and an image reaching it is dropped
-                               where every other mark that reaches it
-                               is. */
-                            if (rw == 0)
-                                continue;
-                            if (rw < devw)
-                                { free(cols); return rangecheck; }
-                        }
-                        else
-                        {
-                            int gret, rw;
-
-                            /* a row of no width, as above */
-                            if (row.comp_.sz == 0)
-                                continue;
-                            gret = _gray_row(ctx, row, 1, &rowp[0], &rw);
-                            if (gret)
-                                { free(cols); return gret; }
-                            if (rw < devw)
-                                { free(cols); return rangecheck; }
-                        }
+                        rret = _blit_out_row(&out, dy, &paint);
+                        if (rret)
+                            { free(cols); return rret; }
+                        if (!paint)
+                            continue;
                         {
                         double sxstep = 1.0 / xscale;
                         double sxv = ((int)floor(xe0) + 0.5 - xoff) / xscale - 0.5;
@@ -2709,18 +2865,13 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
                                 if (px[k] < 0) px[k] = 0;
                                 if (px[k] > 255) px[k] = 255;
                             }
-                            if (rgbrows)
                             {
-                                rowp[0][dx] = (unsigned char)px[0];
-                                rowp[1][dx] = (unsigned char)px[1];
-                                rowp[2][dx] = (unsigned char)px[2];
+                                int sret = _blit_out_span(&out, dy, dx, dx + 1,
+                                                          px[0], px[1], px[2],
+                                                          px[0]);
+                                if (sret)
+                                    { free(cols); return sret; }
                             }
-                            else if (htc)
-                                rowp[0][dx] = (256 * px[0] + 127) / 255
-                                              >= htc[(dy % hth) * htw + dx % htw]
-                                            ? 255 : 0;
-                            else
-                                rowp[0][dx] = (unsigned char)px[0];
                         }
                         }
                     }
@@ -2741,8 +2892,7 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
 
     for (dy = (int)floor(ya); dy < yb; dy++)
     {
-        Xpost_Object row;
-        unsigned char *rowp[3] = { NULL, NULL, NULL };
+        int rret, paint;
 
         if (dy < 0)
             continue;
@@ -2754,40 +2904,16 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
             if (nivl == 0)
                 continue;
         }
-        row = xpost_array_get(ctx, rows, dy);
-        if (rgbrows)
-        {
-            int pret, rw;
-
-            pret = _rgb_planes(ctx, row, 1, rowp, &rw);
-            if (pret)
-                return pret;
-            /* A row of no width is a row the device does not hold: the
-               page shows the ground over it, and an image reaching it is
-               dropped where every other mark that reaches it is. */
-            if (rw == 0)
-                continue;
-            if (rw < devw)
-                return rangecheck;
-        }
-        else
-        {
-            int gret, rw;
-
-            /* a row of no width, as above */
-            if (row.comp_.sz == 0)
-                continue;
-            gret = _gray_row(ctx, row, 1, &rowp[0], &rw);
-            if (gret)
-                return gret;
-            if (rw < devw)
-                return rangecheck;
-        }
+        rret = _blit_out_row(&out, dy, &paint);
+        if (rret)
+            return rret;
+        if (!paint)
+            continue;
 
         for (x = 0; x < w; x++)
         {
             double xa, xb;
-            int dx, r = 0, g = 0, b = 0, gray = 0;
+            int r = 0, g = 0, b = 0, gray = 0;
 
             if (mbits)
             {
@@ -2862,29 +2988,22 @@ int xpost_dev_blit_row(Xpost_Context *ctx,
                 for (iv = 0; iv < niv; iv++)
                 {
                     double sa = xa, sb = xb;
+                    int sret;
 
                     if (have_cspans)
                     {
                         if (ivl[iv][0] > sa) sa = ivl[iv][0];
                         if (ivl[iv][1] < sb) sb = ivl[iv][1];
                     }
-                    for (dx = (int)floor(sa); dx < sb; dx++)
-                    {
-                        if (dx < 0)
-                            continue;
-                        if (rgbrows)
-                        {
-                            rowp[0][dx] = (unsigned char)r;
-                            rowp[1][dx] = (unsigned char)g;
-                            rowp[2][dx] = (unsigned char)b;
-                        }
-                        else if (htc)
-                            rowp[0][dx] = (256 * gray + 127) / 255
-                                          >= htc[(dy % hth) * htw + dx % htw]
-                                        ? 255 : 0;
-                        else
-                            rowp[0][dx] = (unsigned char)gray;
-                    }
+                    /* the columns a walk from floor(sa) up to but not
+                       including sb covers, stated as an interval so
+                       that a device written into by row and a device
+                       painted through its own fill are handed the same
+                       run rather than each working one out */
+                    sret = _blit_out_span(&out, dy, (int)floor(sa),
+                                          (int)ceil(sb), r, g, b, gray);
+                    if (sret)
+                        return sret;
                 }
             }
         }
