@@ -4027,6 +4027,20 @@ test('resource-load',
 # supplies), Xpost_Dev_Line the one statement of which pixels DrawLine
 # paints, and the folding helpers truncate and clamp. Every device
 # routed through the driver header inherits exactly these semantics.
+# What a record gives back, and to which rows: everything when the whole
+# extent is asked for, in the order it was made, and only what reaches
+# the rows when a run of them is. The second is what makes a page larger
+# than its raster affordable, so it is asked at each end of a mark and
+# between marks as well as inside them.
+record_exe = executable('record_test',
+  'tests/record_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('record', record_exe, suite: cost_fast)
+
 dev_rect_exe = executable('dev_rect_test',
   'tests/dev_rect_test.c',
   c_args: '-DHAVE_CONFIG_H',

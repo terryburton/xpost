@@ -49,6 +49,7 @@ libxpost_src = files([
   'xpost_oplib.c',
   'xpost_save.c',
   'xpost_span.c',
+  'xpost_record.c',
   'xpost_stack.c',
   'xpost_string.c',
   'xpost_vm_image.c'

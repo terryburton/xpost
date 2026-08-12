@@ -356,6 +356,12 @@ xpost_putenv
 xpost_quit
 xpost_real_cons
 xpost_realpath
+xpost_record_count
+xpost_record_extent
+xpost_record_free
+xpost_record_mark
+xpost_record_new
+xpost_record_replay
 xpost_renameat_beneath
 xpost_run
 xpost_save_create_snapshot_object
