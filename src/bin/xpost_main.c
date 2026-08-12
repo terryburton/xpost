@@ -188,6 +188,13 @@ _xpost_main_usage(const char *filename)
     i = 0;
     while (_xpost_main_devices[i])
         printf("\t%s\n", _xpost_main_devices[i++]);
+    printf("\n");
+    printf("  A device may be given a mode after a colon:\n");
+    printf("\trecord:DEVICE   write the page down and paint it through\n");
+    printf("\t                DEVICE (pgm, ppm, tiff), which holds a band\n");
+    printf("\t                of the page at a time rather than the page\n");
+    printf("\traster:FORMAT   the pixel format a lent framebuffer is in\n");
+    printf("\t                (rgb, argb, bgr, bgra)\n");
 }
 
 static int

@@ -215,7 +215,7 @@ the machine that took it.
 | `.resourcepath` | `-I` and `xpost_add_resource_dir`, in the order given |
 | `.interactive` | whether the caller asked for a batch run, and whether standard input is a terminal; settled again for every run the context serves |
 | `ShowpageSemantics` | the semantics `xpost_create` was given: pause at a page, carry on, or hand control back |
-| `SUBDEVICE` | the mode selector of a `-d device:mode` selection, which the raster device reads for its pixel format |
+| `SUBDEVICE` | the mode selector of a `-d device:mode` selection: the raster device reads it for its pixel format, and the recording device for which device paints its page |
 | `OutputFileName` | `-o`. The **host's** binding only: a program's own `/OutputFileName`, on the dictionary stack, still wins, and `setpagedevice` writes the program's into `userdict` from `/OutputFile`. The device machinery looks on the dictionary stack first and here second, which is the precedence the host's copy had when it sat at the bottom of that stack |
 | `OutputBufferIn`, `OutputBufferOut` | the framebuffer an embedding caller lends the raster device and where it wants the finished one written back; the pointers travel in strings a program cannot read |
 
