@@ -1,0 +1,262 @@
+% One page of sampled images, put out through a device that keeps its
+% raster in a buffer of its own -- directly, and by a record played into
+% it a band at a time.
+%
+% run-record-span-test.sh runs this file once per selection. Such a
+% device keeps no rows an image can be written into, so the picture is
+% painted through the rectangle fill it declares: the writer that writes
+% an image into a device that does keep rows states one run of columns
+% per sample and per device row, and every one of those runs arrives
+% here as a fill instead of as bytes stored into a row. The sampling is
+% the same either way, which is the whole reason for driving the second
+% route from the first rather than writing it again.
+%
+% What the page reaches, and why each of them is here:
+%
+%   one component     decode, colour conversion and transfer baked into
+%                     a single table, which is the writer's one-value
+%                     path
+%   three components  a decode table per component, converted where the
+%                     row is written
+%   magnified         the samples blended between rows rather than
+%                     stepped, which is the one route that paints per
+%                     device pixel rather than per run of columns
+%   reduced           more samples than device pixels, which takes the
+%                     stepped route whatever was asked for
+%   a shaped clip     a region that is not a rectangle, resolved into
+%                     spans that cut each run of columns in two
+%   colour-key mask   sample ranges that leave a pixel unpainted, so a
+%                     run of columns ends inside the image
+%   explicit mask     a bit per sample, likewise
+%
+% The images sit at the page's edges as well as in the middle of it, so
+% that a run of columns beginning at the first row of the page or ending
+% at its last is among the ones painted, and so that a boundary between
+% bands falls inside an image rather than only between them.
+%
+%   -DBAND=n   rows a band holds, 0 for the page held whole. A record
+%              divides its budget by what a row of the target's raster
+%              costs, so the budget is set from that here and the number
+%              means rows.
+%   -DCMP=1    compare the two files the painting runs left instead of
+%              painting: the page a device keeping rows wrote, and the
+%              page a device keeping a buffer wrote, decoded to pixels.
+
+/PW where { pop }{ /PW 120 def } ifelse
+/PH where { pop }{ /PH 90 def } ifelse
+/BAND where { pop }{ /BAND 0 def } ifelse
+/CMP where { pop }{ /CMP 0 def } ifelse
+
+/failcount 0 def
+/assert { % bool string  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse
+} bind def
+/num { 20 string cvs } bind def
+
+% ---- reading a written page back ----
+% The two files the painting runs left, decoded to their pixels: the
+% PPM is its own raster behind a header, and the PNG is the flate
+% stream its IDAT chunks carry with the row filters undone (PLRM Table
+% 3.20, predictor 15). Both are read through this interpreter's own
+% filters, so nothing outside it has to agree about either format.
+
+/readfile { % name  .  string
+    (r) file
+    dup 65535 string readstring
+    { false (the page written is larger than one string holds) assert } if
+    exch closefile
+} bind def
+
+/be32 { % string i  .  int
+    /be.i exch store /be.s exch store
+    be.s be.i get 16777216 mul
+    be.s be.i 1 add get 65536 mul add
+    be.s be.i 2 add get 256 mul add
+    be.s be.i 3 add get add
+} bind def
+
+/pngpixels { % file-string  .  pixels
+    /pg.d exch store
+    /pg.w pg.d 16 be32 store
+    /pg.n pg.d 25 get 6 eq { 4 }{ 3 } ifelse store
+    /pg.buf 65535 string store
+    /pg.len 0 store
+    /pg.pos 8 store
+    {
+        pg.pos 8 add pg.d length gt { exit } if
+        /pg.clen pg.d pg.pos be32 store
+        pg.d pg.pos 4 add 4 getinterval (IDAT) eq {
+            pg.buf pg.len
+            pg.d pg.pos 8 add pg.clen getinterval putinterval
+            /pg.len pg.len pg.clen add store
+        } if
+        /pg.pos pg.pos pg.clen add 12 add store
+    } loop
+    pg.buf 0 pg.len getinterval
+    << /Predictor 15 /Colors pg.n /BitsPerComponent 8 /Columns pg.w >>
+    /FlateDecode filter
+    65535 string readstring pop
+} bind def
+
+% A binary PPM is three header lines and then the raster, so the raster
+% begins after the third newline.
+/ppmpixels { % file-string  .  pixels
+    /pp.d exch store
+    /pp.i 0 store
+    3 { { pp.d pp.i get 10 eq { exit } if /pp.i pp.i 1 add store } loop
+        /pp.i pp.i 1 add store } repeat
+    pp.d pp.i pp.d length pp.i sub getinterval
+} bind def
+
+CMP 0 gt {
+    /pa (rows.ppm) readfile ppmpixels def
+    /pb (spans.png) readfile pngpixels def
+    pa length 0 gt (the page written through the rows decodes to no
+pixels) assert
+    pa length pb length eq
+        (the two pages decode to different numbers of pixels) assert
+    /diff 0 def
+    pa length pb length eq {
+        0 1 pa length 1 sub { /i exch def
+            pa i get pb i get ne { /diff diff 1 add def } if
+        } for
+    } if
+    diff 0 eq
+        (the page painted through a device's rows and the page painted
+through its own fill are not the same pixels) assert
+    (PIXELS ) print pa length num print ( ) print diff num print (\n) print
+    failcount 0 eq { (SUCCESS\n) }{ (FAILED\n) } ifelse print
+    quit
+} if
+
+% ---- the page ----
+
+% The band the record is to hold, in rows. A record divides its budget
+% by what a row of the target's raster costs, which the target's class
+% prices, so the budget is set from that price here and the number given
+% means rows. A device that is not a record has none of this and takes
+% the page as it always did.
+/banding DEVICE /.playpage known def
+/cls banding { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
+/rowbytes banding
+    { 2 dict begin /width PW def cls /.rowcost get exec end exch pop }
+    { 0 } ifelse def
+
+<< /PageSize [PW PH] >> setpagedevice
+/recdev DEVICE def
+banding {
+    BAND 0 gt rowbytes 0 gt and
+        { DEVICE /.bandbytes BAND rowbytes mul put }
+        { DEVICE /.bandbytes 1000000000 put } ifelse
+} if
+
+% something under the images, so that a band the images do not reach is
+% still a band with a mark on it
+gsave 0.4 0.5 0.6 setrgbcolor 0 0 PW PH rectfill grestore
+
+% one component, magnified: the baked table, and a picture reaching the
+% page's first row and its last
+gsave
+    /DeviceGray setcolorspace
+    2 0 translate 44 PH scale
+    << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8 /Decode [0 1]
+       /ImageMatrix [8 0 0 -8 0 8]
+       /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                    00204060 80a0c0e0 10305070 90b0d0f0
+                    00204060 80a0c0e0 10305070 90b0d0f0
+                    00204060 80a0c0e0 10305070 90b0d0f0> >> image
+grestore
+
+% three components, through a decode table each
+gsave
+    50 52 translate 32 30 scale
+    4 4 8 [ 4 0 0 -4 0 4 ]
+    { <ff0000 00ff00 0000ff ffff00 ff00ff 00ffff 804020 204080
+       102030 302010 c0c0c0 404040 ff8000 0080ff 80ff00 8000ff> }
+    false 3 colorimage
+grestore
+
+% magnified with the samples blended, which paints per device pixel
+gsave
+    50 18 translate 32 30 scale
+    << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+       /ImageMatrix [ 4 0 0 -4 0 4 ] /Decode [ 0 1 ] /Interpolate true
+       /DataSource < 00 40 80 c0 40 80 c0 ff 80 c0 ff 40 c0 ff 40 00 >
+    >> image
+grestore
+
+% under a region that is not a rectangle
+gsave
+    88 50 translate
+    newpath 14 20 13 0 360 arc clip
+    28 40 scale
+    8 8 8 [ 8 0 0 -8 0 8 ]
+    { <ff00ff00ff00ff00 00ff00ff00ff00ff ff00ff00ff00ff00 00ff00ff00ff00ff
+       ff00ff00ff00ff00 00ff00ff00ff00ff ff00ff00ff00ff00 00ff00ff00ff00ff> }
+    image
+grestore
+
+% a colour-key mask: samples inside the ranges leave the page alone
+gsave
+    88 26 translate
+    28 20 scale
+    << /ImageType 4 /Width 4 /Height 4 /BitsPerComponent 8
+       /ImageMatrix [ 4 0 0 -4 0 4 ] /Decode [ 0 1 0 1 0 1 ]
+       /MaskColor [ 0 0 0 ]
+       /DataSource < ff0000 000000 0000ff ffff00
+                     000000 00ff00 ffffff 000000
+                     00ffff ff00ff 000000 808080
+                     000000 c0c0c0 404040 000000 >
+    >> image
+grestore
+
+% an explicit mask over the same grid
+gsave
+    88 2 translate
+    0 setgray
+    28 20 scale
+    << /ImageType 3 /InterleaveType 3
+       /DataDict << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+                    /ImageMatrix [ 4 0 0 -4 0 4 ] /Decode [ 0 1 ]
+                    /DataSource < 20 50 80 b0 50 80 b0 e0
+                                  80 b0 e0 20 b0 e0 20 50 > >>
+       /MaskDict << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 1
+                    /ImageMatrix [ 4 0 0 -4 0 4 ] /Decode [ 0 1 ]
+                    /DataSource < 90 60 > >>
+    >> image
+grestore
+
+% and a reduction: more samples than device pixels, which steps
+gsave
+    50 2 translate 32 14 scale
+    /rw 64 def
+    /rrow rw string def
+    /ry 0 def
+    /rsrc { 0 1 rw 1 sub { /i exch def
+                rrow i i ry add dup 2 mul add 255 and put } for
+            /ry ry 1 add def rrow } bind def
+    /DeviceGray setcolorspace
+    rw 64 8 [ rw 0 0 -64 0 64 ] { rsrc } image
+grestore
+
+showpage
+
+% What the replay was asked to do, which is the half no page can show: a
+% mark or an image played into a run of rows it does not reach paints
+% nothing, so a replay handed the whole page for every band puts out
+% this same page. The counts are read after the page, where a record
+% keeps them across the clearing that begins the next one.
+banding {
+    (PLAYS ) print
+    recdev 1183615869 internaldict /.recordplays get exec num print
+    (\n) print
+    (PLAYED ) print
+    recdev 1183615869 internaldict /.recordplayed get exec num print
+    (\n) print
+    (IMGROWS ) print
+    recdev 1183615869 internaldict /.recordimagerows get exec num print
+    (\n) print
+} if
+failcount 0 eq { (SUCCESS\n) }{ (FAILED\n) } ifelse print
+quit

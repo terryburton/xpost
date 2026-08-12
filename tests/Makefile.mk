@@ -171,6 +171,7 @@ tests/band_writer_test.ps \
 tests/band_device_test.ps \
 tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
+tests/record_span_test.ps \
 tests/record_replay_test.ps \
 tests/region_replay_test.ps \
 tests/graphics_load_stop_test.c \
@@ -306,6 +307,7 @@ tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
 tests/run-record-image-test.sh \
+tests/run-record-span-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-band-loop-test.sh \
 tests/run-band-sparse-test.sh \

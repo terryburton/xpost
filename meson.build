@@ -3316,6 +3316,23 @@ test('record-image',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the same entry played into a device that keeps no rows an image
+# can be written into, whose picture is painted through the rectangle
+# fill it declares instead -- one call per run of columns, the runs being
+# the ones the row writer covers. Four things, none implying the others:
+# the bytes a device paints directly against the bytes a record plays
+# into it at several band heights including one row; the pixels the two
+# routes lay down, decoded and compared, which is the only thing holding
+# the sampling to one statement; how many times the record was played,
+# which is all that separates a band from the whole page; and the bound,
+# weighed as the process, these rasters being outside virtual memory.
+test('record-span',
+  find_program('tests/run-record-span-test.sh'),
+  args: [ xpost_exe, files('tests/record_span_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_slow,
+  timeout: 300)
+
 # ... and the loop those two rest on: a page put out a band at a time.
 # The band loop makes a raster the height of a band, plays the marks that
 # reach it, puts those rows out and moves on, so what it holds is the
