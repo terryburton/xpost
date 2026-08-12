@@ -67,10 +67,6 @@
 % own Create; a compiled sub-class replaces it and holds its page in one
 % block outside the virtual machine, which cannot be held in part.
 /holdsrows device? /.bandrows known def
-% A device that screens what it stores holds the whole page whatever the
-% box says: what it leaves for a grey varies from row to row, so no one
-% row of it can stand for the rows that would not be held.
-/screens device? /ScreenPaint known def
 /plainrows holdsrows { rowlengths }{ [ ] } ifelse def
 
 holdsrows {
@@ -105,14 +101,13 @@ currentpagedevice /ImagingBBox get [50 50 150 150] eqarray
 [ 0 0 transform ] plainorigin eqarray
 (the page origin maps to the same device point) assert
 
-holdsrows screens and {
-    % 4a. A screening device holds the page whole, box or no box.
-    rowlengths plainrows eqarray
-    (a device that screens what it stores holds the whole page) assert
-} if
-
-holdsrows screens not and {
-    % 4. The rows the box reaches are held; the rest are not.
+holdsrows {
+    % 4. The rows the box reaches are held; the rest are not. A device
+    % that screens what it stores is no exception: what it leaves for a
+    % grey varies from one row to the next, so one row of it cannot
+    % stand for every row that is not held -- and what such a device
+    % shows over an unheld row is filled for that row instead of stood
+    % in for (.groundrowat, data/image.ps).
     /rl rowlengths def
     rl length 200 eq
     (the raster still counts one entry per page row) assert

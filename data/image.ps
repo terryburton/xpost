@@ -47,11 +47,6 @@ currentglobal true setglobal
         graphicsdict /.rasterband 2 copy known {
             2 copy get 3 1 roll undef aload pop
         }{ pop pop 0 height } ifelse
-        % A device that screens what it stores holds the whole page
-        % whatever the box says. What such a device leaves for a grey is
-        % a pattern that varies from one row to the next, and the single
-        % ground row below cannot stand for the rows that are not held.
-        currentdict /ScreenPaint known { pop pop 0 height } if
         /.bandrows exch def /.bandtop exch def
         % the run is held to the page, whatever named it
         .bandtop 0 lt .bandtop height ge or { /.bandtop 0 def } if
@@ -624,6 +619,26 @@ currentglobal true setglobal
         .ground astore pop
     end } bind
 
+    % Whether the row this device shows over a row it does not hold is
+    % the same row whatever the row is. A class that stores the colour
+    % it is handed shows one row of that colour wherever it shows the
+    % ground; a class that screens leaves a pattern that repeats down
+    % the page with its cell, so what it shows at one row of the page is
+    % not what it shows at the next.
+    /.groundvaries false
+
+    % y  .groundrowat  row
+    % The row the page shows at row y where this device holds no pixel
+    % of it: the colour erasepage last cleared the page to, laid out as
+    % a row of this class's own shape. A class showing one row answers
+    % the one Ground laid. A class whose ground differs from one row to
+    % the next fills a row for the row it was asked about, and what it
+    % answers stands only until the next call fills it again -- which is
+    % what /.groundvaries above tells a caller collecting rows.
+    /.groundrowat { % y  .  row
+        pop .groundrow
+    } bind
+
     % file  .writehead  -
     % The header a raw portable map carries ahead of its rows: the magic
     % naming the format, the extent in pixels, and, where the format has
@@ -689,6 +704,22 @@ currentglobal true setglobal
             .bandlo .bandhi gt { exit } if
             /.bandn .bandhi .bandlo sub 1 add def
             .bandn .bandcap gt { /.bandn .bandcap def } if
+            % A class whose ground differs from one row to the next
+            % fills one row for the row it stands for, so a row this
+            % device does not hold cannot be collected beside another:
+            % the run one call writes ends at the first such row, or is
+            % that one row by itself.
+            .groundvaries {
+                ImgData .bandlo get .rowheld {
+                    /.bandk 1 def
+                    {
+                        .bandk .bandn ge { exit } if
+                        ImgData .bandlo .bandk add get .rowheld not { exit } if
+                        /.bandk .bandk 1 add def
+                    } loop
+                    /.bandn .bandk def
+                }{ /.bandn 1 def } ifelse
+            } if
             .bandpage /rows 2 copy known
                 { get length .bandn lt }{ pop pop true } ifelse
                 { .bandpage /rows .bandn array put } if
@@ -696,7 +727,7 @@ currentglobal true setglobal
             0 1 .bandn 1 sub {
                 /.bandi exch def
                 ImgData .bandlo .bandi add get
-                dup .rowheld not { pop .groundrow } if
+                dup .rowheld not { pop .bandlo .bandi add .groundrowat } if
                 .bandout exch .bandi exch put
             } for
             .bandout 0 .bandn getinterval
@@ -774,6 +805,19 @@ currentglobal true setglobal
     /Emit { % IMAGE  .  -
     begin
         currentdict /.bandpage known { .emitband }{
+        .groundvaries {
+            % A class whose ground differs from one row to the next
+            % cannot show one row over every row it does not hold, so
+            % its page goes out through the walk a band's rows go out
+            % through, which lays each such row in turn. That walk keeps
+            % the file and how far down the page it has reached between
+            % calls; here they are made for this page and given up with
+            % it, so the device is left as one that was never asked to
+            % take its page in bands.
+            /.bandpage 4 dict def
+            { .bandpage /done known { exit } if .emitband } loop
+            currentdict /.bandpage undef
+        }{
             % The page a writer is given is the page the program asked
             % for. Where the device holds only some of the page's rows,
             % the rest of it shows the ground, and the whole page is put
@@ -792,11 +836,12 @@ currentglobal true setglobal
                 1 index 1 index get         % page i row
                 .rowheld
                     { pop }
-                    { 1 index exch .groundrow put }
+                    { 1 index exch dup .groundrowat put }
                 ifelse
             } for
             .outputfile (w) file
             .writepage
+        } ifelse
         } ifelse
     end } bind
 >> put

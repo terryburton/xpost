@@ -18,10 +18,7 @@
 % and a copy carries what it was copied from: a device says whether its
 % page may arrive in bands and the safe answer is silence, so a class
 % that has not thought about it has to say nothing rather than inherit a
-% yes. This one has not: every grey it stores passes through the screen,
-% and what a screening class leaves over a row it does not hold is a
-% pattern that repeats down the page rather than the one row it has to
-% show there.
+% yes. This one has not said it.
 .xpost_PBMIMAGE /BandedPage undef
 
 % The header is the bilevel one: the magic names the format and a
@@ -53,6 +50,26 @@
         exch ge { 1 }{ 0 } ifelse                   % x y white?
         3 1 roll                                    % c' x y
     } if
+} put
+
+% What the page shows at a row it holds no pixel of. The ground is one
+% colour and the screen turns it into a pattern that repeats down the
+% page with the cell, so the row standing for a row of the page is not
+% the row standing for the next one and one row cannot stand for both:
+% the row is filled for the row it was asked about, through the same
+% fold a paint takes, and stands until the next call fills it again.
+.xpost_PBMIMAGE /.groundvaries true put
+.xpost_PBMIMAGE /.groundrowat { % y  .  row
+    currentdict /.ground known {
+        /.gndy exch def
+        0 1 width 1 sub {
+            /.gndx exch def
+            .groundrow .gndx
+            .ground 0 get .gndx .gndy .screenpix pop pop
+            .rowput
+        } for
+    }{ pop } ifelse
+    .groundrow
 } put
 
 % emission thresholds and packs through the compiled row writer, a run
