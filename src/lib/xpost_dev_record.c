@@ -776,9 +776,11 @@ static int _play_image(Xpost_Context *ctx,
     *nrows = 0;
     if (!xpost_record_image_rows(img, lo, hi, &y0, &y1))
         return 0;
-    /* the sample rows this run of the page's rows takes, which is what
-       a band of a picture costs against the whole of it */
-    *nrows = y1 - y0;
+    /* The sample rows this run of the page's rows takes, which is what
+       a band of a picture costs against the whole of it. A run the
+       picture's rows do not reach names an empty span rather than a
+       span running backwards, and an empty one costs nothing. */
+    *nrows = y1 > y0 ? y1 - y0 : 0;
     cy0 = img->cy0 < lo ? lo : img->cy0;
     cy1 = img->cy1 > hi + 1 ? hi + 1 : img->cy1;
 
@@ -1579,6 +1581,7 @@ static int _create_cont(Xpost_Context *ctx,
     private.ncomp = ncomp.int_.val;
     private.plays = 0;
     private.played = 0;
+    private.imgrows = 0;
     private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
