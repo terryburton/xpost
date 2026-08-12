@@ -36,15 +36,27 @@
  *          <colour> polygon IMAGE  FillPoly  ->  -  (optional)
  *                           IMAGE  Emit      ->  -  (mandatory)
  *                           IMAGE  Flush     ->  -  (optional)
+ *                     IMAGE  ScreenChanged   ->  -  (optional)
  *                           IMAGE  Destroy   ->  -  (mandatory)
  *                     dict1  .copydict  ->  dict2   (mandatory, class)
  *
  * Optional means the base class supplies a fallback built on PutPix, or
  * the pipeline probes the slot with `known` before calling it (Flush,
- * called by flushpage; FillRect and the probe paths in the device
- * contract test). A device that omits PutPix must bring its own
- * implementation of every marking method the pipeline can reach (the
- * vector devices do).
+ * called by flushpage; ScreenChanged, called where a cell is installed;
+ * FillRect and the probe paths in the device contract test). A device
+ * that omits PutPix must bring its own implementation of every marking
+ * method the pipeline can reach (the vector devices do).
+ *
+ * ScreenChanged is how a device learns that the screen it paints
+ * through has changed, and only a device declaring /ScreenPaint is ever
+ * told: the machinery that maintains the cell (.setscreencell,
+ * data/gstate.ps) calls it where a cell is installed, which is where a
+ * cell is built and so not per mark. A device painting through its own
+ * cell has no use for it -- it reads the cell as it paints -- and none
+ * of them declares it. What does is a device recording a page to be
+ * painted again, for which the screen is state no marking call carries
+ * and which would otherwise replay a page under whichever screen its
+ * target held by then.
  *
  * A device keeps the marking methods it brings. Selecting a device
  * finishes it (.completedevice, data/device.ps), and part of that
