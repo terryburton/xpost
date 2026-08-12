@@ -68,6 +68,7 @@
     % is what the loop below is for; a target that did not would still be
     % played into, in one band covering the page.
     /.playtargets <<
+        /pbm /.xpost_PBMIMAGE
         /pgm /.xpost_PGMIMAGE
         /ppm /.xpost_PPMIMAGE
         /tiff /.xpost_TIFFIMAGE
@@ -89,15 +90,20 @@
 
     % A device's features decide what the machinery above it sends, so a
     % record is only faithful where the recorder declares what the device
-    % it plays into declares. The driver takes /nativecolorspace, /.ncomp
-    % and /TextAlphaBits off the target class and puts them here, rather
-    % than this class declaring any of them: a mark carries one value per
-    % component of the space it was made in and is played by handing
-    % those values to a method whose operands the target's own space
-    % decides, so a record made in another space paints a colour nobody
-    % named; and a target asking for a glyph's partly covered edge pixels
-    % as whole pixels would be played the coverage-weighted blends a
-    % recorder declaring otherwise was sent.
+    % it plays into declares. The driver takes /nativecolorspace, /.ncomp,
+    % /TextAlphaBits and /ScreenPaint off the target class and puts them
+    % here, rather than this class declaring any of them: a mark carries
+    % one value per component of the space it was made in and is played
+    % by handing those values to a method whose operands the target's own
+    % space decides, so a record made in another space paints a colour
+    % nobody named; a target asking for a glyph's partly covered edge
+    % pixels as whole pixels would be played the coverage-weighted blends
+    % a recorder declaring otherwise was sent; and a target that renders
+    % a grey as a pattern of pixels paints each through the threshold
+    % under it, which is state a marking call does not carry, so a
+    % recorder that did not declare the screen would never be told of one
+    % and would replay the page under whichever screen the target held by
+    % then.
 
     /.copydict //.xpostsys /.classcopydict get
 
@@ -283,6 +289,15 @@
         % that page was cleared to.
         rec /.ground known
             { rec /.ground get aload pop page dup /Ground get exec } if
+        % The screen the page was painted under, carried onto the raster
+        % the same way and for the same reason. A device rendering a grey
+        % as a pattern of pixels lays the rows it holds no pixel of under
+        % the screen it holds, and a band lays its rows before anything
+        % is played into them -- so the raster needs a screen before it
+        % stands on its first band, which no entry has yet put there.
+        % A record whose target does not screen holds none and this puts
+        % nothing.
+        rec page //.internaldict /.playscreen get exec
 
         banding {
             % what the page's emission keeps between bands: the file it

@@ -164,6 +164,15 @@ static unsigned int _loadrecorddevicecont_opcode;
    mark. A record holds the call, so playing it is making the call. */
 static Xpost_Object _slot(Xpost_Record_Kind kind)
 {
+    /* The five marking calls are the only kinds played by calling a
+       method. An image is written through the row writer that wrote it,
+       and a screen is put back on the device rather than painted, so
+       neither names a method the target declares and neither reaches
+       here; answering nothing for them keeps that true of any kind
+       added beside them. */
+    if ((int)kind < 0
+        || (size_t)kind >= sizeof nameslot / sizeof *nameslot)
+        return null;
     return nameslot[(int)kind];
 }
 
@@ -1047,6 +1056,24 @@ static int _recordplays(Xpost_Context *ctx,
     return 0;
 }
 
+/* How many screens the record holds, which is how many times the page
+   changed the screen it was being painted under, and one more for the
+   screen it opened under. A page whose target does not screen holds
+   none. */
+static int _recordscreens(Xpost_Context *ctx,
+                          Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)
+                                    xpost_record_screen_count(private.rec)));
+    return 0;
+}
+
 /* IMAGE  .recordimagerows  int
    How many sample rows of a recorded image this device has put through
    the image writer.
@@ -1188,6 +1215,127 @@ static int _recordground(Xpost_Context *ctx,
  * and returning: the method runs, and this continuation runs after it
  * with the walk's own operands where the call left them.
  */
+/* Put a cell on the device that paints. It is what playing a screen
+   entry comes to, and what a raster is given before it is moved onto
+   its first band. */
+static int _install_screen(Xpost_Context *ctx, Xpost_Object targetdic,
+                           const unsigned char *cell, int w, int h)
+{
+    Xpost_Object s;
+    unsigned int mode;
+    int ret;
+
+    /* the cell is made in the memory the device it is put on lives in:
+       a dictionary in global memory holding a string from local memory
+       is the reference across banks that a restore would leave
+       dangling, and the check refuses it */
+    mode = ctx->vmmode;
+    ctx->vmmode = (targetdic.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)
+                ? GLOBAL : LOCAL;
+    s = xpost_string_cons(ctx, (unsigned int)w * (unsigned int)h,
+                          (const char *)cell);
+    ctx->vmmode = mode;
+    if (xpost_object_get_type(s) != stringtype)
+        return VMerror;
+    /* Literal, because the cell is read by name from a procedure as
+       well as by the compiled fills. A name holding an executable
+       string runs the string, so a cell left executable would be
+       scanned as program text the moment a device asked for its own
+       screen -- which is what the rows a page holds no pixel of do. */
+    s = xpost_object_cvlit(s);
+
+    ret = xpost_dict_put(ctx, targetdic, namebdkey[BK_HTCELL], s);
+    if (!ret)
+        ret = xpost_dict_put(ctx, targetdic, namebdkey[BK_HTW],
+                             xpost_int_cons((integer)w));
+    if (!ret)
+        ret = xpost_dict_put(ctx, targetdic, namebdkey[BK_HTH],
+                             xpost_int_cons((integer)h));
+    return ret;
+}
+
+/* The screen the raster paints its ground under.
+ *
+ * A device rendering a grey as a pattern of pixels lays the rows it
+ * holds no pixel of under the screen it holds, and a band lays those
+ * rows before anything is played into it -- so a raster about to stand
+ * on its first band needs a screen already, which no entry has yet put
+ * there.
+ *
+ * The screen given is the last the page set, because that is the one a
+ * page held whole is put out under: a page's rows are laid before its
+ * marks are played and read back after, so what a whole page shows
+ * where nothing was painted is the ground under the screen the page
+ * ended with. A band's rows carry the same, and a page painted in bands
+ * comes to the page painted whole.
+ *
+ * A record whose target does not screen holds no screen, and this puts
+ * nothing. */
+static int _playscreen(Xpost_Context *ctx,
+                       Xpost_Object recdic,
+                       Xpost_Object targetdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    const unsigned char *cell;
+    size_t n;
+    int w = 0, h = 0;
+
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec)
+        return 0;
+    n = xpost_record_screen_count(private.rec);
+    if (!n)
+        return 0;
+    cell = xpost_record_screen_get(private.rec, n - 1, &w, &h);
+    if (!cell)
+        return 0;
+    return _install_screen(ctx, targetdic, cell, w, h);
+}
+
+/* What this device is told when the screen changes.
+ *
+ * A record's target may render a grey as a pattern of pixels, choosing
+ * each pixel by the threshold under it. Which thresholds those are is
+ * the screen in force, and it is state a marking call does not carry:
+ * the device reads it from itself when it paints. A page played back
+ * later would find whatever screen its target held by then, so the
+ * screen is written down here, where the machinery maintaining it says
+ * it has changed, and put back as a replay passes it.
+ *
+ * Being told costs a page one entry per screen it sets rather than one
+ * per mark, because that machinery rebuilds the cell only where the
+ * screen it is built from has changed. */
+static int _recordscreen(Xpost_Context *ctx,
+                         Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    const unsigned char *cell;
+    int w, h;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+
+    /* a released record takes no screen, as it takes no mark */
+    if (!private.rec)
+        return 0;
+
+    /* read by the rule the painting device reads it by, so that a
+       screen written down is one a page could have been painted under */
+    cell = xpost_dev_ht_cell(ctx, devdic, &w, &h);
+    if (!cell)
+    {
+        XPOST_LOG_ERR("%d a screen change offers no cell to record",
+                      typecheck);
+        return typecheck;
+    }
+    if (!xpost_record_screen(private.rec, w, h, cell))
+        return VMerror;
+    return 0;
+}
+
 static int _replay_step(Xpost_Context *ctx,
                         Xpost_Object recdic,
                         Xpost_Object targetdic,
@@ -1267,6 +1415,46 @@ static int _replay_step(Xpost_Context *ctx,
            them: the page would be the page, an image write leaving what
            the write before it left, and the cost would follow the marks
            the band does not want. */
+        xpost_stack_push(ctx->lo, ctx->os, recdic);
+        xpost_stack_push(ctx->lo, ctx->os, targetdic);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
+        xpost_stack_push(ctx->lo, ctx->os, lo);
+        xpost_stack_push(ctx->lo, ctx->os, hi);
+        if (!xpost_stack_push(ctx->lo, ctx->es,
+                              xpost_operator_cons_opcode(_replay_step_opcode)))
+            return execstackoverflow;
+        return 0;
+    }
+
+    /* A screen is not a mark and paints nothing. It says what the marks
+       after it were made under, and playing it is putting that back on
+       the device about to paint them, so that each mark is screened by
+       the screen it was made under rather than by whichever one the
+       target happens to hold when the page is put out.
+
+       Every run of rows passes through the same screens in the same
+       order, a screen being met by every range, so the pixels a band
+       paints are the pixels the whole page would have carried there. */
+    if (kind == XPOST_RECORD_SCREEN)
+    {
+        const unsigned char *cell;
+        int w = 0, h = 0;
+        int ret;
+
+        cell = xpost_record_screen_get(private.rec,
+                                       nops > 0 ? (size_t)ops[0] : (size_t)-1,
+                                       &w, &h);
+        if (!cell)
+        {
+            XPOST_LOG_ERR("%d a recorded screen names no entry", undefined);
+            return undefined;
+        }
+        ret = _install_screen(ctx, targetdic, cell, w, h);
+        if (ret)
+            return ret;
+
+        /* the walk resumes past the entry it played, as it does past a
+           mark and past an image */
         xpost_stack_push(ctx->lo, ctx->os, recdic);
         xpost_stack_push(ctx->lo, ctx->os, targetdic);
         xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at + 1));
@@ -1836,6 +2024,25 @@ static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
     if (!ret)
         ret = xpost_dict_put(ctx, classdic, nametextalphabits,
                              xpost_dict_get(ctx, cls, nametextalphabits));
+    /* A device rendering a grey as a pattern of pixels declares
+       ScreenPaint, and the painting machinery then keeps that screen's
+       cell on it. A recorder standing in for such a device declares it
+       as well -- not because it screens anything, but because what it
+       writes down will be screened when it is played, and the screen a
+       mark was made under is state it can only be told about while the
+       page is being drawn. A recorder for a target that does not screen
+       is never told, and holds no screen. */
+    if (!ret)
+    {
+        Xpost_Object sp = xpost_name_cons(ctx, "ScreenPaint");
+
+        if (xpost_object_get_type(sp) == invalidtype)
+            return VMerror;
+        if (xpost_dict_known_key(ctx, xpost_context_select_memory(ctx, cls),
+                                 cls, sp))
+            ret = xpost_dict_put(ctx, classdic, sp,
+                                 xpost_dict_get(ctx, cls, sp));
+    }
     if (!ret)
         ret = xpost_dict_put(ctx, classdic, namedotplayclass, clsname);
     return ret;
@@ -1919,6 +2126,19 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
                              dicttype, arraytype, dicttype);
     ret = xpost_dict_put(ctx, classdic,
                          xpost_name_cons(ctx, ".recordimage"), op);
+    if (ret)
+        return ret;
+
+    /* What the painting machinery calls where the screen changes, for a
+       target that screens. Like the image entry it is not a device
+       method and is not dispatched as one: a method here would be a
+       marking call the record holds no entry for, which is the one
+       thing this class must not declare. A recorder whose target does
+       not screen declares no ScreenPaint, and nothing calls this. */
+    op = xpost_operator_cons(ctx, "recordScreen",
+                             (Xpost_Op_Func)_recordscreen, 1, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, "ScreenChanged"), op);
     if (ret)
         return ret;
 
@@ -2012,6 +2232,11 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordplayed", (Xpost_Op_Func)_recordplayed,
                              1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordscreens",
+                             (Xpost_Op_Func)_recordscreens, 1,
+                             dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".playscreen", (Xpost_Op_Func)_playscreen,
+                             2, dicttype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordimagerows",
                              (Xpost_Op_Func)_recordimagerows, 1,
                              dicttype); INSTALL;
