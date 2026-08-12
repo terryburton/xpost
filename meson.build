@@ -3287,6 +3287,21 @@ test('record-replay',
   suite: cost_fast,
   timeout: 120)
 
+# ... and a page played back a region at a time is that page too. A band
+# loop is nothing but this done once per run of rows, so what it rests on
+# is held here: the page assembled from its regions is the page rendered
+# whole, byte for byte, over regions whose boundaries cut through a
+# polygon, a line and a glyph rather than falling in whitespace. The runs
+# are also required to matter, by leaving one out and requiring the
+# difference where it belongs, and to have received the marks they
+# painted, which the pixels cannot say.
+test('region-replay',
+  find_program('tests/run-region-replay-test.sh'),
+  args: [ xpost_exe, files('tests/region_replay_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

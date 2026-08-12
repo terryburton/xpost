@@ -165,6 +165,7 @@ tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
 tests/record_replay_test.ps \
+tests/region_replay_test.ps \
 tests/graphics_load_stop_test.c \
 tests/graphics_regression_test.ps \
 tests/graphicsdict_slots.golden \
@@ -298,6 +299,7 @@ tests/run-gc-diagnostics-test.sh \
 tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
 tests/run-record-replay-test.sh \
+tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \
 tests/run-jpeg-refusal-test.sh \
 tests/run-leak-test.sh \
