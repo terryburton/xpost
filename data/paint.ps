@@ -836,13 +836,33 @@
         % A device that writes down what it is asked to paint takes the
         % same route as far as the rows, and is handed the rows and the
         % dictionary describing them instead of having them written into
-        % a raster it does not keep. It has to be: the other route paints
+        % a raster it does not keep. It has to be: the route below paints
         % a device without rows one rectangle per sample, and a page
         % written down that way costs tens of bytes a sample against the
         % one to three bytes a pixel of the page being escaped.
+        %
+        % A device keeping its raster in a buffer of its own -- the
+        % compiled writers, and the ones that hand their buffer to
+        % whoever embedded the interpreter -- has no rows to write into
+        % either, and takes the same route through its own rectangle
+        % fill: the writer above states one run of columns per sample
+        % and per device row, and such a device is handed each of them
+        % as a fill rather than having the bytes stored into a row. The
+        % fill has to be compiled, since what runs a method written as a
+        % procedure is the interpreter and the writer is a C function;
+        % the devices that put out a page as drawing instructions rather
+        % than as pixels declare theirs as procedures and so keep the
+        % rectangle per sample, which is what they turn into their own
+        % marks.
         /blitok false def
         /blitrec DEVICE /.recordimage known def
-        DEVICE /ImgData known blitrec or {
+        /blitdev
+            blitrec not DEVICE /ImgData known not and {
+                DEVICE /FillRect known {
+                    DEVICE /FillRect get type /operatortype eq
+                }{ false } ifelse
+            }{ false } ifelse def
+        DEVICE /ImgData known blitrec or blitdev or {
             DEVICE /nativecolorspace get
             dup /DeviceRGB eq exch /DeviceGray eq or {
                 /m mat matrix invertmatrix matrix currentmatrix
@@ -919,7 +939,11 @@
                 } for
             } ifelse
             /bd 24 dict def
-            blitrec not { bd /rows DEVICE /ImgData get put } if
+            blitrec not {
+                blitdev
+                    { bd /dev DEVICE put }
+                    { bd /rows DEVICE /ImgData get put } ifelse
+            } if
             bd /devw DEVICE /dimensions get 0 get put
             bd /devh DEVICE /dimensions get 1 get put
             bd /nat nat put
