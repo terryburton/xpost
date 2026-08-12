@@ -1,0 +1,81 @@
+%!PS
+% The screen a mark was made under, kept by a record and put back.
+%
+% A device that renders a grey as a pattern of pixels chooses each pixel
+% by the threshold under it, and which thresholds those are is the
+% screen in force. That is state a marking call does not carry: the
+% device reads it from itself as it paints. So a record that wrote the
+% marks down and nothing else would replay them under whichever screen
+% its target happened to hold when the page was put out, and a page of
+% greys would come back wrong -- while a page of black and white, whose
+% pixels sit at the ends of every cell, would come back right and say
+% nothing about it.
+%
+% This paints greys under three screens on one page, and a second page
+% that sets none, so the page after a boundary is painted under the
+% screen the page before it ended with.
+%
+%   -DBAND=n       put the page out in bands of n rows' worth of raster
+%   -DCOUNT=1      say how many screens the record holds, and quit
+%   -DONESCREEN=1  paint the same page under the first screen throughout
+
+/BAND where { pop }{ /BAND 0 def } ifelse
+/COUNT where { pop }{ /COUNT 0 def } ifelse
+/ONESCREEN where { pop }{ /ONESCREEN 0 def } ifelse
+
+/ID 1183615869 internaldict def
+
+/W 200 def
+/H 300 def
+<< /PageSize [W H] >> setpagedevice
+
+% The band is stated in rows of the target's raster. A row of this page
+% is W samples wherever it is painted, so the budget is rows by width.
+BAND 0 gt { DEVICE /.bandbytes BAND W mul put } if
+
+/sA { 60 0 {dup mul exch dup mul add 1 exch sub} setscreen } def
+/sB { 133 45 {dup mul exch dup mul add 1 exch sub} setscreen } def
+/sC { 20 15 {pop} setscreen } def
+
+% Every grey here is one no cell resolves the same way twice: a grey at
+% an end of the range would come out of any screen alike and would hold
+% whether or not the screen was carried.
+sA
+0.5 setgray 10 250 180 40 rectfill
+ONESCREEN 0 gt { } { sB } ifelse
+0.5 setgray 10 200 180 40 rectfill
+0.35 setgray 10 150 180 40 rectfill
+ONESCREEN 0 gt { } { sC } ifelse
+0.5 setgray 10 100 180 40 rectfill
+0.65 setgray 10  50 180 40 rectfill
+
+% more than one kind of mark under the last screen, so what is carried
+% is carried for the marks a page makes rather than for rectangles
+0.45 setgray
+newpath 20 10 moveto 180 10 lineto 100 45 lineto closepath fill
+0.6 setgray 2 setlinewidth newpath 20 46 moveto 180 46 lineto stroke
+
+COUNT 0 gt {
+    % Asked before the page is put out, which is when the record still
+    % holds this page. A device that is not recording has no answer and
+    % the run reads the absence.
+    DEVICE /.playtargets known {
+        (\nSCREENS ) print
+        DEVICE ID /.recordscreens get exec 20 string cvs print
+        (\n) print
+    }{
+        (\nNORECORD\n) print
+    } ifelse
+    flush
+    quit
+} if
+
+showpage
+
+% The page after a boundary sets no screen of its own. It is painted
+% under the one the page before it ended with, which is a screen no
+% change on this page announces -- so a record that gave its screens up
+% with its marks would paint this page under whatever its target held.
+0.5 setgray 10 200 180 60 rectfill
+0.6 setgray 10 100 180 60 rectfill
+showpage

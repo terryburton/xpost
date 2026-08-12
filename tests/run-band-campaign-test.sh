@@ -252,15 +252,15 @@ done
 # cannot, and each of those is expected to decline rather than merely
 # seen to.
 #
-# The bilevel device is the one. What it stores for a grey is that grey
-# against the halftone cell under the pixel, so what a mark leaves
-# depends on the halftone in force when it was made -- and a replay
-# happens when the page is put out, by which time the halftone has moved
-# on. Carrying it would mean the record holding the cell as replayable
-# state, which is an addition to the record format and not an entry on a
-# roster (doc/NEWINTERNALS). The day that lands, this is the line that
-# says so.
-NORECORD='pbm'
+# Nothing is named, and that is the whole of it. The bilevel device was
+# named here until the record learned to carry the screen: what it
+# stores for a grey is that grey against the cell under the pixel, so a
+# mark depends on the screen in force when it was made, and a replay
+# happens once the page is put out. The record now writes a screen down
+# where it changes and puts it back as a replay passes it, so every
+# device that bands takes a record (doc/NEWINTERNALS). A device that
+# cannot in future is named here, with the reason it cannot.
+NORECORD=''
 for d in $present; do
     isrec=no
     case " $targets " in *" $d "*) isrec=yes ;; esac
@@ -268,20 +268,17 @@ for d in $present; do
     case " $NORECORD " in *" $d "*) wants=no ;; esac
     if [ "$isrec" = "$wants" ]; then
         if [ "$wants" = no ]; then
-            echo "OK   $d bands and declines a record, which is what is" \
-                 "expected of it: the halftone a mark was made under is" \
-                 "gone by the time the page is put out"
+            echo "OK   $d bands and declines a record, which is what" \
+                 "NORECORD says is expected of it"
         fi
         continue
     fi
     if [ "$wants" = no ]; then
         note "a record is now played into $d, which is named above as a" \
-             "device expected to decline. The bilevel one is named there" \
-             "because what it stores for a grey is that grey against the" \
-             "cell under the pixel, and a replay happens after the" \
-             "halftone has moved on. Either the record carries the cell" \
-             "now -- say so in doc/NEWINTERNALS and take $d out of NORECORD" \
-             "-- or the roster gained an entry it cannot honour"
+             "device expected to decline. Either the record now carries" \
+             "the state that stopped it -- say so in doc/NEWINTERNALS and" \
+             "take $d out of NORECORD -- or the roster gained an entry it" \
+             "cannot honour"
     else
         note "$d says its page may arrive a band at a time and no record" \
              "can be played into it. Every banding device but the ones" \
@@ -749,16 +746,38 @@ for d in $matrixdevs; do
             elif [ $# -lt 5 ]; then
                 note "$d did not say what the record of the mixed page holds"
             else
+                # A device asking for a glyph's partly covered edge
+                # pixels as whole pixels is sent no coverage-weighted
+                # blend, so the blend count is read against what the
+                # target asked for rather than against a constant. Both
+                # ways: such a device reaching a blend would mean it was
+                # sent one it never asked for.
+                tab=$(field "$d-kinds" TAB | head -1)
+                : "${tab:=1}"
+                blends=$2
                 miss=''
                 i=0
                 for k in PutPix BlendPix DrawLine FillRect FillPoly; do
                     i=$((i + 1))
                     eval "v=\${$i}"
+                    if [ "$k" = BlendPix ] && [ "$tab" -le 1 ]; then
+                        continue
+                    fi
                     [ "$v" -gt 0 ] || miss="$miss $k"
                 done
-                if [ -n "$miss" ]; then
+                if [ "$tab" -le 1 ] && [ "$blends" -gt 0 ]; then
+                    note "$d asks for a glyph's edge pixels as whole" \
+                         "pixels and its record holds $blends blend(s)," \
+                         "so it was sent the coverage-weighted marks it" \
+                         "declared it did not want"
+                elif [ -n "$miss" ]; then
                     note "the mixed page reaches no$miss, so what this" \
                          "campaign says about those kinds of mark is nothing"
+                elif [ "$tab" -le 1 ]; then
+                    echo "OK   $d: the mixed page reaches the four kinds a" \
+                         "device taking whole pixels of text can reach," \
+                         "and no blend ($1 pixels, $3 lines, $4 rectangles," \
+                         "$5 polygons)"
                 else
                     echo "OK   $d: the mixed page reaches all five kinds" \
                          "($1 pixels, $2 blends, $3 lines, $4 rectangles," \

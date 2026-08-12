@@ -3302,6 +3302,25 @@ test('region-replay',
   suite: cost_fast,
   timeout: 120)
 
+# The same claim for the one thing a record holds that is not a mark at
+# all. A device rendering a grey as a pattern of pixels picks each pixel
+# by the threshold under it, and which thresholds those are is state the
+# marking call does not carry -- so a record that wrote the marks down
+# and nothing else would replay a page of greys under whichever screen
+# its target held by then, while a page of black and white would come
+# back right and say nothing about it. This paints greys under three
+# screens and requires the page played back, whole and in bands down to
+# one row, to be the page the bilevel device paints in one go; requires
+# the same page under one screen to differ, so the screen changes are
+# reaching the raster; and requires the record to hold one screen per
+# change rather than one per mark.
+test('record-screen',
+  find_program('tests/run-record-screen-test.sh'),
+  args: [ xpost_exe, files('tests/record_screen_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The same claim for the one mark a record cannot hold as a marking call.
 # An image reaches a device without rows of its own one rectangle per
 # sample, so a record built from the marking calls alone would be tens of

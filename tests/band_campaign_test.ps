@@ -772,6 +772,14 @@ CENSUS 0 gt {
             heights 0 get paint
             heights 0 get census
             (\nKINDS ) print kinds { num print sp } forall nl
+            % What the target asks for of a glyph's partly covered edge
+            % pixels. A device asking for whole pixels is sent no
+            % coverage-weighted blend at all, so which kinds of mark a
+            % page can reach is not the same question for every target
+            % and the count above is read against this.
+            (\nTAB ) print
+                cls /TextAlphaBits 2 copy known { get }{ pop pop 1 } ifelse
+                num print nl
         }{
             % No class that keeps its rows carries this many colour
             % values, so there is nothing to count the record into. Said
