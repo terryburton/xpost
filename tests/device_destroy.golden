@@ -26,7 +26,7 @@
 # a copy of the PDF writer, and tests/check-vecbase.sh holds it to staying
 # one.
 
-entries 7
+entries 8
 
 # ---- the compiled devices ----
 
@@ -34,6 +34,7 @@ table src/lib/xpost_dev_bgr.c _destroy
 table src/lib/xpost_dev_jpeg.c _destroy
 table src/lib/xpost_dev_png.c _destroy
 table src/lib/xpost_dev_raster.c _destroy
+table src/lib/xpost_dev_record.c _destroy
 table src/lib/xpost_dev_win32.c _destroy
 table src/lib/xpost_dev_xcb.c _destroy
 

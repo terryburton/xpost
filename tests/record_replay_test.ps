@@ -1,0 +1,131 @@
+% One page, painted twice: directly by a device that paints, and
+% through a device that writes down what it was asked to paint and
+% plays it back into one. run-record-replay-test.sh runs this file once
+% per device and requires the two pages to be the same bytes.
+%
+% What the page is for is reaching every kind of mark a record holds.
+% There are five, they are the whole of what a device that declares no
+% other optional method can be asked for, and each is reached here by
+% the machinery that produces it rather than by calling the device:
+%
+%   FillRect   the page clear. erasepage paints the whole page through
+%              the device's rectangle fill.
+%   FillPoly   a fill. The path has a hole, so the polygon carries the
+%              subpath separator that decides where the interior is.
+%   DrawLine   a hairline stroke. A stroke of no width under a
+%              rectangular clip is plotted segment by segment.
+%   PutPix     a glyph's fully covered pixels.
+%   BlendPix   a glyph's partly covered edge pixels, which is what the
+%              device asking for more than one bit of text alpha gets.
+%
+% There is deliberately no image on it. An image reaches a device that
+% holds its raster as rows the interpreter can see by being written into
+% those rows, and a device without them one sample at a time, so a page
+% with an image on it would be recorded through a route this mechanism
+% does not yet hold (doc/NEWINTERNALS).
+%
+% The counts are read by playing the record into a device that counts
+% instead of painting, which is the only way to see what was written
+% down: a recorder that recorded nothing and a replay that played
+% nothing both read as zero, and the page comparison alone would not
+% tell either from a page that happened to match.
+
+% putpix blendpix drawline fillrect fillpoly, and the subpath separators
+% the polygons carried
+/marks [ 0 0 0 0 0 0 ] def
+/bump { marks exch 2 copy get 1 add put } bind def
+
+% A device that takes every mark and counts it. The operands are the
+% device's colour components, then the call's own, then the instance.
+%
+% Its polygons are looked into rather than dropped. A polygon is a point
+% list with its subpaths separated, and the separators say where the
+% interior is: a record that wrote a polygon down without them would
+% replay a filled ring as a filled disc, and would count the same here.
+/counter <<
+    % what colour a mark carries is the space it was made in, and a
+    % record is played only into a device declaring that space
+    /nativecolorspace /DeviceRGB
+    /PutPix   { 6 { pop } repeat 0 bump } bind
+    /BlendPix { 7 { pop } repeat 1 bump } bind
+    /DrawLine { 8 { pop } repeat 2 bump } bind
+    /FillRect { 8 { pop } repeat 3 bump } bind
+    /FillPoly { % r g b poly IMAGE  .  -
+        pop
+        { null eq { 5 bump } if } forall
+        pop pop pop
+        4 bump
+    } bind
+>> def
+
+% --- a fill whose path has a hole ---
+gsave
+    0.2 setgray
+    newpath
+    100 500 moveto 240 500 lineto 240 620 lineto 100 620 lineto closepath
+    140 540 moveto 140 580 lineto 200 580 lineto 200 540 lineto closepath
+    eofill
+grestore
+
+% --- a fill under the other winding rule, its hole counter-wound ---
+gsave
+    0.6 0 0 setrgbcolor
+    newpath
+    300 500 moveto 440 500 lineto 440 620 lineto 300 620 lineto closepath
+    340 540 moveto 340 580 lineto 400 580 lineto 400 540 lineto closepath
+    fill
+grestore
+
+% --- a hairline stroke ---
+gsave
+    0 setgray
+    0 setlinewidth
+    newpath 80 460 moveto 300 460 lineto 220 400 lineto stroke
+grestore
+
+% --- text, for the glyph pixels ---
+gsave
+    0 setgray
+    /Times-Roman findfont 36 scalefont setfont
+    90 320 moveto (Recorded) show
+grestore
+
+% What the record holds, where there is one to ask. A device that paints
+% carries no such method and this is skipped; the wrapper holds the two
+% runs to answering differently here and identically on the page.
+DEVICE /.playpage known {
+    DEVICE counter 1183615869 internaldict /.replaypage get exec
+    (MARKS ) print
+    marks { 20 string cvs print ( ) print } forall
+    (\n) print
+    true
+    marks { 0 gt and } forall
+    { (RECORD-REACHES-ALL-FIVE\n) print }
+    { (FAIL: the page did not reach every kind of mark a record holds,\n) print
+      (FAIL: or a polygon came back with its subpaths run together\n) print }
+    ifelse
+
+    % The two pairings a replay refuses. A mark carries one value per
+    % component of the space it was made in and is played into a method
+    % whose operands the receiving device's space decides, so a device
+    % declaring another space would take each value for a different one.
+    % And a record played into the device holding it writes down what it
+    % plays, so the run being walked grows by a mark for every mark taken
+    % and there is no end to reach.
+    /depth count def
+    { DEVICE << /nativecolorspace /DeviceGray >>
+      1183615869 internaldict /.replaypage get exec } stopped
+    { (REFUSES-ANOTHER-SPACE\n) print }
+    { (FAIL: a record was played into a device of another colour space\n) print }
+    ifelse
+    count depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+
+    /depth count def
+    { DEVICE DEVICE 1183615869 internaldict /.replaypage get exec } stopped
+    { (REFUSES-ITSELF\n) print }
+    { (FAIL: a record was played into the device holding it\n) print }
+    ifelse
+    count depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+} if
+
+showpage

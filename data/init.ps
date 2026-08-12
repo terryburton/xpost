@@ -1606,6 +1606,7 @@ currentglobal true setglobal
         /jpeg { /newjpegdevice where { pop }{ loadjpegdevice } ifelse newjpegdevice }
         /bgr { /newbgrdevice where { pop }{ loadbgrdevice } ifelse newbgrdevice }
         /raster { /newrasterdevice where { pop }{ loadrasterdevice } ifelse newrasterdevice }
+        /record { /newrecorddevice where { pop }{ loadrecorddevice } ifelse newrecorddevice }
         /xcb { /newxcbdevice where { pop }{ loadxcbdevice } ifelse newxcbdevice }
         /gdi { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
         /gl { /newwin32device where { pop }{ loadwin32device } ifelse newwin32device }
@@ -1618,6 +1619,7 @@ currentglobal true setglobal
         /png /loadpngdevice  /pngalpha /loadpngalphadevice
         /jpeg /loadjpegdevice
         /bgr /loadbgrdevice  /raster /loadrasterdevice
+        /record /loadrecorddevice
         /xcb /loadxcbdevice
         /gdi /loadwin32device  /gl /loadwin32device
     >> {
@@ -2078,7 +2080,8 @@ currentglobal true setglobal
     % privatedict.
     currentglobal false setglobal
     [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
-      /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+      /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE
+      /.xpost_RECORD ]
     { systemdict 1 index known
         { dup systemdict 1 index get dup length 16 add dict copy % name name localcopy
           .privatedict 3 1 roll put                              % name (privatedict/name = localcopy)

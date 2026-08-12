@@ -1,0 +1,108 @@
+//.internaldict /QUIET known { }{ (loading recorddev.ps...)print } ifelse
+
+% .xpost_RECORD writes down what it was asked to paint instead of
+% painting it, and paints the page at Emit by playing what it wrote into
+% a device that does paint. What it costs follows the number of marks
+% rather than the size of the page (doc/NEWINTERNALS).
+%
+% The marking methods, Create, GetPix and Destroy are compiled operators
+% the driver installs over this dictionary (src/lib/xpost_dev_record.c);
+% what is written here is what a record cannot be given from C: the
+% keys the class declares, and the page the record makes at Emit.
+%
+% The class declares exactly the five marking methods it records --
+% PutPix, BlendPix, DrawLine, FillRect and FillPoly -- and no other
+% optional method. FillPath would bring it a whole path and the clip
+% shape beside it, DrawRect an outlined rectangle, Erase an instruction
+% to reset its page: each is a call the record has no entry for, and
+% declining all three has every one of them resolved, above the device,
+% into the five it does hold. tests/check-device-skeleton.sh holds this
+% dictionary to that.
+%
+% /NoOutput keeps the methods the class brought: the device completion
+% (data/device.ps) replaces a device's polygon fill with the compiled
+% scan conversion, which would paint spans into a device that has no
+% pixels to paint into and would leave the polygon unrecorded.
+
+/.xpost_RECORD <<
+    /nativecolorspace /DeviceRGB
+    /.ncomp 3
+    /dimensions [0 0]
+    /NoOutput true  % write the marks down; never rasterize
+
+    % A device's features decide what the machinery above it sends, so a
+    % record is only faithful where the recorder declares what the device
+    % it plays into declares. This one settles whether a glyph's partly
+    % covered edge pixels arrive as coverage-weighted blends or are
+    % thresholded to whole pixels, and the colour raster this plays into
+    % asks for the blends.
+    /TextAlphaBits 4
+
+    /.copydict //.xpostsys /.classcopydict get
+
+    % c1..cN  Ground  -
+    % Take up the colour the page is being cleared to. A record holds no
+    % pixel to read back, so this is the only statement of what a read
+    % off this device answers, and the driver's GetPix reads it here
+    % (the driver contract: a read answers the ground wherever a device
+    % holds no pixel to answer from). The clearing itself arrives as a
+    % rectangle covering the page and is written down like any mark.
+    %
+    % The record is one array, made once and stored into thereafter, and
+    % it is made in global VM: a mark survives the restore that ends a
+    % save because raster memory is not part of virtual memory (PLRM
+    % 3.7.3), and the ground the page was cleared to has to keep to the
+    % page it describes.
+    /Ground { % c1..cN IMAGE  .  -
+    begin
+        currentdict /.ground known not {
+            currentglobal true setglobal
+            /.ground .ncomp array def
+            setglobal
+        } if
+        .ground astore pop
+    end } bind
+
+    % IMAGE  .playpage  -
+    % The page a record holds, painted.
+    %
+    % Reached from the driver's Emit, which is where a device puts out
+    % its page. The record holds marks and no pixels, so the page is
+    % made by building a device that does hold pixels, playing every
+    % mark into it, and putting out its page instead.
+    %
+    % The device built is the colour raster class, which takes the three
+    % components this class declares: a mark was written down as it
+    % arrived, so what plays it back has to be a device asking for the
+    % same colour. It is finished the way any page device is finished,
+    % so that the compiled fills it ends up with are the ones the same
+    % page painted directly would have had, and what it puts out is
+    % therefore the same bytes.
+    %
+    % The name this page goes to has already been settled, on this
+    % device, by .transmitpage; it is carried across rather than settled
+    % again, since settling it twice would count the page twice against
+    % a %d in the name.
+    %
+    % So the page this device can put out is the page a raster can hold.
+    % The record itself is priced by the marks and takes any page there
+    % is, which is why this device starts on a page no raster device
+    % would: what refuses such a page is the raster built here, and the
+    % refusal arrives when the page is put out rather than when the
+    % device is made.
+    /.playpage { % IMAGE  .  -
+    3 dict begin
+        /rec exch def
+        /page rec /width get rec /height get
+            //.xpostsys /.devicemakers get /ppm get exec def
+        % the record's marks are in device space already, so the scale a
+        % completion carries into the default matrix is 1:1 here
+        page 1 1 .privatedict /.completedevice get exec
+        rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
+        rec page //.internaldict /.replaypage get exec
+        page dup /Emit get exec
+        page dup /Destroy get exec
+    end } bind
+>> def
+
+//.internaldict /QUIET known { }{ (eof recorddev.ps\n)print } ifelse

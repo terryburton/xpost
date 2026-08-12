@@ -25,11 +25,15 @@ script=$2
 
 # The members of the marking roster that report no pixels back, with the
 # reason each cannot: null paints nothing and bbox records a page's
-# extent rather than its pixels, so neither has a pixel to report, and
-# the vector writers keep a document rather than a raster and answer a
-# read with a fixed value. Every other member reports what a marking
-# method wrote and is asserted about.
-NO_READBACK='null bbox pdfwrite svgwrite'
+# extent rather than its pixels, so neither has a pixel to report; the
+# vector writers keep a document rather than a raster and answer a read
+# with a fixed value; and the recording device keeps the marks a page
+# made rather than the pixels they cover, so until it plays them into a
+# device that paints there is no pixel to read -- what it answers is the
+# ground, which is what the contract has a device answer wherever it
+# holds no pixel. Every other member reports what a marking method wrote
+# and is asserted about.
+NO_READBACK='null bbox pdfwrite svgwrite record'
 readback=
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then

@@ -75,6 +75,7 @@
 #endif
 #include "xpost_dev_bgr.h"
 #include "xpost_dev_raster.h"
+#include "xpost_dev_record.h"
 #ifdef HAVE_LIBPNG
 # include "xpost_dev_png.h"
 #endif
@@ -230,6 +231,8 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     if (xpost_oper_init_bgr_device_ops(ctx, sd))
         return 0;
     if (xpost_oper_init_raster_device_ops(ctx, sd))
+        return 0;
+    if (xpost_oper_init_record_device_ops(ctx, sd))
         return 0;
 #ifdef HAVE_LIBPNG
     if (xpost_oper_init_png_device_ops(ctx, sd))

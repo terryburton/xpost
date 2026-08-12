@@ -27,6 +27,28 @@ devices=$DEVICE_FLEET_LIFETIME
 fail=0
 ran=0
 
+# This wrapper runs two scripts, and one of them asks its question by
+# painting a mark and reading it back. A device that reports no pixel
+# back cannot be asked that: it answers the page's ground wherever it
+# holds no pixel, which is what the contract has a device answer, and
+# what a device holding the page as the marks that made it answers
+# everywhere. Such a device says so and stands down.
+#
+# Which devices those are is read off the runs rather than assumed, and
+# held to the list below: a device that has quietly stopped reporting
+# its pixels says exactly what one that never could says, and would take
+# itself out of the check with nothing saying so. The script that asks
+# no readback question has every device silent on both counts, and the
+# list is then not held -- so the two scripts share this wrapper without
+# sharing an answer neither of them owes.
+#
+#   record  keeps the marks a page made rather than the pixels they
+#           cover, so a read of it answers the ground until those marks
+#           are played into a device that paints.
+NO_READBACK='record'
+readback_quiet=
+readback_seen=
+
 # A roster that skipped from end to end leaves the loop having asked
 # nothing and every verdict untaken, which reads exactly as a roster
 # that answered. The floor is the roster less what a build may not have
@@ -50,12 +72,40 @@ for dev in $devices; do
         fail=1
         continue
     fi
+    if printf '%s\n' "$out" | grep -q '^NOREADBACK$'; then
+        readback_quiet="$readback_quiet $dev"
+        readback_seen=yes
+    fi
+    if printf '%s\n' "$out" | grep -q '^READBACK$'; then
+        readback_seen=yes
+    fi
     if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
     else
         fail=1
     fi
 done
+
+want=$(printf '%s\n' $NO_READBACK | grep . | sort | tr '\n' ' ')
+got=$(printf '%s\n' $readback_quiet | grep . | sort | tr '\n' ' ')
+if [ -n "$readback_seen" ] && [ "$want" != "$got" ]; then
+    for dev in $got; do
+        case " $want " in
+            *" $dev "*) ;;
+            *) echo "FAILURES: $dev reported no pixel back, and nothing here"
+               echo "      says it cannot; the raster question stopped being"
+               echo "      asked of it" ;;
+        esac
+    done
+    for dev in $want; do
+        case " $got " in
+            *" $dev "*) ;;
+            *) echo "FAILURES: $dev reported its pixels back, and it is named"
+               echo "      here as a device that cannot" ;;
+        esac
+    done
+    fail=1
+fi
 
 rm -rf "$work"
 if [ "$ran" -lt "$floor" ]; then

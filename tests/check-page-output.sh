@@ -170,23 +170,53 @@ if [ "$npf" -ne 1 ]; then
     fail=1
 fi
 
-# and every Emit is reached from there
-awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" '
+# and every Emit is reached from there, bar the one device whose page is
+# another device's page.
+#
+# The recording device holds no pixels: it writes down the marks a page
+# makes and, at Emit, builds a device that paints, plays the marks into
+# it and puts out that device's page. So it reaches an Emit that is not
+# the one .transmitpage ran, and doing that is the device working.
+#
+# What the rule is really about it still keeps, and the keeping is
+# checked rather than assumed: the name is settled once, for this page,
+# by .transmitpage, and the class carries that settled name across to
+# the device that writes it. A class reaching a second Emit and settling
+# a name of its own -- reading the template under /OutputFileName, or
+# substituting a page number again -- is the hazard this guard exists
+# for and fails here.
+recps="$datadir/recorddev.ps"
+awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" -v r="$recps" '
     {
         line = $0
         sub(/^[^:]*:[0-9]+:/, "", line)
+        if ($1 == r && line ~ /\/\.outputfile[ \t]+get/) carried++
+        if ($1 == r && line ~ /OutputFileName/) settles++
         if (line !~ /\/Emit[ \t]+get/) next
         if ($1 == f && $2 >= a && $2 <= b) { n++; next }
+        if ($1 == r && !seen) { seen = 1; next }
         print $1 ":" $2
     }
-    END { if (n != 1) print "COUNT " n + 0 }' "$work/ps" > "$work/emit"
+    END {
+        if (n != 1) print "COUNT " n + 0
+        if (seen && (!carried || settles))
+            print "CARRY " carried + 0 " " settles + 0
+    }' "$work/ps" > "$work/emit"
+if grep -q '^CARRY' "$work/emit"; then
+    echo "check-page-output: the recording device puts out a page through" >&2
+    echo "another device without carrying over the name .transmitpage settled" >&2
+    echo "for it, or settles one of its own:" >&2
+    sed -n 's|^CARRY \([0-9]*\) \([0-9]*\)|      /.outputfile carried \1 times, /OutputFileName named \2|p' \
+        "$work/emit" >&2
+    fail=1
+fi
 if grep -q '^COUNT' "$work/emit"; then
     echo "check-page-output: .transmitpage reaches an Emit $(awk '$1=="COUNT"{print $2}' "$work/emit") times, and it runs one." >&2
     fail=1
 fi
-if grep -v '^COUNT' "$work/emit" | grep -q .; then
+if grep -vE '^(COUNT|CARRY)' "$work/emit" | grep -q .; then
     echo "check-page-output: a device's Emit is run outside .transmitpage:" >&2
-    grep -v '^COUNT' "$work/emit" | sed "s|^$src/||; s|^|  |" >&2
+    grep -vE '^(COUNT|CARRY)' "$work/emit" | sed "s|^$src/||; s|^|  |" >&2
     echo "A page is transmitted through .transmitpage (data/device.ps), which" >&2
     echo "settles the name the page is written to first." >&2
     fail=1

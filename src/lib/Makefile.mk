@@ -19,6 +19,7 @@ src/lib/xpost_dev_jpeg.c \
 src/lib/xpost_dev_png.c \
 src/lib/xpost_handle.c \
 src/lib/xpost_dev_raster.c \
+src/lib/xpost_dev_record.c \
 src/lib/xpost_dict.c \
 src/lib/xpost_error.c \
 src/lib/xpost_file.c \
@@ -67,6 +68,7 @@ src/lib/xpost_dev_jpeg.h \
 src/lib/xpost_dev_png.h \
 src/lib/xpost_handle.h \
 src/lib/xpost_dev_raster.h \
+src/lib/xpost_dev_record.h \
 src/lib/xpost_dict.h \
 src/lib/xpost_error.h \
 src/lib/xpost_file.h \

@@ -3275,6 +3275,18 @@ test('check-fused-ops',
           files('tests/fused_equivalence_test.ps') ],
   suite: cost_fast)
 
+# A page recorded and played back is the page that was painted. The
+# recording device writes down the marks a page makes instead of making
+# them and paints the page at Emit by playing them into a device that
+# does; this renders one page both ways and requires the same bytes,
+# having first required the record to hold every kind of mark there is.
+test('record-replay',
+  find_program('tests/run-record-replay-test.sh'),
+  args: [ xpost_exe, files('tests/record_replay_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

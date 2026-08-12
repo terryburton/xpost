@@ -330,6 +330,7 @@ xpost_oper_init_param_ops
 xpost_oper_init_path_ops
 xpost_oper_init_png_device_ops
 xpost_oper_init_raster_device_ops
+xpost_oper_init_record_device_ops
 xpost_oper_init_save_ops
 xpost_oper_init_stack_ops
 xpost_oper_init_string_ops

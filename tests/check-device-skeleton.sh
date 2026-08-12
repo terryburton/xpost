@@ -40,14 +40,30 @@ src=$mirror
 libdir="$src/src/lib"
 guard_require_dir "$libdir" "the library source directory"
 
-# the compiled devices, and the rasteriser holding the base classes'
-# compiled fills; the Windows driver is checked textually alongside
-fleet="xpost_dev_bgr.c xpost_dev_jpeg.c xpost_dev_png.c xpost_dev_raster.c xpost_dev_xcb.c"
+# The compiled devices that put pixels down, and the rasteriser holding
+# the base classes' compiled fills; the Windows driver is checked
+# textually alongside. The rules about what a mark paints are these
+# files' rules: which pixels a rectangle covers, which a line covers,
+# and that a polygon is resolved by the shared scan conversion.
+painting="xpost_dev_bgr.c xpost_dev_jpeg.c xpost_dev_png.c xpost_dev_raster.c xpost_dev_xcb.c"
+
+# The compiled device that paints nothing: it writes each marking call
+# into a record and plays the record into a device that does paint. It
+# is held to everything that is about being a device -- the private
+# struct, the method table, the slots a device with state of its own may
+# not inherit -- and to a rule of its own below, since the rules about
+# which pixels a mark covers are about a device that covers pixels.
+recording="xpost_dev_record.c"
+
+fleet="$painting $recording"
 marking="$fleet xpost_dev_win32.c xpost_dev_generic.c"
+# what the rules about painted pixels are held over
+paints="$painting xpost_dev_win32.c xpost_dev_generic.c"
 
 # every file that defines a device class
 classes="image.ps pgmimage.ps pbmimage.ps ppmimage.ps tiffimage.ps
-         nulldev.ps bboxdev.ps pdfwrite.ps svgwrite.ps dscwrite.ps"
+         nulldev.ps bboxdev.ps pdfwrite.ps svgwrite.ps dscwrite.ps
+         recorddev.ps"
 
 fail=0
 
@@ -108,24 +124,28 @@ done
 
 # 3. A file that fills a rectangle paints the contract rectangle: its
 #    extent arithmetic must be xpost_dev_rect_normalize, not a private
-#    restatement. And nothing outside the header may restate the two
-#    steps that arithmetic is made of -- reflecting a negative extent
-#    through its origin, and clamping a coordinate to the device -- since
-#    a restatement is how the four behaviours came about. The page's own
-#    extent is not this arithmetic and is excepted by name below.
-for f in $marking; do
+#    restatement.
+#
+#    Held over the files that paint a rectangle. A device that writes the
+#    call down instead keeps the operands as they arrived and takes no
+#    view of which pixels they cover -- that is the whole point of a
+#    record, since the device the marks are played into settles it, and
+#    it may not be this one.
+for f in $paints; do
     if grep -qE '"FillRect"|_fillrect' "$libdir/$f" &&
        ! grep -q 'xpost_dev_rect_normalize' "$libdir/$f"; then
         echo "check-device-skeleton: $f fills a rectangle without xpost_dev_rect_normalize()." >&2
         echo "The painted rectangle is defined once, in xpost_dev_driver.h." >&2
         fail=1
     fi
-    # The extent of a page is a different question from the extent of a
-    # painted rectangle, and it has its own single home. A rectangle of
-    # negative extent names the same rectangle from the other corner, so
-    # it is reflected; a page of negative extent is not a page at all and
-    # is refused, by xpost_device_raster_bytes(). That function's body is
-    # therefore read past, and the rule stands everywhere else.
+done
+
+#    And nothing in any of them may restate the two steps that arithmetic
+#    is made of -- reflecting a negative extent through its origin, and
+#    clamping a coordinate to the device -- since a restatement is how the
+#    four behaviours came about. The page's own extent is not this
+#    arithmetic and is excepted by name below.
+for f in $marking; do
     awk '/^[A-Za-z_].*[^A-Za-z0-9_]xpost_device_raster_bytes[ \t]*\(/ { skip = 1 }
          skip && /^}/                                                  { skip = 0; next }
          { if (!skip) print FNR ": " $0 }' "$libdir/$f" > "$work/rectscan"
@@ -145,7 +165,7 @@ done
 #    endpoints, one excluding the last -- so a wire drawn on one landed
 #    on different pixels than the same wire on the other, and neither
 #    matched the base class.
-for f in $marking; do
+for f in $paints; do
     if grep -q '_drawline' "$libdir/$f" &&
        ! grep -q 'xpost_dev_line_init' "$libdir/$f"; then
         echo "check-device-skeleton: $f draws a line without xpost_dev_line_init()." >&2
@@ -416,7 +436,9 @@ fi
 #     fails here rather than being passed over.
 compiled=0
 for f in $fleet xpost_dev_win32.c; do
-    own=$(sed -n 's/.*xpost_dev_class_install(ctx, classdic, [0-9][0-9]*, \([01]\),.*/\1/p' \
+    # the component count ahead of it may be written as a number or as
+    # the name the device gives it; what is read here is the flag
+    own=$(sed -n 's/.*xpost_dev_class_install(ctx, classdic, [A-Za-z0-9_][A-Za-z0-9_]*, \([01]\),.*/\1/p' \
           "$libdir/$f" | sort -u | tr -d '\n')
     case "$own" in
         0) continue ;;
@@ -526,7 +548,7 @@ fi
 #     the same rule for the third shape, and it is stated separately
 #     because the way to break it is to bring a method rather than to
 #     restate a formula.
-for f in $fleet xpost_dev_win32.c; do
+for f in $paints; do
     hits=$(grep -nE '\{[ \t]*"FillPoly"[ \t]*,' "$libdir/$f" || true)
     if [ -n "$hits" ]; then
         echo "check-device-skeleton: $f brings a polygon fill of its own:" >&2
@@ -537,6 +559,70 @@ for f in $fleet xpost_dev_win32.c; do
         echo "separators the polygon carries. Let the shared scan conversion" >&2
         echo "resolve the polygon and paint the spans through this device's" >&2
         echo "FillRect." >&2
+        fail=1
+    fi
+done
+
+# 14. A device that records its marks declares exactly the five marking
+#     methods a record holds, and no other optional method.
+#
+#     A record holds five kinds of mark and the machinery can ask for
+#     more kinds of call than that. What makes up the difference is what
+#     the device declines to declare: FillPath would bring it a whole
+#     path and the clip shape beside it, ClipPath the clip alone,
+#     DrawRect an outlined rectangle, Erase an instruction to reset its
+#     page. Declining all of them has each resolved, above the device,
+#     into the five the record does hold (doc/NEWINTERNALS).
+#
+#     So this is the rule the whole design rests on, and the way it
+#     breaks is by someone adding a method for a good local reason: the
+#     marks that method would have taken then go unrecorded, and every
+#     page using it replays short of them -- silently, the replay being
+#     missing a mark rather than failing. The other direction, that a
+#     device brings every method it must, is xpost_dev_class_install's
+#     and rule 11's; this is the same shape of rule pointing the other
+#     way.
+#
+#     Both halves of the device are read: the method table it installs
+#     from C, and the class dictionary it specialises. A slot arriving by
+#     either route is a slot the pipeline finds.
+recslots="Create PutPix GetPix BlendPix DrawLine FillRect FillPoly Emit Destroy"
+recforbidden="FillPath ClipPath DrawRect Erase StrokePath"
+for f in $recording; do
+    sed -n 's/.*{[ \t]*"\([A-Za-z]*\)"[ \t]*,[ \t]*"[A-Za-z]*"[ \t]*,.*/\1/p' \
+        "$libdir/$f" | sort -u > "$work/rectable"
+    if [ ! -s "$work/rectable" ]; then
+        echo "FAILURES: no method table could be read from $f; fix the guard" >&2
+        exit 1
+    fi
+    printf '%s\n' $recslots | sort -u > "$work/recwant"
+    if ! cmp -s "$work/rectable" "$work/recwant"; then
+        echo "check-device-skeleton: $f does not declare exactly the methods a" >&2
+        echo "record holds:" >&2
+        comm -13 "$work/recwant" "$work/rectable" | sed 's/^/      brought: /' >&2
+        comm -23 "$work/recwant" "$work/rectable" | sed 's/^/      missing: /' >&2
+        echo "A method it brings is a call the record has no entry for; a" >&2
+        echo "method it declines is resolved above it into the five it holds." >&2
+        fail=1
+    fi
+done
+#     The class dictionary the table specialises is read the same way,
+#     as code: a slot it declares is a slot the instance carries whether
+#     or not the driver knows about it. Comments are dropped before the
+#     scan, since the methods being declined are named in the prose that
+#     says why -- a scan that read the prose would fire on the file that
+#     is right and go quiet on nothing.
+recclass="$src/data/recorddev.ps"
+guard_require_file "$recclass" "the recording device's class"
+awk '{ sub(/\r$/, ""); sub(/%.*$/, ""); print FNR ": " $0 }' "$recclass" \
+    > "$work/recclass"
+for slot in $recforbidden; do
+    hits=$(grep -nE "/$slot([^A-Za-z0-9_]|\$)" "$work/recclass" || true)
+    if [ -n "$hits" ]; then
+        echo "check-device-skeleton: the recording device's class declares $slot:" >&2
+        printf '%s\n' "$hits" | sed 's|^[0-9]*:|      recorddev.ps:|' >&2
+        echo "Declaring it puts the calls it would take beyond the record's" >&2
+        echo "reach, and every page using them replays short of a mark." >&2
         fail=1
     fi
 done

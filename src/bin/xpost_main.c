@@ -104,6 +104,7 @@ static const char *_xpost_main_devices[] =
 #endif
     "bgr",
     "raster",
+    "record",
     "pdfwrite",
     "dscwrite",
     "svgwrite",

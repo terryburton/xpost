@@ -12,6 +12,7 @@ data/ppmimage.ps \
 data/tiffimage.ps \
 data/nulldev.ps \
 data/bboxdev.ps \
+data/recorddev.ps \
 data/pdfwrite.ps \
 data/svgwrite.ps \
 data/dscwrite.ps \
@@ -51,6 +52,7 @@ data/ppmimage.ps \
 data/tiffimage.ps \
 data/nulldev.ps \
 data/bboxdev.ps \
+data/recorddev.ps \
 data/pdfwrite.ps \
 data/svgwrite.ps \
 data/dscwrite.ps \

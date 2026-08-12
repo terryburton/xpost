@@ -38,10 +38,14 @@ bind def
 % pixel's position. A device whose page is built some other way has no
 % such index and no such limit, and answers about a page this size on
 % its own terms: one holding its rows as an array of strings says so by
-% carrying ImgData, and one emitting a stream of drawing operators says
-% so by drawing its glyphs as outlines rather than pixels.
+% carrying ImgData, one emitting a stream of drawing operators says so
+% by drawing its glyphs as outlines rather than pixels, and one that
+% rasterizes nothing at all says so by declaring it -- which is what a
+% device holding the page as the marks that made it declares, having no
+% pixels to index until it comes to put the page out.
 /indexed? DEVICE /ImgData known not
-          DEVICE /VectorGlyphs known not and def
+          DEVICE /VectorGlyphs known not and
+          DEVICE /NoOutput known not and def
 
 % Two thousand million on a side. Nothing is allocated to find out: at
 % any pixel size at all the block runs past every machine's memory, and

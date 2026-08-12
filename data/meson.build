@@ -11,6 +11,7 @@ xpost_data_src = files([
   'tiffimage.ps',
   'nulldev.ps',
   'bboxdev.ps',
+  'recorddev.ps',
   'pdfwrite.ps',
   'svgwrite.ps',
   'dscwrite.ps',

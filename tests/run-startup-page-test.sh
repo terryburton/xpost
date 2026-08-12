@@ -66,6 +66,14 @@ INDEXED=' raster bgr png pngalpha jpeg '
 # The devices that keep no raster at all and so have no page they cannot
 # provide.
 UNBOUNDED=' null bbox pdfwrite svgwrite dscwrite '
+# The device that holds a page as the marks that made it. It starts on
+# any page, because what it builds at start-up is a record and a record
+# is priced by the marks; the limit arrives when the page is put out,
+# which it does by playing those marks into a raster, and that raster is
+# a raster like any other. So its refusal is a page it could not put
+# out rather than a device it could not start, and what is asked of it
+# is that it starts, then refuses, and names a limit.
+DEFERRED=' record '
 
 fail=0
 
@@ -99,6 +107,25 @@ one_device() {
             verdict_run "$st" "$out" "$dev, which keeps no raster to fill," \
                 || return 1
             return 0 ;;
+    esac
+
+    # A device that meets the limit when it puts the page out started on
+    # it, so there is no start-up refusal to read: what it must do is
+    # come back dirty and name the limit it met.
+    case " $DEFERRED " in
+        *" $dev "*)
+            rc=0
+            if [ "$st" -eq 0 ]; then
+                echo "FAILURES: $dev put out a page of $BIG and exited 0"
+                rc=1
+            fi
+            case $out in
+                *limitcheck* | *VMerror*) ;;
+                *) echo "FAILURES: $dev could not put out the page it was"
+                   echo "      asked for and must name the limit it met"
+                   rc=1 ;;
+            esac
+            return $rc ;;
     esac
 
     # What is left is a device that cannot provide the page, and what is

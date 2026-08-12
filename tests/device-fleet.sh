@@ -53,6 +53,13 @@
 #                     opposite fault: a method that does something is as
 #                     wrong as one that does not. Neither owns a raster
 #                     and neither derives from the other.
+#   record            the device that paints nothing and keeps what it
+#                     was asked to paint, playing it into a device that
+#                     does when the page is put out. Every marking
+#                     method is its own, written to record rather than
+#                     to mark, and so is its lifetime: what it owns is a
+#                     record outside virtual memory. It derives from no
+#                     other member and no other member derives from it.
 #
 # A device leaves a subset only where every line it would run there is
 # another member's too. Adding one is free; taking one out is a claim
@@ -67,14 +74,15 @@
 # floor is the roster less this list, so it follows the roster instead
 # of being a number typed beside it.
 DEVICE_FLEET_ALL='pgm ppm pbm tiff null bbox raster bgr png pngalpha
-                  pdfwrite svgwrite dscwrite jpeg'
+                  pdfwrite svgwrite dscwrite jpeg record'
 
 DEVICE_FLEET_OPTIONAL='png pngalpha jpeg'
 
-DEVICE_FLEET_LIFETIME='pgm null bbox raster bgr png jpeg pdfwrite svgwrite'
+DEVICE_FLEET_LIFETIME='pgm null bbox raster bgr png jpeg pdfwrite svgwrite
+                       record'
 
 DEVICE_FLEET_MARKING='pgm ppm pbm null bbox raster bgr png pngalpha jpeg
-                      pdfwrite svgwrite'
+                      pdfwrite svgwrite record'
 
 # fleet_each FUNCTION ITEM...
 #

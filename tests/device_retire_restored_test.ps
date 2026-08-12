@@ -84,9 +84,20 @@
     2 2 getdevice dup /GetPix get exec
     /live 0 def
     ncomp { 0 ne { /live live 1 add def } if } repeat
-    live 0 ne
-        { (FAILURE: the installed page did not take the mark) bail }
-    if
+    live 0 ne {
+        % The reading is not the paint, so this device reports no pixel
+        % back: it answers the ground wherever it holds none, which is
+        % what the contract has a device answer and is what a device
+        % holding the page as the marks that made it answers everywhere.
+        % The raster question below is asked by reading a mark, so it
+        % cannot be asked of such a device at all -- and a device that
+        % has quietly stopped reporting reads exactly the same, which is
+        % why the wrapper holds the set that says this against the
+        % devices it is written for.
+        (NOREADBACK\n) print flush
+        (SUCCESS) bail
+    } if
+    (READBACK\n) print flush
 
     % hold the replacement under the save object, so the program still
     % names it once the restore has taken it out of the graphics state

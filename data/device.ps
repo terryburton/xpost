@@ -267,6 +267,7 @@ setglobal
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device
+(/recorddev.ps) //.xpostsys /.loadmodule get exec  % recording device
 (/pdfwrite.ps) //.xpostsys /.loadmodule get exec  % pdf device
 (/svgwrite.ps) //.xpostsys /.loadmodule get exec  % svg device
 (/dscwrite.ps) //.xpostsys /.loadmodule get exec  % distilled-ps device
@@ -278,7 +279,8 @@ setglobal
 % the dictionary current here, which is the one the language is being read
 % into.
 [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
-  /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE ]
+  /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE
+  /.xpost_RECORD ]
 { dup currentdict exch known
     { dup currentdict exch get .privatedict 3 1 roll put }
     { pop } ifelse

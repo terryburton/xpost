@@ -2224,6 +2224,7 @@ static const char *const device_strings[] =
     "gl",
     "bgr",
     "raster",
+    "record",
     "pdfwrite",
     "svgwrite",
     "dscwrite",
