@@ -182,6 +182,36 @@ holdsrows screens not and {
     (an image outside the box leaves the unheld row unheld) assert
     device? /ImgData get 125 get 10 pixat 0 ne
     (an image outside the box does not reach a row inside it) assert
+
+    % A stroke and a glyph reach the raster a pixel at a time, so an
+    % unheld row turns them away at the store into the row rather than
+    % at the edge of the page. What the drop leaves on the operand stack
+    % is the point: a mark dropped partway through the store leaves the
+    % operands of a store there, which are not the operands the mark
+    % arrived with, and whatever the drop does not take falls to the next
+    % operator to read one. So the count is taken either side.
+    count /depth exch def
+    mark
+    { 0 setgray 0 setlinewidth
+      newpath 10 190 moveto 190 190 lineto stroke } stopped not
+    (a stroke outside the box raises no error) assert
+    cleartomark
+    count depth eq
+    (a stroke outside the box leaves the operand stack as it found it) assert
+
+    count /depth exch def
+    mark
+    { 0 setgray /Times-Roman findfont 12 scalefont setfont
+      10 180 moveto (outside) show } stopped not
+    (text outside the box raises no error) assert
+    cleartomark
+    count depth eq
+    (text outside the box leaves the operand stack as it found it) assert
+
+    device? /ImgData get 190 get rowpixels 0 eq
+    (a stroke and a glyph outside the box leave the unheld row unheld) assert
+    device? /ImgData get 125 get 10 pixat 0 ne
+    (a stroke and a glyph outside the box reach no row inside it) assert
 } if
 
 % 7. A null box gives the whole page back (PLRM 6.2: null denotes the

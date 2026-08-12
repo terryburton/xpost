@@ -206,6 +206,13 @@ currentglobal true setglobal
         } ifelse
     } bind
 
+    % A mark aimed where this device keeps no pixel is dropped: off the
+    % page, and on a row of the page the device does not hold. Each is
+    % asked before the write rather than left to fail inside it, so that
+    % the operands are still the ncomp+2 the cleanup below pops -- a row
+    % carrying no pixel refuses the write partway through .rowput, by
+    % which point the stack is a shape no fixed count of pops answers,
+    % and what is left over lands in the operands of whatever called.
     /PutPix { % c1..cN x y IMAGE  .  -
     begin
         {
@@ -215,7 +222,9 @@ currentglobal true setglobal
             1 index 0 lt { stop } if
             1 index width ge { stop } if
             .screenpix                  % c1..cN x y
-            ImgData exch get exch       % c1..cN row x
+            ImgData exch get            % c1..cN x row
+            dup .rowheld not { stop } if
+            exch                        % c1..cN row x
             .ncomp 2 add 2 roll         % row x c1..cN
             .rowput
         } stopped {
