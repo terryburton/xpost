@@ -109,6 +109,9 @@ typedef struct
     /* and how many recorded marks have been played through it, which is
        what .recordplayed answers */
     unsigned int played;
+    /* and how many sample rows of a recorded image have gone through
+       the image writer, which is what .recordimagerows answers */
+    unsigned int imgrows;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -738,7 +741,8 @@ out:
 static int _play_image(Xpost_Context *ctx,
                        const Xpost_Record_Image *img,
                        Xpost_Object targetdic,
-                       real lo, real hi)
+                       real lo, real hi,
+                       int *nrows)
 {
     Xpost_Object bd, rows, dims;
     Xpost_Object buf = null, prev = null;
@@ -769,8 +773,12 @@ static int _play_image(Xpost_Context *ctx,
         return typecheck;
     devh = (int)xpost_object_number(xpost_array_get(ctx, dims, 1));
 
+    *nrows = 0;
     if (!xpost_record_image_rows(img, lo, hi, &y0, &y1))
         return 0;
+    /* the sample rows this run of the page's rows takes, which is what
+       a band of a picture costs against the whole of it */
+    *nrows = y1 - y0;
     cy0 = img->cy0 < lo ? lo : img->cy0;
     cy1 = img->cy1 > hi + 1 ? hi + 1 : img->cy1;
 
@@ -1037,6 +1045,32 @@ static int _recordplays(Xpost_Context *ctx,
     return 0;
 }
 
+/* IMAGE  .recordimagerows  int
+   How many sample rows of a recorded image this device has put through
+   the image writer.
+
+   What .recordplays says is how many times a picture was painted, and a
+   replay that painted the whole of it into every run of the page's rows
+   would say exactly what one painting each run its own part of it says.
+   The page cannot tell them apart either: a row written outside the run
+   the device is holding is dropped against the row it was about to be
+   written to, so the picture comes out the same and the cost is the
+   picture times the runs. This is the quantity that separates them --
+   the rows the writer was handed, which for a run of the page's rows is
+   the samples reaching that run and not the samples there are. */
+static int _recordimagerows(Xpost_Context *ctx,
+                            Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)private.imgrows));
+    return 0;
+}
+
 /* IMAGE  .recordplayed  int
    How many recorded marks this device has played.
 
@@ -1167,7 +1201,7 @@ static int _replay_step(Xpost_Context *ctx,
     Xpost_Object method;
     Xpost_Object poly = null;
     size_t at;
-    int nops, i;
+    int nops, i, nrows;
 
     if (!_private_get(ctx, recdic, &privatestr, &private))
         return undefined;
@@ -1216,10 +1250,11 @@ static int _replay_step(Xpost_Context *ctx,
            own part of an image that crosses it */
         ret = _play_image(ctx, img, targetdic,
                           (real)xpost_object_number(lo),
-                          (real)xpost_object_number(hi));
+                          (real)xpost_object_number(hi), &nrows);
         if (ret)
             return ret;
         private.plays++;
+        private.imgrows += (unsigned int)nrows;
         if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
             return VMerror;
 
@@ -1974,6 +2009,9 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordplayed", (Xpost_Op_Func)_recordplayed,
                              1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordimagerows",
+                             (Xpost_Op_Func)_recordimagerows, 1,
+                             dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordground", (Xpost_Op_Func)_recordground,
                              3, dicttype, numbertype, numbertype); INSTALL;
 
