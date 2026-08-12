@@ -645,11 +645,23 @@ currentglobal true setglobal
     % a fresh one per run would be a page's worth of them by the end,
     % which is a cost that grows with the page in a mechanism that
     % exists so nothing does.
+    %
+    % One call covers whatever the file has yet to be given, and that is
+    % not always a band: rows nothing painted into are never moved to,
+    % so the run between two bands this device did hold can be as long as
+    % the page. It is written a bandful at a time against an array as
+    % long as the rows this device was made to hold, so the array stays
+    % what it was however long a run one call is asked for.
     /.bandwrite { % lo hi  .  -
         /.bandhi exch def
         /.bandlo exch def
-        .bandhi .bandlo ge {
+        /.bandcap currentdict /.bandpool known
+            { .bandpool length }{ .bandrows } ifelse def
+        .bandcap 1 lt { /.bandcap 1 def } if
+        {
+            .bandlo .bandhi gt { exit } if
             /.bandn .bandhi .bandlo sub 1 add def
+            .bandn .bandcap gt { /.bandn .bandcap def } if
             .bandpage /rows 2 copy known
                 { get length .bandn lt }{ pop pop true } ifelse
                 { .bandpage /rows .bandn array put } if
@@ -663,7 +675,8 @@ currentglobal true setglobal
             .bandout 0 .bandn getinterval
             .bandpage /file get
             .writeband
-        } if
+            /.bandlo .bandlo .bandn add def
+        } loop
     } bind
 
     % -  .emitband  -

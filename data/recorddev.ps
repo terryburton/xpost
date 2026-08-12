@@ -209,10 +209,24 @@
                 /top exch def
                 % the last band is the rows the page has left
                 /rows bandrows ph top sub 2 copy gt { exch } if pop def
-                top 0 gt { top rows page dup /.moveband get exec } if
-                rec page top top rows add 1 sub
-                    //.internaldict /.replaypage get exec
-                page dup /Emit get exec
+                /bot top rows add 1 sub def
+                % A band that comes to nothing but the ground is not
+                % painted at all: the raster is not moved onto its rows,
+                % nothing is played into them and they are not put out
+                % here. What the page carries there is laid down by the
+                % emission that next has rows of its own to write, which
+                % covers every row from where the file has reached and
+                % lays the ground over each one this device does not
+                % hold -- and, where such a band is the last of them, by
+                % the call at the end that finds nothing held. So the
+                % file gets the rows a painted band would have given it,
+                % in the order it has always got them.
+                rec top bot //.internaldict /.recordground get exec not {
+                    top 0 gt { top rows page dup /.moveband get exec } if
+                    rec page top bot
+                        //.internaldict /.replaypage get exec
+                    page dup /Emit get exec
+                } if
             } for
             % and the call that holds nothing, which says the page is
             % finished and closes the file behind it
