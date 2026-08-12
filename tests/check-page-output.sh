@@ -32,13 +32,20 @@
 #   "OutputFileName" is the template, and a device that names it is
 #   resolving what the page already resolved.
 #
-#   No compiled device keeps a stream between pages. A FILE * in a
-#   device's private struct is a file that outlives the page that opened
-#   it, which is what made the second page overwrite the first.
+#   No compiled device keeps a stream except for the page it is writing.
+#   A FILE * in a device's private struct is a file that outlives the
+#   call that opened it, which is what made the second page overwrite
+#   the first -- and it is also what a page arriving a band at a time
+#   needs, that page being written by several Emit calls in turn
+#   (doc/NEWINTERNALS). So the exception is tied to the declaration that
+#   earns it: a device keeping a stream says its page may arrive in
+#   bands, and gives the stream back.
 #
 #   A compiled device opens and closes a page's file through the one
 #   pair, xpost_device_page_open/xpost_device_page_close, and calls them
-#   only from the function its method table registers for the Emit slot.
+#   only from the functions its method table registers for the Emit and
+#   Destroy slots -- the method that writes a page, and the one that
+#   gives back the file of a page that was never finished.
 #
 # The tests are outside this: a test that drives a device's methods
 # one at a time is exercising the device and not transmitting a page, and
@@ -250,7 +257,23 @@ if [ -s "$work/template" ]; then
     fail=1
 fi
 
-# 2. a stream in the private struct outlives the page that opened it
+# 2. a stream in the private struct outlives the call that opened it,
+#    and may outlive only the call
+#
+#    A page that arrives a band at a time is written across several Emit
+#    calls -- once per band, and once more at the end to say it is
+#    finished (doc/NEWINTERNALS) -- so its file cannot be opened and closed
+#    within one of them, and the device holds it between them. That is
+#    the one reason to hold a stream, and a device that holds one for any
+#    other is back at the fault this rule was written for: a file opened
+#    once and kept for the device's whole life, over which a job's second
+#    page writes its first.
+#
+#    So the exception is tied to the declaration that earns it. A device
+#    keeping a stream must say its page may arrive in bands, which is
+#    what makes several Emit calls into one page; and it must name the
+#    shared closer, so that the page it holds the file for ends by giving
+#    it back rather than by being forgotten.
 for f in "$libdir"/xpost_dev_*.c; do
     hits=$(awk -v F="$f" '
         /^typedef struct/ { n = 0; delete buf; inb = 1; next }
@@ -263,11 +286,21 @@ for f in "$libdir"/xpost_dev_*.c; do
         inb && /^\}/ { inb = 0; next }
         inb { buf[++n] = $0; lno[n] = FNR }
     ' "$f")
-    if [ -n "$hits" ]; then
-        echo "check-page-output: a device keeps a stream in its private struct:" >&2
+    [ -n "$hits" ] || continue
+    if ! grep -qE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)' "$f"; then
+        echo "check-page-output: a device keeps a stream in its private struct" >&2
+        echo "and does not say its page may arrive a band at a time:" >&2
         printf '%s\n' "$hits" | sed "s|^$src/||; s|^|  |" >&2
-        echo "A page's file is opened and closed within the Emit that writes the" >&2
-        echo "page; one held between pages is one the next page writes over." >&2
+        echo "A page that arrives whole is written by one Emit, which opens its" >&2
+        echo "file and closes it; one held past that is one the next page" >&2
+        echo "writes over." >&2
+        fail=1
+    fi
+    if ! grep -q 'xpost_device_page_close' "$f"; then
+        echo "check-page-output: a device keeps a stream in its private struct" >&2
+        echo "and never gives one back:" >&2
+        printf '%s\n' "$hits" | sed "s|^$src/||; s|^|  |" >&2
+        echo "A page holding the file open ends by closing it." >&2
         fail=1
     fi
 done
@@ -319,13 +352,23 @@ for f in "$libdir"/xpost_dev_*.c; do
     [ -n "$uses" ] || continue
     callers=$((callers + 1))
 
-    emitfn=$(awk '{ sub(/\r$/, "")
-                    if ($0 ~ /"Emit"/ && $0 ~ /\(Xpost_Op_Func\)/) {
+    # The two slots a page's file belongs to. Emit is where a page is
+    # written, and Destroy is where a page that was never finished gives
+    # its file back: a device retired part way through one -- by an
+    # error, or by a restore past the setpagedevice that installed it --
+    # holds the stream of a page it will now never be asked to finish,
+    # and nothing else is going to be called on it.
+    slotfn() {  # $1 slot name
+        awk -v slot="\"$1\"" '{ sub(/\r$/, "")
+                    if (index($0, slot) && $0 ~ /\(Xpost_Op_Func\)/) {
                         match($0, /\(Xpost_Op_Func\)[ \t]*[A-Za-z_][A-Za-z0-9_]*/)
                         s = substr($0, RSTART, RLENGTH)
                         sub(/\(Xpost_Op_Func\)[ \t]*/, "", s)
                         print s; exit
-                    } }' "$f")
+                    } }' "$f"
+    }
+    emitfn=$(slotfn Emit)
+    destfn=$(slotfn Destroy)
     if [ -z "$emitfn" ]; then
         echo "check-page-output: ${f#"$src"/} opens a page's file and its method" >&2
         echo "table names no Emit; there is nothing to hold the open to." >&2
@@ -341,13 +384,26 @@ EOF
         fail=1
         continue
     fi
+    dstart=0; dend=0
+    if [ -n "$destfn" ]; then
+        read -r dstart dend <<EOF
+$(extent "$work/code" "$f" "(^|[^A-Za-z0-9_])$destfn[ \t]*\\\\(")
+EOF
+        dstart=${dstart:-0}; dend=${dend:-0}
+    fi
     for l in $uses; do
-        if [ "$l" -lt "$estart" ] || [ "$l" -gt "$eend" ]; then
-            echo "check-page-output: ${f#"$src"/}:$l opens a page's file outside" >&2
-            echo "$emitfn(), the method that writes a page (lines $estart-$eend)." >&2
-            echo "The name is settled per page, so the file is opened per page." >&2
-            fail=1
+        if [ "$l" -ge "$estart" ] && [ "$l" -le "$eend" ]; then
+            continue
         fi
+        if [ "$dstart" -gt 0 ] && [ "$l" -ge "$dstart" ] && [ "$l" -le "$dend" ]; then
+            continue
+        fi
+        echo "check-page-output: ${f#"$src"/}:$l opens or closes a page's file" >&2
+        echo "outside $emitfn(), the method that writes a page (lines" >&2
+        echo "$estart-$eend), and outside the Destroy that gives back the file" >&2
+        echo "of a page never finished (lines $dstart-$dend)." >&2
+        echo "The name is settled per page, so the file is opened per page." >&2
+        fail=1
     done
 done
 
