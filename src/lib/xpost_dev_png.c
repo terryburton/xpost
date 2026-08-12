@@ -1225,6 +1225,19 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* and where the machinery reaches a class by name rather than a
+       program reaching a maker: the classes the boot files define are
+       mirrored into the private dictionary (data/device.ps) and one a
+       driver defines has to arrive there the same way, since a record
+       asked to be played into this device is specialised from the class
+       it finds there */
+    ret = xpost_dict_put(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, alpha ? ".xpost_PNGALPHADEVICE"
+                                                    : ".xpost_PNGDEVICE"),
+                         classdic);
+    if (ret)
+        return ret;
+
     if (alpha)
         op = xpost_operator_cons(ctx, "newpngalphadevice", (Xpost_Op_Func)newpngalphadevice, 2, integertype, integertype);
     else

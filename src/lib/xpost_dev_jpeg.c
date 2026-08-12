@@ -1141,6 +1141,17 @@ int loadjpegdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* and where the machinery reaches a class by name rather than a
+       program reaching a maker: the classes the boot files define are
+       mirrored into the private dictionary (data/device.ps) and one a
+       driver defines has to arrive there the same way, since a record
+       asked to be played into this device is specialised from the class
+       it finds there */
+    ret = xpost_dict_put(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, ".xpost_JPEGDEVICE"), classdic);
+    if (ret)
+        return ret;
+
     op = xpost_operator_cons(ctx, "newjpegdevice", (Xpost_Op_Func)newjpegdevice, 2, integertype, integertype);
     ret = xpost_dict_put(ctx, userdict, xpost_name_cons(ctx, "newjpegdevice"), op);
     if (ret)
