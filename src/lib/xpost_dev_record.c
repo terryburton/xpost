@@ -44,6 +44,16 @@
  * reason five kinds are enough is that every other call the machinery
  * can make is resolved above a device that declines to declare it.
  *
+ * Which device paints the page is the run's, named beside the device in
+ * the selection this run was started with: -d record:pgm plays into the
+ * grayscale raster and -d record on its own into the colour one. The
+ * class carries the roster of the devices a record can be played into
+ * and this file settles one of them at load, because the choice decides
+ * the shape of every marking method here -- a mark carries one value per
+ * component of the target's colour space, so a grayscale target and a
+ * colour one are two suites of entry points and not one suite told
+ * which it is.
+ *
  * The operands are written down as they arrived. Which pixels a
  * coordinate names is the painting device's answer and is taken when
  * the mark is played, so a device with a different idea of where its
@@ -78,14 +88,20 @@
 #include "xpost_record.h"
 #include "xpost_dev_record.h"
 
-/* The device's colour space is DeviceRGB, so every mark carries three
-   components; the class declares it and this is the count the record
-   is made with. */
-#define RECORD_NCOMP 3
+/* The most components a mark can carry here, which is the widest of the
+   colour spaces a device this record plays into declares: three for the
+   colour rasters, one for the grayscale one. It bounds the buffers the
+   entry points below build a colour in; how many of them a given record
+   uses is the record's own count, settled when the device is made from
+   the class the run selected a target for. */
+#define RECORD_MAXCOMP 3
 
 typedef struct
 {
     int width, height;
+    /* the components a mark of this record carries, which is the
+       component count of the device its page is played into */
+    int ncomp;
     Xpost_Record *rec;
     /* how many times a recorded image has been painted through this
        device, which is what .recordplays answers */
@@ -99,6 +115,10 @@ static Xpost_Object namedotcopydict;
 static Xpost_Object namedotplaypage;
 static Xpost_Object namedotground;
 static Xpost_Object namenativecolorspace;
+static Xpost_Object namedotncomp;
+static Xpost_Object nametextalphabits;
+static Xpost_Object namedotplaytargets;
+static Xpost_Object namedotplayclass;
 static Xpost_Object nameslot[5];
 
 /* The keys of the blit dictionary the image painter builds, which is
@@ -165,22 +185,27 @@ static int _covers_page(const real *ops, int width, int height)
     return x0 <= 0 && y0 <= 0 && x1 >= width - 1 && y1 >= height - 1;
 }
 
-/* Write one mark down. The colour is the three components the device's
-   space takes, in the range they arrived in: folding one to a channel
-   is the painting device's business and is done when the mark is
-   played, by whichever device plays it. */
+/* Write one mark down. The colour is the components the device's space
+   takes, in the range they arrived in: folding one to a channel is the
+   painting device's business and is done when the mark is played, by
+   whichever device plays it.
+ *
+ * @p ncomp is the count the entry point calling this was installed with,
+ * and the record holds its marks at the count it was made with. The two
+ * are one number read twice -- both come from the class -- and a mark of
+ * a shape the record has no room for is refused rather than written
+ * down, since a colour read back at another count is a colour nobody
+ * named.
+ */
 static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
                  Xpost_Record_Kind kind,
-                 const Xpost_Object *comp,
+                 const Xpost_Object *comp, int ncomp,
                  const real *ops, int nops)
 {
     Xpost_Object privatestr;
     PrivateData private;
-    real colour[RECORD_NCOMP];
+    real colour[RECORD_MAXCOMP];
     int i;
-
-    for (i = 0; i < RECORD_NCOMP; i++)
-        colour[i] = (real)xpost_object_number(comp[i]);
 
     if (!_private_get(ctx, devdic, &privatestr, &private))
         return undefined;
@@ -188,6 +213,15 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
     /* a released record takes no marks, as a released raster takes none */
     if (!private.rec)
         return 0;
+
+    if (ncomp != private.ncomp)
+    {
+        XPOST_LOG_ERR("%d a mark of %d colour values is offered to a record"
+                      " holding %d", rangecheck, ncomp, private.ncomp);
+        return rangecheck;
+    }
+    for (i = 0; i < ncomp; i++)
+        colour[i] = (real)xpost_object_number(comp[i]);
 
     /* A rectangle covering the page paints over every mark before it, so
        none of them is on the page any longer and the record gives them
@@ -212,85 +246,19 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
     return 0;
 }
 
-static int _putpix(Xpost_Context *ctx,
-                   Xpost_Object red, Xpost_Object green, Xpost_Object blue,
-                   Xpost_Object x, Xpost_Object y,
-                   Xpost_Object devdic)
-{
-    Xpost_Object comp[RECORD_NCOMP];
-    real ops[2];
-
-    comp[0] = red; comp[1] = green; comp[2] = blue;
-    ops[0] = (real)xpost_object_number(x);
-    ops[1] = (real)xpost_object_number(y);
-    return _mark(ctx, devdic, XPOST_RECORD_PUTPIX, comp, ops, 2);
-}
-
-static int _blendpix(Xpost_Context *ctx,
-                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
-                     Xpost_Object cov, Xpost_Object x, Xpost_Object y,
-                     Xpost_Object devdic)
-{
-    Xpost_Object comp[RECORD_NCOMP];
-    real ops[3];
-
-    comp[0] = red; comp[1] = green; comp[2] = blue;
-    ops[0] = (real)xpost_object_number(cov);
-    ops[1] = (real)xpost_object_number(x);
-    ops[2] = (real)xpost_object_number(y);
-    return _mark(ctx, devdic, XPOST_RECORD_BLENDPIX, comp, ops, 3);
-}
-
-static int _drawline(Xpost_Context *ctx,
-                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
-                     Xpost_Object x1, Xpost_Object y1,
-                     Xpost_Object x2, Xpost_Object y2,
-                     Xpost_Object devdic)
-{
-    Xpost_Object comp[RECORD_NCOMP];
-    real ops[4];
-
-    comp[0] = red; comp[1] = green; comp[2] = blue;
-    ops[0] = (real)xpost_object_number(x1);
-    ops[1] = (real)xpost_object_number(y1);
-    ops[2] = (real)xpost_object_number(x2);
-    ops[3] = (real)xpost_object_number(y2);
-    return _mark(ctx, devdic, XPOST_RECORD_DRAWLINE, comp, ops, 4);
-}
-
-static int _fillrect(Xpost_Context *ctx,
-                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
-                     Xpost_Object x, Xpost_Object y,
-                     Xpost_Object w, Xpost_Object h,
-                     Xpost_Object devdic)
-{
-    Xpost_Object comp[RECORD_NCOMP];
-    real ops[4];
-
-    comp[0] = red; comp[1] = green; comp[2] = blue;
-    ops[0] = (real)xpost_object_number(x);
-    ops[1] = (real)xpost_object_number(y);
-    ops[2] = (real)xpost_object_number(w);
-    ops[3] = (real)xpost_object_number(h);
-    return _mark(ctx, devdic, XPOST_RECORD_FILLRECT, comp, ops, 4);
-}
-
 /* A polygon is a point list with its subpaths separated, and the
    separators are part of the shape: the interior is settled by scanning
    the subpaths together, so a polygon written down without them replays
    as a region with its holes filled in. The run written down is the
    vertex count and then a pair per element, a separator being the pair
    the packed path already writes a subpath break as. */
-static int _fillpoly(Xpost_Context *ctx,
-                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
-                     Xpost_Object poly,
-                     Xpost_Object devdic)
+static int _polymark(Xpost_Context *ctx, Xpost_Object devdic,
+                     const Xpost_Object *comp, int ncomp,
+                     Xpost_Object poly)
 {
-    Xpost_Object comp[RECORD_NCOMP];
     real *ops;
     int n, i, ret;
 
-    comp[0] = red; comp[1] = green; comp[2] = blue;
     n = (int)poly.comp_.sz;
     ops = malloc((size_t)(1 + 2 * n) * sizeof *ops);
     if (!ops)
@@ -311,33 +279,213 @@ static int _fillpoly(Xpost_Context *ctx,
             ops[2 + 2 * i] = XPOST_PATH_BREAK;
         }
     }
-    ret = _mark(ctx, devdic, XPOST_RECORD_FILLPOLY, comp, ops, 1 + 2 * n);
+    ret = _mark(ctx, devdic, XPOST_RECORD_FILLPOLY, comp, ncomp,
+                ops, 1 + 2 * n);
     free(ops);
     return ret;
 }
 
 /* Read a pixel back. A record holds no pixel to read, so every read
    answers the ground, which is the answer the contract gives wherever a
-   device holds no pixel to answer from. The value is in the channel
-   scale the colour raster this device's page is played into stores. */
+   device holds no pixel to answer from. The values are in the channel
+   scale the raster this device's page is played into stores, and there
+   are as many of them as that raster's colour space takes -- a read is
+   the one method whose operands do not follow the colour space, so one
+   entry point serves a record of either shape and takes the count from
+   the record rather than from where it was installed. */
 static int _getpix(Xpost_Context *ctx,
                    Xpost_Object x, Xpost_Object y,
                    Xpost_Object devdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int r, g, b;
+    Xpost_Object ground;
+    int i;
 
     (void)x;
     (void)y;
     if (!_private_get(ctx, devdic, &privatestr, &private))
         return undefined;
 
-    xpost_device_ground_channels(ctx, devdic, &r, &g, &b);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(b));
+    ground = xpost_dict_get(ctx, devdic, namedotground);
+    for (i = 0; i < private.ncomp; i++)
+    {
+        /* A page that was never cleared has no ground recorded, and
+           every device a record plays into makes its raster white, so
+           that is what a read off such a page owes. */
+        int v = 255;
+
+        if (xpost_object_get_type(ground) == arraytype
+            && ground.comp_.sz >= (unsigned int)private.ncomp)
+            v = xpost_dev_num_to_scaled(xpost_array_get(ctx, ground, i),
+                                        255.0);
+        xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(v));
+    }
     return 0;
+}
+
+/*
+ * The colour suite: the entry points of a record whose target declares
+ * DeviceRGB, so that every mark carries three components.
+ */
+
+static int _putpix(Xpost_Context *ctx,
+                   Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                   Xpost_Object x, Xpost_Object y,
+                   Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+    real ops[2];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    ops[0] = (real)xpost_object_number(x);
+    ops[1] = (real)xpost_object_number(y);
+    return _mark(ctx, devdic, XPOST_RECORD_PUTPIX, comp, 3, ops, 2);
+}
+
+static int _blendpix(Xpost_Context *ctx,
+                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                     Xpost_Object cov, Xpost_Object x, Xpost_Object y,
+                     Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+    real ops[3];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    ops[0] = (real)xpost_object_number(cov);
+    ops[1] = (real)xpost_object_number(x);
+    ops[2] = (real)xpost_object_number(y);
+    return _mark(ctx, devdic, XPOST_RECORD_BLENDPIX, comp, 3, ops, 3);
+}
+
+static int _drawline(Xpost_Context *ctx,
+                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                     Xpost_Object x1, Xpost_Object y1,
+                     Xpost_Object x2, Xpost_Object y2,
+                     Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+    real ops[4];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    ops[0] = (real)xpost_object_number(x1);
+    ops[1] = (real)xpost_object_number(y1);
+    ops[2] = (real)xpost_object_number(x2);
+    ops[3] = (real)xpost_object_number(y2);
+    return _mark(ctx, devdic, XPOST_RECORD_DRAWLINE, comp, 3, ops, 4);
+}
+
+static int _fillrect(Xpost_Context *ctx,
+                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                     Xpost_Object x, Xpost_Object y,
+                     Xpost_Object w, Xpost_Object h,
+                     Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+    real ops[4];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    ops[0] = (real)xpost_object_number(x);
+    ops[1] = (real)xpost_object_number(y);
+    ops[2] = (real)xpost_object_number(w);
+    ops[3] = (real)xpost_object_number(h);
+    return _mark(ctx, devdic, XPOST_RECORD_FILLRECT, comp, 3, ops, 4);
+}
+
+static int _fillpoly(Xpost_Context *ctx,
+                     Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                     Xpost_Object poly,
+                     Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    return _polymark(ctx, devdic, comp, 3, poly);
+}
+
+/*
+ * The grayscale suite: the same five marks, for a record whose target
+ * declares DeviceGray and whose marks therefore carry one component.
+ *
+ * A method's operand count follows the device's colour space, and it is
+ * fixed when the class is installed (xpost_dev_class_install,
+ * src/lib/xpost_dev_driver.h) -- so an entry point is written for a
+ * count rather than told one, and these are the same calls at the other
+ * count. What each does with what it received is the shared code above.
+ */
+
+static int _putpix_g(Xpost_Context *ctx,
+                     Xpost_Object grey,
+                     Xpost_Object x, Xpost_Object y,
+                     Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+    real ops[2];
+
+    comp[0] = grey;
+    ops[0] = (real)xpost_object_number(x);
+    ops[1] = (real)xpost_object_number(y);
+    return _mark(ctx, devdic, XPOST_RECORD_PUTPIX, comp, 1, ops, 2);
+}
+
+static int _blendpix_g(Xpost_Context *ctx,
+                       Xpost_Object grey,
+                       Xpost_Object cov, Xpost_Object x, Xpost_Object y,
+                       Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+    real ops[3];
+
+    comp[0] = grey;
+    ops[0] = (real)xpost_object_number(cov);
+    ops[1] = (real)xpost_object_number(x);
+    ops[2] = (real)xpost_object_number(y);
+    return _mark(ctx, devdic, XPOST_RECORD_BLENDPIX, comp, 1, ops, 3);
+}
+
+static int _drawline_g(Xpost_Context *ctx,
+                       Xpost_Object grey,
+                       Xpost_Object x1, Xpost_Object y1,
+                       Xpost_Object x2, Xpost_Object y2,
+                       Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+    real ops[4];
+
+    comp[0] = grey;
+    ops[0] = (real)xpost_object_number(x1);
+    ops[1] = (real)xpost_object_number(y1);
+    ops[2] = (real)xpost_object_number(x2);
+    ops[3] = (real)xpost_object_number(y2);
+    return _mark(ctx, devdic, XPOST_RECORD_DRAWLINE, comp, 1, ops, 4);
+}
+
+static int _fillrect_g(Xpost_Context *ctx,
+                       Xpost_Object grey,
+                       Xpost_Object x, Xpost_Object y,
+                       Xpost_Object w, Xpost_Object h,
+                       Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+    real ops[4];
+
+    comp[0] = grey;
+    ops[0] = (real)xpost_object_number(x);
+    ops[1] = (real)xpost_object_number(y);
+    ops[2] = (real)xpost_object_number(w);
+    ops[3] = (real)xpost_object_number(h);
+    return _mark(ctx, devdic, XPOST_RECORD_FILLRECT, comp, 1, ops, 4);
+}
+
+static int _fillpoly_g(Xpost_Context *ctx,
+                       Xpost_Object grey,
+                       Xpost_Object poly,
+                       Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+
+    comp[0] = grey;
+    return _polymark(ctx, devdic, comp, 1, poly);
 }
 
 /* What the blit dictionary carries, read out by key. A key it does not
@@ -882,7 +1030,7 @@ static int _recordplays(Xpost_Context *ctx,
    that is missing what they held. */
 static int _grounds(Xpost_Context *ctx, Xpost_Object devdic,
                     const Xpost_Record *rec, size_t at,
-                    real lo, real hi, int width)
+                    real lo, real hi, int width, int ncomp)
 {
     Xpost_Object ground;
     Xpost_Record_Kind kind;
@@ -892,13 +1040,13 @@ static int _grounds(Xpost_Context *ctx, Xpost_Object devdic,
 
     ground = xpost_dict_get(ctx, devdic, namedotground);
     if (xpost_object_get_type(ground) != arraytype ||
-        ground.comp_.sz < RECORD_NCOMP)
+        ground.comp_.sz < (unsigned int)ncomp)
         return 0;   /* a page that was never cleared has no ground */
     if (!xpost_record_get(rec, at, &kind, &colour, &ops, &nops))
         return 0;
     if (kind != XPOST_RECORD_FILLRECT || nops < 4)
         return 0;
-    for (i = 0; i < RECORD_NCOMP; i++)
+    for (i = 0; i < ncomp; i++)
         if ((real)xpost_object_number(xpost_array_get(ctx, ground, i))
             != colour[i])
             return 0;
@@ -945,7 +1093,8 @@ static int _recordground(Xpost_Context *ctx,
                           (real)xpost_object_number(hi), &at))
         answer = _grounds(ctx, devdic, private.rec, at,
                           (real)xpost_object_number(lo),
-                          (real)xpost_object_number(hi), private.width);
+                          (real)xpost_object_number(hi), private.width,
+                          private.ncomp);
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(answer));
     return 0;
 }
@@ -1120,7 +1269,10 @@ static int _replay_step(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, lo);
     xpost_stack_push(ctx->lo, ctx->os, hi);
 
-    for (i = 0; i < RECORD_NCOMP; i++)
+    /* the colour it was made with, one value per component of the space
+       it was made in, which is the space the device being played into
+       declares and so the operands its method takes */
+    for (i = 0; i < private.ncomp; i++)
         xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(colour[i]));
     if (kind == XPOST_RECORD_FILLPOLY)
         xpost_stack_push(ctx->lo, ctx->os, poly);
@@ -1295,6 +1447,7 @@ static int _create_cont(Xpost_Context *ctx,
                         Xpost_Object devdic)
 {
     Xpost_Object privatestr;
+    Xpost_Object ncomp;
     PrivateData private;
     int width, height;
     int ret;
@@ -1312,6 +1465,22 @@ static int _create_cont(Xpost_Context *ctx,
         return limitcheck;
     }
 
+    /* The components a mark of this record carries, taken from the
+       instance rather than from where the entry points were installed:
+       the record is made to hold that many values per mark, and a
+       colour it gave back at another count would be a colour nobody
+       named. The class carries it, put there when the target this
+       record plays into was settled, and the instance is a copy of the
+       class. */
+    ncomp = xpost_dict_get(ctx, devdic, namedotncomp);
+    if (xpost_object_get_type(ncomp) != integertype
+        || ncomp.int_.val < 1 || ncomp.int_.val > RECORD_MAXCOMP)
+    {
+        XPOST_LOG_ERR("%d a record device carries no component count a mark"
+                      " can be held at", rangecheck);
+        return rangecheck;
+    }
+
     ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
@@ -1319,8 +1488,9 @@ static int _create_cont(Xpost_Context *ctx,
 
     private.width = width;
     private.height = height;
+    private.ncomp = ncomp.int_.val;
     private.plays = 0;
-    private.rec = xpost_record_new(RECORD_NCOMP);
+    private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
 
@@ -1431,15 +1601,118 @@ static int loadrecorddevice(Xpost_Context *ctx)
     return 0;
 }
 
+/* The mode selector this run's device selection carried, as the name a
+   roster is keyed by, or a null where the run named none.
+
+   The selector belongs to the device it was written beside: a run
+   started as -d raster:bgra names a raster's pixel format, which says
+   nothing about where a record's page goes, and a program that switches
+   to a record afterwards has not chosen anything. So it is read only
+   where this run's selection named this device, and a record the run did
+   not select takes the target a selection naming no mode takes. */
+static Xpost_Object _selected_mode(Xpost_Context *ctx, const char *device)
+{
+    Xpost_Object o;
+    char name[16];
+
+    o = xpost_context_host_setting(ctx, "StartDevice");
+    if (xpost_object_get_type(o) != nametype
+        || xpost_dict_compare_objects(ctx, o,
+                                      xpost_name_cons(ctx, device)) != 0)
+        return null;
+
+    o = xpost_context_host_setting(ctx, "SUBDEVICE");
+    if (xpost_object_get_type(o) != stringtype || o.comp_.sz < 1
+        || o.comp_.sz >= sizeof name)
+        return null;
+    /* the bytes are as long as the string says and a name is as long as
+       the NUL after it says, so the copy states the length twice */
+    memcpy(name, xpost_string_get_pointer(ctx, o), o.comp_.sz);
+    name[o.comp_.sz] = '\0';
+    return xpost_name_cons(ctx, name);
+}
+
+/* Settle which device paints this record's page, and take from it what
+   this class must declare to be sent the marks that device would have
+   been sent.
+
+   The roster of the devices a record can be played into is the class's,
+   with the reasons a device is on it (data/recorddev.ps); what this adds
+   is the run's choice among them, and the refusal of anything else. The
+   colour space and the component count come off the target because a
+   mark carries one value per component of the space it was made in and
+   is played by handing those values to a method whose operands the
+   target's space decides; the glyph coverage comes off it because a
+   target that thresholds a glyph's edge pixels to whole pixels would
+   otherwise be played the coverage-weighted blends this device was sent
+   in its place.
+
+   Answers the component count the class is to be installed at. */
+static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
+                        int *ncomp)
+{
+    Xpost_Object mode, targets, clsname, cls, o;
+    int ret;
+
+    targets = xpost_dict_get(ctx, classdic, namedotplaytargets);
+    if (xpost_object_get_type(targets) != dicttype)
+    {
+        XPOST_LOG_ERR("%d the recording class carries no roster of the"
+                      " devices it can be played into", undefined);
+        return undefined;
+    }
+
+    mode = _selected_mode(ctx, "record");
+    if (xpost_object_get_type(mode) != nametype)
+        mode = xpost_name_cons(ctx, "ppm");
+
+    clsname = xpost_dict_get(ctx, targets, mode);
+    if (xpost_object_get_type(clsname) != nametype)
+    {
+        XPOST_LOG_ERR("%d a record is asked to be played into a device that"
+                      " is not one it can be played into", rangecheck);
+        return rangecheck;
+    }
+    cls = xpost_dict_get(ctx, ctx->privatedict, clsname);
+    if (xpost_object_get_type(cls) != dicttype)
+    {
+        /* a device the roster names and this build did not make */
+        XPOST_LOG_ERR("%d the device a record is to be played into was not"
+                      " loaded", undefined);
+        return undefined;
+    }
+
+    o = xpost_dict_get(ctx, cls, namedotncomp);
+    if (xpost_object_get_type(o) != integertype
+        || o.int_.val < 1 || o.int_.val > RECORD_MAXCOMP)
+    {
+        XPOST_LOG_ERR("%d the device a record is to be played into takes a"
+                      " colour no record holds", rangecheck);
+        return rangecheck;
+    }
+    *ncomp = o.int_.val;
+    ret = xpost_dict_put(ctx, classdic, namedotncomp, o);
+    if (!ret)
+        ret = xpost_dict_put(ctx, classdic, namenativecolorspace,
+                             xpost_dict_get(ctx, cls, namenativecolorspace));
+    if (!ret)
+        ret = xpost_dict_put(ctx, classdic, nametextalphabits,
+                             xpost_dict_get(ctx, cls, nametextalphabits));
+    if (!ret)
+        ret = xpost_dict_put(ctx, classdic, namedotplayclass, clsname);
+    return ret;
+}
+
 /* Fill the class's method slots with this device's operators and define
    the class and its maker in userdict. */
 static int loadrecorddevicecont(Xpost_Context *ctx,
                                 Xpost_Object classdic)
 {
-    /* This device's whole suite. It is the five marking methods a
-       record holds and nothing else that marks: a method it did not
-       bring is resolved above the device into these, and one it brought
-       would be a call the record has no entry for. */
+    /* This device's whole suite, for a target declaring DeviceRGB. It is
+       the five marking methods a record holds and nothing else that
+       marks: a method it did not bring is resolved above the device into
+       these, and one it brought would be a call the record has no entry
+       for. */
     static const Xpost_Dev_Method methods[] =
     {
         { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
@@ -1453,17 +1726,46 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
         { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
     };
 
+    /* ... and the same suite for a target declaring DeviceGray, whose
+       marks carry one colour value where these carry three. Two tables
+       and not one, because a method's operand count is fixed when it is
+       installed and an entry point's signature is fixed when it is
+       compiled. The read is in both: its operands do not follow the
+       colour space, so there is one of it. */
+    static const Xpost_Dev_Method greymethods[] =
+    {
+        { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "recordGrayPutPix", (Xpost_Op_Func)_putpix_g, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "recordGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "recordGrayBlendPix", (Xpost_Op_Func)_blendpix_g, XPOST_DEV_M_BLEND },
+        { "DrawLine", "recordGrayDrawLine", (Xpost_Op_Func)_drawline_g, XPOST_DEV_M_LINE },
+        { "FillRect", "recordGrayFillRect", (Xpost_Op_Func)_fillrect_g, XPOST_DEV_M_RECT },
+        { "FillPoly", "recordGrayFillPoly", (Xpost_Op_Func)_fillpoly_g, XPOST_DEV_M_POLY },
+        { "Emit", "recordEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
     Xpost_Object userdict;
     Xpost_Object op;
+    int ncomp;
     int ret;
+
+    /* which device paints this record's page, before anything is
+       installed: it decides what every marking method here looks like */
+    ret = _play_target(ctx, classdic, &ncomp);
+    if (ret)
+        return ret;
 
     op = xpost_operator_cons(ctx, "recordCreateCont",
                              (Xpost_Op_Func)_create_cont, 3,
                              integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
-    ret = xpost_dev_class_install(ctx, classdic, RECORD_NCOMP, 1,
-                                  methods, XPOST_DEV_METHOD_COUNT(methods));
+    ret = ncomp == 1
+        ? xpost_dev_class_install(ctx, classdic, ncomp, 1, greymethods,
+                                  XPOST_DEV_METHOD_COUNT(greymethods))
+        : xpost_dev_class_install(ctx, classdic, ncomp, 1, methods,
+                                  XPOST_DEV_METHOD_COUNT(methods));
     if (ret)
         return ret;
 
@@ -1521,6 +1823,14 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotncomp = xpost_name_cons(ctx, ".ncomp"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((nametextalphabits = xpost_name_cons(ctx, "TextAlphaBits"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplaytargets = xpost_name_cons(ctx, ".playtargets"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplayclass = xpost_name_cons(ctx, ".playclass"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((nameslot[XPOST_RECORD_PUTPIX] = xpost_name_cons(ctx, "PutPix"))) == invalidtype)
         return VMerror;

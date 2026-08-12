@@ -102,8 +102,13 @@ fi
 # The entry is recognised by its shape in the stripped code -- a brace, the
 # two literals the stripping emptied, and the cast the table takes its
 # function through -- and the slot it fills is the first literal of the raw
-# line. Every file carrying a method table must yield exactly one, so a
-# table this cannot read is a failure rather than a device passed over.
+# line. What is read out is which function a file's Destroy is, so every
+# file carrying a method table must name exactly one of them and a table
+# this cannot read is a failure rather than a device passed over. A file
+# may carry more than one table -- a device whose marking methods differ
+# with the colour space it was installed for has a table per space -- and
+# those tables name one Destroy between them, a device going away being
+# the one call that does not depend on the space it painted in.
 awk -F: '
     NR == FNR { str[$1 ":" $2] = $3; next }
     {
@@ -115,7 +120,8 @@ awk -F: '
         match(code, /\(Xpost_Op_Func\)[ \t]*[A-Za-z_][A-Za-z0-9_]*/)
         fn = substr(code, RSTART, RLENGTH)
         sub(/\(Xpost_Op_Func\)[ \t]*/, "", fn)
-        got[$1] = got[$1] " " fn
+        if (index(" " got[$1] " ", " " fn " ") == 0)
+            got[$1] = got[$1] " " fn
         print "table " $1 " " fn
     }
     END {
@@ -128,10 +134,13 @@ awk -F: '
     }' "$work/strings" "$work/code" > "$work/route-table"
 
 if grep -q '^BADTABLE' "$work/route-table"; then
-    echo "FAILURES: a device method table names no Destroy this check can read:"
-    awk '$1 == "BADTABLE" { print "      " $2 " (" $3 " found, expected 1)" }' \
+    echo "FAILURES: a device method table names no one Destroy this check can"
+    echo "      read:"
+    awk '$1 == "BADTABLE" { print "      " $2 " (" $3 " named, expected 1)" }' \
         "$work/route-table"
-    echo "      Every compiled device registers a Destroy through its table."
+    echo "      Every compiled device registers a Destroy through its table,"
+    echo "      and a device with a table per colour space registers one"
+    echo "      Destroy across them."
     exit 1
 fi
 ntable=$(grep -c '^table ' "$work/route-table" || true)

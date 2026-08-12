@@ -37,18 +37,49 @@
 % pixels to paint into and would leave the polygon unrecorded.
 
 /.xpost_RECORD <<
-    /nativecolorspace /DeviceRGB
-    /.ncomp 3
     /dimensions [0 0]
     /NoOutput true  % write the marks down; never rasterize
 
+    % Which device paints this record's page, by the name a run selects
+    % it with: -d record:pgm asks for a page recorded and played into the
+    % grayscale raster, and -d record on its own for the colour one. The
+    % driver reads the selection at load and settles the class from this
+    % (src/lib/xpost_dev_record.c); .playpage below builds it.
+    %
+    % A device is here where a record can be played into it, which asks
+    % two things of it. It must hold its page as the rows a recorded
+    % image is written into -- an image is not a marking call and is not
+    % played back as one, it is written through the writer that wrote it
+    % the first time, into a raster of row strings -- so a device keeping
+    % its pixels in a buffer of its own is not a target: the PNG writers,
+    % the JPEG one, and the raster and BGR devices that hand their buffer
+    % to whoever embedded the interpreter. And what it shows for a colour
+    % must be settled by the colour alone, so that a mark written down
+    % when it was painted paints the same when it is played: the bilevel
+    % class is not a target, because what it stores for a grey is the
+    % grey against the halftone cell under the pixel, and the halftone in
+    % force when a mark was made is gone by the time the page is put out.
+    %
+    % Every one of them says its page may arrive a band at a time, which
+    % is what the loop below is for; a target that did not would still be
+    % played into, in one band covering the page.
+    /.playtargets <<
+        /pgm /.xpost_PGMIMAGE
+        /ppm /.xpost_PPMIMAGE
+        /tiff /.xpost_TIFFIMAGE
+    >>
+
     % A device's features decide what the machinery above it sends, so a
     % record is only faithful where the recorder declares what the device
-    % it plays into declares. This one settles whether a glyph's partly
-    % covered edge pixels arrive as coverage-weighted blends or are
-    % thresholded to whole pixels, and the colour raster this plays into
-    % asks for the blends.
-    /TextAlphaBits 4
+    % it plays into declares. The driver takes /nativecolorspace, /.ncomp
+    % and /TextAlphaBits off the target class and puts them here, rather
+    % than this class declaring any of them: a mark carries one value per
+    % component of the space it was made in and is played by handing
+    % those values to a method whose operands the target's own space
+    % decides, so a record made in another space paints a colour nobody
+    % named; and a target asking for a glyph's partly covered edge pixels
+    % as whole pixels would be played the coverage-weighted blends a
+    % recorder declaring otherwise was sent.
 
     /.copydict //.xpostsys /.classcopydict get
 
@@ -108,13 +139,14 @@
     % made by building a device that does hold pixels, playing every
     % mark into it, and putting out its page instead.
     %
-    % The device built is the colour raster class, which takes the three
-    % components this class declares: a mark was written down as it
-    % arrived, so what plays it back has to be a device asking for the
-    % same colour. It is finished the way any page device is finished,
-    % so that the compiled fills it ends up with are the ones the same
-    % page painted directly would have had, and what it puts out is
-    % therefore the same bytes.
+    % The device built is the class the run selected, named on this one
+    % under /.playclass: a mark was written down as it arrived, so what
+    % plays it back has to be a device asking for the same colour, and
+    % this class was given that device's colour space when it was loaded.
+    % It is finished the way any page device is finished, so that the
+    % compiled fills it ends up with are the ones the same page painted
+    % directly would have had, and what it puts out is therefore the
+    % same bytes.
     %
     % The name this page goes to has already been settled, on this
     % device, by .transmitpage; it is carried across rather than settled
@@ -169,7 +201,7 @@
         /rec exch def
         /pw rec /width get def
         /ph rec /height get def
-        /cls .privatedict /.xpost_PPMIMAGE get def
+        /cls .privatedict rec /.playclass get get def
 
         % What one row of that raster costs, asked of the class that
         % makes it: the class prices a row for Create and it is the same
