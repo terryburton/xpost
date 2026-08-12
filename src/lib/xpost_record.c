@@ -164,6 +164,15 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
             return;
         case XPOST_RECORD_DRAWLINE:
             a = ops[1]; b = ops[3];
+            /* A segment's ends are put on the 1/256 grid before it is
+               walked (xpost_dev_line_quantize), and that can carry an
+               end sitting a fraction below a row boundary over it: the
+               row the segment ends on is then one past the row its own
+               coordinates fall in. It cannot go the other way -- a
+               whole row is itself a point of that grid, so a coordinate
+               at or above one rounds to no less than it -- so the reach
+               is taken one grid step further down and no further up. */
+            if (a < b) b += 1.0 / 256.0; else a += 1.0 / 256.0;
             break;
         case XPOST_RECORD_FILLRECT:
             a = ops[1]; b = ops[1] + ops[3];
@@ -533,7 +542,21 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
    asked. */
 static int _meets(const _Mark *m, real lo, real hi)
 {
-    return !(m->hi < lo || m->lo > hi);
+    /* A mark's reach is in the coordinates it was made with and a run of
+       rows is in whole rows, so the reach is taken out to the rows it
+       falls in before the two are compared. A shape reaching from
+       halfway down one row to halfway down another inks both of them --
+       a stroke of any width has ends at a half row, being a rectangle
+       around a segment -- and a run ending at the first of those would
+       judge the shape not to reach it and leave the page short of a
+       mark. Every kind puts a coordinate on a row by dropping the
+       fraction, so that is what taking it out to whole rows is.
+
+       Erring outward here costs a visit to a mark that then paints
+       nothing in the run; erring inward loses the mark from the page,
+       which is wrong output rather than slow output. */
+    return !(floor((double)m->hi) < (double)lo
+          || floor((double)m->lo) > (double)hi);
 }
 
 int xpost_record_next(const Xpost_Record *rec, size_t from, real lo, real hi,

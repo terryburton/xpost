@@ -210,6 +210,72 @@ int main(void)
         report_failure("a subpath separator is no vertex and reaches no row:"
                        " %d mark(s)", s.n);
 
+    /* The rows a mark can ink are whole rows and what it was made with
+       is not, so a reach compared against a run as it stands loses marks
+       at the fraction. Two ways, both of which a page put out a run of
+       rows at a time meets on its first stroke:
+
+       A shape covering the lower half of a row inks that row. A stroke
+       of any width is a rectangle around a segment, so its corners sit
+       half a row off whatever its ends were on, and this is the ordinary
+       case rather than a corner of one. A run of rows ending there has
+       to be given the mark: one judged not to reach a run is simply
+       missing from the page, and a page missing a mark looks like a
+       page.
+
+       And a segment's ends are put on the 1/256 grid before it is walked
+       (xpost_dev_line_quantize), which can carry an end sitting a
+       fraction below a row boundary over it. The segment then paints a
+       row past the rows its own coordinates fall in, and the run holding
+       that row has to be given it too. */
+    {
+        Xpost_Record *fine = xpost_record_new(1);
+
+        if (!fine)
+            report_failure("a record for what a fraction of a row reaches");
+        else
+        {
+            grey[0] = 1.0;
+            ops[0] = 3.0;
+            ops[1] = 0.0;  ops[2] = 9.5;
+            ops[3] = 10.0; ops[4] = 95.5;
+            ops[5] = 20.0; ops[6] = 9.5;
+            if (!xpost_record_mark(fine, XPOST_RECORD_FILLPOLY, grey, ops, 7))
+                report_failure("a shape reaching half a row is written down");
+            s = _play(fine, 0.0, 9.0);
+            if (s.n != 1)
+                report_failure("a shape covering the lower half of a row is"
+                               " met by a run ending on that row: %d mark(s)",
+                               s.n);
+            s = _play(fine, 96.0, 120.0);
+            if (s.n != 0)
+                report_failure("a shape is not met past the row its furthest"
+                               " point falls in: %d mark(s)", s.n);
+            xpost_record_free(fine);
+        }
+
+        fine = xpost_record_new(1);
+        if (!fine)
+            report_failure("a record for what a segment's ends round to");
+        else
+        {
+            grey[0] = 2.0;
+            ops[0] = 0.0; ops[1] = 4.0; ops[2] = 40.0; ops[3] = 9.999;
+            if (!xpost_record_mark(fine, XPOST_RECORD_DRAWLINE, grey, ops, 4))
+                report_failure("a segment ending just short of a row is"
+                               " written down");
+            s = _play(fine, 10.0, 20.0);
+            if (s.n != 1)
+                report_failure("a segment whose end rounds onto the row below"
+                               " is met by the run holding that row:"
+                               " %d mark(s)", s.n);
+            s = _play(fine, 11.0, 20.0);
+            if (s.n != 0)
+                report_failure("... and by that row alone: %d mark(s)", s.n);
+            xpost_record_free(fine);
+        }
+    }
+
     /* The same run of rows, walked a mark at a time. A replay that plays
        into a device returns to the interpreter between marks -- a method
        may be a procedure -- so it cannot be the loop above and asks
