@@ -9,6 +9,7 @@
 # include "config.h"
 #endif
 
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,14 @@ typedef struct
    text, and are read back through a pointer of that kind: what a
    buffer holds is the caller's to say, and its alignment is the
    allocator's, which suits anything. */
+/* One threshold cell, kept whole because a screen is read by the pixel
+   and there is no part of it a replay can do without. */
+typedef struct
+{
+    int w, h;
+    unsigned char *cell;
+} _Screen;
+
 struct _Xpost_Record
 {
     int ncomp;
@@ -47,6 +56,14 @@ struct _Xpost_Record
     Xpost_String_Buffer val;    /* colour and operands, run together */
     Xpost_String_Buffer img;    /* a run of Xpost_Record_Image */
     size_t imgbytes;            /* what the copies they point at cost */
+    Xpost_String_Buffer scr;    /* a run of _Screen */
+    size_t scrbytes;            /* what the cells they point at cost */
+    /* The screen the marks are being made under, kept apart from the
+       run so that it outlives a page: a page boundary is not a screen
+       change, so the page beginning is written the same screen the page
+       ending was painted under. */
+    int htw, hth;
+    unsigned char *htcell;
 };
 
 static _Mark *_marks(const Xpost_Record *rec)
@@ -74,6 +91,16 @@ static size_t _nimg(const Xpost_Record *rec)
     return rec->img.len / sizeof(Xpost_Record_Image);
 }
 
+static _Screen *_scrs(const Xpost_Record *rec)
+{
+    return (_Screen *)rec->scr.s;
+}
+
+static size_t _nscr(const Xpost_Record *rec)
+{
+    return rec->scr.len / sizeof(_Screen);
+}
+
 Xpost_Record *xpost_record_new(int ncomp)
 {
     Xpost_Record *rec;
@@ -85,11 +112,13 @@ Xpost_Record *xpost_record_new(int ncomp)
         return NULL;
     if (xpost_strbuf_init(&rec->mark, 0) ||
         xpost_strbuf_init(&rec->val, 0) ||
-        xpost_strbuf_init(&rec->img, 0))
+        xpost_strbuf_init(&rec->img, 0) ||
+        xpost_strbuf_init(&rec->scr, 0))
     {
         xpost_strbuf_free(&rec->mark);
         xpost_strbuf_free(&rec->val);
         xpost_strbuf_free(&rec->img);
+        xpost_strbuf_free(&rec->scr);
         free(rec);
         return NULL;
     }
@@ -112,6 +141,17 @@ static void _image_free(Xpost_Record_Image *img)
     memset(img, 0, sizeof *img);
 }
 
+/* Give up the cells a record's screens were copied into. */
+static void _screens_free(Xpost_Record *rec)
+{
+    size_t i, n = _nscr(rec);
+
+    for (i = 0; i < n; i++)
+        free(_scrs(rec)[i].cell);
+    rec->scr.len = 0;
+    rec->scrbytes = 0;
+}
+
 void xpost_record_free(Xpost_Record *rec)
 {
     size_t i, n;
@@ -121,9 +161,12 @@ void xpost_record_free(Xpost_Record *rec)
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
+    _screens_free(rec);
+    free(rec->htcell);
     xpost_strbuf_free(&rec->mark);
     xpost_strbuf_free(&rec->val);
     xpost_strbuf_free(&rec->img);
+    xpost_strbuf_free(&rec->scr);
     free(rec);
 }
 
@@ -137,10 +180,11 @@ static int _fixed_nops(Xpost_Record_Kind kind)
         case XPOST_RECORD_BLENDPIX: return 3;
         case XPOST_RECORD_DRAWLINE: return 4;
         case XPOST_RECORD_FILLRECT: return 4;
-        /* a polygon states its own length, and an image is not written
-           down through xpost_record_mark at all */
+        /* a polygon states its own length, and neither an image nor a
+           screen is written down through xpost_record_mark at all */
         case XPOST_RECORD_FILLPOLY:
-        case XPOST_RECORD_IMAGE:    return -1;
+        case XPOST_RECORD_IMAGE:
+        case XPOST_RECORD_SCREEN:   return -1;
     }
     return -1;
 }
@@ -202,6 +246,12 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
                is taken where it is written down, not from the one
                operand -- which names the entry rather than describing
                it */
+            *lo = *hi = 0.0;
+            return;
+        case XPOST_RECORD_SCREEN:
+            /* a screen reaches no row and every run of rows: it paints
+               nothing, and governs whatever is painted after it wherever
+               that lands, which is settled in _meets rather than here */
             *lo = *hi = 0.0;
             return;
     }
@@ -474,6 +524,112 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
     return first < last;
 }
 
+/* Write one screen entry down, its cell copied into the record's own
+   memory. Shared by a screen the painting announced and by the one a
+   page boundary opens the page after with. */
+static int _screen_put(Xpost_Record *rec, int w, int h,
+                       const unsigned char *cell)
+{
+    _Screen s;
+    real *colour;
+    real idx;
+    size_t n = (size_t)w * (size_t)h;
+    int ok;
+
+    s.w = w;
+    s.h = h;
+    s.cell = malloc(n);
+    if (!s.cell)
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    memcpy(s.cell, cell, n);
+
+    /* a screen paints nothing, so the place a mark's colour takes is
+       filled with zeros and every entry's values stay laid out the one
+       way */
+    colour = calloc((size_t)rec->ncomp, sizeof *colour);
+    if (!colour)
+    {
+        free(s.cell);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+
+    idx = (real)_nscr(rec);
+    if (xpost_strbuf_append(&rec->scr, &s, sizeof s))
+    {
+        free(colour);
+        free(s.cell);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    /* the run holds the entry now, so the cell is the record's to give
+       up and no longer this call's */
+    rec->scrbytes += n;
+
+    ok = _put(rec, XPOST_RECORD_SCREEN, colour, &idx, 1, 0.0, 0.0);
+    free(colour);
+    return ok;
+}
+
+int xpost_record_screen(Xpost_Record *rec, int w, int h,
+                        const unsigned char *cell)
+{
+    unsigned char *keep;
+    size_t n;
+
+    if (!rec || !cell || w < 1 || h < 1 || h > INT_MAX / w)
+        return 0;
+    /* a record already short of a mark describes a page it cannot
+       reproduce, and adding to it would only make the gap harder to
+       see */
+    if (rec->short_of_a_mark)
+        return 0;
+    n = (size_t)w * (size_t)h;
+
+    keep = malloc(n);
+    if (!keep)
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    memcpy(keep, cell, n);
+    if (!_screen_put(rec, w, h, cell))
+    {
+        free(keep);
+        return 0;
+    }
+    /* what the page after a boundary is opened under, kept only once
+       the run has taken this one */
+    free(rec->htcell);
+    rec->htcell = keep;
+    rec->htw = w;
+    rec->hth = h;
+    return 1;
+}
+
+size_t xpost_record_screen_count(const Xpost_Record *rec)
+{
+    return rec ? _nscr(rec) : 0;
+}
+
+const unsigned char *xpost_record_screen_get(const Xpost_Record *rec,
+                                             size_t i, int *w, int *h)
+{
+    const _Screen *s;
+
+    /* a record short of a mark gives none of what it holds back, on the
+       same terms as a replay of one */
+    if (!rec || rec->short_of_a_mark || i >= _nscr(rec))
+        return NULL;
+    s = &_scrs(rec)[i];
+    if (w) *w = s->w;
+    if (h) *h = s->h;
+    return s->cell;
+}
+
 void xpost_record_clear(Xpost_Record *rec)
 {
     size_t i, n;
@@ -488,6 +644,7 @@ void xpost_record_clear(Xpost_Record *rec)
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
+    _screens_free(rec);
     /* the runs keep what they took: a record is filled again by the page
        after, and what it costs is then the largest page rather than the
        sum of them */
@@ -495,6 +652,14 @@ void xpost_record_clear(Xpost_Record *rec)
     rec->val.len = 0;
     rec->img.len = 0;
     rec->imgbytes = 0;
+    /* The screen the page ending was painted under opens the page
+       beginning, because a page boundary is not a screen change: the
+       machinery that announces one rebuilds the cell only where the
+       screen it is built from has changed, so nothing would announce
+       this one again and the page after would replay under whatever
+       screen its target happened to hold. */
+    if (rec->htcell)
+        _screen_put(rec, rec->htw, rec->hth, rec->htcell);
 }
 
 size_t xpost_record_count(const Xpost_Record *rec)
@@ -509,7 +674,8 @@ size_t xpost_record_bytes(const Xpost_Record *rec)
     /* what the runs have taken rather than what they have filled: a
        record is compared against a raster it would save holding, and
        what a raster costs is what was allocated for it */
-    return rec->mark.cap + rec->val.cap + rec->img.cap + rec->imgbytes;
+    return rec->mark.cap + rec->val.cap + rec->img.cap + rec->imgbytes
+         + rec->scr.cap + rec->scrbytes;
 }
 
 int xpost_record_failed(const Xpost_Record *rec)
@@ -540,19 +706,30 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
 {
     const _Mark *m;
     size_t i, n;
+    int any = 0;
 
-    if (!rec || !_nmark(rec))
+    if (!rec)
         return 0;
     m = _marks(rec);
     n = _nmark(rec);
-    *lo = m[0].lo;
-    *hi = m[0].hi;
-    for (i = 1; i < n; i++)
+    for (i = 0; i < n; i++)
     {
+        /* a screen paints nothing and so reaches no row: what is being
+           asked is where the ink is, and a record holding screens and
+           no mark reaches nothing */
+        if (m[i].kind == XPOST_RECORD_SCREEN)
+            continue;
+        if (!any)
+        {
+            *lo = m[i].lo;
+            *hi = m[i].hi;
+            any = 1;
+            continue;
+        }
         if (m[i].lo < *lo) *lo = m[i].lo;
         if (m[i].hi > *hi) *hi = m[i].hi;
     }
-    return 1;
+    return any;
 }
 
 /* Whether a mark reaches a run of rows. A mark meeting the range at all
@@ -565,6 +742,14 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
    asked. */
 static int _meets(const _Mark *m, real lo, real hi)
 {
+    /* A screen is met by every run of rows. It paints nothing, and what
+       it says governs whatever is painted after it wherever on the page
+       that lands -- so a replay of any run has to pass through the same
+       screens in the same order as a replay of the whole page, or the
+       rows it paints are not the rows the whole page would have had. */
+    if (m->kind == XPOST_RECORD_SCREEN)
+        return 1;
+
     /* A mark's reach is in the coordinates it was made with and a run of
        rows is in whole rows, so the reach is taken out to the rows it
        falls in before the two are compared. A shape reaching from
@@ -596,9 +781,16 @@ int xpost_record_last(const Xpost_Record *rec, real lo, real hi, size_t *at)
     /* backwards, stopping at the first one found: what is being asked
        is which mark had the last word over the run, and a run with
        anything in it is answered from near the end of the record rather
-       than from a pass over the whole of it */
+       than from a pass over the whole of it.
+
+       A screen is stepped over. It is met by every run, so a caller
+       asking whether a run comes to nothing but the colour the page was
+       cleared to would be told no by the mere presence of one -- and
+       every band of a screening device's page would then be painted,
+       which is the cost this question exists to avoid. */
     while (n--)
-        if (_meets(&marks[n], lo, hi))
+        if (marks[n].kind != XPOST_RECORD_SCREEN
+            && _meets(&marks[n], lo, hi))
         {
             *at = n;
             return 1;

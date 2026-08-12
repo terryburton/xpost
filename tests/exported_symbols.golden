@@ -376,6 +376,9 @@ xpost_record_mark
 xpost_record_new
 xpost_record_next
 xpost_record_replay
+xpost_record_screen
+xpost_record_screen_count
+xpost_record_screen_get
 xpost_renameat_beneath
 xpost_run
 xpost_save_create_snapshot_object

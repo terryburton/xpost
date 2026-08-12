@@ -79,7 +79,27 @@
     by thousand image as a million marks of tens of bytes each against
     the one to three bytes a pixel the page it is escaping costs. It
     carries an index into the images the record holds instead of
-    operands of its own. */
+    operands of its own.
+
+    A screen is the seventh and is not a mark at all: it paints nothing,
+    and says instead what the marks after it are to be painted under. A
+    device rendering a grey as a pattern of pixels picks each pixel by
+    the threshold under it, and which thresholds those are is the screen
+    in force -- state a marking call does not carry, because the device
+    reads it from itself rather than being told it. A record played back
+    later would find whatever screen its target holds by then, so the
+    screen is written down where it changes and put back as a replay
+    passes it, and the marks either side of it are painted under the
+    screens they were made under.
+
+    A screen is met by every run of rows there is, where a mark is met
+    only by the runs it reaches. One set before a mark governs that mark
+    wherever on the page it lands, so every replay passes through the
+    same screens in the same order whatever rows it was asked for --
+    which is what makes a band's pixels the pixels that band would have
+    had, had the whole page been painted at once. It is skipped by
+    everything that asks about marks: what rows the record reaches, and
+    which mark had the last word over a run, are questions about ink. */
 typedef enum
 {
     XPOST_RECORD_PUTPIX,   /**< x y */
@@ -87,7 +107,8 @@ typedef enum
     XPOST_RECORD_DRAWLINE, /**< x1 y1 x2 y2 */
     XPOST_RECORD_FILLRECT, /**< x y w h */
     XPOST_RECORD_FILLPOLY, /**< n, then n pairs of x y */
-    XPOST_RECORD_IMAGE     /**< which of the record's images */
+    XPOST_RECORD_IMAGE,    /**< which of the record's images */
+    XPOST_RECORD_SCREEN    /**< which of the record's screens */
 } Xpost_Record_Kind;
 
 typedef struct _Xpost_Record Xpost_Record;
@@ -249,6 +270,44 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
                             real lo, real hi, int *y0, int *y1);
 
 /**
+ * @brief Write down the screen the marks after this are made under.
+ *
+ * @param[in] rec the record
+ * @param[in] w the cell's width, @p h its height
+ * @param[in] cell w x h thresholds, which is copied
+ * @return 1, or 0 where there is no memory to hold it, on the same
+ *         terms as a mark: the record is then short of a mark and every
+ *         replay of it refuses.
+ *
+ * Called where the screen changes and not per mark. What decides that
+ * is the machinery that maintains the cell, which rebuilds it only when
+ * the screen it is built from has changed -- so a record is exactly as
+ * sensitive to a screen change as painting straight at the device is,
+ * and a page that sets one screen and keeps it holds one of these.
+ *
+ * A record whose target does not screen never has this called and holds
+ * none, which costs it nothing.
+ */
+int xpost_record_screen(Xpost_Record *rec, int w, int h,
+                        const unsigned char *cell);
+
+/**
+ * @brief How many screens a record holds.
+ */
+size_t xpost_record_screen_count(const Xpost_Record *rec);
+
+/**
+ * @brief The screen at @p i, or NULL where the record holds none there.
+ *
+ * @param[out] w the cell's width, @p h its height
+ *
+ * What comes back points into the record and is good until the next
+ * screen is written down.
+ */
+const unsigned char *xpost_record_screen_get(const Xpost_Record *rec,
+                                             size_t i, int *w, int *h);
+
+/**
  * @brief Give up the marks a record holds, keeping the record.
  *
  * What a record describes is a page, and a page ends. A record given up
@@ -266,6 +325,12 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
  * is a record costing the largest page a job has drawn rather than the
  * page in hand, which is the quantity a caller comparing a record
  * against a raster wants.
+ *
+ * The screen in force is not given up with the marks: it is written
+ * down again as the first entry of the page beginning, because a page
+ * boundary is not a screen change and the marks after one are painted
+ * under the screen that was in force before it. A record emptied of it
+ * would paint the page after under whatever screen its target held.
  *
  * A record short of a mark it was given is not emptied. All it has to
  * say about the page it could not hold is that it could not hold it,
