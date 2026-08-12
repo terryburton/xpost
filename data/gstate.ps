@@ -814,14 +814,34 @@ setglobal
         dup 255 gt { pop 255 } if
         put
     } for
-    DEVICE /.htcell cell put
-    DEVICE /.htw L put
-    DEVICE /.hth L put
-    % fetched, not looked up: a bare name would run the procedure
-    DEVICE /.htsrc currentdict /proc get put
     DEVICE /.htfreq freq put
     DEVICE /.htang ang put
+    % fetched, not looked up: a bare name would run the procedure
+    cell L L currentdict /proc get
+    //.xpostsys /.setscreencell get exec
     end
+} put
+
+% cell w h src  .setscreencell  -
+% The cell a screening device paints through, and what it was built
+% from. This is the one place a cell is installed, so it is the one
+% place a device can be told the screen has changed: a device that
+% declares /ScreenChanged is called here, with itself as its operand.
+%
+% What asks to be told is a device recording a page to be painted
+% again. The screen is state a marking call does not carry -- the
+% device paints through the cell it holds -- so a record that was not
+% told would replay under whatever screen its target held by then. It
+% is told where the cell changes rather than per mark, because that is
+% where a cell is built.
+.xpostsys /.setscreencell {
+    DEVICE exch /.htsrc exch put
+    DEVICE exch /.hth exch put
+    DEVICE exch /.htw exch put
+    DEVICE exch /.htcell exch put
+    DEVICE /ScreenChanged known {
+        DEVICE dup /ScreenChanged get exec
+    } if
 } put
 
 % -  .refreshscreencell  -
@@ -838,10 +858,8 @@ setglobal
                 /th exch def
                 DEVICE /.htsrc 2 copy known { get }{ pop pop null } ifelse
                 th eq not {
-                    DEVICE /.htcell th put
-                    DEVICE /.htw ht /Width get put
-                    DEVICE /.hth ht /Height get put
-                    DEVICE /.htsrc th put
+                    th ht /Width get ht /Height get th
+                    //.xpostsys /.setscreencell get exec
                 } if
             }{
                 pop
