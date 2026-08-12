@@ -121,6 +121,7 @@ static Xpost_Object namenativecolorspace;
 static Xpost_Object namedotncomp;
 static Xpost_Object nametextalphabits;
 static Xpost_Object namedotplaytargets;
+static Xpost_Object namedotplayloaders;
 static Xpost_Object namedotplayclass;
 static Xpost_Object nameslot[5];
 
@@ -136,7 +137,7 @@ enum
     BK_YSCALE, BK_CX0, BK_CY0, BK_CX1, BK_CY1, BK_CSPANS, BK_MBITS,
     BK_MROWB, BK_MRANGES, BK_LUT, BK_DLUTS, BK_TLUT, BK_TLUTR,
     BK_TLUTG, BK_TLUTB, BK_INTERP, BK_PREV, BK_PREVS, BK_Y, BK_LAST,
-    BK_HTCELL, BK_HTW, BK_HTH, BK_IMGDATA, BK_DIMENSIONS,
+    BK_HTCELL, BK_HTW, BK_HTH, BK_IMGDATA, BK_DIMENSIONS, BK_DEV,
     BK_COUNT
 };
 
@@ -147,7 +148,7 @@ static const char *const _bdname[BK_COUNT] =
     "yscale", "cx0", "cy0", "cx1", "cy1", "cspans", "mbits",
     "mrowb", "mranges", "lut", "dluts", "tlut", "tlutr",
     "tlutg", "tlutb", "interp", "prev", "prevs", "y", "last",
-    ".htcell", ".htw", ".hth", "ImgData", "dimensions"
+    ".htcell", ".htw", ".hth", "ImgData", "dimensions", "dev"
 };
 
 static Xpost_Object namebdkey[BK_COUNT];
@@ -721,6 +722,14 @@ out:
  * decisions and the two pages would part company somewhere nobody
  * looked.
  *
+ * Where that target keeps its raster in a buffer of its own it has no
+ * rows to be written into, and the writer is driven against the device
+ * itself: the same sampling, handed to the target's own rectangle fill
+ * one run of columns at a time. What decides which of the two a target
+ * takes is the target -- a device holding rows is written into them --
+ * and the picture is the same picture either way, since only the last
+ * step of the one writer differs.
+ *
  * The run of rows is clipped to by choosing which of the image's rows
  * to write and by narrowing the region they are written through -- not
  * by trimming what was recorded, which would leave a record that could
@@ -741,12 +750,17 @@ static int _play_image(Xpost_Context *ctx,
     int ret = 0;
 
     rows = xpost_dict_get(ctx, targetdic, namebdkey[BK_IMGDATA]);
-    if (xpost_object_get_type(rows) != arraytype)
+    if (xpost_object_get_type(rows) != arraytype
+        && xpost_object_get_type(
+               xpost_dict_get(ctx, targetdic, _slot(XPOST_RECORD_FILLRECT)))
+           != operatortype)
     {
         /* the device being played into keeps no rows an image can be
-           written into, so this mark cannot be made -- the same answer
-           as a device missing one of the marking methods */
-        XPOST_LOG_ERR("%d a recorded image has no rows to play it into",
+           written into and declares no compiled fill it can be painted
+           into a span at a time, so this mark cannot be made -- the
+           same answer as a device missing one of the marking
+           methods */
+        XPOST_LOG_ERR("%d a recorded image has nowhere to play it into",
                       undefined);
         return undefined;
     }
@@ -785,7 +799,12 @@ static int _play_image(Xpost_Context *ctx,
         PUT(k, s_); \
     } while (0)
 
-    PUT(BK_ROWS, rows);
+    /* the rows the picture is written into, or the device it is
+       painted into where it keeps none */
+    if (xpost_object_get_type(rows) == arraytype)
+        PUT(BK_ROWS, rows);
+    else
+        PUT(BK_DEV, targetdic);
     PUT(BK_DEVW, xpost_array_get(ctx, dims, 0));
     PUT(BK_DEVH, xpost_int_cons(devh));
     PUT(BK_NAT, xpost_int_cons(img->nat));
@@ -1616,26 +1635,6 @@ static int newrecorddevice(Xpost_Context *ctx,
     return 0;
 }
 
-/* Specialise the .xpost_RECORD class: load it, copy it, and continue
-   below with the copy. */
-static int loadrecorddevice(Xpost_Context *ctx)
-{
-    Xpost_Object classdic;
-    int ret;
-
-    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_RECORD"));
-    if (ret)
-        return ret;
-    classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(_loadrecorddevicecont_opcode)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_dict_get(ctx, classdic, namedotcopydict)))
-        return execstackoverflow;
-    return 0;
-}
-
 /* The mode selector this run's device selection carried, as the name a
    roster is keyed by, or a null where the run named none.
 
@@ -1665,6 +1664,72 @@ static Xpost_Object _selected_mode(Xpost_Context *ctx, const char *device)
     memcpy(name, xpost_string_get_pointer(ctx, o), o.comp_.sz);
     name[o.comp_.sz] = '\0';
     return xpost_name_cons(ctx, name);
+}
+
+/* The driver to bring in before this record is specialised, or a null
+   where there is none to bring in.
+ *
+ * The class of the device a record plays into is what the record is
+ * specialised from, and a class a C driver defines is not there until
+ * the driver has been loaded. Which driver that is the class states
+ * (data/recorddev.ps); it is asked for only where the class is not
+ * already in the private dictionary, so a driver loaded by anything
+ * else is not loaded twice.
+ */
+static Xpost_Object _play_loader(Xpost_Context *ctx, Xpost_Object classdic)
+{
+    Xpost_Object mode, targets, loaders, clsname, o;
+
+    mode = _selected_mode(ctx, "record");
+    if (xpost_object_get_type(mode) != nametype)
+        return null;
+    targets = xpost_dict_get(ctx, classdic, namedotplaytargets);
+    loaders = xpost_dict_get(ctx, classdic, namedotplayloaders);
+    if (xpost_object_get_type(targets) != dicttype
+        || xpost_object_get_type(loaders) != dicttype)
+        return null;
+    clsname = xpost_dict_get(ctx, targets, mode);
+    if (xpost_object_get_type(clsname) != nametype
+        || xpost_object_get_type(xpost_dict_get(ctx, ctx->privatedict,
+                                                clsname)) == dicttype)
+        return null;
+    o = xpost_dict_get(ctx, loaders, mode);
+    if (xpost_object_get_type(o) != nametype)
+        return null;
+    /* the loaders are operators the drivers install in systemdict, and
+       a build without the driver installed none: such a name answers
+       nothing here and the target is refused further on, where every
+       other unbuilt target is refused */
+    o = xpost_dict_get(ctx, xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0), o);
+    return xpost_object_get_type(o) == operatortype ? o : null;
+}
+
+/* Specialise the .xpost_RECORD class: load it, copy it, and continue
+   below with the copy. */
+static int loadrecorddevice(Xpost_Context *ctx)
+{
+    Xpost_Object classdic, loader;
+    int ret;
+
+    ret = xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, ".xpost_RECORD"));
+    if (ret)
+        return ret;
+    classdic = xpost_stack_topdown_fetch(ctx->lo, ctx->os, 0);
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_operator_cons_opcode(_loadrecorddevicecont_opcode)))
+        return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_dict_get(ctx, classdic, namedotcopydict)))
+        return execstackoverflow;
+    /* and, ahead of both, the driver of the device this record plays
+       into: the copy above is made from this class and the continuation
+       takes the target's colour space off the target's class, so the
+       class has to be there by the time it looks */
+    loader = _play_loader(ctx, classdic);
+    if (xpost_object_get_type(loader) == operatortype
+        && !xpost_stack_push(ctx->lo, ctx->es, loader))
+        return execstackoverflow;
+    return 0;
 }
 
 /* Settle which device paints this record's page, and take from it what
@@ -1864,6 +1929,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     if (xpost_object_get_type((nametextalphabits = xpost_name_cons(ctx, "TextAlphaBits"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotplaytargets = xpost_name_cons(ctx, ".playtargets"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplayloaders = xpost_name_cons(ctx, ".playloaders"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotplayclass = xpost_name_cons(ctx, ".playclass"))) == invalidtype)
         return VMerror;

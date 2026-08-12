@@ -47,18 +47,22 @@
     % (src/lib/xpost_dev_record.c); .playpage below builds it.
     %
     % A device is here where a record can be played into it, which asks
-    % two things of it. It must hold its page as the rows a recorded
-    % image is written into -- an image is not a marking call and is not
-    % played back as one, it is written through the writer that wrote it
-    % the first time, into a raster of row strings -- so a device keeping
-    % its pixels in a buffer of its own is not a target: the PNG writers,
-    % the JPEG one, and the raster and BGR devices that hand their buffer
-    % to whoever embedded the interpreter. And what it shows for a colour
-    % must be settled by the colour alone, so that a mark written down
-    % when it was painted paints the same when it is played: the bilevel
-    % class is not a target, because what it stores for a grey is the
-    % grey against the halftone cell under the pixel, and the halftone in
-    % force when a mark was made is gone by the time the page is put out.
+    % one thing of it: what it shows for a colour must be settled by the
+    % colour alone, so that a mark written down when it was painted
+    % paints the same when it is played. The bilevel class is not a
+    % target, because what it stores for a grey is the grey against the
+    % halftone cell under the pixel, and the halftone in force when a
+    % mark was made is gone by the time the page is put out.
+    %
+    % Where the device keeps its pixels is not one of the things asked.
+    % A recorded image is not a marking call and is not played back as
+    % one: it is written through the writer that wrote it the first
+    % time, into the rows of a device that keeps them and through the
+    % rectangle fill of a device that keeps a buffer of its own instead
+    % -- one call per run of columns, the sampling stated once either
+    % way (src/lib/xpost_dev_generic.c). So the compiled writers are
+    % targets, and so is anything else offering the five marking methods
+    % with a compiled fill among them.
     %
     % Every one of them says its page may arrive a band at a time, which
     % is what the loop below is for; a target that did not would still be
@@ -67,6 +71,20 @@
         /pgm /.xpost_PGMIMAGE
         /ppm /.xpost_PPMIMAGE
         /tiff /.xpost_TIFFIMAGE
+        /png /.xpost_PNGDEVICE
+        /jpeg /.xpost_JPEGDEVICE
+    >>
+
+    % The driver each of those classes arrives with, where it is a C
+    % driver brought in on first use rather than a class a boot file
+    % defined. A record is specialised from the class of the device it
+    % plays into -- the colour space it records in is that device's --
+    % so the driver has to be loaded before the recorder is made, and
+    % this is what says which one to load. A target whose class is
+    % already there is not named here.
+    /.playloaders <<
+        /png /loadpngdevice
+        /jpeg /loadjpegdevice
     >>
 
     % A device's features decide what the machinery above it sends, so a
