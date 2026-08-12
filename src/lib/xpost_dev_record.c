@@ -871,15 +871,21 @@ static int _replay_step(Xpost_Context *ctx,
         dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
         if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
             return typecheck;
-        ret = _play_image(ctx, img, targetdic, (real)0,
-                          (real)xpost_object_number(
-                              xpost_array_get(ctx, dims, 1)) - 1);
+        /* an image is held to the rows asked for the same way a mark is:
+           the replay chooses the sample rows that reach them and narrows
+           the region it paints to them, so a run of rows takes only its
+           own part of an image that crosses it */
+        ret = _play_image(ctx, img, targetdic,
+                          (real)xpost_object_number(lo),
+                          (real)xpost_object_number(hi));
         if (ret)
             return ret;
 
         xpost_stack_push(ctx->lo, ctx->os, recdic);
         xpost_stack_push(ctx->lo, ctx->os, targetdic);
         xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(idx.int_.val + 1));
+        xpost_stack_push(ctx->lo, ctx->os, lo);
+        xpost_stack_push(ctx->lo, ctx->os, hi);
         if (!xpost_stack_push(ctx->lo, ctx->es,
                               xpost_operator_cons_opcode(_replay_step_opcode)))
             return execstackoverflow;
