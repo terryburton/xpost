@@ -3432,6 +3432,45 @@ test('band-device',
   suite: cost_fast,
   timeout: 120)
 
+# ... and all of them at once, which is the question a reader of the
+# feature asks and no test above answers. Every one of the checks before
+# this was written beside the change it covers and is right about its own
+# part; none of them asks whether the whole of it still works everywhere.
+#
+# So this drives every device that says its page may arrive in bands --
+# both the way a job reaches one, through a record played into it, and
+# the way a test drives the loop by hand, which is the only way to reach
+# the one no record can be played into -- over pages reaching every kind
+# of mark at once, at band heights chosen to fall on the seams rather
+# than to cover a range. And it drives the five that say their
+# page may not, where the whole claim is that none of this happened to
+# them, which a campaign testing only the banding half would not notice
+# going wrong.
+#
+# Three things it does that a comparison of pages cannot. It counts what
+# each band was played, because a replay that ignored its row range
+# paints exactly the same pixels. It weighs each device by the meter the
+# device its page ends up on answers to -- the interpreter's own where
+# that device keeps its rows in virtual memory, the process's peak
+# resident size where it keeps a buffer of its own, asked of the device
+# rather than of the route that reached it -- at three page heights,
+# since a bound is a slope and not a reading. And it ends by breaking its own
+# instruments and its own machinery on purpose, six ways, and requiring
+# itself to fail each time: a check that had gone quiet answers exactly
+# as a clean tree does.
+#
+# It is the dearest test in the suite and it is priced honestly rather
+# than trimmed until it fits. What costs is the loop driven by hand,
+# which offers every mark again for every band, and a band of one row
+# over a page of glyphs is a hundred repaints of it -- which is the
+# instrument that has caught most of what this work has found.
+test('band-campaign',
+  find_program('tests/run-band-campaign-test.sh'),
+  args: [ xpost_exe, files('tests/band_campaign_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_veryslow,
+  timeout: 900)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

@@ -1,0 +1,902 @@
+% The devices that take a page in bands, driven as a fleet.
+%
+% run-band-campaign-test.sh runs this file once per device and route.
+% Every other test of this feature holds one part of it: the loop through
+% one class, the two classes whose emission is not raw rows, the two
+% whose raster is a buffer of their own, the record's lifetime, the
+% region a replay takes. What none of them asks is whether the six
+% devices that say their page may arrive in bands all still put out the
+% page they paint whole, at band heights chosen to fall on the seams, on
+% pages that reach every kind of mark at once.
+%
+% Two routes reach a band, and this file drives whichever the run
+% selected:
+%
+%   The record route, which is how a job asks for one. -d record:pgm
+%   records the page and plays it into the grayscale raster a band at a
+%   time; the band's height is a byte budget divided by what a row of
+%   that raster costs, so /.bandbytes is what this sets. What each band
+%   was played is read off the record (.recordplayed) as the target
+%   class's Emit takes it, because no page can show it: a mark played
+%   into a run of rows it does not reach paints nothing, so a replay
+%   handed the whole page for every band puts out the same page as one
+%   handed each band's own rows.
+%
+%   The direct route, which is the loop by hand: the run of rows the
+%   device holds is left where a page device leaves it, the marks are
+%   offered to each run in turn, and each run's rows go out as they are
+%   finished. It is the only way to reach the bilevel device, whose
+%   screen is not in a record, and it reaches every other device beside
+%   the record, so that each is asked both ways it can be asked. What a
+%   band holds there is read back through the device's own GetPix, which
+%   answers the ground wherever the device holds no pixel: a row outside
+%   the run the raster stands on must answer what it answered before the
+%   run was painted, whatever was painted over it.
+%
+% What a run is asked for:
+%
+%   -DPAGE=n   which page: 1 every kind of mark at once, 2 a page whose
+%              content is images, 3 a job of two pages the second of
+%              which is the first transmitted again with more on it
+%   -DW=n      the page's width
+%   -DBSET=1   run the reduced sweep rather than the full one: one page
+%              height and three band heights
+%   -DMPH=n    the page height the two-page job of page 3 runs at
+%   -DMPB=n    the band that job holds, or 0 for pages held whole
+%   -DMEMH=n   weigh one page of this height instead of running the
+%              matrix; the global half of virtual memory is what a
+%              PostScript raster class comes out of, and the wrapper
+%              weighs the process around this run for the two whose
+%              raster does not
+%   -DMEMB=n   the band that run holds, or 0 for the whole page
+%   -DCMP=1    decode the pages an earlier run of this file wrote and
+%              compare the pixels rather than the bytes, which is the
+%              other half of the claim for a device whose output is
+%              encoded
+%   -DNOBAND=n weigh nothing and run no band: put one page out through a
+%              device that must not band, with the state a band loop
+%              leaves about absent (1) or present (2), and report what
+%              the device answers over the whole page
+%   -DCENSUS=1 count what the record holds by kind, in a run of its own
+%   -DASK=1    say what device this run's page ends up on and stop, which
+%              is how the wrapper knows which meter answers for it
+%   -DSAB=n    a defect built on purpose, for the wrapper to require its
+%              own checks to catch: 1 a replay handed the whole page for
+%              every band, 2 a mark counter answering zero, 3 the memory
+%              meter this file reads answering a constant, 4 a band whose
+%              marks are not played, 6 a raster left standing on the
+%              whole page rather than moved onto the band. The wrapper
+%              has one more of its own, for the meter it reads rather
+%              than this one.
+
+/W where { pop }{ /W 128 def } ifelse
+/PAGE where { pop }{ /PAGE 1 def } ifelse
+/MEMH where { pop }{ /MEMH 0 def } ifelse
+/MEMB where { pop }{ /MEMB 0 def } ifelse
+/SAB where { pop }{ /SAB 0 def } ifelse
+/CMP where { pop }{ /CMP 0 def } ifelse
+/NOBAND where { pop }{ /NOBAND 0 def } ifelse
+/MPH where { pop }{ /MPH 96 def } ifelse
+/MPB where { pop }{ /MPB 0 def } ifelse
+/CENSUS where { pop }{ /CENSUS 0 def } ifelse
+/BSET where { pop }{ /BSET 0 def } ifelse
+/ASK where { pop }{ /ASK 0 def } ifelse
+
+% The page heights the matrix runs at. 96 is divided by four of the band
+% heights below and 100 by one, so a page the bands divide evenly is
+% reached as well as one whose last band is shorter than the rest.
+/heights [ 96 100 ] def
+
+% The band heights, chosen for the seams rather than for coverage.
+%
+%   1 is the sharpest instrument there is: every row of the page is a
+%   boundary between bands, so every mark whose reach ends part way down
+%   a row is asked about, and a screen or a filter phased on the band
+%   rather than on the page shows it here and nowhere else.
+%   3, 7 and 13 divide neither the page, nor the four rows of the
+%   halftone cell the bilevel class screens through, nor the eight rows
+%   of a JPEG coding unit.
+%   8 and 16 divide all three of those, so a defect showing only where a
+%   band cuts a cell or a unit in half is not what these two catch, and
+%   one showing only where a band does not is not what the others catch.
+/bands [ 1 3 7 8 13 16 ] def
+
+% ... and the reduced sweep, for the one cell of the matrix the full one
+% is too dear in: an image painted into a device that keeps no rows
+% arrives a rectangle per sample, and the loop driven by hand offers
+% every mark again for every band, so a page of images through such a
+% device costs the samples times the bands. What is kept is a band of
+% one row, which is the sharpest of them, one band that divides the
+% eight rows of a JPEG coding unit and one that does not.
+BSET 1 eq { /heights [ 96 ] def /bands [ 1 8 13 ] def } if
+
+/ID 1183615869 internaldict def
+/num { 20 string cvs } bind def
+/sp { ( ) print } bind def
+/nl { (\n) print } bind def
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+
+% Which route this run is. A record has a page to play; a device that
+% paints holds the page it was given.
+/banding DEVICE /.playpage known def
+/tag banding { (rec) }{ (dir) } ifelse def
+
+% The class a page ends up in: the one a record plays into, or the class
+% behind this device. What a row of it costs is asked of it, because a
+% band height stated in rows here has to be the height the loop arrives
+% at, and that loop divides a byte budget by this.
+/cls banding { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
+/NC cls /.ncomp known { cls /.ncomp get }{ 1 } ifelse def
+/rowbytes cls /.rowcost known
+    { 2 dict begin /width W def cls /.rowcost get exec end exch pop }
+    { W NC mul } ifelse def
+
+% Where the page's raster lives, which is what decides which meter can
+% weigh it. A device keeping its rows as an array the interpreter can
+% see takes them from virtual memory, which the interpreter reports on;
+% one keeping a buffer of its own is invisible there whatever route
+% reached it, and what answers for it is the process. So this is asked
+% of the device the page ends up on and not of the route that reached
+% it: a record played into a compiled writer paints into that writer's
+% buffer, and asking the interpreter what it took would answer nothing
+% and answer it truthfully.
+%
+% It is read off a device of that class rather than guessed from the
+% class's name, because the array of rows is made at Create and a class
+% is therefore asked by making one. It is the same property the image
+% replay asks about, which is the point: a device with rows is written
+% into them, and one without takes its picture through its own fill.
+/keepsrows banding
+    { 8 8 cls dup /Create get exec /ImgData known }
+    { DEVICE /ImgData known } ifelse def
+
+% ---- the pages ----
+% Everything is placed against the page's height rather than at fixed
+% rows, so that whatever the band height is the marks straddle the
+% boundaries between bands rather than sitting inside one. A page whose
+% content fell between the seams would prove nothing about them.
+
+% h  drawmixed  -
+% Every kind of mark a record holds, at once. The clear is a rectangle
+% covering the page; a fill and an eofill with a counter-wound hole
+% arrive as polygons; a fill under a clip arrives already cut to the
+% region, the clip having been resolved above the device; hairlines at
+% fractional offsets walk lines; a glyph's interior is whole pixels and
+% its edges are coverage-weighted blends; and two images, one of them
+% asking to be interpolated.
+/drawmixed { % h  .  -
+    /dm.h exch store
+    erasepage
+
+    % a fill with a counter-wound hole, across the middle of the page
+    gsave
+        0.2 setgray
+        newpath
+        14 dm.h 0.31 mul moveto  114 dm.h 0.31 mul lineto
+        114 dm.h 0.69 mul lineto 14 dm.h 0.69 mul lineto closepath
+        40 dm.h 0.42 mul moveto  40 dm.h 0.58 mul lineto
+        88 dm.h 0.58 mul lineto  88 dm.h 0.42 mul lineto closepath
+        eofill
+    grestore
+
+    % a fill under the other winding rule, low on the page
+    gsave
+        0.7 0.1 0.1 setrgbcolor
+        newpath 20 dm.h 0.06 mul moveto 108 dm.h 0.06 mul lineto
+        108 dm.h 0.23 mul lineto 20 dm.h 0.23 mul lineto closepath fill
+    grestore
+
+    % a fill cut to a clip. The clip is resolved above the device, so
+    % what a record holds is the piece of the fill that survived it and
+    % no clip at all -- which is the whole reason five kinds of mark are
+    % enough. The shape offered is the page, so every band would carry
+    % it had the clip not been applied.
+    gsave
+        newpath
+        30 dm.h 0.36 mul moveto 90 dm.h 0.36 mul lineto
+        90 dm.h 0.64 mul lineto 30 dm.h 0.64 mul lineto closepath clip
+        0 0 0.9 setrgbcolor
+        newpath 0 0 moveto W 0 lineto W dm.h lineto 0 dm.h lineto closepath
+        fill
+    grestore
+
+    % hairlines the length of the page, placed off the pixel grid so that
+    % the row a segment's end falls part way down is a row a boundary
+    % between bands can land in the middle of
+    gsave
+        0 setgray 0 setlinewidth
+        newpath 6.5 4.25 moveto W 6 sub dm.h 4.25 sub lineto stroke
+        newpath W 6 sub 4.75 moveto 6.5 dm.h 3.75 sub lineto stroke
+    grestore
+
+    % text, for the glyph pixels a boundary between bands cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 17 scalefont setfont
+        10 dm.h 0.75 mul moveto (Seams) show
+    grestore
+
+    % a sampled image, and beside it one asking to be interpolated
+    gsave
+        /DeviceGray setcolorspace
+        8 dm.h 0.80 mul translate
+        52 dm.h 0.16 mul scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+    gsave
+        /DeviceGray setcolorspace
+        68 dm.h 0.80 mul translate
+        52 dm.h 0.16 mul scale
+        << /ImageType 1 /Width 4 /Height 4 /BitsPerComponent 8
+           /Decode [0 1] /Interpolate true /ImageMatrix [4 0 0 -4 0 4]
+           /DataSource <005090f0 f0905000 0050f090 90f05000> >> image
+    grestore
+
+    % one small square of its own, low on the page
+    gsave
+        0 0.6 0.3 setrgbcolor
+        newpath 5 dm.h 0.02 mul moveto 1 0 rlineto 0 1 rlineto -1 0 rlineto
+        closepath fill
+    grestore
+} bind def
+
+% The samples the images below are made of: a gradient down and across,
+% built once so that the two images are the same data placed twice.
+%
+% The grid is small because a device keeping its pixels in a buffer of
+% its own is painted an image a rectangle per sample, and the direct
+% route offers the marks again for every band -- so what this costs
+% follows the samples times the bands. What it has to carry does not:
+% that an image is one entry in a record and not a mark per sample is
+% said by the entry count, at any grid.
+/imgdata 256 string def
+0 1 15 {
+    /iy exch def
+    0 1 15 {
+        /ix exch def
+        imgdata iy 16 mul ix add ix 8 mul iy 8 mul add 255 and put
+    } for
+} for
+
+% h  drawimages  -
+% A page whose content is images. A record holds an image as one entry
+% naming its samples rather than as a mark per sample, which is what the
+% memory of this whole mechanism rests on, and a page of images is where
+% a record that got that wrong would be larger than the page it exists
+% to avoid holding.
+/drawimages { % h  .  -
+    /di.h exch store
+    erasepage
+    gsave
+        /DeviceGray setcolorspace
+        4 di.h 0.52 mul translate
+        W 8 sub di.h 0.44 mul scale
+        << /ImageType 1 /Width 16 /Height 16 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [16 0 0 -16 0 16]
+           /DataSource imgdata >> image
+    grestore
+    gsave
+        /DeviceGray setcolorspace
+        4 di.h 0.04 mul translate
+        W 8 sub di.h 0.44 mul scale
+        << /ImageType 1 /Width 16 /Height 16 /BitsPerComponent 8
+           /Decode [0 1] /Interpolate true /ImageMatrix [16 0 0 -16 0 16]
+           /DataSource imgdata >> image
+    grestore
+} bind def
+
+% h  drawplain  -
+% The cheapest page that covers the raster: what the weighing runs paint,
+% so that what they weigh is the raster and not the drawing.
+/drawplain { % h  .  -
+    /dp.h exch store
+    erasepage
+    gsave
+        0.2 setgray
+        newpath 4 4 moveto W 4 sub 4 lineto W 4 sub dp.h 4 sub lineto
+        4 dp.h 4 sub lineto closepath fill
+    grestore
+} bind def
+
+% The two halves of the two-page job. The first page is transmitted
+% without being erased (copypage, PLRM 8.2) and the second is that same
+% page with more on it, which is the case a record has to read its page
+% boundary off the marks to get right: a page boundary reaches a
+% recorder as the rectangle that clears the page, and copypage sends no
+% such rectangle.
+/drawfirst { % h  .  -
+    /df.h exch store
+    erasepage
+    gsave
+        0.15 0.15 0.65 setrgbcolor
+        newpath 10 df.h 0.20 mul moveto 118 df.h 0.20 mul lineto
+        118 df.h 0.55 mul lineto 10 df.h 0.55 mul lineto closepath fill
+    grestore
+    gsave
+        0 setgray 0 setlinewidth
+        newpath 4 4 moveto W 4 sub df.h 4 sub lineto stroke
+    grestore
+} bind def
+/drawsecond { % h  .  -
+    /ds.h exch store
+    gsave
+        0.9 0.5 0 setrgbcolor
+        newpath 30 ds.h 0.40 mul moveto 100 ds.h 0.40 mul lineto
+        100 ds.h 0.86 mul lineto 30 ds.h 0.86 mul lineto closepath fill
+    grestore
+    gsave
+        0 setgray
+        /Times-Roman findfont 15 scalefont setfont
+        14 ds.h 0.66 mul moveto (Again) show
+    grestore
+} bind def
+
+/paint [ /drawmixed /drawimages /drawfirst /drawplain ]
+    PAGE 1 sub dup 3 gt { pop 3 } if get load def
+
+% ---- what each band was played ----
+% Read off the record as the class that paints the page takes each band,
+% which is once per band the loop did not pass over. Emit is wrapped on
+% the class rather than on an instance, before any raster is made from
+% it, so every device the run makes carries it.
+/ebn 0 def          % bands taken
+/ebsum 0 def        % marks played over them
+/ebmax 0 def
+/ebmin 0 def
+/ebprev 0 def
+/ebrows 0 def       % rows handed to the class's row writer
+/ebcalls 0 def      % calls into it
+/ebreset { /ebn 0 store /ebsum 0 store /ebmax 0 store /ebmin 0 store
+           /ebprev 0 store /ebrows 0 store /ebcalls 0 store } bind def
+
+% What the record says it has played, or what a counter that had stopped
+% counting would say.
+/recplayed { % -  .  n
+    SAB 2 eq { 0 }{ recdev ID /.recordplayed get exec } ifelse
+} bind def
+
+/embase cls /Emit known { cls /Emit get }{ null } ifelse def
+/wbbase cls /.writeband known { cls /.writeband get }{ null } ifelse def
+/countband { % rows file  .  rows file
+    /ebcalls ebcalls 1 add store
+    1 index length /ebrows exch ebrows add store
+} bind def
+
+banding {
+    cls /Emit {
+        recplayed
+        dup ebprev sub                          % played delta
+        exch /ebprev exch store
+        dup 0 gt {
+            /ebn ebn 1 add store
+            dup ebsum add /ebsum exch store
+            dup ebmax gt { dup /ebmax exch store } if
+            ebn 1 eq { dup /ebmin exch store } if
+            dup ebmin lt { /ebmin exch store }{ pop } ifelse
+        }{ pop } ifelse
+        embase
+    } put
+    cls /.writeband { countband wbbase } bind put
+} if
+
+% ---- what a device is holding ----
+% What the device answers for one pixel of a row, read through its own
+% GetPix. A device answers the ground wherever it holds no pixel, so a
+% row outside the run the raster stands on answers the same before and
+% after that run is painted -- and a raster still holding the page would
+% not.
+/CX 40 def
+/pix { % dev y  .  array
+    /px.y exch store /px.d exch store
+    CX px.y px.d dup /GetPix get exec
+    NC array astore
+} bind def
+/pixsame { % dev y array  .  bool
+    /ps.a exch store /ps.y exch store /ps.d exch store
+    /ps.ok true store
+    CX ps.y ps.d dup /GetPix get exec
+    NC 1 sub -1 0 { ps.a exch get ne { /ps.ok false store } if } for
+    ps.ok
+} bind def
+
+% ---- the names a page goes to ----
+/wholename { % page h  .  name
+    /wn.h exch store
+    (whole-) exch num join (-) join wn.h num join (-) join tag join
+    (.out) join
+} bind def
+/bandname { % page h b  .  name
+    /bn.b exch store /bn.h exch store
+    (band-) exch num join (-) join bn.h num join (-) join bn.b num join
+    (-) join tag join (.out) join
+} bind def
+/mppat { % h b  .  name
+    /mp.b exch store
+    (mp-) exch num join (-) join mp.b num join (-) join tag join
+} bind def
+/mpname { % h b n  .  name
+    /mq.n exch store /mq.b exch store /mq.h exch store
+    (mp-) mq.h num join (-) join mq.b num join (-) join tag join (-) join
+    mq.n join (.out) join
+} bind def
+
+% ---- what a record holds, by kind ----
+% A page that reached only some of the five kinds would pass every
+% comparison the wrapper makes and say nothing about the rest, so what
+% the record holds is counted by kind and the wrapper requires all five.
+% The count is taken by playing the record into a device that counts
+% instead of painting -- a raster of the target's own class with its
+% five marking methods replaced, because a recorded image is written
+% into a device's rows rather than played as a mark, and a device with
+% no rows has nowhere to put it.
+%
+% It is taken while the record still describes the page: showpage clears
+% the page it transmits, and a record reads that clearing as the page
+% after this one beginning.
+% The class the census counts into, by the number of colour values a
+% mark carries.
+%
+% It is not the target's own class, and cannot be. A recorded image is
+% written into the rows of a device that keeps them and painted through
+% the device's own compiled rectangle fill where it does not, so a
+% counter that had replaced that fill with a procedure would leave a
+% target keeping a buffer of its own no way to take an image at all. A
+% class that does keep rows takes the image into those rows, where it is
+% counted as no mark -- which is what an image is, one entry that is not
+% a marking call. What a mark needs of the device it is played into is
+% the arity its colour space decides, and that is the component count
+% alone, so counting into another class of the same count counts the
+% same marks.
+/countclass << 1 /.xpost_PGMIMAGE 3 /.xpost_PPMIMAGE >> def
+
+/kinds [ 0 0 0 0 0 ] def
+/bump { kinds exch 2 copy get 1 add put } bind def
+/census { % h  .  -
+    /cn.h exch store
+    /ccls .privatedict countclass NC get get store
+    /counter W cn.h ccls dup /Create get exec store
+    counter /PutPix   { NC 3 add { pop } repeat 0 bump } bind put
+    counter /BlendPix { NC 4 add { pop } repeat 1 bump } bind put
+    counter /DrawLine { NC 5 add { pop } repeat 2 bump } bind put
+    counter /FillRect { NC 5 add { pop } repeat 3 bump } bind put
+    counter /FillPoly { pop pop NC { pop } repeat 4 bump } bind put
+    recdev counter 0 cn.h 1 sub ID /.replaypage get exec
+} bind def
+
+% ---- the record route ----
+% A page put out the way a job puts one out. What decides whether it
+% arrives in bands is the byte budget the loop divides by a row of the
+% target's raster, so a band height in rows is set by multiplying.
+/cmarks 0 def
+/cimages 0 def
+/cbytes 0 def
+/cplayed 0 def
+/cplays 0 def
+/recordpage { % h b file  .  -
+    /rp.file exch store
+    /rp.b exch store
+    /rp.h exch store
+    << /PageSize [W rp.h] /OutputFile rp.file >> setpagedevice
+    % the device this page goes to, named while it is the current one:
+    % the Emit wrapped above reads the record through it, and by then
+    % the page machinery has moved on
+    /recdev DEVICE store
+    SAB 1 eq { DEVICE /.playpage /sabplaypage load put } if
+    SAB 4 eq { DEVICE /.playpage /skipplaypage load put } if
+    rp.b 0 gt
+        { DEVICE /.bandbytes rp.b rowbytes mul put }
+        { DEVICE /.bandbytes 1000000000 put } ifelse
+    ebreset
+    rp.h paint
+    % what the record holds, read while it still holds the page: the
+    % showpage below clears the page it transmits, and a record reads
+    % that clearing as the page after this one beginning
+    recdev ID /.recordcost get exec
+    /cbytes exch store /cimages exch store /cmarks exch store
+    showpage
+    % ... and what the page's emission played of it, read after that
+    % emission, since a replay is what a page put out is. An image is
+    % the one entry whose replay costs the picture rather than a mark,
+    % so how many times one was painted is counted beside them.
+    /cplayed recplayed store
+    /cplays recdev ID /.recordplays get exec store
+} bind def
+
+% ---- the direct route ----
+% The same loop by hand: the run of rows the device holds is left where
+% a page device leaves one for the device it is about to make, the marks
+% are offered to each run in turn, and each run's rows go out as they
+% are finished.
+/dbn 0 def          % runs the loop drove
+/dboutside 0 def    % rows outside a run whose answer the run changed
+/directpage { % h b file  .  -
+    /d.file exch store
+    /d.b exch store
+    /d.h exch store
+    /dbn 0 store
+    /dboutside 0 store
+    ebreset
+    d.b 0 gt {
+        graphicsdict /.rasterband [ 0 d.b ] put
+        << /PageSize [W d.h] >> setpagedevice
+        DEVICE /.outputfile d.file put
+        DEVICE /.writeband { countband wbbase } bind put
+        % what the page's emission keeps between bands: the file it is
+        % going to and how far down the page it has reached
+        DEVICE /.bandpage 4 dict put
+        0 d.b d.h 1 sub {
+            /d.top exch store
+            /d.rows d.b d.h d.top sub 2 copy gt { exch } if pop store
+            % ... and, on purpose, a raster left standing on the whole
+            % page instead of on this run of rows, which is the defect
+            % the read-back below is the only instrument for
+            SAB 6 eq { 0 d.h }{ d.top d.rows } ifelse
+            DEVICE dup /.moveband get exec
+            % what two rows outside this run answer while the device
+            % certainly holds no pixel of either
+            /d.above d.top 0 gt { DEVICE 0 pix }{ null } ifelse store
+            /d.below d.top d.rows add d.h lt
+                { DEVICE d.h 1 sub pix }{ null } ifelse store
+            d.h paint
+            d.above null ne {
+                DEVICE 0 d.above pixsame not
+                    { /dboutside dboutside 1 add store } if
+            } if
+            d.below null ne {
+                DEVICE d.h 1 sub d.below pixsame not
+                    { /dboutside dboutside 1 add store } if
+            } if
+            DEVICE dup /Emit get exec
+            /dbn dbn 1 add store
+        } for
+        % and the call that holds nothing, which says the page is finished
+        0 0 DEVICE dup /.moveband get exec
+        DEVICE dup /Emit get exec
+    }{
+        << /PageSize [W d.h] >> setpagedevice
+        DEVICE /.outputfile d.file put
+        DEVICE /.writeband { countband wbbase } bind put
+        d.h paint
+        DEVICE dup /Emit get exec
+        /dbn 1 store
+    } ifelse
+} bind def
+
+% ---- a replay that is handed the whole page for every band ----
+% The defect the counts are here to catch, built on purpose so that the
+% wrapper can require its own check to catch it. Every band is painted
+% from a replay handed the page's rows rather than the band's: the marks
+% outside the band paint nothing, so the page is the same page and no
+% comparison of pixels can see it. This is the class's own loop with the
+% row range changed, because that one line is the whole of the defect.
+/sabplaypage { % IMAGE  .  -
+16 dict begin
+    /rec exch def
+    /pw rec /width get def
+    /ph rec /height get def
+    /pcls .privatedict rec /.playclass get get def
+    /prow 2 dict begin /width pw def pcls /.rowcost get exec end exch pop def
+    /prows rec /.bandbytes get prow idiv dup 1 lt { pop 1 } if def
+    prows ph gt { /prows ph def } if
+    graphicsdict /.rasterband [ 0 prows ] put
+    /page pw ph pcls dup /Create get exec def
+    page 1 1 .privatedict /.completedevice get exec
+    rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
+    rec /.ground known
+        { rec /.ground get aload pop page dup /Ground get exec } if
+    page /.bandpage 4 dict put
+    0 prows ph 1 sub {
+        /top exch def
+        /rows prows ph top sub 2 copy gt { exch } if pop def
+        top rows page dup /.moveband get exec
+        rec page 0 ph 1 sub ID /.replaypage get exec
+        page dup /Emit get exec
+    } for
+    0 0 page dup /.moveband get exec
+    page dup /Emit get exec
+end } bind def
+
+% ... and the same loop with one band's marks not played, which is a
+% page short of what it should carry and is what the bytes are for.
+/skipplaypage { % IMAGE  .  -
+16 dict begin
+    /rec exch def
+    /pw rec /width get def
+    /ph rec /height get def
+    /pcls .privatedict rec /.playclass get get def
+    /prow 2 dict begin /width pw def pcls /.rowcost get exec end exch pop def
+    /prows rec /.bandbytes get prow idiv dup 1 lt { pop 1 } if def
+    prows ph gt { /prows ph def } if
+    graphicsdict /.rasterband [ 0 prows ] put
+    /page pw ph pcls dup /Create get exec def
+    page 1 1 .privatedict /.completedevice get exec
+    rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
+    rec /.ground known
+        { rec /.ground get aload pop page dup /Ground get exec } if
+    page /.bandpage 4 dict put
+    /nth 0 def
+    0 prows ph 1 sub {
+        /top exch def
+        /rows prows ph top sub 2 copy gt { exch } if pop def
+        top rows page dup /.moveband get exec
+        nth 1 ne { rec page top top rows add 1 sub ID /.replaypage get exec } if
+        /nth nth 1 add def
+        page dup /Emit get exec
+    } for
+    0 0 page dup /.moveband get exec
+    page dup /Emit get exec
+end } bind def
+
+% ---- a device that must not band ----
+% raster and bgr hand their buffer to whoever embedded the interpreter
+% and the vector writers hold no raster at all, so for all five of them
+% the right outcome is that none of this happened. What is put about for
+% a band loop is a run of rows in graphicsdict, which Create takes and
+% undefines, and a dictionary on the device for what an emission keeps
+% between bands. Both are left where the loop leaves them here, and the
+% page a device puts out has to be the page it puts out with neither --
+% a device whose Create honoured the run of rows would hold eight rows
+% of the page and put out a different one.
+%
+% What is read back is the page itself, through the device's own GetPix,
+% because two of these five write no file: the caller they hand their
+% buffer to is the file. Every row of the page is read, at three columns
+% across it, weighted by the row so that the same pixels in another
+% order are another answer.
+/NBH 96 def
+NOBAND 0 gt {
+    NOBAND 2 eq { graphicsdict /.rasterband [ 0 8 ] put } if
+    << /PageSize [W NBH] /OutputFile (noband.out) >> setpagedevice
+    NOBAND 2 eq { DEVICE /.bandpage 4 dict put } if
+    NBH drawmixed
+    % read back before the page is transmitted: showpage clears the page
+    % it sends, so a read after it is a read of a cleared page
+    /nbsum 0 def
+    /nbink 0 def
+    0 1 NBH 1 sub {
+        /nby exch def
+        /nbwhite true def
+        [ W 4 idiv W 2 idiv W 3 mul 4 idiv ] {
+            nby DEVICE dup /GetPix get exec
+            NC { dup 255 ne { /nbwhite false def } if
+                 nby 1 add mul /nbsum exch nbsum add def } repeat
+        } forall
+        nbwhite not { /nbink nbink 1 add def } if
+    } for
+    showpage
+    (\nNB ) print NOBAND num print sp nbsum num print sp nbink num print sp
+        DEVICE /BandedPage known { (yes) }{ (no) } ifelse print nl
+    (\nSUCCESS\n) print
+    quit
+} if
+
+% ---- the pixels an encoded page decodes to ----
+% A page whose bytes are an encoding can differ from another byte for
+% byte while standing for the same picture, or agree in length while
+% standing for a different one, so the two claims are separate and
+% neither implies the other. The bytes are compared by the wrapper; the
+% pixels are compared here, decoded through this interpreter's own
+% filters -- a PNG through the flate decoder with the row filters undone
+% (PLRM Table 3.20, predictor 15) and a JPEG through the DCT decoder,
+% which is the same decode tests/run-band-writer-test.sh takes. Which it
+% is is read off the file's first byte rather than told, so nothing here
+% has to be kept in step with what the wrapper selected.
+/readfile { % name  .  string
+    (r) file
+    dup 65535 string readstring pop
+    exch closefile
+} bind def
+/be32 { % string i  .  int
+    /be.i exch store /be.s exch store
+    be.s be.i get 16777216 mul
+    be.s be.i 1 add get 65536 mul add
+    be.s be.i 2 add get 256 mul add
+    be.s be.i 3 add get add
+} bind def
+/pngpixels { % file-string  .  pixels
+    /pg.d exch store
+    /pg.w pg.d 16 be32 store
+    /pg.n pg.d 25 get 6 eq { 4 }{ 3 } ifelse store
+    /pg.buf 65535 string store
+    /pg.len 0 store
+    /pg.pos 8 store
+    {
+        pg.pos 8 add pg.d length gt { exit } if
+        /pg.clen pg.d pg.pos be32 store
+        pg.d pg.pos 4 add 4 getinterval (IDAT) eq {
+            pg.buf pg.len
+            pg.d pg.pos 8 add pg.clen getinterval putinterval
+            /pg.len pg.len pg.clen add store
+        } if
+        /pg.pos pg.pos pg.clen add 12 add store
+    } loop
+    pg.buf 0 pg.len getinterval
+    << /Predictor 15 /Colors pg.n /BitsPerComponent 8 /Columns pg.w >>
+    /FlateDecode filter
+    65535 string readstring pop
+} bind def
+/jpegpixels { % file-string  .  pixels
+    /DCTDecode filter 65535 string readstring pop
+} bind def
+/pixelsof { % name  .  pixels
+    readfile
+    dup 0 get 137 eq { pngpixels }{ jpegpixels } ifelse
+} bind def
+/firstdiff { % a b  .  index-or--1
+    /fd.b exch store /fd.a exch store
+    /fd.i -1 store
+    0 1 fd.a length 1 sub {
+        /fd.j exch store
+        fd.a fd.j get fd.b fd.j get ne { /fd.i fd.j store exit } if
+    } for
+    fd.i
+} bind def
+
+CMP 0 gt {
+    heights {
+        /hh exch store
+        /pw PAGE hh wholename pixelsof store
+        bands {
+            /bb exch store
+            /pb PAGE hh bb bandname pixelsof store
+            (\nPIXELS ) print hh num print sp bb num print sp
+                pw length num print sp pb length num print sp
+                pw length pb length eq { pw pb firstdiff num }{ (-2) } ifelse
+                print nl
+        } forall
+    } forall
+    (\nSUCCESS\n) print
+    quit
+} if
+
+% ---- what a record holds, by kind ----
+% A run of its own, because the census plays the record and the marks a
+% replay has played is what the matrix reads: a census taken beside the
+% matrix would be counted into it.
+CENSUS 0 gt {
+    banding {
+        countclass NC known {
+            << /PageSize [W heights 0 get] /OutputFile (census.out) >>
+                setpagedevice
+            /recdev DEVICE store
+            heights 0 get paint
+            heights 0 get census
+            (\nKINDS ) print kinds { num print sp } forall nl
+        }{
+            % No class that keeps its rows carries this many colour
+            % values, so there is nothing to count the record into. Said
+            % rather than passed over: a kind of mark nobody counted is a
+            % kind this campaign says nothing about.
+            (\nNOCOUNT ) print NC num print nl
+        } ifelse
+    } if
+    (\nSUCCESS\n) print
+    quit
+} if
+
+% ---- what a run reports about itself ----
+(\nROUTE ) print tag print nl
+(\nDEV ) print NC num print sp rowbytes num print sp
+    cls /BandedPage known { (yes) }{ (no) } ifelse print sp
+    banding { (play) }{ (paint) } ifelse print sp
+    keepsrows { (rows) }{ (buffer) } ifelse print nl
+
+ASK 0 gt { (\nSUCCESS\n) print quit } if
+
+% ---- weighing one page ----
+% The global half of virtual memory is what a PostScript raster class
+% takes its rows from and nothing here gives it back, so the difference
+% across one page is what that page cost. The two classes whose raster
+% is a buffer of their own are invisible to it, and the wrapper weighs
+% the process around this run instead.
+/gvm { SAB 3 eq { 1000000 }{ globalvmstatus pop exch pop } ifelse } bind def
+
+MEMH 0 gt {
+    % a page painted and thrown away first: the fonts and the tables the
+    % marks build are built once, and a measurement taken across the
+    % first page of a run would carry them
+    /paint /drawplain load def
+    banding { 32 0 (memwarm.out) recordpage }
+            { 32 0 (memwarm.out) directpage } ifelse
+    /before gvm def
+    banding { MEMH MEMB (mem.out) recordpage }
+            { MEMH MEMB (mem.out) directpage } ifelse
+    /after gvm def
+    (\nMEM ) print tag print sp MEMH num print sp MEMB num print sp
+        after before sub num print nl
+    (\nSUCCESS\n) print
+    quit
+} if
+
+% ---- the matrix ----
+PAGE 3 eq {
+    % A job of two pages: the first transmitted without being erased and
+    % the second that same page with more on it. The page after a
+    % copypage is the same page with more on it (PLRM 8.2), so a record
+    % that gave its page up at the emission rather than at the clearing
+    % that starts the next one would put out a second page missing the
+    % first's marks.
+    %
+    % One page height and one band height per run, because the name a
+    % page goes to carries the job's own page number and a run that put
+    % out every combination would number them from one end of the run to
+    % the other.
+    banding {
+        << /PageSize [W MPH] /OutputFile MPH MPB mppat (-%d.out) join >>
+            setpagedevice
+        /recdev DEVICE store
+        MPB 0 gt
+            { DEVICE /.bandbytes MPB rowbytes mul put }
+            { DEVICE /.bandbytes 1000000000 put } ifelse
+        ebreset
+        MPH drawfirst
+        copypage
+        MPH drawsecond
+        showpage
+        (\nMP ) print MPH num print sp MPB num print sp ebn num print nl
+    }{
+        MPB 0 gt {
+            % the same two pages through the band loop by hand: what the
+            % second page carries is what copypage leaves, which is the
+            % first page's marks and then the second's
+            /paint { drawfirst } bind store
+            MPH MPB MPH MPB (1) mpname directpage
+            /paint { dup drawfirst drawsecond } bind store
+            MPH MPB MPH MPB (2) mpname directpage
+            (\nMP ) print MPH num print sp MPB num print sp dbn num print nl
+        }{
+            % ... and the reference the two are held to: the same job
+            % through a device that paints and holds the page it is given
+            << /PageSize [W MPH] /OutputFile MPH MPB mppat (-%d.out) join >>
+                setpagedevice
+            MPH drawfirst
+            copypage
+            MPH drawsecond
+            showpage
+            (\nMP ) print MPH num print sp MPB num print sp 1 num print nl
+        } ifelse
+    } ifelse
+}{
+    heights {
+        /hh exch store
+
+        % the page whole, and with it how many marks the page comes to:
+        % a replay into one band meets every mark there is, so what it
+        % played is the count each band's own is read against
+        banding { hh 0 PAGE hh wholename recordpage }
+                { hh 0 PAGE hh wholename directpage } ifelse
+        (\nWHOLE ) print PAGE num print sp hh num print sp
+            PAGE hh wholename print sp
+            banding { cplayed num }{ (0) } ifelse print nl
+        banding {
+            (\nCOST ) print PAGE num print sp hh num print sp
+            cmarks num print sp cimages num print sp cbytes num print sp
+            W hh mul NC mul num print nl
+        } if
+
+        bands {
+            /bb exch store
+            banding { hh bb PAGE hh bb bandname recordpage }
+                    { hh bb PAGE hh bb bandname directpage } ifelse
+            (\nBAND ) print PAGE num print sp hh num print sp bb num print sp
+                PAGE hh bb bandname print sp
+                banding { ebn }{ dbn } ifelse num print sp
+                ebsum num print sp ebmax num print sp ebmin num print sp
+                ebcalls num print sp ebrows num print sp
+                dboutside num print sp cplays num print nl
+        } forall
+    } forall
+} ifelse
+
+(\nSUCCESS\n) print
+quit
