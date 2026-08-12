@@ -130,12 +130,14 @@
     % and the marks are held instead -- a cost that follows the drawing
     % rather than the paper.
     %
-    % One raster, moved, rather than one device per band: raster memory
-    % is not part of virtual memory (PLRM 3.7.3) and comes from the
-    % global half, which nothing reclaims, so a device per band would
-    % leave every band's rows behind and hold the page this exists not to
-    % hold. What that costs, and that this does not, is measured rather
-    % than argued (tests/run-band-loop-test.sh).
+    % One raster, moved, rather than one device per band: a raster comes
+    % from the half of virtual memory a restore does not rewind (PLRM
+    % 3.7.3), and while the collector reaches that half, a device the
+    % page machinery has retired stays reachable and its rows are not
+    % given back. So a device per band would leave every band's rows
+    % behind and hold the page this exists not to hold. What that costs,
+    % and that this does not, is measured rather than argued
+    % (tests/run-band-loop-test.sh).
     %
     % A class that has not said its page may arrive in bands is handed
     % the whole of it, which is what such a device expects, and so is a

@@ -155,11 +155,15 @@ currentglobal true setglobal
     % carries no pixel behind at the positions given up.
     %
     % A raster per band would be the shorter way to say this and it does
-    % not bound anything: global virtual memory is where raster memory
-    % is taken from (PLRM 3.7.3 puts it outside the memory a restore
-    % rewinds) and nothing reclaims it, so a device per band leaves each
-    % band's rows behind and the loop ends up holding the page it exists
-    % not to hold. Measured, not assumed: tests/run-band-loop-test.sh.
+    % not bound anything. A raster is taken from global virtual memory,
+    % which a restore does not rewind (PLRM 3.7.3), and the collector
+    % does reach that half -- but a device the page machinery has
+    % retired stays reachable, so a collection reclaims none of it: four
+    % devices made in turn grow global memory by every one of their
+    % rasters, and a collection after them gives nothing back. A device
+    % per band therefore leaves each band's rows behind and the loop
+    % ends up holding the page it exists not to hold. Measured, not
+    % assumed: tests/run-band-loop-test.sh.
     %
     % The run is held to the page and to the rows there are, so a caller
     % naming a run this raster cannot stand for gets the part of it that
