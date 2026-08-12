@@ -3331,6 +3331,20 @@ test('band-loop',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the refinement on that loop: a band nothing painted into is not
+# painted. A band painted the ground and a band left alone carry the same
+# bytes, which is what makes leaving it alone allowed and what makes no
+# comparison of pages able to see it -- so this counts the bands the loop
+# put out and holds that count to the bands the record says have anything
+# in them. The page painted everywhere is the control: nothing there may
+# be skipped, so a run reporting a saving where there is none is caught.
+test('band-sparse',
+  find_program('tests/run-band-sparse-test.sh'),
+  args: [ xpost_exe, files('tests/band_sparse_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

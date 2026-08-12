@@ -1,0 +1,237 @@
+% A page with large regions nothing painted into, put out a band at a
+% time, and the same page put out whole.
+%
+% run-band-sparse-test.sh runs this file once through the device that
+% writes down what it was asked to paint -- which paints its page by
+% playing what it wrote into a raster holding one run of the page's rows
+% at a time -- and once through a device that paints as it goes. The
+% claims are that the two are the same bytes, and that the bands nothing
+% painted into were not painted.
+%
+% The second claim is what this file is for and it cannot be read off
+% the page: a band that was painted the ground and a band that was left
+% alone carry the same bytes, which is the whole reason leaving it alone
+% is allowed. So the run counts the bands the loop actually put out, by
+% wrapping the raster class's Emit before any raster is made from it.
+% That counts what the loop did rather than what it was told, which a
+% count taken from the predicate would not: a loop ignoring the answer
+% would still be handed the same answers.
+%
+% The page painted everywhere is the control. Nothing there may be
+% skipped, and the count says so in the same unit -- so an instrument
+% that reported a saving where there is none is caught by the run that
+% has none to report.
+
+/W 240 def
+/H 480 def
+/ROWBYTES W 3 mul def
+
+% Which run this is. The recording device is the one with a band loop in
+% it; a device that paints holds its page whole, which is the answer the
+% bands are held against.
+/banding DEVICE /.playpage known def
+/tag banding { (rec) }{ (dir) } ifelse def
+/ID 1183615869 internaldict def
+
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+/num { 20 string cvs } bind def
+/name { % kind band  .  string
+    /nm.b exch store /nm.k exch store
+    nm.k (-) join nm.b join (-) join tag join (.ppm) join
+} bind def
+
+% A device row as a user-space y. The page is painted against the rows
+% it is put out in, so that where a mark falls among the bands is
+% something this file states rather than something it hopes for.
+/dy { H exch sub } bind def
+
+% How many bands the loop put out. The raster class's Emit is wrapped
+% here, before any instance is copied from it, so every raster the loop
+% makes carries the count. The loop calls Emit once for each band it
+% paints and once at the end to say the page is finished, so a loop that
+% painted every band would count one per band and one more.
+/emits [ 0 ] def
+banding {
+    /rasterclass .privatedict /.xpost_PPMIMAGE get def
+    /rasteremit rasterclass /Emit get def
+    rasterclass /Emit { emits 0 emits 0 get 1 add put rasteremit } put
+} if
+
+% h  paint  -
+% A page with ink in some bands and nothing in others, arranged so that
+% the first band and the last hold nothing -- the first because the file
+% and its header are opened by the first band that has rows to write,
+% the last because the rows after the final band that has any are laid
+% down by the call that finds nothing held at all.
+/sparsepaint { % -  .  -
+    % Painted, and then cleared away. A band holding nothing but this is
+    % the ground however much was painted into it, since erasepage
+    % covers the page and nothing here survives it. A page put out band
+    % by band must agree.
+    gsave
+        0 setgray
+        newpath 0 30 dy moveto W 30 dy lineto
+                W 450 dy lineto 0 450 dy lineto closepath fill
+    grestore
+    erasepage
+
+    % a rectangle high on the page, clear of the first band
+    gsave
+        0.6 0 0 setrgbcolor
+        newpath 10 40 dy moveto 200 40 dy lineto
+                200 70 dy lineto 10 70 dy lineto closepath fill
+    grestore
+
+    % A bar, and then the page's own ground laid back over the rows
+    % below it and across the whole width. The rows that rectangle
+    % covers whole are the ground again and need not be painted; the
+    % band the bar is in is not, because the rectangle does not reach
+    % the rows the bar is on and the bar is still there to be painted.
+    % A run judged ground because a rectangle merely reaches it would
+    % lose that bar.
+    gsave
+        0 setgray
+        newpath 10 100 dy moveto 230 100 dy lineto
+                230 105 dy lineto 10 105 dy lineto closepath fill
+    grestore
+    DEVICE /.ground get aload pop
+    0 105 W 1 sub 38 DEVICE dup /FillRect get exec
+
+    % The same the other way round: a bar down the left, and the ground
+    % laid back over every row it is on but only across the right of the
+    % page. Those rows are not the ground -- the bar is still on them --
+    % and a run judged ground from the rows a rectangle covers without
+    % asking how wide it is would lose it.
+    gsave
+        0 setgray
+        newpath 0 160 dy moveto 60 160 dy lineto
+                60 190 dy lineto 0 190 dy lineto closepath fill
+    grestore
+    DEVICE /.ground get aload pop
+    100 150 W 100 sub 1 sub 41 DEVICE dup /FillRect get exec
+
+    % a fill with a hole, over the middle
+    gsave
+        0.2 setgray
+        newpath
+        20 200 dy moveto 220 200 dy lineto
+        220 260 dy lineto 20 260 dy lineto closepath
+        60 215 dy moveto 60 245 dy lineto
+        180 245 dy lineto 180 215 dy lineto closepath
+        eofill
+    grestore
+
+    % a stroke lying across a boundary between bands
+    gsave
+        0 setgray 1 setlinewidth
+        newpath 20 300 dy moveto 220 306 dy lineto stroke
+    grestore
+
+    % text, for the glyph pixels a boundary cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 18 scalefont setfont
+        20 355 dy moveto (Sparse) show
+    grestore
+
+    % A rectangle covering whole bands across the whole width, in a
+    % colour that is not the one the page was cleared to. It is the same
+    % shape as the rectangle that clears a page and the same shape as
+    % the two above, and it is not the ground: a run judged ground from
+    % the rows a rectangle covers without asking what colour it is would
+    % put these bands out white.
+    0.5 0.5 0.5
+    0 432 W 1 sub 31 DEVICE dup /FillRect get exec
+
+    % a sampled image, which a record holds as one entry: a band it
+    % reaches is a band that has to be painted, and one it does not is
+    % not
+    gsave
+        /DeviceGray setcolorspace
+        30 400 dy translate
+        180 30 scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+% The control: ink in every band, so that nothing may be skipped. The
+% fill covering the page is a polygon and not a rectangle at the colour
+% the page was cleared to, so it is a mark like any other and the bands
+% it reaches are bands that have to be painted.
+/fullpaint { % -  .  -
+    gsave
+        0.25 setgray
+        newpath 0 0 moveto W 0 lineto W H lineto 0 H lineto closepath fill
+    grestore
+    gsave
+        0 setgray 0 setlinewidth
+        newpath 5 5 moveto W 5 sub H 5 sub lineto stroke
+    grestore
+} bind def
+
+% kind label budget painter  transmit  -
+% Paint one page and put it out, saying how many bands the loop put out
+% and which of them held nothing but the ground.
+/transmit { % kind label budget painter  .  -
+    /tr.paint exch store
+    /tr.budget exch store
+    /tr.label exch store
+    /tr.kind exch store
+    << /PageSize [W H] /OutputFile tr.kind tr.label name >> setpagedevice
+    banding { DEVICE /.bandbytes tr.budget put } if
+    emits 0 0 put
+    tr.paint
+
+    banding {
+        % the band grid the loop will use, worked out the way the loop
+        % works it out, and what the record says each of those runs of
+        % rows comes to
+        /tr.rows tr.budget ROWBYTES idiv def
+        tr.rows 1 lt { /tr.rows 1 def } store
+        tr.rows H ge { /tr.rows H def } store
+        /tr.n 0 def
+        /tr.ground 0 def
+        (GROUND ) print tr.kind print ( ) print tr.label print ( ) print
+        0 tr.rows H 1 sub {
+            /tr.top exch store
+            /tr.bot tr.top tr.rows add H 2 copy gt { exch } if pop 1 sub store
+            /tr.n tr.n 1 add store
+            DEVICE tr.top tr.bot ID /.recordground get exec {
+                /tr.ground tr.ground 1 add store (y)
+            }{ (n) } ifelse print
+        } for
+        (\n) print
+    } if
+
+    showpage
+
+    banding {
+        (CASE ) print tr.kind print ( ) print tr.label print ( ) print
+        tr.rows num print ( ) print tr.n num print ( ) print
+        emits 0 get num print ( ) print tr.ground num print (\n) print
+    } if
+} bind def
+
+(PAGE ) print W num print ( ) print H num print (\n) print
+(ROWBYTES ) print ROWBYTES num print (\n) print
+
+% Two band heights and the whole page. A band height is a budget divided
+% by what a row costs, so the budget is what is named here: sixteen rows,
+% five rows, and a budget the page fits inside, which is a page put out
+% the way a page has always been put out.
+(sparse) (16) ROWBYTES 16 mul { sparsepaint } transmit
+(sparse) (5)  ROWBYTES 5 mul  { sparsepaint } transmit
+(sparse) (w)  ROWBYTES H mul  { sparsepaint } transmit
+(full)   (16) ROWBYTES 16 mul { fullpaint } transmit
+(full)   (5)  ROWBYTES 5 mul  { fullpaint } transmit
+(full)   (w)  ROWBYTES H mul  { fullpaint } transmit
