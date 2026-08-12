@@ -2459,7 +2459,16 @@ void loadinitps(Xpost_Context *ctx, const char *datadir)
     if (!datadir[0])
         return;
     xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, quit));
-    snprintf(path_init_ps, sizeof(path_init_ps), "%s/init.ps", datadir);
+    /* a data directory long enough to leave no room for the file's name
+       beside it names no file, so the load is not attempted with a name
+       that was cut to fit */
+    if (snprintf(path_init_ps, sizeof(path_init_ps), "%s/init.ps", datadir)
+        >= (int)sizeof(path_init_ps))
+    {
+        XPOST_LOG_ERR("the data directory %s leaves no room for the name of"
+                      " the file to load beside it", datadir);
+        return;
+    }
 
     _forward_slashes(path_init_ps);
     n = snprintf(buf, sizeof(buf),

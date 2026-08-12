@@ -298,11 +298,19 @@ jobs:
       # what they are for -- and a checker cannot run under a checker.
       # What is left is the interpreter watched across the whole of the
       # fast suite, which is what this lane never had before.
+      #
+      # Leaks are not this job's question. Two jobs beside it check for
+      # them and check nothing else, so asking here as well would pay
+      # for the same answer twice -- and the price is not small: a full
+      # leak check walks the whole of virtual memory at every exit, and
+      # this suite exits a few hundred times. What is left is what only
+      # this job reports: reading and writing where it should not, and
+      # acting on a value nobody wrote.
       run: |
         mkdir -p vglogs
         MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh quick \
           --print-errorlogs \
-          --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=full --errors-for-leak-kinds=definite --track-origins=yes --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
+          --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=no --track-origins=yes --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
           --timeout-multiplier 60 || {
             # Selected on the count, not on the words: every report ends
             # with a summary naming each kind, so a search for the words
@@ -533,44 +541,24 @@ jobs:
         set -o pipefail
         CC=clang meson setup builddir -Dc_args=-Wunreachable-code
         ninja -C builddir 2>&1 | tee unreachable.log
-    # Three sites are unreachable on purpose: each is an implementation
-    # kept beside the decision that would enable it, behind a return
-    # that says it is not enabled, and each says so where the checker
-    # points. They are named by file, because a line number moves and a
-    # register that has to be renumbered to stay true is a register that
-    # stops being true.
-    #
-    # Held from both ends. A finding in any other file fails: that is
-    # code nobody meant to be unreachable, which is the class this job
-    # exists for. A file named here that no longer produces one fails
-    # too -- the parked implementation was enabled or removed, and an
-    # entry describing neither would go on excusing whatever appeared in
-    # that file next.
+    # No code in this tree is unreachable. Code kept beside the decision
+    # that would enable it, behind a return that says it is not enabled,
+    # was carried here for a time and named in a register; none is left,
+    # so the rule is the plain one and there is no register to keep true.
+    # A finding is code nobody meant to be unreachable, which is the
+    # class this job exists for.
     - name: check
       run: |
-        cat > parked <<'REGISTER'
-        src/lib/xpost_garbage.c
-        src/lib/xpost_interpreter.c
-        src/lib/xpost_memory.c
-        REGISTER
         grep -F '[-Wunreachable-code]' unreachable.log \
           | sed -E 's@^.*(src/(lib|bin)/[A-Za-z_0-9]+\.[ch]).*@\1@' \
-          | sort > found.all
-        sort -u found.all > found
-        echo '--- findings by file ---'
-        uniq -c found.all
-        echo '--- unparked ---'
-        comm -23 found parked | tee unparked
-        echo '--- parked and silent ---'
-        comm -13 found parked | tee stale
-        [ ! -s unparked ] || {
-          echo 'code is unreachable in a file that does not say it is parked'
+          | sort > found.all || true
+        if [ -s found.all ]; then
+          echo '--- findings by file ---'
+          uniq -c found.all
+          echo 'code is unreachable, and nothing in this tree is meant to be'
           exit 1
-        }
-        [ ! -s stale ] || {
-          echo 'a file is registered as holding parked code and holds none'
-          exit 1
-        }
+        fi
+        echo 'no unreachable code'
     - uses: actions/upload-artifact@v4
       with:
         name: unreachable-code

@@ -825,6 +825,11 @@ static void _compare(const char *pa, const char *pb)
     Image a;
     Image b;
 
+    /* both are given up together below, so both name something before
+       either is read: the second is not reached when the first fails */
+    memset(&a, 0, sizeof a);
+    memset(&b, 0, sizeof b);
+
     if (!_read_image(pa, &a) || !_read_image(pb, &b))
     {
         free(a.bytes);
