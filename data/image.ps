@@ -117,6 +117,89 @@ currentglobal true setglobal
         pop
     } bind
 
+    % row  .rowclear  -
+    % Leave a row as a row this device has just made. A string is
+    % allocated zero, so a fresh row of the class's own shape is what a
+    % row starts as, and one is kept to copy from: a raster standing for
+    % one run of the page's rows after another has to start each run as
+    % a fresh raster would, or what the run before painted shows through
+    % wherever this one paints nothing.
+    %
+    % A row is a string or the array of planes a colour class keeps one
+    % as, and either is cleared plane for plane against a row of the
+    % same shape, so a class stating a row of its own is cleared by what
+    % it states rather than by an assumption about its shape.
+    /.rowclear { % row  .  -
+        dup type /stringtype eq {
+            0 .zerorow putinterval
+        }{
+            0 1 2 index length 1 sub {  % row i
+                2 copy get 0            % row i plane 0
+                .zerorow 3 index get    % row i plane 0 zeroplane
+                putinterval pop         % row
+            } for
+            pop
+        } ifelse
+    } bind
+
+    % top rows IMAGE  .moveband  -
+    % Move the run of the page's rows this device holds.
+    %
+    % The rows are the ones Create made: one raster the size of a band,
+    % standing for one run of the page after another, which is what
+    % bounds what a page costs to put out. The rows a device holds are
+    % asked of ImgData everywhere they are asked -- a mark is dropped
+    % against the row it was about to be written to, and Emit lays the
+    % ground over a row that carries no pixel -- so moving the run is
+    % moving those rows within the spine and leaving the row that
+    % carries no pixel behind at the positions given up.
+    %
+    % A raster per band would be the shorter way to say this and it does
+    % not bound anything: global virtual memory is where raster memory
+    % is taken from (PLRM 3.7.3 puts it outside the memory a restore
+    % rewinds) and nothing reclaims it, so a device per band leaves each
+    % band's rows behind and the loop ends up holding the page it exists
+    % not to hold. Measured, not assumed: tests/run-band-loop-test.sh.
+    %
+    % The run is held to the page and to the rows there are, so a caller
+    % naming a run this raster cannot stand for gets the part of it that
+    % it can rather than a write past the end of the spine.
+    /.moveband { % top rows IMAGE  .  -
+    begin
+        % the row to copy from, and the rows this device made, both
+        % taken up at the first move: a device that never moves its band
+        % pays nothing for the ability to.
+        currentdict /.bandpool known not {
+            currentglobal true setglobal
+            /.zerorow .rowalloc def
+            /.bandpool .bandrows array def
+            setglobal
+            0 1 .bandrows 1 sub {
+                dup .bandtop add ImgData exch get
+                .bandpool 3 1 roll put
+            } for
+        } if
+        % the run given up shows the page's ground, which is the row
+        % carrying no pixel every row this device does not hold shows
+        .bandtop 1 .bandtop .bandrows add 1 sub {
+            ImgData exch .emptyrow put
+        } for
+        /.bandrows exch def
+        /.bandtop exch def
+        .bandtop 0 lt { /.bandtop 0 def } if
+        .bandtop height gt { /.bandtop height def } if
+        .bandrows 0 lt { /.bandrows 0 def } if
+        .bandtop .bandrows add height gt
+            { /.bandrows height .bandtop sub def } if
+        .bandrows .bandpool length gt { /.bandrows .bandpool length def } if
+        0 1 .bandrows 1 sub {
+            dup .bandtop add               % i row-index
+            exch .bandpool exch get        % row-index row
+            dup .rowclear
+            ImgData 3 1 roll put
+        } for
+    end } bind
+
     /.to-int { floor cvi } bind
 
     % c  .chan  byte
@@ -537,32 +620,141 @@ currentglobal true setglobal
         .ground astore pop
     end } bind
 
+    % file  .writehead  -
+    % The header a raw portable map carries ahead of its rows: the magic
+    % naming the format, the extent in pixels, and the top of the value
+    % range, which is the full 255 whatever the page holds. The extent
+    % is the page's own -- one page is being written whatever it arrives
+    % in -- so a page put out a band at a time carries at its head the
+    % bytes a page put out whole carries.
+    /.writehead { % file  .  -
+        dup .pnmmagic writestring
+        dup width 20 string cvs writestring
+        dup ( ) writestring
+        dup height 20 string cvs writestring
+        (\n255\n) writestring
+    } bind
+
+    % lo hi  .bandwrite  -
+    % Hand one run of the page's rows to the class's row writer. A row
+    % the device does not hold is the page's ground, which is what a
+    % whole page lays over such a row, so a writer is handed the same
+    % rows either way and no writer has to know the difference.
+    %
+    % The array handed over is kept and reused from one run to the next:
+    % a fresh one per run would be a page's worth of them by the end,
+    % which is a cost that grows with the page in a mechanism that
+    % exists so nothing does.
+    /.bandwrite { % lo hi  .  -
+        /.bandhi exch def
+        /.bandlo exch def
+        .bandhi .bandlo ge {
+            /.bandn .bandhi .bandlo sub 1 add def
+            .bandpage /rows 2 copy known
+                { get length .bandn lt }{ pop pop true } ifelse
+                { .bandpage /rows .bandn array put } if
+            /.bandout .bandpage /rows get def
+            0 1 .bandn 1 sub {
+                /.bandi exch def
+                ImgData .bandlo .bandi add get
+                dup .rowheld not { pop .groundrow } if
+                .bandout exch .bandi exch put
+            } for
+            .bandout 0 .bandn getinterval
+            .bandpage /file get
+            .writeband
+        } if
+    } bind
+
+    % -  .emitband  -
+    % Put out the rows this device holds, for a page arriving in bands.
+    %
+    % Emit is called once per band, with the rows the device holds at
+    % that moment, and once more at the end with nothing, which is what
+    % says the page is finished. So this writes what it can -- the rows
+    % from where the file has reached to the last row the device holds --
+    % and keeps what it must, which is where the file has reached. That
+    % is kept in .bandpage rather than on the device, since it outlives
+    % the run of rows the device is standing for at any moment.
+    %
+    % The file is opened and its header written before the first row
+    % goes out, and closed by the call that finds nothing held: a call
+    % holding no row is the last one, and what the page has left of its
+    % rows goes out as the ground. A page finished stays finished, so a
+    % further call writes nothing rather than a second page into the
+    % same file.
+    /.emitband { % -  .  -
+        .bandpage /done known not {
+            .bandpage /file known not {
+                .bandpage /file .outputfile (w) file put
+                .bandpage /file get .writehead
+                .bandpage /next 0 put
+            } if
+            % the first row this device holds at or after the row the
+            % file has reached
+            /.bandat .bandpage /next get def
+            {
+                .bandat height ge { exit } if
+                ImgData .bandat get .rowheld { exit } if
+                /.bandat .bandat 1 add def
+            } loop
+            .bandat height ge {
+                .bandpage /next get height 1 sub .bandwrite
+                .bandpage /next height put
+                .bandpage /file get
+                dup (%stdout) (w) file ne { closefile }{ pop } ifelse
+                .bandpage /done true put
+            }{
+                % ... and the last of the run it begins
+                /.bandtail .bandat def
+                {
+                    .bandtail 1 add height ge { exit } if
+                    ImgData .bandtail 1 add get .rowheld not { exit } if
+                    /.bandtail .bandtail 1 add def
+                } loop
+                .bandpage /next get .bandtail .bandwrite
+                .bandpage /next .bandtail 1 add put
+            } ifelse
+        } if
+    } bind
+
     % write the page: open the name settled for this page and hand the
     % rows to the class's .writepage
+    %
+    % A device whose page is arriving in bands is put out through
+    % .emitband instead, which writes the rows this device holds at this
+    % moment and keeps the file open for the rows the next call brings.
+    % The band loop is what leaves .bandpage on a device (data/recorddev.ps);
+    % a device put out the ordinary way carries none and takes the whole
+    % page below, which is why a device that has not been asked to band
+    % cannot be handed part of a page by accident.
     /Emit { % IMAGE  .  -
     begin
-        % The page a writer is given is the page the program asked for.
-        % Where the device holds only some of the page's rows, the rest
-        % of it shows the ground, and the whole page is put together
-        % here so that no writer has to know the difference.
-        %
-        % Which rows those are is asked of the rows themselves, one at a
-        % time, rather than worked out from the run the device set out
-        % to hold. The two answer alike while the rows a device holds
-        % are settled once and for all at Create, and only the first
-        % stays right when they are not: a page whose held rows are the
-        % ones a mark reached does not hold a run at all, and there is
-        % no arithmetic over .bandtop and .bandrows that describes it.
-        ImgData height array copy
-        0 1 height 1 sub {              % page i
-            1 index 1 index get         % page i row
-            .rowheld
-                { pop }
-                { 1 index exch .groundrow put }
-            ifelse
-        } for
-        .outputfile (w) file
-        .writepage
+        currentdict /.bandpage known { .emitband }{
+            % The page a writer is given is the page the program asked
+            % for. Where the device holds only some of the page's rows,
+            % the rest of it shows the ground, and the whole page is put
+            % together here so that no writer has to know the difference.
+            %
+            % Which rows those are is asked of the rows themselves, one
+            % at a time, rather than worked out from the run the device
+            % set out to hold. The two answer alike while the rows a
+            % device holds are settled once and for all at Create, and
+            % only the first stays right when they are not: a page whose
+            % held rows are the ones a mark reached does not hold a run
+            % at all, and there is no arithmetic over .bandtop and
+            % .bandrows that describes it.
+            ImgData height array copy
+            0 1 height 1 sub {              % page i
+                1 index 1 index get         % page i row
+                .rowheld
+                    { pop }
+                    { 1 index exch .groundrow put }
+                ifelse
+            } for
+            .outputfile (w) file
+            .writepage
+        } ifelse
     end } bind
 >> put
 

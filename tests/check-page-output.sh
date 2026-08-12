@@ -176,7 +176,11 @@ fi
 # The recording device holds no pixels: it writes down the marks a page
 # makes and, at Emit, builds a device that paints, plays the marks into
 # it and puts out that device's page. So it reaches an Emit that is not
-# the one .transmitpage ran, and doing that is the device working.
+# the one .transmitpage ran, and doing that is the device working. It
+# reaches one per band besides, where the page it plays into holds a run
+# of the page's rows at a time: such a page is put out once per band and
+# once more to finish it (doc/NEWINTERNALS), which is a count this cannot
+# have an opinion about.
 #
 # What the rule is really about it still keeps, and the keeping is
 # checked rather than assumed: the name is settled once, for this page,
@@ -194,7 +198,7 @@ awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" -v r="$recps" '
         if ($1 == r && line ~ /OutputFileName/) settles++
         if (line !~ /\/Emit[ \t]+get/) next
         if ($1 == f && $2 >= a && $2 <= b) { n++; next }
-        if ($1 == r && !seen) { seen = 1; next }
+        if ($1 == r) { seen = 1; next }
         print $1 ":" $2
     }
     END {

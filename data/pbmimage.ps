@@ -14,6 +14,16 @@
 % a bilevel page keeps its glyphs bilevel
 .xpost_PBMIMAGE /TextAlphaBits 1 put
 
+% This class is a copy of one whose page may arrive a band at a time,
+% and a copy carries what it was copied from: a device says whether its
+% page may arrive in bands and the safe answer is silence, so a class
+% that has not thought about it has to say nothing rather than inherit a
+% yes. This one has not -- its rows are packed at emission and its
+% header is the bilevel one, neither of which the rows below write --
+% and the header it would otherwise be handed goes with the answer.
+.xpost_PBMIMAGE /BandedPage undef
+.xpost_PBMIMAGE /.pnmmagic undef
+
 % every grey painted screens through the halftone in force
 .xpost_PBMIMAGE /ScreenPaint true put
 

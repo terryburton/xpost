@@ -75,6 +75,31 @@
         .ground astore pop
     end } bind
 
+    % What the raster a page is played into may cost, in bytes.
+    %
+    % It is the whole of the bound. A record is priced by the marks and
+    % takes any page there is; the raster that paints it is priced by the
+    % page, and this is what says how much of that page is held at once.
+    % The band is this many bytes' worth of the target's rows, so what a
+    % page costs to put out stops following the page's height here and
+    % follows this instead.
+    %
+    % A megabyte, because the two costs it stands between pull opposite
+    % ways and neither is sharp. Below it the fixed cost of a band -- one
+    % pass over the marks that reach it, and one call per band into the
+    % writer -- is paid over too few rows to be worth it; above it the
+    % bound stops being a bound worth having, since a page at production
+    % size is a hundred times this and a page at screen size is already
+    % under it. At any ordinary page width it is some hundreds of rows,
+    % which is a band deep enough that the marks reaching two of them are
+    % a small part of the marks there are.
+    %
+    % It is not a page-device parameter and must not become one. PLRM
+    % Appendix G declares the band-device setup operators obsolete and
+    % bars them from page descriptions, so a program may neither tell how
+    % many times its marks were played nor choose it.
+    /.bandbytes 1048576
+
     % IMAGE  .playpage  -
     % The page a record holds, painted.
     %
@@ -96,22 +121,95 @@
     % again, since settling it twice would count the page twice against
     % a %d in the name.
     %
-    % So the page this device can put out is the page a raster can hold.
-    % The record itself is priced by the marks and takes any page there
-    % is, which is why this device starts on a page no raster device
-    % would: what refuses such a page is the raster built here, and the
-    % refusal arrives when the page is put out rather than when the
-    % device is made.
+    % The page is painted a band at a time where the class says its page
+    % may arrive that way and the budget above buys fewer rows than the
+    % page has. A band is a raster holding one run of the page's rows: the
+    % marks that reach the run are played into it, the rows it holds go
+    % out, and the same raster stands for the next run. What is held at
+    % once is then the band and not the page, whatever the page's height,
+    % and the marks are held instead -- a cost that follows the drawing
+    % rather than the paper.
+    %
+    % One raster, moved, rather than one device per band: raster memory
+    % is not part of virtual memory (PLRM 3.7.3) and comes from the
+    % global half, which nothing reclaims, so a device per band would
+    % leave every band's rows behind and hold the page this exists not to
+    % hold. What that costs, and that this does not, is measured rather
+    % than argued (tests/run-band-loop-test.sh).
+    %
+    % A class that has not said its page may arrive in bands is handed
+    % the whole of it, which is what such a device expects, and so is a
+    % page the budget already covers -- a page put out in one band is a
+    % page put out whole, and it is put out the way it always was.
+    %
+    % So the page this device can put out is the page a raster can hold,
+    % and a band raster holds a taller page than a whole one does. The
+    % record itself is priced by the marks and takes any page there is,
+    % which is why this device starts on a page no raster device would:
+    % what refuses such a page is the raster built here, and the refusal
+    % arrives when the page is put out rather than when the device is
+    % made.
     /.playpage { % IMAGE  .  -
-    3 dict begin
+    12 dict begin
         /rec exch def
-        /page rec /width get rec /height get
-            //.xpostsys /.devicemakers get /ppm get exec def
+        /pw rec /width get def
+        /ph rec /height get def
+        /cls .privatedict /.xpost_PPMIMAGE get def
+
+        % What one row of that raster costs, asked of the class that
+        % makes it: the class prices a row for Create and it is the same
+        % row here. The elements a row takes are left out of the division
+        % -- a planar row is three of them against a byte per pixel per
+        % plane -- so the band is priced by the pixels, which is what the
+        % page is priced by.
+        /rowbytes 2 dict begin
+            /width pw def
+            cls /.rowcost get exec
+        end exch pop def
+        % A row whose bytes are past what an integer counts is a row no
+        % band holds one of, so there is nothing to divide: the page is
+        % asked for whole and refused by the raster that cannot hold it,
+        % which is where a page too large to paint has always been
+        % refused.
+        /bandrows cls /BandedPage known
+            rowbytes type /integertype eq and
+            rowbytes 0 gt and {
+            rec /.bandbytes get rowbytes idiv
+            dup 1 lt { pop 1 } if
+        }{ ph } ifelse def
+
+        % The raster the page is painted in, holding a band of it or the
+        % whole of it. The run of rows a band holds is left where a page
+        % device leaves it for the device it is about to make, and Create
+        % takes it from there; a page held whole names no run and Create
+        % holds every row.
+        /banding bandrows ph lt def
+        banding { graphicsdict /.rasterband [ 0 bandrows ] put } if
+        /page pw ph cls dup /Create get exec def
         % the record's marks are in device space already, so the scale a
         % completion carries into the default matrix is 1:1 here
         page 1 1 .privatedict /.completedevice get exec
         rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
-        rec page //.internaldict /.replaypage get exec
+
+        banding {
+            % what the page's emission keeps between bands: the file it
+            % is going to and how far down the page it has got
+            page /.bandpage 4 dict put
+            0 bandrows ph 1 sub {
+                /top exch def
+                % the last band is the rows the page has left
+                /rows bandrows ph top sub 2 copy gt { exch } if pop def
+                top 0 gt { top rows page dup /.moveband get exec } if
+                rec page top top rows add 1 sub
+                    //.internaldict /.replaypage get exec
+                page dup /Emit get exec
+            } for
+            % and the call that holds nothing, which says the page is
+            % finished and closes the file behind it
+            0 0 page dup /.moveband get exec
+        }{
+            rec page //.internaldict /.replaypage get exec
+        } ifelse
         page dup /Emit get exec
         page dup /Destroy get exec
     end } bind

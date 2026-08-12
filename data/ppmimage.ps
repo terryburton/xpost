@@ -35,6 +35,15 @@
     /.ncomp 3
     /BlendPix //.internaldict /.blendpixrgb get
 
+    % This device's page may arrive a band at a time: a header and then
+    % raw rows, so a row goes out the moment it is finished and nothing
+    % written has to be revisited. What a device states about itself is
+    % what the machinery above it goes by, and the safe answer is
+    % silence -- a device that has not said this gets the whole page it
+    % expects (doc/NEWINTERNALS).
+    /BandedPage true
+    /.pnmmagic (P6\n)
+
     % three component planes per scanline, red green blue in that order;
     % a fresh string is already zero. The empty row a page held in part
     % stands the rows it does not hold on is the same shape carrying no
@@ -73,6 +82,18 @@
     } bind
 
     % the planes interleave through the compiled row writer
+    /.writeband { % rows file  .  -
+        //.internaldict /.writergbrows get exec
+    } bind
+
+    % The whole page is the header and every row. The compiled writer
+    % reached here writes both, taking the extent from the rows it is
+    % given; the run of rows a band puts out is not the page's extent,
+    % so a band writes the header from the page through .writehead and
+    % the rows through the same walk. The two headers are the same bytes,
+    % and what holds them to that is the band gate rather than a comment:
+    % a page put out a band at a time is required to be the page put out
+    % whole, byte for byte (tests/run-band-loop-test.sh).
     /.writepage { % img file
         2 dict begin
         {/f /a}{exch def}forall

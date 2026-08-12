@@ -1,0 +1,255 @@
+% One page painted in a raster the size of a band, and the same page
+% painted in a raster the size of the page.
+%
+% run-band-loop-test.sh runs this file once through the device that
+% writes down what it was asked to paint -- which paints its page by
+% playing what it wrote into a raster holding one run of the page's rows
+% at a time -- and once through a device that paints as it goes. The
+% claims are that the two are the same bytes, and that what the first
+% holds while it does it is the band and not the page.
+%
+% The second claim is the point of the mechanism and it is measured, not
+% asserted. Raster memory comes out of the global half of virtual memory
+% -- a mark has to survive the restore that ends a save (PLRM 3.7.3), and
+% the global half is the half a restore does not reach -- so what a page
+% costs to put out is the growth of that half across the transmission,
+% which vmstatus answers. Every page here is put out twice through the
+% same device and the same code, once with a budget that buys a band of
+% a few rows and once with one that buys the page, at three page
+% heights: what is compared is then a slope against a slope rather than
+% one number against a claim.
+%
+% A band loop that quietly held the whole page anyway would paint the
+% same bytes, so the bytes cannot see it. That is why the memory is a
+% gate here and not a note.
+
+/W 240 def
+/heights [ 240 480 960 ] def
+
+% What a band may cost, in bytes, for the runs that band: sixteen rows
+% of a 240-wide colour raster, which at the shortest page above is
+% fifteen bands and at the tallest sixty. A page one band covers is a
+% page with no boundary between bands on it, and every arrangement of
+% marks passes on one of those.
+/BANDBYTES 240 3 mul 16 mul def
+
+% Which run this is. The recording device is the one with a band loop in
+% it; a device that paints holds its page whole, which is the answer the
+% bands are held against.
+/banding DEVICE /.playpage known def
+/tag banding { (rec) }{ (dir) } ifelse def
+
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+/num { 20 string cvs } bind def
+
+% -  gvm  int
+% What the global half of virtual memory has taken. It only grows -- an
+% allocation given up goes on a free list and the count stays -- so the
+% difference across a page is the high-water mark of what that page
+% took, which is the quantity a bound is a bound on.
+/gvm {
+    currentglobal true setglobal
+    vmstatus pop exch pop
+    exch setglobal
+} bind def
+
+/name { % kind h  .  string
+    /nm.h exch store /nm.k exch store
+    nm.k (-) join nm.h num join (-) join tag join (.ppm) join
+} bind def
+
+% h  paint  -
+% A page reaching all five kinds of mark and a sampled image, laid out
+% against the page's height so that whatever the height is the marks
+% cross the boundaries between bands rather than sitting inside one.
+% A band is sixteen rows here and nothing below is sixteen rows tall.
+/paint { % h  .  -
+    /ph exch store
+
+    % a fill with a hole, over the middle of the page
+    gsave
+        0.2 setgray
+        newpath
+        30 ph 0.30 mul moveto 200 ph 0.30 mul lineto
+        200 ph 0.55 mul lineto 30 ph 0.55 mul lineto closepath
+        70 ph 0.36 mul moveto 70 ph 0.49 mul lineto
+        160 ph 0.49 mul lineto 160 ph 0.36 mul lineto closepath
+        eofill
+    grestore
+
+    % a fill under the other winding rule, low on the page
+    gsave
+        0.6 0 0 setrgbcolor
+        newpath
+        40 ph 0.06 mul moveto 190 ph 0.06 mul lineto
+        190 ph 0.20 mul lineto 40 ph 0.20 mul lineto closepath
+        fill
+    grestore
+
+    % strokes down the length of it, so that every band has one across it
+    gsave
+        0 setgray
+        0 setlinewidth
+        newpath 10 5 moveto 230 ph 5 sub lineto stroke
+        newpath 230 5 moveto 10 ph 5 sub lineto stroke
+        1 setlinewidth
+        0 0 0.8 setrgbcolor
+        newpath 120 ph 0.02 mul moveto 120 ph 0.98 mul lineto stroke
+    grestore
+
+    % text, for the glyph pixels a boundary cuts through
+    gsave
+        0 setgray
+        /Times-Roman findfont 22 scalefont setfont
+        20 ph 0.70 mul moveto (Bands) show
+        20 ph 0.80 mul moveto (Bound) show
+    grestore
+
+    % a sampled image, which a record holds as one entry and plays for
+    % the rows a band covers rather than as a mark per sample. It is
+    % magnified well past a band's height, so every band it reaches is a
+    % band it is played into for part of itself.
+    gsave
+        /DeviceGray setcolorspace
+        30 ph 0.60 mul translate
+        180 ph 0.08 mul scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+% h budget kind  transmit  -
+% Paint one page and put it out, reporting what the global half of
+% virtual memory took while it was put out.
+/transmit { % h budget kind  .  -
+    /tr.kind exch store
+    /tr.budget exch store
+    /tr.h exch store
+    << /PageSize [W tr.h] /OutputFile tr.kind tr.h name >> setpagedevice
+    banding { DEVICE /.bandbytes tr.budget put } if
+    tr.h paint
+    /tr.before gvm store
+    showpage
+    /tr.after gvm store
+    banding {
+        (MEM ) print tr.kind print ( ) print tr.h num print ( ) print
+        tr.after tr.before sub num print (\n) print
+    } if
+} bind def
+
+(PAGE ) print W num print (\n) print
+(ROWBYTES ) print W 3 mul num print (\n) print
+(BANDBYTES ) print BANDBYTES num print (\n) print
+
+heights {
+    /hh exch def
+    banding { hh BANDBYTES (band) transmit } if
+    hh 999999999 (whole) transmit
+} forall
+
+% ... and the shortest of them again in a band of one row, where every
+% row of the page is a boundary between bands. What that reaches is the
+% marks whose reach ends part way down a row -- a stroke of any width
+% has ends half a row off whatever it was drawn between -- which a band
+% deep enough to hold both sides of such an end never asks about.
+banding { heights 0 get W 3 mul (fine) transmit } if
+
+% ---- what a class says about taking its page in bands ----
+% A device says whether its page may arrive in bands and the answer
+% defaults to no, so what is reported is every class that could say yes
+% and whether it does. The two that derive from these by dict copy are
+% where the rule breaks: a copy carries what it was copied from, so a
+% class that has not thought about it would say yes by inheritance.
+banding {
+    [ /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE /.xpost_TIFFIMAGE ]
+    {
+        /dcl.n exch store
+        (DECL ) print dcl.n num print ( ) print
+        .privatedict dcl.n get /BandedPage known { (yes) }{ (no) } ifelse
+        print (\n) print
+    } forall
+} if
+
+% ---- the same, one layer down: a grayscale page put out band by band ----
+% The page above is played into the colour raster, which is the class the
+% recorder's marks are the right shape for. The grayscale class takes its
+% page in bands as well and nothing above reaches it, so it is driven
+% here directly: one raster holding a run of rows, the same marks offered
+% to it once per run, and its page put out a band at a time against the
+% same marks painted into a raster holding the whole page.
+%
+% The marks are offered whole to every run and each run keeps what lands
+% on the rows it holds, which is what a replay does to a record. Nothing
+% below covers the page, so most of it is the raster as it was made --
+% which is what holds the moved raster to starting each run as a fresh
+% raster would. A row that came up carrying what the run before painted
+% on it would show here as ink no run put there.
+/GW 200 def
+/GH 300 def
+/GBAND 11 def
+
+/greymarks { % dev  .  -
+    /gm.dev exch store
+    0.1 20 20 100 40 gm.dev dup /FillRect get exec
+    0.0 5 5 GW 6 sub GH 6 sub gm.dev dup /DrawLine get exec
+    0.0 GW 6 sub 5 5 GH 6 sub gm.dev dup /DrawLine get exec
+    0.35 [ [30 200] [170 200] [170 260] [100 285] [30 260] ]
+        gm.dev dup /FillPoly get exec
+    17 1 GH 2 sub { 0.7 exch 17 exch gm.dev dup /PutPix get exec } for
+} bind def
+
+/greydev { % top rows file  .  dev
+    /gd.file exch store
+    /gd.rows exch store
+    /gd.top exch store
+    graphicsdict /.rasterband [ gd.top gd.rows ] put
+    /gd.dev GW GH .privatedict /newPGMIMAGEdevice get exec store
+    gd.dev 1 1 .privatedict /.completedevice get exec
+    gd.dev /.outputfile gd.file put
+    gd.dev
+} bind def
+
+banding {
+    % the page in one raster, put out the way a page has always been
+    /gwhole 0 GH (pgm-whole.pgm) greydev def
+    gwhole greymarks
+    gwhole dup /Emit get exec
+    gwhole dup /Destroy get exec
+
+    % and the page in a raster holding eleven rows, put out as each run
+    % of rows is finished
+    /gband 0 GBAND (pgm-band.pgm) greydev def
+    gband /.bandpage 4 dict put
+    /gn 0 def
+    0 GBAND GH 1 sub {
+        /gtop exch store
+        /grows GBAND GH gtop sub 2 copy gt { exch } if pop store
+        gtop 0 gt { gtop grows gband dup /.moveband get exec } if
+        % the rows this run holds, and no others: a run given up carries
+        % the row of no pixels, which is how a device says it holds no
+        % row there
+        gtop 0 gt {
+            (HELD ) print gtop num print ( ) print
+            gband /ImgData get gtop 1 sub get length num print ( ) print
+            gband /ImgData get gtop get length num print (\n) print
+        } if
+        gband greymarks
+        gband dup /Emit get exec
+        /gn gn 1 add store
+    } for
+    % the call that holds nothing, which says the page is finished
+    0 0 gband dup /.moveband get exec
+    gband dup /Emit get exec
+    gband dup /Destroy get exec
+    (GREY ) print GW num print ( ) print GH num print ( ) print
+    gn num print (\n) print
+} if

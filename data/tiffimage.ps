@@ -12,6 +12,17 @@
 
 /.xpost_TIFFIMAGE .xpost_PPMIMAGE dup length 2 add dict copy def
 
+% This class is a copy of one whose page may arrive a band at a time,
+% and a copy carries what it was copied from: a device says whether its
+% page may arrive in bands and the safe answer is silence, so a class
+% that has not thought about it has to say nothing rather than inherit a
+% yes. This one has not -- its header states where the strip is and how
+% long, which is a reason to plan the strips before the rows go out
+% rather than a reason it cannot -- and the portable-map header it would
+% otherwise be handed goes with the answer.
+.xpost_TIFFIMAGE /BandedPage undef
+.xpost_TIFFIMAGE /.pnmmagic undef
+
 % emission frames the rows as a TIFF; the Emit dispatch itself is
 % inherited
 .xpost_TIFFIMAGE /.writepage { % img file

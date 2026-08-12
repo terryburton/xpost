@@ -3316,6 +3316,21 @@ test('record-image',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the loop those two rest on: a page put out a band at a time.
+# The band loop makes a raster the height of a band, plays the marks that
+# reach it, puts those rows out and moves on, so what it holds is the
+# band and not the page. Both halves are gated here, and neither implies
+# the other: the page assembled from bands is the page held whole, byte
+# for byte, and what the transmission takes is measured at three page
+# heights -- flat for the band route against a whole-page route that
+# grows by a row of pixels per row of page.
+test('band-loop',
+  find_program('tests/run-band-loop-test.sh'),
+  args: [ xpost_exe, files('tests/band_loop_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

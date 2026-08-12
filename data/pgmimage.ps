@@ -29,6 +29,15 @@
     /.ncomp 1
     /BlendPix //.internaldict /.blendpixgray get
 
+    % This device's page may arrive a band at a time: a header and then
+    % raw rows, so a row goes out the moment it is finished and nothing
+    % written has to be revisited. What a device states about itself is
+    % what the machinery above it goes by, and the safe answer is
+    % silence -- a device that has not said this gets the whole page it
+    % expects (doc/NEWINTERNALS).
+    /BandedPage true
+    /.pnmmagic (P5\n)
+
     % a string row per scanline; a fresh string is already zero. The
     % empty row a page held in part stands the rows it does not hold on
     % is the same shape carrying no pixel.
@@ -59,15 +68,19 @@
     } bind
 
     % raw (binary) format: each row string is already the raster bytes
+    /.writeband { % rows file  .  -
+        exch { 1 index exch writestring } forall pop
+    } bind
+
+    % the whole page is the header and every row, written through the
+    % same two the bands are written through, so a page put out at once
+    % and a page put out a band at a time carry the same bytes because
+    % they are the same bytes rather than because two writers agree
     /.writepage { % img file
         2 dict begin
         {/f /a}{exch def}forall
-        f (P5\n) writestring
-        f a 0 get length =string cvs writestring
-        f ( ) writestring
-        f a length =string cvs writestring
-        f (\n255\n) writestring
-        a { f exch writestring } forall
+        f .writehead
+        a f .writeband
         f (%stdout)(w)file ne {
             f closefile
         } if
