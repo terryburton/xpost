@@ -592,6 +592,21 @@ int loadbgrdevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* This device's page does not arrive a band at a time. The raster is
+       given to whoever embedded the interpreter, which asked for a page
+       and holds one, so the page is whole by the contract it asked
+       under: holding less of it at once would bound nothing and would
+       hand back less than a page (doc/NEWINTERNALS).
+
+       Taken back out rather than left unsaid. The class is a copy of the
+       colour raster class, which says its page may arrive that way, and
+       a copy carries what it was copied from -- so a device that has not
+       considered the question says yes by inheritance, and the safe
+       answer is the one that has to be stated. */
+    ret = xpost_dict_undef(ctx, classdic, xpost_name_cons(ctx, "BandedPage"));
+    if (ret && ret != undefined)
+        return ret;
+
     op = xpost_operator_cons(ctx, "bgrCreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 

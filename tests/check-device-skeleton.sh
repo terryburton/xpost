@@ -627,8 +627,80 @@ for slot in $recforbidden; do
     fi
 done
 
+# 15. A device that specialises a class saying its page may arrive in
+#     bands says for itself whether its own may, and one that says yes
+#     brings the method that moves its raster from band to band.
+#
+#     Whether a page may arrive a band at a time is /BandedPage, and the
+#     safe answer is silence -- a device that has not thought about it
+#     gets the whole page it expects (doc/NEWINTERNALS). The compiled
+#     devices here are all dict copies of a class that says yes, and a
+#     copy carries what it was copied from, so silence is exactly what
+#     they cannot have: an untouched copy says yes on behalf of a driver
+#     that never considered the question. The PostScript classes have
+#     the same problem one layer up and answer it the same way, by
+#     taking the declaration back out (pbmimage.ps, tiffimage.ps).
+#
+#     And a device that says yes is one a band loop will call .moveband
+#     on. That method moves the run of rows a raster stands for, which
+#     for these devices is a run within a buffer of their own and not
+#     within the base class's array of rows: the inherited one reaches
+#     for a row array the instance does not carry and answers undefined.
+#     It is not on the raster-slot list above, which is about the slots
+#     the class bodies read that array through, and the completeness
+#     check therefore does not ask for it -- so it is asked for here, of
+#     the devices whose declaration makes it reachable.
+banded=0
+for f in $fleet xpost_dev_win32.c; do
+    # the class this device specialises, and whether that class says its
+    # page may arrive in bands
+    base=$(sed -n 's/.*xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, "\(\.xpost_[A-Za-z0-9_]*\)")).*/\1/p' \
+           "$libdir/$f" | sort -u)
+    inherits=0
+    for b in $base; do
+        for c in $classes; do
+            p="$src/data/$c"
+            [ -f "$p" ] || continue
+            grep -qE "^/$b[ \t]+<<" "$p" || continue
+            grep -qE '^[ \t]*/BandedPage[ \t]+true' "$p" && inherits=1
+        done
+    done
+    [ "$inherits" -eq 1 ] || continue
+
+    says=$(grep -cE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)' \
+           "$libdir/$f" || true)
+    takes=$(grep -cE 'xpost_dict_undef\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)\)' \
+            "$libdir/$f" || true)
+    if [ "$says" -eq 0 ] && [ "$takes" -eq 0 ]; then
+        echo "check-device-skeleton: $f copies a class that says its page may" >&2
+        echo "arrive a band at a time and says nothing itself, so it inherits" >&2
+        echo "the yes. Say it again, or take it back out with the reason." >&2
+        fail=1
+        continue
+    fi
+    if [ "$says" -gt 0 ] && [ "$takes" -gt 0 ]; then
+        echo "check-device-skeleton: $f both declares and undeclares BandedPage." >&2
+        fail=1
+        continue
+    fi
+    banded=$((banded + 1))
+    if [ "$says" -gt 0 ] &&
+       ! grep -qE '\{[ \t]*"\.moveband"[ \t]*,' "$libdir/$f"; then
+        echo "check-device-skeleton: $f says its page may arrive a band at a" >&2
+        echo "time and its method table has no .moveband, so a band loop moves" >&2
+        echo "its raster through the base class's, which reaches for a row" >&2
+        echo "array this device does not carry and answers undefined." >&2
+        fail=1
+    fi
+done
+if [ "$banded" -eq 0 ]; then
+    echo "FAILURES: no compiled device was held to what it says about taking" >&2
+    echo "      its page in bands; fix the guard" >&2
+    exit 1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion, $compiled devices behind the raster slots)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion, $compiled devices behind the raster slots, $banded saying for themselves whether their page may arrive in bands)"

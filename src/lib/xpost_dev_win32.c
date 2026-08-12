@@ -1077,6 +1077,21 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* This device's page does not arrive a band at a time. Its pixels go
+       to a window, which holds them, so a band could be sent as it was
+       finished (doc/NEWINTERNALS) -- but this driver keeps a buffer of the
+       page and writes the whole of it, and what a device states about
+       itself is what the machinery above it goes by.
+
+       Taken back out rather than left unsaid. The class is a copy of the
+       colour raster class, which says its page may arrive that way, and
+       a copy carries what it was copied from -- so a device that has not
+       considered the question says yes by inheritance, and the safe
+       answer is the one that has to be stated. */
+    ret = xpost_dict_undef(ctx, classdic, xpost_name_cons(ctx, "BandedPage"));
+    if (ret && ret != undefined)
+        return ret;
+
     op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
