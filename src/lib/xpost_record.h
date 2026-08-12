@@ -56,7 +56,15 @@
  */
 
 /** The marking calls a record holds, and their operand counts after
-    the colour. The order and arities follow xpost_dev_driver.h. */
+    the colour. The order and arities follow xpost_dev_driver.h.
+
+    A polygon's pairs are its vertices with its subpath separators among
+    them, a separator being the pair a subpath break is written as in
+    the packed path this tree already keeps a polygon in (XPOST_PATH_BREAK
+    in both coordinates, xpost_op_path.h). The separators are part of the
+    shape and not decoration: the interior of a path with a hole is
+    settled by scanning its subpaths together, so a polygon written down
+    without them replays as a different region. */
 typedef enum
 {
     XPOST_RECORD_PUTPIX,   /**< x y */
@@ -133,6 +141,31 @@ int xpost_record_failed(const Xpost_Record *rec);
  * @return 1 where the record holds a mark, 0 where it holds none
  */
 int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi);
+
+/**
+ * @brief The mark at @p i, as it was written down.
+ *
+ * @param[out] kind which marking call
+ * @param[out] colour the ncomp values it was made with
+ * @param[out] ops its own operands, or NULL where the kind has none
+ * @param[out] nops how many
+ * @return 1, or 0 where the record holds no mark there
+ *
+ * What comes back points into the record and is good until the next
+ * mark is written down. A record short of a mark it was given gives
+ * none of them back, on the same terms as a replay of one: what would
+ * be built from what is left is a page missing something, and a page
+ * missing a mark looks like a page.
+ *
+ * A replay that plays a mark into a device returns to the interpreter
+ * to do it -- a device method may be a procedure, and what runs a
+ * procedure is the interpreter -- so it cannot be handed the run of
+ * marks in one call. It asks for them one at a time instead, and what
+ * it keeps between marks is how far it has got.
+ */
+int xpost_record_get(const Xpost_Record *rec, size_t i,
+                     Xpost_Record_Kind *kind, const real **colour,
+                     const real **ops, int *nops);
 
 /**
  * @brief What a replay does with each mark it is given.

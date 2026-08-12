@@ -34,6 +34,7 @@
 #include <string.h>
 
 #include "xpost_object.h"
+#include "xpost_op_path.h"   /* XPOST_PATH_BREAK: a subpath separator */
 #include "xpost_record.h"
 
 #include "xpost_test.h"
@@ -181,6 +182,34 @@ int main(void)
         report_failure("a run meeting two marks gives both in order:"
                        " %d mark(s)", s.n);
 
+    /* A polygon's subpath separators are pairs among its vertices, and a
+       separator is not a point: it reaches no row. Taken as one it would
+       put the polygon's reach at the sentinel's own value, and a polygon
+       reaching from there would be met by every range there is -- which
+       is correct and useless, since the point of a range is to visit the
+       marks that meet it. The one written down here has a separator
+       between two subpaths at rows 100..120, and the rows it reaches are
+       the rows its vertices are on. */
+    grey[0] = 5.0;
+    ops[0] = 7.0;
+    ops[1] = 0.0;   ops[2] = 100.0;
+    ops[3] = 10.0;  ops[4] = 110.0;
+    ops[5] = 20.0;  ops[6] = 100.0;
+    ops[7] = XPOST_PATH_BREAK; ops[8] = XPOST_PATH_BREAK;
+    ops[9] = 4.0;   ops[10] = 110.0;
+    ops[11] = 8.0;  ops[12] = 120.0;
+    ops[13] = 12.0; ops[14] = 110.0;
+    if (!xpost_record_mark(rec, XPOST_RECORD_FILLPOLY, grey, ops, 15))
+        report_failure("a polygon with a subpath separator is written down");
+    s = _play(rec, 100.0, 120.0);
+    if (s.n != 1 || s.first[0] != 5.0)
+        report_failure("a polygon is met over the rows its vertices span:"
+                       " %d mark(s)", s.n);
+    s = _play(rec, 90.0, 99.0);
+    if (s.n != 0)
+        report_failure("a subpath separator is no vertex and reaches no row:"
+                       " %d mark(s)", s.n);
+
     /* a record refuses a mark whose operands do not fit its kind, so
        that a walk of what was written down stays inside it */
     grey[0] = 9.0; ops[0] = 1.0; ops[1] = 2.0;
@@ -192,7 +221,7 @@ int main(void)
     if (xpost_record_mark(rec, XPOST_RECORD_FILLPOLY, grey, ops, 3))
         report_failure("a polygon needs as many vertices as it says it"
                        " has");
-    if (xpost_record_count(rec) != 4)
+    if (xpost_record_count(rec) != 5)
         report_failure("a refused mark is not written down");
 
     /* A record that could not hold a mark describes a page it cannot

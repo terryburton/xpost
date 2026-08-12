@@ -14,6 +14,7 @@
 
 #include "xpost_object.h"
 #include "xpost_error.h"
+#include "xpost_op_path.h"  /* XPOST_PATH_BREAK: what a subpath break is */
 #include "xpost_strbuf.h"
 
 #include "xpost_record.h"
@@ -112,7 +113,7 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
                     real *lo, real *hi)
 {
     real a, b;
-    int i;
+    int i, any;
 
     switch (kind)
     {
@@ -130,17 +131,22 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
             break;
         case XPOST_RECORD_FILLPOLY:
             /* n, then n pairs: the vertices are walked, which is the
-               only kind whose reach is not read off two values */
+               only kind whose reach is not read off two values. A pair
+               marking a subpath break is a separator and not a point,
+               and reaches no row: taken as one it would put the reach
+               at the sentinel's own value and have the polygon met by
+               every range there is. */
             *lo = *hi = 0.0;
-            if (nops < 3)
-                return;
-            *lo = *hi = ops[2];
-            for (i = 1; i * 2 + 2 < nops; i++)
+            for (i = 0, any = 0; i * 2 + 2 < nops; i++)
             {
-                real y = ops[i * 2 + 2];
+                real y;
 
-                if (y < *lo) *lo = y;
-                if (y > *hi) *hi = y;
+                if (ops[i * 2 + 1] == XPOST_PATH_BREAK)
+                    continue;
+                y = ops[i * 2 + 2];
+                if (!any) { *lo = *hi = y; any = 1; }
+                else if (y < *lo) *lo = y;
+                else if (y > *hi) *hi = y;
             }
             return;
     }
@@ -206,6 +212,25 @@ size_t xpost_record_count(const Xpost_Record *rec)
 int xpost_record_failed(const Xpost_Record *rec)
 {
     return rec ? rec->short_of_a_mark : 0;
+}
+
+int xpost_record_get(const Xpost_Record *rec, size_t i,
+                     Xpost_Record_Kind *kind, const real **colour,
+                     const real **ops, int *nops)
+{
+    const _Mark *m;
+
+    /* a record short of a mark describes a page it cannot reproduce, so
+       it gives none of them back: what a caller would build from what
+       is left is a page missing something, which looks like a page */
+    if (!rec || rec->short_of_a_mark || i >= _nmark(rec))
+        return 0;
+    m = &_marks(rec)[i];
+    *kind = m->kind;
+    *colour = _vals(rec) + m->at;
+    *ops = m->nops ? _vals(rec) + m->at + rec->ncomp : NULL;
+    *nops = m->nops;
+    return 1;
 }
 
 int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
