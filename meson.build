@@ -3380,6 +3380,23 @@ test('band-writer',
   suite: cost_slow,
   timeout: 300)
 
+# ... and what all of that is per page rather than per job. A record
+# describes a page and the raster it is played into holds one, so both
+# end where the page does -- and neither of them ending there shows on
+# any page, since a page opens by painting over the one before it and a
+# raster left behind paints nothing at all. So this counts what the
+# record holds after each page of a multi-page job, reads what the job
+# has taken of the memory a raster comes out of against a device that
+# paints and holds one page, and counts how many times a band replay
+# paints a recorded image -- which no page can say either, an image
+# written twice carrying what one write left.
+test('page-lifetime',
+  find_program('tests/run-page-lifetime-test.sh'),
+  args: [ xpost_exe, files('tests/page_lifetime_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # The byte-identity render gate: the golden page (fills, strokes, clipping,
 # images, shading, patterns, an inline Type 3 font) rendered through every
 # deterministic output device must reproduce the recorded sha256 exactly.

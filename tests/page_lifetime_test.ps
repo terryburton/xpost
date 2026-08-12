@@ -1,0 +1,231 @@
+% What a record holds, and what putting a page out of it takes, over a
+% job of more than one page.
+%
+% run-page-lifetime-test.sh runs this file once through the device that
+% writes down what it was asked to paint and once through a device that
+% paints as it goes, and holds the two to the same bytes page for page.
+% What it is for is three quantities no comparison of pages can see,
+% because a record whose lifetime is the job's rather than the page's
+% paints exactly the right pixels:
+%
+%   What a record holds. A page ends, and what the record describes ends
+%   with it. A record not given up at that boundary holds every page a
+%   job has drawn so far and replays all of them, once per band, to
+%   paint the last of them -- and the page still comes out right,
+%   because each page opens by painting over its predecessors.
+%
+%   What putting a page out takes. The raster a record is played into
+%   comes out of the half of virtual memory nothing here gives back, so
+%   a raster per page leaves every page's rows behind and a job of n
+%   pages ends holding n pages. The device that paints directly is the
+%   control: it holds one page whatever the job does, and is flat.
+%
+%   How many times an image is played. An image is the one entry whose
+%   replay costs the picture rather than a mark, and a row written twice
+%   carries what one write left -- so an image played again over rows it
+%   has already been played into leaves the page it left the first time.
+%   What is claimed is that a band replay plays an image once for each
+%   band that reaches it, and that the marks the walk steps over on the
+%   way to it do not enter.
+%
+% The multi-page job is run twice: once with the budget the class
+% carries, which covers a page of this size and so puts it out whole,
+% and once with a budget that divides it into bands. The two are
+% different routes through the emission and a raster kept from one page
+% to the next has to be put back to what Create left it as on both of
+% them, so both are asked for the same bytes and the same memory.
+%
+% Every quantity is printed rather than judged here, and the wrapper
+% judges. Two of them are only asked of the recording device, since a
+% device that paints has no record and no band loop; the memory is asked
+% of both, which is what makes the flat answer mean something.
+
+/W 240 def
+/H 480 def
+/ROWBYTES W 3 mul def
+/NPAGES 4 def
+% Forty rows to a band, so the banded case divides the page into twelve
+% of them and where a mark falls among the bands is stated rather than
+% hoped for.
+/BANDROWS 40 def
+/BANDBYTES ROWBYTES BANDROWS mul def
+/NBANDS H BANDROWS add 1 sub BANDROWS idiv def
+
+% Which run this is. The recording device is the one with a band loop in
+% it; a device that paints holds its page whole.
+/banding DEVICE /.playpage known def
+/tag banding { (rec) }{ (dir) } ifelse def
+/ID 1183615869 internaldict def
+
+/join { % a b  .  ab
+    /jn.b exch store /jn.a exch store
+    jn.a length jn.b length add string
+    dup 0 jn.a putinterval
+    dup jn.a length jn.b putinterval
+} bind def
+/num { 20 string cvs } bind def
+/sp { ( ) print } bind def
+/nl { (\n) print } bind def
+
+% The name both runs write beside each other under, so the wrapper can
+% compare them page for page.
+/pagename (page-%d-) tag join (.ppm) join def
+
+% How much of global virtual memory the run has taken. Raster memory is
+% not part of virtual memory as a program sees it (PLRM 3.7.3), but it
+% is taken from the global half -- the half a restore does not rewind
+% and the half nothing here gives back -- so a raster left behind is
+% what this reads.
+/gvm { globalvmstatus pop exch pop } bind def
+
+% A device row as a user-space y.
+/dy { H exch sub } bind def
+
+% ---- the meter, before anything is measured with it ----
+% A reading that could not see memory being taken would report every
+% route flat and pass everything. So a known quantity is taken in the
+% half being read and the difference is printed, for the wrapper to hold
+% against what was asked for. It is more than a page of this size costs
+% to hold, so a meter that passes here can see a raster left behind.
+%
+% Taken as several strings because one of them cannot be that large: a
+% composite object's length is held in a sixteen-bit field in the
+% narrower of the two builds, so a string past that is refused.
+/METERCHUNK 60000 def
+/METERN 6 def
+/METERBYTES METERCHUNK METERN mul def
+/g0 gvm def
+currentglobal true setglobal
+/meterhold METERN array def
+0 1 METERN 1 sub { meterhold exch METERCHUNK string put } for
+setglobal
+(METER ) print METERBYTES num print sp gvm g0 sub num print nl
+
+(PAGE ) print W num print sp H num print nl
+(BANDS ) print NBANDS num print nl
+
+% -  paintpage  -
+% One page's drawing: fills, a stroke lying across a band boundary, and
+% text, which is where the coverage-weighted blends come from. The same
+% drawing on every page, so that a record holding one page's worth and a
+% record holding the whole job's differ by the page number alone.
+%
+% The bar across the top is on the first rows of the page, which is the
+% first band of the banded case. A raster standing for a second page
+% starts that band from the rows it left the first page's last band on,
+% so a page whose first band is nothing but the ground would never ask
+% whether those rows had been put back to what Create left them as.
+/paintpage { % -  .  -
+    gsave
+        0.1 0.7 0.3 setrgbcolor
+        newpath 10 5 dy moveto 230 5 dy lineto
+                230 30 dy lineto 10 30 dy lineto closepath fill
+    grestore
+    gsave
+        0.2 0.4 0.6 setrgbcolor
+        newpath 20 40 dy moveto 220 40 dy lineto
+                220 120 dy lineto 20 120 dy lineto closepath fill
+    grestore
+    gsave
+        0 setgray 1 setlinewidth
+        newpath 20 200 dy moveto 220 260 dy lineto stroke
+    grestore
+    gsave
+        0 setgray
+        /Times-Roman findfont 18 scalefont setfont
+        20 320 dy moveto (Page lifetime) show
+    grestore
+    gsave
+        0.9 0.1 0.1 setrgbcolor
+        newpath
+        30 380 dy moveto 210 380 dy lineto
+        210 440 dy lineto 30 440 dy lineto closepath
+        70 395 dy moveto 70 425 dy lineto
+        170 425 dy lineto 170 395 dy lineto closepath
+        eofill
+    grestore
+} bind def
+
+% label banded  lifecase  -
+% A job of NPAGES identical pages, saying after each of them what the
+% record holds and what the run has taken.
+/lifecase { % label banded  .  -
+    /lc.banded exch store
+    /lc.label exch store
+    << /PageSize [W H] /OutputFile pagename >> setpagedevice
+    banding lc.banded and { DEVICE /.bandbytes BANDBYTES put } if
+    1 1 NPAGES {
+        /lc.pg exch store
+        paintpage
+        banding {
+            DEVICE ID /.recordcost get exec pop pop /lc.marks exch store
+            (COST ) print lc.label print sp lc.pg num print sp
+            lc.marks num print nl
+        } if
+        showpage
+        % read where the page has been put out, so that the raster it was
+        % played into is memory this run has taken
+        (GVM ) print lc.label print sp lc.pg num print sp gvm num print nl
+    } for
+} bind def
+
+(whole) false lifecase
+(band) true lifecase
+
+% ---- the image, and what the marks in front of it cost it ----
+% The same page twice, differing only in how many marks stand between
+% the start of the record and the image. A band replay steps over the
+% marks that do not reach the band it is filling, and what is claimed is
+% that stepping over them costs nothing: the image is played once for
+% each band that reaches it either way.
+%
+% The image is placed across the middle of the page, so that it reaches
+% some of the bands and not others. A picture covering every band would
+% be played the same number of times by a replay that played it once per
+% band and by one that played it once per page.
+/imagepage { % nfills  .  -
+    /ip.n exch store
+    0 1 ip.n 1 sub {
+        /ip.i exch store
+        gsave 0 setgray
+            newpath 5 ip.i 5 mul 5 add dy moveto
+                    40 ip.i 5 mul 5 add dy lineto
+                    40 ip.i 5 mul 8 add dy lineto
+                    5 ip.i 5 mul 8 add dy lineto closepath fill
+        grestore
+    } for
+    gsave
+        /DeviceGray setcolorspace
+        60 340 dy translate
+        160 240 scale
+        << /ImageType 1 /Width 8 /Height 8 /BitsPerComponent 8
+           /Decode [0 1] /ImageMatrix [8 0 0 -8 0 8]
+           /DataSource <00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0
+                        00204060 80a0c0e0 10305070 90b0d0f0> >> image
+    grestore
+} bind def
+
+% label nfills  imagecase  -
+% Put out one such page and say what it cost. The page device is made
+% again for each case, so the count of plays each reports is its own.
+/imagecase { % label nfills  .  -
+    /ic.n exch store
+    /ic.label exch store
+    << /PageSize [W H] /OutputFile pagename >> setpagedevice
+    banding { DEVICE /.bandbytes BANDBYTES put } if
+    ic.n imagepage
+    banding {
+        DEVICE ID /.recordcost get exec pop pop /ic.marks exch store
+    } if
+    showpage
+    banding {
+        (PLAYS ) print ic.label print sp
+        DEVICE ID /.recordplays get exec num print sp
+        ic.marks num print nl
+    } if
+} bind def
+
+(few) 4 imagecase
+(many) 60 imagecase

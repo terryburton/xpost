@@ -168,6 +168,7 @@ tests/band_loop_test.ps \
 tests/band_sparse_test.ps \
 tests/band_format_test.ps \
 tests/band_writer_test.ps \
+tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_replay_test.ps \
 tests/region_replay_test.ps \
@@ -309,6 +310,7 @@ tests/run-band-loop-test.sh \
 tests/run-band-sparse-test.sh \
 tests/run-band-format-test.sh \
 tests/run-band-writer-test.sh \
+tests/run-page-lifetime-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \
 tests/run-jpeg-refusal-test.sh \
