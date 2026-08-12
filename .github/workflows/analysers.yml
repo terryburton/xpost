@@ -306,11 +306,16 @@ jobs:
       # this suite exits a few hundred times. What is left is what only
       # this job reports: reading and writing where it should not, and
       # acting on a value nobody wrote.
+      #
+      # Where an unwritten value came from is not tracked. That answer
+      # is worth having and costs about as much again as the run that
+      # finds the value in the first place; the report still names the
+      # test and the access, which is where the search starts anyway.
       run: |
         mkdir -p vglogs
         MESON_BUILD_ROOT="$PWD/builddir" sh tests/run-profile.sh quick \
           --print-errorlogs \
-          --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=no --track-origins=yes --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
+          --wrapper="valgrind --error-exitcode=9 --trace-children=yes --trace-children-skip=/usr/bin/*,/bin/*,/usr/lib/*,/sbin/*,/usr/sbin/* --leak-check=no --log-file=$PWD/vglogs/vg.%p.log --suppressions=$PWD/tests/valgrind.supp" \
           --timeout-multiplier 60 || {
             # Selected on the count, not on the words: every report ends
             # with a summary naming each kind, so a search for the words
