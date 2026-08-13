@@ -65,6 +65,7 @@
 # include <config.h>
 #endif
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1686,7 +1687,7 @@ static int _replay_step(Xpost_Context *ctx,
         Xpost_Object m;
         Xpost_Object poly = null;
         size_t at;
-        int nops, i, left;
+        int nops, i, left, fresh;
 
         /* The rows asked for choose which marks are played, and the
            marks between are stepped over rather than played and
@@ -1814,8 +1815,9 @@ static int _replay_step(Xpost_Context *ctx,
         {
             const unsigned char *cov;
             int mw = 0, mh = 0;
+            int r0, r1;
             real gx, gy;
-            size_t area;
+            size_t first, last;
 
             cov = xpost_record_mask_get(private.rec,
                                         nops > 0 ? (size_t)ops[0]
@@ -1828,9 +1830,35 @@ static int _replay_step(Xpost_Context *ctx,
             }
             gx = nops > 1 ? ops[1] : (real)0;
             gy = nops > 2 ? ops[2] : (real)0;
-            area = (size_t)mw * (size_t)mh;
+            /* whether the walk is meeting this entry for the first
+               time, rather than coming back into the middle of it */
+            fresh = at != resumeat || pixat == 0;
             if (at != resumeat)
                 pixat = 0;
+
+            /* Which of the mask's rows reach the rows asked for. Row k
+               of it lands on device row gy + k, so this is that question
+               turned round; the answer errs outward, a row painted that
+               the target then drops costing a pass over it where a row
+               not painted is missing from the page.
+
+               A mask is held to the rows asked for the way an image is
+               and not the way a shape is. A shape has to be converted
+               whole to be right about any part of it, so a range chooses
+               which shapes are played and never trims one; a mask is
+               already resolved into pixels that stand alone, so the rows
+               outside the range are rows the device would drop, and
+               painting them would cost a tall mask its whole height once
+               per band it crosses. */
+            r0 = (int)floor((double)rlo - (double)gy);
+            r1 = (int)floor((double)rhi - (double)gy) + 1;
+            if (r0 < 0) r0 = 0;
+            if (r1 > mh) r1 = mh;
+            if (r1 < r0) r1 = r0;
+            first = (size_t)r0 * (size_t)mw;
+            last = (size_t)r1 * (size_t)mw;
+            if (pixat < first)
+                pixat = first;
 
             /* One more mark played -- the glyph, and not its pixels.
                What this counts is the marks of the page, and a page of
@@ -1838,7 +1866,7 @@ static int _replay_step(Xpost_Context *ctx,
                pixels would answer the ink, which is the quantity the
                entry exists to stop the record paying. Counted once
                however many batches the mask takes. */
-            if (pixat == 0)
+            if (fresh)
                 private.played++;
 
             /* the walk stays on this entry while any of the mask is
@@ -1848,7 +1876,7 @@ static int _replay_step(Xpost_Context *ctx,
                 xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
                                             xpost_int_cons((integer)at)));
 
-            while (pixat < area)
+            while (pixat < last)
             {
                 int c = cov[pixat];
                 int which;
