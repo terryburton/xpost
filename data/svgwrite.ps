@@ -14,6 +14,10 @@
 % Emit reports the page size in points (unscaling the device resolution
 % from the defaultmatrix fixup, as the bbox device does) with a viewBox
 % in device units, so any HWResolution yields the same physical page.
+%
+% A method runs its body with the device dictionary current, and opens it
+% through the bracket that takes it off again however the body ends, error
+% included (.indict, graphics.ps).
 
 /.xpost_SVGWRITE <<
     /nativecolorspace /DeviceRGB
@@ -25,7 +29,7 @@
     /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
-    begin {/height /width}{exch def}forall
+    { {/height /width}{exch def}forall
     % the page dimensions are points and need not be integral; adopt the
     % exact values when the page device machinery published them
     graphicsdict /.exactpagedims 2 copy known {
@@ -33,12 +37,12 @@
         dup 0 get /width exch def
         1 get /height exch def
     }{ pop pop } ifelse
-    currentdict end
+    currentdict } //.xpostsys /.indict get exec
     dup /.copydict get exec
-    begin
+    {
         currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
     currentdict
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     /Destroy { % IMAGE  .  -
         dup //.internaldict /.pdffree get exec pop
@@ -64,29 +68,29 @@
     } bind
 
     /PutPix { % r g b x y IMAGE  .  -
-    begin {y x b g r}{exch def}forall
+    { {y x b g r}{exch def}forall
         (<rect fill=) .put r g b .svgrgb
         ( x=") .put x .svgnum (" y=") .put y .svgnum
         (" width="1" height="1"/>\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     /GetPix { % x y IMAGE  .  r g b
         pop pop pop  0 0 0
     }
 
     /DrawLine { % r g b x1 y1 x2 y2 IMAGE  .  -
-    begin {y2 x2 y1 x1 b g r}{exch def}forall
+    { {y2 x2 y1 x1 b g r}{exch def}forall
         (<path fill="none" stroke=) .put r g b .svgrgb
         ( d="M) .put x1 .svgnum ( ) .put y1 .svgnum
         (L) .put x2 .svgnum ( ) .put y2 .svgnum ("/>\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     /DrawRect { % r g b x y w h IMAGE  .  -
-    begin {h w y x b g r}{exch def}forall
+    { {h w y x b g r}{exch def}forall
         (<rect fill="none" stroke=) .put r g b .svgrgb
         ( x=") .put x .svgnum (" y=") .put y .svgnum
         (" width=") .put w .svgnum (" height=") .put h .svgnum ("/>\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % The operands name an inclusive pixel span and an SVG rect is
     % half-open, so the rect that covers the pixels a raster device
@@ -95,14 +99,14 @@
     % device painting a rect a pixel short in each direction of every
     % other device's.
     /FillRect { % r g b x y w h IMAGE  .  -
-    begin {h w y x b g r}{exch def}forall
+    { {h w y x b g r}{exch def}forall
         w 0 lt { /x x w add def /w w neg def } if
         h 0 lt { /y y h add def /h h neg def } if
         (<rect fill=) .put r g b .svgrgb
         ( x=") .put x .svgnum (" y=") .put y .svgnum
         (" width=") .put w 1 add .svgnum
         (" height=") .put h 1 add .svgnum ("/>\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % r g b polygon IMAGE . -  ; append one path element: the fill colour,
     % the subpaths as M/L commands each closed with Z, and a nonzero
@@ -136,7 +140,7 @@
     % a bottom-up 24-bit BMP, and ride a base64 data URI under the
     % image-to-device matrix
     /PaintImage {
-    begin {siint sidec sirows sim sinc sih siw}{exch def}forall
+    { {siint sidec sirows sim sinc sih siw}{exch def}forall
         % per-component decode tables to bytes
         /siluts [ 0 1 sinc 1 sub { /c exch def
             /silt 256 string def
@@ -220,7 +224,7 @@
         sibp 0 gt { sibuf 0 sibp getinterval //.internaldict /.base64 get exec .put } if
         /sibp 0 def
         ("/>\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % r g b IMAGE . -  ; fill the current path as one path element with
     % curves preserved (the flattening fill goes through FillPoly
@@ -232,12 +236,12 @@
         dup 5 1 roll            % keep the device for the clip close below
         //.internaldict /.svgfillpath get exec
         % a clip adopted for this fill ends with it
-        begin
+        {
             currentdict /.svgclipopen 2 copy known { get }{ pop pop false } ifelse {
                 (</g>\n) .put
                 /.svgclipopen false def
             } if
-        end
+        } //.xpostsys /.indict get exec
     } bind
 
     % clippath IMAGE . -  ; adopt a clip shape the interpreter could not
@@ -246,7 +250,7 @@
     % reaching the device and arrive as one path per scanline; the shape
     % costs one element and keeps its curves.
     /ClipPath { % path IMAGE  .  -
-    begin
+    {
         /.svgclipid currentdict /.svgclipid 2 copy known { get 1 add }{ pop pop 1 } ifelse def
         % the path walker reads the current path, so install the clip
         % shape for the walk and put the working path back after
@@ -259,7 +263,7 @@
         (<g clip-path="url\(#xc) .put .svgclipid 20 string cvs .put (\)">\n) .put
         graphicsdict /currgstate get exch /currpath exch put
         /.svgclipopen true def
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % r g b IMAGE . -  ; stroke the current path as one path element with
     % the device-space line width and the graphics state's cap, join and
@@ -268,7 +272,7 @@
     % first (the walker runs in its own dictionary, away from this
     % device's methods) and emitted afterwards.
     /StrokePath { % r g b IMAGE  .  -
-    begin {spb spg spr}{exch def}forall
+    { {spb spg spr}{exch def}forall
         /spelems [ { /m } { /l } { /c } { /h } //.xpostsys /.devpathforall get exec ] def
         spelems length 0 gt {
             (<path fill="none" stroke=) .put spr spg spb .svgrgb
@@ -285,10 +289,10 @@
             spelems .putelems
             ("/>\n) .put
         } if
-    end }
+    } //.xpostsys /.indict get exec }
 
     /Emit { % IMAGE  .  -
-    begin
+    {
         % an SVG document holds one page, so successive pages are written
         % to separate files: the name settled for this page carries the
         % page number where the output name has a %d, and without one
@@ -317,7 +321,7 @@
         % marks must not stack on the emitted content (a later Emit
         % rewrites the output with the then-current page)
         currentdict //.internaldict /.pdfreset get exec
-    end }
+    } //.xpostsys /.indict get exec }
 >> def
 
 /TESTGRAPHICS where {pop
