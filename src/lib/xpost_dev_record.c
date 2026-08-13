@@ -117,6 +117,14 @@ typedef struct
        what tells the one it is carrying now from one it has given up
        (.playbuilt and .playkept below) */
     unsigned int playgen;
+    /* What holding this page in bands saves over holding it whole: the
+       raster of the run less the raster of one band of it, in bytes, and
+       zero for a page held whole. It is the whole of what a device buys
+       by writing the page down instead of painting it, so it is the
+       quantity anything weighing a record against a raster wants.
+       Settled where the band grid is settled and handed down from there
+       (.playsaving), and answered by .recordsaving. */
+    size_t saving;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -1208,6 +1216,52 @@ static int _recordcost(Xpost_Context *ctx,
                      xpost_int_cons((integer)xpost_record_image_count(private.rec)));
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_int_cons((integer)xpost_record_bytes(private.rec)));
+    return 0;
+}
+
+/* IMAGE bytes  .playsaving  -
+   What holding this page in bands saves over holding it whole, handed
+   down from where the band grid is settled (.playmake, data/recorddev.ps)
+   to the device holding the record.
+
+   It is one number read twice rather than two that agree: the saving is
+   the raster of the run less the raster of one band of it, and how deep
+   a band is is the reading the band loop itself goes by. A page held
+   whole saves nothing and is handed nothing. */
+static int _playsaving(Xpost_Context *ctx,
+                       Xpost_Object devdic,
+                       Xpost_Object n)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    double v;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    v = xpost_object_number(n);
+    private.saving = v > 0 ? (size_t)v : 0;
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
+    return 0;
+}
+
+/* IMAGE  .recordsaving  bytes
+   What holding this page in bands saves over holding it whole, which is
+   what holding the record instead is worth. Zero for a page held whole,
+   which saves nothing.
+
+   The other side of the comparison .recordcost states: what a record
+   costs against what having it is buying. */
+static int _recordsaving(Xpost_Context *ctx,
+                         Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)private.saving));
     return 0;
 }
 
@@ -2502,6 +2556,11 @@ static int _create_cont(Xpost_Context *ctx,
     private.played = 0;
     private.imgrows = 0;
     private.playgen = 0;
+    /* Nothing to weigh the record against until the band grid is
+       settled, which .playmake does below, before any mark arrives. A
+       record whose page is held whole is left with nothing here: it
+       saves nothing, so there is nothing it could cost more than. */
+    private.saving = 0;
     private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
@@ -3174,6 +3233,10 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordground", (Xpost_Op_Func)_recordground,
                              3, dicttype, numbertype, numbertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".playsaving", (Xpost_Op_Func)_playsaving,
+                             2, dicttype, numbertype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordsaving", (Xpost_Op_Func)_recordsaving,
+                             1, dicttype); INSTALL;
 
     return 0;
 }

@@ -86,6 +86,31 @@
 % the reading to that themselves, and a budget past the page is how they
 % are told there are no bands.
 currentglobal true setglobal
+
+% dict  .rowbytes  cost
+% What one row of the raster a device's page is painted in costs, asked
+% of the class that makes it: the class prices a row for Create and it is
+% the same row here. The elements a row takes are left out of the answer
+% -- a planar row is three of them against a byte per pixel per plane --
+% so a row is priced by the pixels, which is what the page is priced by.
+%
+% The price is what the class says and is not examined here. A class that
+% prices no row in bytes is a class no band arithmetic can be done for,
+% and each caller doing that arithmetic says so for itself.
+%
+% One statement, because two callers want it: the band grid divides the
+% budget by it, and the saving a band grid buys multiplies the rows not
+% held by it. A second copy of the question would agree with this one
+% until one of them was changed.
+.xpostsys /.rowbytes { % dict  .  cost
+2 dict begin
+    /dev exch def
+    2 dict begin
+        /width dev /width get def
+        .privatedict dev /.playclass get get /.rowcost get exec
+    end exch pop
+end } bind put
+
 .xpostsys /.bandheight { % dict  .  rows
 5 dict begin
     /dev exch def
@@ -93,16 +118,7 @@ currentglobal true setglobal
     /held dev /.playrun known { dev /.playrun get 1 get }{ ph } ifelse def
     dev /.playclass known ph 0 gt and {
         /cls .privatedict dev /.playclass get get def
-        % What one row of that raster costs, asked of the class that
-        % makes it: the class prices a row for Create and it is the same
-        % row here. The elements a row takes are left out of the
-        % division -- a planar row is three of them against a byte per
-        % pixel per plane -- so the band is priced by the pixels, which
-        % is what the page is priced by.
-        /rowbytes 2 dict begin
-            /width dev /width get def
-            cls /.rowcost get exec
-        end exch pop def
+        /rowbytes dev //.xpostsys /.rowbytes get exec def
         % A row whose bytes are past what an integer counts is a row no
         % band holds one of, so there is nothing to divide: the page is
         % asked for whole and refused by the raster that cannot hold it,
@@ -116,6 +132,30 @@ currentglobal true setglobal
             held ph lt { held 2 copy gt { exch } if pop } if
         }{ held } ifelse
     }{ held } ifelse
+end } bind put
+
+% dict  .bandsaving  bytes
+% What holding this device's page a band at a time saves over holding it
+% whole: the raster of the run it paints, less the raster of one band of
+% that run. Zero for a page held whole, which saves nothing.
+%
+% It is the whole of what a device buys by holding its page's marks
+% instead of its pixels, and so the quantity a caller weighing the two
+% against each other wants.
+%
+% Both terms are read where the band loop reads them, above: how deep a
+% band is from .bandheight, what a row costs from .rowbytes. So the rows
+% this says are not held are the rows the loop does not hold, rather than
+% a second calculation that agrees with it until one of them is changed.
+.xpostsys /.bandsaving { % dict  .  bytes
+4 dict begin
+    /dev exch def
+    /ph dev /height known { dev /height get }{ 0 } ifelse def
+    /held dev /.playrun known { dev /.playrun get 1 get }{ ph } ifelse def
+    /rows dev //.xpostsys /.bandheight get exec def
+    rows held lt
+        { held rows sub dev //.xpostsys /.rowbytes get exec mul }
+        { 0 } ifelse
 end } bind put
 
 % /target w rows  .bandsatpage  bool
@@ -690,6 +730,18 @@ setglobal
         % much of it the raster above holds: a record has no rows of its
         % own, and what it is asked about them is asked about those.
         rec /.bandrows rasterrows put
+
+        % And what holding the page that way saves over holding it whole,
+        % handed down to the device holding the record, which answers it
+        % to a caller weighing what the record costs against what having
+        % it buys (.recordsaving). A page held whole saves nothing and
+        % hands nothing down.
+        %
+        % Handed down here because this is where the band grid is
+        % settled, and again whenever it is settled again, so that the
+        % number stands for the grid the run asked for.
+        rec dup //.xpostsys /.bandsaving get exec
+        //.internaldict /.playsaving get exec
     } //.xpostsys /.indict get exec } bind
 
     % IMAGE  .playpage  -
