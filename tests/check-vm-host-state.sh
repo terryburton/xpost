@@ -304,7 +304,7 @@ fi
 # list itself. Nothing else in the library declares a variable that way.
 sed -n '/^#define XPOST_OBJECT_SINGLETONS(_)/,/XPOST_OBJECT_SINGLETONS \*\//p' \
     "$lib/xpost_object.h" \
-  | sed -n 's/^[ \t]*_(\([A-Za-z_][A-Za-z0-9_]*\)).*/\1\tXpost_Object/p' \
+  | sed -n 's/^[[:blank:]]*_(\([A-Za-z_][A-Za-z0-9_]*\)).*/\1\tXpost_Object/p' \
   > "$work/singletons"
 if [ ! -s "$work/singletons" ]; then
     echo "FAILURES: the singleton object list was not found in"
@@ -466,7 +466,13 @@ function derive(code,   t, id) {
 if grep -q '@UNREAD@' "$work/reach"; then
     echo "FAIL: virtual memory is reached in a way this check cannot read,"
     echo "      so it cannot say what type is being stored there:"
-    sed -n 's/^[a-z]*\t\([^\t]*\)\t@UNREAD@ */      \1: /p' "$work/reach" >&2
+    awk -F'\t' '{
+        rest = substr($0, length($1) + length($2) + 3)
+        if (index(rest, "@UNREAD@") == 1) {
+            sub(/^@UNREAD@ */, "", rest)
+            print "      " $2 ": " rest
+        }
+    }' "$work/reach" >&2
     echo "      Passing over it would leave this check reporting about"
     echo "      every other site and calling that all of them."
     exit 1
@@ -474,7 +480,16 @@ fi
 
 # What is left is the set of types a memory file holds. Scalars and raw
 # bytes have no members and nothing to name a process with.
-cut -f3 "$work/reach" | sed 's/[ \t]*$//' | sort -u > "$work/reached"
+#
+# A blank is written as a class rather than as an escape inside a
+# bracket, in this scan and in the others this file runs. One sed reads
+# \t in a bracket as a tab; the other reads it as the two characters it
+# is spelled with, so the set becomes a backslash and the letter t, and
+# every name ending in that letter is shortened by it. The walk below
+# then closes over names no member has, reaches the whole ones again
+# through the members, and arrives at a larger set of types on one
+# platform than on the other.
+cut -f3 "$work/reach" | sed 's/[[:blank:]]*$//' | sort -u > "$work/reached"
 if [ ! -s "$work/reached" ]; then
     echo "FAILURES: nothing was found to reach virtual memory at all; the"
     echo "      scan above is not reading the sources"
@@ -515,7 +530,7 @@ awk -F'\t' 'NR == FNR { vm[$1] = 1; next }
 # place.
 sed -n '/^typedef enum/,/} Xpost_Handle_Kind;/p' "$handleh" \
     | sed 's|/\*.*\*/||' \
-    | sed -n 's/^[ \t]*\(XPOST_HANDLE_[A-Z_]*\).*/xpost_handle.h:\1/p' \
+    | sed -n 's/^[[:blank:]]*\(XPOST_HANDLE_[A-Z_]*\).*/xpost_handle.h:\1/p' \
     | sort -u > "$work/kinds"
 nkinds=$(grep -c . "$work/kinds")
 if [ "$nkinds" -lt 1 ]; then

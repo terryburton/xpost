@@ -388,7 +388,7 @@ if [ ! -s "$work/rowops" ]; then
     exit 1
 fi
 # the class slots those operators are stored in
-sed -n 's|^[ \t]*/\([A-Za-z][A-Za-z0-9_]*\)[ \t]*//\.internaldict[ \t]*/\(\.[A-Za-z0-9_]*\)[ \t]*get.*|\2 \1|p' \
+sed -n 's|^[[:blank:]]*/\([A-Za-z][A-Za-z0-9_]*\)[[:blank:]]*//\.internaldict[[:blank:]]*/\(\.[A-Za-z0-9_]*\)[[:blank:]]*get.*|\2 \1|p' \
     $classfiles | sort -u > "$work/clsops"
 if [ ! -s "$work/clsops" ]; then
     echo "FAILURES: no class slot is filled from the rasteriser; fix the guard" >&2
@@ -589,7 +589,7 @@ done
 recslots="Create PutPix GetPix BlendPix DrawLine FillRect FillPoly Emit Destroy"
 recforbidden="FillPath ClipPath DrawRect Erase StrokePath"
 for f in $recording; do
-    sed -n 's/.*{[ \t]*"\([A-Za-z]*\)"[ \t]*,[ \t]*"[A-Za-z]*"[ \t]*,.*/\1/p' \
+    sed -n 's/.*{[[:blank:]]*"\([A-Za-z]*\)"[[:blank:]]*,[[:blank:]]*"[A-Za-z]*"[[:blank:]]*,.*/\1/p' \
         "$libdir/$f" | sort -u > "$work/rectable"
     if [ ! -s "$work/rectable" ]; then
         echo "FAILURES: no method table could be read from $f; fix the guard" >&2
@@ -797,7 +797,7 @@ for c in $classes; do
         fi
         psderived=$((psderived + 1))
     done <<EOF
-$(sed -n 's|^/\(\.xpost_[A-Za-z0-9_]*\)[ \t]\{1,\}\(\.xpost_[A-Za-z0-9_]*\)[ \t]\{1,\}dup length[ \t].*dict copy.*|\1 \2|p' "$p")
+$(sed -n 's|^/\(\.xpost_[A-Za-z0-9_]*\)[[:blank:]]\{1,\}\(\.xpost_[A-Za-z0-9_]*\)[[:blank:]]\{1,\}dup length[[:blank:]].*dict copy.*|\1 \2|p' "$p")
 EOF
 done
 if [ "$psderived" -eq 0 ]; then
