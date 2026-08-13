@@ -699,8 +699,115 @@ if [ "$banded" -eq 0 ]; then
     exit 1
 fi
 
+# 16. A device that specialises a class stating what a row of its raster
+#     costs states that for itself.
+#
+#     /.rowcost is the pair -- the elements and the bytes one row takes
+#     -- that a class answers about its own raster. The band loop divides
+#     a byte budget by the bytes of it to reach a band height
+#     (data/recorddev.ps), and a raster class prices the whole raster
+#     from it before building any of it (data/image.ps). So a wrong
+#     answer is not a wrong page: the bands come out byte for byte the
+#     page they always were, and what moves is how much is held at once,
+#     which is the whole of what the budget states.
+#
+#     It is the same shape as /BandedPage above and breaks the same way.
+#     The devices held here are copies of a class that prices a row of
+#     its own raster, and a copy carries what it was copied from, so a
+#     device whose raster is a different shape answers for the shape it
+#     was copied from unless it says otherwise: a four-byte pixel
+#     answering for a three-byte planar row holds a third more than the
+#     budget bought, over pages that come out byte for byte the same.
+#
+#     Either answer counts, since a device may have no row of its own to
+#     price: one whose pixel is settled per instance rather than by the
+#     class, and one whose pixels are the window system's. What may not
+#     count is silence.
+#
+#     The two PostScript classes made by copying another are held to it
+#     too. Nothing about the defect is particular to a driver written in
+#     C -- a dict copy carries the same statement the same way -- and the
+#     rule is asked of a file that derives one class from another
+#     wherever that is written.
+priced=0
+for f in $fleet xpost_dev_win32.c; do
+    base=$(sed -n 's/.*xpost_op_privatedict_load(ctx, xpost_name_cons(ctx, "\(\.xpost_[A-Za-z0-9_]*\)")).*/\1/p' \
+           "$libdir/$f" | sort -u)
+    inherits=0
+    for b in $base; do
+        for c in $classes; do
+            p="$src/data/$c"
+            [ -f "$p" ] || continue
+            grep -qE "^/$b[ \t]+<<" "$p" || continue
+            grep -qE '^[ \t]*/\.rowcost[ \t]*\{' "$p" && inherits=1
+        done
+    done
+    [ "$inherits" -eq 1 ] || continue
+
+    says=$(grep -c 'xpost_dev_class_rowcost(' "$libdir/$f" || true)
+    takes=$(grep -c 'xpost_dev_class_no_rowcost(' "$libdir/$f" || true)
+    if [ "$says" -eq 0 ] && [ "$takes" -eq 0 ]; then
+        echo "check-device-skeleton: $f copies a class that prices a row of" >&2
+        echo "its raster and says nothing itself, so it answers for a raster" >&2
+        echo "that is not the one it holds. Price its own row with" >&2
+        echo "xpost_dev_class_rowcost(), or take the statement back out with" >&2
+        echo "xpost_dev_class_no_rowcost() and the reason." >&2
+        fail=1
+        continue
+    fi
+    if [ "$says" -gt 0 ] && [ "$takes" -gt 0 ]; then
+        echo "check-device-skeleton: $f both prices a row and takes the" >&2
+        echo "price back out." >&2
+        fail=1
+        continue
+    fi
+    priced=$((priced + 1))
+done
+if [ "$priced" -eq 0 ]; then
+    echo "FAILURES: no compiled device was held to what a row of its raster" >&2
+    echo "      costs; fix the guard" >&2
+    exit 1
+fi
+
+#     And the classes one PostScript file derives from another. The
+#     derivation is read out of the file rather than listed, so a class
+#     added by copying joins this the day it is written.
+psderived=0
+for c in $classes; do
+    p="$src/data/$c"
+    [ -f "$p" ] || continue
+    while read -r derived b; do
+        [ -n "${b:-}" ] || continue
+        prices=0
+        for o in $classes; do
+            q="$src/data/$o"
+            [ -f "$q" ] || continue
+            grep -qE "^/$b[ \t]+<<" "$q" || continue
+            grep -qE '^[ \t]*/\.rowcost[ \t]*\{' "$q" && prices=1
+        done
+        [ "$prices" -eq 1 ] || continue
+        if ! grep -qE "^$derived[ \t]+/\.rowcost[ \t]*(\{|undef)" "$p"; then
+            echo "check-device-skeleton: $c derives $derived from $b, which" >&2
+            echo "prices a row of its raster, and states no price of its own." >&2
+            echo "A dict copy carries what it was copied from, so the derived" >&2
+            echo "class answers on behalf of the class it came from; state the" >&2
+            echo "price again, or undef it with the reason." >&2
+            fail=1
+            continue
+        fi
+        psderived=$((psderived + 1))
+    done <<EOF
+$(sed -n 's|^/\(\.xpost_[A-Za-z0-9_]*\)[ \t]\{1,\}\(\.xpost_[A-Za-z0-9_]*\)[ \t]\{1,\}dup length[ \t].*dict copy.*|\1 \2|p' "$p")
+EOF
+done
+if [ "$psderived" -eq 0 ]; then
+    echo "FAILURES: no PostScript class derived from another was held to what" >&2
+    echo "      a row of its raster costs; fix the guard" >&2
+    exit 1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion, $compiled devices behind the raster slots, $banded saying for themselves whether their page may arrive in bands)"
+echo "check-device-skeleton: ok (fleet behind the driver contract, $copies classes behind one copy, $callers paths behind one completion, $compiled devices behind the raster slots, $banded saying for themselves whether their page may arrive in bands, $priced devices and $psderived derived classes pricing a row of their own raster)"
