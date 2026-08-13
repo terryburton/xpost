@@ -58,15 +58,42 @@
  * pages the machinery touches once however small the record is: those
  * came to under a quarter of a megabyte.
  *
- * WHAT IS NOT WEIGHED HERE, BECAUSE IT IS NOT THE RECORD'S
+ * WHAT PLAYING A RECORD BACK COSTS, WHICH IS NOT WHAT THE RECORD COSTS
  *
- * Playing a record back. A replay hands each mark to a device method,
- * and a method may be a procedure, so a mark reaches one as interpreter
- * objects built for the call -- a polygon as an array of its vertices.
- * On path-heavy content that comes to several times what holding the
- * record costs, and a run weighed across its emission sees it. It is the
- * target's and the interpreter's, it is not in this number, and
- * xpost_record.h says so where the number is declared.
+ * A replay hands each mark to a device method, and a method may be a
+ * procedure, so a mark that cannot be handed to a compiled one reaches
+ * it as interpreter objects built for the call -- a polygon as an array
+ * of its vertices, one two-element array apiece. That is not in
+ * xpost_record_bytes and cannot be: it is the target's and the
+ * interpreter's, it follows the drawing rather than the page, and it is
+ * paid once for every band a shape reaches rather than once for the
+ * page.
+ *
+ * Which is why it is weighed here beside the record. The two are the
+ * whole of what holding a page's marks instead of its pixels costs, the
+ * second is the larger of them on a page of paths, and it is the one no
+ * page and no comparison of pages can see: a polygon rebuilt for every
+ * band paints exactly the pixels a polygon handed over once paints.
+ *
+ * It is weighed in the interpreter's own virtual memory rather than
+ * against the process, because what is being counted is what a replay
+ * builds and not what it is left resident for. Automatic collection is
+ * turned off for the weighing (PLRM 8.2 vmreclaim): with it on, what
+ * vmstatus answers afterwards is whatever the collector had not got to
+ * yet, which is a reading of the collector.
+ *
+ * Two claims, and each has its own control:
+ *
+ *   A page of polygons costs no more to play than the same number of
+ *   rectangles, rectangles being the mark whose operands are numbers and
+ *   which therefore builds nothing. The control is that the rectangles
+ *   are weighed the same way in the same run.
+ *
+ *   And it does not grow with the number of bands the page is held in.
+ *   The control there is that the band count is shown to have changed:
+ *   how many marks were played is read off the record, and a page held
+ *   in more bands plays more of them. An instrument that had stopped
+ *   dividing the page would report a flat cost for the best of reasons.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -81,6 +108,7 @@
 # include <malloc.h>
 #endif
 
+#include "xpost.h"
 #include "xpost_object.h"
 #include "xpost_record.h"
 
@@ -333,6 +361,166 @@ static Xpost_Record *_build(Kind kind, int n)
 #define OVER_DEN  4
 #define ALLOW     ((size_t)512 * 1024)
 
+/*
+ * WHAT ONE EMISSION BUILDS, read out of a run that makes one.
+ */
+
+/* the page the marks below are made on, and the rows a row of it costs
+   the grayscale raster they are played into: one byte to the pixel, so
+   the band budget that holds n rows is n times the width */
+#define PAGE_W  600
+#define PAGE_H  800
+
+/* Enough polygons, of enough vertices, that what building them would
+   cost is far above what one emission costs when nothing is built --
+   forty of two hundred vertices would come to some four hundred
+   kilobytes a band against the twenty at most that an emission costs on
+   its own -- and few enough
+   that a run rebuilding them once per band still has the memory and the
+   entity numbers to do it. A weighing that ran out of either would
+   report the refusal, which says something is wrong without saying what
+   it cost. */
+#define MARKS     40
+#define VERTICES  200
+
+/* What an emission builds when it builds nothing for a mark: the walk's
+   own working objects, which are a handful and are the same handful for
+   either kind of page. Twenty-one kilobytes at the widest an object is
+   built here, so this is three times the reading it allows for and a
+   small fraction of what one page of vertices would come to. */
+#define BUILT_ALLOW ((size_t)64 * 1024)
+
+/* Each polygon reaches from the top of the page to the bottom, so every
+   band holds part of every one of them and a page in n bands plays n
+   times the marks. A shape reaching one band would be played once
+   however finely the page was divided, and the second claim would hold
+   for a reason that had nothing to do with what a replay builds. */
+static const char *_program =
+    "/poly [ 0 1 %d { /j exch def\n"
+    "    [ j 2 mod 500 mul 40 add  j %d mul %d div 5 add ] } for ] def\n"
+    "/drawpoly { 1 1 %d { pop\n"
+    "    0.5 poly DEVICE dup /FillPoly get exec } for } bind def\n"
+    "/drawrect { 1 1 %d { 12 mul 5 add\n"
+    "    0.5 exch 20 exch 500 3 DEVICE dup /FillRect get exec } for } bind def\n"
+    "/played { DEVICE 1183615869 internaldict /.recordplayed get exec } bind def\n"
+    "DEVICE /.bandbytes %d put\n"
+    /* the collection that would answer for the collector rather than
+       for the replay, and the page that touches everything the weighed
+       one touches */
+    "-1 vmreclaim\n"
+    "%s showpage\n"
+    /* the page weighed: drawn, then put out with the two readings
+       taken either side of the emission that plays it back */
+    "%s\n"
+    "vmstatus pop /u0 exch def pop  played /p0 exch def\n"
+    "showpage\n"
+    "vmstatus pop /u1 exch def pop  played /p1 exch def\n"
+    "(BUILT ) print u1 u0 sub 20 string cvs print\n"
+    "( ) print p1 p0 sub 20 string cvs print (\\n) print flush\n";
+
+/* the standard output of one run, kept so that the figures the program
+   above reports can be read back */
+static char out_buf[512];
+static size_t out_len;
+
+static size_t _out_sink(void *user, const char *buf, size_t len)
+{
+    (void)user;
+    if (out_len + len < sizeof out_buf)
+    {
+        memcpy(out_buf + out_len, buf, len);
+        out_len += len;
+    }
+    return len;
+}
+
+/* What one emission of a page of @p draw builds in virtual memory, over
+   a page held in bands of @p bandrows rows, and how many marks that
+   emission played. Answers whether the run made it that far. */
+static int _emission(const char *draw, int bandrows,
+                     unsigned long *built, unsigned long *played)
+{
+    Xpost_Context *ctx;
+    char prog[2048];
+    int ok;
+
+    *built = *played = 0;
+    ctx = xpost_create("record:pgm", XPOST_OUTPUT_FILENAME, "/dev/null",
+                       XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
+                       XPOST_USE_SIZE, PAGE_W, PAGE_H);
+    if (!ctx)
+        return 0;
+    xpost_job_snapshots_set(ctx, 0);
+    xpost_stdout_handler_set(ctx, _out_sink, NULL);
+    snprintf(prog, sizeof prog, _program, VERTICES - 1, PAGE_H - 10,
+             VERTICES - 1, MARKS, MARKS, bandrows * PAGE_W, draw, draw);
+    out_len = 0;
+    ok = xpost_run(ctx, XPOST_INPUT_STRING, prog, 0) == XPOST_RUN_COMPLETE;
+    out_buf[out_len] = '\0';
+    xpost_stdout_handler_set(ctx, NULL, NULL);
+    xpost_destroy(ctx);
+    if (!ok)
+        return 0;
+    return sscanf(out_buf, "BUILT %lu %lu", built, played) == 2;
+}
+
+/* Weigh the two kinds of page against each other, and each against
+   itself over two band counts. Reports its own failures. */
+static void _weigh_replay(void)
+{
+    /* the page whole, and the page in bands of a hundred rows, which is
+       eight of them */
+    static const int rows[2] = { PAGE_H, 100 };
+    unsigned long poly[2], rect[2], polyplayed[2], rectplayed[2];
+    int i;
+
+    for (i = 0; i < 2; i++)
+    {
+        if (!_emission("drawpoly", rows[i], &poly[i], &polyplayed[i]))
+        {
+            report_failure("a page of polygons in bands of %d rows is put"
+                           " out", rows[i]);
+            return;
+        }
+        if (!_emission("drawrect", rows[i], &rect[i], &rectplayed[i]))
+        {
+            report_failure("a page of rectangles in bands of %d rows is put"
+                           " out", rows[i]);
+            return;
+        }
+    }
+
+    /* the instruments first: a page that played no mark, or that played
+       the same marks however it was divided, would make everything
+       below pass without weighing anything */
+    check(polyplayed[0] >= MARKS && rectplayed[0] >= MARKS,
+          "an emission plays the marks the page was given");
+    check(polyplayed[1] > polyplayed[0],
+          "a page held in bands plays more marks than the same page held"
+          " whole, each band playing the shapes that reach it");
+
+    /* A polygon carries its vertices and a rectangle carries four
+       numbers, and neither is built into anything: the same number of
+       either costs the same emission. */
+    if (poly[0] > rect[0] + BUILT_ALLOW)
+        report_failure("playing back a page of %d polygons built %lu bytes"
+                       " where the same number of rectangles built %lu:"
+                       " the marks of a path-heavy page are reaching the"
+                       " device as objects made for the call",
+                       MARKS, poly[0], rect[0]);
+
+    /* And the cost does not follow the band count. A polygon rebuilt for
+       each band it reaches would multiply here by the bands, which is
+       the number a small band budget exists to raise. */
+    if (poly[1] > poly[0] + BUILT_ALLOW)
+        report_failure("playing a page back in bands of %d rows built %lu"
+                       " bytes where playing the same page whole built"
+                       " %lu: what a replay builds is following the band"
+                       " count, so it is heaviest where the budget buys"
+                       " the most bands",
+                       rows[1], poly[1], poly[0]);
+}
+
 int main(void)
 {
     /* how much of each kind, chosen so that each record comes to several
@@ -558,6 +746,17 @@ int main(void)
     {
         xpost_record_free(kept[k]);
         xpost_record_free(warm[k]);
+    }
+
+    /* and the other half of what holding a page's marks costs: what
+       playing them back builds, which is the half no page can show */
+    if (!xpost_init())
+        report_failure("the interpreter a record is played back through"
+                       " starts");
+    else
+    {
+        _weigh_replay();
+        xpost_quit();
     }
 
     return verdict();
