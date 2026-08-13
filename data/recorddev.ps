@@ -367,20 +367,31 @@ setglobal
     % page costs to put out stops following the page's height here and
     % follows this instead.
     %
-    % A megabyte, because the two costs it stands between pull opposite
-    % ways and neither is sharp. Below it the fixed cost of a band -- one
-    % pass over the marks that reach it, and one call per band into the
-    % writer -- is paid over too few rows to be worth it; above it the
-    % bound stops being a bound worth having, since a page at production
-    % size is a hundred times this and a page at screen size is already
-    % under it. At any ordinary page width it is some hundreds of rows,
-    % which is a band deep enough that the marks reaching two of them are
-    % a small part of the marks there are.
+    % It says one thing more, because the same number is what a page is
+    % weighed against to decide whether it is recorded at all
+    % (.devicefor above): a page the budget covers is held in one band,
+    % which is the page, so it is painted on the device the run asked for
+    % and nothing is written down. The two readings are one reading on
+    % purpose -- a page is recorded exactly when recording it buys a
+    % second band -- and that is why this number has to be large enough
+    % to cover the pages that ought not to be recorded.
     %
-    % A round million and not the power of two nearest it: nothing in
-    % this tree is 1048576 wide, and a number shaped like a boundary
-    % claims to be one. What this is, is a judgement about where two
-    % costs cross, and it is written so as to say so.
+    % Four million, which is what covers them. A page at the default
+    % resolution is one pixel to the point, so the largest ordinary sheet
+    % there is -- A3 at 842 by 1191 points -- costs 3.0 MB across three
+    % bytes a pixel, and every smaller sheet less: letter is 1.45 MB, A4
+    % 1.75 MB. All of them are held whole and record nothing. Above the
+    % sheets the bound is still a bound worth having: a 612 by 40000
+    % strip costs 73.4 MB held whole and gives back some 70 MB of it. At
+    % any ordinary page width four million bytes is some thousands of
+    % rows, which is a band deep enough that the marks reaching two of
+    % them are a small part of the marks there are.
+    %
+    % Four round millions and not the power of two nearest them: nothing
+    % in this tree is 4194304 wide, and a number shaped like a boundary
+    % claims to be one. What this is, is a judgement about which pages
+    % are worth recording, taken against the sheets a page is cut to, and
+    % it is written so as to say so.
     %
     % It is not a page-device parameter and must not become one. PLRM
     % Appendix G declares the band-device setup operators obsolete and
@@ -390,7 +401,7 @@ setglobal
     % mode that holds the page whole does not. Being told what happened is
     % the other thing: currentsystemparams reports the band a page was
     % held in and there is no way to write it back.
-    /.bandbytes 1000000
+    /.bandbytes 4000000
 
     % IMAGE  Flush  -
     % Put out what the device is holding, without ending its page.
