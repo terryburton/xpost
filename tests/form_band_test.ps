@@ -39,11 +39,11 @@
 %   N     placements. Two values, so the cache claim is about how the
 %         count moves rather than about one number.
 %   FRAC  place the form at fractional device offsets rather than whole
-%         ones. A form's marks are cut to its bounding box and the cut
-%         is to whole pixels, so what a form paints depends on where it
-%         falls between pixels: a drawing is shared between placements
-%         that fall at the same place on the pixel and not between
-%         placements that do not.
+%         ones, and at two different fractions, so that a drawing held
+%         is placed at points between pixels it was not made at. A
+%         drawing is the marks the description made and a placement
+%         carries them, so the page must be the page painted afresh
+%         wherever the placements fall.
 %   RO    make the form dictionary read-only, which takes the copy out
 %         of the picture on a device that would otherwise make one. It
 %         is how the run reaches a direct rendering on the route that

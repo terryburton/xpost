@@ -1128,6 +1128,30 @@ currentglobal true setglobal
     dup /PaintProc get //.xpostsys /.pexec get exec
     grestore
 } put
+
+% formdict  .execformcapture  -
+% Paint a form for keeping: its matrix concatenates and the paint
+% procedure runs, and the bounding box does not clip.
+%
+% What the box would cut is nothing -- a form paints inside the box it
+% declares -- but cutting is not free of consequence. A shape the clip
+% has to cut is resolved into whole pixel rows above the device, where a
+% shape the clip leaves alone arrives as itself; the two paint the same
+% pixels, and only one of them can be carried somewhere else. A drawing
+% held for placing has to be the marks and not the rows they came to,
+% since the rows a shape covers depend on where it falls between pixels.
+%
+% The caller clips instead, to the box out to whole pixels and one
+% further, so that a procedure painting outside the box it declared is
+% still held to about the box while a procedure painting inside it is
+% not cut at all.
+.xpostsys /.execformcapture {
+    gsave
+    dup /Matrix get concat
+    newpath
+    dup /PaintProc get //.xpostsys /.pexec get exec
+    grestore
+} put
 setglobal
 
 % formdict  .execformbox  bx by w h
@@ -1214,32 +1238,22 @@ setglobal
         % the procedure made under one transformation, and marks made
         % under another are another drawing.
         %
-        % Where the position falls between pixels is in the key because
-        % a form's marks are cut to its bounding box and the cut is to
-        % whole pixels: the same form painted a fractional distance away
-        % reaches the device as a different number of pixel rows, so
-        % what it paints is not its own marks carried sideways. Two
-        % positions a whole number of pixels apart do carry, and that is
-        % what shares a drawing here. PLRM 4.7 says a change to the
-        % translation usually does not require the procedure to be run
-        % again; a whole number of pixels is how much of that holds.
+        % The position is not in the key. PLRM 4.7 says a change to the
+        % translation of the transformation usually does not require the
+        % procedure to be run again, and here it never does: the drawing
+        % is the marks the procedure made, held in the coordinates they
+        % were made in, and a placement carries them. So a form used at
+        % any position is the same drawing placed there, at whatever
+        % point between pixels that position falls.
         %
-        % The fraction is taken as it stands and not on a grid. A grid
-        % would share a drawing between two positions that fall at
-        % nearly the same place on the pixel, and nearly is not the
-        % same: measured on a page of forms inside forms, sharing
-        % between positions three millionths of a pixel apart moved one
-        % pixel of a hundred and sixty thousand. What that buys is
-        % sharing between positions whose fractions differ only in what
-        % a coordinate can hold at that magnitude, and what it costs is
-        % a page nothing would paint. A form whose position does not
-        % repeat exactly is described once for each place it falls on
-        % the pixel, which is what a page holding no description at all
-        % pays.
+        % It is the capture not cutting the marks that makes this true.
+        % A shape the bounding box has to cut is resolved into whole
+        % pixel rows before it reaches a device, and rows cannot be
+        % carried a fraction of a pixel and stay the rows the shape
+        % covers there; marks can (.execformcapture above).
         /cm matrix currentmatrix def
         /key fd /.formid get 20 string cvs
-        [ cm 0 get cm 1 get cm 2 get cm 3 get
-          cm 4 get dup floor sub  cm 5 get dup floor sub ] {
+        [ cm 0 get cm 1 get cm 2 get cm 3 get ] {
             40 string cvs
             exch (:) //.xpostsys /.strcat get exec exch //.xpostsys /.strcat get exec
         } forall def
@@ -1276,22 +1290,32 @@ setglobal
                 } if
                 gsave
                 graphicsdict /currgstate get /device cap put
-                fd //.xpostsys /.execformdirect get exec
+                % The clip the capture paints under: the form's box, out
+                % to whole pixels and one further, in the device's own
+                % coordinates. It holds a procedure that paints outside
+                % the box it declared to about the box, and leaves a
+                % procedure that paints inside it uncut -- which is what
+                % keeps the marks carryable.
+                /cm2 matrix currentmatrix def
+                matrix setmatrix
+                newpath fbx 1 sub fby 1 sub fw 2 add fh 2 add rectclip
+                cm2 setmatrix
+                fd //.xpostsys /.execformcapture get exec
                 grestore
                 fc key << /drawing cap
-                           /tx cm 4 get floor /ty cm 5 get floor >> put
+                           /tx cm 4 get /ty cm 5 get >> put
             } if
         } if
         fits fc key known and {
             /fe fc key get def
             % Where this execution puts the drawing: how far it is from
             % the position the drawing was painted at, in the device's
-            % own coordinates. A whole number of pixels, since the two
-            % fall at the same place between pixels -- that being what
-            % the key holds them to -- so the marks are carried and not
-            % re-rounded.
-            /dx cm 4 get floor fe /tx get sub def
-            /dy cm 5 get floor fe /ty get sub def
+            % own coordinates. Not rounded to a pixel -- which pixels a
+            % coordinate names is settled when the mark is played, so a
+            % placement paints at the point between pixels it was asked
+            % for rather than at the one the drawing was made at.
+            /dx cm 4 get fe /tx get sub def
+            /dy cm 5 get fe /ty get sub def
             DEVICE /.recordplace known {
                 % a device holding a record of its own is given the
                 % placement to write down, so the drawing is held once

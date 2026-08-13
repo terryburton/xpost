@@ -198,9 +198,9 @@ fi
 fcp=$(field "$fc" PAINTS)
 if [ -n "$fcp" ] && [ "$fcp" -lt "$n25" ]; then
     echo "OK   at placements falling between pixels the form is described"
-    echo "     $fcp times for $n25 placements: one for each place it falls"
-    echo "     on the pixel, and the comparison below is made where a"
-    echo "     drawing is being held"
+    echo "     $fcp times for $n25 placements, so the comparison below is"
+    echo "     made where a drawing is being held and placed at a point"
+    echo "     between pixels it was not made at"
 else
     echo "FAILURES: at placements falling between pixels the form was"
     echo "      described $fcp times for $n25 placements, so nothing was"

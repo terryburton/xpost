@@ -137,6 +137,10 @@ render scaled           pgm:whole -DSCALE=1.07            || fail=1
 s=$out
 render painted-scaled   pgm:whole -DSCALE=1.07 -DRO=1     || fail=1
 ps=$out
+render spill            pgm:whole -DSPILL=1              || fail=1
+sl=$out
+render painted-spill    pgm:whole -DSPILL=1 -DRO=1       || fail=1
+psl=$out
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a page could not be rendered"
@@ -239,24 +243,29 @@ fi
 same "$work/painted-moved.pgm" "$work/moved.pgm" \
      "the moved page painted afresh and the moved page held"
 
-# A form used at a position that does not repeat exactly is described
-# once for each place it falls on the pixel. Stated rather than
-# required: it is what the page costs, not what it looks like.
-echo "NOTE at a scale of 1.07 the uses fall at $sp different places on"
-echo "     the pixel and cost $sp descriptions against $pp"
+# The same page under a scale that puts every use at its own place
+# between pixels, which is where a drawing carried to the wrong place
+# would show.
+if [ "$sp" -eq "$forms" ]; then
+    echo "OK   under a scale of 1.07 the same $forms descriptions serve"
+    echo "     $uses uses, none of them repeating a place on the pixel"
+else
+    echo "FAILURES: under a scale of 1.07 the page described a form $sp"
+    echo "      times for $uses uses of $forms forms"
+    fail=1
+fi
+same "$work/painted-scaled.pgm" "$work/scaled.pgm" \
+     "the scaled page painted afresh and the scaled page held"
 
-# And what that page comes to, stated rather than required, because what
-# it measures is the width a coordinate is held at rather than anything
-# about forms. A drawing holds its marks in the type a coordinate
-# arrives in, and at the narrow object width that is a 32-bit float: a
-# mark carried a whole number of pixels is then rounded twice where
-# painting afresh rounds once, so a coordinate sitting within a float
-# step of a pixel edge can land on the other side of it. At the wide
-# width, where a coordinate is a double, the two pages are the same
-# bytes.
-set -- $(pixdiff "$work/painted-scaled.pgm" "$work/scaled.pgm")
-echo "NOTE the scaled page painted afresh and held differ in $1 pixels,"
-echo "     largest difference $2 -- the width a coordinate is held at"
+# What a form painting outside the box it declares costs, stated rather
+# than required. A form is expected to keep inside its box (PLRM 4.7),
+# and a description held carries the marks it made where painting afresh
+# cuts them at the box -- so a form that does not keep inside it is the
+# one thing holding a description changes about a page.
+set -- $(pixdiff "$work/painted-spill.pgm" "$work/spill.pgm")
+echo "NOTE a form reaching past the box it declares differs held from"
+echo "     painted afresh in $1 pixels, largest difference $2: what it"
+echo "     painted outside the box is carried rather than cut"
 
 if [ "$fail" -ne 0 ]; then
     exit 1

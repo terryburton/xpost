@@ -2197,8 +2197,17 @@ static int _replay_step(Xpost_Context *ctx,
             into->rec = sub;
             into->dx = f->dx + (nops > 1 ? ops[1] : (real)0);
             into->dy = f->dy + (nops > 2 ? ops[2] : (real)0);
-            into->lo = f->lo - (nops > 2 ? ops[2] : (real)0);
-            into->hi = f->hi - (nops > 2 ? ops[2] : (real)0);
+            /* The rows asked of the drawing are the rows asked of this
+               level, less where the placement puts it, and a row either
+               side of those. A placement at a fractional distance puts
+               a mark of the drawing's row on one of two rows of the
+               page, so a range taken exactly would leave the drawing
+               judging a mark not to reach a run it is painted into --
+               and a mark judged not to reach a band is absent from the
+               page. Erring outward costs a visit to a mark that then
+               paints nothing there. */
+            into->lo = f->lo - (nops > 2 ? ops[2] : (real)0) - (real)1;
+            into->hi = f->hi - (nops > 2 ? ops[2] : (real)0) + (real)1;
             into->idx = 0;
             into->pixat = 0;
             into->inmask = 0;

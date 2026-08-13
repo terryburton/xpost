@@ -22,15 +22,17 @@
 % Four properties of the figure, each there to make a comparison able to
 % fail:
 %
-%   Every placement falls between pixels. A copy taken at one phase
-%   against the pixel grid and replayed at every other is wrong at each
-%   of them, and a figure placed at whole numbers could not show it.
+%   Every placement falls between pixels, and no two of them fall at the
+%   same place between pixels. A description held is placed wherever it
+%   is wanted, so what the comparison has to catch is a drawing landing
+%   at the place it was made at rather than the place it was asked for
+%   -- and a figure placed at whole numbers could not show it.
 %
-%   The transformations are not whole numbers either: the page places
-%   the outer form under a scale of 1.07, and the innermost form is
-%   placed under a scale of 0.9 and a rotation of thirteen degrees, so
-%   its marks do not lie along an axis and its box does not fall on the
-%   pixel grid.
+%   The transformations are not whole numbers either: the innermost form
+%   is placed under a scale of 0.9 and a rotation of thirteen degrees,
+%   so its marks do not lie along an axis and its box does not fall on
+%   the pixel grid. The run can put a scale of 1.07 on the outer form as
+%   well (-DSCALE).
 %
 %   A form is held only where the clip is an axis-aligned rectangle in
 %   the device's own coordinates holding the whole of the form's box:
@@ -47,6 +49,13 @@
 %   transformation -- once by the outer form and once inside the middle
 %   one -- so a page that holds a description once holds one of it and a
 %   page that holds one per level holds two.
+%
+%   Every form keeps inside the box it declares, which is what a form is
+%   expected to do (PLRM 4.7): a description held carries the marks it
+%   made, and painting afresh cuts them at the box, so the two agree
+%   exactly where the marks were never outside it. -DSPILL asks the
+%   innermost form to reach past its box, and the run reports what that
+%   comes to.
 %
 % What is printed, and why each is needed:
 %
@@ -72,11 +81,16 @@
 %          placement that has moved by less than a pixel.
 %   BB     what a band of the page may cost in bytes, so that the figure
 %          is played into several bands and crosses their edges.
+%   SPILL  let the innermost form paint outside the bounding box it
+%          declares. A form is expected to keep inside the box it
+%          declares (PLRM 4.7) and this one does; asked for, it does
+%          not, and the run reports what that costs.
 
 /RO where { pop }{ /RO 0 def } ifelse
 /SCALE where { pop }{ /SCALE 1 def } ifelse
 /NUDGE where { pop }{ /NUDGE 0 def } ifelse
 /BB where { pop }{ /BB 0 def } ifelse
+/SPILL where { pop }{ /SPILL 0 def } ifelse
 
 /W 400 def
 /H 400 def
@@ -109,8 +123,16 @@ globaldict /pl 0 put
         countc
         0.15 setgray 0 0 12 12 rectfill
         0.85 setgray 1.5 1.5 9 9 rectfill
+        % A stroke inside the box the form declares. Asked for, the
+        % same stroke reaches the corners instead, where half its width
+        % falls outside that box: painting afresh cuts it there and a
+        % drawing held carries it, which is the one thing holding a
+        % description changes about a page.
         0 setgray 0.8 setlinewidth
-        0 0 moveto 12 12 lineto stroke
+        SPILL 0 ne
+            { 0 0 moveto 12 12 lineto }
+            { 1 1 moveto 11 11 lineto } ifelse
+        stroke
         0.45 setgray
         newpath 0 12 moveto 6 6.5 lineto 12 12 lineto closepath fill
     }
@@ -127,9 +149,9 @@ globaldict /pl 0 put
         pop
         countb
         0.55 setgray 0 0 46 1.5 rectfill
-        gsave 4 3 translate 0.9 0.9 scale 13 rotate FC place grestore
-        gsave 17 16 translate 0.9 0.9 scale 13 rotate FC place grestore
-        gsave 30 28 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 3.7 3.1 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 16.9 15.4 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 30.3 28.6 translate 0.9 0.9 scale 13 rotate FC place grestore
     }
 >> def
 
@@ -148,10 +170,10 @@ globaldict /pl 0 put
         0 118 120 2 rectfill
         0 0 2 120 rectfill
         118 0 2 120 rectfill
-        gsave 4 7 translate FB place grestore
-        gsave 39 41 translate FB place grestore
-        gsave 70 72 translate FB place grestore
-        gsave 93 10 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 4.3 7.1 translate FB place grestore
+        gsave 38.9 41.7 translate FB place grestore
+        gsave 70.1 72.3 translate FB place grestore
+        gsave 92.7 10.4 translate 0.9 0.9 scale 13 rotate FC place grestore
     }
 >> def
 
@@ -172,12 +194,12 @@ BB 0 ne { DEVICE /.bandbytes known { DEVICE /.bandbytes BB put } if } if
 % The page: the outer figure at four fractional positions, all under one
 % scale and rotation. One of them moves a fraction of a pixel when the
 % run asks for it.
-/nx NUDGE 0 ne { 205.25 0.37 add }{ 205.25 } ifelse def
+/nx NUDGE 0 ne { 205.3 0.37 add }{ 205.3 } ifelse def
 
-gsave  10.25   9.75 translate SCALE SCALE scale FA place grestore
-gsave  nx      9.75 translate SCALE SCALE scale FA place grestore
-gsave  10.25 190.75 translate SCALE SCALE scale FA place grestore
-gsave 205.25 190.75 translate SCALE SCALE scale FA place grestore
+gsave  10.3   9.7 translate SCALE SCALE scale FA place grestore
+gsave  nx     13.1 translate SCALE SCALE scale FA place grestore
+gsave  14.9 190.7 translate SCALE SCALE scale FA place grestore
+gsave 201.4 187.3 translate SCALE SCALE scale FA place grestore
 
 % Read before the page is put out: what a device wrote down is the
 % page's, and the page ends when it is put out.
