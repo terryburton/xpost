@@ -199,7 +199,15 @@ for f in $formats; do
             echo "      the same $max mark(s) at $rows rows a band"
             continue
         fi
-        if [ "$sum" -ge $((marks * nb)) ] || [ "$sum" -gt $((marks * 8)) ]; then
+        # ... and by a margin, against what a replay ignoring its row
+        # range would pay, which is every mark once per band. Stated as a
+        # fraction of that rather than as a multiple of the page's marks,
+        # because how many bands a mark meets is how tall the mark is: a
+        # page whose marks reach its full height costs nearly as much
+        # either way, so a multiple of the marks measures the page's
+        # shape and not the replay's bound.
+        if [ "$sum" -ge $((marks * nb)) ] ||
+           [ $((sum * 3)) -gt $((marks * nb * 2)) ]; then
             echo "FAILURES: the $f page of $h rows played $sum mark(s) over"
             echo "      $nb bands of $rows rows, against $marks in the page;"
             echo "      what a band replay costs is following the bands"

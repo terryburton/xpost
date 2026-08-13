@@ -557,8 +557,17 @@ for d in $matrixdevs; do
                     echo "      played the same $mx mark(s) at $bb rows a band"
                     continue
                 fi
+                # ... and by a margin, against what a replay ignoring
+                # its row range would pay, which is every mark once per
+                # band. Stated as a fraction of that rather than as a
+                # multiple of the page's marks, because how many bands a
+                # mark meets is how tall the mark is: a page whose marks
+                # reach its full height costs nearly as much either way,
+                # and a page of marks a row tall costs almost nothing, so
+                # a multiple of the marks measures the page's shape and
+                # not the replay's bound.
                 if [ "$sum" -ge $((marks * nb)) ] ||
-                   [ "$sum" -gt $((marks * 8)) ]; then
+                   [ $((sum * 3)) -gt $((marks * nb * 2)) ]; then
                     echo "FAILURES: $d played $sum mark(s) over $nb bands of"
                     echo "      $bb rows on page $bp of $bh, against $marks in"
                     echo "      the page; what a band replay costs is"

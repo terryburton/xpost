@@ -1011,6 +1011,94 @@ out:
     return ret;
 }
 
+int xpost_dev_record_takemask(Xpost_Context *ctx, Xpost_Object devdic,
+                              const unsigned char *cov, int w, int h,
+                              size_t *at)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!cov || !at)
+        return rangecheck;
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    /* a released record takes a mask as it takes a mark: not at all */
+    if (!private.rec)
+        return undefined;
+    if (!xpost_record_mask(private.rec, cov, w, h, at))
+        return VMerror;
+    return 0;
+}
+
+/* Write down one placement of a coverage mask the record already holds.
+ *
+ * The colour is the components the device's space takes and is carried
+ * once for the whole mask, the coverage being in the mask: which is the
+ * shape the painting has, since one colour is in force for a glyph and
+ * each of its pixels is covered as much as it is covered.
+ *
+ * @p ncomp is the count the entry point calling this was installed with,
+ * and is checked against the record's for the reason a mark's is.
+ */
+static int _glyphmark(Xpost_Context *ctx, Xpost_Object devdic,
+                      const Xpost_Object *comp, int ncomp,
+                      Xpost_Object at, Xpost_Object x, Xpost_Object y)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    real colour[RECORD_MAXCOMP];
+    integer i;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+
+    /* a released record takes no glyph, as it takes no mark */
+    if (!private.rec)
+        return 0;
+
+    if (ncomp != private.ncomp)
+    {
+        XPOST_LOG_ERR("%d a glyph of %d colour values is offered to a record"
+                      " holding %d", rangecheck, ncomp, private.ncomp);
+        return rangecheck;
+    }
+    for (i = 0; i < ncomp; i++)
+        colour[i] = (real)xpost_object_number(comp[i]);
+
+    i = xpost_dev_num_to_int(at);
+    if (i < 0)
+        return rangecheck;
+    if (!xpost_record_glyph(private.rec, colour, (size_t)i,
+                            (real)xpost_object_number(x),
+                            (real)xpost_object_number(y)))
+        return VMerror;
+    return 0;
+}
+
+/* r g b at x y IMAGE  .recordglyph  -
+   ... and the same at the other colour count. */
+static int _recordglyph(Xpost_Context *ctx,
+                        Xpost_Object red, Xpost_Object green, Xpost_Object blue,
+                        Xpost_Object at, Xpost_Object x, Xpost_Object y,
+                        Xpost_Object devdic)
+{
+    Xpost_Object comp[3];
+
+    comp[0] = red; comp[1] = green; comp[2] = blue;
+    return _glyphmark(ctx, devdic, comp, 3, at, x, y);
+}
+
+static int _recordglyph_g(Xpost_Context *ctx,
+                          Xpost_Object grey,
+                          Xpost_Object at, Xpost_Object x, Xpost_Object y,
+                          Xpost_Object devdic)
+{
+    Xpost_Object comp[1];
+
+    comp[0] = grey;
+    return _glyphmark(ctx, devdic, comp, 1, at, x, y);
+}
+
 /* IMAGE  .recordcost  marks images bytes
    What a record holds and what holding it costs. The mechanism is worth
    having exactly while a record is smaller than the raster it saves
@@ -1053,6 +1141,32 @@ static int _recordplays(Xpost_Context *ctx,
     if (!_private_get(ctx, devdic, &privatestr, &private))
         return undefined;
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)private.plays));
+    return 0;
+}
+
+/* IMAGE  .recordglyphs  masks bytes
+   How many coverage masks this record holds, and what they cost.
+
+   The quantity a page of text is judged on. A glyph entry is worth
+   having because one mask serves every placement of it, so a page of
+   text costs its distinct glyphs and a placement apiece; the way that
+   stops being true -- a mask per placement -- puts out exactly the same
+   page and no comparison of pages can see it. This is what can
+   (tests/run-record-glyph-test.sh). */
+static int _recordglyphs(Xpost_Context *ctx,
+                         Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)
+                                    xpost_record_mask_count(private.rec)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)
+                                    xpost_record_mask_bytes(private.rec)));
     return 0;
 }
 
@@ -1413,6 +1527,67 @@ static int _is_replay_cont(Xpost_Object o)
  * can be made to need. */
 #define XPOST_REPLAY_BATCH 512
 
+/* Make one call into the device that paints, its operands being on the
+ * operand stack already.
+ *
+ * Where the method is a compiled operator the call is made here, without
+ * going round the interpreter for it. What that saves is not the call
+ * but the journey -- a mark played by leaving the call on the stacks and
+ * returning costs two evaluation steps, and with them a fresh look at
+ * the target's method table, for every mark on the page.
+ *
+ * Where the method is not an operator the call cannot be made here: a
+ * device method may be a procedure, and what runs a procedure is the
+ * interpreter. Such a call is left on the stacks the way every mark used
+ * to be. The same applies to a method that is an operator and leaves
+ * work behind it, since the calls after it must be made after that work
+ * rather than before it: the walk's own continuation goes on the
+ * execution stack before the call and is taken off again after it -- if
+ * it is still on top, nothing was left; if it is not, the interpreter
+ * has been given something to do.
+ *
+ * Answers the error to raise, and sets @p left where the caller must
+ * return to let the interpreter reach what is waiting for it.
+ */
+static int _play_call(Xpost_Context *ctx, Xpost_Object m,
+                      Xpost_Object cont, Xpost_Object caller, int *left)
+{
+    int ret;
+
+    *left = 0;
+    /* the continuation goes on first, so that the call runs before it
+       and anything the call leaves behind runs before it too */
+    if (!xpost_stack_push(ctx->lo, ctx->es, cont))
+        return execstackoverflow;
+
+    if (xpost_object_get_type(m) != operatortype)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, m);
+        if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
+            return execstackoverflow;
+        *left = 1;
+        return 0;
+    }
+
+    /* The operator is named as the object being executed for the length
+       of the call, so that an error raised inside it is reported against
+       the method and unwinds onto the method's own operands, which is
+       what an error from a mark played by the interpreter does. */
+    ctx->currentobject = m;
+    ret = xpost_operator_exec(ctx, m.mark_.padw);
+    if (ret)
+        return ret;  /* the method is left named, for the error */
+    ctx->currentobject = caller;
+
+    if (!_is_replay_cont(xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0)))
+    {
+        *left = 1;
+        return 0;
+    }
+    (void)xpost_stack_pop(ctx->lo, ctx->es);
+    return 0;
+}
+
 /* Play the marks that reach the rows asked for, from the one at @p idx
  * on, into the device that paints.
  *
@@ -1431,27 +1606,30 @@ static int _is_replay_cont(Xpost_Object o)
  * interpreter. Such a mark is played by leaving the call on the stacks
  * and returning, and the walk resumes here afterwards and goes back to
  * looping. The same applies to a method that is an operator and leaves
- * work behind it: an operator may put a continuation of its own on the
- * execution stack, and the marks after it must be played after that
- * work rather than before it. So the walk's own continuation goes on
- * the execution stack before each call and is taken off again after it
- * -- if it is still on top, nothing was left and the loop goes on; if
- * it is not, the interpreter has been given something to do and this
- * returns to let it, with the continuation already sitting under the
- * work in the right place.
+ * work behind it. Both are _play_call above, and both have this return
+ * to let the interpreter reach the work, with the walk's continuation
+ * already sitting under it in the right place.
  *
  * The walk's operands sit on the operand stack for the whole batch
  * rather than being pushed and dropped per mark. The method consumes
- * what it was given and leaves them where they were, so the only one
- * that changes is the place in the record, which is written over in
- * place as each mark is played.
+ * what it was given and leaves them where they were, so the only ones
+ * that change are the place in the record and the place inside a glyph,
+ * which are written over in place as each call is made.
+ *
+ * A glyph is the one entry a batch can end in the middle of. It stands
+ * for a run of pixel calls rather than one call, so the walk keeps how
+ * far into its mask it has got and comes back to the same entry: a
+ * glyph of a thousand pixels played in one go would be a thousand calls
+ * during which memory is not reclaimed and a request to stop is not
+ * heard, which is what the batch exists to bound.
  */
 static int _replay_step(Xpost_Context *ctx,
                         Xpost_Object recdic,
                         Xpost_Object targetdic,
                         Xpost_Object idx,
                         Xpost_Object lo,
-                        Xpost_Object hi)
+                        Xpost_Object hi,
+                        Xpost_Object pix)
 {
     Xpost_Object privatestr;
     PrivateData private;
@@ -1463,7 +1641,7 @@ static int _replay_step(Xpost_Context *ctx,
     Xpost_Object method[5];
     char looked[5];
     real rlo, rhi;
-    size_t from;
+    size_t from, pixat, resumeat;
     int batch, k;
     int ret = 0;
 
@@ -1477,6 +1655,12 @@ static int _replay_step(Xpost_Context *ctx,
     rlo = (real)xpost_object_number(lo);
     rhi = (real)xpost_object_number(hi);
     from = (size_t)idx.int_.val;
+    pixat = pix.int_.val > 0 ? (size_t)pix.int_.val : 0;
+    /* the entry the place inside an entry belongs to, which is the one
+       the walk was resumed at. Anything else starts at its own beginning,
+       so a cursor left by a glyph cannot be read as a place inside some
+       later one and have that one start part way through. */
+    resumeat = from;
 
     /* The walk's own operands, which every return below leaves in place
        for the continuation to be resumed with. They go on once for the
@@ -1487,13 +1671,14 @@ static int _replay_step(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)from));
     xpost_stack_push(ctx->lo, ctx->os, lo);
     xpost_stack_push(ctx->lo, ctx->os, hi);
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)pixat));
     /* a push the stack would not take leaves the walk standing on
        operands that are not there; the run is told about it at the next
        evaluation step, and nothing is played in the meantime */
     if (ctx->lo->push_refused)
         return 0;
 
-    for (batch = 0; batch < XPOST_REPLAY_BATCH; batch++)
+    for (batch = 0; batch < XPOST_REPLAY_BATCH; )
     {
         Xpost_Record_Kind kind;
         const real *colour;
@@ -1501,7 +1686,7 @@ static int _replay_step(Xpost_Context *ctx,
         Xpost_Object m;
         Xpost_Object poly = null;
         size_t at;
-        int nops, i;
+        int nops, i, left;
 
         /* The rows asked for choose which marks are played, and the
            marks between are stepped over rather than played and
@@ -1516,6 +1701,7 @@ static int _replay_step(Xpost_Context *ctx,
             goto refused;
         if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
             goto refused;
+        batch++;
 
         /* Every entry played moves the walk past itself, whether it was
            a mark, a picture or a screen. Resuming where it was looking
@@ -1523,8 +1709,8 @@ static int _replay_step(Xpost_Context *ctx,
            the rows asked for had it step over.
 
            Written over the operand the continuation reads it from, the
-           third of the five the walk stands on. There is no reaching
-           for a place the stack does not have: the five went on above,
+           fourth of the six the walk stands on. There is no reaching
+           for a place the stack does not have: the six went on above,
            the push that would not have taken them was answered there,
            and each turn of the loop leaves them where it found them --
            a method takes the operands its own shape states and this
@@ -1532,7 +1718,7 @@ static int _replay_step(Xpost_Context *ctx,
            stated. */
         from = at + 1;
         XPOST_REFUSAL_IMPOSSIBLE(
-            xpost_stack_topdown_replace(ctx->lo, ctx->os, 2,
+            xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
                                         xpost_int_cons((integer)from)));
 
         /* An image is not one of the marking calls and is not made by
@@ -1612,6 +1798,131 @@ static int _replay_step(Xpost_Context *ctx,
             continue;
         }
 
+        /* A glyph is a coverage mask put at a place, and is played as
+           the run of pixel calls that comes to: a fully covered pixel
+           through the target's PutPix and a partly covered one through
+           its BlendPix, carrying how much of it is covered. Which is
+           what the painting did with the same mask, one glyph at a time
+           rather than one page of text at a time.
+
+           The rows asked for chose this entry and the mask is played
+           whole into them, as every mark is: a pixel outside the rows
+           the target is standing on is dropped against the row it was
+           about to be written to, so a glyph crossing a band's edge
+           leaves each band its own part of itself. */
+        if (kind == XPOST_RECORD_GLYPH)
+        {
+            const unsigned char *cov;
+            int mw = 0, mh = 0;
+            real gx, gy;
+            size_t area;
+
+            cov = xpost_record_mask_get(private.rec,
+                                        nops > 0 ? (size_t)ops[0]
+                                                 : (size_t)-1, &mw, &mh);
+            if (!cov)
+            {
+                XPOST_LOG_ERR("%d a recorded glyph names no mask", undefined);
+                ret = undefined;
+                goto refused;
+            }
+            gx = nops > 1 ? ops[1] : (real)0;
+            gy = nops > 2 ? ops[2] : (real)0;
+            area = (size_t)mw * (size_t)mh;
+            if (at != resumeat)
+                pixat = 0;
+
+            /* One more mark played -- the glyph, and not its pixels.
+               What this counts is the marks of the page, and a page of
+               text holds a glyph wherever it shows one; counting the
+               pixels would answer the ink, which is the quantity the
+               entry exists to stop the record paying. Counted once
+               however many batches the mask takes. */
+            if (pixat == 0)
+                private.played++;
+
+            /* the walk stays on this entry while any of the mask is
+               left, so what it comes back to is this one and not the
+               one after it */
+            XPOST_REFUSAL_IMPOSSIBLE(
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
+                                            xpost_int_cons((integer)at)));
+
+            while (pixat < area)
+            {
+                int c = cov[pixat];
+                int which;
+
+                if (!c)
+                {
+                    pixat++;
+                    continue;
+                }
+                which = c == 255 ? XPOST_RECORD_PUTPIX : XPOST_RECORD_BLENDPIX;
+                if (!looked[which])
+                {
+                    method[which] = xpost_dict_get(ctx, targetdic,
+                                                   _slot(which));
+                    looked[which] = 1;
+                }
+                m = method[which];
+                if (xpost_object_get_type(m) == invalidtype ||
+                    xpost_object_get_type(m) == nulltype)
+                {
+                    /* the device being played into does not offer one
+                       of the two methods a coverage mask is painted
+                       through, so the glyph cannot be made */
+                    XPOST_LOG_ERR("%d a recorded glyph has no method to play"
+                                  " it into", undefined);
+                    ret = undefined;
+                    goto refused;
+                }
+
+                /* where inside the mask to come back to, written before
+                   the call's own operands go on top of the walk's */
+                XPOST_REFUSAL_IMPOSSIBLE(
+                    xpost_stack_topdown_replace(
+                        ctx->lo, ctx->os, 0,
+                        xpost_int_cons((integer)(pixat + 1))));
+
+                for (i = 0; i < private.ncomp; i++)
+                    xpost_stack_push(ctx->lo, ctx->os,
+                                     xpost_real_cons(colour[i]));
+                if (which == XPOST_RECORD_BLENDPIX)
+                    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(c));
+                xpost_stack_push(ctx->lo, ctx->os,
+                                 xpost_real_cons(gx + (real)(pixat
+                                                             % (size_t)mw)));
+                xpost_stack_push(ctx->lo, ctx->os,
+                                 xpost_real_cons(gy + (real)(pixat
+                                                             / (size_t)mw)));
+                xpost_stack_push(ctx->lo, ctx->os, targetdic);
+
+                pixat++;
+                batch++;
+                ret = _play_call(ctx, m, cont, caller, &left);
+                if (ret)
+                    goto done;
+                if (left)
+                    goto done;
+                if (batch >= XPOST_REPLAY_BATCH
+                    || (ctx->lo && ctx->lo->garbage_collect_pending)
+                    || (ctx->gl && ctx->gl->garbage_collect_pending))
+                    goto resume;
+            }
+
+            /* the mask is spent: the walk moves past it and the entry
+               after it starts at its own first pixel */
+            pixat = 0;
+            XPOST_REFUSAL_IMPOSSIBLE(
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
+                                            xpost_int_cons((integer)from)));
+            XPOST_REFUSAL_IMPOSSIBLE(
+                xpost_stack_topdown_replace(ctx->lo, ctx->os, 0,
+                                            xpost_int_cons(0)));
+            continue;
+        }
+
         if ((int)kind < 0 || (int)kind >= (int)(sizeof looked / sizeof *looked))
         {
             XPOST_LOG_ERR("%d a recorded mark is of no kind a record holds",
@@ -1662,44 +1973,11 @@ static int _replay_step(Xpost_Context *ctx,
                 xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(ops[i]));
         xpost_stack_push(ctx->lo, ctx->os, targetdic);
 
-        /* the continuation goes on first, so that the call runs before
-           it and anything the call leaves behind runs before it too */
-        if (!xpost_stack_push(ctx->lo, ctx->es, cont))
-        {
-            ret = execstackoverflow;
-            goto done;
-        }
-
-        if (xpost_object_get_type(m) != operatortype)
-        {
-            /* a method that is a procedure, which only the interpreter
-               runs: the call is left on the stacks and this returns */
-            xpost_stack_push(ctx->lo, ctx->os, m);
-            if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
-                ret = execstackoverflow;
-            goto done;
-        }
-
-        /* The mark is made from here. The operator is named as the
-           object being executed for the length of the call, so that an
-           error raised inside it is reported against the method and
-           unwinds onto the method's own operands, which is what an error
-           from a mark played by the interpreter does. */
-        ctx->currentobject = m;
-        ret = xpost_operator_exec(ctx, m.mark_.padw);
+        ret = _play_call(ctx, m, cont, caller, &left);
         if (ret)
-            goto done;  /* the method is left named, for the error */
-        ctx->currentobject = caller;
-
-        /* Whether the call left the interpreter something to do. The
-           walk's continuation was put on before the call, so work left
-           behind sits above it and this returns to let the interpreter
-           reach both in that order; an untouched execution stack still
-           has the continuation on top and the loop takes it back off and
-           goes on to the next mark. */
-        if (!_is_replay_cont(xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0)))
             goto done;
-        (void)xpost_stack_pop(ctx->lo, ctx->es);
+        if (left)
+            goto done;
 
         /* A collection the run has asked for is taken between evaluation
            steps and not inside this, so a batch that has been asked for
@@ -1710,6 +1988,7 @@ static int _replay_step(Xpost_Context *ctx,
             break;
     }
 
+  resume:
     /* the batch is full, or a collection is waiting: the walk goes back
        on to be resumed, standing on the operands it was left with */
     if (!xpost_stack_push(ctx->lo, ctx->es, cont))
@@ -1724,7 +2003,7 @@ static int _replay_step(Xpost_Context *ctx,
        working state. An error raised by a method that did run leaves
        them where they are, which is where a mark played by the
        interpreter leaves them. */
-    for (k = 0; k < 5; k++)
+    for (k = 0; k < 6; k++)
         (void)xpost_stack_pop(ctx->lo, ctx->os);
 
   done:
@@ -1794,6 +2073,10 @@ static int _replay_walk(Xpost_Context *ctx,
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
     xpost_stack_push(ctx->lo, ctx->os, lo);
     xpost_stack_push(ctx->lo, ctx->os, hi);
+    /* and the place inside the entry it is looking at, which only a
+       glyph has one of: a mask is a run of pixel calls and a batch may
+       end in the middle of it */
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_operator_cons_opcode(_replay_step_opcode)))
         return execstackoverflow;
@@ -2285,6 +2568,36 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
+    /* How a glyph reaches the record, for the same reason and by the
+       same route. The glyph painter looks for it, and finding it hands
+       over one coverage mask and a placement of it rather than the mark
+       per inked pixel a device that paints is sent -- which costs a
+       raster nothing and would cost this record tens of bytes a pixel.
+       Like the image entry it is not a device method and is not
+       dispatched as one: a method here would be a marking call the
+       record holds no entry for, which is the one thing this class must
+       not declare (tests/check-device-skeleton.sh).
+
+       The mask itself does not come this way. It is handed over as the
+       glyph is rendered, through xpost_dev_record_takemask, and this
+       writes down which of the record's masks was painted where -- the
+       two being separate because the order a string's glyphs are
+       rendered in is not the order they are painted in, and a record
+       holds its marks in the order they were painted. */
+    op = ncomp == 1
+        ? xpost_operator_cons(ctx, "recordGrayGlyph",
+                              (Xpost_Op_Func)_recordglyph_g, 5,
+                              numbertype, numbertype, numbertype, numbertype,
+                              dicttype)
+        : xpost_operator_cons(ctx, "recordGlyph",
+                              (Xpost_Op_Func)_recordglyph, 7,
+                              numbertype, numbertype, numbertype, numbertype,
+                              numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, ".recordglyph"), op);
+    if (ret)
+        return ret;
+
     /* What the painting machinery calls where the screen changes, for a
        target that screens. Like the image entry it is not a device
        method and is not dispatched as one: a method here would be a
@@ -2378,9 +2691,9 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              (Xpost_Op_Func)_replaypage_rows, 4,
                              dicttype, dicttype, numbertype, numbertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 5,
+    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 6,
                              dicttype, dicttype, integertype,
-                             numbertype, numbertype);
+                             numbertype, numbertype, integertype);
     _replay_step_opcode = op.mark_.padw;
     op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
                              dicttype); INSTALL;
@@ -2390,6 +2703,9 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              1, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordscreens",
                              (Xpost_Op_Func)_recordscreens, 1,
+                             dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordglyphs",
+                             (Xpost_Op_Func)_recordglyphs, 1,
                              dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".playscreen", (Xpost_Op_Func)_playscreen,
                              2, dicttype, dicttype); INSTALL;

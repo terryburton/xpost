@@ -34,6 +34,14 @@
  * of bytes a sample against the one to three bytes a pixel of the page
  * the record exists to avoid holding.
  *
+ * A glyph is the same case and is held the same way. Text reaches a
+ * device one coverage-weighted pixel at a time, which costs a raster
+ * nothing and costs a record a mark of tens of bytes per inked pixel;
+ * so a glyph is held as a coverage mask and a placement of it, the mask
+ * shared by every placement it is the same mask for. What a page of
+ * text then costs is its distinct glyphs, once each, and a placement
+ * apiece -- which is the drawing, rather than the ink.
+ *
  * Every mark says where it reaches in y when it is written down, and a
  * replay is given a row range, so a replay visits the marks that reach
  * into that range and steps over the rest. Playing a page of n marks
@@ -81,6 +89,17 @@
     carries an index into the images the record holds instead of
     operands of its own.
 
+    A glyph is the eighth and is a mark: a coverage mask, painted in one
+    colour at one place. It is here for the reason an image is. Text
+    reaches a device one pixel at a time -- fully covered pixels through
+    PutPix and partly covered edge pixels through BlendPix with their
+    coverage -- which a raster stores nothing for, and which a record
+    built from the five alone would hold at tens of bytes per inked
+    pixel: a page of ordinary text inks a tenth of itself, so such a
+    record runs to twenty times the page it is escaping. It carries an
+    index into the masks the record holds and the place to put it, and
+    the mask is one copy however many placements name it.
+
     A screen is the seventh and is not a mark at all: it paints nothing,
     and says instead what the marks after it are to be painted under. A
     device rendering a grey as a pattern of pixels picks each pixel by
@@ -108,7 +127,8 @@ typedef enum
     XPOST_RECORD_FILLRECT, /**< x y w h */
     XPOST_RECORD_FILLPOLY, /**< n, then n pairs of x y */
     XPOST_RECORD_IMAGE,    /**< which of the record's images */
-    XPOST_RECORD_SCREEN    /**< which of the record's screens */
+    XPOST_RECORD_SCREEN,   /**< which of the record's screens */
+    XPOST_RECORD_GLYPH     /**< which of the record's masks, then x y */
 } Xpost_Record_Kind;
 
 typedef struct _Xpost_Record Xpost_Record;
@@ -270,6 +290,87 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
                             real lo, real hi, int *y0, int *y1);
 
 /**
+ * @brief Take up a coverage mask, answering which of the record's it is.
+ *
+ * @param[in] cov @p w x @p h coverage bytes, a row at a time: 0 where
+ *                the pixel is not painted, 255 where the whole of it is,
+ *                and the coverage between where part of it is
+ * @param[out] at which mask it became
+ * @return 1, or 0 where there is no memory to hold it, on the same
+ *         terms as a mark: the record is then short of a mark and every
+ *         replay of it refuses.
+ *
+ * A mask equal to one the record already holds is that one: the record
+ * answers its index and takes no second copy. That is the whole of what
+ * a glyph entry buys -- a line of text is the same few dozen masks over
+ * and over, and holding one copy of each is the difference between a
+ * page of text costing its drawing and costing its ink.
+ *
+ * Equal means equal in every byte and in both extents, which is what
+ * makes the sharing safe to do here rather than at the caller: two
+ * placements of one glyph reach this with the same bytes, and anything
+ * that reaches it with different bytes is a different mask whatever it
+ * was named by. A caller that knows two placements are the same glyph
+ * need not say so, and one that is wrong about it cannot mislead this.
+ *
+ * The mask is copied. A record outlives the job that made it, and what
+ * a caller hands over is a rendering cache's entry or a scratch buffer,
+ * either of which may be given up while the record still names it.
+ *
+ * Taking the mask up and writing the placement down are two calls
+ * because they happen at two times. A glyph's coverage is rendered when
+ * the text operator reaches the character; the mark is made when the
+ * page is painted, which for a string of text is not the same order.
+ * A record holds its marks in the order they were painted, so the
+ * placement is written down where the painting happens and the mask,
+ * which is the same mask whenever it is taken up, is taken up here.
+ */
+int xpost_record_mask(Xpost_Record *rec, const unsigned char *cov,
+                      int w, int h, size_t *at);
+
+/**
+ * @brief Write down a placement of the mask at @p at.
+ *
+ * @param[in] colour ncomp values, the colour the mask is painted in
+ * @param[in] x where the mask's first column lands, @p y its first row
+ * @return 1, or 0 where the record holds no such mask or has no memory
+ *         to hold the placement, on the same terms as a mark.
+ *
+ * The colour is carried once for the whole mask and the coverage per
+ * pixel is in the mask, which is the shape the painting has: one colour
+ * is in force for a glyph and each pixel of it is covered as much as it
+ * is covered.
+ */
+int xpost_record_glyph(Xpost_Record *rec, const real *colour,
+                       size_t at, real x, real y);
+
+/**
+ * @brief How many coverage masks a record holds.
+ */
+size_t xpost_record_mask_count(const Xpost_Record *rec);
+
+/**
+ * @brief What the masks a record holds cost, in bytes.
+ *
+ * The quantity a page of text is judged on, beside xpost_record_bytes:
+ * a record of text is worth what it is worth because it holds a glyph
+ * once however often the page shows it, and the way that stops being
+ * true is silent.
+ */
+size_t xpost_record_mask_bytes(const Xpost_Record *rec);
+
+/**
+ * @brief The mask at @p i, as it was taken up, or NULL.
+ *
+ * @param[out] w its width, @p h its height
+ *
+ * What comes back points into the record and is good until the next
+ * mask is taken up.
+ */
+const unsigned char *xpost_record_mask_get(const Xpost_Record *rec, size_t i,
+                                           int *w, int *h);
+
+/**
  * @brief Write down the screen the marks after this are made under.
  *
  * @param[in] rec the record
@@ -347,7 +448,8 @@ size_t xpost_record_count(const Xpost_Record *rec);
 /**
  * @brief What a record costs, in bytes.
  *
- * The marks, their values, and the images they name. It is the quantity
+ * The marks, their values, and the images and masks they name. It is
+ * the quantity
  * the whole mechanism is judged on: a record is worth holding while it
  * is smaller than the raster it saves holding, and that is a comparison
  * rather than a guess.
@@ -408,7 +510,9 @@ int xpost_record_last(const Xpost_Record *rec, real lo, real hi, size_t *at);
  * @return 1, or 0 where the record holds no mark there
  *
  * An image's one operand is which of the record's images it names, and
- * its colour values are zero: what colours it is in its samples.
+ * its colour values are zero: what colours it is in its samples. A
+ * glyph's are which of the record's masks it names and where that mask
+ * is put, and its colour values are the colour the mask is painted in.
  *
  * What comes back points into the record and is good until the next
  * mark is written down. A record short of a mark it was given gives

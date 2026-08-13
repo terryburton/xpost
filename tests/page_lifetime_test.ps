@@ -130,10 +130,16 @@ setglobal
         0 setgray 1 setlinewidth
         newpath 20 200 dy moveto 220 260 dy lineto stroke
     grestore
+    % Text at five heights rather than one. A glyph reaches a record as
+    % one mark and not as one per inked pixel, so a page carrying a
+    % single line of it holds too few marks for a record accumulating
+    % across pages to be told from one that is not.
     gsave
         0 setgray
         /Times-Roman findfont 18 scalefont setfont
-        20 320 dy moveto (Page lifetime) show
+        [ 290 310 330 350 370 ] {
+            20 exch dy moveto (Page lifetime) show
+        } forall
     grestore
     gsave
         0.9 0.1 0.1 setrgbcolor

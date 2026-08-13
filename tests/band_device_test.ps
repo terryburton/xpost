@@ -123,11 +123,17 @@ banding {
         newpath 20 ph 0.90 mul moveto 180 ph 0.84 mul lineto stroke
     grestore
 
-    % text, for the glyph pixels a boundary between bands cuts through
+    % text, for the glyph coverage a boundary between bands cuts
+    % through, at five heights down the page. A glyph reaches a record as
+    % one mark and not as one per inked pixel, so a page carrying text at
+    % a single height holds too few marks for what a band was played to
+    % be told from what the page holds.
     gsave
         0 setgray
         /Times-Roman findfont 20 scalefont setfont
-        16 ph 0.68 mul moveto (Bands) show
+        [ 0.10 0.30 0.50 0.68 0.86 ] {
+            16 exch ph mul moveto (Bands) show
+        } forall
     grestore
 
     % a sampled image, which a record holds as one entry and plays for

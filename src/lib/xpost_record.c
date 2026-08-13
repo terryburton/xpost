@@ -48,6 +48,20 @@ typedef struct
     unsigned char *cell;
 } _Screen;
 
+/* One coverage mask, and a digest of it. The digest is kept because
+   taking a mask up asks whether the record already holds it, and a page
+   of text asks that once per glyph on it: comparing the bytes against
+   every mask held would make a line of text cost the masks times the
+   glyphs, where comparing digests makes it cost the glyphs. The bytes
+   are still compared where the digests agree, so what is shared is
+   masks that are equal and not masks that collide. */
+typedef struct
+{
+    int w, h;
+    unsigned long long digest;
+    unsigned char *cov;
+} _Cover;
+
 struct _Xpost_Record
 {
     int ncomp;
@@ -56,6 +70,8 @@ struct _Xpost_Record
     Xpost_String_Buffer val;    /* colour and operands, run together */
     Xpost_String_Buffer img;    /* a run of Xpost_Record_Image */
     size_t imgbytes;            /* what the copies they point at cost */
+    Xpost_String_Buffer msk;    /* a run of _Cover */
+    size_t mskbytes;            /* what the coverage they point at costs */
     Xpost_String_Buffer scr;    /* a run of _Screen */
     size_t scrbytes;            /* what the cells they point at cost */
     /* The screen the marks are being made under, kept apart from the
@@ -91,6 +107,16 @@ static size_t _nimg(const Xpost_Record *rec)
     return rec->img.len / sizeof(Xpost_Record_Image);
 }
 
+static _Cover *_msks(const Xpost_Record *rec)
+{
+    return (_Cover *)rec->msk.s;
+}
+
+static size_t _nmsk(const Xpost_Record *rec)
+{
+    return rec->msk.len / sizeof(_Cover);
+}
+
 static _Screen *_scrs(const Xpost_Record *rec)
 {
     return (_Screen *)rec->scr.s;
@@ -113,11 +139,13 @@ Xpost_Record *xpost_record_new(int ncomp)
     if (xpost_strbuf_init(&rec->mark, 0) ||
         xpost_strbuf_init(&rec->val, 0) ||
         xpost_strbuf_init(&rec->img, 0) ||
+        xpost_strbuf_init(&rec->msk, 0) ||
         xpost_strbuf_init(&rec->scr, 0))
     {
         xpost_strbuf_free(&rec->mark);
         xpost_strbuf_free(&rec->val);
         xpost_strbuf_free(&rec->img);
+        xpost_strbuf_free(&rec->msk);
         xpost_strbuf_free(&rec->scr);
         free(rec);
         return NULL;
@@ -152,6 +180,17 @@ static void _screens_free(Xpost_Record *rec)
     rec->scrbytes = 0;
 }
 
+/* and the coverage its masks were copied into */
+static void _masks_free(Xpost_Record *rec)
+{
+    size_t i, n = _nmsk(rec);
+
+    for (i = 0; i < n; i++)
+        free(_msks(rec)[i].cov);
+    rec->msk.len = 0;
+    rec->mskbytes = 0;
+}
+
 void xpost_record_free(Xpost_Record *rec)
 {
     size_t i, n;
@@ -161,11 +200,13 @@ void xpost_record_free(Xpost_Record *rec)
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
+    _masks_free(rec);
     _screens_free(rec);
     free(rec->htcell);
     xpost_strbuf_free(&rec->mark);
     xpost_strbuf_free(&rec->val);
     xpost_strbuf_free(&rec->img);
+    xpost_strbuf_free(&rec->msk);
     xpost_strbuf_free(&rec->scr);
     free(rec);
 }
@@ -180,11 +221,13 @@ static int _fixed_nops(Xpost_Record_Kind kind)
         case XPOST_RECORD_BLENDPIX: return 3;
         case XPOST_RECORD_DRAWLINE: return 4;
         case XPOST_RECORD_FILLRECT: return 4;
-        /* a polygon states its own length, and neither an image nor a
-           screen is written down through xpost_record_mark at all */
+        /* a polygon states its own length, and none of an image, a
+           screen and a glyph is written down through xpost_record_mark
+           at all */
         case XPOST_RECORD_FILLPOLY:
         case XPOST_RECORD_IMAGE:
-        case XPOST_RECORD_SCREEN:   return -1;
+        case XPOST_RECORD_SCREEN:
+        case XPOST_RECORD_GLYPH:    return -1;
     }
     return -1;
 }
@@ -252,6 +295,12 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
             /* a screen reaches no row and every run of rows: it paints
                nothing, and governs whatever is painted after it wherever
                that lands, which is settled in _meets rather than here */
+            *lo = *hi = 0.0;
+            return;
+        case XPOST_RECORD_GLYPH:
+            /* a glyph's reach is its mask's height at the row it is put
+               on, and is taken where it is written down: the operands
+               name the mask rather than describing it */
             *lo = *hi = 0.0;
             return;
     }
@@ -524,6 +573,137 @@ int xpost_record_image_rows(const Xpost_Record_Image *img,
     return first < last;
 }
 
+/* A digest of a mask's bytes, and of the extents that say how to read
+   them. It answers whether two masks might be equal; the bytes answer
+   whether they are. */
+static unsigned long long _digest(const unsigned char *p, size_t n,
+                                  int w, int h)
+{
+    unsigned long long d = 1469598103934665603ULL;
+    size_t i;
+
+    d = (d ^ (unsigned long long)(unsigned)w) * 1099511628211ULL;
+    d = (d ^ (unsigned long long)(unsigned)h) * 1099511628211ULL;
+    for (i = 0; i < n; i++)
+        d = (d ^ p[i]) * 1099511628211ULL;
+    return d;
+}
+
+int xpost_record_mask(Xpost_Record *rec, const unsigned char *cov,
+                      int w, int h, size_t *at)
+{
+    _Cover m;
+    _Cover *held;
+    size_t n, i, count;
+
+    if (!rec || !cov || !at || w < 1 || h < 1)
+        return 0;
+    /* a record already short of a mark describes a page it cannot
+       reproduce, and adding to it would only make the gap harder to
+       see */
+    if (rec->short_of_a_mark)
+        return 0;
+    /* what the two extents multiply to has to be a count this can walk,
+       which is asked here rather than on the way past every byte */
+    if (h > INT_MAX / w)
+        return 0;
+    n = (size_t)w * (size_t)h;
+
+    /* the one the record already holds, if it holds it. Backwards,
+       because a page's text repeats the glyph it last used far more
+       often than the one it used first. */
+    m.digest = _digest(cov, n, w, h);
+    held = _msks(rec);
+    count = _nmsk(rec);
+    for (i = count; i--; )
+    {
+        if (held[i].digest != m.digest
+            || held[i].w != w || held[i].h != h)
+            continue;
+        if (memcmp(held[i].cov, cov, n) != 0)
+            continue;
+        *at = i;
+        return 1;
+    }
+
+    m.w = w;
+    m.h = h;
+    m.cov = malloc(n);
+    if (!m.cov)
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    memcpy(m.cov, cov, n);
+    if (xpost_strbuf_append(&rec->msk, &m, sizeof m))
+    {
+        free(m.cov);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    /* the run holds the entry now, so the coverage is the record's to
+       give up and no longer this call's */
+    rec->mskbytes += n;
+    *at = count;
+    return 1;
+}
+
+int xpost_record_glyph(Xpost_Record *rec, const real *colour,
+                       size_t at, real x, real y)
+{
+    const _Cover *m;
+    real ops[3];
+
+    if (!rec || !colour)
+        return 0;
+    if (rec->short_of_a_mark)
+        return 0;
+    /* a placement naming a mask the record does not hold would replay
+       as nothing, which is a page missing a glyph: it is refused on the
+       terms a mark that cannot be held is refused, so that the page is
+       refused rather than put out short */
+    if (at >= _nmsk(rec))
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    m = &_msks(rec)[at];
+
+    ops[0] = (real)at;
+    ops[1] = x;
+    ops[2] = y;
+    /* the rows the mask covers from where it was put, which is the one
+       kind whose reach is read off the entry it names rather than off
+       its own operands */
+    return _put(rec, XPOST_RECORD_GLYPH, colour, ops, 3,
+                y, y + (real)(m->h - 1));
+}
+
+size_t xpost_record_mask_count(const Xpost_Record *rec)
+{
+    return rec ? _nmsk(rec) : 0;
+}
+
+size_t xpost_record_mask_bytes(const Xpost_Record *rec)
+{
+    return rec ? rec->mskbytes : 0;
+}
+
+const unsigned char *xpost_record_mask_get(const Xpost_Record *rec, size_t i,
+                                           int *w, int *h)
+{
+    const _Cover *m;
+
+    /* a record short of a mark gives none of what it holds back, on the
+       same terms as a replay of one */
+    if (!rec || rec->short_of_a_mark || i >= _nmsk(rec))
+        return NULL;
+    m = &_msks(rec)[i];
+    if (w) *w = m->w;
+    if (h) *h = m->h;
+    return m->cov;
+}
+
 /* Write one screen entry down, its cell copied into the record's own
    memory. Shared by a screen the painting announced and by the one a
    page boundary opens the page after with. */
@@ -644,6 +824,7 @@ void xpost_record_clear(Xpost_Record *rec)
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
+    _masks_free(rec);
     _screens_free(rec);
     /* the runs keep what they took: a record is filled again by the page
        after, and what it costs is then the largest page rather than the
@@ -675,6 +856,7 @@ size_t xpost_record_bytes(const Xpost_Record *rec)
        record is compared against a raster it would save holding, and
        what a raster costs is what was allocated for it */
     return rec->mark.cap + rec->val.cap + rec->img.cap + rec->imgbytes
+         + rec->msk.cap + rec->mskbytes
          + rec->scr.cap + rec->scrbytes;
 }
 

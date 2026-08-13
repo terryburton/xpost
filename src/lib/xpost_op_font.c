@@ -64,6 +64,7 @@
 #include "xpost_op_font.h"
 #include "xpost_dev_generic.h" /* pdfwrite accumulator access for glyph outlines */
 #include "xpost_dev_driver.h" /* the device grid the clip region's bounds sit on */
+#include "xpost_dev_record.h" /* where a glyph's coverage goes whole */
 #include "xpost_handle.h" /* the handle a font dictionary names its face by */
 
 /*
@@ -137,6 +138,12 @@ typedef struct clipband
     int band;
     int lo, hi;
 } clipband;
+
+/* The key a device that writes down what it is asked to paint declares,
+   under which the glyph painter finds the entry a glyph's coverage goes
+   to whole. Taken up at start-up: the painter asks the device for it
+   once per glyph. */
+static Xpost_Object namedotrecordglyph;
 
 /* How the clip region in force meets device pixels. The glyph raster
    route paints pixels straight through the device, so it meets the
@@ -1986,6 +1993,16 @@ int _device_color(Xpost_Context *ctx,
    anti-aliases text (ts->blend), in which case fully covered pixels go
    through PutPix and partially covered edge pixels through the
    device's BlendPix with their coverage.
+   A device that writes down what it is asked to paint rather than
+   painting it declares /.recordglyph, and is handed the coverage that
+   walk resolves as one mask and one placement of it instead of a call
+   per inked pixel. The two routes resolve the same coverage in the same
+   loop -- which pixels the region keeps and how much of each is covered
+   is stated once, here -- and differ only in where the answer goes: a
+   device that paints is told a pixel at a time because that is what
+   painting is, and a device that stores is told a glyph at a time
+   because a mark per inked pixel costs it tens of bytes where the page
+   it is escaping costs one to three (doc/NEWINTERNALS).
    The raster is narrowed to the pixels the clip region covers, as
    PLRM 7.5.1 has every painting operation meet the region: the whole
    raster is rejected or accepted against the region's bounds first, so
@@ -2018,8 +2035,14 @@ void _draw_bitmap(Xpost_Context *ctx,
     const unsigned char *tmp;
     unsigned int pix;
     Xpost_Object exec_op;
+    Xpost_Object glyphop;
     int i0 = 0, i1 = rows;
     int inside;
+    /* the coverage a device that stores is handed, and whether any of
+       it was written: a glyph the region keeps nothing of, and one with
+       no ink in it, reach the page nowhere and are not written down */
+    unsigned char *mask = NULL;
+    int any = 0;
 
     /* The operator itself, not its name: a name pushed for execution is
        resolved against the dictionary stack at that moment, so a program
@@ -2044,6 +2067,21 @@ void _draw_bitmap(Xpost_Context *ctx,
           || (ts->clipkind == CLIP_BOX
            && i0 == 0 && i1 == rows
            && ts->cx0 <= xpos && ts->cx1 >= xpos + width);
+
+    /* Where a device writes marks down, the coverage is gathered into a
+       mask of the rows the region keeps rather than being paid out a
+       call at a time. It is the whole of those rows and not the runs
+       within them: a pixel the region drops is a pixel with no coverage,
+       which is what the buffer already holds. The colour is not in it --
+       one colour is in force for the glyph and it goes with the
+       placement -- and neither is the position, so two placements of one
+       glyph hand over the same bytes and the record holds one copy.
+       A device whose space takes a colour no record holds, and a mask
+       there is no memory for, both leave this at the route that paints. */
+    glyphop = xpost_dict_get(ctx, devdic, namedotrecordglyph);
+    if (xpost_object_get_type(glyphop) == operatortype
+        && (ncomp == 1 || ncomp == 3) && width > 0 && i1 > i0)
+        mask = calloc((size_t)(i1 - i0), (size_t)width);
 
     for (i = i0; i < i1; i++)
     {
@@ -2097,11 +2135,22 @@ void _draw_bitmap(Xpost_Context *ctx,
                     break;
                 default:
                     XPOST_LOG_ERR("unsupported pixel_mode");
+                    free(mask);
                     return;
             }
             if (cov)
             {
                 *inked = 1;
+                any = 1;
+                if (mask)
+                {
+                    /* the whole of a pixel where the whole of it is
+                       covered, and as much of one as is covered where
+                       part of it is: the two the calls below make */
+                    mask[(size_t)(i - i0) * (size_t)width + j]
+                        = cov < 0 ? 255 : (unsigned char)cov;
+                    continue;
+                }
                 switch (ncomp)
                 {
                     case 1:
@@ -2138,6 +2187,49 @@ void _draw_bitmap(Xpost_Context *ctx,
         if (!inside && ts->clipkind == CLIP_BANDS)
             goto next_run;
     }
+
+    if (!mask)
+        return;
+    if (any)
+    {
+        size_t at;
+
+        /* The coverage goes over as the glyph is rendered and the
+           placement is left for the device to be told when the glyph is
+           painted, which for a string is not the same order: the calls
+           queued here are made from the top of the execution stack down,
+           so the last character of a show reaches the device first. A
+           record holds its marks in the order they were painted, so the
+           mark belongs where the painting happens; the mask is the same
+           mask whenever it is taken up, so it goes now.
+
+           A device that could not take the mask is a device with no
+           record left to hold it or no memory to hold it in. It is left
+           unmarked either way: a record that could not hold something it
+           was given refuses every replay of itself, so the page is
+           refused rather than put out short of a glyph. */
+        if (xpost_dev_record_takemask(ctx, devdic, mask,
+                                      width, i1 - i0, &at) == 0)
+        {
+            switch (ncomp)
+            {
+                case 1:
+                    xpost_stack_push(ctx->lo, ctx->os, comp1);
+                    break;
+                default:
+                    xpost_stack_push(ctx->lo, ctx->os, comp1);
+                    xpost_stack_push(ctx->lo, ctx->os, comp2);
+                    xpost_stack_push(ctx->lo, ctx->os, comp3);
+                    break;
+            }
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)at));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xpos));
+            xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ypos + i0));
+            xpost_stack_push(ctx->lo, ctx->os, devdic);
+            xpost_stack_push(ctx->lo, ctx->es, glyphop);
+        }
+    }
+    free(mask);
 }
 
 /* Emit one glyph's outline into the pdfwrite device's content
@@ -4821,6 +4913,15 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
+
+    /* The key a device declaring it takes a glyph's coverage whole is
+       asked for by. Taken up once, here, because the glyph painter asks
+       it of the device for every glyph it draws and a lookup by text
+       there would be part of what drawing a page of text costs. */
+    if (xpost_object_get_type(
+            (namedotrecordglyph = xpost_name_cons(ctx, ".recordglyph")))
+        == invalidtype)
+        return VMerror;
 
     op = xpost_operator_cons(ctx, "findfont", (Xpost_Op_Func)_findfont, 1, nametype);
     INSTALL;

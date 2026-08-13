@@ -214,11 +214,20 @@ BSET 1 eq { /heights [ 96 ] def /bands [ 1 8 13 ] def } if
         newpath W 6 sub 4.75 moveto 6.5 dm.h 3.75 sub lineto stroke
     grestore
 
-    % text, for the glyph pixels a boundary between bands cuts through
+    % text, for the glyph coverage a boundary between bands cuts
+    % through, at five heights down the page.
+    %
+    % Five and not one because a glyph reaches a record as one mark and
+    % not as one per inked pixel: a page carrying text at a single height
+    % holds too few marks for what a band was played to be told from what
+    % the page holds, and the checks that ask that are asked only of a
+    % page with something to discriminate.
     gsave
         0 setgray
         /Times-Roman findfont 17 scalefont setfont
-        10 dm.h 0.75 mul moveto (Seams) show
+        [ 0.13 0.29 0.47 0.63 0.75 ] {
+            10 exch dm.h mul moveto (Seams) show
+        } forall
     grestore
 
     % a sampled image, and beside it one asking to be interpolated

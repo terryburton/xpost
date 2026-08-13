@@ -100,6 +100,7 @@ xpost_dev_jpeg_options_set
 xpost_dev_pdf_append
 xpost_dev_pdf_fmt_num
 xpost_dev_png_options_set
+xpost_dev_record_takemask
 xpost_device_ground_channels
 xpost_device_ground_scaled
 xpost_device_page_close
@@ -367,12 +368,17 @@ xpost_record_extent
 xpost_record_failed
 xpost_record_free
 xpost_record_get
+xpost_record_glyph
 xpost_record_image
 xpost_record_image_count
 xpost_record_image_get
 xpost_record_image_rows
 xpost_record_last
 xpost_record_mark
+xpost_record_mask
+xpost_record_mask_bytes
+xpost_record_mask_count
+xpost_record_mask_get
 xpost_record_new
 xpost_record_next
 xpost_record_replay

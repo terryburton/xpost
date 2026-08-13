@@ -31,6 +31,17 @@
 % class's there. It is not dispatched as a marking call and takes none
 % of them away from the record.
 %
+% A glyph is the second such thing and is here for the same reason. Text
+% reaches a device one pixel at a time -- a fully covered pixel through
+% PutPix and a partly covered edge pixel through BlendPix carrying how
+% much of it is covered -- which costs a raster nothing and would cost a
+% record tens of bytes for every inked pixel of every character on the
+% page. So the glyph painter (src/lib/xpost_op_font.c) looks for
+% /.recordglyph, and finding it hands over one coverage mask and one
+% placement of it. The mask is shared by every placement it is the same
+% mask for, so a page of text costs its distinct glyphs and a placement
+% apiece. Like the image entry it is not dispatched as a marking call.
+%
 % /NoOutput keeps the methods the class brought: the device completion
 % (data/device.ps) replaces a device's polygon fill with the compiled
 % scan conversion, which would paint spans into a device that has no
