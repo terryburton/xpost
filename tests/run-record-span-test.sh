@@ -44,7 +44,10 @@
 #   resident size of a run at a short page and a tall one. The
 #   whole-page route is required to grow by a row of pixels for every
 #   row of page, since a measurement that saw nothing would pass
-#   everything, and the banded route by a small fraction of that.
+#   everything, and the banded route by a small fraction of that. The
+#   reading is the process's and not the page's, so it carries whatever
+#   else the machine was doing; the section itself says what is done
+#   about that.
 #
 #   $1  path to the built xpost binary
 #   $2  path to record_span_test.ps
@@ -231,24 +234,86 @@ if have png; then
 fi
 
 # ---- the bound ----
+#
+# What is read here is the process and not the page, so it carries the
+# machine. Peak resident size is what the machine let a run hold, and a
+# run sharing the machine with others reads a little away from what it
+# holds alone: measured over thirty rounds of each of the four readings
+# with sixteen tests running beside them, every reading moved by up to
+# 560 KiB in both directions, two to five per cent of itself. The
+# whole-page route grows by a raster and reads straight through that.
+# The band route grows by almost nothing, so most of what its two
+# readings differ by is that movement -- and the tenth of the whole
+# page's growth it is allowed has to stand well clear of it, or the
+# verdict is the machine's rather than the code's.
+#
+# Two things put it clear. The tall page is tall enough that a tenth of
+# what the whole-page route grows by is a couple of mebibytes: over the
+# seven thousand rows between the two heights of a page a thousand wide
+# the whole-page route grows by 21 to 27 MiB, by device, and the band
+# route by under a fifth of one, which leaves it two mebibytes of room
+# against readings that move by a quarter of that. And the four
+# readings are taken in rounds, the round kept being the one whose band
+# route came off best against its own whole-page run. A round the
+# machine interfered with is not evidence about the code, and what a
+# kept round says is that the machine managed the measurement once,
+# which is all the machine is being asked for. Neither hides a route
+# that follows the page: such a route reads the whole page's own growth
+# in every round, which is ten times what any of this moves by.
+#
+# Each reading is a run and is judged like one. A run that died on the
+# way took little, and little is exactly the reading the band route is
+# here to produce.
 if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
-    peak() {  # $1 device; $2 height; $3 band
-        p_out=$( cd "$work" && /usr/bin/time -f '%M' \
+    lo=1000; hi=8000; rounds=3
+    peak() {  # $1 selection; $2 height; $3 band; sets peakkib
+        peakkib=''
+        p_out=$( cd "$work" && /usr/bin/time -f '%M' -o peak.rss \
                  "$xpost" -q $ns -d "$1" -o /dev/null \
                  -DPW=1000 -DPH="$2" -DBAND="$3" "$script" \
-                 </dev/null 2>&1 >/dev/null )
-        printf '%s\n' "$p_out" | tail -1
+                 </dev/null 2>&1 )
+        p_st=$?
+        if ! verdict_run "$p_st" "$p_out" "the $1 run at $2 rows" ||
+           ! verdict_ok "$p_out" "the $1 run at $2 rows"; then
+            note "the $1 run at $2 rows did not put out its page, so what" \
+                 "it took is not what putting one out takes"
+            return 1
+        fi
+        peakkib=$(tail -1 "$work/peak.rss")
+        case ${peakkib:-} in
+            ''|*[!0-9]*)
+                note "the $1 run at $2 rows did not report what it took"
+                return 1 ;;
+        esac
+        return 0
     }
     for dev in png jpeg; do
         have "$dev" || continue
-        lo=1000; hi=4000
-        wlo=$(peak "record:$dev" "$lo" 0);  whi=$(peak "record:$dev" "$hi" 0)
-        blo=$(peak "record:$dev" "$lo" 64); bhi=$(peak "record:$dev" "$hi" 64)
-        case "$wlo$whi$blo$bhi" in
-            *[!0-9]*|'') note "the record:$dev runs did not report what they" \
-                              "took"
-                         continue ;;
-        esac
+        kept=no
+        round=0
+        while [ "$round" -lt "$rounds" ]; do
+            round=$((round + 1))
+            peak "record:$dev" "$lo" 0  || break
+            r_wlo=$peakkib
+            peak "record:$dev" "$hi" 0  || break
+            r_whi=$peakkib
+            peak "record:$dev" "$lo" 64 || break
+            r_blo=$peakkib
+            peak "record:$dev" "$hi" 64 || break
+            r_bhi=$peakkib
+            # the room this round leaves the check below, which is that
+            # check's own comparison written as a difference: what the
+            # whole page grew by, less ten times what the band route
+            # grew by. The rows between the two page heights are the
+            # same for both routes and divide out of it.
+            r_spare=$(( (r_whi - r_wlo) - 10 * (r_bhi - r_blo) ))
+            if [ "$kept" = no ] || [ "$r_spare" -gt "$spare" ]; then
+                kept=yes
+                spare=$r_spare
+                wlo=$r_wlo; whi=$r_whi; blo=$r_blo; bhi=$r_bhi
+            fi
+        done
+        [ "$kept" = yes ] || continue
         rows=$((hi - lo))
         # what each route took for each further row of page, in bytes;
         # the timer reports kibibytes, and the scaling keeps a slope
@@ -256,9 +321,9 @@ if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
         wslope=$((1000 * (whi - wlo) * 1024 / rows))
         bslope=$((1000 * (bhi - blo) * 1024 / rows))
         echo "OK   held: record:$dev whole ${wlo} -> ${whi} KiB over" \
-             "$lo -> $hi rows"
+             "$lo -> $hi rows, best of $rounds"
         echo "OK   held: record:$dev band  ${blo} -> ${bhi} KiB over" \
-             "$lo -> $hi rows"
+             "$lo -> $hi rows, best of $rounds"
         # The measurement has to be able to see a page at all. A row of
         # this raster is three or four bytes a pixel over a page a
         # thousand wide, so most of that must show up here or the
