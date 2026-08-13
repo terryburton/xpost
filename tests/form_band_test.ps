@@ -8,14 +8,15 @@
 % and the language allows an interpreter to keep the graphical output of
 % one and substitute it for a later execution rather than running the
 % description again (PLRM 4.7). This interpreter does that where the
-% device holds the page as rows of its own: the description is run twice
-% over an offscreen raster, once over each of two grounds, and the
-% pixels the two agree on are copied onto the page at every later use.
+% device can be stood in for by a recorder, which is a device declaring
+% the five marking methods, a colour space a record holds, no path
+% filling and no screen.
 %
-% A device that writes down what it is asked to paint holds no rows, so
-% there is nothing for that copy to be made into and every use runs the
-% description again. What that costs is the description, once per
-% placement, which is exactly the cost forms exist to avoid paying.
+% What is kept is the marks the description made, held by a recorder
+% standing in for the device, and every use after the first places that
+% drawing where it is wanted. It is kept on both routes: a device that
+% writes down what it is asked to paint holds no rows, and a drawing is
+% not rows.
 %
 % The page below is built so that the difference has somewhere to show:
 % one form, placed many times, at a placement count the run varies, so
@@ -38,11 +39,11 @@
 %   N     placements. Two values, so the cache claim is about how the
 %         count moves rather than about one number.
 %   FRAC  place the form at fractional device offsets rather than whole
-%         ones. A copied form lands quantized to the pixel grid, so
-%         where the placement is not already on it the copy and a fresh
-%         execution differ -- which is what gives the run a pair of
-%         pages that must NOT match, and so a demonstration that its
-%         byte comparison can see a difference at all.
+%         ones. A form's marks are cut to its bounding box and the cut
+%         is to whole pixels, so what a form paints depends on where it
+%         falls between pixels: a drawing is shared between placements
+%         that fall at the same place on the pixel and not between
+%         placements that do not.
 %   RO    make the form dictionary read-only, which takes the copy out
 %         of the picture on a device that would otherwise make one. It
 %         is how the run reaches a direct rendering on the route that

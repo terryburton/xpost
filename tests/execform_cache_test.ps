@@ -1,14 +1,18 @@
-% Regression: caching an execform builds a raster device and fetched the
-% rectangle-fill C operators (.fillrectrgb / .fillrectgray) by name with load.
-% Once those operators were relocated out of systemdict into .internaldict, the
-% load failed with undefined and every cached form broke. They are now fetched
-% through //.internaldict /X get.
+% Regression: holding a form's description reaches for machinery by name
+% -- the recorder a drawing is taken by, the placement that puts one on
+% the page, and the replay that paints one into a device that paints.
+% Every one of those is a dot-named operator relocated out of systemdict
+% into .internaldict, and a name that cannot be found there is undefined
+% at the first form rather than at load. This runs a form twice, so both
+% the taking and the placing are reached, and either failing is an error
+% rather than a page that quietly took the other path.
 %
-% Run through the ppm device by run-ps-test.sh, and it has to be a device that
-% keeps its page as rows: the cache is only built where the device holds such a
-% page, so a run on a device that paints nothing takes the uncached path and
-% reaches none of what this exists to guard. Prints SUCCESS iff a cacheable form
-% runs through execform without error.
+% Run through the ppm device by run-ps-test.sh, and it has to be a device
+% a drawing can be held for: one declaring the five marking methods, a
+% colour space a record holds, no path filling and no screen. A run on a
+% device that paints nothing takes the uncached path and reaches none of
+% what this exists to guard. Prints SUCCESS iff a cacheable form runs
+% through execform without error.
 
 /faildict 1 dict def faildict /n 0 put
 /assert { % bool (name) . -
