@@ -375,10 +375,18 @@ setglobal
         % band grid it was built for both have to be this page's, since a
         % raster built for another page holds the wrong rows and there is
         % no moving it onto rows it never took.
+        %
+        % And it has to be a raster this record still holds. The name is
+        % virtual memory and what it names is not: a raster built inside
+        % a save and given up when it was replaced leaves this name
+        % pointing, after the restore, at a device whose page has already
+        % been released. What answers that is state the record keeps
+        % outside virtual memory (.playkept).
         /kept rec /.playdev known {
             rec /.playdev get /dimensions get aload pop
             ph eq exch pw eq and
             rec /.playrows get bandrows eq and
+            rec rec /.playdev get //.internaldict /.playkept get exec and
         }{ false } ifelse def
 
         kept {
@@ -402,6 +410,7 @@ setglobal
             % this ends
             rec /.playdev page put
             rec /.playrows bandrows put
+            rec page //.internaldict /.playbuilt get exec
         } ifelse
 
         % What the program asked of this record, on the device that

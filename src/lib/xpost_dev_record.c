@@ -113,6 +113,10 @@ typedef struct
     /* and how many sample rows of a recorded image have gone through
        the image writer, which is what .recordimagerows answers */
     unsigned int imgrows;
+    /* how many devices this record has built to paint through, which is
+       what tells the one it is carrying now from one it has given up
+       (.playbuilt and .playkept below) */
+    unsigned int playgen;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -123,6 +127,7 @@ static Xpost_Object namedotplaypage;
 static Xpost_Object namedotplaymake;
 static Xpost_Object namedotplaydev;
 static Xpost_Object namedotplayrows;
+static Xpost_Object namedotplaygen;
 static Xpost_Object namedotground;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object namedotncomp;
@@ -2328,6 +2333,7 @@ static int _create_cont(Xpost_Context *ctx,
     private.plays = 0;
     private.played = 0;
     private.imgrows = 0;
+    private.playgen = 0;
     private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
@@ -2398,6 +2404,59 @@ static int _emit(Xpost_Context *ctx,
     return 0;
 }
 
+/* rec page  .playbuilt  -
+   This record has built this device to paint through: count the build
+   and stamp the device with the count it was built at.
+ *
+ * The count is kept in the record's own state, which is not virtual
+ * memory and which a restore therefore does not rewind; the stamp is
+ * written into the device's dictionary, which is virtual memory and
+ * which a restore does. That difference is the whole point of the pair.
+ * A device built inside a save is gone at the restore, and the name the
+ * record reached it by goes back to naming the device before it -- one
+ * this record has already given up, whose page is released memory.
+ * Afterwards the record's count has moved on and the resurrected
+ * device's stamp has not, which is what tells them apart.
+ */
+static int _playbuilt(Xpost_Context *ctx,
+                      Xpost_Object recdic,
+                      Xpost_Object playdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    private.playgen++;
+    if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
+        return VMerror;
+    return xpost_dict_put(ctx, playdic, namedotplaygen,
+                          xpost_int_cons((integer)private.playgen));
+}
+
+/* rec page  .playkept  bool
+   Whether this device is the one the record is carrying now, rather
+   than one it built, gave up, and has been left naming again by a
+   restore (.playbuilt above). */
+static int _playkept(Xpost_Context *ctx,
+                     Xpost_Object recdic,
+                     Xpost_Object playdic)
+{
+    Xpost_Object privatestr;
+    Xpost_Object stamp;
+    PrivateData private;
+
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    stamp = xpost_dict_get(ctx, playdic, namedotplaygen);
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_bool_cons(xpost_object_get_type(stamp) == integertype
+                                     && stamp.int_.val >= 0
+                                     && (unsigned int)stamp.int_.val
+                                        == private.playgen));
+    return 0;
+}
+
 /* Give up what this device holds: the record, and the device the record
    is painted through.
 
@@ -2425,6 +2484,7 @@ static int _destroy(Xpost_Context *ctx,
     Xpost_Object privatestr;
     Xpost_Object play;
     PrivateData private;
+    int held = _private_get(ctx, devdic, &privatestr, &private);
 
     play = xpost_dict_get(ctx, devdic, namedotplaydev);
     if (xpost_object_get_type(play) == dicttype)
@@ -2433,6 +2493,11 @@ static int _destroy(Xpost_Context *ctx,
 
         (void)xpost_dict_undef(ctx, devdic, namedotplaydev);
         (void)xpost_dict_undef(ctx, devdic, namedotplayrows);
+        /* counted as a build is counted, so that a restore leaving this
+           record naming the device again finds a stamp that has been
+           left behind (.playbuilt above) */
+        if (held)
+            private.playgen++;
         if (release && xpost_stack_push(ctx->lo, ctx->os, play))
         {
             int res = xpost_operator_exec(ctx, release);
@@ -2443,7 +2508,7 @@ static int _destroy(Xpost_Context *ctx,
         }
     }
 
-    if (!_private_get(ctx, devdic, &privatestr, &private))
+    if (!held)
         return undefined;
 
     xpost_record_free(private.rec);
@@ -2863,6 +2928,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
         return VMerror;
     if (xpost_object_get_type((namedotplayrows = xpost_name_cons(ctx, ".playrows"))) == invalidtype)
         return VMerror;
+    if (xpost_object_get_type((namedotplaygen = xpost_name_cons(ctx, ".playgen"))) == invalidtype)
+        return VMerror;
     if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
@@ -2924,6 +2991,10 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              (Xpost_Op_Func)_recordglyphs, 1,
                              dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".playscreen", (Xpost_Op_Func)_playscreen,
+                             2, dicttype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".playbuilt", (Xpost_Op_Func)_playbuilt,
+                             2, dicttype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".playkept", (Xpost_Op_Func)_playkept,
                              2, dicttype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordimagerows",
                              (Xpost_Op_Func)_recordimagerows, 1,

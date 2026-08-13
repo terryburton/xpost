@@ -202,6 +202,98 @@ setglobal
 (whole) false lifecase
 (band) true lifecase
 
+% ---- and the same job with a save and its restore around each page ----
+% Wrapping a save and its restore around each page is the ordinary way to
+% write a job (data/device.ps), and virtual memory goes back at the
+% restore to what the save found. What a record paints through is not
+% virtual memory -- it is a raster (PLRM 3.7.3) -- but the name the
+% record reaches it by is, so that name has to be older than the save.
+% One written inside a save is taken away at the restore, the page after
+% builds a raster of its own, and the raster before it is left where
+% nothing can find it and nothing can give it up.
+%
+% No page can see any of that: each one is painted correctly, in a raster
+% of its own. Two readings can. The device the record is painting through
+% must be the same device after every page of the job, since a second
+% device is a second raster; and the memory a raster comes out of must
+% not grow from page to page, which is the same meter the job above is
+% read with. Both are asked only of the recording run, a device that
+% paints having no raster underneath it to keep.
+%
+% The pages are written too, and the wrapper holds them to the pages the
+% device that paints wrote, so a raster kept when it should have been
+% rebuilt -- another page, another size -- is caught by the bytes.
+/NSAVED 3 def
+
+% -  savedcase  -
+/savedcase { % -  .  -
+    << /PageSize [W H] /OutputFile pagename >> setpagedevice
+    banding { DEVICE /.bandbytes BANDBYTES put } if
+    /sc.dev null store
+    /sc.mem 0 store
+    /sc.bad false store
+    % Before any page at all, and so before anything the job opens: the
+    % record is already painting through a device. That is the whole of
+    % why one raster serves the job -- a raster taken up at the first
+    % page is taken up inside whatever the job has opened by then, and
+    % the name it is reached by goes back at the restore.
+    banding {
+        DEVICE /.playdev known not {
+            (FAIL the record is painting through nothing before its ) print
+            (first page, so the raster it will paint through is taken up ) print
+            (inside whatever the job has opened by then\n) print
+            /sc.bad true store
+        } if
+    } if
+    % One page before the measured ones, and outside any save. How deep a
+    % band is is asked for after the device has been made, there being no
+    % other way to ask, so the raster the device started on is not the
+    % one this job wants and the first page is where it is exchanged.
+    % Exchanging it inside a save is a restore taking the exchange back,
+    % which is a thing of its own and not what is being read below.
+    paintpage
+    showpage
+    1 1 NSAVED {
+        /sc.pg exch store
+        save
+        paintpage
+        showpage
+        restore
+        banding {
+            DEVICE /.playdev known not {
+                (FAIL after page ) print sc.pg num print
+                ( the record is painting through nothing: the restore) print
+                ( took away the name its raster was reached by\n) print
+                /sc.bad true store
+            }{
+                sc.dev null eq {
+                    /sc.dev DEVICE /.playdev get store
+                    /sc.mem gvm store
+                }{
+                    DEVICE /.playdev get sc.dev eq not {
+                        (FAIL page ) print sc.pg num print
+                        ( was painted through a different device from the) print
+                        ( page before it, so a raster was built for it\n) print
+                        /sc.bad true store
+                    } if
+                    gvm sc.mem gt {
+                        (FAIL the job grew by ) print gvm sc.mem sub num print
+                        ( bytes over page ) print sc.pg num print
+                        (, which is where a raster left behind shows\n) print
+                        /sc.bad true store
+                    } if
+                } ifelse
+            } ifelse
+        } if
+    } for
+    banding sc.bad not and {
+        (OK   one raster painted ) print NSAVED num print
+        ( pages, each inside its own save and restore\n) print
+    } if
+} bind def
+
+savedcase
+
 % ---- the image, and what the marks in front of it cost it ----
 % The same page twice, differing only in how many marks stand between
 % the start of the record and the image. A band replay steps over the
