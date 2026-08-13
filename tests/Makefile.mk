@@ -58,6 +58,7 @@ tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
 tests/check-show-clip.sh \
 tests/check-test-cost.sh \
+tests/check-test-devices.sh \
 tests/check-test-quality.sh \
 tests/check-test-timeouts.sh \
 tests/check-vecbase.sh \

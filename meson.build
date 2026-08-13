@@ -4119,6 +4119,17 @@ test('check-device-roster',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# A test runs on the device it names, and a test that wants a window
+# opens it on a display it conjured. A run with no device named takes
+# whichever one the build was configured with, which where the window
+# system was found is a window on the screen the suite was started from;
+# a run that reads the display it was handed puts the window there on
+# purpose. Neither shows on a lane, which has no display at all.
+test('check-test-devices',
+  find_program('tests/check-test-devices.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # A function that can refuse returns that fact and no caller may ignore
 # it. The compiler enforces that wherever XPOST_MUST_CHECK is applied;
 # this holds the set it is applied to, so the enforcement cannot be
