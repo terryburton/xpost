@@ -424,11 +424,19 @@ setglobal
         rec /pagenumber known
             { page /pagenumber rec /pagenumber get put } if
 
-        kept not {
-            % the record's marks are in device space already, so the scale a
-            % completion carries into the default matrix is 1:1 here
-            page 1 1 .privatedict /.completedevice get exec
-        } if
+        % The finishing every page device takes, so that the compiled
+        % fills this one ends up with are the ones the same page painted
+        % directly would have had. The record's marks are in device space
+        % already, so the scale a completion carries into the default
+        % matrix is 1:1 here.
+        %
+        % Taken again on a raster that is being kept, rather than only on
+        % one just built. The completion reads what the device carries --
+        % the process colour model is one of the things it reads -- and
+        % what it carries is what was just put on it above. A raster
+        % built before the program said what it wanted would otherwise
+        % keep the answers it was finished with.
+        page 1 1 .privatedict /.completedevice get exec
 
         % How much of its page this record holds at once, which is how
         % much of it the raster above holds: a record has no rows of its

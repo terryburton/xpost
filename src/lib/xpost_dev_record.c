@@ -2407,17 +2407,16 @@ static int _emit(Xpost_Context *ctx,
 /* rec page  .playbuilt  -
    This record has built this device to paint through: count the build
    and stamp the device with the count it was built at.
- *
- * The count is kept in the record's own state, which is not virtual
- * memory and which a restore therefore does not rewind; the stamp is
- * written into the device's dictionary, which is virtual memory and
- * which a restore does. That difference is the whole point of the pair.
- * A device built inside a save is gone at the restore, and the name the
- * record reached it by goes back to naming the device before it -- one
- * this record has already given up, whose page is released memory.
- * Afterwards the record's count has moved on and the resurrected
- * device's stamp has not, which is what tells them apart.
- */
+
+   The count is kept in the record's own state, which is not virtual
+   memory and which a restore therefore does not rewind; the stamp is
+   written into the device's dictionary, which is virtual memory and
+   which a restore does. That difference is the whole point of the pair.
+   A device built inside a save is gone at the restore, and the name the
+   record reached it by goes back to naming the device before it -- one
+   this record has already given up, whose page is released memory.
+   Afterwards the record's count has moved on and the resurrected
+   device's stamp has not, which is what tells them apart. */
 static int _playbuilt(Xpost_Context *ctx,
                       Xpost_Object recdic,
                       Xpost_Object playdic)
