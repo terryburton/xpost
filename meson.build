@@ -3335,6 +3335,24 @@ test('record-image',
   suite: cost_fast,
   timeout: 120)
 
+# ... and the same argument for the second thing that reaches a device as
+# bulk pixels. Text arrives one coverage-weighted pixel at a time, which
+# a raster stores nothing for and a record would hold at tens of bytes an
+# inked pixel; a glyph is one coverage mask and one placement of it
+# instead, the mask shared by every placement it is the same mask for.
+# This renders a page of text both ways and requires the same bytes, a
+# mark per glyph rather than per pixel, one mask serving many placements,
+# and the record to cost less than the raster -- then takes the device's
+# glyph entry away and requires the page to be unchanged and every one of
+# those readings to fail, since the page is the one thing that cannot
+# show this.
+test('record-glyph',
+  find_program('tests/run-record-glyph-test.sh'),
+  args: [ xpost_exe, files('tests/record_glyph_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 180)
+
 # ... and the same entry played into a device that keeps no rows an image
 # can be written into, whose picture is painted through the rectangle
 # fill it declares instead -- one call per run of columns, the runs being

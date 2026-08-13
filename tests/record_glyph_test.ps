@@ -1,0 +1,141 @@
+% One page of text, painted twice: directly by a device that paints, and
+% through a device that writes down what it was asked to paint and plays
+% it back into one. run-record-glyph-test.sh runs this file once per
+% device, requires the two pages to be the same bytes, and reads the
+% numbers printed below.
+%
+% A glyph is the second thing a record of the five marking kinds is the
+% wrong shape for. Text reaches a device one pixel at a time -- a fully
+% covered pixel through PutPix and a partly covered edge pixel through
+% BlendPix carrying how much of it is covered -- which costs a raster
+% nothing, since it stores the pixel and forgets the call, and would cost
+% a record tens of bytes for every inked pixel on the page. A record
+% holds a coverage mask and a placement of it instead, one mask however
+% many placements name it (doc/NEWINTERNALS).
+%
+% The page is built so the claim has something to be true of: a short
+% alphabet repeated, so that the placements greatly outnumber the
+% distinct glyphs, and enough lines that the ink greatly outnumbers the
+% placements. A page of one character each would pass a sharing check by
+% having nothing to share.
+%
+% What is printed, and why each is needed:
+%
+%   RECORD  the marks the record holds, the masks it holds, what those
+%           masks cost and what the whole record costs. The first says
+%           whether text arrived as a mark per glyph or a mark per pixel;
+%           the second and third say whether one mask is serving every
+%           placement of it; the fourth is the quantity the mechanism is
+%           judged on.
+%   RASTER  what the page's own pixels would cost, which is what the
+%           record is worth holding instead of.
+%   INK     how many pixel calls the page comes to, counted by playing
+%           the record into a device that counts them. It is what a
+%           record of the five marking kinds alone would have held one
+%           mark for each of, so it is the number the record's own size
+%           is read against. Counted rather than assumed: the page's ink
+%           depends on the font the build found and on how it renders.
+%   SHOWN   how many glyphs the page shows, stated by the page.
+%
+% A page comparison alone would pass with the record holding a mark per
+% inked pixel, which replays to exactly the same bytes and is the one
+% outcome the entry exists to avoid.
+
+/SAB where { pop }{ /SAB 0 def } ifelse
+
+/W 570 def
+/H 360 def
+
+% A short alphabet, twice over: 22 distinct characters and 44 of them a
+% line. No spaces, so every character on the page inks something and the
+% count of placements is the count of characters.
+/alpha (ABCDEFGHIJKLMNOPQRSTUVWX) def
+/nlines 16 def
+/line alpha length 2 mul string def
+line 0 alpha putinterval
+line alpha length alpha putinterval
+
+% The page size, and no output file: where the page goes is the
+% run's to say, and the wrapper says it with -o.
+<< /PageSize [W H] >> setpagedevice
+
+% The defect the run holds its own checks against: the device's glyph
+% entry taken away, so that text reaches the record the way it reaches a
+% device that paints -- a mark per inked pixel. It is the outcome every
+% reading here exists to detect, and it produces exactly the same page,
+% which is why the page cannot be what detects it.
+SAB 1 eq { DEVICE /.recordglyph undef } if
+
+0 setgray
+/Helvetica findfont 16 scalefont setfont
+1 1 nlines {
+    /i exch def
+    10 H 26 sub i 20 mul sub moveto line show
+} for
+
+% ---- what the record holds, where there is one to ask ----
+% A device that paints carries no .playpage and this is skipped; the
+% wrapper holds the two runs to answering differently here and
+% identically on the page.
+/ID 1183615869 internaldict def
+/rep { 20 string cvs print ( ) print } bind def
+
+DEVICE /.playpage known {
+    /recdev DEVICE def
+    /NC recdev /.ncomp get def
+
+    % The class the ink is counted into.
+    %
+    % Not the target's own, and it cannot be: what is wanted is a count
+    % of the calls a glyph comes to, and the way to count a call is to
+    % put a procedure in the slot it is made through. A class of the same
+    % colour count counts the same calls, since what a mark needs of the
+    % device it is played into is the arity its colour space decides.
+    /countclass << 1 /.xpost_PGMIMAGE 3 /.xpost_PPMIMAGE >> def
+    countclass NC known {
+        /counter W H .privatedict countclass NC get get
+                 dup /Create get exec def
+        /pixels 0 def
+        counter /PutPix   { NC 3 add { pop } repeat
+                            /pixels pixels 1 add store } bind put
+        counter /BlendPix { NC 4 add { pop } repeat
+                            /pixels pixels 1 add store } bind put
+        % The other three are counted by nobody and must still be taken:
+        % a class left with its own would paint them, and the rectangle
+        % that clears the page is filled a pixel at a time through the
+        % very method the ink is being counted through -- which would
+        % add the page's whole area to the answer.
+        counter /DrawLine { NC 5 add { pop } repeat } bind put
+        counter /FillRect { NC 5 add { pop } repeat } bind put
+        counter /FillPoly { pop pop NC { pop } repeat } bind put
+        recdev counter 0 H 1 sub ID /.replaypage get exec
+
+        % An instrument answering nothing would make every reading below
+        % pass, so it is one of the things the run is sabotaged in.
+        SAB 2 eq { /pixels 0 store } if
+        (\nINK ) print pixels rep (\n) print
+    } if
+
+    recdev ID /.recordcost get exec
+    /recbytes exch def
+    pop                       % images: a page of text holds none
+    /recmarks exch def
+    recdev ID /.recordglyphs get exec
+    /maskbytes exch def
+    /nmasks exch def
+    SAB 3 eq { /nmasks recmarks store } if
+
+    (\nRECORD ) print
+    recmarks rep nmasks rep maskbytes rep recbytes rep (\n) print
+
+    % What the page would have cost as pixels, which is what the record
+    % is worth holding instead of. The device's own extent says it, so a
+    % page of another size does not have to be restated here.
+    (\nRASTER ) print
+    recdev /dimensions get 0 get
+    recdev /dimensions get 1 get mul NC mul rep (\n) print
+} if
+
+(\nSHOWN ) print nlines line length mul rep (\n) print
+
+showpage
