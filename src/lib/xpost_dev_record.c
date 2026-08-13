@@ -2113,11 +2113,11 @@ static int _replay_step(Xpost_Context *ctx,
         /* a polygon's coordinates where the call takes them as they are
            held, and nothing for every other mark */
         const real *co = NULL;
-        size_t at;
+        size_t at, waspix;
         /* the rows asked for, on the page, which is where the drawing
            this level is walking has been carried to */
         real rlo = f->lo + f->dy, rhi = f->hi + f->dy;
-        int nops, npts = 0, i, left, fresh;
+        int nops, npts = 0, i, left, fresh, inmask;
 
         /* The rows asked for choose which marks are played, and the
            marks between are stepped over rather than played and
@@ -2142,10 +2142,19 @@ static int _replay_step(Xpost_Context *ctx,
         }
         batch++;
 
+        /* Whether the walk is coming back into the middle of this
+           entry, and how far into it -- read before the walk is moved
+           past the entry below. Only a coverage mask is left in the
+           middle of: it stands for a run of pixel calls rather than one
+           call, and a batch may end inside it. */
+        inmask = f->inmask;
+        waspix = f->pixat;
+
         /* Every entry played moves the walk past itself, whether it was
            a mark, a picture, a screen or a placement. Resuming where it
            was looking from instead would find the same entry again for
-           every mark the rows asked for had it step over. */
+           every mark the rows asked for had it step over. A mask left
+           part way puts the walk back on its own entry below. */
         f->idx = at + 1;
         f->inmask = 0;
 
@@ -2330,8 +2339,8 @@ static int _replay_step(Xpost_Context *ctx,
                              + (double)f->dy + 0.5);
             /* whether the walk is meeting this entry for the first
                time, rather than coming back into the middle of it */
-            pixat = f->inmask ? f->pixat : 0;
-            fresh = !f->inmask;
+            pixat = inmask ? waspix : 0;
+            fresh = !inmask;
 
             /* Which of the mask's rows reach the rows asked for. Row k
                of it lands on device row gy + k, so this is that question
