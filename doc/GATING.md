@@ -1,7 +1,7 @@
 # What to run, and when
 
 The suite is three hundred and eleven tests at two object widths. Run
-whole, at both widths, it costs about twelve minutes of wall clock and
+whole, at both widths, it costs about ten minutes of wall clock and
 sixteen cores. That is the right price for a verdict on the tree and the
 wrong price for an edit, and paying it for every edit is how a suite
 stops being run at all.
@@ -34,16 +34,16 @@ making it.
 | area | what a change to it reaches | tests |
 | --- | --- | --- |
 | `doc` | prose no program reads | 5 |
-| `suite` | a test's own source; the test itself is added from its registration | 5 |
+| `suite` | a test's own source; the test itself is added from its registration | 4 |
 | `corpus` | the fetched programs and their harnesses | 10 |
-| `host` | what the interpreter asks of the platform, and the program a user starts | 14 |
-| `font` | glyphs, the cache, the files they come from | 21 |
-| `filter` | files, filters, the scanner's reading | 39 |
+| `host` | what the interpreter asks of the platform, and the program a user starts | 13 |
+| `font` | glyphs, the cache, the files they come from | 18 |
+| `filter` | files, filters, the scanner's reading | 38 |
 | `guards` | the checks over the tree's own shape, and the path helper they share | 43 |
 | `graphics` | paths, paint, colour, clipping, images | 49 |
 | `record` | the recorded page, its spans, the band devices | 29 |
 | `device` | what a page is painted into and written out as | 63 |
-| `language` | operators, errors, names, the programs that install them | 129 |
+| `language` | operators, errors, names, the programs that install them | 103 |
 | `vm`, `build` | the object and its memory; the build description | all 311, both widths |
 
 Counts include the four guards every gate runs whatever was touched, and
@@ -104,17 +104,24 @@ nothing whatever about the corpus or the consumer suite.
 
 ## What each costs
 
-Measured on sixteen cores, this tree, both builds present.
+Measured on sixteen cores of a machine also doing other work, so read
+the ratios rather than the seconds. The old rule was the whole suite at
+both widths whatever the change was, which is the first row.
 
-| run | narrow | wide | both |
+| gate | narrow | wide | both |
 | --- | --- | --- | --- |
-| whole suite | 4m24s | 6m00s | 10m24s |
-| a change to doc/ | 1s | 15s | 16s |
-| a change to one device | 1m24s | 15s | 1m39s |
-| a change to the object | 4m24s | 6m00s | 10m24s |
+| everything, both widths | 5m04s | 5m12s | 10m16s |
+| a change to doc/ | 2s | 7s | 9s |
+| a change to one device | 32s | 15s | 47s |
+| a change to the object | 5m04s | 5m12s | 10m05s |
 
-The whole-suite figure is set by one test: the banding campaign takes
-four minutes of a narrow run and six of a wide one, and everything else
-fits alongside it several times over. It is reached first so that a run
-does not spend its first minute doing something else, and it is left out
-of any selection that cannot see it.
+So a doc change costs a hundredth of what it used to and a device change
+a fourteenth, and a change to the object costs exactly what it did,
+which is the point: what was dropped is the re-verification of things
+the change could not reach.
+
+The whole-suite figure is set by one test. The banding campaign takes
+five minutes of it and everything else fits alongside it several times
+over -- the same suite without it runs in one minute forty-three. It is
+reached first so that a run does not spend its opening minute doing
+something else, and it is outside every selection that cannot see it.

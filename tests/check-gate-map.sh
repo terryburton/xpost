@@ -299,6 +299,37 @@ if [ -s "$work/unreachable" ]; then
     fail=1
 fi
 
+# ---- what the wide build runs has a narrow home too
+#
+# The `width` area is not a region of the tree, so nothing a change
+# touches lands in it and no per-change gate selects it in the narrow
+# build. A test named there and nowhere else is therefore one the narrow
+# build never runs unless the whole suite does -- which is the same
+# unreachability as before, moved one step: the test would be reachable
+# on the primary width only through a gate that was not selecting.
+cat > "$work/widehome.awk" <<'AWK'
+FILENAME == rules { if ($1 == "width") { nw++; wg[nw] = globre($2) }
+                    else { no++; og[no] = globre($2) } ; next }
+{
+    for (i = 1; i <= nw; i++) if ($0 ~ wg[i]) {
+        for (j = 1; j <= no; j++) if ($0 ~ og[j]) next
+        print
+        next
+    }
+}
+AWK
+awk -f "$work/glob.awk" -f "$work/widehome.awk" \
+    rules="$work/rule.test" FS='\t' "$work/rule.test" \
+    FS='\n' "$work/tests" > "$work/widthonly"
+if [ -s "$work/widthonly" ]; then
+    echo "FAIL: $(grep -c . "$work/widthonly") test(s) are named by the width area and by no"
+    echo "      other, so the narrow build -- which is the primary one --"
+    echo "      never runs them under any per-change gate. Name each in the"
+    echo "      area it answers for as well:"
+    sed 's/^/      /' "$work/widthonly"
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the gate map does not describe this tree"
     exit 1

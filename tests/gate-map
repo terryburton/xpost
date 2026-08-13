@@ -50,8 +50,12 @@
 # several areas and runs when a change reaches any of them. A glob
 # matches a whole test name as the build lists it.
 #
-# Every test the build defines must be named by some area, and
-# tests/check-gate-map.sh holds the table to that. It is what stops a
+# Every test the build defines must be named by some area other than
+# `width`, and tests/check-gate-map.sh holds the table to that. `width`
+# is excluded because nothing a change touches lands there: it is what
+# the wide build runs, not a region of the tree, so a test named only in
+# it would never be run by the narrow build -- the primary one -- under
+# any per-change gate. It is what stops a
 # test becoming unreachable: a test in no area is one no proportionate
 # selection ever runs, and the whole point of selecting is undone by one
 # that nothing selects. The guard holds the other side too -- a path
@@ -90,6 +94,18 @@
 # The batch gate, `tests/gate.sh --batch`, is both widths over
 # everything, and is what a branch is held to before it goes anywhere.
 # The per-change gate is for the edit-run-edit loop in between.
+
+# ---- build: the description of what is compiled, and how
+build path meson.build
+build path meson_options.txt
+build path **/meson.build
+build path **/Makefile.mk
+build path Makefile.am
+build path configure.ac
+build path m4/**
+build path tools/**
+build scope all
+build width full
 
 # ---- record: the recorded page, its spans, and the band devices
 record path src/lib/xpost_record.*
@@ -270,6 +286,7 @@ vm path src/lib/xpost.h
 vm path data/init.ps
 vm scope all
 vm test api-definitions
+vm test build-personality
 vm test c-held-objects
 vm test check-vm-address
 vm test composite-limit
@@ -285,6 +302,7 @@ vm test job-snapshot-balance
 vm test large-object
 vm test memory-bounds
 vm test operator-install-refusal
+vm test refusal-report
 vm test reloc-*
 vm test run-input-close
 vm test run-invalid-context
@@ -422,18 +440,6 @@ suite test check-test-cost
 suite test check-test-quality
 suite test check-test-timeouts
 suite width witness
-
-# ---- build: the description of what is compiled, and how
-build path meson.build
-build path meson_options.txt
-build path **/meson.build
-build path **/Makefile.mk
-build path Makefile.am
-build path configure.ac
-build path m4/**
-build path tools/**
-build scope all
-build width full
 
 # ---- doc: prose, and nothing a program reads
 #

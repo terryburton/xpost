@@ -160,14 +160,16 @@ done
 # held to its length, and an exemption naming something the directory
 # does not hold is a failure too -- so the list cannot outlive what it
 # excuses, and cannot grow without the number moving with it.
-verdict_exempt='verdict.sh guard-paths.sh device-fleet.sh run-profile.sh'
-verdict_exempt_n=4
+verdict_exempt='verdict.sh guard-paths.sh device-fleet.sh run-profile.sh gate.sh'
+verdict_exempt_n=5
 #   verdict.sh       the rule itself
 #   guard-paths.sh   the path helper the guards source
 #   device-fleet.sh  the device roster the wrappers source
 #   run-profile.sh   drives meson over a selection of the suite rather
 #                    than running the interpreter; the runs it starts
 #                    report to meson, which is what it reads back
+#   gate.sh          the same, over a selection made from what changed
+#                    rather than from what a test costs
 
 # The two rules as one pass over a wrapper, so the self-check below can
 # put cases to them rather than trusting that patterns which find nothing

@@ -43,6 +43,7 @@ tests/check-exported-symbols.sh \
 tests/check-filter-base.sh \
 tests/check-fopen-funnel.sh \
 tests/check-fused-ops.sh \
+tests/check-gate-map.sh \
 tests/check-guard-paths.sh \
 tests/check-host-settings.sh \
 tests/check-must-check.sh \
@@ -183,6 +184,8 @@ tests/record_span_test.ps \
 tests/record_replay_test.ps \
 tests/record_screen_test.ps \
 tests/region_replay_test.ps \
+tests/gate-map \
+tests/gate.sh \
 tests/graphics_load_stop_test.c \
 tests/graphics_regression_test.ps \
 tests/graphicsdict_slots.golden \

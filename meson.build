@@ -555,16 +555,20 @@ endif
 #   veryslow  longer than fifty
 #
 # The upper boundary is where the measurement has its one large gap: the
-# whole suite runs in a smooth tail up to twenty-two seconds and then
-# jumps by a factor of four to two runs measured in minutes. Both of
-# those are corpora, so nothing the tree runs out of itself is veryslow,
-# and there is no test to promote into the band -- the tail below it has
-# no gap at all. The tag is still what keeps a four-minute run out of
-# the cheaper selections the moment one appears, and it already selects
-# on the other axis, where the two expensive corpora carry it and the
-# two cheap ones do not. What it cannot do is divide the profiles: a
-# range drawn at the top of the slow band and a range drawn above it
-# hold the same tests, so there is one profile over them and not two.
+# suite runs in a smooth tail up to about twenty seconds and then jumps
+# by a factor of four to runs measured in minutes. Two of those are
+# corpora and the third is the banding campaign, which is the one thing
+# the tree runs out of itself that costs minutes -- five of them in
+# either build, on a machine carrying other work -- and which decides
+# how long a run of the whole suite takes, everything else fitting
+# alongside it several times over.
+#
+# So the band above fifty seconds does now hold a test of the tree's own,
+# and `full` runs it. A range drawn below it would therefore select
+# something different, and is still not drawn: what a developer wants
+# between edits is not the suite minus its longest member but the tests
+# that answer for what was changed, which is a different axis again and
+# is tests/gate.sh below.
 #
 # The lower boundary has no gap to sit in -- the tail is dense -- so it
 # is set by what the tag is worth: sixteen of the interpreter's tests
@@ -588,6 +592,27 @@ endif
 #   ninja -C build vendor       the vendor suite         -- with its checkout
 #   ninja -C build everything   all of the above         -- and nothing skipped
 #   meson test -C build         every test, as before
+#
+# There is a third axis, which is neither what a test costs nor what it
+# is about but what a change can reach, and it is not a suite because it
+# is not a property of a test: it is a relation between the tree and the
+# suite, written down in tests/gate-map and applied by tests/gate.sh.
+#
+#   tests/gate.sh --narrow build --wide blarge
+#
+# selects the tests that answer for what the working tree has changed,
+# runs them in the narrow build, and runs the tests that read the object
+# width in the wide one -- or the whole selection in both where the
+# change reaches the layer the width is a property of. `--batch` is that
+# same gate over everything at both widths, which is what a branch is
+# held to before it goes anywhere.
+#
+# The profiles above and that gate answer different questions and the
+# answers are not interchangeable. A profile says how much of the suite
+# ran; the gate says whether what ran could have noticed what changed.
+# A green `quick` over a change to the record proves less than a red
+# `gate.sh` over the same change would have, and neither is a verdict on
+# the tree -- `everything` is.
 #
 # `full` is not a verdict on the tree, and reading it as one is the
 # mistake this rung exists to stop. It is every test the tree runs out of
@@ -3193,6 +3218,17 @@ run_target('cost-drift',
 test('check-test-timeouts',
   find_program('tests/check-test-timeouts.sh'),
   args: [ meson.current_source_dir() ],
+  suite: cost_fast)
+
+# The table a proportionate gate reads describes this tree, and every
+# test the build defines is named somewhere in it. A test named by no
+# area is one that tests/gate.sh never selects, and nothing else here
+# would say so: the suite still holds it and the cost profiles still run
+# it, so only a selection narrower than the suite stops asking it
+# anything.
+test('check-gate-map',
+  find_program('tests/check-gate-map.sh'),
+  args: [ meson.current_source_dir(), meson.current_build_dir() ],
   suite: cost_fast)
 
 # The distribution lists must cover every built file: a header present in the

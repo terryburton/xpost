@@ -143,11 +143,12 @@ awk '
     /^[[:space:]]*#/ { next }
     NF < 3 { next }
     { area = $1; kind = $2; rest = $3
-      if (kind == "path" || kind == "test" || kind == "width")
+      if (kind == "path" || kind == "test" || kind == "width" ||
+          kind == "scope")
           print area "\t" rest > (out "/map." kind)
     }
 ' out="$work" "$map"
-for k in path test width; do
+for k in path test width scope; do
     [ -f "$work/map.$k" ] || : > "$work/map.$k"
 done
 if [ ! -s "$work/map.path" ] || [ ! -s "$work/map.test" ]; then
@@ -156,14 +157,14 @@ if [ ! -s "$work/map.path" ] || [ ! -s "$work/map.test" ]; then
 fi
 
 # ---- what the build carries
-if ! meson test -C "$narrow" --list > "$work/listing" 2>"$work/err"; then
-    echo "FAILURES: could not list the tests in $narrow"
-    sed 's/^/      /' "$work/err"
-    exit 1
-fi
-sed 's/.* \/ //' "$work/listing" | sort -u > "$work/tests.all"
-if [ ! -s "$work/tests.all" ]; then
-    echo "FAILURES: $narrow defines no tests at all"
+#
+# Out of the record meson writes at configure time. A test object states
+# its name between the command it runs and the directory it runs in,
+# which is the one place in the file that shape occurs.
+sed 's/, "name": "/\n@@/g' "$narrow/meson-info/intro-tests.json" |
+    sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u > "$work/tests.all"
+if [ "$(grep -c . "$work/tests.all")" -lt 2 ]; then
+    echo "FAILURES: read no tests out of $narrow/meson-info/intro-tests.json"
     exit 1
 fi
 
@@ -172,6 +173,11 @@ fi
 if [ -n "$paths_named" ]; then
     for p in $paths_named; do printf '%s\n' "$p"; done > "$work/changed"
     origin="named on the command line"
+elif [ -n "$areas_named" ] && [ "$batch" = no ]; then
+    # An area named outright is the whole of the request. Reading the
+    # working tree as well would add whatever else is uncommitted, which
+    # is the opposite of asking about one area.
+    origin='the areas named'
 elif [ -n "$since" ]; then
     git -C "$src" diff --name-only "$since" > "$work/changed" 2>"$work/err" || {
         echo "FAILURES: could not read what changed since $since"
@@ -221,14 +227,20 @@ function globre(g,   i, c, r, star) {
 }
 AWK
 
-awk -f "$work/glob.awk" '
-    FILENAME == rules { n++; ra[n] = $1; rg[n] = globre($2); next }
-    {
-        for (i = 1; i <= n; i++)
-            if ($0 ~ rg[i]) { print ra[i] "\t" $0; next }
-        print "everything\t" $0
-    }
-' rules="$work/map.path" FS='\t' "$work/map.path" FS='\n' "$work/changed" \
+# Every awk here reads its program from two files: the converter above
+# and the pass itself. An inline program alongside -f is read as another
+# input FILE, which awk fails to open and carries on from, so the pass
+# yields nothing and the selection it was computing comes out empty.
+cat > "$work/classify.awk" <<'AWK'
+FILENAME == rules { n++; ra[n] = $1; rg[n] = globre($2); next }
+{
+    for (i = 1; i <= n; i++)
+        if ($0 ~ rg[i]) { print ra[i] "\t" $0; next }
+    print "everything\t" $0
+}
+AWK
+awk -f "$work/glob.awk" -f "$work/classify.awk" \
+    rules="$work/map.path" FS='\t' "$work/map.path" FS='\n' "$work/changed" \
     > "$work/classified"
 
 cut -f1 "$work/classified" | sort -u > "$work/areas"
@@ -241,7 +253,7 @@ sort -u -o "$work/areas" "$work/areas"
 # An area named that the table does not define selects nothing and would
 # do it silently.
 while read -r a; do
-    if ! cut -f1 "$work/map.test" | grep -qx "$a"; then
+    if ! cut -f1 "$work/map.test" "$work/map.scope" | grep -qx "$a"; then
         echo "FAILURES: $map defines no area called $a"
         exit 1
     fi
@@ -318,29 +330,49 @@ while read -r p; do
     fi
     if [ -n "$got" ]; then
         printf '%s\n' "$got" >> "$work/derived"
-    else
+    elif awk -F'\t' -v p="$p" '$2 == p && $1 == "suite" { f = 1 }
+                               END { exit !f }' "$work/classified"; then
+        # Only where the table left the file to its registration in the
+        # first place. Everywhere else the file has an area of its own
+        # and the derivation is an addition to it, not the whole of it:
+        # data/paint.ps answers to no test by name and is still the
+        # graphics area, and widening there would undo the table.
         printf '%s\n' "$p" >> "$work/unclaimed"
     fi
 done < "$work/changed"
 sort -u -o "$work/derived" "$work/derived"
 
-# A file under tests/ or data/ that answers to no test and to no name is
-# something this cannot place, so the gate widens to everything rather
-# than reporting on a selection that may not hold it.
+# A file the table left to its registration, and that no registration
+# and no name answers to, is one this cannot place -- a golden a guard
+# opens for itself, a register a check reads. The gate widens to
+# everything rather than reporting on a selection that may not hold it.
 if [ -s "$work/unclaimed" ]; then
     printf 'everything\n' >> "$work/areas"
     sort -u -o "$work/areas" "$work/areas"
 fi
 
 # ---- the areas' tests
-awk -f "$work/glob.awk" '
-    FILENAME == picked { want[$0] = 1; next }
-    FILENAME == rules { if ($1 in want) { n++; rg[n] = globre($2) } ; next }
-    { for (i = 1; i <= n; i++) if ($0 ~ rg[i]) { print; next } }
-' picked="$work/areas" rules="$work/map.test" \
+cat > "$work/pick.awk" <<'AWK'
+FILENAME == picked { want[$0] = 1; next }
+FILENAME == rules { if ($1 in want) { n++; rg[n] = globre($2) } ; next }
+{ for (i = 1; i <= n; i++) if ($0 ~ rg[i]) { print; next } }
+AWK
+awk -f "$work/glob.awk" -f "$work/pick.awk" \
+    picked="$work/areas" rules="$work/map.test" \
     FS='\n' "$work/areas" FS='\t' "$work/map.test" FS='\n' "$work/tests.all" \
     > "$work/sel.narrow.raw"
 cat "$work/derived" >> "$work/sel.narrow.raw"
+
+# An area saying the whole suite answers for it takes the selection to
+# everything. It is said apart from the test rules so that an area can
+# both name its own tests and be one of these.
+while read -r a; do
+    if awk -F'\t' -v a="$a" '$1 == a && $2 == "all" { f = 1 }
+                             END { exit !f }' "$work/map.scope"; then
+        cat "$work/tests.all" >> "$work/sel.narrow.raw"
+    fi
+done < "$work/areas"
+
 sort -u "$work/sel.narrow.raw" | comm -12 - "$work/tests.all" > "$work/sel.narrow"
 
 # ---- the wide leg
@@ -358,11 +390,11 @@ done < "$work/areas"
 if [ "$widepolicy" = full ]; then
     cp "$work/sel.narrow" "$work/sel.wide"
 else
-    awk -f "$work/glob.awk" '
-        FILENAME == rules { if ($1 == "width") { n++; rg[n] = globre($2) } ; next }
-        { for (i = 1; i <= n; i++) if ($0 ~ rg[i]) { print; next } }
-    ' rules="$work/map.test" FS='\t' "$work/map.test" FS='\n' "$work/tests.all" \
-        | sort -u > "$work/sel.wide"
+    printf 'width\n' > "$work/areas.width"
+    awk -f "$work/glob.awk" -f "$work/pick.awk" \
+        picked="$work/areas.width" rules="$work/map.test" \
+        FS='\n' "$work/areas.width" FS='\t' "$work/map.test" \
+        FS='\n' "$work/tests.all" | sort -u > "$work/sel.wide"
 fi
 
 if [ ! -s "$work/sel.narrow" ] || [ ! -s "$work/sel.wide" ]; then
@@ -429,6 +461,10 @@ run_leg() {
         echo "FAILURES: the $leg leg ran nothing -- meson wrote no record"
         return 1
     fi
+    # A record names a test as its project and suites and then the name
+    # itself; a selection names it as the build lists it. Read the name
+    # off the record's form so the two are the same thing before they
+    # are compared.
     awk '{
         name = ""; res = ""
         if (match($0, /^\{"name": "[^"]*"/))
@@ -437,7 +473,11 @@ run_leg() {
             res = substr($0, RSTART, RLENGTH)
             sub(/^, "result": "/, "", res); sub(/"$/, "", res)
         }
-        if (name != "" && res != "") print name "\t" res
+        if (name != "" && res != "") {
+            i = index(name, " / ")
+            if (i) name = substr(name, i + 3)
+            print name "\t" res
+        }
     }' "$record" | sort > "$work/ran.$leg"
 
     cut -f1 "$work/ran.$leg" | sort -u > "$work/ranames.$leg"
