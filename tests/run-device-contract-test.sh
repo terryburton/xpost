@@ -122,38 +122,69 @@ fi
 # The same contract on the route a selection takes without asking for
 # one. The roster above asked for each device with the mode that holds
 # the page whole, because that is where a pixel can be read back; a
-# selection naming the device alone reaches it through the record, and
-# that is what an ordinary run gets. Without this the route most runs
-# take would be the one never asked.
+# selection naming the device alone is weighed against the band budget
+# and may reach the device through a record. That is what an ordinary
+# run gets, and without this the route most runs take would be the one
+# never asked.
 #
-# Such a run is held to the record's contract rather than the painter's:
-# it keeps the marks a page made and not the pixels they cover, so it
-# answers a read with the ground, which the test reports as GROUNDBACK.
+# Which route it is depends on the page, so both sides of the boundary
+# are asked and each is held to the contract of what it reaches.
+#
+#   On a page over the budget the selection reaches a record, which is
+#   held to the record's contract rather than the painter's: it keeps
+#   the marks a page made and not the pixels they cover, so it answers
+#   a read with the ground, reported as GROUNDBACK.
+#
+#   On the page a run takes when it names none there is no record, and
+#   the same selection answers a read the way the device that paints it
+#   does -- which is the answer the roster above asserted about.
+#
+# The tall page is over the budget for every device on the roster: the
+# costliest row on it is four bytes a pixel at 612, and eight thousand
+# of those is several times the budget. A budget raised past it would
+# not quietly stop this half from asking -- the run would answer as the
+# painter and be reported here as a failure.
+BAND_OVER=612x8000+0+0
+
 for dev in $DEVICE_FLEET_BANDS; do
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/band.$dev" "$script" \
-          </dev/null 2>&1)
-    st=$?
-    case "$out" in
-        *"wrong device"*) echo "SKIP $dev banded (not built in)"; continue ;;
-    esac
-    if [ "$st" -ne 0 ]; then
-        echo "FAIL $dev banded: the interpreter exited with status $st"
-        fail=1
-        continue
-    fi
-    if printf '%s\n' "$out" | tr -s '-' '\n' | grep -q '^GROUNDBACK$'; then
-        if verdict_ok "$out" "$dev banded"; then
-            echo "OK   $dev banded"
+    for page in over default; do
+        case $page in
+            over) geom="-g $BAND_OVER"; want=ground ;;
+            *)    geom=; want=pixels ;;
+        esac
+        # the page and the route are two words in one label, so a
+        # failure names the run that produced it
+        who="$dev on the $page page"
+        out=$("$xpost" -q $ns $geom -d "$dev" -o "$work/band.$dev.$page" \
+              "$script" </dev/null 2>&1)
+        st=$?
+        case "$out" in
+            *"wrong device"*) echo "SKIP $who (not built in)"; continue ;;
+        esac
+        if [ "$st" -ne 0 ]; then
+            echo "FAIL $who: the interpreter exited with status $st"
+            fail=1
+            continue
+        fi
+        if printf '%s\n' "$out" | tr -s '-' '\n' | grep -q '^GROUNDBACK$'; then
+            got=ground
+        else
+            got=pixels
+        fi
+        if [ "$got" != "$want" ]; then
+            echo "FAILURES: -d $dev on the $page page answered a read with"
+            echo "      the $got where the route it takes there answers"
+            echo "      the $want; what a selection reaches without asking"
+            echo "      is asserted rather than assumed"
+            fail=1
+            continue
+        fi
+        if verdict_ok "$out" "$who"; then
+            echo "OK   $who ($got)"
         else
             fail=1
         fi
-    else
-        echo "FAILURES: -d $dev answered a read with something other than the"
-        echo "      page's ground; the route a selection takes without asking"
-        echo "      holds the marks and not the pixels, and what it answers"
-        echo "      there is asserted rather than assumed"
-        fail=1
-    fi
+    done
 done
 
 rm -rf "$work"
