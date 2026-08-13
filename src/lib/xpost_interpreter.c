@@ -2265,6 +2265,12 @@ static const char *const bands_by_default[] =
    and remove a flag. */
 #define XPOST_WHOLE_PAGE_MODE "whole"
 
+static const char *const whole_page_modes[] =
+{
+    XPOST_WHOLE_PAGE_MODE,
+    NULL
+};
+
 static int _bands_by_default(const char *name, size_t n)
 {
     int i;
@@ -2274,6 +2280,64 @@ static int _bands_by_default(const char *name, size_t n)
             && strncmp(name, bands_by_default[i], n) == 0)
             return 1;
     return 0;
+}
+
+/* The modes a selection of this device may carry, or NULL where the
+   selector means nothing here and belongs to whatever reads it.
+
+   Two devices have a mode this file decides on, and they are the two it
+   rewrites a selection between. A device that bands by default takes the
+   one mode that says to hold the page whole; the recording class takes
+   the name of the device that paints its page, which is the same roster
+   of devices over again. Everything else a colon may carry is read
+   somewhere else -- the raster device reads it for a pixel format -- and
+   is passed through to be held there.
+
+   Held at all because the two answers differ in a direction nothing
+   would report: a selection carrying any mode whatever is one this file
+   leaves alone, so a mode nobody recognises reads as a run having asked
+   for something specific, and the specific thing it gets is the route
+   the mode that turns banding off selects. */
+static const char *const *_device_modes(const char *selected, size_t n)
+{
+    if (strcmp(selected, "record") == 0)
+        return bands_by_default;
+    if (_bands_by_default(selected, n))
+        return whole_page_modes;
+    return NULL;
+}
+
+static int _mode_taken(const char *const *modes, const char *mode)
+{
+    int i;
+
+    for (i = 0; modes[i]; i++)
+        if (strcmp(modes[i], mode) == 0)
+            return 1;
+    return 0;
+}
+
+/* The modes as a caller can be shown them, in as much of buf as they
+   fit: a refusal that names what was given is only half of what the
+   caller needs to fix it. */
+static void _mode_roster(const char *const *modes, char *buf, size_t sz)
+{
+    size_t len = 0;
+    int i;
+
+    buf[0] = '\0';
+    for (i = 0; modes[i]; i++)
+    {
+        size_t l = strlen(modes[i]);
+
+        if (len + l + 2 > sz)
+            break;
+        if (len)
+            buf[len++] = ' ';
+        memcpy(buf + len, modes[i], l);
+        len += l;
+        buf[len] = '\0';
+    }
 }
 
 /* Which device this run selected, without the mode selector a
@@ -2319,10 +2383,29 @@ int setlocalconfig(Xpost_Context *ctx,
     (void)sd;
 #endif
 
-    if (!_device_selected(device, &n))
     {
-        XPOST_LOG_ERR("unknown device %.*s", (int)n, device ? device : "");
-        return undefined;
+        const char *selected = _device_selected(device, &n);
+        const char *const *modes;
+        const char *colon;
+
+        if (!selected)
+        {
+            XPOST_LOG_ERR("unknown device %.*s", (int)n, device ? device : "");
+            return undefined;
+        }
+
+        colon = strchr(device, ':');
+        modes = _device_modes(selected, n);
+        if (colon && modes && !_mode_taken(modes, colon + 1))
+        {
+            char takes[64];
+
+            _mode_roster(modes, takes, sizeof takes);
+            XPOST_LOG_ERR("%d the %s device takes no mode \"%s\"; the modes"
+                          " it takes are: %s", rangecheck, selected,
+                          colon + 1, takes);
+            return rangecheck;
+        }
     }
 
 #ifdef _WIN32
