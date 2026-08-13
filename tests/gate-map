@@ -115,6 +115,7 @@ record path data/recorddev.ps
 record test band-*
 record test record
 record test record-*
+record test form-band
 record test region-replay
 record test reloc-fused
 record test sparse-rows
