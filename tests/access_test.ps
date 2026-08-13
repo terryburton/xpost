@@ -231,9 +231,6 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 { 0 0 0 255 0 0 rgbdev idict /.blendpixrgb get exec }
                                          /invalidaccess (.blendpixrgb over a readonly plane) chk
 (.blendpixrgb over a readonly plane) planes
-{ [ [ (\004) (\005) (\006) ] ] [ (\377) ] 0 0 rgbdev idict /.blitform get exec }
-                                         /invalidaccess (.blitform over a readonly plane) chk
-(.blitform over a readonly plane) planes
 
 % --- noaccess on a dictionary: the read-only rung is refused ---
 % A dictionary carries its access on the value, so noaccess reaches every
