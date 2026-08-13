@@ -441,6 +441,60 @@ const unsigned char *xpost_record_screen_get(const Xpost_Record *rec,
 void xpost_record_clear(Xpost_Record *rec);
 
 /**
+ * @brief Give up everything a record holds, and the room it holds it in.
+ *
+ * The other way a record is emptied, and the difference is the storage.
+ * xpost_record_clear ends a page and keeps what the page filled, because
+ * the page after will fill it again; this is for a record that is not
+ * going to be filled again, so the room goes back to the allocator with
+ * the marks. What is left is a record holding nothing and costing
+ * nothing, still usable, which xpost_record_bytes then answers for
+ * accordingly -- the high-water mark goes with the storage it was a mark
+ * of, since a record that has given its runs back is resident for none
+ * of them.
+ *
+ * It is what a caller does when it wants the room back rather than the
+ * record emptied: one that has finished with a record it is holding, or
+ * one that has put the marks somewhere else and no longer needs them
+ * where they are.
+ *
+ * The screen in force goes too, unlike at a page boundary. A page
+ * boundary is a point the same record goes on past, so the screen the
+ * marks after it are made under has to be written down again; a record
+ * given up is not going to describe those marks at all, and whatever
+ * paints them is being told the screen directly.
+ *
+ * A record short of a mark is emptied like any other, and stays short of
+ * it. Nothing here paints the mark that went missing, so the page it
+ * describes is still one it cannot reproduce and every replay of it
+ * still refuses.
+ */
+void xpost_record_release(Xpost_Record *rec);
+
+/**
+ * @brief Give up the entries a caller has finished with, keeping the
+ *        coverage masks.
+ *
+ * For a caller that has finished with each entry as it arrived rather
+ * than holding a page of them. Such a caller takes an entry up only so
+ * that one writer, or one replay, reads it, and the entry is spent the
+ * moment that has happened: giving up the spent ones holds what the
+ * record costs to the entry in hand.
+ *
+ * The masks are what stays, and they stay because they are not spent.
+ * Which mask a glyph names is an index into the record, and the
+ * placements of a string arrive after all of its masks, so a mask has to
+ * outlive the placement that named it. What is left is the coverage of
+ * the page's distinct glyphs -- what a glyph cache holds -- and it goes
+ * at the page boundary with everything else (xpost_record_clear).
+ *
+ * A mark naming an image or a screen the record no longer holds replays
+ * as nothing, so this is only for a record whose marks have all been
+ * played.
+ */
+void xpost_record_spent(Xpost_Record *rec);
+
+/**
  * @brief How many marks a record holds.
  */
 size_t xpost_record_count(const Xpost_Record *rec);
