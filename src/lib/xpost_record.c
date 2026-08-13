@@ -74,6 +74,12 @@ struct _Xpost_Record
     size_t mskbytes;            /* what the coverage they point at costs */
     Xpost_String_Buffer scr;    /* a run of _Screen */
     size_t scrbytes;            /* what the cells they point at cost */
+    /* The most the runs have ever held at once. The runs keep their
+       storage over a page boundary and are filled again, so what they
+       are resident for after one is the largest page rather than the
+       page in hand; the lengths themselves go back to nothing there and
+       cannot say it. */
+    size_t runhigh;
     /* The screen the marks are being made under, kept apart from the
        run so that it outlives a page: a page boundary is not a screen
        change, so the page beginning is written the same screen the page
@@ -125,6 +131,15 @@ static _Screen *_scrs(const Xpost_Record *rec)
 static size_t _nscr(const Xpost_Record *rec)
 {
     return rec->scr.len / sizeof(_Screen);
+}
+
+/* What is in the runs now. Read where a page boundary is about to empty
+   them, and again where what the record costs is asked for, so it is
+   stated once. */
+static size_t _runfill(const Xpost_Record *rec)
+{
+    return rec->mark.len + rec->val.len + rec->img.len
+         + rec->msk.len + rec->scr.len;
 }
 
 Xpost_Record *xpost_record_new(int ncomp)
@@ -833,6 +848,13 @@ void xpost_record_clear(Xpost_Record *rec)
        page in hand */
     if (rec->short_of_a_mark)
         return;
+    /* what the runs came to on the page ending, before the lengths that
+       say it go back to nothing: the storage stays and is filled again,
+       so it is what the record is resident for from here until a larger
+       page fills more of it */
+    n = _runfill(rec);
+    if (n > rec->runhigh)
+        rec->runhigh = n;
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
@@ -860,16 +882,77 @@ size_t xpost_record_count(const Xpost_Record *rec)
     return rec ? _nmark(rec) : 0;
 }
 
+/* What an allocator keeps beside a block, which a sum of the sizes asked
+   for cannot see. Two words is what the common ones take -- a header
+   with the block's size in it, and the rounding up to the alignment the
+   next block must start on. It is charged per block rather than
+   measured, because there is no portable way to ask; the point of
+   charging it at all is that a record holding many small blocks holds
+   measurably more than their bytes, and a page of text (a coverage mask
+   per distinct glyph) and a page that keeps changing its screen (a
+   threshold cell per change) are both that record. */
+#define _BLOCK_OVER (2 * sizeof(void *))
+
+/* How many blocks the record is holding, so that what an allocator
+   keeps beside each of them is charged once per block. */
+static size_t _blocks(const Xpost_Record *rec)
+{
+    size_t n = 1;               /* the record itself */
+    size_t i, c;
+
+    if (rec->mark.s) n++;
+    if (rec->val.s)  n++;
+    if (rec->img.s)  n++;
+    if (rec->msk.s)  n++;
+    if (rec->scr.s)  n++;
+    if (rec->htcell) n++;
+    n += _nmsk(rec);            /* a mask's coverage is one block */
+    n += _nscr(rec);            /* a screen's cell is one block */
+    /* an image is its samples and whichever of its tables it was given,
+       each of them a block of its own */
+    c = _nimg(rec);
+    for (i = 0; i < c; i++)
+    {
+        const Xpost_Record_Image *m = &_imgs(rec)[i];
+
+        if (m->samples) n++;
+        if (m->lut)     n++;
+        if (m->dluts)   n++;
+        if (m->tlut)    n++;
+        if (m->tlutrgb) n++;
+        if (m->mbits)   n++;
+        if (m->mranges) n++;
+        if (m->cspans)  n++;
+    }
+    return n;
+}
+
 size_t xpost_record_bytes(const Xpost_Record *rec)
 {
+    size_t runs;
+
     if (!rec)
         return 0;
-    /* what the runs have taken rather than what they have filled: a
-       record is compared against a raster it would save holding, and
-       what a raster costs is what was allocated for it */
-    return rec->mark.cap + rec->val.cap + rec->img.cap + rec->imgbytes
-         + rec->msk.cap + rec->mskbytes
-         + rec->scr.cap + rec->scrbytes;
+    /* What the runs hold and not what they have room for. A run grows by
+       doubling, so the room past what is in it is up to as much again,
+       and none of that room is paid for until a mark is written into it:
+       a record answering its capacity would answer up to twice what the
+       page it holds has made resident. What is answered instead is the
+       most the runs have ever held, which is what they are resident for
+       -- storage a run has been filled to stays resident after a page
+       boundary empties it, because the run keeps it to be filled
+       again. */
+    runs = _runfill(rec);
+    if (runs < rec->runhigh)
+        runs = rec->runhigh;
+    /* and what the entries point at as it stands, which is not the same
+       question: those blocks are given up at a page boundary rather than
+       kept, so what a record is resident for there is the page in hand
+       and not the largest one */
+    return sizeof *rec + runs
+         + rec->imgbytes + rec->mskbytes + rec->scrbytes
+         + (rec->htcell ? (size_t)rec->htw * (size_t)rec->hth : 0)
+         + _BLOCK_OVER * _blocks(rec);
 }
 
 void xpost_record_lost(Xpost_Record *rec)

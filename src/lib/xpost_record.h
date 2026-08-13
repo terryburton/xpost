@@ -446,13 +446,44 @@ void xpost_record_clear(Xpost_Record *rec);
 size_t xpost_record_count(const Xpost_Record *rec);
 
 /**
- * @brief What a record costs, in bytes.
+ * @brief What holding a record costs, in bytes.
  *
- * The marks, their values, and the images and masks they name. It is
- * the quantity
- * the whole mechanism is judged on: a record is worth holding while it
- * is smaller than the raster it saves holding, and that is a comparison
- * rather than a guess.
+ * The marks, their values, the images, masks and screen cells they name,
+ * the record itself, and what an allocator keeps beside each of those
+ * blocks. It is the quantity the whole mechanism is judged on: a record
+ * is worth holding while it is smaller than the raster it saves holding,
+ * and that is a comparison rather than a guess.
+ *
+ * So that the comparison is one, this is what the record has made
+ * resident and not what it has asked for. The runs grow by doubling, and
+ * the room past what is in them costs nothing until a mark is written
+ * into it, so what is counted is the most they have ever held: that
+ * storage stays after a page boundary empties them, because a run keeps
+ * it to be filled again, and a record between pages is therefore
+ * resident for the largest page the job has drawn. What the entries
+ * point at is counted as it stands instead, those blocks being given up
+ * at a boundary rather than kept.
+ *
+ * WHAT IT DOES NOT INCLUDE, so that a caller comparing it against a
+ * raster knows what it is comparing:
+ *
+ *   Playing the record back. A replay hands each mark to a device
+ *   method, and a method may be a procedure -- so a mark reaches one as
+ *   interpreter objects built for the call, a polygon as an array of its
+ *   vertices. What that costs follows the marks a run of rows meets and
+ *   is the target's and the interpreter's, not the record's; on
+ *   path-heavy content it is several times this number. A caller
+ *   weighing a whole banded emission against a whole page raster is
+ *   weighing that too, and will not find it here.
+ *
+ *   The pages a run leaves behind when it outgrows a block. Growing
+ *   copies into a new block and gives up the old one, whose pages stay
+ *   resident until the allocator hands them out again -- which is
+ *   fragmentation, and there is no asking a C allocator for it.
+ *
+ * Both of those are measured in tests/record_cost_test.c, which holds
+ * this number to what a process is resident for over the marks that
+ * produced it.
  */
 size_t xpost_record_bytes(const Xpost_Record *rec);
 
