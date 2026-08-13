@@ -3769,15 +3769,22 @@ test('band-extent',
 # device's own price for a row and the class's own budget rather than
 # written down; the two spellings that opt out are held on the far side
 # of it from where the weighing would have put them; and the page is
-# compared across the crossing. It breaks its own instrument both ways
-# and the gate itself both ways at the end, requiring itself to fail each
-# time.
+# compared across the crossing. Every one of those is asked both of a
+# page sized on the command line and of a page the program declared,
+# because those are the two ways a run arrives at a page and only the
+# first is a human typing. It breaks its own instrument both ways, the
+# gate itself both ways, and the weighing back to settling once, at the
+# end, requiring itself to fail each time.
+# Its own limit rather than the configuration's: asking every question
+# twice puts the run at half of the standard limit on a machine it is
+# sharing, which is close enough that a slower one would be reported as
+# a hang rather than as the cost of the second way of asking.
 test('band-route',
   find_program('tests/run-band-route-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,
-  timeout: 300)
+  timeout: 600)
 
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or

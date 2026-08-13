@@ -32,23 +32,41 @@
 # the boundary wrongly would be asking about the wrong page rather than
 # passing.
 #
+# Both ways of saying how large a page is, because there are two and only
+# one of them is a human at a terminal. A geometry on the command line
+# settles the page the run opens at; a page description states its page
+# by declaring it, and setpagedevice is the whole of how it does so. The
+# second is the ordinary case -- a program that wants a page other than
+# the standard one has no other way to ask for it -- and it reaches the
+# route decision by a different path: it makes a second device, at a page
+# nothing knew about when the first was made. So each of the questions
+# above is asked twice, once each way, and the answers must agree: what
+# decides the route is the page, and not how the run came to be at it.
+#
 # The two spellings that opt out are held on the far side of that
 # boundary from where the weighing would have put them: device:whole
 # records nothing at a page over the budget, and record:device records at
 # a page under it. Each is a run saying which route it wants, and neither
-# is the weighing's to overrule.
+# is the weighing's to overrule. Both are held to that at a declared page
+# as well, since a request that could talk either of them round would be
+# a page description choosing how its marks are held, which PLRM Appendix
+# G bars it from.
 #
 # And the page is compared across the crossing, because a route that
 # records nothing is only right if it puts out the same page: the run one
 # row over the budget and the run at that page held whole must write the
-# same bytes.
+# same bytes. The declared page is compared against the same page sized
+# on the command line for the same reason, one route having reached it
+# through a device that was replaced.
 #
 # The controls, which this runs on itself at the end and requires to
 # fail: the instrument that reads which route was taken is stubbed both
-# ways, and the gate itself is broken both ways, by running against a
+# ways, the gate itself is broken both ways, by running against a
 # recording class whose budget covers no page and one whose budget covers
-# every page. A check that could not see those four is a check that would
-# pass whatever the route did.
+# every page, and the route is made to settle once, at the page the run
+# opened at, so that a declared page is weighed at the wrong page. A
+# check that could not see those five is a check that would pass whatever
+# the route did.
 #
 #   $1  path to the built xpost binary
 #
@@ -77,7 +95,9 @@ trap 'rm -rf "$work"' EXIT
 
 # The width every page here is at. An ordinary one, so the height the
 # boundary falls at is an ordinary number of rows rather than a
-# degenerate one.
+# degenerate one. It is also the width a run given no geometry opens at,
+# so the page a run declares differs from the page it opened at in its
+# height alone and the boundary derived below is the boundary for both.
 W=612
 
 # What the run says about itself. The route is read off the device in the
@@ -87,9 +107,17 @@ W=612
 # would be an instrument with nothing holding it -- a run reporting only
 # half a record says so and is a failure of its own.
 #
+# One file for both ways of arriving at a page. A run handed PH declares
+# its page here and was started at the standard one; a run handed none
+# was sized on the command line and declares nothing. Everything after
+# that point is the same run asking the same question of whatever device
+# it ended up with, so the two answers are comparable because there is
+# only one instrument.
+#
 # SAB stubs the reading, which is this test's control on its instrument.
 cat > "$work/route.ps" <<'PSEOF'
 /SAB where { pop }{ /SAB 0 def } ifelse
+/PH where { pop << /PageSize [PW PH] >> setpagedevice }{ } ifelse
 /played DEVICE /.playclass known def
 /priced DEVICE /.bandbytes known def
 SAB 1 eq { /played false def /priced false def } if
@@ -127,41 +155,70 @@ case $sab in 1|2) SABDEF="-DSAB=$sab" ;; esac
 # replace with one carrying a rewritten budget
 RUNDATA=${XPOST_DATA_DIR:-}
 
-# route SELECTION GEOMETRY OUTFILE -- leaves the route in $route and the
-# rows held at once in $band, or answers non-zero
+# route HOW SELECTION HEIGHT OUTFILE -- leaves the route in $route and
+# the rows held at once in $band, or answers non-zero.
+#
+# HOW is which of the two ways the run is brought to that page: "sized"
+# hands it a geometry and no page description, "declared" hands it no
+# geometry and a page description that asks for the page. The second
+# opens at the standard page, which is under the budget for every device
+# here, so a run that answers "record" there answers it about the page it
+# declared and no other.
 route_of() {
+    case $1 in
+        sized)    r_arg="-g ${W}x$3+0+0" ;;
+        declared) r_arg="-DPW=$W -DPH=$3" ;;
+    esac
+    r_at="$2 at ${W}x$3 $1"
     if [ -n "$RUNDATA" ]; then
         out=$(XPOST_DATA_DIR=$RUNDATA "$xpost" -q --no-sandbox \
-              -g "$2+0+0" -d "$1" -o "$3" $SABDEF "$work/route.ps" \
+              $r_arg -d "$2" -o "$4" $SABDEF "$work/route.ps" \
               </dev/null 2>&1)
     else
-        out=$("$xpost" -q --no-sandbox -g "$2+0+0" -d "$1" -o "$3" \
+        out=$("$xpost" -q --no-sandbox $r_arg -d "$2" -o "$4" \
               $SABDEF "$work/route.ps" </dev/null 2>&1)
     fi
     st=$?
-    verdict_run "$st" "$out" "$1 at $2" || return 1
+    verdict_run "$st" "$out" "$r_at" || return 1
     route=$(printf '%s\n' "$out" | sed -n 's/.*ROUTE \([a-z][a-z]*\) band=.*/\1/p')
     band=$(printf '%s\n' "$out" | sed -n 's/.*ROUTE [a-z][a-z]* band=\([0-9][0-9]*\).*/\1/p')
     if [ -z "$route" ] || [ -z "$band" ]; then
-        echo "FAILURES: $1 at $2 said nothing about the route it took"
+        echo "FAILURES: $r_at said nothing about the route it took"
         return 1
     fi
     if [ "$route" = split ]; then
-        echo "FAILURES: $1 at $2 is half a record: it names a class to play"
+        echo "FAILURES: $r_at is half a record: it names a class to play"
         echo "      into or a budget to divide, but not both"
         return 1
     fi
     return 0
 }
 
-# took SELECTION GEOMETRY OUTFILE WANTED WHY
+# took SELECTION HEIGHT OUTFILE WANTED WHY -- both ways of arriving at
+# the page, each held to the same answer. A device's route follows the
+# page it is made at, so a run sized on the command line and a run that
+# declared the same page are two spellings of one question.
 took() {
-    route_of "$1" "$2" "$3" || return 1
-    if [ "$route" != "$4" ]; then
-        echo "FAILURES: $1 at $2 $5"
-        echo "      wanted $4, and the run reports $route (band=$band)"
+    t_ok=0
+    for how in sized declared; do
+        route_of "$how" "$1" "$2" "$3.$how" || { t_ok=1; continue; }
+        if [ "$route" != "$4" ]; then
+            echo "FAILURES: $1 at ${W}x$2 $how $5"
+            echo "      wanted $4, and the run reports $route (band=$band)"
+            t_ok=1
+        fi
+    done
+    [ "$t_ok" -eq 0 ] || return 1
+    # the page a run declared and the same page sized on the command
+    # line: one of them reached its device through a page-device request
+    # that replaced the device the run opened on, and a route that put
+    # out a different page for that would be a route worth nothing
+    if ! cmp -s "$3.sized" "$3.declared"; then
+        echo "FAILURES: $1 at ${W}x$2 writes a different page declared than"
+        echo "      sized on the command line"
         return 1
     fi
+    cp "$3.sized" "$3"
     return 0
 }
 
@@ -190,10 +247,10 @@ one_device() {
     fi
     over=$((fits + 1))
 
-    took "$dev" "${W}x${fits}" "$work/fits.out" direct \
+    took "$dev" "$fits" "$work/fits.out" direct \
          "is the largest page the budget covers and must record nothing" \
         || return 1
-    took "$dev" "${W}x${over}" "$work/over.out" record \
+    took "$dev" "$over" "$work/over.out" record \
          "is one row past the budget and must be recorded" || return 1
     if [ "$band" -ge "$over" ] || [ "$band" -lt 1 ]; then
         echo "FAILURES: $dev at ${W}x${over} reports holding $band rows at"
@@ -203,10 +260,10 @@ one_device() {
 
     # The two spellings that say which route they want, each held on the
     # side of the boundary the weighing would have sent it to the other.
-    took "$dev:whole" "${W}x${over}" "$work/whole.out" direct \
+    took "$dev:whole" "$over" "$work/whole.out" direct \
          "asks for the page whole and must record nothing at any page" \
         || return 1
-    took "record:$dev" "${W}x${fits}" "$work/rec.out" record \
+    took "record:$dev" "$fits" "$work/rec.out" record \
          "asks for a record by name and must be given one at any page" \
         || return 1
 
@@ -262,6 +319,31 @@ if [ "$sab" -eq 3 ] || [ "$sab" -eq 4 ]; then
     RUNDATA=$d
 fi
 
+# The route made to settle once, at the page the run opened at, which is
+# the defect that leaves a declared page weighed at a page nobody asked
+# for. The page-device request goes on making the device it names and
+# stops asking which device that name is made through, so a run sized on
+# the command line answers exactly as it did and only a run that declared
+# its page answers wrongly -- which is the whole of what the second way
+# of asking is here for.
+if [ "$sab" -eq 5 ]; then
+    if [ -z "$RUNDATA" ]; then
+        echo "FAILURES: the gate's controls need the data directory named"
+        exit 1
+    fi
+    d=$work/data
+    mkdir -p "$d"
+    cp -R "$RUNDATA"/. "$d/"
+    sed "s|^\( *\)/made dev pw ph .*|\1/made dev def|" \
+        "$RUNDATA/init.ps" > "$d/init.ps"
+    if cmp -s "$RUNDATA/init.ps" "$d/init.ps"; then
+        echo "FAILURES: the control could not stop the page-device request"
+        echo "      weighing its page, so it is not a control on the gate"
+        exit 1
+    fi
+    RUNDATA=$d
+fi
+
 # The reduced pass a control runs: one device is enough to show that a
 # broken gate or a stubbed instrument is seen.
 if [ "$sab" -ne 0 ]; then
@@ -294,12 +376,13 @@ echo "band-route: held on $asked device(s)"
 # ---------------------------------------------------------------------
 # The controls
 #
-# Four defects, one per thing that could go quiet: the instrument
+# Five defects, one per thing that could go quiet: the instrument
 # answering direct whatever happened, the instrument answering record
-# whatever happened, a gate that records every page, and a gate that
-# records none. Each is required to be seen.
+# whatever happened, a gate that records every page, a gate that records
+# none, and a route that settles at the page the run opened at and is
+# never weighed again. Each is required to be seen.
 # ---------------------------------------------------------------------
-for n in 1 2 3 4; do
+for n in 1 2 3 4 5; do
     s_out=$("$self" --sabotage "$n" "$xpost" 2>&1)
     s_st=$?
     if [ "$s_st" -eq 0 ]; then
