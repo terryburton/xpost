@@ -39,6 +39,18 @@
 #   empty data/ and tests/ under it is the harder one, and the one the
 #   interpreter's fallback search makes dangerous.
 #
+#   Every decoy was a path that is wrong, so what was held was only that
+#   a guard reads the path it was given. A guard handed the right path to
+#   a tree with nothing in it was held to nothing at all: it scanned an
+#   empty population, found no fault in it -- there being none to find --
+#   and answered SUCCESS. That answer is the dangerous one, because it is
+#   the same answer a working guard gives, and a reader takes it for
+#   coverage. So a guard must say how many things it examined and refuse
+#   a count of none: the emptied tree below is a source root of exactly
+#   the real shape, every directory and every file name in place and
+#   every one of them empty, and a guard that passes on it is a guard
+#   that never checked it had anything to look at.
+#
 #   $1  path to the source tree root
 #   $2  path to the built interpreter
 #   $3  path to the built library
@@ -72,6 +84,32 @@ mkdir -p "$decoy_empty"
 # and an empty file, for an argument naming a register or a test
 decoy_emptyfile="$work/decoy-empty-file"
 : > "$decoy_emptyfile"
+# and the source tree with everything taken out of it: the real shape,
+# every file empty. A corpus is left out for the reason guard_mirror_tree
+# leaves it out -- it is written while its own tests run, and a walk that
+# lists it races them -- but its .gitignore stays, that being the file
+# the mirroring reads to know what to leave out.
+decoy_hollow="$work/decoy-hollow"
+mkdir -p "$decoy_hollow"
+( cd "$src" && find data src tests -path 'tests/corpus/*' -prune -o -type f -print ) \
+    > "$work/hollow-list" 2>/dev/null
+echo tests/corpus/.gitignore >> "$work/hollow-list"
+nhollow=$(grep -c . "$work/hollow-list" || true)
+if [ "${nhollow:-0}" -lt 100 ]; then
+    echo "FAILURES: only $nhollow files were listed under $src, so the emptied"
+    echo "      tree would be empty for the wrong reason and every guard"
+    echo "      would refuse it without being held to anything"
+    exit 1
+fi
+( cd "$decoy_hollow" \
+  && sed 's|/[^/]*$||' "$work/hollow-list" | sort -u | xargs mkdir -p \
+  && xargs touch < "$work/hollow-list" )
+: > "$decoy_hollow/meson.build"
+if [ ! -r "$decoy_hollow/data/init.ps" ] || [ ! -r "$decoy_hollow/tests/guard-paths.sh" ]; then
+    echo "FAILURES: the emptied tree was not made; a guard would refuse it as"
+    echo "      a path rather than as a tree with nothing in it"
+    exit 1
+fi
 
 # ---- what meson runs, and with what ----
 #
@@ -217,10 +255,17 @@ while IFS="$(printf '\t')" read -r base args; do
     while read -r kind; do
         i=$((i + 1))
         case $kind in
-            SRCROOT) list="$decoy_data $decoy_shape $decoy_gone" ;;
-            SUBPATH) list="$decoy_empty $decoy_gone" ;;
-            FILE)    list="$decoy_emptyfile $decoy_gone" ;;
-            *)       continue ;;
+            SRCROOT)   list="$decoy_data $decoy_shape $decoy_gone $decoy_hollow" ;;
+            SUBPATH)   list="$decoy_empty $decoy_gone" ;;
+            FILE)      list="$decoy_emptyfile $decoy_gone" ;;
+            # A built thing that is not there, or is there and holds
+            # nothing, is the same hazard in the other half of the
+            # argument list: a guard that runs an interpreter it could
+            # not find, or reads a library with no symbols in it, reports
+            # about nothing.
+            BUILT)     list="$decoy_emptyfile $decoy_gone" ;;
+            BUILDROOT) list="$decoy_empty $decoy_gone" ;;
+            *)         continue ;;
         esac
         for d in $list; do
             set --
