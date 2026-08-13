@@ -164,6 +164,18 @@ end } bind put
 % run asked for is made directly, and the marks of such a page are
 % written down nowhere.
 %
+% What is weighed is the page against the budget, and nothing about what
+% is on the page. The raster not held is the whole of what a page's own
+% numbers can say, and it is the term this rule accounts for. The other
+% side of the trade it does not account for at all: the marks the record
+% holds, which follow the drawing, and the objects a replay builds
+% afresh each time it plays a mark into a band, which follow the drawing
+% and the number of bands together. Neither is knowable from a page
+% extent, and the second is the larger of the two on a page of paths and
+% is paid once per band, so it is largest exactly where the budget buys
+% the most bands. So this rule is right about the memory a page gives
+% back and silent about what holding that page's marks instead costs.
+%
 % Asked once, where this run's device is made from its selection
 % (.startdevice, data/device.ps), at the page the run was started at.
 % The device that answer installs is the one every page-device request
@@ -396,6 +408,17 @@ setglobal
     % claims to be one. What this is, is a judgement about which pages
     % are worth recording, taken against the sheets a page is cut to, and
     % it is written so as to say so.
+    %
+    % It is a judgement about the raster and no more. What is compared
+    % against it is a page's own extent, so what a page's marks cost to
+    % hold and to play does not enter the comparison, however much of it
+    % there is. It was arrived at by weighing whole runs that put their
+    % pages out, so what those readings include is everything a page
+    % costs either way -- the raster, the record and the objects the
+    % replay builds per band -- and what this number does is put the
+    % boundary where those readings crossed for the sheets a page is cut
+    % to. A page whose drawing is far heavier than its sheets suggests
+    % crosses somewhere else, and nothing here is measuring that.
     %
     % It is not a page-device parameter and must not become one. PLRM
     % Appendix G declares the band-device setup operators obsolete and
