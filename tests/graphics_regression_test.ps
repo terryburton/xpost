@@ -2797,10 +2797,11 @@ DEVW dup /Destroy get exec
 graphicsdict /currgstate get /device DEV put
 initgraphics
 
-% The form cache: a form's paint runs only for the two capture
-% grounds; later executions replay the raster, uncovered pixels keep
-% the page beneath, a new transformation captures afresh, and an
-% unwritable dictionary paints directly every time
+% Holding a form: the paint runs once for the form and the
+% transformation it stands under; later executions place what it
+% painted, uncovered pixels keep the page beneath, a new transformation
+% is a new drawing, and an unwritable dictionary paints directly every
+% time
 erasepage
 userdict /fm.n 0 put
 /FmCached << /FormType 1 /Matrix [1 0 0 1 0 0] /BBox [0 0 16 16]
@@ -2808,10 +2809,10 @@ userdict /fm.n 0 put
         userdict /fm.n 2 copy get 1 add put
         0 setgray 2 2 12 12 rectfill } >> def
 gsave 4 4 translate FmCached execform grestore
-userdict /fm.n get 2 eq (the capture runs the paint twice, once per ground) assert
+userdict /fm.n get 1 eq (the capture runs the paint once) assert
 countink /fm.one exch def
 gsave 36 4 translate FmCached execform grestore
-userdict /fm.n get 2 eq (a second execution replays without painting) assert
+userdict /fm.n get 1 eq (a second execution places what was painted) assert
 countink fm.one 2 mul eq (the replay lands the same marks) assert
 % uncovered pixels keep what the page held
 erasepage
@@ -2821,7 +2822,7 @@ gsave 8 20 translate FmCached execform grestore
 9 25 inkat (the stripe shows through the form's uncovered margin) assert
 % a rotated transformation is a different key
 gsave 32 32 translate 30 rotate FmCached execform grestore
-userdict /fm.n get 4 eq (a new transformation captures afresh) assert
+userdict /fm.n get 2 eq (a new transformation captures afresh) assert
 % readonly forms paint afresh every time
 userdict /fm.m 0 put
 /FmPlain << /FormType 1 /Matrix [1 0 0 1 0 0] /BBox [0 0 8 8]
