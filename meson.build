@@ -3926,10 +3926,13 @@ test('setpagedevice-failure',
 # The page device's imaging bounding box (PLRM 6.2). A program declaring one
 # asserts that it paints no marks outside it, and PLRM leaves a device free to
 # render or to drop the marks that do fall outside -- which is what lets a
-# device hold only the rows the box reaches. Two questions, put to every device:
-# what a program observes of the page, which the box must not change at all, and
-# what comes out, which must be the same page to the byte as the same program
-# rendered declaring no box.
+# device hold only the rows the box reaches. Three questions, put to every
+# device: what a program observes of the page, which the box must not change at
+# all; what comes out, which must be the same page to the byte as the same
+# program rendered declaring no box; and whether the two routes to a page -- the
+# device's own raster, and a band loop playing a record into it -- put out the
+# same bytes for the same box, which is asked of a page painting outside its own
+# box as well as one keeping to it.
 test('imaging-bbox',
   find_program('tests/run-imaging-bbox-test.sh'),
   args: [ xpost_exe, files('tests/imaging_bbox_test.ps') ],
