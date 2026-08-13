@@ -444,33 +444,39 @@ setglobal
     % second band -- and that is why this number has to be large enough
     % to cover the pages that ought not to be recorded.
     %
-    % Four million, which is what covers them. A page at the default
-    % resolution is one pixel to the point, so the largest ordinary sheet
-    % there is -- A3 at 842 by 1191 points -- costs 3.0 MB across three
-    % bytes a pixel, and every smaller sheet less: letter is 1.45 MB, A4
-    % 1.75 MB. All of them are held whole and record nothing. Above the
-    % sheets the bound is still a bound worth having: a 612 by 40000
-    % strip costs 73.4 MB held whole and gives back some 70 MB of it. At
-    % any ordinary page width four million bytes is some thousands of
-    % rows, which is a band deep enough that the marks reaching two of
-    % them are a small part of the marks there are.
+    % Four million, which is what covers them. The sheets are priced in
+    % bytes because that is what this number is, and two byte counts want
+    % no unit between them. A page at the default resolution is one pixel
+    % to the point, so at three bytes a pixel the largest ordinary sheet
+    % there is -- A3 at 842 by 1191 points -- costs 3,008,466 bytes, and
+    % every smaller sheet less: letter is 1,454,112 and A4 1,502,970. All
+    % three are under this, so all three are held whole and record
+    % nothing. Above the sheets the bound is still a bound worth having:
+    % a 612 by 40000 strip costs 73,440,000 bytes held whole and is held
+    % in 2,178 rows of that instead, giving back all but the budget's
+    % worth of it. How deep a band the budget buys follows
+    % the width a page is painted at rather than the sheet it is cut to
+    % -- 2,178 rows across a letter page at the default resolution, 1,568
+    % across the same page at 300 dpi in grey, 522 in colour -- and it is
+    % some hundreds of rows at the shallowest of those, which is a band
+    % deep enough that the marks reaching two of them are a small part of
+    % the marks there are.
     %
-    % Four round millions and not the power of two nearest them: nothing
-    % in this tree is 4194304 wide, and a number shaped like a boundary
-    % claims to be one. What this is, is a judgement about which pages
-    % are worth recording, taken against the sheets a page is cut to, and
-    % it is written so as to say so.
+    % Four round millions and not the power of two nearest them: a number
+    % shaped like a boundary claims to be one, and this is a judgement
+    % and not a boundary of anything.
     %
-    % It is a judgement about the raster and no more. What is compared
-    % against it is a page's own extent, so what a page's marks cost to
-    % hold and to play does not enter the comparison, however much of it
-    % there is. It was arrived at by weighing whole runs that put their
-    % pages out, so what those readings include is everything a page
-    % costs either way -- the raster, the record and the objects the
-    % replay builds per band -- and what this number does is put the
-    % boundary where those readings crossed for the sheets a page is cut
-    % to. A page whose drawing is far heavier than its sheets suggests
-    % crosses somewhere else, and nothing here is measuring that.
+    % The judgement is about the raster and no more, and it is a free
+    % parameter. It was put above the largest ordinary sheet's raster and
+    % rounded up, and that arithmetic is the whole of where the value
+    % came from: no run was weighed to arrive at it and nothing measured
+    % what a page costs either way. What is compared against it is a
+    % page's own extent, so what a page's marks cost to hold and to play
+    % enters neither the comparison nor the choosing, however much of it
+    % there is. Where the cost of holding a page whole and the cost of
+    % recording it actually cross is unmeasured, and a page whose drawing
+    % is far heavier than its sheets suggest is a page this number is not
+    % answering for.
     %
     % It is not a page-device parameter and must not become one. PLRM
     % Appendix G declares the band-device setup operators obsolete and
