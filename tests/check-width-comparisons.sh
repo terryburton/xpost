@@ -28,6 +28,17 @@ src=${1:?usage: check-width-comparisons.sh <srcroot> <buildroot>}
 build=${2:?usage: check-width-comparisons.sh <srcroot> <buildroot>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
+# The build directory is named for the header the build generated, which
+# is where the width the tree was configured for is written down. A
+# directory without one is not the build being checked: the unit still
+# compiles, because the header it wants is found by another route or not
+# needed at all, and the widths are then asked about a configuration
+# nobody built.
+guard_require_dir "$build" "the build directory"
+guard_require_file "$build/config.h" "the generated configuration header"
+
+guard_workdir
+trap 'rm -rf "$work"' EXIT
 
 # The compiler the tree was built with is the one that has already had
 # its say. What is wanted here is the other one.
@@ -59,8 +70,11 @@ fi
 # contract, which is where a page extent is bounded against what a
 # buffer can be indexed by.
 unit=$src/src/lib/xpost_dev_generic.c
-if [ ! -f "$unit" ]; then
-    echo "FAILURES: $unit is not there, so nothing was asked"
+guard_require_file "$unit" "the unit the widths are asked about"
+if ! grep -q 'xpost_dev_driver\.h' "$unit"; then
+    echo "FAILURES: $unit no longer includes the driver contract, which is"
+    echo "      where a page extent is bounded against what a buffer can be"
+    echo "      indexed by; compiling it asks nothing about either width"
     exit 1
 fi
 
@@ -68,6 +82,42 @@ flags="-fsyntax-only -I$src/src/lib -I$build -I$src
        -Werror=tautological-type-limit-compare
        -Werror=tautological-constant-out-of-range-compare
        -Werror=type-limits -Werror=sign-compare"
+
+# ---- the compiler is shown to be answering ----
+#
+# A clean compile says nothing on its own: an empty file compiles clean
+# under any flags, and so does a unit whose width-dependent bounds have
+# been deleted or whose flags this compiler does not know. So put the
+# compiler to a pair first -- one unit carrying the comparison this
+# exists to catch and one carrying none -- and go on only if it
+# separates them.
+cat > "$work/control-quiet.c" <<'CQ'
+int _xpost_width_control(unsigned int u);
+int _xpost_width_control(unsigned int u)
+{
+    return (int)(u + 1u);
+}
+CQ
+cat > "$work/control-loud.c" <<'CL'
+#include <limits.h>
+int _xpost_width_control(unsigned short v);
+int _xpost_width_control(unsigned short v)
+{
+    return v <= (unsigned short)USHRT_MAX;
+}
+CL
+if ! out=$("$alt" $flags "$work/control-quiet.c" 2>&1); then
+    echo "FAILURES: $alt refuses a unit that carries no such comparison, so a"
+    echo "      refusal below would say nothing about the tree:"
+    printf '%s\n' "$out" | head -5 | sed 's/^/      /'
+    exit 1
+fi
+if "$alt" $flags "$work/control-loud.c" >/dev/null 2>&1; then
+    echo "FAILURES: $alt accepts a bound the object width settles, so it is"
+    echo "      not being asked the question this check exists to put and"
+    echo "      the tree would pass however such a comparison is written"
+    exit 1
+fi
 
 fail=0
 asked=0
@@ -100,4 +150,4 @@ fi
 
 [ "$fail" -eq 0 ] || exit 1
 echo "width comparisons: $alt agrees in both widths"
-echo SUCCESS
+echo "SUCCESS ($asked width(s) asked of $alt, which refuses such a comparison)"
