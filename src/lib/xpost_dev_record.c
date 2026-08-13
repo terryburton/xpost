@@ -3240,7 +3240,11 @@ static const char *const _suiteslot[] =
 
 #define RECORD_SUITE_SLOTS ((int)(sizeof _suiteslot / sizeof *_suiteslot))
 
-static Xpost_Object _suite[2][RECORD_SUITE_SLOTS];
+/* The opcodes of the suite, and not the operator objects: what is kept
+   in C is a number the operator table is indexed by rather than an
+   object, so there is nothing here for the collector to be told about
+   (tests/check-c-held-objects.sh). */
+static unsigned int _suite[2][RECORD_SUITE_SLOTS];
 static int _suite_made[2];
 
 /* Fill a class's slots with the recorder's suite at this colour count,
@@ -3298,7 +3302,9 @@ static int _install_suite(Xpost_Context *ctx, Xpost_Object classdic, int ncomp)
 
             if (xpost_object_get_type(key) == invalidtype)
                 return VMerror;
-            ret = xpost_dict_put(ctx, classdic, key, _suite[suite][i]);
+            ret = xpost_dict_put(ctx, classdic, key,
+                                 xpost_operator_cons_opcode(
+                                     (int)_suite[suite][i]));
             if (ret)
                 return ret;
         }
@@ -3393,12 +3399,14 @@ static int _install_suite(Xpost_Context *ctx, Xpost_Object classdic, int ncomp)
     for (i = 0; i < RECORD_SUITE_SLOTS; i++)
     {
         Xpost_Object key = xpost_name_cons(ctx, _suiteslot[i]);
+        Xpost_Object slot;
 
         if (xpost_object_get_type(key) == invalidtype)
             return VMerror;
-        _suite[suite][i] = xpost_dict_get(ctx, classdic, key);
-        if (xpost_object_get_type(_suite[suite][i]) == invalidtype)
+        slot = xpost_dict_get(ctx, classdic, key);
+        if (xpost_object_get_type(slot) != operatortype)
             return undefined;
+        _suite[suite][i] = slot.mark_.padw;
     }
     _suite_made[suite] = 1;
     return 0;

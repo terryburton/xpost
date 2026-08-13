@@ -182,6 +182,7 @@ tests/record_glyph_test.ps \
 tests/record_excess_test.ps \
 tests/record_short_test.ps \
 tests/form_band_test.ps \
+tests/form_nest_test.ps \
 tests/record_span_test.ps \
 tests/record_replay_test.ps \
 tests/record_screen_test.ps \
@@ -324,6 +325,7 @@ tests/run-record-image-test.sh \
 tests/run-record-glyph-test.sh \
 tests/run-record-short-test.sh \
 tests/run-form-band-test.sh \
+tests/run-form-nest-test.sh \
 tests/run-record-span-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-record-screen-test.sh \
