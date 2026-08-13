@@ -170,7 +170,9 @@ probe=$work/probe.ps
 cat > "$probe" <<'EOF'
 (\nDECL ) print DEVICE /BandedPage known { (yes) }{ (no) } ifelse print (\n) print
 (\nMOVE ) print DEVICE /.moveband known { (yes) }{ (no) } ifelse print (\n) print
-(\nPLAY ) print DEVICE /.playpage known { (yes) }{ (no) } ifelse print (\n) print
+(\nPLAY ) print
+DEVICE /.bandbytes 1 put
+currentsystemparams /CurBandHeight get 0 gt { (yes) }{ (no) } ifelse print (\n) print
 quit
 EOF
 

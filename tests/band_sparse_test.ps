@@ -26,10 +26,33 @@
 /H 480 def
 /ROWBYTES W 3 mul def
 
-% Which run this is. The recording device is the one with a band loop in
-% it; a device that paints holds its page whole, which is the answer the
-% bands are held against.
-/banding DEVICE /.playpage known def
+% -  bands?  bool
+% Whether this run's page arrives a band at a time, asked of the
+% interpreter rather than read off the device.
+%
+% The smallest band there is is asked for and what became of the page is
+% read back through currentsystemparams: a device that paints holds its
+% page whole whatever budget is set on it, and a record holds it in
+% bands. What the budget was is put back, so asking changes nothing --
+% the cases below set their own.
+%
+% Asked rather than inferred from a method the device happens to carry,
+% because the presence of a band loop and the use of one are different
+% facts: a record whose budget buys every row of the page holds that
+% page whole, and only the answer can say so.
+/bands? {
+    2 dict begin
+    /b.had DEVICE /.bandbytes known def
+    /b.was b.had { DEVICE /.bandbytes get }{ 0 } ifelse def
+    DEVICE /.bandbytes 1 put
+    currentsystemparams /CurBandHeight get 0 gt
+    b.had { DEVICE /.bandbytes b.was put }
+          { DEVICE /.bandbytes undef } ifelse
+    end
+} bind def
+
+% Which run this is, and it is the run that answers.
+/banding bands? def
 /tag banding { (rec) }{ (dir) } ifelse def
 /ID 1183615869 internaldict def
 

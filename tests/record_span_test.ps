@@ -137,7 +137,31 @@ through its own fill are not the same pixels) assert
 % prices, so the budget is set from that price here and the number given
 % means rows. A device that is not a record has none of this and takes
 % the page as it always did.
-/banding DEVICE /.playpage known def
+% -  bands?  bool
+% Whether this run's page arrives a band at a time, asked of the
+% interpreter rather than read off the device.
+%
+% The smallest band there is is asked for and what became of the page is
+% read back through currentsystemparams: a device that paints holds its
+% page whole whatever budget is set on it, and a record holds it in
+% bands. What the budget was is put back, so asking changes nothing --
+% the cases below set their own.
+%
+% Asked rather than inferred from a method the device happens to carry,
+% because the presence of a band loop and the use of one are different
+% facts: a record whose budget buys every row of the page holds that
+% page whole, and only the answer can say so.
+/bands? {
+    2 dict begin
+    /b.had DEVICE /.bandbytes known def
+    /b.was b.had { DEVICE /.bandbytes get }{ 0 } ifelse def
+    DEVICE /.bandbytes 1 put
+    currentsystemparams /CurBandHeight get 0 gt
+    b.had { DEVICE /.bandbytes b.was put }
+          { DEVICE /.bandbytes undef } ifelse
+    end
+} bind def
+/banding bands? def
 /cls banding { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
 /rowbytes banding
     { 2 dict begin /width PW def cls /.rowcost get exec end exch pop }

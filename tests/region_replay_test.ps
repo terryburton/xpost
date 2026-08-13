@@ -205,10 +205,35 @@ paint
     } forall
 } bind def
 
-% A device that paints carries no record to ask about and this is
-% skipped; the wrapper holds the two runs to answering differently here
-% and identically on the page.
-DEVICE /.playpage known {
+% -  bands?  bool
+% Whether this run's page arrives a band at a time, asked of the
+% interpreter rather than read off the device.
+%
+% The smallest band there is is asked for and what became of the page is
+% read back through currentsystemparams: a device that paints holds its
+% page whole whatever budget is set on it, and a record holds it in
+% bands. What the budget was is put back, so asking changes nothing --
+% the cases below set their own.
+%
+% Asked rather than inferred from a method the device happens to carry,
+% because the presence of a band loop and the use of one are different
+% facts: a record whose budget buys every row of the page holds that
+% page whole, and only the answer can say so.
+/bands? {
+    2 dict begin
+    /b.had DEVICE /.bandbytes known def
+    /b.was b.had { DEVICE /.bandbytes get }{ 0 } ifelse def
+    DEVICE /.bandbytes 1 put
+    currentsystemparams /CurBandHeight get 0 gt
+    b.had { DEVICE /.bandbytes b.was put }
+          { DEVICE /.bandbytes undef } ifelse
+    end
+} bind def
+
+% A device that paints holds its page whole and has no bands to count,
+% so this is skipped; the wrapper holds the two runs to answering
+% differently here and identically on the page.
+bands? {
     (PAGE ) print PW 20 string cvs print ( ) print PH 20 string cvs print
     (\n) print
 

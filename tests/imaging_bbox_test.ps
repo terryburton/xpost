@@ -63,10 +63,18 @@
 /plainclip [ gsave newpath clippath pathbbox grestore ] def
 /plainmatrix [ matrix defaultmatrix aload pop ] def
 /plainorigin [ 0 0 transform ] def
-% A device holds the rows this class allocates when it kept the class's
-% own Create; a compiled sub-class replaces it and holds its page in one
-% block outside the virtual machine, which cannot be held in part.
-/holdsrows device? /.bandrows known def
+% Whether this run's page can be read a row at a time below. Two things
+% have to hold: the device keeps its rows where a program can reach
+% them -- a compiled sub-class holds its page in one block outside the
+% virtual machine and keeps none -- and it is holding the whole page
+% rather than a band of it, which is asked of the interpreter rather
+% than guessed from a key the device happens to carry.
+/holdsrows device? /ImgData known
+    currentsystemparams /CurBandHeight get 0 eq and def
+% Said out loud, because everything below is inside it: a roster on
+% which no device ever held rows would skip every one of those checks
+% and report exactly what a clean tree reports. The wrapper counts these.
+(\nHOLDSROWS ) print holdsrows { (yes) }{ (no) } ifelse print (\n) print
 /plainrows holdsrows { rowlengths }{ [ ] } ifelse def
 
 holdsrows {
