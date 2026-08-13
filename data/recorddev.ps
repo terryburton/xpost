@@ -78,11 +78,19 @@
 %
 % A device with no record behind it is handed its page and holds it, so
 % the rows it holds at once are the page.
+%
+% A record painting less of its page than the page -- the run an imaging
+% bounding box reaches, and nothing outside it (/.playrun below) -- has
+% that run and no more to hold, so the run bounds the reading here. The
+% page's own height does not, by the paragraph above: the callers hold
+% the reading to that themselves, and a budget past the page is how they
+% are told there are no bands.
 currentglobal true setglobal
 .xpostsys /.bandheight { % dict  .  rows
-4 dict begin
+5 dict begin
     /dev exch def
     /ph dev /height known { dev /height get }{ 0 } ifelse def
+    /held dev /.playrun known { dev /.playrun get 1 get }{ ph } ifelse def
     dev /.playclass known ph 0 gt and {
         /cls .privatedict dev /.playclass get get def
         % What one row of that raster costs, asked of the class that
@@ -105,8 +113,9 @@ currentglobal true setglobal
             rowbytes 0 gt and {
             dev /.bandbytes get rowbytes idiv
             dup 1 lt { pop 1 } if
-        }{ ph } ifelse
-    }{ ph } ifelse
+            held ph lt { held 2 copy gt { exch } if pop } if
+        }{ held } ifelse
+    }{ held } ifelse
 end } bind put
 
 % /target w h  .bandsatpage  bool
@@ -505,10 +514,54 @@ setglobal
         /ph rec /height get def
         /cls .privatedict rec /.playclass get get def
 
+        % The run of the page's rows this record paints.
+        %
+        % PLRM 6.2 has a program declare the page's imaging bounding box,
+        % asserting that it paints no marks outside it, and leaves a
+        % device free to render or to drop the marks that do fall
+        % outside. So the rows the box does not reach need not be painted
+        % at all: the page shows the ground over them, which is what a
+        % device holding its page directly shows over the rows it did not
+        % hold, and the loop below has that much less of the page to go
+        % over. A page declaring no box is the run of every row it has.
+        %
+        % The run is left for the device being made by the page device
+        % that is making it, and taken here, at the record's Create --
+        % which is the only moment it is there to take, the page device
+        % having put it about for one device and taken it away again
+        % (data/init.ps). The record paints its page long afterwards, so
+        % what it took has to be what it kept, and this is where it is
+        % kept. Taken, and not merely read: the next device made must not
+        % inherit a box that was not asked of it.
+        rec /.playrun known not {
+            /run graphicsdict /.rasterband 2 copy known
+                { 2 copy get 3 1 roll undef }{ pop pop null } ifelse def
+            /rtop 0 def
+            /rrows ph def
+            run type dup /arraytype eq exch /packedarraytype eq or
+                { run length 2 ge }{ false } ifelse {
+                /rtop run 0 get def
+                /rrows run 1 get def
+                % the run is held to the page, whatever named it
+                rtop 0 lt rtop ph ge or { /rtop 0 def } if
+                rrows 1 lt { /rrows 1 def } if
+                rtop rrows add ph gt { /rrows ph rtop sub def } if
+            } if
+            rec /.playrun [ rtop rrows ] put
+        } if
+        /imgtop rec /.playrun get 0 get def
+        /imgrows rec /.playrun get 1 get def
+
         % The rows this raster stands on at once, taken where every
-        % reader of it takes it (.bandheight above).
+        % reader of it takes it (.bandheight above), and the comparison
+        % that says whether the run arrives in more than one of them.
         /bandrows rec //.xpostsys /.bandheight get exec def
-        /banding bandrows ph lt def
+        /banding bandrows imgrows lt def
+        % ... and the rows it is built with, which is a band of the run
+        % where the run arrives in more than one and the whole run where
+        % it does not. A budget buying more rows than there are to hold
+        % buys the rows there are.
+        /rasterrows banding { bandrows }{ imgrows } ifelse def
 
         % The raster this record is carrying stands for the page where it
         % can stand for it at all: the extent it was built at and the
@@ -533,16 +586,16 @@ setglobal
             /page rec /.playdev get def
         }{
             rec //.xpostsys /.playdrop get exec
-            % The run of rows a band holds is left where a page device
-            % leaves it for the device it is about to build, and Create
-            % takes it from there; a page held whole names no run and
-            % Create holds every row. It is stated either way, so that
-            % the rows this raster holds are the record's answer and not
-            % whatever the caller happened to leave behind.
-            banding
-                { graphicsdict /.rasterband [ 0 bandrows ] put }
-                { graphicsdict /.rasterband undef }
-            ifelse
+            % The run of rows this raster holds is left where a page
+            % device leaves one for the device it is about to build, and
+            % Create takes it from there. It is the first band of the run
+            % the record paints, or the whole of that run where one band
+            % covers it; a page declaring no box and needing no band is
+            % then every row, which is what Create would have held
+            % without being told. Stated in every case, so that the rows
+            % this raster holds are the record's answer and not whatever
+            % the caller happened to leave behind.
+            graphicsdict /.rasterband [ imgtop rasterrows ] put
             /page pw ph cls dup /Create get exec def
             graphicsdict /.rasterband undef
             % named as soon as it exists, so that a device this record
@@ -564,7 +617,7 @@ setglobal
             % painted into rows that hold no pixel. Made here, it is made
             % before the job has opened anything, which is why the raster
             % itself is made here.
-            0 bandrows page dup /.moveband get exec
+            imgtop rasterrows page dup /.moveband get exec
         } ifelse
 
         % What the program asked of this record, on the device that
@@ -595,7 +648,7 @@ setglobal
         % How much of its page this record holds at once, which is how
         % much of it the raster above holds: a record has no rows of its
         % own, and what it is asked about them is asked about those.
-        rec /.bandrows bandrows put
+        rec /.bandrows rasterrows put
     } //.xpostsys /.indict get exec } bind
 
     % IMAGE  .playpage  -
@@ -633,10 +686,17 @@ setglobal
     % the whole of it, which is what such a device expects, and so is a
     % page the budget already covers -- a page put out in one band is a
     % page put out whole, and it is put out the way it always was.
+    %
+    % What the loop goes over is the run of the page's rows this record
+    % paints, which is the run an imaging bounding box reaches where the
+    % program declared one (.playmake above). The rows outside it are not
+    % stood on, nothing is played into them, and the page shows the
+    % ground over them -- which is the page a device holding the same box
+    % directly puts out, so declaring a box costs the same rows and the
+    % same marks whichever route the page took.
     /.playpage { % IMAGE  .  -
     16 dict {
         /rec exch def
-        /ph rec /height get def
 
         % The device this page is painted in, and the rows it stands on
         % at once: the raster this record is carrying where it can still
@@ -644,7 +704,9 @@ setglobal
         rec dup /.playmake get exec
         /page rec /.playdev get def
         /bandrows rec /.playrows get def
-        /banding bandrows ph lt def
+        /imgtop rec /.playrun get 0 get def
+        /imgrows rec /.playrun get 1 get def
+        /banding bandrows imgrows lt def
 
         rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
         % The colour the page was cleared to, carried onto the raster
@@ -674,10 +736,11 @@ setglobal
             % this page's and not the page before's, so a raster standing
             % again is given a fresh one.
             page /.bandpage 4 dict put
-            0 bandrows ph 1 sub {
+            imgtop bandrows imgtop imgrows add 1 sub {
                 /top exch def
-                % the last band is the rows the page has left
-                /rows bandrows ph top sub 2 copy gt { exch } if pop def
+                % the last band is the rows the run has left
+                /rows bandrows imgtop imgrows add top sub
+                    2 copy gt { exch } if pop def
                 /bot top rows add 1 sub def
                 % A band that comes to nothing but the ground is not
                 % painted at all: the raster is not moved onto its rows,
@@ -707,15 +770,15 @@ setglobal
             % finished and closes the file behind it
             0 0 page dup /.moveband get exec
         }{
-            % A page held whole is one run of rows, and a raster standing
-            % for the page before still carries that page's ink, so the
-            % run is moved onto for this page as a band's is: what a move
-            % does beyond choosing the rows is leave them as rows fresh
-            % from Create. The first page moves onto it too, where it has
-            % nothing to clear away, so that what a page costs is the
-            % same on the first as on the rest and a job's memory is flat
-            % rather than flat after one page.
-            0 ph page dup /.moveband get exec
+            % A page painted in one band is one run of rows, and a
+            % raster standing for the page before still carries that
+            % page's ink, so the run is moved onto for this page as a
+            % band's is: what a move does beyond choosing the rows is
+            % leave them as rows fresh from Create. The first page moves
+            % onto it too, where it has nothing to clear away, so that
+            % what a page costs is the same on the first as on the rest
+            % and a job's memory is flat rather than flat after one page.
+            imgtop imgrows page dup /.moveband get exec
             rec page //.internaldict /.replaypage get exec
         } ifelse
         page dup /Emit get exec
