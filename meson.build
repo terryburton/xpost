@@ -3757,6 +3757,28 @@ test('band-extent',
   suite: cost_fast,
   timeout: 120)
 
+# ... and which of the two routes a page is put out by, which is the one
+# thing about banding that no page and no meter answers. A page comes out
+# the same bytes whichever route it took, and what a record costs a small
+# page is small, so what says plainly that a page under the band budget
+# records nothing at all is the device the run ended up with: a record
+# names the class it plays into and carries the budget it divides that
+# class's rows by, and a device painting its own page carries neither.
+# Each device that bands by default is asked at the largest page the
+# budget covers and at one row more, with the boundary derived from the
+# device's own price for a row and the class's own budget rather than
+# written down; the two spellings that opt out are held on the far side
+# of it from where the weighing would have put them; and the page is
+# compared across the crossing. It breaks its own instrument both ways
+# and the gate itself both ways at the end, requiring itself to fail each
+# time.
+test('band-route',
+  find_program('tests/run-band-route-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or
 # its outline into the content a vector writer keeps, or its ink box to a
