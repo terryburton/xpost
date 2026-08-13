@@ -133,11 +133,12 @@ render() {
 field() { sed -n "s/^$2 //p" "$work/$1.log" 2>/dev/null; }
 
 # What a selection's page ends up on: how many colour values a mark
-# carries there, and whether the raster is rows the interpreter can see
-# or a buffer of the device's own. Asked of the run rather than worked
-# out here from the device's name, because the device a record's page
-# ends up on is the record's business and not the selection's spelling.
-# Sets ask_nc and ask_where.
+# carries there, what one row of its raster costs, and whether that
+# raster is rows the interpreter can see or a buffer of the device's
+# own. Asked of the run rather than worked out here from the device's
+# name, because the device a record's page ends up on is the record's
+# business and not the selection's spelling.
+# Sets ask_nc, ask_row and ask_where.
 askdev() {  # $1 selection
     mkdir -p "$work/ask"
     a_line=$( cd "$work/ask" && "$xpost" -q $ns -d "$1" -o /dev/null \
@@ -145,8 +146,11 @@ askdev() {  # $1 selection
     a_line=$(printf '%s\n' "$a_line" | sed -n 's/^DEV //p' | head -1)
     [ -n "${a_line:-}" ] || return 1
     ask_nc=$(printf '%s\n' "$a_line" | awk '{print $1}')
+    ask_row=$(printf '%s\n' "$a_line" | awk '{print $2}')
     ask_where=$(printf '%s\n' "$a_line" | awk '{print $5}')
     case ${ask_where:-} in rows|buffer) ;; *) return 1 ;; esac
+    case ${ask_row:-x} in ''|*[!0-9]*) return 1 ;; esac
+    [ "$ask_row" -gt 0 ] || return 1
     return 0
 }
 
@@ -874,7 +878,13 @@ for d in $present; do
                  "nothing here would weigh it"
             continue
         fi
-        rowpix=$((MEMW * ask_nc))
+        # What a row of this raster costs, taken from the class's own
+        # statement of it rather than from the colour space: the two
+        # agree only where a component is a byte and the row holds
+        # nothing else, and the meter below is being asked whether it
+        # can see a page of this device -- so the number it is held
+        # against has to be this device's row and not a stand-in for it.
+        rowpix=$ask_row
         case $ask_where in
             rows)   meter=vm ;;
             buffer) meter=rss ;;
