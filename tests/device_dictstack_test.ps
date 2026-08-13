@@ -105,6 +105,16 @@
     /.writepage  false
 ] def
 
+% One body of this shape is not here, and is named rather than left to be
+% assumed covered: the class-to-instance copy every class stores under
+% /.copydict opens the copy to write the dimensions into it. It is
+% reached from here -- it is a method of every device below -- but not
+% driven to the failure inside that open, which wants a class carrying a
+% width and no height, and the operand shapes above carry nulls and the
+% device and can build no such thing. What holds that body is the
+% dictionary stack read across it directly, and reaching it here wants a
+% third operand shape built out of a class rather than out of nulls.
+%
 % The methods with no failure path of their own, named rather than
 % counted: each is a body that cannot raise whatever it is handed, so no
 % trial provokes anything and none is expected to. A method that acquires
