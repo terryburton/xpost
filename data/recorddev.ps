@@ -164,31 +164,35 @@ end } bind put
 % run asked for is made directly, and the marks of such a page are
 % written down nowhere.
 %
-% Asked wherever a device is made from a selection -- the start device
-% (data/device.ps) and setpagedevice (data/init.ps) -- so which route a
-% page takes follows the page in force rather than the page the run
-% opened at. A page-device request that resizes the page is weighed
-% again, and lands on the same side of the boundary as a run that opened
-% at that size.
+% Asked once, where this run's device is made from its selection
+% (.startdevice, data/device.ps), at the page the run was started at.
+% The device that answer installs is the one every page-device request
+% afterwards is made from, so a run stays on the route it was weighed
+% onto for as long as it lasts.
+%
+% It is not asked again at setpagedevice, and that is the point rather
+% than an omission. PLRM Appendix G bars a page description from
+% choosing how its marks are held, and a program able to move itself
+% from one route to the other by resizing its page would be choosing
+% exactly that; it would also be handed a device of another class part
+% way through a job, which a program that has already looked at the one
+% it had cannot survive. What it costs is a run whose pages grow far
+% past the page it opened at, which holds them whole -- and such a run
+% says so, -d record:pgm asking for a record by name and getting one at
+% any page.
 %
 % Only for the selection this run made, and only where the run did not
-% name this class itself: -d record:pgm is a run asking for a record and
-% gets one at any page, and -d pgm:whole is a run refusing one and gets
-% none at any page. What is recognised is either end of the route the
-% selection was given -- this class, or the device it was given for --
-% because a page weighed one way installs the one and a page weighed the
-% other installs the other, and the request after it names whichever is
-% running.
+% name this class itself: -d record:pgm records at any page, and
+% -d pgm:whole records at none.
 .xpostsys /.devicefor { % /name w h  .  /name'
 5 dict begin
     /ph exch def
     /pw exch def
     /nm exch def
     /asked /StartDeviceAsked //.xpostsys /.hostvalue get exec def
-    /StartDevice //.xpostsys /.hostvalue get exec /record eq
+    nm /record eq
     asked type /nametype eq and
-    asked /record ne and
-    nm /record eq nm asked eq or and {
+    asked /record ne and {
         asked pw ph //.xpostsys /.bandsatpage get exec
             { /record }{ asked } ifelse
     }{ nm } ifelse

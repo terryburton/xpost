@@ -426,9 +426,9 @@ currentglobal true setglobal
         % band at a time is made through the recording class, and a page
         % the band budget already covers is made on the device the run
         % asked for instead, recording nothing (.devicefor,
-        % data/recorddev.ps). What is made is what is named below, so a
-        % page-device request afterwards is weighed from the device that
-        % is running.
+        % data/recorddev.ps). What is made is what is named below, so
+        % every page-device request afterwards is made from the route
+        % this run took rather than from the selection that reached it.
         /StartPageSize //.xpostsys /.hostvalue get exec aload pop
         //.xpostsys /.devicefor get exec
         /StartPageSize //.xpostsys /.hostvalue get exec aload pop

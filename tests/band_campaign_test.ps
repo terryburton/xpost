@@ -519,6 +519,20 @@ banding {
     /rp.file exch store
     /rp.b exch store
     /rp.h exch store
+    % The budget goes on the class a record is made from as well as on
+    % the device after it is made, because a record builds the raster it
+    % plays into when it is made and the budget is what sizes it. A
+    % budget arriving afterwards moves the band the loop takes and the
+    % raster built at the class's budget is dropped and replaced, which
+    % is right about every page and wrong about the memory: what a run
+    % held at its peak is what it held, and this is the one place that
+    % quantity is read. The class is the specialised copy the driver
+    % leaves for the maker to build from, a build without the recording
+    % driver leaving none.
+    /recordDEVICE where {
+        pop recordDEVICE /.bandbytes
+            rp.b 0 gt { rp.b rowbytes mul }{ 1000000000 } ifelse put
+    } if
     << /PageSize [W rp.h] /OutputFile rp.file >> setpagedevice
     % the device this page goes to, named while it is the current one:
     % the Emit wrapped above reads the record through it, and by then
