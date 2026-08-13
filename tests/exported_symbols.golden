@@ -385,6 +385,7 @@ xpost_record_mask_count
 xpost_record_mask_get
 xpost_record_new
 xpost_record_next
+xpost_record_depth
 xpost_record_place
 xpost_record_place_count
 xpost_record_place_get

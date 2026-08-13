@@ -876,6 +876,11 @@ size_t xpost_record_place_count(const Xpost_Record *rec)
     return rec ? _nsub(rec) : 0;
 }
 
+int xpost_record_depth(const Xpost_Record *rec)
+{
+    return rec ? rec->depth : 0;
+}
+
 Xpost_Record *xpost_record_place_get(const Xpost_Record *rec, size_t i)
 {
     /* a record short of a mark gives none of what it holds back, on the

@@ -460,6 +460,16 @@ int xpost_record_place(Xpost_Record *rec, Xpost_Record *sub,
 size_t xpost_record_place_count(const Xpost_Record *rec);
 
 /**
+ * @brief How many drawings deep a record goes, counting itself.
+ *
+ * One for a record placing none, and one more than the deepest drawing
+ * it places. What it is for is the question a caller about to place it
+ * asks: a drawing this deep placed in another goes one deeper, and a
+ * replay descends a bounded number of levels.
+ */
+int xpost_record_depth(const Xpost_Record *rec);
+
+/**
  * @brief The drawing at @p i, or NULL where the record places none there.
  *
  * What comes back is held by the record and is good until the record
