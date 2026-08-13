@@ -1,0 +1,541 @@
+# What a change reaches, and what answers for it.
+#
+# The suite is selected two ways. The cost profiles in meson.build
+# select on what a test costs and say nothing about what it is for, so
+# `full` runs every test the tree carries whatever was edited. That is
+# the right selection for a verdict and the wrong one for an edit: a
+# paragraph reworded in doc/ is re-verified against the banding
+# campaign, the corpus harnesses and three hundred other tests that
+# cannot see it.
+#
+# This table is the other axis. It says which part of the tree each area
+# of the suite answers for, so a change is gated against the tests that
+# could notice it. tests/gate.sh reads it in both directions -- a path
+# to the area it belongs to, an area to the tests that guard it -- and
+# there is one table rather than two lists, so the two directions cannot
+# come to disagree.
+#
+# ---- the form
+#
+# Four kinds of line, each naming its area first:
+#
+#   <area> path  <glob>   a part of the tree this area answers for
+#   <area> test  <glob>   a test that answers for this area
+#   <area> width <policy> what the wide-object build runs for it
+#   <area> scope all      a change here is gated on the whole suite
+#
+# In a glob `*` matches within one path element and `**` matches across
+# them, so `data/*.ps` is the PostScript beside init and `src/**` is
+# everything under src. Blank lines and lines opening with # are
+# nothing.
+#
+# ---- how a path finds its area
+#
+# The path lines are ORDERED and the FIRST that matches wins, so every
+# file belongs to exactly one area and the areas are written most
+# specific first. The last rules in the table are catch-alls naming
+# `everything`, which is what makes the table safe to leave incomplete:
+# a source file added tomorrow and not classified here falls through to
+# a catch-all and gates against the whole suite at both widths, which is
+# what this tree did before the table existed. So the table can cost a
+# developer a saving it might have had. It cannot cost anyone a test.
+#
+# That is the direction to keep it in. Where a file plausibly belongs to
+# two areas it is classified as the broader of them, and where its reach
+# is not obvious it is left to the catch-all.
+#
+# ---- how an area finds its tests
+#
+# The test lines are a UNION and are not ordered: a test may guard
+# several areas and runs when a change reaches any of them. A glob
+# matches a whole test name as the build lists it.
+#
+# Every test the build defines must be named by some area, and
+# tests/check-gate-map.sh holds the table to that. It is what stops a
+# test becoming unreachable: a test in no area is one no proportionate
+# selection ever runs, and the whole point of selecting is undone by one
+# that nothing selects. The guard holds the other side too -- a path
+# rule matching no file and a test rule matching no test are both stale,
+# and a stale rule is one that quietly stopped selecting what it names.
+#
+# `scope all` is how an area says the whole suite answers for it, and it
+# is kept apart from the test lines for that reason. An area could say
+# the same thing by naming every test with a bare `*`, and then every
+# test in the tree would be named by it and the rule above would be
+# satisfied by an area that classifies nothing. Three areas carry
+# `scope all`: the object and its memory, the build description, and the
+# catch-all. Two of them go on naming their own tests as well, because
+# what they select and what answers for them are different questions.
+#
+# ---- what the wide build runs
+#
+# The tree builds at two object widths. The narrow one is primary and
+# both are equally important; neither is dropped here. What this settles
+# is HOW MUCH of the wide build one change is gated against, which is a
+# different question from whether the wide build is gated at all.
+#
+#   width full      the change reaches the layer that decides the width,
+#                   so the wide build runs the whole of what was
+#                   selected: the object, the memory it lives in, and
+#                   the build's own configuration.
+#
+#   width witness   everything else. The wide build runs the tests that
+#                   read the width directly -- the `width` area below --
+#                   whatever the change was. They are cheap, they run on
+#                   every gate, and they are a tripwire rather than a
+#                   verdict: they do not stand in for a wide run of the
+#                   change's own tests, which is what the batch gate is
+#                   for.
+#
+# The batch gate, `tests/gate.sh --batch`, is both widths over
+# everything, and is what a branch is held to before it goes anywhere.
+# The per-change gate is for the edit-run-edit loop in between.
+
+# ---- record: the recorded page, its spans, and the band devices
+record path src/lib/xpost_record.*
+record path src/lib/xpost_dev_record.*
+record path src/lib/xpost_span.*
+record path data/recorddev.ps
+record test band-*
+record test record
+record test record-*
+record test region-replay
+record test reloc-fused
+record test sparse-rows
+record test check-clip-writer
+record test check-page-output
+record test check-device-skeleton
+record width witness
+
+# ---- device: what a page is painted into and written out as
+device path src/lib/xpost_dev_*
+device path src/lib/xpost_dsc*
+device path data/device.ps
+device path data/bboxdev.ps
+device path data/nulldev.ps
+device path data/dscwrite.ps
+device path data/pdfwrite.ps
+device path data/svgwrite.ps
+device path data/pbmimage.ps
+device path data/pgmimage.ps
+device path data/ppmimage.ps
+device path data/tiffimage.ps
+device test bbox-device
+device test blit-*
+device test check-buffer-family
+device test check-device-*
+device test check-page-output
+device test check-test-devices
+device test dev-*
+device test device-*
+device test devices
+device test dsc-parse
+device test fill-span
+device test golden-render
+device test job-page
+device test jpeg-refusal
+device test multipage
+device test one-bytebuf
+device test output-buffer-release
+device test oversize-page
+device test page-*
+device test pdf-*
+device test pngalpha-device
+device test raster-*
+device test render-*
+device test setpagedevice-failure
+device test startup-device
+device test startup-page
+device test stencil-mask-size
+device test svg-*
+device test vecbase
+device test vecout-gc
+device width witness
+
+# ---- font: glyphs, the cache they live in, and the files they come from
+font path src/lib/xpost_font.*
+font path src/lib/xpost_op_font.*
+font path data/font.ps
+font path data/cid.ps
+font test cid-show
+font test execform-cache
+font test font-*
+font test glyph-page
+font test op-fontcache
+font test op-glyphcontext
+font test outline-font
+font test record-glyph
+font width witness
+
+# ---- filter: files, the filters over them, and the scanner's reading
+filter path src/lib/xpost_file.*
+filter path src/lib/xpost_op_file.*
+filter path src/lib/xpost_op_token.*
+filter path data/readstring.ps
+filter test binary-tokens
+filter test dct-truncated
+filter test edit-stream-close
+filter test encoder-units
+filter test error-binary
+filter test file-*
+filter test filter-*
+filter test fopen-funnel
+filter test numstring-decode
+filter test op-bytesavailable
+filter test op-closed-read
+filter test op-file-*
+filter test op-filenameforall
+filter test op-proc-filter
+filter test op-readline
+filter test op-readstring
+filter test op-string-filter
+filter test op-subfiledecode
+filter test scanner-eof
+filter test statementedit
+filter test stream-exec
+filter width witness
+
+# ---- graphics: paths, paint, colour, clipping and images
+graphics path src/lib/xpost_matrix.*
+graphics path src/lib/xpost_op_matrix.*
+graphics path src/lib/xpost_op_path.*
+graphics path data/graphics.ps
+graphics path data/paint.ps
+graphics path data/path.ps
+graphics path data/clip.ps
+graphics path data/color.ps
+graphics path data/gstate.ps
+graphics path data/image.ps
+graphics path data/pattern.ps
+graphics path data/shade.ps
+graphics path data/testdraw.ps
+graphics test *-matrix
+graphics test bbox-device
+graphics test cacheparams-range
+graphics test clip-*
+graphics test colorspace-matrix
+graphics test colour-*
+graphics test empty-clip
+graphics test fillpoly-arity
+graphics test fill-span
+graphics test gc-clip-region
+graphics test golden-render
+graphics test graphics-load-stop
+graphics test graphics-regression
+graphics test gstate-*
+graphics test halftone-*
+graphics test imaging-bbox
+graphics test mask-cache-range
+graphics test matrix-backup
+graphics test nographics
+graphics test op-gstate-types
+graphics test op-initgraphics
+graphics test op-path
+graphics test op-rect
+graphics test op-showstate
+graphics test path-*
+graphics test pattern-phase
+graphics test render-differ
+graphics test save-restore-ctm
+graphics test save-restore-matrix
+graphics test show-*
+graphics test stencil-mask-size
+graphics test thin-stroke
+graphics test trapping
+graphics width witness
+
+# ---- vm: the object, the memory it lives in, and everything reached
+# through them. This is the layer the object width is a property of, so
+# a change here is gated against the whole suite at both widths.
+vm path src/lib/xpost_object.*
+vm path src/lib/xpost_memory.*
+vm path src/lib/xpost_garbage*
+vm path src/lib/xpost_free.*
+vm path src/lib/xpost_save.*
+vm path src/lib/xpost_op_save.*
+vm path src/lib/xpost_stack.*
+vm path src/lib/xpost_dict.*
+vm path src/lib/xpost_string.*
+vm path src/lib/xpost_array.*
+vm path src/lib/xpost_name.*
+vm path src/lib/xpost_context.*
+vm path src/lib/xpost_op_context.*
+vm path src/lib/xpost_interpreter.*
+vm path src/lib/xpost_vm_image.*
+vm path src/lib/xpost_handle.*
+vm path src/lib/xpost_private.h
+vm path src/lib/xpost_bytes.h
+vm path src/lib/xpost_strbuf.h
+vm path src/lib/xpost.h
+vm path data/init.ps
+vm scope all
+vm test api-definitions
+vm test c-held-objects
+vm test check-vm-address
+vm test composite-limit
+vm test context-*
+vm test dict-capacity*
+vm test entity-limit
+vm test filenameforall-large
+vm test forall-large
+vm test free-*
+vm test gc-*
+vm test global-vm-invariant
+vm test job-snapshot-balance
+vm test large-object
+vm test memory-bounds
+vm test operator-install-refusal
+vm test reloc-*
+vm test run-input-close
+vm test run-invalid-context
+vm test save-*
+vm test sealed-dict-restore
+vm test stack-*
+vm test startup-surface*
+vm test strbuf
+vm test string-bounds
+vm test subinterval-retention
+vm test vm
+vm test vm-image*
+vm test wrapped-save
+vm test wrapsave-*
+vm width full
+
+# ---- language: the operators, the errors they raise, the names they
+# live under, and the programs that install them
+language path src/lib/xpost_op_*
+language path src/lib/xpost_operator.*
+language path src/lib/xpost_oplib.*
+language path src/lib/xpost_error.*
+language path data/err.ps
+language path data/prepr.ps
+language path data/qsort.ps
+language path data/resource.ps
+language path data/test.ps
+language test access
+language test array-swap-range
+language test bind-packed
+language test callback-reentry
+language test callout-bracket
+language test check-error-names
+language test check-fused-ops
+language test check-op-references
+language test check-shadowed-operators
+language test check-wrapped-bind
+language test counttomark
+language test dict-*
+language test error-*
+language test free-*
+language test fused-equivalence
+language test internal-debug-ops
+language test interpreter
+language test interrupt
+language test isolation
+language test lockdown
+language test loop-exit
+language test name-*
+language test namespace
+language test op-*
+language test opsigs-writer
+language test privatedict-install
+language test private-refs
+language test resource-*
+language test roll
+language test sandbox*
+language test semantics
+language test stack-*
+language test tamper-dispatch
+language test token-sign
+language test wrapped-bind
+language test wrapped-save
+language width witness
+
+# ---- host: what the interpreter asks of the platform it runs on, and
+# the program a user starts
+host path src/lib/xpost_compat*
+host path src/lib/xpost_log.*
+host path src/lib/xpost_main.*
+host path src/bin/**
+host test check-env-traps
+host test check-exported-symbols
+host test check-vm-host-state
+host test clean-startup
+host test cli-options
+host test clock
+host test host-settings
+host test run-status
+host test single-instance
+host width witness
+
+# ---- guards: the checks over the tree's own shape, and the helper they
+# all read a path through. A change to that helper reaches every one of
+# them, which is why it is named here rather than left to the file a
+# single test is built from.
+guards path doc/GATING.md
+guards path tests/guard-paths.sh
+guards path tests/check-guard-paths.sh
+guards path tests/gate-map
+guards path tests/gate.sh
+guards path tests/check-gate-map.sh
+guards path tests/run-profile.sh
+guards test check-*
+guards test guard-paths
+guards test c-held-objects
+guards test must-check
+guards test name-registers
+guards test narrow-cursors
+guards test object-brace-init
+guards test dict-homes
+guards test filter-base
+guards test one-bytebuf
+guards test opsigs-writer
+guards test op-references
+guards test private-refs
+guards test vecbase
+guards test host-settings
+guards test show-clip-routes
+guards test raster-classes-derivation
+guards test render-classes
+guards test encoder-units
+guards test callout-bracket
+guards test fopen-funnel
+guards test devices
+guards width witness
+
+# ---- corpus: the real programs fetched into tests/corpus, and the
+# harnesses that run them
+corpus path tests/corpus/**
+corpus test corpus-*
+corpus test vendor-*
+corpus width witness
+
+# ---- suite: a test's own source
+#
+# A change to a test selects that test, and the selection comes from the
+# registration rather than from here: tests/gate.sh reads meson.build
+# for the tests a changed file is registered as, and falls back to the
+# file's own name where the registration names it through a variable.
+# What is named here is the other thing such a change can break, which
+# is the rule its registration has to satisfy.
+suite path tests/**
+suite test check-test-cost
+suite test check-test-quality
+suite test check-test-timeouts
+suite width witness
+
+# ---- build: the description of what is compiled, and how
+build path meson.build
+build path meson_options.txt
+build path **/meson.build
+build path **/Makefile.mk
+build path Makefile.am
+build path configure.ac
+build path m4/**
+build path tools/**
+build scope all
+build width full
+
+# ---- doc: prose, and nothing a program reads
+#
+# No test reads any of these files. What a doc change can still break is
+# the distribution lists, which name every file the tarball carries, so
+# a page added to doc/ and left out of them yields a tarball missing it.
+doc path doc/*.md
+doc path doc/COMPAT
+doc path doc/INTERNALS
+doc path doc/MANUAL
+doc path doc/NEWINTERNALS
+doc path doc/ROOTS
+doc path doc/*.dox
+doc path doc/Doxyfile
+doc path *.md
+doc path AUTHORS
+doc path COMPLIANCE
+doc path ChangeLog
+doc path NEWS
+doc path README
+doc path data/DICTIONARIES.md
+doc test check-dist-lists
+doc width witness
+
+# ---- width: what reads the object width directly
+#
+# The `width` area names no path. It is not a part of the tree; it is
+# what the wide build runs on a gate whose change does not reach the
+# layer that decides the width.
+#
+# Two things put a test here, and the first is a measurement rather than
+# a judgement. The whole suite was run at both widths and the two
+# records compared test by test: three hundred and ten tests, of which
+# twenty-one say something different in the two builds. Four of those
+# differ in a temporary file's name or in a millisecond count and are
+# not here. Three more are the banding tests, which differ in a
+# byte-per-row figure that moves with the object size; they cost between
+# half a minute and six, so they are left to the batch gate and named
+# here in prose rather than run on every edit -- which is the one place
+# this list knowingly trades coverage for time, and it is written down
+# so that the trade is visible: band-writer, band-replay-cost and
+# band-campaign.
+#
+# The second is a test whose subject IS a width question even where both
+# builds answer it the same. The personality probe asks all three faces
+# of the width outright and prints nothing while they agree, so no
+# comparison of outputs would ever find it; the composite bounds, the
+# integer horizon and the real's significand are the same case. A test
+# that asks the question and gets the same answer twice is exactly the
+# test that would notice one build starting to answer differently.
+#
+# It is written down because repeating the derivation costs two builds
+# and two full runs at both widths, which is the cost this table exists
+# to stop paying on every edit.
+width test build-personality
+width test composite-limit
+width test counttomark
+width test dict-capacity
+width test dict-capacity-field
+width test dict-grow
+width test entity-limit
+width test filenameforall-large
+width test forall-large
+width test function-matrix
+width test fused-equivalence
+width test gc-large-dict
+width test gc-large-dict-pressure
+width test large-object
+width test mask-cache-range
+width test name-length
+width test op-cvi
+width test op-cvs
+width test op-intoverflow
+width test op-math
+width test op-radix
+width test op-resource
+width test op-vm-param
+width test page-extent
+width test refusal-report
+width test startup-page
+width test vm-image
+width width witness
+
+# ---- always: what every gate runs whatever was touched
+#
+# The guards over how a test is registered. They are seconds apiece and
+# each is a rule about the suite's own shape rather than about what the
+# interpreter computes, so any change that adds, moves or re-costs a
+# test can break one.
+always test check-gate-map
+always test check-test-cost
+always test check-test-quality
+always test check-test-timeouts
+always width witness
+
+# ---- everything: what a path falls through to
+#
+# The catch-alls, last so that every rule above wins over them, and wide
+# enough that no file in the tree misses them. A path reaching here
+# selects the whole suite at both widths, which is what this tree ran
+# before the table and is therefore the safe answer to a file nobody has
+# classified.
+everything path **
+everything scope all
+everything width full

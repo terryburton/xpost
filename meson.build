@@ -3452,7 +3452,7 @@ test('band-format',
   find_program('tests/run-band-format-test.sh'),
   args: [ xpost_exe, files('tests/band_format_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # ... and the same loop driving the devices that keep their raster in a
@@ -3783,7 +3783,7 @@ test('band-route',
   find_program('tests/run-band-route-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 600)
 
 # ... and which route each way of spelling a selection asks for, which is
@@ -3808,7 +3808,7 @@ test('band-select',
   find_program('tests/run-band-select-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # The same question of a job whose marks are glyphs. Text does not reach the
@@ -3830,7 +3830,7 @@ test('glyph-page',
   find_program('tests/run-glyph-page-test.sh'),
   args: [ xpost_exe ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
+  suite: cost_slow,
   timeout: 300)
 
 # Where a number stops and a name starts. A sign and a decimal point begin
