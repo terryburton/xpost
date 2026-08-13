@@ -168,5 +168,5 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "SUCCESS ($(wc -l < "$work/maker") devices, one roster in four files)"
+echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files)"
 exit 0

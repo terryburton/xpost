@@ -218,7 +218,7 @@ if [ ! -s "$work/calls" ]; then
     echo "      the shape the guard reads for has changed; fix the guard"
     exit 1
 fi
-total=$(wc -l < "$work/calls")
+total=$(wc -l < "$work/calls" | tr -d ' ')
 if [ "$total" -lt 100 ]; then
     echo "FAILURES: only $total test registrations found in meson.build;"
     echo "      the scan is reading a fraction of the file"

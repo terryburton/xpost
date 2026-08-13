@@ -281,7 +281,7 @@ if ! grep -q 'return xpost_vm_ptr(' "$header"; then
     echo "      the header has two spellings of its own"
     exit 1
 fi
-nstack=$(grep -c 'xpost_stack_at(' "$lib"/*.c "$lib"/*.h | grep -v ':0$' | wc -l)
+nstack=$(grep -c 'xpost_stack_at(' "$lib"/*.c "$lib"/*.h | grep -v ':0$' | grep -c .)
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a VM address is obtained or derived off the one path"
