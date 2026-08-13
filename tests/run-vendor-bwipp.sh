@@ -234,9 +234,15 @@ mark { /Generic /Category findresource pop } stopped
 { cleartomark } ifelse
 PSEOF
 
+# The shim names a device before whatever the suite passes. A run with
+# no device named takes the build's, which is whatever the libraries
+# found allowed and on one of them is a window on the screen the run was
+# started from -- a hundred and thirty of them, on a suite that renders
+# nothing. A suite naming its own device names it after this one, and
+# the name it gives is the one used.
 cat > "$root/bin/xpost" <<XPEOF
 #!/bin/sh
-exec "$xpost" --no-sandbox "\$@"
+exec "$xpost" --no-sandbox -d null "\$@"
 XPEOF
 chmod +x "$root/bin/xpost" || exit 1
 

@@ -356,7 +356,12 @@ hinc2="$hwork/resources-two"
 probe_run() {                   # <output file> <extra args...>
     o=$1
     shift
-    XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox "$@" \
+    # The device is named before the caller's arguments rather than left
+    # to the build: what a build with no option named makes is whatever
+    # its libraries allowed, and on one of them that is a window on the
+    # screen the run was started from. A caller naming its own device
+    # names it after this one and is the device used.
+    XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null "$@" \
         "$hwork/probe.ps" </dev/null 2>/dev/null | tr -d "$cr" > "$o"
 }
 

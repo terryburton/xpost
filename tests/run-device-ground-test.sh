@@ -88,18 +88,20 @@ NO_GROUND='null bbox pdfwrite svgwrite pngalpha'
 # making the roster shorter.
 built=$("$xpost" -q $ns -d '' /dev/null </dev/null 2>&1) || :
 
-# The window device needs a display as well as a build. One is used if
-# the environment has it and conjured if it does not; where neither is
-# possible the device is named as one that could not be asked.
+# The window device needs a display as well as a build, and the display
+# it gets is one conjured for it. A display the run was started with
+# belongs to whoever is sitting at it: a window opened there is a window
+# on somebody's screen, taking the focus and the pointer for as long as
+# the test runs, and it is a different display on every machine, so what
+# the test sees depends on who ran it. Where no display can be conjured
+# the device is named as one that could not be asked.
 xcb_run=
 xcb_why='it is not built into this interpreter'
 if printf '%s\n' "$built" | grep -qx '[[:space:]]*xcb'; then
-    if [ -n "${DISPLAY:-}" ]; then
-        xcb_run=direct
-    elif command -v xvfb-run >/dev/null 2>&1; then
+    if command -v xvfb-run >/dev/null 2>&1; then
         xcb_run=xvfb
     else
-        xcb_why='there is no display for it to open a window on'
+        xcb_why='there is no virtual display to open a window on'
     fi
 fi
 
@@ -123,8 +125,6 @@ ask() {
     case $ag_dev in
         xcb)
             case $xcb_run in
-                direct) ag_out=$("$xpost" -q $ns -d xcb "$script" \
-                                 </dev/null 2>&1) ;;
                 xvfb)   ag_out=$(xvfb-run -a "$xpost" -q $ns -d xcb "$script" \
                                  </dev/null 2>&1) ;;
                 *)      echo "UNASKED $ag_dev: $xcb_why"; return 2 ;;

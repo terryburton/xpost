@@ -68,7 +68,12 @@ fail=0
 run_xpost() {   # $1 what to call it in a complaint, $2... arguments
     rx_who=$1
     shift
-    rx_out=$("$xpost" -q "$@" </dev/null 2>&1)
+    # The device is named here rather than left to the build: what a
+    # build with no option named makes is whatever its libraries allowed,
+    # and on one of them that is a window on the screen the run was
+    # started from. Every caller below names the device it wants, after
+    # this, and the name it gives is the one used.
+    rx_out=$("$xpost" -q -d null "$@" </dev/null 2>&1)
     verdict_run "$?" "$rx_out" "$rx_who" || return 1
     return 0
 }

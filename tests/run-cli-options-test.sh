@@ -40,7 +40,12 @@ note() { echo "FAIL: $1"; fail=1; }
 render() {  # $1 what to call it in a complaint, $2... the arguments
     r_who=$1
     shift
-    r_out=$("$xpost" -q --no-sandbox "$@" "$work/blank.ps" </dev/null 2>&1)
+    # The device is named before the caller's arguments rather than left
+    # to the build: what a build with no option named makes is whatever
+    # its libraries allowed, which on one machine is a window on the
+    # screen the run was started from. A caller naming its own device is
+    # naming it after this one and is the device used.
+    r_out=$("$xpost" -q --no-sandbox -d null "$@" "$work/blank.ps" </dev/null 2>&1)
     verdict_run "$?" "$r_out" "$r_who" || fail=1
 }
 
@@ -197,7 +202,7 @@ run_to_end() {
     e_prog=$2
     shift 2
     got=$(printf '(STDIN-EXECUTED) print flush\n' \
-          | "$xpost" -q --no-sandbox "$@" "$e_prog" 2>&1)
+          | "$xpost" -q --no-sandbox -d null "$@" "$e_prog" 2>&1)
     verdict_run "$?" "$got" "$e_who" || fail=1
     # the program itself has to have run, or the two assertions that
     # follow it are satisfied by an interpreter that did nothing at all
