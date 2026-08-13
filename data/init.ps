@@ -1271,6 +1271,17 @@ setglobal
         % pixel rows before it reaches a device, and rows cannot be
         % carried a fraction of a pixel and stay the rows the shape
         % covers there; marks can (.execformcapture above).
+        %
+        % Nothing else of the graphics state is in the key, and a
+        % description that reads any of it is a description this paints
+        % at whatever it read the first time. PLRM 4.7 asks a form to be
+        % self-contained -- to depend only on what its own dictionary
+        % holds, and to paint the same thing every time it is called --
+        % and this is where that is relied on. A description setting its
+        % own colour, line width and font, which is what self-contained
+        % comes to, is unaffected; one inheriting the colour in force is
+        % painted in the colour that was in force when it was first
+        % used.
         /cm matrix currentmatrix def
         /key fd /.formid get 20 string cvs
         [ cm 0 get cm 1 get cm 2 get cm 3 get ] {
