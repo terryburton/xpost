@@ -120,6 +120,9 @@ static Xpost_Object namewidth;
 static Xpost_Object nameheight;
 static Xpost_Object namedotcopydict;
 static Xpost_Object namedotplaypage;
+static Xpost_Object namedotplaymake;
+static Xpost_Object namedotplaydev;
+static Xpost_Object namedotplayrows;
 static Xpost_Object namedotground;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object namedotncomp;
@@ -2280,6 +2283,7 @@ static int _create_cont(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     Xpost_Object ncomp;
+    Xpost_Object make;
     PrivateData private;
     int width, height;
     int ret;
@@ -2337,6 +2341,23 @@ static int _create_cont(Xpost_Context *ctx,
     }
 
     xpost_stack_push(ctx->lo, ctx->os, devdic);
+
+    /* The device this record paints through, built now and not at the
+       first page. The record wraps it for the whole of its own life --
+       it builds it, nothing else names it, and it gives it up when it is
+       itself retired -- and a device built at the first page instead
+       would be built inside whatever the job had opened by then; virtual
+       memory goes back to what a save found, and a raster does not
+       (data/recorddev.ps). What runs a procedure is the interpreter, so
+       it is left on the execution stack rather than called, over a copy
+       of the instance the procedure takes and the one this Create
+       answers with. */
+    make = xpost_dict_get(ctx, devdic, namedotplaymake);
+    if (!xpost_object_is_exe(make))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, devdic);
+    if (!xpost_stack_push(ctx->lo, ctx->es, make))
+        return execstackoverflow;
     return 0;
 }
 
@@ -2377,11 +2398,50 @@ static int _emit(Xpost_Context *ctx,
     return 0;
 }
 
+/* Give up what this device holds: the record, and the device the record
+   is painted through.
+
+   The record builds that device, is the only thing that names it, and so
+   is the only thing that can retire it. What it holds is a raster --
+   memory outside the interpreter's own, which the collector neither
+   reaches nor gives back -- so a record retired without retiring it
+   leaves that raster behind for the life of the process.
+
+   Released from here rather than by running the class's /Destroy through
+   the interpreter, because this method is called from places no
+   procedure can run: restore is one operator and not an interpreter loop
+   (xpost_dev_generic.c). The operator run is the one recorded with the
+   painter's own state when that state was issued, which is what a page
+   device is retired by everywhere else and is not the slot the program
+   can write to. A painter whose page is virtual memory the collector
+   already owns carries no such record and needs none.
+
+   The painter is unnamed before it is released, so a second Destroy
+   finds nothing rather than a device that has begun to give up its
+   memory. */
 static int _destroy(Xpost_Context *ctx,
                     Xpost_Object devdic)
 {
     Xpost_Object privatestr;
+    Xpost_Object play;
     PrivateData private;
+
+    play = xpost_dict_get(ctx, devdic, namedotplaydev);
+    if (xpost_object_get_type(play) == dicttype)
+    {
+        unsigned int release = xpost_handle_device_release(ctx, play);
+
+        (void)xpost_dict_undef(ctx, devdic, namedotplaydev);
+        (void)xpost_dict_undef(ctx, devdic, namedotplayrows);
+        if (release && xpost_stack_push(ctx->lo, ctx->os, play))
+        {
+            int res = xpost_operator_exec(ctx, release);
+
+            if (res)
+                XPOST_LOG_ERR("%s retiring the device a record paints"
+                              " through", errorname[res]);
+        }
+    }
 
     if (!_private_get(ctx, devdic, &privatestr, &private))
         return undefined;
@@ -2597,6 +2657,41 @@ static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
             ret = xpost_dict_put(ctx, classdic, sp,
                                  xpost_dict_get(ctx, cls, sp));
     }
+    /* What the target says about how a page of its is held, said here as
+       well. These are answers about the raster this record's page is
+       painted in, and a record has no raster of its own to answer them
+       from: whether a page may arrive a band at a time, what one row of
+       it costs, whether the row shown where the device holds no pixel is
+       the same row down the page, and which process colour models the
+       device offers. A record answering any of them for itself would be
+       answering about a device it is standing in front of, and would
+       answer differently from the device that actually holds the page.
+
+       Taken only where the target states one. Each has a default that
+       holds where a class is silent -- no bands, no price, one ground
+       row, no model but the native one -- and a record standing in for a
+       silent class must be silent in the same way. */
+    if (!ret)
+    {
+        static const char *const facts[] =
+        {
+            "BandedPage", ".rowcost", ".groundvaries", ".colormodels"
+        };
+        size_t i;
+
+        for (i = 0; !ret && i < sizeof facts / sizeof *facts; i++)
+        {
+            Xpost_Object key = xpost_name_cons(ctx, facts[i]);
+
+            if (xpost_object_get_type(key) == invalidtype)
+                return VMerror;
+            if (xpost_dict_known_key(ctx,
+                                     xpost_context_select_memory(ctx, cls),
+                                     cls, key))
+                ret = xpost_dict_put(ctx, classdic, key,
+                                     xpost_dict_get(ctx, cls, key));
+        }
+    }
     if (!ret)
         ret = xpost_dict_put(ctx, classdic, namedotplayclass, clsname);
     return ret;
@@ -2761,6 +2856,12 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     if (xpost_object_get_type((namedotcopydict = xpost_name_cons(ctx, ".copydict"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotplaypage = xpost_name_cons(ctx, ".playpage"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplaymake = xpost_name_cons(ctx, ".playmake"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplaydev = xpost_name_cons(ctx, ".playdev"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotplayrows = xpost_name_cons(ctx, ".playrows"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
         return VMerror;

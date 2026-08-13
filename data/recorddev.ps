@@ -17,12 +17,19 @@
 %
 % The class declares exactly the five marking methods it records --
 % PutPix, BlendPix, DrawLine, FillRect and FillPoly -- and no other
-% optional method. FillPath would bring it a whole path and the clip
-% shape beside it, DrawRect an outlined rectangle, Erase an instruction
-% to reset its page: each is a call the record has no entry for, and
-% declining all three has every one of them resolved, above the device,
-% into the five it does hold. tests/check-device-skeleton.sh holds this
-% dictionary to that.
+% optional marking method. FillPath would bring it a whole path and the
+% clip shape beside it, DrawRect an outlined rectangle, Erase an
+% instruction to reset its page: each is a call the record has no entry
+% for, and declining all three has every one of them resolved, above the
+% device, into the five it does hold. tests/check-device-skeleton.sh
+% holds this dictionary to that.
+%
+% Flush is the one method here that takes no mark. It asks a device to
+% put out what it is holding, and what holds this record's pixels is the
+% device below it, so the call belongs there: a record answering it for
+% itself would answer for a device it is standing in front of. Declaring
+% it takes no call away from the record, which is what the rule above is
+% about.
 %
 % A sampled image is the one thing the five are the wrong shape for, and
 % it does not arrive as a device method either. The image painter
@@ -101,6 +108,73 @@ currentglobal true setglobal
         }{ ph } ifelse
     }{ ph } ifelse
 end } bind put
+
+% dict  .playdrop  -
+% Give up the device a record paints through.
+%
+% The record makes that device and is the only thing that names it, so a
+% record that stops naming one has left a device nothing will ever
+% retire: what such a device holds is a raster, which is not virtual
+% memory (PLRM 3.7.3) and which the collector therefore neither reaches
+% nor gives back.
+%
+% It is unnamed before it is retired, so a second attempt finds nothing
+% rather than a device that has begun to give up its memory. A record
+% that has painted through nothing yet has nothing to give up.
+.xpostsys /.playdrop { % dict  .  -
+1 dict {
+    /pd.rec exch def
+    pd.rec /.playdev known {
+        pd.rec /.playdev get
+        pd.rec /.playdev undef
+        pd.rec /.playrows undef
+        dup /Destroy 2 copy known { get exec }{ pop pop pop } ifelse
+    } if
+} //.xpostsys /.indict get exec } bind put
+
+% rec page  .playparams  -
+% The page-device parameters a program asked of a record, put onto the
+% device that paints for it.
+%
+% A page-device request settles what a device is to do, and its keys are
+% stored on the device the request made (data/init.ps). Where that device
+% is a record, the device that paints is one the record makes for itself
+% out of a class, so a key the program asked for reached the record and
+% stopped there and the painter knew only what its class said.
+%
+% Which names are the request's is read from the request rather than
+% listed: what currentpagedevice holds is what was asked for, and what is
+% carried across is what the record actually has under those names. So a
+% key the page-device machinery keeps to itself is not carried, and
+% neither is anything of the record's own that no request named.
+%
+% They are carried before the completion runs, so that a key the
+% completion reads -- the process colour model is one -- is there when it
+% looks. A key a device reads as it is created is one no route delivers:
+% a page-device request builds its device before it stores the request's
+% keys on it, so a device the program selected directly does not see one
+% either.
+%
+% /Private is the one name skipped. It is the handle a device's own state
+% is reached through, issued to the instance holding that state, and a
+% request naming it would otherwise hand the painter the record's.
+.xpostsys /.playparams { % rec page  .  -
+2 dict {
+    /pp.page exch def
+    /pp.rec exch def
+    /.pagedevice where {
+        pop .pagedevice {
+            pop
+            dup /Private eq
+                { pop }
+                { dup pp.rec exch known
+                    { dup pp.rec exch get pp.page 3 1 roll put }
+                    { pop }
+                  ifelse }
+            ifelse
+        } forall
+    } if
+} //.xpostsys /.indict get exec } bind put
 setglobal
 
 /.xpost_RECORD <<
@@ -224,13 +298,38 @@ setglobal
     % is no way to write it back.
     /.bandbytes 1048576
 
-    % IMAGE  .playpage  -
-    % The page a record holds, painted.
+    % IMAGE  Flush  -
+    % Put out what the device is holding, without ending its page.
     %
-    % Reached from the driver's Emit, which is where a device puts out
-    % its page. The record holds marks and no pixels, so the page is
-    % made by building a device that does hold pixels, playing every
-    % mark into it, and putting out its page instead.
+    % A record holds marks and no pixels, so it is holding nothing this
+    % call is about; what holds this page's pixels is the device it is
+    % painted in, and the call belongs there. A record that has painted
+    % through nothing yet, and one whose painter takes no such call, has
+    % nothing to do.
+    /Flush { % IMAGE  .  -
+    {
+        currentdict /.playdev known {
+            .playdev dup /Flush 2 copy known
+                { get exec }{ pop pop pop } ifelse
+        } if
+    } //.xpostsys /.indict get exec } bind
+
+    % IMAGE  .playmake  -
+    % The device this record's page is painted in: built, or the one
+    % built before kept, and carrying what this record was asked of.
+    %
+    % Built when the record is made rather than when its first page is
+    % put out. A record wraps this device for the whole of its own life:
+    % it builds it, it is the only thing that names it, and it gives it
+    % up when it is itself retired. A device built at the first page
+    % instead would be built inside whatever the job had opened by then,
+    % and a save and restore around each page is the ordinary way to
+    % write one (data/device.ps). Virtual memory goes back to what the
+    % save found, so a device named from the record inside a save is a
+    % device the record stops naming at the restore -- holding a raster,
+    % which is not virtual memory (PLRM 3.7.3) and which nothing would
+    % give back. Built with the record, it is named before any of that,
+    % and one raster serves the job.
     %
     % The device built is the class the run selected, named on this one
     % under /.playclass: a mark was written down as it arrived, so what
@@ -240,6 +339,101 @@ setglobal
     % compiled fills it ends up with are the ones the same page painted
     % directly would have had, and what it puts out is therefore the
     % same bytes.
+    %
+    % One raster for the job's pages, and not one for each of them. A
+    % raster comes out of the half of virtual memory nothing here gives
+    % back, so a raster per page leaves every page's rows behind and a
+    % job of n pages ends holding n pages. So the raster is kept on the
+    % record that built it, under /.playdev, and the page after stands on
+    % it -- starting each page as a raster fresh from Create would, which
+    % is what .moveband does for a run of rows and is asked of it in
+    % .playpage below for the same reason. It is built again only where
+    % it could not stand for the page in hand: a page of another size, or
+    % a band grid of another height, is a different raster and not this
+    % one moved, and the raster it replaces is given up before it is
+    % replaced.
+    %
+    % So the page this device can put out is the page a raster can hold,
+    % and a band raster holds a taller page than a whole one does. The
+    % record itself is priced by the marks and takes any page there is;
+    % what refuses a page past what a raster holds is the raster built
+    % here.
+    /.playmake { % IMAGE  .  -
+    16 dict {
+        /rec exch def
+        /pw rec /width get def
+        /ph rec /height get def
+        /cls .privatedict rec /.playclass get get def
+
+        % The rows this raster stands on at once, taken where every
+        % reader of it takes it (.bandheight above).
+        /bandrows rec //.xpostsys /.bandheight get exec def
+        /banding bandrows ph lt def
+
+        % The raster this record is carrying stands for the page where it
+        % can stand for it at all: the extent it was built at and the
+        % band grid it was built for both have to be this page's, since a
+        % raster built for another page holds the wrong rows and there is
+        % no moving it onto rows it never took.
+        /kept rec /.playdev known {
+            rec /.playdev get /dimensions get aload pop
+            ph eq exch pw eq and
+            rec /.playrows get bandrows eq and
+        }{ false } ifelse def
+
+        kept {
+            /page rec /.playdev get def
+        }{
+            rec //.xpostsys /.playdrop get exec
+            % The run of rows a band holds is left where a page device
+            % leaves it for the device it is about to build, and Create
+            % takes it from there; a page held whole names no run and
+            % Create holds every row. It is stated either way, so that
+            % the rows this raster holds are the record's answer and not
+            % whatever the caller happened to leave behind.
+            banding
+                { graphicsdict /.rasterband [ 0 bandrows ] put }
+                { graphicsdict /.rasterband undef }
+            ifelse
+            /page pw ph cls dup /Create get exec def
+            graphicsdict /.rasterband undef
+            % named as soon as it exists, so that a device this record
+            % built is a device this record gives up however the rest of
+            % this ends
+            rec /.playdev page put
+            rec /.playrows bandrows put
+        } ifelse
+
+        % What the program asked of this record, on the device that
+        % answers for it, and before the completion below reads any of
+        % it.
+        rec page //.xpostsys /.playparams get exec
+
+        % and the pages the announcing semantics have counted, which they
+        % count on the device they were asked of (data/device.ps) -- this
+        % record, and not the device it paints through
+        rec /pagenumber known
+            { page /pagenumber rec /pagenumber get put } if
+
+        kept not {
+            % the record's marks are in device space already, so the scale a
+            % completion carries into the default matrix is 1:1 here
+            page 1 1 .privatedict /.completedevice get exec
+        } if
+
+        % How much of its page this record holds at once, which is how
+        % much of it the raster above holds: a record has no rows of its
+        % own, and what it is asked about them is asked about those.
+        rec /.bandrows bandrows put
+    } //.xpostsys /.indict get exec } bind
+
+    % IMAGE  .playpage  -
+    % The page a record holds, painted.
+    %
+    % Reached from the driver's Emit, which is where a device puts out
+    % its page. The record holds marks and no pixels, so the page is
+    % made by playing every mark into the device it paints through
+    % (.playmake above) and putting out that device's page instead.
     %
     % The name this page goes to has already been settled, on this
     % device, by .transmitpage; it is carried across rather than settled
@@ -268,66 +462,19 @@ setglobal
     % the whole of it, which is what such a device expects, and so is a
     % page the budget already covers -- a page put out in one band is a
     % page put out whole, and it is put out the way it always was.
-    %
-    % So the page this device can put out is the page a raster can hold,
-    % and a band raster holds a taller page than a whole one does. The
-    % record itself is priced by the marks and takes any page there is,
-    % which is why this device starts on a page no raster device would:
-    % what refuses such a page is the raster built here, and the refusal
-    % arrives when the page is put out rather than when the device is
-    % made.
-    %
-    % One raster for the job's pages, and not one for each of them. The
-    % same argument that makes the band loop move one raster from run to
-    % run makes this device keep one from page to page: a raster comes
-    % out of the half of virtual memory nothing here gives back, so a
-    % raster per page leaves every page's rows behind and a job of n
-    % pages ends holding n pages. So the raster is kept on the device
-    % that made it, under /.playdev, and the page after stands on it --
-    % starting each page as a raster fresh from Create would, which is
-    % what .moveband does for a run of rows and is asked of it here for
-    % the same reason. It is made again only where it could not stand for
-    % the page in hand: a page of another size, or a band grid of another
-    % height, is a different raster and not this one moved.
     /.playpage { % IMAGE  .  -
     16 dict {
         /rec exch def
-        /pw rec /width get def
         /ph rec /height get def
-        /cls .privatedict rec /.playclass get get def
 
-        % The rows this raster stands on at once, taken where every
-        % reader of it takes it (.bandheight above).
-        /bandrows rec //.xpostsys /.bandheight get exec def
-
-        % The raster the page is painted in, holding a band of it or the
-        % whole of it. The run of rows a band holds is left where a page
-        % device leaves it for the device it is about to make, and Create
-        % takes it from there; a page held whole names no run and Create
-        % holds every row.
-        %
-        % The raster this device kept from the page before stands for
-        % this page where it can stand for it at all: the extent it was
-        % made at and the band grid it was made for both have to be this
-        % page's, since a raster made for another page holds the wrong
-        % rows and there is no moving it onto rows it never took.
+        % The device this page is painted in, and the rows it stands on
+        % at once: the raster this record is carrying where it can still
+        % stand for the page, and a new one where it cannot.
+        rec dup /.playmake get exec
+        /page rec /.playdev get def
+        /bandrows rec /.playrows get def
         /banding bandrows ph lt def
-        /kept rec /.playdev known {
-            rec /.playdev get /dimensions get aload pop
-            ph eq exch pw eq and
-            rec /.playrows get bandrows eq and
-        }{ false } ifelse def
-        kept {
-            /page rec /.playdev get def
-        }{
-            banding { graphicsdict /.rasterband [ 0 bandrows ] put } if
-            /page pw ph cls dup /Create get exec def
-            % the record's marks are in device space already, so the scale a
-            % completion carries into the default matrix is 1:1 here
-            page 1 1 .privatedict /.completedevice get exec
-            rec /.playdev page put
-            rec /.playrows bandrows put
-        } ifelse
+
         rec /.outputfile known { page /.outputfile rec /.outputfile get put } if
         % The colour the page was cleared to, carried onto the raster
         % that paints it. That colour is what a device shows over a row
