@@ -372,6 +372,7 @@ xpost_record_free
 xpost_record_get
 xpost_record_glyph
 xpost_record_image
+xpost_record_hold
 xpost_record_image_count
 xpost_record_image_get
 xpost_record_image_rows
@@ -384,6 +385,9 @@ xpost_record_mask_count
 xpost_record_mask_get
 xpost_record_new
 xpost_record_next
+xpost_record_place
+xpost_record_place_count
+xpost_record_place_get
 xpost_record_release
 xpost_record_replay
 xpost_record_screen

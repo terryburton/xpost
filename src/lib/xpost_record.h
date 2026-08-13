@@ -42,6 +42,18 @@
  * text then costs is its distinct glyphs, once each, and a placement
  * apiece -- which is the drawing, rather than the ink.
  *
+ * A record may also hold a placement of another record. A drawing made
+ * once and put in several places is then held once and named from each
+ * of them, and what a page pays for the second placement is the
+ * placement. The drawing named is an ordinary record and may name
+ * further drawings itself, so a drawing built out of drawings costs
+ * each of them once however deep it sits and however often it is
+ * placed. A placement is resolved when it is played rather than when it
+ * is written down: expanding one into the marks it stands for would
+ * write those marks once per placement, which is the cost the entry
+ * exists to avoid, and would multiply where placements enclose each
+ * other.
+ *
  * Every mark says where it reaches in y when it is written down, and a
  * replay is given a row range, so a replay visits the marks that reach
  * into that range and steps over the rest. Playing a page of n marks
@@ -100,6 +112,16 @@
     index into the masks the record holds and the place to put it, and
     the mask is one copy however many placements name it.
 
+    A placement of another record is the ninth and is a mark: a drawing
+    the record holds, put at an offset. It is here because a drawing put
+    in several places is one drawing, and writing its marks down once per
+    place would cost the places rather than the drawing -- which is the
+    same argument the mask makes for a glyph, over whole drawings instead
+    of over one character's pixels. It carries which of the record's
+    drawings it names and where that drawing's own origin lands, and the
+    drawing is one copy however many placements name it, at whatever
+    depth: a placed drawing may itself hold placements.
+
     A screen is the seventh and is not a mark at all: it paints nothing,
     and says instead what the marks after it are to be painted under. A
     device rendering a grey as a pattern of pixels picks each pixel by
@@ -128,8 +150,22 @@ typedef enum
     XPOST_RECORD_FILLPOLY, /**< n, then n pairs of x y */
     XPOST_RECORD_IMAGE,    /**< which of the record's images */
     XPOST_RECORD_SCREEN,   /**< which of the record's screens */
-    XPOST_RECORD_GLYPH     /**< which of the record's masks, then x y */
+    XPOST_RECORD_GLYPH,    /**< which of the record's masks, then x y */
+    XPOST_RECORD_PLACE     /**< which of the record's drawings, then dx dy */
 } Xpost_Record_Kind;
+
+/** How many drawings a placement may stand inside.
+ *
+ * A drawing holding a placement of a drawing that holds one is nested,
+ * and a replay descends a level per placement it meets. The descent is
+ * bounded so that a drawing nested past this is refused where the
+ * placement is written down, with the run still in a position to hear
+ * about it, rather than followed until something runs out. Twelve is
+ * past any nesting a drawing built out of drawings has -- a page of a
+ * figure of a figure of a figure is four -- and short of any depth a
+ * bounded descent could not be made at.
+ */
+#define XPOST_RECORD_NEST 12
 
 typedef struct _Xpost_Record Xpost_Record;
 
@@ -140,7 +176,14 @@ typedef struct _Xpost_Record Xpost_Record;
 Xpost_Record *xpost_record_new(int ncomp);
 
 /**
- * @brief Give up a record and everything it holds.
+ * @brief Give up a reference to a record, and, with the last of them,
+ *        the record and everything it holds.
+ *
+ * A record is held by whoever made it and by every record that places
+ * it (xpost_record_place), so what is given up here is one holder's
+ * claim; the record goes when the last of them does. A drawing whose
+ * maker has finished with it therefore stands while a page still places
+ * it, and the page's own boundary is what gives it up.
  */
 void xpost_record_free(Xpost_Record *rec);
 
@@ -371,6 +414,71 @@ const unsigned char *xpost_record_mask_get(const Xpost_Record *rec, size_t i,
                                            int *w, int *h);
 
 /**
+ * @brief Write down a placement of another record, at @p dx @p dy.
+ *
+ * @param[in] rec the record the placement is written into
+ * @param[in] sub the drawing placed, which @p rec holds a reference to
+ *                from here
+ * @param[in] dx how far along the drawing's own coordinates are carried,
+ *               @p dy how far down
+ * @return 1, or 0 where the placement could not be held or would place a
+ *         record inside itself, on the same terms as a mark: the record
+ *         is then short of a mark and every replay of it refuses.
+ *
+ * The drawing is named and not copied. One drawing placed twenty-five
+ * times is one drawing and twenty-five placements, and a drawing built
+ * out of placements of further drawings costs each of those once as
+ * well -- which is what makes a page of a form inside a form inside a
+ * form cost the three forms rather than their product. What a placement
+ * costs is the mark.
+ *
+ * A reference is taken and given up again where the placement is (at a
+ * page boundary, and where the record is given up or released), so the
+ * drawing outlives whatever else was holding it: a caller may write a
+ * placement down and drop the drawing it named, and the page still
+ * plays.
+ *
+ * The offset is carried in the coordinates the marks were made in and is
+ * added to each of them as it is played, so a drawing made at one place
+ * is played at another without being written down again. It is not
+ * rounded to a pixel: which pixels a coordinate names is the painting
+ * device's answer, taken when the mark is played, so a placement lands
+ * at the sub-pixel phase it was placed at rather than at the phase the
+ * drawing was made at.
+ *
+ * A record may not be placed inside itself, directly or through the
+ * drawings it holds, since playing such a placement would never end.
+ * The whole of what a placement can reach is walked here to say so,
+ * which costs the drawings held rather than the marks in them.
+ */
+int xpost_record_place(Xpost_Record *rec, Xpost_Record *sub,
+                       real dx, real dy);
+
+/**
+ * @brief How many drawings a record places.
+ */
+size_t xpost_record_place_count(const Xpost_Record *rec);
+
+/**
+ * @brief The drawing at @p i, or NULL where the record places none there.
+ *
+ * What comes back is held by the record and is good until the record
+ * gives its placements up.
+ */
+Xpost_Record *xpost_record_place_get(const Xpost_Record *rec, size_t i);
+
+/**
+ * @brief Take a reference to a record, which xpost_record_free gives up.
+ *
+ * @return @p rec
+ *
+ * A record is held by whoever is going to play it, and a drawing placed
+ * in another record is held by that record as well. What the last holder
+ * gives up is given up.
+ */
+Xpost_Record *xpost_record_hold(Xpost_Record *rec);
+
+/**
  * @brief Write down the screen the marks after this are made under.
  *
  * @param[in] rec the record
@@ -530,6 +638,13 @@ size_t xpost_record_count(const Xpost_Record *rec);
  *   weighing a whole banded emission against a whole page raster is
  *   weighing that too, and will not find it here.
  *
+ *   The drawings a record places. A placed drawing is a record of its
+ *   own, held by every record placing it and by whoever made it, and
+ *   what it costs is what it answers here: charging it to each of its
+ *   placements would count one drawing as many times as the page shows
+ *   it, which is the arithmetic a placement exists to avoid. What is
+ *   counted here is the placements themselves.
+ *
  *   The pages a run leaves behind when it outgrows a block. Growing
  *   copies into a new block and gives up the old one, whose pages stay
  *   resident until the allocator hands them out again -- which is
@@ -623,6 +738,9 @@ int xpost_record_last(const Xpost_Record *rec, real lo, real hi, size_t *at);
  * its colour values are zero: what colours it is in its samples. A
  * glyph's are which of the record's masks it names and where that mask
  * is put, and its colour values are the colour the mask is painted in.
+ * A placement's are which of the record's drawings it names and how far
+ * that drawing's coordinates are carried, and its colour values are
+ * zero: what colours it is the marks of the drawing it names.
  *
  * What comes back points into the record and is good until the next
  * mark is written down. A record short of a mark it was given gives
@@ -682,6 +800,13 @@ typedef int (*Xpost_Record_Player)(void *data, Xpost_Record_Kind kind,
  * A mark that reaches the range at all is played whole. A shape has to
  * be converted whole to be right about any part of it, so the range
  * chooses which marks are played and never trims one.
+ *
+ * A placement is handed over as the mark it is and is not descended
+ * into: what it stands for is another record's marks, at an offset, and
+ * a player wanting them plays that record. A caller that plays a page
+ * into a device descends instead, so that a drawing placed at several
+ * depths is played wherever it was placed
+ * (src/lib/xpost_dev_record.c).
  */
 int xpost_record_replay(const Xpost_Record *rec, real lo, real hi,
                         Xpost_Record_Player player, void *data);
