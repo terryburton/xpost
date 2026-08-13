@@ -75,7 +75,9 @@
 % The vector classes add the methods a device that keeps its marks
 % rather than its pixels is asked for -- a whole path to fill or stroke,
 % a clip shape it could not reduce to a rectangle, a sampled image -- and
-% the writers that put a page or a document out.
+% the writers that put a page or a document out. The recording class adds
+% the page it paints at Emit by playing the marks it wrote down into a
+% device that does paint.
 /roster [
     /Create      true
     /Destroy     true
@@ -91,6 +93,7 @@
     /PaintImage  true
     /Ground      true
     /Emit        true
+    /.playpage   true
     /.moveband   true
     /.registersep true
     /.emitpage   true
@@ -108,20 +111,21 @@
 % a failure path is caught by the far side of the same check.
 /undrivable [ /Destroy ] def
 
-% The classes held: every class the interpreter can make from the private
-% dictionary. Each is held twice -- as the class's own suite, and as an
-% instance finished the way the device machinery finishes one, which
-% replaces some of the suite with the compiled rasterisers. A page is
-% marked through the second, so the second is the one a program's error
-% arrives in.
+% The classes held: every class the interpreter can make. Each is held
+% twice -- as the class's own suite, and as an instance finished the way
+% the device machinery finishes one, which replaces some of the suite
+% with the compiled rasterisers. A page is marked through the second, so
+% the second is the one a program's error arrives in.
 %
-% The recording class is not here. Its maker is an operator of its own
-% rather than an entry in the private dictionary this reaches makers
-% through, and its marking methods, Create, GetPix and Destroy are
-% compiled operators that open no dictionary; what it does have of this
-% shape is /Ground and the page it plays at Emit, which are written in
-% PostScript and are owed the same close. Reaching it wants a second way
-% of finding a maker, and it belongs here once it has one.
+% A class is reached through its maker, and a maker is found wherever it
+% lives: most are procedures a boot file left in the private dictionary,
+% and the recording class's is an operator its driver installs where a
+% program can see it. That class holds its page as marks and paints it by
+% playing them into a device that does paint, so its marking methods,
+% Create, GetPix and Destroy are compiled operators that open no
+% dictionary; what it has of the shape measured here is /Ground and the
+% page it plays at Emit, which are written in PostScript and owe the same
+% close as any other body.
 /makers [
     /newPGMIMAGEdevice (pgm)
     /newPPMIMAGEdevice (ppm)
@@ -131,7 +135,33 @@
     /newPDFWRITEdevice (pdfwrite)
     /newSVGWRITEdevice (svgwrite)
     /newDSCWRITEdevice (dscwrite)
+    /newrecorddevice (record)
 ] def
+
+% The drivers a run brings in on demand. A class a boot file defined is in
+% the private dictionary from the start; one a C driver defines is not
+% there, and neither is its maker, until the driver has been loaded. Each
+% loader named here is run before the walk, so that every maker above is
+% there to be found by the time one is looked for.
+/loaders [ /loadrecorddevice ] def
+loaders {
+    dup where { exch get exec }{
+        (FAIL: ) print 64 string cvs print
+        ( loads a driver this interpreter does not have; a class below cannot be made\n) print
+        /failcount failcount 1 add store
+    } ifelse
+} forall
+
+% /maker  findmaker  proc|null
+% The maker, wherever it lives. The private dictionary is looked in by
+% name because it is not on the dictionary stack; everything else is
+% found the way a program would find it.
+/findmaker {
+    dup .privatedict exch known
+        { .privatedict exch get }
+        { dup where { exch get }{ pop null } ifelse }
+    ifelse
+} def
 
 % A name this interpreter cannot open for writing, so that the emission
 % methods are driven to a failure rather than made to write a page. It
@@ -148,13 +178,16 @@
 % has not been half written to.
 /make {
     /mk.finish exch def
-    .privatedict 1 index known not {
-        (FAIL: ) print dup 64 string cvs print
-        ( is not in the private dictionary; the makers have moved\n) print
+    dup findmaker
+    dup null eq {
+        pop
+        (FAIL: ) print 64 string cvs print
+        ( is a maker no dictionary answers to; the makers have moved\n) print
         /failcount failcount 1 add store
-        pop null
+        null
     }{
-        .privatedict exch get 20 10 3 -1 roll exec
+        exch pop
+        20 10 3 -1 roll exec
         dup /.outputfile unopenable put
         mk.finish { dup 1 1 .privatedict /.completedevice get exec } if
     } ifelse
