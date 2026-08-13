@@ -157,7 +157,9 @@ content 0 8 getinterval (1 0 0 rg) eq
 (Spot) (cs) (fn) acc regsep /spot exch def
 spot 0 eq (a separation registers under the first index) require
 acc sepcnt 1 eq (the accumulator counts the separation) require
-(Spot) acc findsep { 0 eq }{ pop false } ifelse
+% findsep answers an index and true, or false alone, so the arm for a
+% name it did not find has nothing to drop.
+(Spot) acc findsep { 0 eq }{ false } ifelse
   (the separation is found again by name) require
 0 acc sepget /fn exch def /cs exch def
 cs (cs) eq fn (fn) eq and (the separation gives its bodies back) require

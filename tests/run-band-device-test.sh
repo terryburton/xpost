@@ -146,11 +146,16 @@ for f in $formats; do
         cmp -s "$w" "$d" ||
             echo "FAILURES: the $f page of $h rows recorded and played back"
     done > "$work/wholeout"
+    nwhole=$(field "rec-$f" WHOLE | grep -c . || true)
     if [ -s "$work/wholeout" ]; then
         cat "$work/wholeout"
         fail=1
+    elif [ "${nwhole:-0}" -lt 1 ]; then
+        echo "FAILURES: $f put out no whole page at all; the comparisons"
+        echo "      above were made over an empty list and held nothing"
+        fail=1
     else
-        echo "OK   $f: a recorded page put out whole is the page painted"
+        echo "OK   $f: $nwhole recorded page(s) put out whole are the page painted"
     fi
 
     # ... and the page put out a band at a time, against both of those.
@@ -215,11 +220,20 @@ for f in $formats; do
             continue
         fi
     done > "$work/bandout"
+    nband=$(field "rec-$f" BAND | grep -c . || true)
     if [ -s "$work/bandout" ]; then
         cat "$work/bandout"
         fail=1
+    elif [ "${nband:-0}" -lt 3 ]; then
+        # Every check on a banded page is inside the loop above, so a run
+        # that emitted no BAND line runs none of them and reads exactly
+        # like a clean one. The run bands each page at three heights, so
+        # three is what there is to find.
+        echo "FAILURES: $f put out ${nband:-0} banded page(s) and the run bands"
+        echo "      each page three ways; the checks above were made over an"
+        echo "      empty list and held nothing"
+        fail=1
     else
-        nband=$(field "rec-$f" BAND | wc -l)
         echo "OK   $f: $nband banded pages are the page put out whole, each" \
              "played the marks its own rows meet"
     fi

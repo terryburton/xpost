@@ -27,6 +27,7 @@ work=$(mktemp -d)
 devices=$DEVICE_FLEET_MARKING
 fail=0
 ran=0
+accounted=0
 
 # A roster that skipped from end to end leaves the loop having asked
 # nothing and every verdict untaken, which reads exactly as a roster that
@@ -56,9 +57,33 @@ for dev in $devices; do
     else
         fail=1
     fi
+
+    # Whether this device reached the accounting. What a refusal cost
+    # against what the ordinary page cost is the whole point of the run,
+    # and it is measured only where the page is virtual memory to
+    # measure; a run that reached it nowhere asserts that nothing errored
+    # and stops there.
+    case $(printf '%s\n' "$out" | sed -n 's/^RASTER //p' | head -1) in
+        yes) accounted=$((accounted + 1)) ;;
+        no)  ;;
+        *)   echo "FAIL $dev: said nothing about where it keeps its page"
+             fail=1 ;;
+    esac
 done
 
 rm -rf "$work"
+# The devices that kept their page where this run could account for it.
+# Three classes hold a page as rows of the interpreter's own virtual
+# memory and each must reach the comparison; move a page out of virtual
+# memory and the measurement that names this test would stop being made
+# without anything saying so.
+ACCOUNTED_FLOOR=3
+if [ "$accounted" -lt "$ACCOUNTED_FLOOR" ]; then
+    echo "FAILURES: $accounted of the roster kept its page where the cost of"
+    echo "      a refusal could be counted, and $ACCOUNTED_FLOOR of it does;"
+    echo "      the comparison this test is for was made $accounted time(s)"
+    exit 1
+fi
 if [ "$ran" -lt "$floor" ]; then
     echo "FAILURES: $ran of the roster's devices answered, and $floor of them"
     echo "      are made without an optional library; the rest said they were"

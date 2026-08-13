@@ -1,10 +1,14 @@
 % Regression: caching an execform builds a raster device and fetched the
 % rectangle-fill C operators (.fillrectrgb / .fillrectgray) by name with load.
 % Once those operators were relocated out of systemdict into .internaldict, the
-% load failed with undefined and every cached form -- e.g. the bwipp vdp corpus
-% job -- broke. They are now fetched through //.internaldict /X get. Run through
-% `xpost -d null` by run-ps-test.sh; prints SUCCESS iff a cacheable form runs
-% through execform without error.
+% load failed with undefined and every cached form broke. They are now fetched
+% through //.internaldict /X get.
+%
+% Run through the ppm device by run-ps-test.sh, and it has to be a device that
+% keeps its page as rows: the cache is only built where the device holds such a
+% page, so a run on a device that paints nothing takes the uncached path and
+% reaches none of what this exists to guard. Prints SUCCESS iff a cacheable form
+% runs through execform without error.
 
 /faildict 1 dict def faildict /n 0 put
 /assert { % bool (name) . -

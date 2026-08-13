@@ -53,8 +53,18 @@
     0 getdevice /.ncomp get { exch add } repeat
 } bind def
 
+% Whether this device's page is virtual memory this run can read and
+% account for. Three of the roster's devices keep their page as rows of
+% the interpreter's own memory; the rest keep a buffer of their own, or
+% paint nothing, and there is no entity count to compare.
 /raster getdevice /ImgData known def
 /refused 0 def
+
+% Said out loud, because the comparison this file exists to make is
+% inside it. A roster on which no device kept its page in virtual memory
+% would make that comparison nowhere and print exactly what a clean tree
+% prints; the wrapper counts these and holds them to a floor.
+(RASTER ) print raster { (yes) }{ (no) } ifelse = flush
 
 raster {
     /e0 ents def

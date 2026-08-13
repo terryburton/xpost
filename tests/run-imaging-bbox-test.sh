@@ -147,6 +147,18 @@ one_device() {
     verdict_run "$st" "$out" "the imaging-bbox job on $dev" || d_fail=1
     verdict_ok "$out" "the imaging-bbox check on $dev" || d_fail=1
 
+    # Whether this device's run reached the half of the script that reads
+    # the page a row at a time. Most of what the script asserts is inside
+    # that, so a roster on which no device ever got there would print the
+    # same success as one that asked everywhere; the answers are collected
+    # and held to a floor below.
+    case $(printf '%s\n' "$out" | sed -n 's/^HOLDSROWS //p' | head -1) in
+        yes) echo "$dev" >> "$work/heldrows" ;;
+        no)  ;;
+        *)   echo "FAILURES: $dev did not say whether it held its page as rows"
+             d_fail=1 ;;
+    esac
+
     # 2. what comes out
     wrote=no
     for case in $CASES; do
@@ -196,6 +208,23 @@ if [ "$want" != "$got" ]; then
     echo "FAILURES: the devices with no page to compare are [$got],"
     echo "      and the ones named here as writing none are [$want]"
     fail=1
+fi
+
+# The devices that read their page a row at a time, and the floor under
+# them. Four classes keep their page as rows of the interpreter's own
+# virtual memory and every one of them must reach those checks: rename
+# or relocate what they keep it in and the whole raster half of this
+# script would go quiet, passing on the strength of the byte comparison
+# alone.
+ROWS_FLOOR=4
+nrows=$([ -f "$work/heldrows" ] && wc -l < "$work/heldrows" || echo 0)
+if [ "${nrows:-0}" -lt "$ROWS_FLOOR" ]; then
+    echo "FAILURES: $nrows device(s) read their page a row at a time and"
+    echo "      $ROWS_FLOOR keep it that way; the checks that read the rows"
+    echo "      asked nothing"
+    fail=1
+else
+    echo "OK   $nrows device(s) read their page a row at a time"
 fi
 
 if [ "$fleet_asked" -lt "$floor" ]; then
