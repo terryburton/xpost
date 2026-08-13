@@ -176,37 +176,45 @@ end } bind put
 % the most bands. So this rule is right about the memory a page gives
 % back and silent about what holding that page's marks instead costs.
 %
-% Asked once, where this run's device is made from its selection
-% (.startdevice, data/device.ps), at the page the run was started at.
-% The device that answer installs is the one every page-device request
-% afterwards is made from, so a run stays on the route it was weighed
-% onto for as long as it lasts.
+% Asked wherever a device is made: where this run's device is made from
+% its selection (.startdevice, data/device.ps), and again for every
+% page-device request that makes another (data/init.ps). Both are asked
+% at the page the device being made is to hold, so a job that opens at
+% one page and declares another is weighed at the page it declared --
+% which is how a program states a page at all, and the case the whole
+% mechanism is for.
 %
-% It is not asked again at setpagedevice, and that is the point rather
-% than an omission. PLRM Appendix G bars a page description from
-% choosing how its marks are held, and a program able to move itself
-% from one route to the other by resizing its page would be choosing
-% exactly that; it would also be handed a device of another class part
-% way through a job, which a program that has already looked at the one
-% it had cannot survive. What it costs is a run whose pages grow far
-% past the page it opened at, which holds them whole -- and such a run
-% says so, -d record:pgm asking for a record by name and getting one at
-% any page.
+% Asked at those two points and nowhere between them. Making a device is
+% where a page description has already given up whatever it knew of the
+% one before: a page-device request erases the page and replaces the
+% device (PLRM 6.2), so nothing has been painted that a change of route
+% could lose and nothing has been asked of the device being replaced that
+% could go on being true. Between two of them a device is being drawn on
+% and answering for itself, and a program that has looked at the one it
+% had cannot survive being handed another of a different class -- so the
+% route is never re-weighed there.
+%
+% What that leaves a program unable to do is choose how its marks are
+% held, which PLRM Appendix G bars it from: a request is weighed on the
+% page it asks for, and the same page is weighed the same way whatever
+% the request was trying to arrange.
 %
 % Only for the selection this run made, and only where the run did not
-% name this class itself: -d record:pgm records at any page, and
-% -d pgm:whole records at none.
+% name this class itself: -d record:pgm records at any page, -d pgm:whole
+% records at none, and a request naming some other device than the run's
+% selection is made on that device directly. A record plays into the
+% device this run's selection was given banding for, so it is that
+% selection, and no other name a request may carry, that this weighs.
 .xpostsys /.devicefor { % /name w h  .  /name'
 5 dict begin
     /ph exch def
     /pw exch def
     /nm exch def
-    /asked /StartDeviceAsked //.xpostsys /.hostvalue get exec def
-    nm /record eq
-    asked type /nametype eq and
-    asked /record ne and {
-        asked pw ph //.xpostsys /.bandsatpage get exec
-            { /record }{ asked } ifelse
+    /StartDevice //.xpostsys /.hostvalue get exec /record eq
+    nm /record ne and
+    nm /StartDeviceAsked //.xpostsys /.hostvalue get exec eq and {
+        nm pw ph //.xpostsys /.bandsatpage get exec
+            { /record }{ nm } ifelse
     }{ nm } ifelse
 end } bind put
 

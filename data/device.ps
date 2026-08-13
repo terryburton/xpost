@@ -415,24 +415,30 @@ currentglobal true setglobal
         % written into it as the job runs, and a restore has to take
         % them back
         currentglobal false setglobal
-        /StartDevice //.xpostsys /.hostvalue get exec
+        % The device this run asked for, which is the name a page-device
+        % request naming none goes on being made from, and the name a
+        % refusal is reported under. The route a page takes is not part
+        % of it: a selection whose page may arrive a band at a time is
+        % handed to the recording class before it gets here, and taking
+        % that back is what the weighing below does.
+        /StartDeviceAsked //.xpostsys /.hostvalue get exec
         % a device the build left the driver out of registers no maker,
         % so the roster the page-device request is held to is the roster
         % here as well
         //.xpostsys /.devicemakers get 1 index known not
             { /.startdevice cvx /undefined signalerror } if
         % Which device that selection is made through at the page this
-        % run opens at. A selection for a device whose page may arrive a
-        % band at a time is made through the recording class, and a page
-        % the band budget already covers is made on the device the run
-        % asked for instead, recording nothing (.devicefor,
-        % data/recorddev.ps). What is made is what is named below, so
-        % every page-device request afterwards is made from the route
-        % this run took rather than from the selection that reached it.
-        /StartPageSize //.xpostsys /.hostvalue get exec aload pop
+        % run opens at. A page too large for the band budget to cover is
+        % made through the recording class, which holds it in less memory
+        % than the page; a page the budget already covers is made on the
+        % device the run asked for, recording nothing (.devicefor,
+        % data/recorddev.ps). Every page-device request afterwards is
+        % weighed the same way at the page it asks for, so what is named
+        % below is the selection and not the route this page took.
+        dup /StartPageSize //.xpostsys /.hostvalue get exec aload pop
         //.xpostsys /.devicefor get exec
         /StartPageSize //.xpostsys /.hostvalue get exec aload pop
-        2 index //.xpostsys /.devicemakers get exch get exec
+        3 -1 roll //.xpostsys /.devicemakers get exch get exec
         % the interpreter's own device takes the same finishing
         % setpagedevice gives the ones it makes; the start-up page is at
         % the device's own resolution, so the point-to-device scale is

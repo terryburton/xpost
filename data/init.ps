@@ -1666,7 +1666,7 @@ currentglobal true setglobal
         % caught one does not leave the dictionary stack deeper than it
         % was found.
         dup //.xpostsys /.checkpagehandlers get exec pop
-        16 dict begin
+        17 dict begin
         /pd exch def
         % PLRM 6.2.6: an operator that deactivates the page device calls
         % EndPage as its first action, and transmits the page it ends only
@@ -1756,15 +1756,33 @@ currentglobal true setglobal
         % on the device it already had. Retiring the incumbent first would
         % leave the graphics state naming a device whose buffers are freed,
         % so the next mark made after the caught error reads freed memory.
-        % Whether this run's marks are held whole or a band at a time was
-        % settled when its device was made (.devicefor,
-        % data/recorddev.ps), and this request does not settle it again.
-        % The device it names is the one running, which is the route that
-        % was taken, so a request naming no device stays on it; and PLRM
-        % Appendix G bars a page description from choosing how its marks
-        % are held, which a request that could move a run from one route
-        % to the other would let it do by resizing the page.
-        /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
+        % Which device that name is made through at the page this request
+        % asks for. A page too large for the band budget to cover is made
+        % through the recording class, which holds it in less memory than
+        % the page, and a page the budget covers is made on the device
+        % named, recording nothing (.devicefor, data/recorddev.ps). It is
+        % weighed here as well as where the run's own device was made
+        % (.startdevice, data/device.ps), because declaring a page is how
+        % a program states one: a job that opens at the standard page and
+        % asks for a long one is a job whose pages are the one it asked
+        % for, and weighing only the page it opened at would hold every
+        % one of them whole.
+        %
+        % Here rather than anywhere else in the job, because this is
+        % where a page description has already given up what it knew of
+        % the device before: the page is erased and the device replaced
+        % whatever the answer is, so nothing has been painted that a
+        % change of route could lose. What PLRM Appendix G bars a page
+        % description from -- choosing how its marks are held -- it is no
+        % nearer to here, since the same page is weighed the same way
+        % whatever the request was trying to arrange.
+        %
+        % The name below is the device the request asked of, and this
+        % answer is only which device is made from it, so the route is
+        % nowhere recorded as a device name and every later request is
+        % weighed from the selection again.
+        /made dev pw ph //.xpostsys /.devicefor get exec def
+        /newdev pw ph //.xpostsys /.devicemakers get made get exec def
         graphicsdict /.exactpagedims undef
         graphicsdict /.rasterband undef
 
