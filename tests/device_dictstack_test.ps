@@ -1,7 +1,7 @@
-% A raster device method closes what it opens.
+% A device method closes what it opens.
 %
-% A raster device method runs with a dictionary current: the device's own
-% for the methods the machinery calls, a scratch one of its own for the
+% A device method runs with a dictionary current: the device's own for
+% the methods the machinery calls, a scratch one of its own for the
 % helpers underneath them. The method opens it on the way in and takes it
 % off on the way out, and every name the body reads or defines is read
 % and defined in there. An error part way through the body is a way out
@@ -18,8 +18,10 @@
 % adjudicating: a dictionary this method pushed is this method's to pop,
 % whichever way it left.
 %
-% So every method of every raster class is driven to a failure here and
-% the dictionary stack is measured across it. The measurement is the
+% So every method of every class is driven to a failure here and the
+% dictionary stack is measured across it -- the raster classes, which
+% paint pixels into a page they hold, and the vector classes, which write
+% the marks out in a page description instead. The measurement is the
 % whole test -- the errors are provoked deliberately and nothing is
 % asserted about which one arrives, only that the stack the method was
 % handed is the stack it gives back.
@@ -69,22 +71,35 @@
 % calls with the device already current, which are reached here from
 % outside that scope, as any caller that has only the device can reach
 % them. Both kinds open a dictionary and so both kinds owe the close.
+%
+% The vector classes add the methods a device that keeps its marks
+% rather than its pixels is asked for -- a whole path to fill or stroke,
+% a clip shape it could not reduce to a rectangle, a sampled image -- and
+% the writers that put a page or a document out.
 /roster [
-    /Create     true
-    /Destroy    true
-    /PutPix     true
-    /GetPix     true
-    /DrawLine   true
-    /DrawRect   true
-    /FillRect   true
-    /FillPoly   true
-    /Ground     true
-    /Emit       true
-    /.moveband  true
-    /.intersect false
-    /.writehead false
-    /.writetail false
-    /.writepage false
+    /Create      true
+    /Destroy     true
+    /PutPix      true
+    /GetPix      true
+    /DrawLine    true
+    /DrawRect    true
+    /FillRect    true
+    /FillPoly    true
+    /FillPath    true
+    /StrokePath  true
+    /ClipPath    true
+    /PaintImage  true
+    /Ground      true
+    /Emit        true
+    /.moveband   true
+    /.registersep true
+    /.emitpage   true
+    /.emitwhole  true
+    /.endfile    true
+    /.intersect  false
+    /.writehead  false
+    /.writetail  false
+    /.writepage  false
 ] def
 
 % The methods with no failure path of their own, named rather than
@@ -93,20 +108,37 @@
 % a failure path is caught by the far side of the same check.
 /undrivable [ /Destroy ] def
 
-% The classes held: every raster class the interpreter can make. Each is
-% held twice -- as the class's own suite, and as an instance finished the
-% way the device machinery finishes one, which replaces some of the suite
-% with the compiled rasterisers. A page is marked through the second, so
-% the second is the one a program's error arrives in.
+% The classes held: every class the interpreter can make from the private
+% dictionary. Each is held twice -- as the class's own suite, and as an
+% instance finished the way the device machinery finishes one, which
+% replaces some of the suite with the compiled rasterisers. A page is
+% marked through the second, so the second is the one a program's error
+% arrives in.
+%
+% The recording class is not here. Its maker is an operator of its own
+% rather than an entry in the private dictionary this reaches makers
+% through, and its marking methods, Create, GetPix and Destroy are
+% compiled operators that open no dictionary; what it does have of this
+% shape is /Ground and the page it plays at Emit, which are written in
+% PostScript and are owed the same close. Reaching it wants a second way
+% of finding a maker, and it belongs here once it has one.
 /makers [
     /newPGMIMAGEdevice (pgm)
     /newPPMIMAGEdevice (ppm)
     /newPBMIMAGEdevice (pbm)
     /newTIFFIMAGEdevice (tiff)
+    /newbboxdevice (bbox)
+    /newPDFWRITEdevice (pdfwrite)
+    /newSVGWRITEdevice (svgwrite)
+    /newDSCWRITEdevice (dscwrite)
 ] def
 
 % A name this interpreter cannot open for writing, so that the emission
-% methods are driven to a failure rather than made to write a page.
+% methods are driven to a failure rather than made to write a page. It
+% reaches every class whose Emit opens a file; the bounding-box class
+% writes its report to the standard output instead, so its Emit runs to
+% the end and the empty boxes it reports appear in this test's output.
+% They are that device working, not this test failing.
 /unopenable (/nonexistent-xpost-dictstack-guard/page.out) def
 
 % /maker finished  make  device
