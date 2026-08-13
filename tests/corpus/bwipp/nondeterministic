@@ -24,4 +24,25 @@
 #        digits are how busy the machine was while it drew, and they
 #        are painted in the same ink as the barcodes underneath them.
 #        The rest of the page is this tree's and is compared with it.
+#
+#        What does NOT vary is how many pages it draws, and this entry
+#        does not excuse a change in that. The count is the arithmetic
+#        of the data and the grid, it is declared in `pages` beside this
+#        file, and it is six: five runs on the tree that holds a form's
+#        drawing gave six pages every time, and five on the tree before
+#        it gave six every time. A run putting out fewer has been cut
+#        short, and the way that happens is a harness bound rather than
+#        anything about the tree -- this program is a demonstration of
+#        what holding a costly drawing saves, so withdrawing the holding
+#        takes it from under ten seconds to twelve minutes, and a
+#        per-render timeout of the ordinary sort ends it partway with no
+#        error to show for it.
+#        Read the count against `pages`, never against another run.
+#
+#        And where the timing text differs it differs there and nowhere
+#        else: measured against the same pages drawn with the holding
+#        withdrawn, seven bands of eight to ten rows -- two of about
+#        forty columns at the head, five of two hundred and seventy-two,
+#        one per stage -- and every other row of all six pages the same
+#        bytes.
 vdp
