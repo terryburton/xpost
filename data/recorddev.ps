@@ -411,6 +411,20 @@ setglobal
             rec /.playdev page put
             rec /.playrows bandrows put
             rec page //.internaldict /.playbuilt get exec
+            % The raster's first move onto a run of rows, made here and
+            % not left to the first page. What a device takes up to be
+            % able to move a run -- the rows it built, and a row to clear
+            % a given-up one against (data/image.ps) -- it takes up at
+            % its first move, and that take-up is virtual memory while
+            % the rows are not. A first move made while a page is being
+            % put out is a first move made inside whatever the job has
+            % opened by then: the restore takes the take-up back, the
+            % move after it looks for the rows this device built and
+            % finds the ones it gave up, and the page after that is
+            % painted into rows that hold no pixel. Made here, it is made
+            % before the job has opened anything, which is why the raster
+            % itself is made here.
+            0 bandrows page dup /.moveband get exec
         } ifelse
 
         % What the program asked of this record, on the device that

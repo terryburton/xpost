@@ -294,6 +294,92 @@ setglobal
 
 savedcase
 
+% ---- and the same, with the band grid asked for before the device ----
+% A raster is exchanged where the band grid it was built for is not the
+% one in force, and the case above puts that exchange outside a save on
+% purpose. This one asks for the band grid before the device exists -- of
+% the class the device is made from, which is the only way to have a
+% record built on the grid it is going to keep -- so nothing is exchanged
+% and everything the raster takes up for the job it takes up while the
+% job is still being set up.
+%
+% What that reaches is the second half of a raster's state. A device
+% takes up what it needs to move its rows from one run to the next at its
+% first move (data/image.ps), and a first move made while a page is being
+% put out is made inside whatever the job has opened: the restore takes
+% the take-up back, and the move after it finds the rows the device gave
+% up rather than the ones it built. What comes of that is a page painted
+% into rows holding no pixel, which is a page and not a count -- so what
+% says so is the wrapper holding these pages to the pages the device that
+% paints wrote.
+/NBUILT 3 def
+
+% -  builtcase  -
+/builtcase { % -  .  -
+    /bc.dev null store
+    /bc.bad false store
+    % The band grid, asked of the class the device is about to be made
+    % from and put back the moment it has been. A device reads it when it
+    % is made and every page after; asking it of the device -- which is
+    % what every other case here does, there being no other way once the
+    % device exists -- is asking after the raster has been built on some
+    % other grid, and the first page is then where one raster is
+    % exchanged for another.
+    banding {
+        /recordDEVICE where {
+            pop
+            /bc.was recordDEVICE /.bandbytes get store
+            recordDEVICE /.bandbytes BANDBYTES put
+        }{
+            (FAIL the recording class cannot be reached, so nothing here ) print
+            (can ask for a band grid before the device exists\n) print
+            /bc.bad true store
+        } ifelse
+    } if
+    << /PageSize [W H] /OutputFile pagename >> setpagedevice
+    banding bc.bad not and { recordDEVICE /.bandbytes bc.was put } if
+    % and the device really was built on it, since a case that quietly
+    % held its page whole would exercise none of what it is here for
+    banding bc.bad not and {
+        DEVICE /.playrows get BANDBYTES ROWBYTES idiv ne {
+            (FAIL the record was not built on the band grid asked for, so ) print
+            (this case is not the case it says it is\n) print
+            /bc.bad true store
+        } if
+    } if
+    1 1 NBUILT {
+        /bc.pg exch store
+        save
+        paintpage
+        showpage
+        restore
+        banding {
+            DEVICE /.playdev known not {
+                (FAIL after page ) print bc.pg num print
+                ( the record built on its own band grid is painting ) print
+                (through nothing\n) print
+                /bc.bad true store
+            }{
+                bc.dev null eq
+                    { /bc.dev DEVICE /.playdev get store }
+                    { DEVICE /.playdev get bc.dev eq not {
+                        (FAIL page ) print bc.pg num print
+                        ( was painted through a different device from the) print
+                        ( page before it\n) print
+                        /bc.bad true store
+                      } if }
+                ifelse
+            } ifelse
+        } if
+    } for
+    banding bc.bad not and {
+        (OK   one raster, built on the band grid it kept, painted ) print
+        NBUILT num print ( saved and restored pages\n) print
+    } if
+} bind def
+
+builtcase
+
 % ---- the image, and what the marks in front of it cost it ----
 % The same page twice, differing only in how many marks stand between
 % the start of the record and the image. A band replay steps over the
