@@ -110,9 +110,22 @@ HEIGHTS='96 100'
 BANDS='1 3 7 8 13 16'
 MPBANDS='1 7 16'
 MEMW=1000
+# The sweep of page heights the bound is read over, one set per meter.
+# The interpreter's own count of virtual memory is exact and answers for
+# this raster and nothing else, so a short sweep says everything there
+# is to say about it. The peak resident size of a process is a
+# measurement, and what it moves by on a busy machine is comparable with
+# what the band route is allowed to grow by over a short sweep -- so the
+# cells that meter answers for are read over a taller page, where what
+# the whole-page route grows by, and hence the room the band route is
+# given, is several times that movement. The section that uses these
+# says what was measured.
 MEMLO=1000
 MEMMID=2500
 MEMHI=4000
+RSSLO=2000
+RSSMID=5000
+RSSHI=8000
 
 # $1 the device selection, $2 the directory, $3 what to call the log,
 # $4.. the definitions the run reads its page and band height out of
@@ -844,6 +857,21 @@ done
 # device is the one that decides, because a meter that cannot see the
 # page would pass everything. That is the control: the whole-page route
 # is required to grow by most of a row of pixels for every row of page.
+#
+# The second meter reads the process and not the page, so it carries the
+# machine, and the sweep it is read over is chosen for that. Measured
+# here with sixteen renders running beside it, each of these readings
+# moved by two to three hundred kibibytes across ten rounds, and the
+# same reading elsewhere in the suite has been seen to move by nearly
+# seven hundred. Over the sweep the exact meter uses, what these cells
+# were allowed came to around two mebibytes -- one movement of the
+# instrument away from a verdict about the machine rather than about the
+# code. Over the taller sweep they are read on instead, the room is four
+# to six, several times any movement measured, and the cost is one
+# taller run per cell rather than the same runs over again. Neither
+# loosens what is caught: a route holding what the page's height reaches
+# grows by the whole page's own growth, which is ten times what any of
+# this moves by.
 # ---------------------------------------------------------------------
 if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
     havetime=yes
@@ -869,7 +897,13 @@ weigh() {
           >"$w_dir/run.log" 2>&1
     fi
     w_st=$?
-    verdict_run "$w_st" "$(cat "$w_dir/run.log")" "the $1 weighing" || return 1
+    # A weighing is a run and is judged like one, both ways round. A run
+    # that died on its way to a page took little, and little is exactly
+    # the reading the band route is here to produce, so a reading nobody
+    # judged is a reading a broken run could forge.
+    w_out=$(cat "$w_dir/run.log")
+    verdict_run "$w_st" "$w_out" "the $1 weighing" || return 1
+    verdict_ok "$w_out" "the $1 weighing" || return 1
     memvm=$(sed -n 's/^MEM //p' "$w_dir/run.log" | awk '{print $NF}' | tail -1)
     memrss=$(tail -1 "$w_dir/rss.txt" 2>/dev/null)
     case ${memrss:-x} in *[!0-9]*) memrss='' ;; esac
@@ -916,8 +950,8 @@ for d in $present; do
         # against has to be this device's row and not a stand-in for it.
         rowpix=$ask_row
         case $ask_where in
-            rows)   meter=vm ;;
-            buffer) meter=rss ;;
+            rows)   meter=vm;  hlo=$MEMLO; hmid=$MEMMID; hhi=$MEMHI ;;
+            buffer) meter=rss; hlo=$RSSLO; hmid=$RSSMID; hhi=$RSSHI ;;
         esac
         if [ "$meter" = rss ] && [ "$havetime" != yes ]; then
             echo "SKIP $sel keeps its raster in a buffer of its own and the" \
@@ -938,7 +972,7 @@ for d in $present; do
         fi
 
         ok=yes
-        for h in $MEMLO $MEMMID $MEMHI; do
+        for h in $hlo $hmid $hhi; do
             for b in 0 64; do
                 weigh "$sel" "$d-$route-$h-$b" "$h" "$b" || { ok=no; break; }
                 eval "vm_${h}_${b}=\$memvm"
@@ -954,23 +988,23 @@ for d in $present; do
 
         if [ "$meter" = vm ]; then
             u=1
-            eval "wlo=\$vm_${MEMLO}_0;  wmid=\$vm_${MEMMID}_0;  whi=\$vm_${MEMHI}_0"
-            eval "blo=\$vm_${MEMLO}_64; bmid=\$vm_${MEMMID}_64; bhi=\$vm_${MEMHI}_64"
+            eval "wlo=\$vm_${hlo}_0;  wmid=\$vm_${hmid}_0;  whi=\$vm_${hhi}_0"
+            eval "blo=\$vm_${hlo}_64; bmid=\$vm_${hmid}_64; bhi=\$vm_${hhi}_64"
             what="the global half of virtual memory"
         else
             u=1024
-            eval "wlo=\$rss_${MEMLO}_0;  wmid=\$rss_${MEMMID}_0;  whi=\$rss_${MEMHI}_0"
-            eval "blo=\$rss_${MEMLO}_64; bmid=\$rss_${MEMMID}_64; bhi=\$rss_${MEMHI}_64"
+            eval "wlo=\$rss_${hlo}_0;  wmid=\$rss_${hmid}_0;  whi=\$rss_${hhi}_0"
+            eval "blo=\$rss_${hlo}_64; bmid=\$rss_${hmid}_64; bhi=\$rss_${hhi}_64"
             what="the peak resident size of the process"
         fi
-        w1=$(slope "$wlo" "$wmid" $((MEMMID - MEMLO)) "$u")
-        w2=$(slope "$wmid" "$whi" $((MEMHI - MEMMID)) "$u")
-        b1=$(slope "$blo" "$bmid" $((MEMMID - MEMLO)) "$u")
-        b2=$(slope "$bmid" "$bhi" $((MEMHI - MEMMID)) "$u")
-        wa=$(slope "$wlo" "$whi" $((MEMHI - MEMLO)) "$u")
-        ba=$(slope "$blo" "$bhi" $((MEMHI - MEMLO)) "$u")
+        w1=$(slope "$wlo" "$wmid" $((hmid - hlo)) "$u")
+        w2=$(slope "$wmid" "$whi" $((hhi - hmid)) "$u")
+        b1=$(slope "$blo" "$bmid" $((hmid - hlo)) "$u")
+        b2=$(slope "$bmid" "$bhi" $((hhi - hmid)) "$u")
+        wa=$(slope "$wlo" "$whi" $((hhi - hlo)) "$u")
+        ba=$(slope "$blo" "$bhi" $((hhi - hlo)) "$u")
         echo "OK   held: $sel whole $wlo -> $wmid -> $whi, band $blo -> $bmid" \
-             "-> $bhi ($what)"
+             "-> $bhi over $hlo -> $hmid -> $hhi rows ($what)"
         echo "OK   held: $sel grows by $w1/1000 then $w2/1000 bytes a row" \
              "holding the page, and $b1/1000 then $b2/1000 holding a band"
 
@@ -1011,9 +1045,13 @@ for d in $present; do
             said="under a tenth of the whole page's growth, at both steps"
         else
             [ $((ba * 5)) -lt "$wa" ] || bounded=no
-            # ... and the plainest statement of the same thing, which no
-            # amount of noise on this meter reaches: the tallest page in
-            # bands weighs less than the shortest page held whole.
+            # ... and the plainest statement of the same thing: the
+            # tallest page in bands weighs less than the shortest page
+            # held whole. What separates them is the raster of the short
+            # page, which is why the short page of this sweep is not the
+            # shortest one worth rendering -- at a thousand rows the two
+            # readings stand two mebibytes apart and this says as much
+            # about the machine as the other check does.
             [ "$bhi" -lt "$wlo" ] || bounded=no
             said="under a fifth of the whole page's growth over the sweep, \
 and the tallest page in bands weighs less than the shortest page held whole"
@@ -1021,7 +1059,7 @@ and the tallest page in bands weighs less than the shortest page held whole"
         if [ "$bounded" != yes ]; then
             note "the $sel band route grew by $ba/1000 bytes a row over the" \
                  "sweep against the whole page's $wa/1000, and weighs $bhi" \
-                 "at $MEMHI rows against $wlo for a whole page of $MEMLO;" \
+                 "at $hhi rows against $wlo for a whole page of $hlo;" \
                  "what it holds is following the page's height, so the band" \
                  "is not bounding it"
             continue
