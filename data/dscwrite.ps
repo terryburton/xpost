@@ -21,6 +21,10 @@
 % resolution carried in the defaultmatrix fixup, as the bbox device
 % does) and the content runs under a matrix taking the accumulator's
 % y-down device coordinates back to that page.
+%
+% A method runs its body with the device dictionary current, and opens it
+% through the bracket that takes it off again however the body ends, error
+% included (.indict, graphics.ps).
 
 /.xpost_DSCWRITE .xpost_PDFWRITE dup length 2 add dict copy def
 
@@ -37,7 +41,7 @@
 % inherited from the PDF device; only the three writers differ.
 
 .xpost_DSCWRITE /.emitwhole { % IMAGE  .  -
-begin
+{
     % the name settled for this page, which a %d in the output name makes
     % its own, so each page lands in its own file
     /F .outputfile (w) file def
@@ -104,7 +108,7 @@ begin
     % marks must not stack on the emitted content (a later Emit
     % rewrites the output with the then-current page)
     currentdict .pdfreset
-end } put
+} //.xpostsys /.indict get exec } put
 
 % write a number to the accumulating file in two decimals at most
 .xpost_DSCWRITE /.vwnum { % num  .  -
@@ -116,7 +120,7 @@ end } put
 % matrix taking the accumulator's y-down device units back to the page. The
 % content is read here, as the page is emitted, before any restore the job runs.
 .xpost_DSCWRITE /.emitpage { % IMAGE  .  -
-begin
+{
     % page size in points from the resolution fixup
     currentdict //.xpostsys /.devres-to-points get exec
     /sy exch def /sx exch def
@@ -179,12 +183,12 @@ begin
     % advance the page count; start the next page fresh
     //.xpostsys /.vecout get dup /np get 1 add /np exch put
     currentdict //.internaldict /.pdfreset get exec
-end } put
+} //.xpostsys /.indict get exec } put
 
 % Close the accumulating DSC program: the trailer carries the real page count
 % the header deferred with (atend).
 .xpost_DSCWRITE /.endfile { % IMAGE  .  -
-begin
+{
     //.xpostsys /.vecout get /headered get not {
         (%!PS-Adobe-3.0\n%%Creator: Xpost\n%%Pages: \(atend\)\n%%EndComments\n) .vw
         //.xpostsys /.vecout get /headered true put
@@ -193,6 +197,6 @@ begin
     (%%Pages: ) .vw //.xpostsys /.vecout get /np get 20 string cvs .vw (\n) .vw
     (%%EOF\n) .vw
     //.xpostsys /.vecout get /F get dup (%stdout) (w) file ne { closefile }{ pop } ifelse
-end } put
+} //.xpostsys /.indict get exec } put
 
 //.internaldict /QUIET known { }{ (eof dscwrite.ps\n)print } ifelse
