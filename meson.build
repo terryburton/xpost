@@ -3372,6 +3372,27 @@ test('record-short',
   suite: cost_fast,
   timeout: 120)
 
+# The third thing painted many times from one description: a form, whose
+# output the language allows an interpreter to keep and substitute for a
+# later execution (PLRM 4.7). It is kept where the device holds the page
+# as rows of its own and not where the device writes down what it was
+# asked to paint, so the two routes differ in how often the description
+# runs while painting the same page. This puts one form at two placement
+# counts to both routes, requires the pages to match byte for byte at
+# whole-numbered placement and at placement falling between pixels, and
+# reads the description's own count of its executions -- which is the
+# whole quantity, since a description re-executed paints exactly what a
+# copy of its output paints and no page can show which happened. Two
+# controls: the copy withdrawn, so the count is shown to move; and a
+# pair of pages that must not match, so the byte comparison is shown to
+# see a difference at all.
+test('form-band',
+  find_program('tests/run-form-band-test.sh'),
+  args: [ xpost_exe, files('tests/form_band_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # ... and the same entry played into a device that keeps no rows an image
 # can be written into, whose picture is painted through the rectangle
 # fill it declares instead -- one call per run of columns, the runs being

@@ -1,0 +1,113 @@
+% One page placing one form many times, painted twice: directly by a
+% device that paints, and through a device that writes down what it was
+% asked to paint and plays it back into one. run-form-band-test.sh runs
+% this file once per route, compares the pages it leaves, and reads the
+% numbers printed below.
+%
+% A form is a self-contained description painted at several locations,
+% and the language allows an interpreter to keep the graphical output of
+% one and substitute it for a later execution rather than running the
+% description again (PLRM 4.7). This interpreter does that where the
+% device holds the page as rows of its own: the description is run twice
+% over an offscreen raster, once over each of two grounds, and the
+% pixels the two agree on are copied onto the page at every later use.
+%
+% A device that writes down what it is asked to paint holds no rows, so
+% there is nothing for that copy to be made into and every use runs the
+% description again. What that costs is the description, once per
+% placement, which is exactly the cost forms exist to avoid paying.
+%
+% The page below is built so that the difference has somewhere to show:
+% one form, placed many times, at a placement count the run varies, so
+% that how the count of executions moves with the count of placements is
+% a reading rather than a single number.
+%
+% What is printed, and why each is needed:
+%
+%   PAINTS      how many times the form's description was executed. It
+%               is the whole quantity: a page comparison cannot see it,
+%               since a form re-executed paints exactly what a form
+%               copied paints.
+%   PLACEMENTS  how many times the page used the form. PAINTS is read
+%               against this and not on its own -- a cache that works
+%               holds PAINTS still while this grows.
+%
+% The run varies three things through -D, so that one page serves every
+% reading:
+%
+%   N     placements. Two values, so the cache claim is about how the
+%         count moves rather than about one number.
+%   FRAC  place the form at fractional device offsets rather than whole
+%         ones. A copied form lands quantized to the pixel grid, so
+%         where the placement is not already on it the copy and a fresh
+%         execution differ -- which is what gives the run a pair of
+%         pages that must NOT match, and so a demonstration that its
+%         byte comparison can see a difference at all.
+%   RO    make the form dictionary read-only, which takes the copy out
+%         of the picture on a device that would otherwise make one. It
+%         is how the run reaches a direct rendering on the route that
+%         caches, and it is the control for the cache reading: the same
+%         page, the same route, the copy the only thing withdrawn.
+
+/N where { pop }{ /N 25 def } ifelse
+/FRAC where { pop }{ /FRAC 0 def } ifelse
+/RO where { pop }{ /RO 0 def } ifelse
+
+/W 400 def
+/H 400 def
+<< /PageSize [W H] >> setpagedevice
+
+globaldict /paints 0 put
+
+/F <<
+    /FormType 1
+    /BBox [0 0 60 60]
+    /Matrix [1 0 0 1 0 0]
+    /PaintProc {
+        pop
+        globaldict /paints globaldict /paints get 1 add put
+        0.2 setgray 0 0 60 60 rectfill
+        0.9 setgray 10 10 40 40 rectfill
+        0 setgray 5 5 moveto 55 55 lineto 3 setlinewidth stroke
+    }
+>> def
+
+% A read-only form dictionary is painted rather than copied, the
+% dictionary being what the copy is keyed and recorded in.
+RO 0 ne { /F F readonly def } if
+
+% The placements: a square grid holding N of them, spread over the page.
+% The step is a whole number of device units, or a half short of one
+% where the run asked for fractional placement.
+/cols N sqrt ceiling cvi def
+/gaps cols 1 sub def
+gaps 1 lt { /gaps 1 def } if
+/step W 70 sub gaps div truncate def
+% A half unit on the step, not on the origin: what a copied form is
+% quantized against is where the placement falls between pixels, and a
+% whole-numbered step puts every placement at the same such phase --
+% including the one the copy was taken at, which is then right for all
+% of them. Half a unit on the step gives the placements two phases, so
+% a copy taken at one of them is standing half a pixel off at the other.
+FRAC 0 ne { /step step 0.5 add def } if
+
+0 1 N 1 sub {
+    /i exch def
+    gsave
+        i cols mod step mul 5 add
+        i cols idiv step mul 5 add
+        translate
+        F execform
+    grestore
+} for
+
+showpage
+
+% a line of its own to begin on: the page semantics end their showpage
+% banner without one, so a reading printed straight after it would be
+% the tail of that line rather than a line the run can be read from
+(\n) print
+(PLACEMENTS ) print N =print (\n) print
+(PAINTS ) print globaldict /paints get =print (\n) print
+flush
+quit
