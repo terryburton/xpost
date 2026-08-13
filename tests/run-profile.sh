@@ -88,13 +88,16 @@ fi
 # that means two things. Naming them also keeps the exclusion from
 # resting on what cost they happen to be tagged with today.
 #
-# Two ranges and not three: a range whose bound falls where no test lies
-# is a second name for the range below it. Nothing the tree runs out of
-# itself is veryslow -- the tag is carried by two of the corpora, which
-# these profiles take out by name -- so a profile drawn at the top of
-# the slow band and a profile drawn above it select the same tests, and
-# a reader choosing between them is choosing between two spellings.
-# `full` is the one kept, because what it selects is what it says.
+# Two ranges and not three. The band above fifty seconds holds three
+# tests: two corpora, which these profiles take out by name, and the
+# banding campaign, which the tree runs out of itself and which `full`
+# therefore runs. So a profile drawn below that band would select
+# something different from `full` rather than being a second spelling of
+# it, and it is still not drawn: the selection a developer wants between
+# edits is not the suite minus its longest member -- which leaves three
+# hundred tests that cannot see what was changed -- but the tests that
+# answer for the change, which is what tests/gate.sh selects and is a
+# relation between the tree and the suite rather than a cost.
 case $profile in
     quick)  filter='--suite fast --no-suite corpus --no-suite vendor'
             want='fast'; without='corpus vendor'
