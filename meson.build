@@ -3540,11 +3540,23 @@ test('band-device',
 # which offers every mark again for every band, and a band of one row
 # over a page of glyphs is a hundred repaints of it -- which is the
 # instrument that has caught most of what this work has found.
+#
+# Being the longest, it decides when a run of the whole suite ends: the
+# rest of the suite fits alongside it several times over, so the clock
+# reads whatever this takes plus however long it waited to start.
+# Measured, it started half a minute into a narrow run and a minute and
+# a half into a wide one, and each of those was added to the run
+# outright. Reached first it starts with the run and the wait is gone --
+# a fifth of the wide run's clock, for a number. The priority is above
+# the corpora, which are the next longest and carry a hundred for the
+# same reason, and below the two hundred belonging to the test that must
+# be reached before anything has started at all.
 test('band-campaign',
   find_program('tests/run-band-campaign-test.sh'),
   args: [ xpost_exe, files('tests/band_campaign_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_veryslow,
+  priority: 150,
   timeout: 900)
 
 # What the band loop charges, which nothing else in the suite can see: a
