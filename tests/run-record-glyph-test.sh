@@ -89,7 +89,7 @@ render() {
 # The trailing space the page separates its figures with is taken
 # off, so that a reading is a number and prints as one.
 field() { printf '%s\n' "$1" | sed -n "s/^$2 //p" | head -1 \
-          | sed 's/[ \t]*$//'; }
+          | sed 's/[[:blank:]]*$//'; }
 
 render pgm "$work/direct.pgm" || fail=1
 direct=$out
