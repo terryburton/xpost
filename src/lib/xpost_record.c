@@ -877,6 +877,54 @@ void xpost_record_clear(Xpost_Record *rec)
         _screen_put(rec, rec->htw, rec->hth, rec->htcell);
 }
 
+/* Give up the entries a caller has finished with, which is everything
+   but the coverage: the marks, the pictures they name and the screens
+   they were made under. The masks stay because a placement names one by
+   an index into the record and arrives after it. */
+void xpost_record_spent(Xpost_Record *rec)
+{
+    size_t i, n;
+
+    if (!rec)
+        return;
+    n = _nimg(rec);
+    for (i = 0; i < n; i++)
+        _image_free(&_imgs(rec)[i]);
+    _screens_free(rec);
+    rec->mark.len = 0;
+    rec->val.len = 0;
+    rec->img.len = 0;
+    rec->imgbytes = 0;
+}
+
+void xpost_record_release(Xpost_Record *rec)
+{
+    size_t i, n;
+
+    if (!rec)
+        return;
+    n = _nimg(rec);
+    for (i = 0; i < n; i++)
+        _image_free(&_imgs(rec)[i]);
+    _masks_free(rec);
+    _screens_free(rec);
+    free(rec->htcell);
+    rec->htcell = NULL;
+    rec->htw = rec->hth = 0;
+    rec->imgbytes = 0;
+    /* The runs go back to the allocator rather than being emptied. A
+       freed buffer is an empty one and takes marks again from nothing,
+       which is what makes this a record the caller may go on holding. */
+    xpost_strbuf_free(&rec->mark);
+    xpost_strbuf_free(&rec->val);
+    xpost_strbuf_free(&rec->img);
+    xpost_strbuf_free(&rec->msk);
+    xpost_strbuf_free(&rec->scr);
+    /* and the mark of how full they ever were goes with them: it says
+       what the runs are resident for, and they are resident for nothing */
+    rec->runhigh = 0;
+}
+
 size_t xpost_record_count(const Xpost_Record *rec)
 {
     return rec ? _nmark(rec) : 0;

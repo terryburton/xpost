@@ -1,0 +1,101 @@
+% What a record costs against what banding a page saves.
+%
+% Holding a page's marks instead of its pixels buys the raster the page
+% does not have to hold, and that raster is the whole of what it buys:
+% the run less one band of it, because a page held in bands still holds a
+% band. What the marks cost follows the drawing and has no bound at all,
+% so a page can be drawn whose record costs more than the raster it is
+% saving -- and that page is held in bands anyway and pays both.
+%
+% This is the page that does it, and this run is where the two sides are
+% read off the interpreter and put where a wrapper can compare them.
+% Nothing here decides anything: what is printed is a measurement of a
+% page that came out right, on both of the routes a page can take.
+%
+% Two shapes, chosen by BIG:
+%
+%   0   a page a little past the band budget, so it bands into two and
+%       saves one band's worth of rows and no more. That is the shape a
+%       run meets by accident rather than a trick -- every page a little
+%       too large for the budget is one -- and it makes a drawing worth
+%       more than the saving cheap to write, so the boundary can be
+%       asked from both sides for the price of a few hundred marks. Its
+%       height follows the colour space because what a row costs does,
+%       read off the device, which answers on both routes.
+%
+%   1   the page the cost was measured on: a full sheet at print
+%       resolution carrying a drawing of small filled rectangles, which
+%       is the ordinary content that costs a record most. Its saving is
+%       the larger part of the page and its record is several times
+%       that, which is the case in full rather than at the boundary.
+%
+% M says how much is drawn. The two shapes spend it differently -- a
+% scatter over the small page, a grid over the large one -- and both come
+% to M marks of the kind a record holds most cheaply, so what the record
+% costs is the drawing and not one awkward mark.
+
+/num { 20 string cvs } bind def
+/ID 1183615869 internaldict def
+
+/M where { pop }{ /M 50 def } ifelse
+/BIG where { pop }{ /BIG 0 def } ifelse
+
+% The record device, where the run reached one. Every reading below is
+% asked of it rather than of the page: a page put out in bands and the
+% same page put out whole are the same bytes, which is the requirement
+% the mechanism is under and is also why the page cannot answer any of
+% this.
+/isrec { DEVICE /.playclass known } bind def
+/saving { isrec { DEVICE ID /.recordsaving get exec }{ 0 } ifelse } bind def
+/cost { isrec { DEVICE ID /.recordcost get exec exch pop exch pop }{ 0 } ifelse } bind def
+/band { currentsystemparams /CurBandHeight get } bind def
+
+/W BIG 0 gt { 2550 }{ 2000 } ifelse def
+/H BIG 0 gt
+    { 3300 }
+    { DEVICE /.ncomp get 1 eq { 2010 }{ 676 } ifelse }
+  ifelse def
+
+<< /PageSize [W H] >> setpagedevice
+
+% M marks. The large page lays them out as a grid so that every band of
+% it carries ink -- a band holding nothing but the ground is a band the
+% loop does not paint, and a page whose ink is in one band is a page held
+% whole for every purpose here. The small page scatters them for the same
+% reason across its two.
+/draw {
+    gsave 0 setgray
+    BIG 0 gt {
+        /g M sqrt cvi def
+        0 1 g 1 sub {
+            /i exch def
+            0 1 g 1 sub {
+                /j exch def
+                i W mul g div 2 add
+                j H mul g div 3 add
+                2 2 rectfill
+            } for
+        } for
+    }{
+        0 1 M 1 sub {
+            /i exch def
+            i 37 mul W 8 sub mod 3 add
+            i 53 mul H 8 sub mod 3 add
+            3 3 rectfill
+        } for
+    } ifelse
+    grestore
+} bind def
+
+(PAGE ) print W num print ( ) print H num print (\n) print
+(ROUTE ) print isrec num print (\n) print
+(BAND ) print band num print (\n) print
+(SAVING ) print saving num print (\n) print
+
+draw
+
+(COST ) print cost num print (\n) print
+
+showpage
+(\nDONE\n) print
+flush
