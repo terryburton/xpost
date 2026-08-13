@@ -264,6 +264,32 @@ currentglobal true setglobal
 % on the operand stack while it does.
 /.pexec { { exec } //.coexec } bind def
 
+% --- running a body with a dictionary current ------------------------
+% The other bracket, and the smaller one. A body that opens a dictionary
+% owes the dictionary stack the close, and an error part way through it
+% is a way out of the body like returning is: what the error handler runs
+% in, and everything after it, is then a dictionary somebody else opened,
+% where a name reads what it was never meant to read and a definition
+% lands where nobody will look for it.
+%
+% dict {body}  .indict  -
+%
+% Run the body with the dictionary current and take that dictionary off
+% again however the body ends -- exactly the one this opened, so a body
+% that opens more of its own closes those itself. What stopped the body
+% is raised again once the dictionary is off, so the caller's error
+% handling sees the error the body raised.
+%
+% The body's operands are whatever is already on the operand stack and
+% what it leaves there is left there: nothing of the bracket lies between
+% them while it runs. What fails in here is the caller failing, and its
+% operands come back as they would from any other part of its body; a
+% procedure of the program's goes through .pcallout above, which says
+% otherwise.
+/.indict {
+    exch begin stopped { end //.costop exec }{ end } ifelse
+} bind def
+
 end
 setglobal
 
