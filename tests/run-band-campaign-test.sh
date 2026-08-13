@@ -685,9 +685,14 @@ for d in $matrixdevs; do
         # the two write the same bytes, so decoding one would settle the
         # other -- but that is a step of reasoning rather than a
         # measurement, and it costs less to take the measurement.
+        #
+        # The direct cell asks for the page whole, as every direct cell
+        # here does: the bare name is weighed, so a cell spelling it
+        # would be whichever route the page's size chose and the pair
+        # would be one route decoded twice on a page large enough.
         for tg in dir rec; do
             [ "$sab" -eq 0 ] && [ "$encoded" = yes ] || continue
-            csel=$d
+            csel=$(whole "$d")
             if [ "$tg" = rec ]; then
                 [ "$isrec" = yes ] || continue
                 csel="record:$d"
