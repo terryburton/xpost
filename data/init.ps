@@ -1251,15 +1251,12 @@ setglobal
             fd /.formid 2 index put
             graphicsdict /.formserial 3 -1 roll 1 add put
         } if
-        % The key: the form, the linear part of the transformation, and
-        % where the position falls between pixels. The values are
+        % The key: the form and the linear part of the transformation,
         % written out in full rather than rounded, so two executions
-        % share a drawing only where they are the same execution moved a
-        % whole number of pixels.
-        %
-        % The linear part is in the key because a drawing is the marks
-        % the procedure made under one transformation, and marks made
-        % under another are another drawing.
+        % share a drawing only where the transformation that made it is
+        % the same one. A drawing is the marks the procedure made under
+        % one transformation, and marks made under another are another
+        % drawing.
         %
         % The position is not in the key. PLRM 4.7 says a change to the
         % translation of the transformation usually does not require the
