@@ -25,6 +25,10 @@
 % with the device matrix (1 0 0 -1 0 height cm) so device coordinates map to
 % PDF's y-up user space -- the same flip the raster devices apply, done once.
 %
+% A method runs its body with the device dictionary current, and opens it
+% through the bracket that takes it off again however the body ends, error
+% included (.indict, graphics.ps).
+%
 % Content is accumulated in a growable buffer held outside virtual memory -- via
 % the device's /Private string, like the raster devices' pixel buffer -- so that
 % it survives a `restore` the job may execute before showpage (the current
@@ -48,7 +52,7 @@
     /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
-    begin {/height /width}{exch def}forall
+    { {/height /width}{exch def}forall
     % the page dimensions are points and need not be integral; adopt the
     % exact values when the page device machinery published them
     graphicsdict /.exactpagedims 2 copy known {
@@ -56,9 +60,9 @@
         dup 0 get /width exch def
         1 get /height exch def
     }{ pop pop } ifelse
-    currentdict end
+    currentdict } //.xpostsys /.indict get exec
     dup /.copydict get exec
-    begin
+    {
         /.docinfo 8 dict def    % document metadata from DOCINFO pdfmarks
         currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
         /.pdfimages 0 array def
@@ -71,18 +75,18 @@
         % that restore)
         currentdict dup /.setupoutput get exec
     currentdict
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % Take the ticket on the open document. The record names one ticket and
     % the device holding it is the one that finishes the document, so a device
     % that hands the document on and is then retired leaves it alone.
     /.claimdoc { % IMAGE  .  -
-    begin
+    {
         //.xpostsys /.vecout get /docid get 1 add
         //.xpostsys /.vecout get /docid 2 index put
         //.xpostsys /.vecout get /owner 2 index put
         currentdict /.vecticket 3 -1 roll put
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % Decide the output form from the name and, for the single-file form, open
     % the file. Without a %d the pages accumulate into one file (finalised at
@@ -101,7 +105,7 @@
     % restore closes it again. One writing a different name is a different
     % document, so the open one is finished off before this one starts.
     /.setupoutput { % IMAGE  .  -
-    begin
+    {
         //.xpostsys /.vecout get /ready get {
             currentdict /OutputFileName known {
                 //.xpostsys /.vecout get /name get OutputFileName ne {
@@ -174,7 +178,7 @@
                 } if
             } if
         } ifelse
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     /Destroy { % IMAGE  .  -
         % finalise the accumulating file (page tree, cross-reference and
@@ -182,8 +186,8 @@
         % device holding the ticket on it: a page device change hands the open
         % document to its replacement, and the device being retired is no
         % longer the one writing it.
-        % .endfile `begin`s the device, so it needs its own copy (get consumes
-        % one, begin the other) while leaving the device for .pdffree
+        % .endfile runs with the device current, so it needs its own copy (get
+        % consumes one, the body the other) while leaving the device for .pdffree
         dup /.vecticket known //.xpostsys /.vecout get /owner known and {
             dup /.vecticket get //.xpostsys /.vecout get /owner get eq
         }{ false } ifelse
@@ -443,7 +447,7 @@
     % device space the syntax can name; painting then falls back to the
     % tint-transformed process colour.
     /.registersep { % tint space IMAGE  .  index true | false
-    begin
+    {
         /.sepspace exch def
         pop  % the tint: the caller records it per-gstate
         /.sepnout .sepspace 2 get
@@ -479,31 +483,31 @@
                 true
             } ifelse
         } ifelse
-    end }
+    } //.xpostsys /.indict get exec }
 
     /PutPix { % c1..cN x y IMAGE  .  -
-    begin {y x}{exch def}forall
+    { {y x}{exch def}forall
         .pdffillcolor
         x .pdfnum ( ) .put y .pdfnum ( 1 1 re\nf\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     /GetPix { % x y IMAGE  .  r g b
         pop pop pop  0 0 0
     }
 
     /DrawLine { % c1..cN x1 y1 x2 y2 IMAGE  .  -
-    begin {y2 x2 y1 x1}{exch def}forall
+    { {y2 x2 y1 x1}{exch def}forall
         .pdfstrokecolor
         x1 .pdfnum ( ) .put y1 .pdfnum ( m\n) .put
         x2 .pdfnum ( ) .put y2 .pdfnum ( l\nS\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     /DrawRect { % c1..cN x y w h IMAGE  .  -
-    begin {h w y x}{exch def}forall
+    { {h w y x}{exch def}forall
         .pdfstrokecolor
         x .pdfnum ( ) .put y .pdfnum ( ) .put
         w .pdfnum ( ) .put h .pdfnum ( re\nS\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % The operands name an inclusive pixel span and a PDF rectangle is
     % half-open, so the rectangle that covers the pixels a raster device
@@ -512,13 +516,13 @@
     % device painting a rectangle a pixel short in each direction of
     % every other device's.
     /FillRect { % c1..cN x y w h IMAGE  .  -
-    begin {h w y x}{exch def}forall
+    { {h w y x}{exch def}forall
         w 0 lt { /x x w add def /w w neg def } if
         h 0 lt { /y y h add def /h h neg def } if
         .pdffillcolor
         x .pdfnum ( ) .put y .pdfnum ( ) .put
         w 1 add .pdfnum ( ) .put h 1 add .pdfnum ( re\nf\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % c1..cN polygon IMAGE . -  ; append the fill colour, the subpath
     % moveto/lineto/closepath, and a nonzero-winding fill. The per-coordinate
@@ -526,11 +530,11 @@
     % appending to the accumulator; the colour is emitted here, where
     % separations are the device's business.
     /FillPoly { % c1..cN polygon IMAGE  .  -
-    begin
+    {
         /.polyarg exch def
         .pdffillcolor
         .polyarg currentdict //.internaldict /.pdffillpoly get exec
-    end }
+    } //.xpostsys /.indict get exec }
 
     % append collected path elements (coordinates then a /m /l /c /h
     % name each, from the .devpathforall walker) as content-stream
@@ -562,7 +566,7 @@
     % accumulator, so subpath count costs no operand stack; the colour
     % is emitted here, where separations are the device's business.
     /FillPath { % c1..cN IMAGE  .  -
-    begin
+    {
         .pdffillcolor
         currentdict //.internaldict /.pdffillpath get exec
         % a clip adopted for this fill ends with it
@@ -570,7 +574,7 @@
             (Q\n) .put
             /.pdfclipopen false def
         } if
-    end }
+    } //.xpostsys /.indict get exec }
 
     % clippath IMAGE . -  ; adopt a clip shape the interpreter could not
     % reduce to a rectangle, as a content-stream clip. Without this the
@@ -579,7 +583,7 @@
     % and keeps its curves. The clip lands inside the q/Q the fill's own
     % emission balances, so it governs that fill alone.
     /ClipPath { % path IMAGE  .  -
-    begin
+    {
         % the path walker reads the current path, so install the clip
         % shape for the walk and put the working path back after. No
         % scratch dictionary is opened: the accumulator methods below
@@ -592,7 +596,7 @@
         (W n\n) .put
         graphicsdict /currgstate get exch /currpath exch put
         /.pdfclipopen true def
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % w h ncomp mat rows decode interp IMAGE . -  ; take a whole sampled
     % image: the rows (one interleaved 8-bit string per row) file as
@@ -600,7 +604,7 @@
     % the unit square under the image-to-device matrix, the decode
     % ranges carried in the object for the consumer to apply
     /PaintImage {
-    begin {piint pidec pirows pim pinc pih piw}{exch def}forall
+    { {piint pidec pirows pim pinc pih piw}{exch def}forall
         /piidx .pdfimages length def
         /.pdfimages [ .pdfimages aload pop
             << /w piw /h pih /nc pinc /rows pirows /dec pidec
@@ -622,7 +626,7 @@
         dup 4 get .pdfnum ( ) .put
         5 get .pdfnum ( cm\n) .put
         (/Im) .put piidx 20 string cvs .put ( Do\nQ\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % r g b IMAGE . -  ; stroke the current path as one content-stream
     % path with the device-space line width and the graphics state's
@@ -631,7 +635,7 @@
     % path is collected first (the walker runs in its own dictionary,
     % away from this device's methods) and emitted afterwards.
     /StrokePath { % c1..cN IMAGE  .  -
-    begin
+    {
         /spelems [ { /m } { /l } { /c } { /h } //.xpostsys /.devpathforall get exec ] def
         spelems length 0 gt {
             .pdfstrokecolor
@@ -646,22 +650,22 @@
             % an empty path strokes nothing: drop the unused colour
             .ncomps { pop } repeat
         } ifelse
-    end }
+    } //.xpostsys /.indict get exec }
 
     % A showpage emits the page. Without a %d in the output name the pages
     % accumulate into the one file opened at Create (.emitpage), finalised at
     % Destroy; with a %d each page is written whole to its own numbered file
     % (.emitwhole).
     /Emit { % IMAGE  .  -
-        % .setupoutput and the writer each `begin` the device, so each needs
-        % its own copy (get consumes one, begin the other)
+        % .setupoutput and the writer each run with the device current, so each
+        % needs its own copy (get consumes one, the body the other)
         dup dup /.setupoutput get exec
         //.xpostsys /.vecout get /single get
         { dup /.emitpage get exec }{ dup /.emitwhole get exec } ifelse
     } bind
 
     /.emitwhole { % IMAGE  .  -
-    begin
+    {
         /Chunks currentdict //.internaldict /.pdfchunks get exec def
         % deflate the content stream (falls back to uncompressed without zlib)
         Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
@@ -804,7 +808,7 @@
         currentdict //.internaldict /.pdfreset get exec
         /.pdfimages 0 array def
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
-    end }
+    } //.xpostsys /.indict get exec }
 
     % Append one page to the accumulating file: the content stream, any
     % separation function objects registered since the previous page, this
@@ -815,7 +819,7 @@
     % as the page is emitted, before any restore the job runs -- so none of
     % them need to outlive the page.
     /.emitpage { % IMAGE  .  -
-    begin
+    {
         //.xpostsys /.vecout get /headered get not {
             (%PDF-1.4\n) .vw
             //.xpostsys /.vecout get /headered true put
@@ -917,14 +921,14 @@
         currentdict //.internaldict /.pdfreset get exec
         /.pdfimages 0 array def
         (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % Close the accumulating file: the page tree over every page (object 2),
     % the catalog (object 1), the document info if any DOCINFO arrived, then
     % the cross-reference table and trailer. Runs with the device dictionary
     % current, for the document info.
     /.endfile { % IMAGE  .  -
-    begin
+    {
         //.xpostsys /.vecout get /headered get not {
             (%PDF-1.4\n) .vw //.xpostsys /.vecout get /headered true put
         } if
@@ -975,7 +979,7 @@
         % close the file unless it is stdout, and give up the local hold
         //.xpostsys /.vecout get /F get dup (%stdout) (w) file ne { closefile }{ pop } ifelse
         .privatedict /.vecoutfile undef
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 >> def
 
 /TESTGRAPHICS where {pop
