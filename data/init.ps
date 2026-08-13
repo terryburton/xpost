@@ -1158,25 +1158,42 @@ currentglobal true setglobal
 setglobal
 
 % formdict  execform  -
-% Paint a form. On a raster page the output is cached: the paint
-% runs once over a black ground and once over white in an offscreen
-% raster of the device's own class, pixels that agree are the form's
-% own marks -- painting is opaque, so a pixel the paint left alone
-% still shows its ground -- and later executions under the same
-% linear transformation copy the marks straight onto the page,
-% quantized to the pixel grid. Blended glyph edges differ between
-% the grounds and stay uncovered, keeping the page's own background
-% there. The cache serves within a rectangular clip that holds the
-% whole raster; anything else -- a vector or screening device, an
-% unwritable dictionary, an oversized raster -- paints afresh. A
-% form's own execform calls run inside its capture, so nested forms
-% cache independently.
+% Paint a form.
+%
+% The paint procedure runs once for each form and each linear
+% transformation it is used under. What it paints is captured as a
+% drawing -- the marks it made, in the device's own coordinates, held by
+% a recorder standing in for the device -- and every execution after
+% that places the drawing where it is wanted rather than running the
+% procedure again. PLRM 4.7 permits saved output to stand in for
+% re-executing the procedure, and this is that latitude: it also says
+% that a change to the translation of the transformation does not
+% require the procedure to be run again, which is why the key carries
+% the linear part and the placement carries the position.
+%
+% A placement is a reference and not a copy. The drawing is held once
+% however many places it is put, and a form whose paint procedure uses a
+% form places that form's drawing inside its own -- so a page built of
+% forms inside forms costs each distinct form once, at its own
+% transformation, rather than their product. A placement is resolved
+% when the page is painted, which is what makes that true at any depth.
+%
+% What is placed is the marks, not a picture of them, so each placement
+% is painted at its own position rather than at the position the
+% procedure was run at. A form at a fractional position is therefore the
+% page the procedure would have painted there.
+%
+% The cache serves where a drawing can be held for the device
+% (.newformrecord, src/lib/xpost_dev_record.c) and where the clip is a
+% rectangle holding the whole of the form's box: what reaches the
+% recorder is already cut to the clip, so a form the clip cuts would be
+% captured cut and placed cut somewhere the clip is not. Anything else
+% -- a device given whole paths, one that screens, a form dictionary
+% that cannot take its serial -- paints afresh.
 /execform [ /dicttype ] {
     dup /FormType 2 copy known { get 1 eq }{ pop pop false } ifelse
     not { /execform cvx /rangecheck signalerror } if
-    DEVICE /ImgData known
-    DEVICE /ScreenPaint known not and
-    1 index wcheck and
+    dup wcheck
     not {
         //.xpostsys /.execformdirect get exec
     }{
@@ -1187,12 +1204,17 @@ setglobal
             fd /.formid 2 index put
             graphicsdict /.formserial 3 -1 roll 1 add put
         } if
-        % the key: the form and the transformation's linear part on a
-        % thousandth grid; the position quantizes at replay
+        % The key: the form, and the linear part of the transformation
+        % as it stands. The values are written out in full rather than
+        % rounded, so two transformations share a drawing only where
+        % they are the same transformation -- a drawing is the marks the
+        % procedure made under one of them, and marks made under another
+        % are another drawing. The position is not in the key: it is
+        % what the placement carries.
         /cm matrix currentmatrix def
         /key fd /.formid get 20 string cvs
         [ cm 0 get cm 1 get cm 2 get cm 3 get ] {
-            1000 mul round cvi 20 string cvs
+            40 string cvs
             exch (:) //.xpostsys /.strcat get exec exch //.xpostsys /.strcat get exec
         } forall def
         /fc graphicsdict /.formcache 2 copy known { get }{
@@ -1200,68 +1222,55 @@ setglobal
         } ifelse def
         fd //.xpostsys /.execformbox get exec
         /fh exch def /fw exch def /fby exch def /fbx exch def
-        fc key known not {
-            fw 0 gt fh 0 gt and fw fh mul 4194304 le and {
-                /rgbdev DEVICE /nativecolorspace get /DeviceRGB eq def
-                /mdev fw fh
-                    rgbdev { .privatedict /newPPMIMAGEdevice get exec }
-                          { .privatedict /newPGMIMAGEdevice get exec } ifelse
-                def
-                mdev /FillPoly //.internaldict /.fillpoly get put
-                mdev /FillRect
-                    //.internaldict rgbdev { /.fillrectrgb }{ /.fillrectgray } ifelse get
-                    put
-                % blended glyph edges would differ between the two
-                % grounds and fall out of the coverage; bilevel text
-                % keeps every glyph pixel deterministic
-                mdev /TextAlphaBits 1 put
-                gsave
-                graphicsdict /currgstate get /device mdev put
-                /cm2 cm matrix copy def
-                cm2 4 cm 4 get fbx sub put
-                cm2 5 cm 5 get fby sub put
-                cm2 setmatrix
-                initclip
-                % a fill's extent operands name an inclusive pixel span,
-                % so the rectangle covering a mask of fw columns is
-                % spanned by fw-1 (the driver contract,
-                % src/lib/xpost_dev_driver.h)
-                rgbdev { 0 0 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
-                       { 0 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse
-                fd //.xpostsys /.execformdirect get exec
-                % the first painting is read back after the second has
-                % overwritten the raster, so the copy has to reach the
-                % storage itself: a grey row is that storage and a
-                % colour row names the planes that are
-                /rowsa [ mdev /ImgData get {
-                    dup type /stringtype eq
-                        { dup length string copy }
-                        { [ exch { dup length string copy } forall ] } ifelse
-                } forall ] def
-                rgbdev { 1 1 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectrgb get exec }
-                       { 1 0 0 fw 1 sub fh 1 sub mdev //.internaldict /.fillrectgray get exec } ifelse
-                fd //.xpostsys /.execformdirect get exec
-                grestore
+        % Whether the clip holds the whole of the form's box. What
+        % reaches a recorder is already cut to the clip, so a drawing
+        % captured under a clip that cuts it is cut wherever it is
+        % placed; and a drawing placed where the clip would cut it is
+        % placed whole. Both are the same question, asked of the capture
+        % and of every placement.
+        /fits //.internaldict /.cliprect get exec {
+            /cy1 exch def /cx1 exch def /cy0 exch def /cx0 exch def
+            fbx cx0 ge fby cy0 ge and
+            fbx fw add cx1 le and fby fh add cy1 le and
+        }{ false } ifelse def
+        fits fc key known not and {
+            % A recorder standing in for the device, at the page's own
+            % extent: the marks are the device's coordinates and the
+            % clip they are cut to is the page's.
+            /cap DEVICE /dimensions get aload pop
+                DEVICE //.internaldict /.newformrecord get exec def
+            cap null ne {
+                % the drawings the cache is holding are given up before
+                % it is replaced, since what a recorder holds is not
+                % virtual memory and nothing else would give it back
                 fc length 8 ge {
+                    fc { pop /drawing get dup /Destroy get exec } forall
                     graphicsdict /.formcache 8 dict put
                     /fc graphicsdict /.formcache get def
                 } if
-                fc key <<
-                    /rows mdev /ImgData get
-                    /mask rowsa mdev /ImgData get //.internaldict /.formmask get exec
-                >> put
+                gsave
+                graphicsdict /currgstate get /device cap put
+                fd //.xpostsys /.execformdirect get exec
+                grestore
+                fc key << /drawing cap /tx cm 4 get /ty cm 5 get >> put
             } if
         } if
-        fc key known
-        { //.internaldict /.cliprect get exec {
-              /cy1 exch def /cx1 exch def /cy0 exch def /cx0 exch def
-              fbx cx0 ge fby cy0 ge and
-              fbx fw add cx1 le and fby fh add cy1 le and
-          }{ false } ifelse }
-        { false } ifelse
-        {
+        fits fc key known and {
             /fe fc key get def
-            fe /rows get fe /mask get fbx fby DEVICE //.internaldict /.blitform get exec
+            % where this execution puts the drawing: the difference
+            % between the position it is wanted at and the position it
+            % was painted at, in the device's own coordinates
+            /dx cm 4 get fe /tx get sub def
+            /dy cm 5 get fe /ty get sub def
+            DEVICE /.recordplace known {
+                % a device holding a record of its own is given the
+                % placement to write down, so the drawing is held once
+                % for the page rather than played once per placement
+                fe /drawing get dx dy DEVICE dup /.recordplace get exec
+            }{
+                fe /drawing get DEVICE dx dy
+                    //.internaldict /.replayplace get exec
+            } ifelse
         }{
             fd //.xpostsys /.execformdirect get exec
         } ifelse

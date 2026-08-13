@@ -250,11 +250,13 @@ fi
 #    process colour model and the other did not, so the same device
 #    behaved differently according to how it had been selected.
 #
-#    Two sites install a compiled rasteriser on a device that is not a
-#    page device and never becomes one -- the glyph cache in font.ps and
-#    the form cache in init.ps, each a scratch raster the machinery
-#    paints into and reads back. They are named here rather than left to
-#    slip through a looser pattern.
+#    One site installs a compiled rasteriser on a device that is not a
+#    page device and never becomes one: the glyph cache in font.ps, a
+#    scratch raster the machinery paints into and reads back. It is
+#    named here rather than left to slip through a looser pattern. A
+#    form is not one of them -- what a form is painted into is a
+#    recorder, which brings its own marking methods and is finished by
+#    nothing.
 scratch=0
 for f in device.ps font.ps init.ps image.ps pgmimage.ps pbmimage.ps \
          ppmimage.ps tiffimage.ps nulldev.ps bboxdev.ps pdfwrite.ps \
@@ -266,20 +268,19 @@ for f in device.ps font.ps init.ps image.ps pgmimage.ps pbmimage.ps \
         case "$f:$hit" in
             device.ps:*"dev /Fill"*)   continue ;;   # .completedevice itself
             font.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
-            init.ps:*"mdev /Fill"*)    scratch=$((scratch + 1)); continue ;;
         esac
         echo "check-device-skeleton: a device is completed outside .completedevice:" >&2
         echo "  $f:$hit" >&2
         echo "A page device is finished by .completedevice (data/device.ps); the only" >&2
-        echo "sites that may install a rasteriser directly are the two scratch rasters," >&2
-        echo "font.ps's glyph cache and init.ps's form cache, both named mdev." >&2
+        echo "site that may install a rasteriser directly is the scratch raster," >&2
+        echo "font.ps's glyph cache, named mdev." >&2
         fail=1
     done <<EOF
 $(grep -nE '/(FillPoly|FillRect)([ \t]+//\.internaldict|$)' "$p" || true)
 EOF
 done
-if [ "$scratch" -ne 4 ]; then
-    echo "check-device-skeleton: $scratch scratch-raster completions, expected 4." >&2
+if [ "$scratch" -ne 2 ]; then
+    echo "check-device-skeleton: $scratch scratch-raster completions, expected 2." >&2
     echo "A new one is another place a device gets finished; give it" >&2
     echo ".completedevice or add it here with its reason." >&2
     fail=1
