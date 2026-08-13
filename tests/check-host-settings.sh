@@ -415,6 +415,7 @@ compare_values "a run given a data directory and two resource directories" \
 .interactive false
 ShowpageSemantics 0
 StartDevice /null
+StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE -
 OutputFileName -
@@ -429,6 +430,7 @@ compare_values "a run given an output file and a device mode" \
 .interactive false
 ShowpageSemantics 0
 StartDevice /null
+StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE bgra
 OutputFileName $hwork/page.out

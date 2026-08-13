@@ -22,7 +22,7 @@
 # A name is added here in the same commit that makes the interpreter
 # settle it, and removed in the one that stops.
 
-entries 10
+entries 11
 
 # where this run found its boot files: XPOST_DATA_DIR, the directory the
 # shared library sits in, the configured data directory, or a relative
@@ -43,11 +43,17 @@ DATA_DIR
 # control back to the caller -- as the context was created with
 ShowpageSemantics
 
-# which device this run was started with: -d, less the mode selector a
-# "device:mode" selection carries. The boot files make the device from
-# it once the language stands, and the start-up report names it when the
-# device could not be made
+# which device this run's page is given to: -d, less the mode selector a
+# "device:mode" selection carries, and the recording class where the
+# selection names a device whose page may arrive a band at a time. The
+# boot files make the device from it once the language stands
 StartDevice
+
+# which device this run asked for, which is the one the start-up report
+# names when the device could not be made. It differs from StartDevice
+# where a selection was given banding: a caller told about a device it
+# never named is being told about a choice made on its behalf
+StartDeviceAsked
 
 # the page this run was started at, in device pixels: -g, or the page a
 # run that named none is started at
