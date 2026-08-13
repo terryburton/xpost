@@ -27,6 +27,18 @@
 .xpost_PBMIMAGE /.pnmmagic (P4\n) put
 .xpost_PBMIMAGE /.pnmmaxval () put
 
+% what one row of this class's raster costs, as the elements and the
+% string bytes it takes. The rows are the grayscale class's rows -- a
+% page renders through the machinery this class inherits and the packing
+% into bits happens at emission, over a run of finished rows -- so a row
+% is one byte per pixel and no elements. Said rather than inherited,
+% because a copy carries what it was copied from and a budget divided by
+% a number nobody restated buys a band of some other height than the one
+% it paid for.
+.xpost_PBMIMAGE /.rowcost { % -  .  elements bytes
+    0 width
+} bind put
+
 % every grey painted screens through the halftone in force
 .xpost_PBMIMAGE /ScreenPaint true put
 

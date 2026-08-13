@@ -38,6 +38,18 @@
 .xpost_TIFFIMAGE /.pnmmagic undef
 .xpost_TIFFIMAGE /.pnmmaxval undef
 
+% what one row of this class's raster costs, as the elements and the
+% string bytes it takes. The rows are the rgb class's rows -- a page
+% renders through the machinery this class inherits and only the
+% emission is this format's -- so a row is the three elements naming its
+% planes and one byte per pixel in each of them. Said rather than
+% inherited, because a copy carries what it was copied from and a budget
+% divided by a number nobody restated buys a band of some other height
+% than the one it paid for.
+.xpost_TIFFIMAGE /.rowcost { % -  .  elements bytes
+    3 width 3 mul
+} bind put
+
 % file  .writehead  -
 % what precedes the strip: the byte order, the format's own number, and
 % where the directory begins. A seekable file writes a placeholder there
