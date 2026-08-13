@@ -114,9 +114,18 @@ guard_mirror_tree() {
         echo "FAILURES: could not make a scratch directory under $work"
         exit 1
     fi
+    # A file that is not there, or that names no pattern, leaves nothing
+    # to prune and the walk copies what it finds. Read in a shell that
+    # ends on the first command to fail, the pipeline below is the whole
+    # of that shell: an empty list makes the last stage exit non-zero and
+    # takes the guard with it, which is a guard exiting 1 having said
+    # nothing at all -- red, and mute about why.
     gm_prune=
-    gm_pats=$(tr -d '\r' < "$1/tests/corpus/.gitignore" 2>/dev/null \
-        | sed 's/#.*//' | tr -s ' \t' '\n' | grep .)
+    gm_pats=
+    if [ -r "$1/tests/corpus/.gitignore" ]; then
+        gm_pats=$(tr -d '\r' < "$1/tests/corpus/.gitignore" \
+            | sed 's/#.*//' | tr -s ' \t' '\n' | grep . || true)
+    fi
     set -f
     for gm_p in $gm_pats; do
         case $gm_p in
