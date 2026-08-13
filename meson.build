@@ -3717,6 +3717,27 @@ test('startup-page',
   suite: cost_fast,
   timeout: 120)
 
+# Where that refusal stands for a record, whose page arrives in bands.
+# Banding bounds the pixels held at once and leaves the array of rows
+# growing with the page, so the largest page a record can take is settled
+# by the memory that array comes to and not by what a composite counts --
+# and the two answer differently on the build whose composite is the
+# wider one. Both ends are held, on both builds: a page whose rows no
+# memory holds is refused in either dimension and in both, since the
+# array follows the height and a row follows the width; and the largest
+# page the ordinary build can name is taken, so the bound cannot be
+# tightened onto a page the interpreter provides. The job makes no mark,
+# so no page is put out and nothing waits on a raster; a build that took
+# a page it cannot hold would ask for the block, so this one answers
+# null rather than ending the process at the request.
+test('band-extent',
+  find_program('tests/run-band-extent-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+         'ASAN_OPTIONS': asan_answers_null },
+  suite: cost_fast,
+  timeout: 120)
+
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or
 # its outline into the content a vector writer keeps, or its ink box to a

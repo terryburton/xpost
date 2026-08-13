@@ -325,6 +325,7 @@ tests/run-band-writer-test.sh \
 tests/run-band-device-test.sh \
 tests/run-band-campaign-test.sh \
 tests/run-band-replay-cost-test.sh \
+tests/run-band-extent-test.sh \
 tests/run-page-lifetime-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \

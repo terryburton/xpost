@@ -2158,6 +2158,85 @@ static int _replaypage(Xpost_Context *ctx,
                         xpost_real_cons(lo), xpost_real_cons(hi));
 }
 
+/* Whether a page of this extent could be painted at all.
+ *
+ * A record holds marks and no pixels, so it would take a page of any
+ * size and refuse it at the far end, when the raster that paints it is
+ * finally asked for -- which is after the program has run. The device
+ * that paints holds a page as rows: an array of them, one string per
+ * row. So the page a record can be given is the page its target could
+ * hold, and that is the question asked here, at Create, where every
+ * other device answers it.
+ *
+ * Banding is what makes this worth stating rather than leaving to the
+ * raster. Without it, a page too large refuses itself by not fitting in
+ * memory; a banded page holds one band whatever its height, so the
+ * extent stops being refused by its own weight and has to be refused on
+ * purpose. What is left bounding it is the array of rows, which is the
+ * one part of a banded page that still grows with the page: one object
+ * slot per row of the page, held whether or not the device holds that
+ * row's pixels, because a band presents the whole spine and keeps
+ * pixels in the rows of its own run (doc/NEWINTERNALS).
+ *
+ * So the page is put to two questions and they are not the same one.
+ * What can be held is a quantity of memory; what a composite can count
+ * is the range of a field. Asking only the second lets a build whose
+ * field is wide accept a page of two thousand million rows, which is
+ * tens of gigabytes of array before a pixel exists, and no field width
+ * makes that memory appear.
+ */
+
+/* The bytes one page's rows may take of the virtual memory they are
+   built in.
+
+   The array of rows and the rows themselves are allocated in one bank of
+   virtual memory, and a bank is addressed by an unsigned 32-bit offset,
+   so a bank runs no further than such an offset reaches: a request past
+   that span cannot be met however much memory the host has, which is why
+   .vmreserve (src/lib/xpost_op_param.c) refuses one without asking the
+   system for it. That is the ceiling this comes out of. What one page's
+   rows may take is a share of a bank rather than the whole of it, since
+   the band's own pixels, the marks the record holds and everything the
+   program allocates come out of the same bank.
+
+   The share is a judgement and is written as one. A round decimal admits
+   to being chosen, where a power of two would claim to be a boundary of
+   the object or of the machine and there is no such boundary here. A
+   hundred million bytes of rows is millions of rows at either object
+   width, which is past any page that is going to be painted and short of
+   any page that could be held. */
+#define PAGE_ROWS_BUDGET 100000000u
+
+static int _extent_ok(Xpost_Object width, Xpost_Object height)
+{
+    int w, h;
+
+    /* The page as the extent a device takes it as, which is where a
+       number that is no extent at all -- a negative one, or one past
+       what a device counts a pixel's position in -- is refused. */
+    if (!xpost_dev_buffer_extent(width.int_.val, &w)
+        || !xpost_dev_buffer_extent(height.int_.val, &h))
+        return 0;
+    /* What can be held. The array of rows costs an object slot for every
+       row of the page, and a row costs at least a byte a pixel -- one
+       string of the page's width for the grayscale rasters and three for
+       the colour ones. The spine is asked as a division rather than as a
+       product, so that a height no memory could answer for is not first
+       multiplied into a number nothing counts. */
+    if ((size_t)h > PAGE_ROWS_BUDGET / sizeof(Xpost_Object)
+        || (size_t)w > PAGE_ROWS_BUDGET)
+        return 0;
+    /* And then what can be counted. A row is a string of the page's width
+       and the rows are an array of the page's height, so each is held to
+       what a composite counts; the bound is the object width this build
+       was made with, and a page past it cannot be described, never mind
+       held. */
+    if ((dword)w > XPOST_OBJECT_COMP_MAX_SZ
+        || (dword)h > XPOST_OBJECT_COMP_MAX_SZ)
+        return 0;
+    return 1;
+}
+
 /* create an instance of the device, using the class .copydict procedure */
 static int _create(Xpost_Context *ctx,
                    Xpost_Object width,
@@ -2165,6 +2244,14 @@ static int _create(Xpost_Context *ctx,
                    Xpost_Object classdic)
 {
     int ret;
+
+    if (!_extent_ok(width, height))
+    {
+        XPOST_LOG_ERR("%d a page of %ldx%ld is larger than the rows a"
+                      " device can hold it as", limitcheck,
+                      (long)width.int_.val, (long)height.int_.val);
+        return limitcheck;
+    }
 
     xpost_stack_push(ctx->lo, ctx->os, width);
     xpost_stack_push(ctx->lo, ctx->os, height);
