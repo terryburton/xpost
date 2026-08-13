@@ -628,21 +628,26 @@ int xpost_record_mask(Xpost_Record *rec, const unsigned char *cov,
 
     m.w = w;
     m.h = h;
-    m.cov = malloc(n);
-    if (!m.cov)
-    {
-        rec->short_of_a_mark = 1;
-        return 0;
-    }
-    memcpy(m.cov, cov, n);
+    m.cov = NULL;
     if (xpost_strbuf_append(&rec->msk, &m, sizeof m))
     {
-        free(m.cov);
         rec->short_of_a_mark = 1;
         return 0;
     }
-    /* the run holds the entry now, so the coverage is the record's to
-       give up and no longer this call's */
+    /* The entry goes down before the coverage is taken into it, so the
+       copy is the record's from the moment it is made and nothing here
+       is ever the only thing naming it. An entry the coverage could not
+       be taken into comes straight back off the run, so the run holds
+       whole entries and the count over it stays a count of them. */
+    held = &_msks(rec)[count];
+    held->cov = malloc(n);
+    if (!held->cov)
+    {
+        rec->msk.len -= sizeof m;
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    memcpy(held->cov, cov, n);
     rec->mskbytes += n;
     *at = count;
     return 1;
@@ -711,20 +716,12 @@ static int _screen_put(Xpost_Record *rec, int w, int h,
                        const unsigned char *cell)
 {
     _Screen s;
+    _Screen *held;
     real *colour;
     real idx;
+    size_t count;
     size_t n = (size_t)w * (size_t)h;
     int ok;
-
-    s.w = w;
-    s.h = h;
-    s.cell = malloc(n);
-    if (!s.cell)
-    {
-        rec->short_of_a_mark = 1;
-        return 0;
-    }
-    memcpy(s.cell, cell, n);
 
     /* a screen paints nothing, so the place a mark's colour takes is
        filled with zeros and every entry's values stay laid out the one
@@ -732,21 +729,36 @@ static int _screen_put(Xpost_Record *rec, int w, int h,
     colour = calloc((size_t)rec->ncomp, sizeof *colour);
     if (!colour)
     {
-        free(s.cell);
         rec->short_of_a_mark = 1;
         return 0;
     }
 
-    idx = (real)_nscr(rec);
+    s.w = w;
+    s.h = h;
+    s.cell = NULL;
+    count = _nscr(rec);
+    idx = (real)count;
     if (xpost_strbuf_append(&rec->scr, &s, sizeof s))
     {
         free(colour);
-        free(s.cell);
         rec->short_of_a_mark = 1;
         return 0;
     }
-    /* the run holds the entry now, so the cell is the record's to give
-       up and no longer this call's */
+    /* The entry goes down before the cell is taken into it, so the copy
+       is the record's from the moment it is made and nothing here is
+       ever the only thing naming it. An entry the cell could not be
+       taken into comes straight back off the run, so the run holds
+       whole entries and the count over it stays a count of them. */
+    held = &_scrs(rec)[count];
+    held->cell = malloc(n);
+    if (!held->cell)
+    {
+        rec->scr.len -= sizeof s;
+        free(colour);
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    memcpy(held->cell, cell, n);
     rec->scrbytes += n;
 
     ok = _put(rec, XPOST_RECORD_SCREEN, colour, &idx, 1, 0.0, 0.0);
