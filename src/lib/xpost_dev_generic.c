@@ -399,6 +399,46 @@ int _points_resolved_spans(Xpost_Span_Vertex *points,
     return 0;
 }
 
+/* Read a run of coordinates into a vertex run the scan conversion
+   takes: a pair per vertex, a break written as the pair the packed path
+   writes a subpath break as. This is the boundary as everything that
+   holds one holds it -- the packed path, and a record of a page's marks
+   -- so it is the form a caller reaches the conversion through without
+   building anything to carry it. The caller owns the returned buffer.
+   0 on success. */
+static
+int _co_vertices(const real *co,
+                 integer npts,
+                 Xpost_Span_Vertex **out)
+{
+    Xpost_Span_Vertex *points;
+    integer i;
+
+    *out = NULL;
+
+    points = malloc((size_t)npts * sizeof *points);
+    if (!points)
+        return VMerror;
+    for (i = 0; i < npts; i++)
+    {
+        if (co[2 * i] == SUBPATH_BREAK)
+        {
+            points[i].x = SUBPATH_BREAK;
+            points[i].y = SUBPATH_BREAK;
+            continue;
+        }
+        /* quantize to the 1/256 pixel device grid, the same one the
+           contract's line walk uses: geometry meant to lie on a pixel
+           boundary arrives with accumulated float noise, and unsnapped
+           it would classify to the wrong side of the boundary */
+        points[i].x = (real)xpost_dev_line_quantize(co[2 * i]);
+        points[i].y = (real)xpost_dev_line_quantize(co[2 * i + 1]);
+    }
+
+    *out = points;
+    return 0;
+}
+
 /* Read a null-separated polygon array into a vertex run the scan
    conversion takes: the array form of the boundary, where a null
    element separates one subpath from the next. One vertex per array
@@ -489,7 +529,7 @@ int _path_resolved_spans(Xpost_Context *ctx,
 {
     Xpost_Span_Vertex *points;
     real *co;
-    int npts, i, code;
+    int npts, code;
 
     *out = NULL;
     *nout = 0;
@@ -499,24 +539,10 @@ int _path_resolved_spans(Xpost_Context *ctx,
         return code;
     if (npts == 0)
         return 0;
-    points = malloc((size_t)npts * sizeof *points);
-    if (!points)
-    {
-        free(co);
-        return VMerror;
-    }
-    for (i = 0; i < npts; i++)
-    {
-        if (co[2 * i] == SUBPATH_BREAK)
-        {
-            points[i].x = SUBPATH_BREAK;
-            points[i].y = SUBPATH_BREAK;
-            continue;
-        }
-        points[i].x = (real)xpost_dev_line_quantize(co[2 * i]);
-        points[i].y = (real)xpost_dev_line_quantize(co[2 * i + 1]);
-    }
+    code = _co_vertices(co, (integer)npts, &points);
     free(co);
+    if (code)
+        return code;
 
     return _points_resolved_spans(points, (integer)npts, out, nout, evenodd);
 }
@@ -575,10 +601,19 @@ int _rect_paint(Xpost_Span_Consumer *c, int band, real lo, real hi)
     return xpost_operator_exec(p->ctx, p->fillrect);
 }
 
+/* Fill the region a run of vertices bounds, in the colour on the operand
+ * stack under wherever the caller took its own operands from.
+ *
+ * The whole of the fill, from the boundary onwards. What differs between
+ * the callers is only how the boundary reached them, and each turns it
+ * into this run first: the vertices are consumed here, whichever way the
+ * fill leaves.
+ */
 static
-int _fillpoly(Xpost_Context *ctx,
-              Xpost_Object poly,
-              Xpost_Object devdic)
+int _fillpoly_points(Xpost_Context *ctx,
+                     Xpost_Span_Vertex *points,
+                     integer npoints,
+                     Xpost_Object devdic)
 {
     Xpost_Object colorspace;
     int ncomp;
@@ -604,6 +639,7 @@ int _fillpoly(Xpost_Context *ctx,
     else
     {
         XPOST_LOG_ERR("unimplemented device color space");
+        free(points);
         return unregistered;
     }
 
@@ -617,7 +653,10 @@ int _fillpoly(Xpost_Context *ctx,
        named, in silence. The operands an operator needs and has not
        been given are a stackunderflow (PLRM 8.2). */
     if (xpost_stack_count(ctx->lo, ctx->os) < ncomp)
+    {
+        free(points);
         return stackunderflow;
+    }
     if (ncomp == 1)
         comp1 = xpost_stack_pop(ctx->lo, ctx->os);
     else
@@ -645,12 +684,6 @@ int _fillpoly(Xpost_Context *ctx,
     if (usefillrect)
     {
         struct _rect_painter p;
-        Xpost_Span_Vertex *points;
-        int code;
-
-        code = _poly_vertices(ctx, poly, &points);
-        if (code)
-            return code;
 
         p.consumer.take = _rect_paint;
         p.ctx = ctx;
@@ -666,12 +699,11 @@ int _fillpoly(Xpost_Context *ctx,
         /* the device's raster is the page's own rows */
         p.firstrow = 0;
 
-        return xpost_span_scanconvert(points, (integer)poly.comp_.sz, 0,
-                                      NULL, &p.consumer);
+        return xpost_span_scanconvert(points, npoints, 0, NULL, &p.consumer);
     }
 
     {
-        int code = _poly_resolved_spans(ctx, poly, &rsp, &nrsp, 0);
+        int code = _points_resolved_spans(points, npoints, &rsp, &nrsp, 0);
 
         if (code)
             return code;
@@ -811,6 +843,46 @@ int _fillpoly(Xpost_Context *ctx,
      */
     free(rsp);
     return 0;
+}
+
+/* The opcode the polygon fill below is installed under, kept so that a
+   caller holding a device's method can tell it is this one. */
+static unsigned int _fillpoly_opcode;
+
+int xpost_dev_fillpoly_compiled(Xpost_Object method)
+{
+    return xpost_object_get_type(method) == operatortype
+        && method.mark_.padw == _fillpoly_opcode;
+}
+
+int xpost_dev_fillpoly_run(Xpost_Context *ctx,
+                           const real *co,
+                           int npts,
+                           Xpost_Object devdic)
+{
+    Xpost_Span_Vertex *points;
+    int code;
+
+    if (npts < 0)
+        return rangecheck;
+    code = _co_vertices(co, (integer)npts, &points);
+    if (code)
+        return code;
+    return _fillpoly_points(ctx, points, (integer)npts, devdic);
+}
+
+static
+int _fillpoly(Xpost_Context *ctx,
+              Xpost_Object poly,
+              Xpost_Object devdic)
+{
+    Xpost_Span_Vertex *points;
+    int code;
+
+    code = _poly_vertices(ctx, poly, &points);
+    if (code)
+        return code;
+    return _fillpoly_points(ctx, points, (integer)poly.comp_.sz, devdic);
 }
 
 /* How many bands one polygon array carries. A band costs five
@@ -3798,6 +3870,7 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
 
     op = xpost_operator_cons(ctx, ".yxsort", (Xpost_Op_Func)_yxsort, 1, arraytype); INSTALL;
     op = xpost_operator_cons(ctx, ".fillpoly", (Xpost_Op_Func)_fillpoly, 2, arraytype, dicttype); INSTALL;
+    _fillpoly_opcode = op.mark_.padw;
     _region_memo_flush();
     op = xpost_operator_cons(ctx, ".regionmeet", (Xpost_Op_Func)_regionmeet, 3,
                              arraytype, arraytype, integertype); INSTALL;

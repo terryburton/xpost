@@ -169,6 +169,41 @@ void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
 int xpost_dev_blit_row(Xpost_Context *ctx, Xpost_Object dict);
 
 /**
+ * @brief whether a device's polygon fill is the one below
+ *
+ * A device names its methods in its own dictionary and may name
+ * anything: a procedure, a fill of its own, or the compiled one every
+ * raster class installs. Only the last can be reached as a function, so
+ * a caller wanting to hand it a boundary directly asks this first and
+ * makes an ordinary method call otherwise.
+ */
+int xpost_dev_fillpoly_compiled(Xpost_Object method);
+
+/**
+ * @brief fill the region a run of coordinates bounds
+ *
+ * The .fillpoly operator, reached as a function. @p co is a pair per
+ * vertex over @p npts vertices, a subpath break written as the pair the
+ * packed path writes one as, and the colour is on the operand stack as
+ * the operator takes it: one value or three, according to what the
+ * device paints in.
+ *
+ * It is a function as well as an operator so that a caller already
+ * holding a boundary in this form -- a record of a page's marks holds
+ * every polygon in it -- reaches the fill without building the array
+ * operand the method call would take. That array is one two-element
+ * array per vertex, in virtual memory, built afresh for each call; on a
+ * page of paths played back a band at a time it is built once per band a
+ * shape reaches, and it is several times what holding the whole page's
+ * marks costs.
+ *
+ * The fill is the same fill either way, over the same vertices, so what
+ * a page comes to does not depend on which way its boundary arrived.
+ */
+int xpost_dev_fillpoly_run(Xpost_Context *ctx, const real *co, int npts,
+                           Xpost_Object devdic);
+
+/**
  * @brief the threshold cell a screening device paints through
  *
  * @param[out] w the cell's width, @p h its height

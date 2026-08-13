@@ -1544,6 +1544,11 @@ static int _recordscreen(Xpost_Context *ctx,
 
 /* A polygon mark's coordinates as the array a device method takes.
  *
+ * For the method that is not the compiled fill. That one is handed the
+ * coordinates as they are held (xpost_dev_fillpoly_run), and this is
+ * what a polygon costs when it cannot be: a device method may be a
+ * procedure, and what a procedure takes is an object.
+ *
  * It is built in local memory whatever the run was allocating in: it
  * lives as long as the call it is made for, and global memory is not
  * collected. One array per mark, and one two-element array per vertex
@@ -1552,7 +1557,10 @@ static int _recordscreen(Xpost_Context *ctx,
  * the next either: the length differs mark by mark, and a method is
  * given its operand to keep for as long as it wants it, so an array
  * handed to two calls is an array the first of them may still be
- * holding. */
+ * holding.
+ *
+ * Built once for each band the shape reaches, since each band's replay
+ * makes the call afresh. */
 static int _play_poly(Xpost_Context *ctx, const real *ops,
                       Xpost_Object *poly)
 {
@@ -1646,11 +1654,22 @@ static int _is_replay_cont(Xpost_Object o)
  * it is still on top, nothing was left; if it is not, the interpreter
  * has been given something to do.
  *
+ * A polygon whose method is the compiled fill is called through @p co
+ * instead, the run of coordinates the record already holds it as, over
+ * @p npts vertices and into @p devdic. An operator takes its operands
+ * from the operand stack because that is where the interpreter leaves
+ * them, and the shape of a polygon operand there is an array of arrays
+ * built for the one call; the same fill reached as a function takes the
+ * run and builds nothing. The colour still goes on the stack, that being
+ * where the fill reads it whichever way it was entered.
+ *
  * Answers the error to raise, and sets @p left where the caller must
  * return to let the interpreter reach what is waiting for it.
  */
 static int _play_call(Xpost_Context *ctx, Xpost_Object m,
-                      Xpost_Object cont, Xpost_Object caller, int *left)
+                      Xpost_Object cont, Xpost_Object caller,
+                      Xpost_Object devdic, const real *co, int npts,
+                      int *left)
 {
     int ret;
 
@@ -1674,7 +1693,8 @@ static int _play_call(Xpost_Context *ctx, Xpost_Object m,
        the method and unwinds onto the method's own operands, which is
        what an error from a mark played by the interpreter does. */
     ctx->currentobject = m;
-    ret = xpost_operator_exec(ctx, m.mark_.padw);
+    ret = co ? xpost_dev_fillpoly_run(ctx, co, npts, devdic)
+             : xpost_operator_exec(ctx, m.mark_.padw);
     if (ret)
         return ret;  /* the method is left named, for the error */
     ctx->currentobject = caller;
@@ -1785,8 +1805,11 @@ static int _replay_step(Xpost_Context *ctx,
         const real *ops;
         Xpost_Object m;
         Xpost_Object poly = null;
+        /* a polygon's coordinates where the call takes them as they are
+           held, and nothing for every other mark */
+        const real *co = NULL;
         size_t at;
-        int nops, i, left, fresh;
+        int nops, npts = 0, i, left, fresh;
 
         /* The rows asked for choose which marks are played, and the
            marks between are stepped over rather than played and
@@ -2027,7 +2050,8 @@ static int _replay_step(Xpost_Context *ctx,
 
                 pixat++;
                 batch++;
-                ret = _play_call(ctx, m, cont, caller, &left);
+                ret = _play_call(ctx, m, cont, caller, targetdic, NULL, 0,
+                                 &left);
                 if (ret)
                     goto done;
                 if (left)
@@ -2081,11 +2105,25 @@ static int _replay_step(Xpost_Context *ctx,
            and not marks looked at. */
         private.played++;
 
+        /* A polygon reaches the compiled fill as the run the record
+           holds it as, and reaches any other method as the array that
+           method's operand is. Which of the two it is decides what goes
+           on the stack below: the run is handed to the call and the
+           array is an operand, and a device it is an operand for takes
+           the device dictionary after it as every method call does. */
         if (kind == XPOST_RECORD_FILLPOLY)
         {
-            ret = _play_poly(ctx, ops, &poly);
-            if (ret)
-                goto refused;
+            if (xpost_dev_fillpoly_compiled(m))
+            {
+                co = ops + 1;
+                npts = (int)ops[0];
+            }
+            else
+            {
+                ret = _play_poly(ctx, ops, &poly);
+                if (ret)
+                    goto refused;
+            }
         }
 
         /* the colour it was made with, one value per component of the
@@ -2093,14 +2131,21 @@ static int _replay_step(Xpost_Context *ctx,
            played into declares and so the operands its method takes */
         for (i = 0; i < private.ncomp; i++)
             xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(colour[i]));
-        if (kind == XPOST_RECORD_FILLPOLY)
-            xpost_stack_push(ctx->lo, ctx->os, poly);
-        else
-            for (i = 0; i < nops; i++)
-                xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(ops[i]));
-        xpost_stack_push(ctx->lo, ctx->os, targetdic);
+        /* A run handed to the call is not an operand and neither is the
+           device it is handed with, so a polygon reaching the fill that
+           way leaves the colour standing on its own. */
+        if (!co)
+        {
+            if (kind == XPOST_RECORD_FILLPOLY)
+                xpost_stack_push(ctx->lo, ctx->os, poly);
+            else
+                for (i = 0; i < nops; i++)
+                    xpost_stack_push(ctx->lo, ctx->os,
+                                     xpost_real_cons(ops[i]));
+            xpost_stack_push(ctx->lo, ctx->os, targetdic);
+        }
 
-        ret = _play_call(ctx, m, cont, caller, &left);
+        ret = _play_call(ctx, m, cont, caller, targetdic, co, npts, &left);
         if (ret)
             goto done;
         if (left)
