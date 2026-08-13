@@ -197,9 +197,12 @@ _xpost_main_usage(const char *filename)
     printf("  A device may be given a mode after a colon:\n");
     printf("\tDEVICE:whole    hold the whole page rather than a band of\n");
     printf("\t                it, which is what to compare against\n");
-    printf("\trecord:DEVICE   the same banding asked for by name\n");
+    printf("\tDEVICE:band     hold a band of it whatever the page size\n");
     printf("\traster:FORMAT   the pixel format a lent framebuffer is in\n");
     printf("\t                (rgb, argb, bgr, bgra)\n");
+    printf("\n");
+    printf("  record is the class a banded page is held by, and takes no\n");
+    printf("  mode: selecting it is the same as ppm:band.\n");
 }
 
 static int

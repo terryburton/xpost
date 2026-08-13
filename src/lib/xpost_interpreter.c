@@ -2244,9 +2244,9 @@ static const char *const device_strings[] =
    dictionary that does not exist yet. tests/check-device-roster.sh holds
    the two to naming the same devices, so the duplication cannot drift.
 
-   The mode selector a run may write after a colon is what turns this
-   off: a selection naming a mode is the caller having asked for
-   something specific, and is left alone. */
+   The mode selector a run may write after a colon says which of the two
+   ways such a page is held: banded whatever its size, or whole whatever
+   its size. A selection naming neither is the one that is weighed. */
 static const char *const bands_by_default[] =
 {
     "pgm",
@@ -2258,16 +2258,39 @@ static const char *const bands_by_default[] =
     NULL
 };
 
-/* The mode a selection carries that says to hold the page whole. It is
-   spelled as a mode rather than as an option of its own because the
-   thing it turns off is chosen by the device selection, and a run
-   comparing the two ways wants to change one word rather than to add
-   and remove a flag. */
-#define XPOST_WHOLE_PAGE_MODE "whole"
+/* The class a banded page is held by. It is a device of its own -- a
+   page-device request may name it, and the boot files make it from the
+   same roster of makers as any other -- so it is a selection a run may
+   make directly. A run that does so gets the page held a band at a time
+   and painted by the colour raster, which is what "ppm:band" selects,
+   and it is kept for the runs that spell it that way.
+   doc/MANUAL says so where it says how a run asks for banding. */
+#define XPOST_RECORD_DEVICE "record"
 
-static const char *const whole_page_modes[] =
+/* The two ways a page whose device can take it a band at a time may be
+   held, as a run spells them after the colon.
+
+   They are spelled as modes of the device rather than as options of
+   their own because what they choose between is chosen by the device
+   selection, and a run comparing the two ways wants to change one word
+   rather than to add and remove a flag. The device is the head of the
+   selection and the way its page is held is the tail, which is where
+   every other selector in the tree keeps them. */
+#define XPOST_WHOLE_PAGE_MODE "whole"
+#define XPOST_BAND_MODE "band"
+
+static const char *const banding_modes[] =
 {
     XPOST_WHOLE_PAGE_MODE,
+    XPOST_BAND_MODE,
+    NULL
+};
+
+/* No mode at all, which is what the recording class takes: what a record
+   plays into is the device the run selected, and a run selects that by
+   naming the device and the band mode. */
+static const char *const no_modes[] =
+{
     NULL
 };
 
@@ -2285,25 +2308,23 @@ static int _bands_by_default(const char *name, size_t n)
 /* The modes a selection of this device may carry, or NULL where the
    selector means nothing here and belongs to whatever reads it.
 
-   Two devices have a mode this file decides on, and they are the two it
-   rewrites a selection between. A device that bands by default takes the
-   one mode that says to hold the page whole; the recording class takes
-   the name of the device that paints its page, which is the same roster
-   of devices over again. Everything else a colon may carry is read
-   somewhere else -- the raster device reads it for a pixel format -- and
-   is passed through to be held there.
+   Two devices have a mode this file decides on. A device that bands by
+   default takes the two words that say how its page is held; the
+   recording class takes none, being what one of those words is done
+   through rather than something a run says more about. Everything else a
+   colon may carry is read somewhere else -- the raster device reads it
+   for a pixel format -- and is passed through to be held there.
 
-   Held at all because the two answers differ in a direction nothing
-   would report: a selection carrying any mode whatever is one this file
-   leaves alone, so a mode nobody recognises reads as a run having asked
-   for something specific, and the specific thing it gets is the route
-   the mode that turns banding off selects. */
+   Held at all because the answers differ in a direction nothing would
+   report: a selection carrying a mode is one whose route is not weighed,
+   so a mode nobody recognised would read as a run having asked for
+   something specific and quietly turn the weighing off. */
 static const char *const *_device_modes(const char *selected, size_t n)
 {
-    if (strcmp(selected, "record") == 0)
-        return bands_by_default;
+    if (strcmp(selected, XPOST_RECORD_DEVICE) == 0)
+        return no_modes;
     if (_bands_by_default(selected, n))
-        return whole_page_modes;
+        return banding_modes;
     return NULL;
 }
 
@@ -2401,9 +2422,32 @@ int setlocalconfig(Xpost_Context *ctx,
             char takes[64];
 
             _mode_roster(modes, takes, sizeof takes);
-            XPOST_LOG_ERR("%d the %s device takes no mode \"%s\"; the modes"
-                          " it takes are: %s", rangecheck, selected,
-                          colon + 1, takes);
+            if (takes[0])
+                XPOST_LOG_ERR("%d the %s device takes no mode \"%s\"; the"
+                              " modes it takes are: %s", rangecheck, selected,
+                              colon + 1, takes);
+            else if (_bands_by_default(colon + 1, strlen(colon + 1)))
+                XPOST_LOG_ERR("%d the %s device takes no mode; a page held a"
+                              " band at a time and painted by the %s device"
+                              " is selected as \"%s:%s\"", rangecheck,
+                              selected, colon + 1, colon + 1,
+                              XPOST_BAND_MODE);
+            else
+                XPOST_LOG_ERR("%d the %s device takes no mode, and \"%s\" was"
+                              " given", rangecheck, selected, colon + 1);
+            return rangecheck;
+        }
+        /* The two modes above are the two ways a page may be held, so a
+           device that holds its page one way and cannot hold it the
+           other takes neither of them. Refused here rather than passed
+           on: nothing further down reads a mode it does not recognise,
+           so a device that bands nowhere would take the word for banding
+           and paint a whole page under it. */
+        if (colon && !modes && _mode_taken(banding_modes, colon + 1))
+        {
+            XPOST_LOG_ERR("%d the %s device does not take its page a band at"
+                          " a time, so it takes no mode \"%s\"", rangecheck,
+                          selected, colon + 1);
             return rangecheck;
         }
     }
@@ -2789,8 +2833,8 @@ static int _record_host_config(Xpost_Context *ctx,
     unsigned int vmmode;
     const char *subdevice;
     const char *selected;
-    /* the device a selection given banding was made for, which becomes
-       the mode the recording class is told to paint through */
+    /* the device a selection given banding was made for, which is the
+       device a record made from it paints through */
     const char *banded = NULL;
     Xpost_Object o;
     size_t n;
@@ -2863,16 +2907,20 @@ static int _record_host_config(Xpost_Context *ctx,
        if one is made, and the weighing waits for the classes that carry
        the two numbers.
 
-       A selection that names a mode is left alone, which is how a run
-       says otherwise: "pgm:whole" holds the page whole, and
-       "record:pgm" asks for the record by name and gets one at any page.
-       Naming the mode rather than adding an option is what lets the two
-       be compared by changing one word. */
+       A selection naming the mode that holds the page whole is left
+       alone, which is how a run says otherwise: "pgm:whole" is made on
+       the device named and records nothing at any page. "pgm:band" is
+       given to the recording class like the bare selection and, naming
+       the mode, is not weighed once it gets there. Naming the mode
+       rather than adding an option is what lets the three be compared by
+       changing one word. */
     subdevice = device ? strchr(device, ':') : NULL;
-    if (!subdevice && _bands_by_default(selected, n))
+    if (_bands_by_default(selected, n)
+        && (!subdevice
+            || strcmp(subdevice + 1, XPOST_BAND_MODE) == 0))
     {
         banded = selected;
-        selected = "record";
+        selected = XPOST_RECORD_DEVICE;
     }
 
     /* literal: the name is data here, and an executable one would be
@@ -2916,22 +2964,18 @@ static int _record_host_config(Xpost_Context *ctx,
     if ((ret = _host_put(ctx, "StartPageSize", o)) != 0)
         goto done;
 
-    /* The mode selector of a "device:mode" selection, which the raster
-       device reads to settle its pixel format and the recording class
-       reads to settle which device paints its page. A selection given
-       banding above names no mode of its own, so the device it was
-       given for is the mode the record is told.
+    /* The mode selector of a "device:mode" selection, as the run wrote
+       it: the raster device reads it for a pixel format, and the
+       weighing reads it for the word that says to band whatever the page
+       (.devicefor, data/recorddev.ps). Which device a record plays into
+       is not here -- that is the device the run asked for, above.
 
        The mode that holds the page whole is consumed here rather than
-       passed on: it says which of two routes to take, and the device it
+       passed on: it is answered by leaving the selection on the device
+       it names, so by this point it has been acted on and the device it
        reaches has no use for it. */
-    if (banded)
-    {
-        if ((ret = _host_put_string(ctx, "SUBDEVICE", banded)) != 0)
-            goto done;
-    }
-    else if (subdevice
-             && strcmp(subdevice + 1, XPOST_WHOLE_PAGE_MODE) == 0)
+    if (subdevice
+        && strcmp(subdevice + 1, XPOST_WHOLE_PAGE_MODE) == 0)
     {
         if ((ret = _host_put_string(ctx, "SUBDEVICE", NULL)) != 0)
             goto done;

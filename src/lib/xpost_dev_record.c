@@ -44,9 +44,9 @@
  * reason five kinds are enough is that every other call the machinery
  * can make is resolved above a device that declines to declare it.
  *
- * Which device paints the page is the run's, named beside the device in
- * the selection this run was started with: -d record:pgm plays into the
- * grayscale raster and -d record on its own into the colour one. The
+ * Which device paints the page is the device this run selected: -d pgm
+ * and -d pgm:band play into the grayscale raster, and -d record, which
+ * selects this class itself and names no device, into the colour one. The
  * class carries the roster of the devices a record can be played into
  * and this file settles one of them at load, because the choice decides
  * the shape of every marking method here -- a mark carries one value per
@@ -2675,19 +2675,23 @@ static int newrecorddevice(Xpost_Context *ctx,
     return 0;
 }
 
-/* The mode selector this run's device selection carried, as the name a
-   roster is keyed by, or a null where the run named none.
+/* The device this run's selection is played into, as the name a roster
+   is keyed by, or a null where the run named none.
 
-   The selector belongs to the device it was written beside: a run
-   started as -d raster:bgra names a raster's pixel format, which says
-   nothing about where a record's page goes, and a program that switches
-   to a record afterwards has not chosen anything. So it is read only
-   where this run's selection named this device, and a record the run did
-   not select takes the target a selection naming no mode takes. */
-static Xpost_Object _selected_mode(Xpost_Context *ctx, const char *device)
+   It is the device the run asked for: selecting one whose page may
+   arrive a band at a time is what hands the selection to this class
+   (src/lib/xpost_interpreter.c), and the device that selection named is
+   the device this record is standing in front of.
+
+   The run has to have selected this class for the question to be about
+   it. A run started as -d raster:bgra asked for a raster, and a program
+   that switches to a record afterwards has not chosen anything for it to
+   play into; such a record takes the target a run that named no device
+   takes. So does a run that selected this class itself, which names the
+   mechanism and no device to paint through. */
+static Xpost_Object _selected_target(Xpost_Context *ctx, const char *device)
 {
     Xpost_Object o;
-    char name[16];
 
     o = xpost_context_host_setting(ctx, "StartDevice");
     if (xpost_object_get_type(o) != nametype
@@ -2695,15 +2699,12 @@ static Xpost_Object _selected_mode(Xpost_Context *ctx, const char *device)
                                       xpost_name_cons(ctx, device)) != 0)
         return null;
 
-    o = xpost_context_host_setting(ctx, "SUBDEVICE");
-    if (xpost_object_get_type(o) != stringtype || o.comp_.sz < 1
-        || o.comp_.sz >= sizeof name)
+    o = xpost_context_host_setting(ctx, "StartDeviceAsked");
+    if (xpost_object_get_type(o) != nametype
+        || xpost_dict_compare_objects(ctx, o,
+                                      xpost_name_cons(ctx, device)) == 0)
         return null;
-    /* the bytes are as long as the string says and a name is as long as
-       the NUL after it says, so the copy states the length twice */
-    memcpy(name, xpost_string_get_pointer(ctx, o), o.comp_.sz);
-    name[o.comp_.sz] = '\0';
-    return xpost_name_cons(ctx, name);
+    return o;
 }
 
 /* The driver to bring in before this record is specialised, or a null
@@ -2718,22 +2719,22 @@ static Xpost_Object _selected_mode(Xpost_Context *ctx, const char *device)
  */
 static Xpost_Object _play_loader(Xpost_Context *ctx, Xpost_Object classdic)
 {
-    Xpost_Object mode, targets, loaders, clsname, o;
+    Xpost_Object target, targets, loaders, clsname, o;
 
-    mode = _selected_mode(ctx, "record");
-    if (xpost_object_get_type(mode) != nametype)
+    target = _selected_target(ctx, "record");
+    if (xpost_object_get_type(target) != nametype)
         return null;
     targets = xpost_dict_get(ctx, classdic, namedotplaytargets);
     loaders = xpost_dict_get(ctx, classdic, namedotplayloaders);
     if (xpost_object_get_type(targets) != dicttype
         || xpost_object_get_type(loaders) != dicttype)
         return null;
-    clsname = xpost_dict_get(ctx, targets, mode);
+    clsname = xpost_dict_get(ctx, targets, target);
     if (xpost_object_get_type(clsname) != nametype
         || xpost_object_get_type(xpost_dict_get(ctx, ctx->privatedict,
                                                 clsname)) == dicttype)
         return null;
-    o = xpost_dict_get(ctx, loaders, mode);
+    o = xpost_dict_get(ctx, loaders, target);
     if (xpost_object_get_type(o) != nametype)
         return null;
     /* the loaders are operators the drivers install in systemdict, and
@@ -2778,7 +2779,12 @@ static int loadrecorddevice(Xpost_Context *ctx)
 
    The roster of the devices a record can be played into is the class's,
    with the reasons a device is on it (data/recorddev.ps); what this adds
-   is the run's choice among them, and the refusal of anything else. The
+   is the run's choice among them. The refusal below stands over a class
+   whose roster does not carry the device the run selected: a selection
+   naming a device that cannot be played into is refused before the run
+   begins, where the modes a device takes are read
+   (src/lib/xpost_interpreter.c), so it is reached by the two rosters
+   disagreeing and not by anything a run can spell. The
    colour space and the component count come off the target because a
    mark carries one value per component of the space it was made in and
    is played by handing those values to a method whose operands the
@@ -2791,7 +2797,7 @@ static int loadrecorddevice(Xpost_Context *ctx)
 static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
                         int *ncomp)
 {
-    Xpost_Object mode, targets, clsname, cls, o;
+    Xpost_Object target, targets, clsname, cls, o;
     int ret;
 
     targets = xpost_dict_get(ctx, classdic, namedotplaytargets);
@@ -2802,11 +2808,11 @@ static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
         return undefined;
     }
 
-    mode = _selected_mode(ctx, "record");
-    if (xpost_object_get_type(mode) != nametype)
-        mode = xpost_name_cons(ctx, "ppm");
+    target = _selected_target(ctx, "record");
+    if (xpost_object_get_type(target) != nametype)
+        target = xpost_name_cons(ctx, "ppm");
 
-    clsname = xpost_dict_get(ctx, targets, mode);
+    clsname = xpost_dict_get(ctx, targets, target);
     if (xpost_object_get_type(clsname) != nametype)
     {
         XPOST_LOG_ERR("%d a record is asked to be played into a device that"

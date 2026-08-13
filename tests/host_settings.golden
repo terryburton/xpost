@@ -50,9 +50,10 @@ ShowpageSemantics
 StartDevice
 
 # which device this run asked for, which is the one the start-up report
-# names when the device could not be made. It differs from StartDevice
-# where a selection was given banding: a caller told about a device it
-# never named is being told about a choice made on its behalf
+# names when the device could not be made, and the one a record made for
+# such a selection paints through. It differs from StartDevice where a
+# selection was given banding: a caller told about a device it never
+# named is being told about a choice made on its behalf
 StartDeviceAsked
 
 # the page this run was started at, in device pixels: -g, or the page a
@@ -60,7 +61,9 @@ StartDeviceAsked
 StartPageSize
 
 # the mode selector of a "device:mode" selection (-d raster:bgra), which
-# the raster device reads to settle its pixel format
+# the raster device reads to settle its pixel format and the route
+# decision reads for the word that says to hold a band of the page
+# whatever its size
 SUBDEVICE
 
 # where this run's pages go when the page device names nothing and the

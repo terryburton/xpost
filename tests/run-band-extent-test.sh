@@ -57,11 +57,12 @@ NAMED=65535
 # and the shape of page a job asks for.
 ORDINARY=612x792
 
-# The devices a record can be played into (data/recorddev.ps), each named
-# as the run selects it, and the record itself under the name a run gives
-# when it names no target.
-BANDED='record record:pgm record:ppm record:pbm record:tiff record:png
-        record:jpeg'
+# The devices a record can be played into (data/recorddev.ps), each
+# selected with the mode that holds a band of the page whatever its size,
+# and the recording class itself, which a run may still select by name
+# and which then plays into the device its roster defaults to.
+BANDED='record pgm:band ppm:band pbm:band tiff:band png:band
+        jpeg:band'
 
 fail=0
 

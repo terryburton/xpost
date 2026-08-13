@@ -45,7 +45,7 @@
 #
 # The two spellings that opt out are held on the far side of that
 # boundary from where the weighing would have put them: device:whole
-# records nothing at a page over the budget, and record:device records at
+# records nothing at a page over the budget, and device:band records at
 # a page under it. Each is a run saying which route it wants, and neither
 # is the weighing's to overrule. Both are held to that at a declared page
 # as well, since a request that could talk either of them round would be
@@ -263,7 +263,7 @@ one_device() {
     took "$dev:whole" "$over" "$work/whole.out" direct \
          "asks for the page whole and must record nothing at any page" \
         || return 1
-    took "record:$dev" "$fits" "$work/rec.out" record \
+    took "$dev:band" "$fits" "$work/rec.out" record \
          "asks for a record by name and must be given one at any page" \
         || return 1
 

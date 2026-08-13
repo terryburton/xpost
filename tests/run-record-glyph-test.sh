@@ -96,9 +96,9 @@ field() { printf '%s\n' "$1" | sed -n "s/^$2 //p" | head -1 \
 # comparison here is between a recorder and a painter.
 render pgm:whole "$work/direct.pgm" || fail=1
 direct=$out
-render record:pgm "$work/played.pgm" || fail=1
+render pgm:band "$work/played.pgm" || fail=1
 played=$out
-render record:pgm "$work/noentry.pgm" -DSAB=1 || fail=1
+render pgm:band "$work/noentry.pgm" -DSAB=1 || fail=1
 noentry=$out
 
 if [ "$fail" -ne 0 ]; then
@@ -245,7 +245,7 @@ for s in 1 2 3; do
     if [ "$s" -eq 1 ]; then
         sabout=$noentry
     else
-        render record:pgm "$work/sab$s.pgm" -DSAB=$s || {
+        render pgm:band "$work/sab$s.pgm" -DSAB=$s || {
             echo "FAILURES: the run with $why could not be rendered"
             fail=1
             continue

@@ -226,11 +226,19 @@ end } bind put
 % the request was trying to arrange.
 %
 % Only for the selection this run made, and only where the run did not
-% name this class itself: -d record:pgm records at any page, -d pgm:whole
-% records at none, and a request naming some other device than the run's
-% selection is made on that device directly. A record plays into the
-% device this run's selection was given banding for, so it is that
+% name this class itself: a request naming some other device than the
+% run's selection is made on that device directly. A record plays into
+% the device this run's selection was given banding for, so it is that
 % selection, and no other name a request may carry, that this weighs.
+%
+% And only where that selection named no mode. A mode is a run saying
+% which of the two routes it wants and is not the weighing's to
+% overrule: -d pgm:band is given to this class and records at any page,
+% and -d pgm:whole never reaches this class at all, being left on the
+% device it names where the selection is read
+% (src/lib/xpost_interpreter.c). So the one mode that arrives here is the
+% one that says to band, and a selection carrying it is answered without
+% being weighed.
 .xpostsys /.devicefor { % /name w h  .  /name'
 6 dict begin
     /ph exch def
@@ -245,8 +253,11 @@ end } bind put
     /StartDevice //.xpostsys /.hostvalue get exec /record eq
     nm /record ne and
     nm /StartDeviceAsked //.xpostsys /.hostvalue get exec eq and {
-        nm pw held //.xpostsys /.bandsatpage get exec
-            { /record }{ nm } ifelse
+        /SUBDEVICE //.xpostsys /.hostvalue get exec (band) eq
+            { /record }
+            { nm pw held //.xpostsys /.bandsatpage get exec
+                { /record }{ nm } ifelse }
+        ifelse
     }{ nm } ifelse
 end } bind put
 
@@ -323,10 +334,11 @@ setglobal
     /NoOutput true  % write the marks down; never rasterize
 
     % Which device paints this record's page, by the name a run selects
-    % it with: -d record:pgm asks for a page recorded and played into the
-    % grayscale raster, and -d record on its own for the colour one. The
-    % driver reads the selection at load and settles the class from this
-    % (src/lib/xpost_dev_record.c); .playpage below builds it.
+    % it with: -d pgm and -d pgm:band ask for a page played into the
+    % grayscale raster, and -d record, which names this class and no
+    % device, for the colour one. The driver reads the selection at load
+    % and settles the class from this (src/lib/xpost_dev_record.c);
+    % .playpage below builds it.
     %
     % A device is here where a record can be played into it, which asks
     % one thing of it: what it shows for a colour must be settled by the

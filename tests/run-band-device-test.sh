@@ -3,10 +3,11 @@
 # page in bands, and the page it gets is the page it would have painted.
 #
 # A record holds marks and no pixels, and paints its page by playing them
-# into a device that does hold pixels. Which device that is, is the run's:
-# -d record:pgm asks for a recorded page played into the grayscale
-# raster, -d record:tiff into the TIFF one, and -d record for the colour
-# raster the roster defaults to. That choice is what this covers. Before
+# into a device that does hold pixels. Which device that is, is the one
+# the run selected: -d pgm:band asks for a page held a band at a time and
+# played into the grayscale raster, -d tiff:band into the TIFF one, and
+# -d record, which names the class and no device, for the colour raster
+# the roster defaults to. That choice is what this covers. Before
 # it there was one, so a page in bands was a page in one class, and every
 # other device's banding was driven by hand from a test.
 #
@@ -94,7 +95,7 @@ field() { sed -n "s/^$2 //p" "$work/$1.log"; }
 formats='ppm pgm tiff'
 
 for f in $formats; do
-    render "record:$f" "rec-$f" || fail=1
+    render "$f:band" "rec-$f" || fail=1
     render "$f:whole" "dir-$f" || fail=1
 done
 if [ "$fail" -ne 0 ]; then
@@ -119,9 +120,9 @@ for f in $formats; do
         continue
     fi
     if [ "$play" != "yes" ] || [ "$direct" != "no" ]; then
-        note "-d record:$f gave a device with no record to play, or -d $f" \
-             "gave one with a record; the comparison is not between a" \
-             "recorded page and a painted one"
+        note "-d $f:band gave a device with no record to play, or" \
+             "-d $f:whole gave one with a record; the comparison is not" \
+             "between a recorded page and a painted one"
         continue
     fi
     if [ "$rec" != "$dir" ]; then

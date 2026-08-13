@@ -184,7 +184,7 @@ KEEPERS='raster bgr pdfwrite dscwrite svgwrite'
 # that selecting it by name now puts in front of it. What this campaign
 # compares is the two routes; without this both spellings would name the
 # same route and every comparison would be a page against itself. A
-# selection that already names a mode, "record:pgm" among them, is left
+# selection that already names a mode, "pgm:band" among them, is left
 # as it is.
 whole() {
     case " $BANDERS " in
@@ -233,8 +233,8 @@ for d in $BANDERS; do
              "one run of rows to the next"
         continue
     fi
-    if asks "record:$d" PLAY >/dev/null 2>&1 &&
-       [ "$(asks "record:$d" PLAY || true)" = yes ]; then
+    if asks "$d:band" PLAY >/dev/null 2>&1 &&
+       [ "$(asks "$d:band" PLAY || true)" = yes ]; then
         targets="$targets $d"
         echo "OK   $d takes its page in bands, and a record plays into it"
     else
@@ -255,23 +255,23 @@ if [ "$ntgt" -lt 2 ]; then
 fi
 echo "OK   the fleet: $(echo $present) band; $(echo $targets) take a record"
 
-# A device that is not on the record's roster is refused when the device
-# is made, rather than quietly answered with the default. Both halves
-# matter: a refusal that did not fire would paint a page in a device
-# nobody asked for, and one that fired for everything would take the
-# roster away.
+# A device that cannot take its page a band at a time is refused the
+# mode that asks for one, rather than quietly answered with a whole page
+# under a word that said otherwise. Both halves matter: a refusal that
+# did not fire would leave a run believing it had asked for something,
+# and one that fired for everything would take the mode away.
 for d in $KEEPERS notadevice; do
-    if asks "record:$d" PLAY >/dev/null 2>&1; then
-        note "-d record:$d was accepted; a record cannot be played into" \
-             "that device and asking for it has to be refused where the" \
-             "device is made, not answered with whatever the default is"
+    if asks "$d:band" PLAY >/dev/null 2>&1; then
+        note "-d $d:band was accepted; that device takes no page in bands" \
+             "and no record plays into it, so asking for one has to be" \
+             "refused rather than answered with a page held whole"
     else
-        echo "OK   -d record:$d is refused"
+        echo "OK   -d $d:band is refused"
     fi
 done
 for d in $targets; do
-    asks "record:$d" PLAY >/dev/null 2>&1 ||
-        note "-d record:$d was refused although $d is on the record's roster"
+    asks "$d:band" PLAY >/dev/null 2>&1 ||
+        note "-d $d:band was refused although $d is on the record's roster"
 done
 
 # Discovery is what the roster is; it is not what the roster may be.
@@ -479,7 +479,7 @@ for d in $matrixdevs; do
             }
         fi
         if [ "$isrec" = yes ] && [ "$wantrec" = yes ]; then
-            render "record:$d" "$d" "$d-rec" -DPAGE=$p $bset $sabarg || {
+            render "$d:band" "$d" "$d-rec" -DPAGE=$p $bset $sabarg || {
                 note "a record played into $d could not put out page $p"
                 continue
             }
@@ -695,7 +695,7 @@ for d in $matrixdevs; do
             csel=$(whole "$d")
             if [ "$tg" = rec ]; then
                 [ "$isrec" = yes ] || continue
-                csel="record:$d"
+                csel="$d:band"
             fi
             rm -f "$work/$d-cmp.log"
             if render "$csel" "$d" "$d-cmp" -DPAGE=$p -DCMP=1 $bset; then
@@ -751,7 +751,7 @@ for d in $matrixdevs; do
             render "$(whole "$d")" "$d" "$d-mp" -DPAGE=3 -DMPH=$h -DMPB=7 || mpok=no
             if [ "$isrec" = yes ]; then
                 for b in 0 $MPBANDS; do
-                    render "record:$d" "$d" "$d-mp" \
+                    render "$d:band" "$d" "$d-mp" \
                            -DPAGE=3 -DMPH=$h -DMPB=$b || mpok=no
                 done
             fi
@@ -786,7 +786,7 @@ for d in $matrixdevs; do
     # comparison above and say nothing about the rest.
     if [ "$sab" -eq 0 ] && [ "$isrec" = yes ]; then
         rm -f "$work/$d-kinds.log"
-        if render "record:$d" "$d" "$d-kinds" -DPAGE=1 -DCENSUS=1; then
+        if render "$d:band" "$d" "$d-kinds" -DPAGE=1 -DCENSUS=1; then
             nocount=$(field "$d-kinds" NOCOUNT | head -1)
             set -- $(field "$d-kinds" KINDS | head -1)
             if [ -n "${nocount:-}" ]; then
@@ -938,7 +938,7 @@ for d in $present; do
     for route in dir rec; do
         sel=$d
         if [ "$route" = rec ]; then
-            case " $targets " in *" $d "*) sel="record:$d" ;; *) continue ;; esac
+            case " $targets " in *" $d "*) sel="$d:band" ;; *) continue ;; esac
         fi
 
         # Which meter answers for this cell, taken from the device the

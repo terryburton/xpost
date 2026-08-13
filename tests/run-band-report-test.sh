@@ -232,7 +232,7 @@ check_verbose() {
 # selecting a device by name selects the record in front of it, and a
 # wrapper comparing the two routes would otherwise name one of them
 # twice.
-for r in dir:pgm:whole rec:record:pgm; do
+for r in dir:pgm:whole rec:pgm:band; do
     route=${r%%:*}
     dev=${r#*:}
     run "$dev" "$work/page.$route" "$work/rep.$route"
@@ -266,7 +266,7 @@ fi
 # standard output whenever the run was given nowhere else to put it. So
 # the page a verbose run writes must be the page a quiet one writes, to
 # the byte, and the lines must be on the other stream.
-for r in dir:pgm:whole rec:record:pgm; do
+for r in dir:pgm:whole rec:pgm:band; do
     route=${r%%:*}
     dev=${r#*:}
     XPOST_DATA_DIR=$datadir "$xpost" -v -d "$dev" -o "$work/vpage.$route" \
@@ -318,9 +318,9 @@ sabotage() {  # $1 what; $2 tag; $3 route; $4 dev; rest: override lines
     fi
 }
 
-sabotage "a reporter answering nought whatever happened" const0 rec record:pgm \
+sabotage "a reporter answering nought whatever happened" const0 rec pgm:band \
     '.xpostsys /.curbandheight { 0 } bind put'
-sabotage "a reporter answering with a constant band" const25 rec record:pgm \
+sabotage "a reporter answering with a constant band" const25 rec pgm:band \
     '.xpostsys /.curbandheight { 25 } bind put'
 sabotage "a reporter naming a band on a page held whole" wrongdir dir pgm \
     '.xpostsys /.curbandheight { 7 } bind put'
@@ -329,7 +329,7 @@ sabotage "a reporter naming a band on a page held whole" wrongdir dir pgm \
 b_dir=$(sab_data whole \
     '.xpostsys /.reportpage { pop (%stderr) (w) file dup (xpost: page 1 to record, painted by .xpost_PGMIMAGE, whole: 400 rows held at once of a 200x400 page\n) writestring flushfile } bind put')
 if [ -n "${b_dir:-}" ]; then
-    XPOST_DATA_DIR=$b_dir "$xpost" -v -d record:pgm -o "$work/sab.page" \
+    XPOST_DATA_DIR=$b_dir "$xpost" -v -d pgm:band -o "$work/sab.page" \
         "$script" </dev/null >/dev/null 2>"$work/sab.err"
     if ( check_verbose "$work/sab.err" rec ) >"$work/sab.out" 2>&1; then
         note "a page report naming the wrong route passed the check"

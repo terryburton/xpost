@@ -110,7 +110,7 @@ for dev in png jpeg; do
         continue
     fi
     run "$dev" "direct.out" || { note "$dev could not paint the page"; continue; }
-    run "record:$dev" "whole.out" -DBAND=0 || {
+    run "$dev:band" "whole.out" -DBAND=0 || {
         note "$dev could not play a recorded page held whole"
         continue
     }
@@ -137,7 +137,7 @@ for dev in png jpeg; do
 
     onerow=0
     for band in 1 3 7 64; do
-        run "record:$dev" "band-$band.out" -DBAND=$band || {
+        run "$dev:band" "band-$band.out" -DBAND=$band || {
             note "$dev could not play a recorded page in bands of $band"
             continue
         }
@@ -217,8 +217,8 @@ fi
 # so what is compared is the two tails of the one writer rather than a
 # record against a painter.
 if have png; then
-    run record:ppm "rows.ppm" -DBAND=7 || note "the rows route wrote no page"
-    run record:png "spans.png" -DBAND=7 || note "the span route wrote no page"
+    run ppm:band "rows.ppm" -DBAND=7 || note "the rows route wrote no page"
+    run png:band "spans.png" -DBAND=7 || note "the span route wrote no page"
     if [ -s "$work/rows.ppm" ] && [ -s "$work/spans.png" ]; then
         if run null "/dev/null" -DCMP=1; then
             echo "OK   $(field "$out" PIXELS) pixel bytes compared, none" \
@@ -293,13 +293,13 @@ if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
         round=0
         while [ "$round" -lt "$rounds" ]; do
             round=$((round + 1))
-            peak "record:$dev" "$lo" 0  || break
+            peak "$dev:band" "$lo" 0  || break
             r_wlo=$peakkib
-            peak "record:$dev" "$hi" 0  || break
+            peak "$dev:band" "$hi" 0  || break
             r_whi=$peakkib
-            peak "record:$dev" "$lo" 64 || break
+            peak "$dev:band" "$lo" 64 || break
             r_blo=$peakkib
-            peak "record:$dev" "$hi" 64 || break
+            peak "$dev:band" "$hi" 64 || break
             r_bhi=$peakkib
             # the room this round leaves the check below, which is that
             # check's own comparison written as a difference: what the
@@ -320,9 +320,9 @@ if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
         # below one byte a row a number here
         wslope=$((1000 * (whi - wlo) * 1024 / rows))
         bslope=$((1000 * (bhi - blo) * 1024 / rows))
-        echo "OK   held: record:$dev whole ${wlo} -> ${whi} KiB over" \
+        echo "OK   held: $dev recorded whole ${wlo} -> ${whi} KiB over" \
              "$lo -> $hi rows, best of $rounds"
-        echo "OK   held: record:$dev band  ${blo} -> ${bhi} KiB over" \
+        echo "OK   held: $dev recorded in bands ${blo} -> ${bhi} KiB over" \
              "$lo -> $hi rows, best of $rounds"
         # The measurement has to be able to see a page at all. A row of
         # this raster is three or four bytes a pixel over a page a
@@ -338,12 +338,12 @@ if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
                  "$wslope/1000 bytes a row"
         fi
         if [ $((bslope * 10)) -ge "$wslope" ]; then
-            note "the record:$dev band route grew by $bslope/1000 bytes a" \
+            note "the $dev band route grew by $bslope/1000 bytes a" \
                  "row against the whole page's $wslope/1000; what it holds" \
                  "is following the page's height, so the band is not" \
                  "bounding it"
         else
-            echo "OK   the record:$dev band route grows by $bslope/1000" \
+            echo "OK   the $dev band route grows by $bslope/1000" \
                  "bytes a row, under a tenth of it"
         fi
     done

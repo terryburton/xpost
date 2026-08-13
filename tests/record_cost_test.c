@@ -445,7 +445,7 @@ static int _emission(const char *draw, int bandrows,
     int ok;
 
     *built = *played = 0;
-    ctx = xpost_create("record:pgm", XPOST_OUTPUT_FILENAME, "/dev/null",
+    ctx = xpost_create("pgm:band", XPOST_OUTPUT_FILENAME, "/dev/null",
                        XPOST_SHOWPAGE_NOPAUSE, XPOST_OUTPUT_MESSAGE_QUIET,
                        XPOST_USE_SIZE, PAGE_W, PAGE_H);
     if (!ctx)

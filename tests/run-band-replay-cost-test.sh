@@ -165,7 +165,7 @@ while [ "$round" -lt "$rounds" ]; do
     # readings would show.
     render "ppm" whole.ppm || fail=1
     r_whole=${cost:-0}
-    render "record:ppm" banded.ppm || fail=1
+    render "ppm:band" banded.ppm || fail=1
     r_banded=${cost:-0}
     [ "$fail" -eq 0 ] || break
 

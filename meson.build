@@ -3492,7 +3492,7 @@ test('page-lifetime',
 
 # ... and all of it reached from a device selection rather than from a
 # test driving the machinery by hand. A record is played into the device
-# the run named beside it (-d record:pgm), so this renders one page
+# the run selected (-d pgm:band), so this renders one page
 # through every device a record can be played into -- in bands, whole,
 # and by that device with no record at all -- and requires the three to
 # be the same bytes. Two colour spaces, because a mark carries one value
@@ -3785,6 +3785,31 @@ test('band-route',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,
   timeout: 600)
+
+# ... and which route each way of spelling a selection asks for, which is
+# the question above asked of the command line rather than of the page. A
+# device whose page may arrive a band at a time is selected three ways --
+# the bare name, which is weighed; the name with the mode that holds the
+# page whole; and the name with the mode that holds a band of it whatever
+# the page -- and each has to mean what it says, at a page where the
+# weighing would have answered otherwise. The tail of the selection is
+# held to naming the device the recorded page is played into, since a
+# record that ignored it would answer with the roster's default and pass
+# everything else. And the other half, which no page can show: a spelling
+# outside that vocabulary is refused rather than read as one of them,
+# because a selection carrying any mode at all is one the weighing leaves
+# alone -- so a misspelt mode would turn banding off silently, and the
+# run comparing the two ways by changing one word would be comparing one
+# way with itself. Each refusal is required to name what was given and
+# what the device takes. It stubs both of its readings both ways and
+# requires a word no refusal names, at the end, requiring itself to fail
+# each time.
+test('band-select',
+  find_program('tests/run-band-select-test.sh'),
+  args: [ xpost_exe ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
 
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or

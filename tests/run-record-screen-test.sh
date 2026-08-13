@@ -107,7 +107,7 @@ if [ "$fail" -eq 0 ] && samepages direct one; then
     fail=1
 fi
 
-render record:pbm whole || fail=1
+render pbm:band whole || fail=1
 if [ "$fail" -eq 0 ] && ! samepages direct whole; then
     echo "FAILURES: page $diffpage played back whole is not the page painted"
     fail=1
@@ -122,7 +122,7 @@ fi
 if [ "$fail" -eq 0 ]; then
     bad=''
     for rows in 1 2 3 7 16 64 149; do
-        if ! render record:pbm band "-DBAND=$rows"; then
+        if ! render pbm:band band "-DBAND=$rows"; then
             bad="$bad $rows"
             continue
         fi
@@ -170,7 +170,7 @@ count_screens() {
     return 0
 }
 
-if count_screens record:pbm; then
+if count_screens pbm:band; then
     if [ "$screens" -ne 4 ]; then
         echo "FAILURES: the record of a page opening under one screen and" \
              "setting three more holds $screens, where four is one for the" \
@@ -187,7 +187,7 @@ fi
 
 # A page under one screen holds one, so the count above follows the page
 # rather than being a constant.
-out=$("$xpost" -q $ns -d record:pbm -o "$work/count1.out" -DCOUNT=1 \
+out=$("$xpost" -q $ns -d pbm:band -o "$work/count1.out" -DCOUNT=1 \
       -DONESCREEN=1 "$script" </dev/null 2>&1)
 st=$?
 if verdict_run "$st" "$out" "the one-screen census"; then
@@ -207,7 +207,7 @@ fi
 
 # A target that does not screen is never told of one and holds none, so
 # what a screen costs a page that cannot use it is nothing.
-out=$("$xpost" -q $ns -d record:pgm -o "$work/countg.out" -DCOUNT=1 \
+out=$("$xpost" -q $ns -d pgm:band -o "$work/countg.out" -DCOUNT=1 \
       "$script" </dev/null 2>&1)
 st=$?
 if verdict_run "$st" "$out" "the greyscale census"; then
