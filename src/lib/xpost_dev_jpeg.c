@@ -979,6 +979,19 @@ int _moveband(Xpost_Context *ctx,
     return 0;
 }
 
+/* -  .rowcost  elements bytes
+   What one row of this device's raster costs, at the width the caller
+   states on the dictionary stack. A pixel here is red, green and blue,
+   one byte each, interleaved in a buffer of this device's own -- so a
+   row is three bytes a pixel and no elements of the memory the
+   interpreter allocates rows out of. The same sizeof the buffer is
+   measured with, so the price and the allocation cannot drift apart. */
+static
+int _rowcost(Xpost_Context *ctx)
+{
+    return xpost_dev_rowcost(ctx, (int)sizeof(Xpost_Jpeg_Pixel));
+}
+
 static
 int _destroy(Xpost_Context *ctx,
              Xpost_Object devdic)
@@ -1118,6 +1131,16 @@ int loadjpegdevicecont(Xpost_Context *ctx,
        makes the answer this device's own (doc/NEWINTERNALS). */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
                          xpost_bool_cons(1));
+    if (ret)
+        return ret;
+
+    /* What one row of this device's raster costs, which is what the
+       budget a band is priced against is divided by. The bytes come to
+       what the colour raster class this one is a copy of states and the
+       elements do not, and a copy carries what it was copied from, so
+       this says both rather than inheriting them. */
+    ret = xpost_dev_class_rowcost(ctx, classdic, "jpegRowCost",
+                                  (Xpost_Op_Func)_rowcost);
     if (ret)
         return ret;
 

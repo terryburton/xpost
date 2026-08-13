@@ -983,6 +983,19 @@ int _moveband(Xpost_Context *ctx,
     return 0;
 }
 
+/* -  .rowcost  elements bytes
+   What one row of this device's raster costs, at the width the caller
+   states on the dictionary stack. A pixel here is red, green, blue and
+   alpha, one byte each, in a buffer of this device's own -- so a row is
+   four bytes a pixel and no elements of the memory the interpreter
+   allocates rows out of. The same sizeof the buffer is measured with,
+   so the price and the allocation cannot drift apart. */
+static
+int _rowcost(Xpost_Context *ctx)
+{
+    return xpost_dev_rowcost(ctx, (int)sizeof(Xpost_Png_Pixel));
+}
+
 /* clear the page to fully transparent: the alpha device's erasepage.
    An explicit white fill stays opaque; only the page reset is clear.
    PLRM 8.2 erases the entire page, and what a device holding part of
@@ -1195,6 +1208,16 @@ int _loaddevicecont_common(Xpost_Context *ctx,
        makes the answer this device's own (doc/NEWINTERNALS). */
     ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
                          xpost_bool_cons(1));
+    if (ret)
+        return ret;
+
+    /* What one row of this device's raster costs, which is what the
+       budget a band is priced against is divided by. Both halves differ
+       from the three-byte planar row of the colour raster class this one
+       is a copy of, and a copy carries what it was copied from, so this
+       says it rather than inheriting it. */
+    ret = xpost_dev_class_rowcost(ctx, classdic, "pngRowCost",
+                                  (Xpost_Op_Func)_rowcost);
     if (ret)
         return ret;
 

@@ -856,6 +856,17 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     if (ret && ret != undefined)
         return ret;
 
+    /* And this class states nothing about what a row of its raster
+       costs, because the raster is not here to cost anything: the
+       pixels are a pixmap the display server holds, and a mark reaches
+       them as a request rather than as a write into memory this process
+       allocated. So what the colour raster class this one is a copy of
+       states about its own three-byte planar row is taken back out
+       rather than answered on behalf of a raster that is elsewhere. */
+    ret = xpost_dev_class_no_rowcost(ctx, classdic);
+    if (ret)
+        return ret;
+
     op = xpost_operator_cons(ctx, "xcbCreateCont", (Xpost_Op_Func)_create_cont, 3,
                              integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;

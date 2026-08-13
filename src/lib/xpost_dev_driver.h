@@ -160,6 +160,8 @@
 
 #include "xpost_handle.h"
 #include "xpost_array.h" /* the run of rows a device is asked to hold */
+#include "xpost_op_dict.h" /* the width a row is priced at is read off
+                              the dictionary stack */
 
 /* fold a numeric operand (integertype or realtype) to an int,
    truncating toward zero */
@@ -910,6 +912,90 @@ xpost_dev_class_install(Xpost_Context *ctx,
         }
 
     return 0;
+}
+
+/* What one row of this device's raster costs, as the elements and the
+   bytes one row takes: the pair a class answers under /.rowcost
+   (data/ppmimage.ps), and the pair the band loop divides its byte
+   budget by to arrive at a band height (data/recorddev.ps).
+
+   The body of such a method, for a device that keeps its raster in a
+   buffer of its own: @p bytesperpixel is what one pixel of that buffer
+   occupies, and the elements are none, since the buffer takes nothing
+   from the memory the interpreter allocates rows out of.
+
+   The width a row is being priced at is not an operand. It is read off
+   the dictionary stack, where a caller states it, which is how the
+   PostScript classes' own bodies read it -- so a class of either kind
+   answers the same call. A width whose row runs past what an integer
+   counts answers a real, as the multiply in those bodies does; the band
+   loop takes such an answer as a row no band holds one of. */
+static inline int
+xpost_dev_rowcost(Xpost_Context *ctx,
+                  int bytesperpixel)
+{
+    Xpost_Object w;
+    double bytes;
+    int ret;
+
+    ret = xpost_op_any_load(ctx, xpost_name_cons(ctx, "width"));
+    if (ret)
+        return ret;
+    w = xpost_stack_pop(ctx->lo, ctx->os);
+    if (xpost_object_get_type(w) != integertype &&
+        xpost_object_get_type(w) != realtype)
+        return typecheck;
+
+    bytes = xpost_object_number(w) * (double)bytesperpixel;
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0)))
+        return stackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          (bytes > (double)INT_MAX || bytes < -(double)INT_MAX)
+                          ? xpost_real_cons((real)bytes)
+                          : xpost_int_cons((integer)bytes)))
+        return stackoverflow;
+    return 0;
+}
+
+/* State what a row of this device's raster costs, by installing @p func
+   -- a body built on xpost_dev_rowcost() above -- in the class's
+   /.rowcost slot under the operator name @p opname.
+
+   Said rather than inherited, for the reason /BandedPage is said rather
+   than inherited. The class is a copy of a PostScript raster class,
+   which prices the row it allocates, and a copy carries what it was
+   copied from -- so a device whose raster is a different shape would
+   answer for the shape it was copied from, and a budget divided by that
+   buys a band of some other number of rows than the one it paid for. */
+static inline XPOST_MUST_CHECK int
+xpost_dev_class_rowcost(Xpost_Context *ctx,
+                        Xpost_Object classdic,
+                        const char *opname,
+                        Xpost_Op_Func func)
+{
+    Xpost_Object op = xpost_operator_cons(ctx, opname, func, 0);
+
+    if (xpost_object_get_type(op) != operatortype)
+        return unregistered;
+    return xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, ".rowcost"),
+                          op);
+}
+
+/* Take back what a row of this device's raster costs.
+
+   For a device that has no row of its own to price: one whose pixel is
+   settled per instance rather than by the class, and one whose page is
+   the window system's rather than this process's. The class is a copy
+   of a PostScript raster class, which prices the row it allocates, so
+   what is taken back is a number that would otherwise be answered on
+   behalf of a raster that is not there. */
+static inline XPOST_MUST_CHECK int
+xpost_dev_class_no_rowcost(Xpost_Context *ctx,
+                           Xpost_Object classdic)
+{
+    int ret = xpost_dict_undef(ctx, classdic, xpost_name_cons(ctx, ".rowcost"));
+
+    return (ret == undefined) ? 0 : ret;
 }
 
 /* Where the block a handed-over raster sits in begins.

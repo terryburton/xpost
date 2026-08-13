@@ -1092,6 +1092,19 @@ int loadwin32devicecont(Xpost_Context *ctx,
     if (ret && ret != undefined)
         return ret;
 
+    /* And this class states nothing about what a row of its raster
+       costs, because it has no one answer to state: which rendering
+       backend a window is made with is settled when the device is made,
+       and one of them draws through the graphics library with no
+       buffer of its own here at all. What a row costs is then a
+       property of the instance and not of the class, so what the colour
+       raster class this one is a copy of states about its own
+       three-byte planar row is taken back out rather than answered on
+       behalf of a raster of some other shape. */
+    ret = xpost_dev_class_no_rowcost(ctx, classdic);
+    if (ret)
+        return ret;
+
     op = xpost_operator_cons(ctx, "win32CreateCont", (Xpost_Op_Func)_create_cont, 3, integertype, integertype, dicttype);
     _create_cont_opcode = op.mark_.padw;
 
