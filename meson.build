@@ -4375,6 +4375,29 @@ record_exe = executable('record_test',
   install: false)
 test('record', record_exe, suite: cost_fast)
 
+# What a record says it cost, against what the process is resident for
+# over the marks that produced it. The number decides whether a record is
+# kept and whether a page arrives in bands, and a page comes out right
+# whichever way those go -- so nothing else in the suite can see the
+# number drift away from what it describes.
+#
+# It weighs the process, so it is in the memacct suite: an allocator that
+# keeps freed memory in quarantine or carries shadow maps of its own puts
+# the measurement out of reach. And it reads the figure from
+# /proc/self/statm, so it is defined where that is: a host without it has
+# no reading for the test to be about, and a test defined there would be
+# asserting over a zero.
+if host_machine.system() == 'linux'
+  record_cost_exe = executable('record_cost_test',
+    'tests/record_cost_test.c',
+    c_args: '-DHAVE_CONFIG_H',
+    dependencies: [ libxpost_dep, m_dep ],
+    link_args: internals_link_args,
+    include_directories: [ config_dir, include_directories('src/lib') ],
+    install: false)
+  test('record-cost', record_cost_exe, suite: cost_fast + ['memacct'])
+endif
+
 dev_rect_exe = executable('dev_rect_test',
   'tests/dev_rect_test.c',
   c_args: '-DHAVE_CONFIG_H',

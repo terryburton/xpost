@@ -484,6 +484,12 @@ size_t xpost_record_count(const Xpost_Record *rec);
  * Both of those are measured in tests/record_cost_test.c, which holds
  * this number to what a process is resident for over the marks that
  * produced it.
+ *
+ * A record short of a mark describes a page it cannot reproduce, and
+ * what it answers here is what it managed to hold rather than what that
+ * page would have cost. Nothing is to be concluded from it about the
+ * page: xpost_record_failed is the question worth asking of such a
+ * record.
  */
 size_t xpost_record_bytes(const Xpost_Record *rec);
 

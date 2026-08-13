@@ -100,6 +100,7 @@ tests/dct_truncated_test.ps \
 tests/dev_gray_row_test.ps \
 tests/dev_rect_test.c \
 tests/record_test.c \
+tests/record_cost_test.c \
 tests/device-fleet.sh \
 tests/device_completion_test.ps \
 tests/device_contract_test.ps \

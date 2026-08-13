@@ -1,0 +1,564 @@
+/*
+ * Xpost - a Level-2 Postscript interpreter
+ * Copyright (C) 2013-2016, Michael Joshua Ryan
+ * All rights reserved.
+ * (BSD 3-clause; see COPYING)
+ */
+
+/* What a record says it cost, against what the process is resident for.
+ *
+ * xpost_record_bytes is not a report. Two decisions are taken from it --
+ * whether to keep a record at all, and whether a page should arrive in
+ * bands -- and both are of the form "is the record smaller than the
+ * raster it saves holding". A raster's cost is its pixels and cannot be
+ * wrong; a record's is a sum, and a sum that has drifted from what the
+ * record makes the process resident for turns both decisions over
+ * without anything looking wrong. The page still comes out right, which
+ * is exactly why nothing else catches it.
+ *
+ * So the number is weighed here against the process, over the marks that
+ * produced it, for every kind of mark a record holds: rectangles and
+ * lines, which are the fixed-arity marks; polygons, whose values are as
+ * many as the shape has vertices and are the bulk of path-heavy content;
+ * glyphs, which are a coverage mask apiece and thousands of placements
+ * naming them; images, which are held whole; and screens, which are a
+ * threshold cell per change.
+ *
+ * HOW THE MEASUREMENT IS MADE HONEST
+ *
+ * A record is built twice per kind. The first build is small and is
+ * KEPT: it touches every code and data page the measured build will
+ * touch, so what is weighed is the record rather than the first use of
+ * the machinery, and it leaves nothing free for the measured build to be
+ * handed back -- a build served out of pages the process was already
+ * resident for would weigh less than it costs. Every record made here is
+ * kept for the same reason, and they are given up together at the end.
+ *
+ * Before the second weighing the allocator is asked to give back what it
+ * is holding free, where it offers a way to ask. Growing a run copies
+ * into a new block and gives up the old one, whose pages stay resident
+ * until they are handed out again; those pages are the allocator's
+ * doing and not the record's, and a measurement that carried them would
+ * be measuring fragmentation.
+ *
+ * WHAT THE TOLERANCE IS, AND WHY IT IS THAT
+ *
+ * Measured over both regimes a C allocator serves such blocks from --
+ * mapped directly, and carved out of the heap -- and over sizes from one
+ * to twenty-six megabytes, the process came to between 1.003 and 1.111
+ * times what the record said. It was never less: the record does not
+ * claim more than it made resident.
+ *
+ * The margin above is real and is of two parts. Blocks do not begin on
+ * page boundaries, so the last page of each is shared and counted whole.
+ * And a record of many small blocks -- a page of text holds a mask per
+ * distinct glyph -- leaves partly-used pages that cannot be given back.
+ * A quarter is the bound taken here, which is a little over twice the
+ * worst margin measured, and the fixed allowance beside it covers the
+ * pages the machinery touches once however small the record is: those
+ * came to under a quarter of a megabyte.
+ *
+ * WHAT IS NOT WEIGHED HERE, BECAUSE IT IS NOT THE RECORD'S
+ *
+ * Playing a record back. A replay hands each mark to a device method,
+ * and a method may be a procedure, so a mark reaches one as interpreter
+ * objects built for the call -- a polygon as an array of its vertices.
+ * On path-heavy content that comes to several times what holding the
+ * record costs, and a run weighed across its emission sees it. It is the
+ * target's and the interpreter's, it is not in this number, and
+ * xpost_record.h says so where the number is declared.
+ */
+
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef __GLIBC__
+# include <malloc.h>
+#endif
+
+#include "xpost_object.h"
+#include "xpost_record.h"
+
+#include "xpost_test.h"
+
+/* What the process is resident for, in bytes. The build defines this
+   test only where the figure can be read (meson.build), so there is no
+   answer here standing in for one. */
+static size_t resident(void)
+{
+    FILE *f = fopen("/proc/self/statm", "r");
+    unsigned long total = 0, res = 0;
+
+    if (!f)
+        return 0;
+    if (fscanf(f, "%lu %lu", &total, &res) != 2)
+        res = 0;
+    fclose(f);
+    return (size_t)res * 4096u;
+}
+
+/* Ask the allocator to give back the pages it is holding free, so that
+   what is weighed after is what the record holds and not what growing it
+   left behind. An allocator that offers no way to ask is left alone; the
+   tolerance says what that costs. */
+static void give_back(void)
+{
+#ifdef __GLIBC__
+    malloc_trim(0);
+#endif
+}
+
+/* the kinds of content weighed, and how much of each */
+typedef enum
+{
+    K_RECT, K_LINE, K_POLY, K_GLYPH, K_IMAGE, K_SCREEN, K_COUNT
+} Kind;
+
+static const char *_name(Kind k)
+{
+    switch (k)
+    {
+        case K_RECT:   return "rectangles";
+        case K_LINE:   return "lines";
+        case K_POLY:   return "polygons";
+        case K_GLYPH:  return "glyphs";
+        case K_IMAGE:  return "images";
+        case K_SCREEN: return "screens";
+        case K_COUNT:  break;
+    }
+    return "?";
+}
+
+/* A record of @p n polygons of @p nv vertices apiece. Its own function
+   because the two counts are asked for separately below: a polygon's
+   values follow its vertices and its entry follows the mark, and the
+   parts are told apart by moving one at a time. */
+static Xpost_Record *_build_poly(int n, int nv)
+{
+    Xpost_Record *rec = xpost_record_new(1);
+    real colour[1];
+    real *ops;
+    int i, j;
+
+    if (!rec)
+        return NULL;
+    colour[0] = 0.5;
+    ops = malloc((size_t)(1 + 2 * nv) * sizeof *ops);
+    if (!ops)
+    {
+        xpost_record_free(rec);
+        return NULL;
+    }
+    for (i = 0; i < n; i++)
+    {
+        ops[0] = (real)nv;
+        for (j = 0; j < nv; j++)
+        {
+            ops[1 + 2 * j] = (real)(j % 600);
+            ops[2 + 2 * j] = (real)((j + i) % 780);
+        }
+        if (!xpost_record_mark(rec, XPOST_RECORD_FILLPOLY, colour,
+                               ops, 1 + 2 * nv))
+        {
+            free(ops);
+            xpost_record_free(rec);
+            return NULL;
+        }
+    }
+    free(ops);
+    return rec;
+}
+
+/* A record of @p nplace placements over @p nmask distinct masks, which
+   is the shape a page of text has and the shape a glyph entry exists
+   for. */
+static Xpost_Record *_build_glyph(int nplace, int nmask)
+{
+    Xpost_Record *rec = xpost_record_new(1);
+    unsigned char cov[14 * 20];
+    real colour[1];
+    size_t *at;
+    int i, j;
+
+    if (!rec)
+        return NULL;
+    colour[0] = 0.5;
+    at = malloc((size_t)nmask * sizeof *at);
+    if (!at)
+    {
+        xpost_record_free(rec);
+        return NULL;
+    }
+    for (i = 0; i < nmask; i++)
+    {
+        for (j = 0; j < (int)sizeof cov; j++)
+            cov[j] = (unsigned char)((i * 7 + j * 13) & 0xff);
+        if (!xpost_record_mask(rec, cov, 14, 20, &at[i]))
+            goto no;
+    }
+    for (i = 0; i < nplace; i++)
+        if (!xpost_record_glyph(rec, colour, at[i % nmask],
+                                (real)(i % 600), (real)(i % 780)))
+            goto no;
+    free(at);
+    return rec;
+
+  no:
+    free(at);
+    xpost_record_free(rec);
+    return NULL;
+}
+
+/* One record of @p n of the kind. Answers NULL where a mark could not
+   be held, which is not what is being weighed and is reported by the
+   caller. */
+static Xpost_Record *_build(Kind kind, int n)
+{
+    Xpost_Record *rec = xpost_record_new(1);
+    real colour[1];
+    int i, j;
+
+    if (!rec)
+        return NULL;
+    colour[0] = 0.5;
+
+    switch (kind)
+    {
+        case K_RECT:
+        case K_LINE:
+        {
+            Xpost_Record_Kind k = kind == K_RECT ? XPOST_RECORD_FILLRECT
+                                                 : XPOST_RECORD_DRAWLINE;
+
+            for (i = 0; i < n; i++)
+            {
+                real ops[4];
+
+                ops[0] = (real)(i % 600);
+                ops[1] = (real)(i % 780);
+                ops[2] = (real)(i % 17) + 1;
+                ops[3] = (real)(i % 23) + 1;
+                if (!xpost_record_mark(rec, k, colour, ops, 4))
+                    goto short_of_one;
+            }
+            break;
+        }
+        case K_POLY:
+            /* four hundred vertices apiece, which is the order a stroked
+               curve flattens to and is what makes a polygon's values the
+               bulk of such a page */
+            xpost_record_free(rec);
+            return _build_poly(n, 400);
+        case K_GLYPH:
+            /* a mask per hundred placements, which is the order a page
+               of text runs to */
+            xpost_record_free(rec);
+            return _build_glyph(n, n / 100 + 1);
+        case K_IMAGE:
+        {
+            int w = 512, h = 512;
+            unsigned char *row = malloc((size_t)w);
+            const unsigned char **run = malloc((size_t)h * sizeof *run);
+            unsigned char lut[256];
+            Xpost_Record_Image img;
+
+            if (!row || !run)
+            {
+                free(row);
+                free((void *)run);
+                goto short_of_one;
+            }
+            for (j = 0; j < w; j++)
+                row[j] = (unsigned char)(j & 0xff);
+            for (j = 0; j < h; j++)
+                run[j] = row;
+            for (j = 0; j < 256; j++)
+                lut[j] = (unsigned char)j;
+            for (i = 0; i < n; i++)
+            {
+                memset(&img, 0, sizeof img);
+                img.width = w;
+                img.height = h;
+                img.ncomp = 1;
+                img.nat = 1;
+                img.xscale = 1.0;
+                img.yscale = 1.0;
+                img.yoff = (real)(i * 10);
+                img.cx1 = 10000.0;
+                img.cy1 = 10000.0;
+                img.lut = lut;
+                if (!xpost_record_image(rec, &img, run, h))
+                {
+                    free(row);
+                    free((void *)run);
+                    goto short_of_one;
+                }
+            }
+            free(row);
+            free((void *)run);
+            break;
+        }
+        case K_SCREEN:
+        {
+            unsigned char cell[16 * 16];
+
+            for (i = 0; i < n; i++)
+            {
+                for (j = 0; j < (int)sizeof cell; j++)
+                    cell[j] = (unsigned char)((i + j) & 0xff);
+                if (!xpost_record_screen(rec, 16, 16, cell))
+                    goto short_of_one;
+            }
+            break;
+        }
+        case K_COUNT:
+            break;
+    }
+    return rec;
+
+  short_of_one:
+    xpost_record_free(rec);
+    return NULL;
+}
+
+/* The margin allowed above what the record says, and the fixed
+   allowance beside it. Both are stated in the file's opening, from what
+   was measured. */
+#define OVER_NUM  1
+#define OVER_DEN  4
+#define ALLOW     ((size_t)512 * 1024)
+
+int main(void)
+{
+    /* how much of each kind, chosen so that each record comes to several
+       megabytes: the fixed allowance is then a few percent of what is
+       weighed rather than the whole of it */
+    static const int howmany[K_COUNT] = {
+        150000,   /* rectangles */
+        150000,   /* lines */
+        2000,     /* polygons, four hundred vertices apiece */
+        200000,   /* glyph placements over two thousand masks */
+        24,       /* images of a quarter million samples */
+        20000     /* screens */
+    };
+    Xpost_Record *kept[K_COUNT];
+    Xpost_Record *warm[K_COUNT];
+    Xpost_Record *page;
+    size_t before, after;
+    int k, i;
+
+    for (k = 0; k < K_COUNT; k++)
+        kept[k] = warm[k] = NULL;
+
+    /* A record is something before it holds anything: it is a structure
+       and the runs it grows, and a report answering nothing for it would
+       be answering about a record that does not exist. */
+    page = xpost_record_new(1);
+    check(page != NULL, "a record is made");
+    if (page)
+        check(xpost_record_bytes(page) > 0,
+              "a record with no marks in it still costs what it is");
+    xpost_record_free(page);
+
+    for (k = 0; k < K_COUNT; k++)
+    {
+        size_t said, got, rss0, rss1;
+
+        /* the same build, small, kept: every page the measured build
+           touches has been touched, and nothing it could be handed back
+           is free */
+        warm[k] = _build((Kind)k, 4);
+        if (!warm[k])
+        {
+            report_failure("a small record of %s is held", _name((Kind)k));
+            continue;
+        }
+
+        give_back();
+        rss0 = resident();
+        kept[k] = _build((Kind)k, howmany[k]);
+        if (!kept[k])
+        {
+            report_failure("a record of %s is held", _name((Kind)k));
+            continue;
+        }
+        said = xpost_record_bytes(kept[k]);
+        give_back();
+        rss1 = resident();
+        got = rss1 > rss0 ? rss1 - rss0 : 0;
+
+        /* The report is not above what the record made the process
+           resident for. A report above it sends a caller comparing a
+           record against a raster to the raster, where the record was
+           the cheaper of the two. */
+        if (said > got + ALLOW)
+            report_failure("a record of %s says it cost %lu bytes where"
+                           " the process came to %lu: the report is above"
+                           " what the record made resident",
+                           _name((Kind)k), (unsigned long)said,
+                           (unsigned long)got);
+
+        /* and not below it by more than the margin. That way round is
+           the worse of the two: it is what keeps a record costing more
+           than the page it exists to escape. */
+        if (got > said + said / OVER_DEN * OVER_NUM + ALLOW)
+            report_failure("a record of %s says it cost %lu bytes where"
+                           " the process came to %lu: the report is under"
+                           " what the record made resident by more than"
+                           " the margin",
+                           _name((Kind)k), (unsigned long)said,
+                           (unsigned long)got);
+    }
+
+    /* WHAT EACH PART OF A RECORD COSTS, BY DIFFERENCE
+     *
+     * The weighing above is a proportion, and a proportion cannot see a
+     * part go missing that is a few percent of the whole -- the coverage
+     * a page of text holds is a twentieth of what that page costs, and a
+     * report that stopped counting it would still land inside any margin
+     * wide enough to allow for an allocator. So each part is also asked
+     * for on its own, by building two records differing in that part
+     * alone and holding the difference to what the part is known to
+     * cost. These are exact where the difference is exact, and are
+     * lower bounds where the record's own structures are in it, those
+     * being none of a caller's business and not named here. */
+    {
+        Xpost_Record *a, *b;
+        size_t got;
+
+        /* a polygon's values are as many as it has vertices, and are
+           what path-heavy content is nearly all of. Two records of the
+           same marks over twice the vertices differ by those values and
+           by nothing else. */
+        a = _build_poly(500, 200);
+        b = _build_poly(500, 400);
+        check(a != NULL && b != NULL, "two records of polygons are held");
+        if (a && b)
+        {
+            got = xpost_record_bytes(b) - xpost_record_bytes(a);
+            check(got == (size_t)500 * 400 * sizeof(real),
+                  "a polygon's vertices cost what they are: twice as many"
+                  " of them costs the coordinates of the difference");
+        }
+        xpost_record_free(a);
+        xpost_record_free(b);
+
+        /* a mark costs something beside its values. Two records holding
+           nearly the same values -- the same vertices over twice the
+           polygons -- differ by the entries describing them. */
+        a = _build_poly(100, 400);
+        b = _build_poly(200, 200);
+        check(a != NULL && b != NULL, "two records of like polygons are held");
+        if (a && b)
+        {
+            check(xpost_record_bytes(b)
+                      > xpost_record_bytes(a) + (size_t)100 * 16,
+                  "a mark costs its own entry beside its values, so twice"
+                  " the marks over the same vertices costs more");
+        }
+        xpost_record_free(a);
+        xpost_record_free(b);
+
+        /* the coverage a mask holds, which is what a page of text is
+           mostly made of and is held once however often it is placed */
+        a = _build_glyph(1000, 100);
+        b = _build_glyph(1000, 200);
+        check(a != NULL && b != NULL, "two records of glyphs are held");
+        if (a && b)
+        {
+            got = xpost_record_bytes(b) - xpost_record_bytes(a);
+            check(got >= xpost_record_mask_bytes(b)
+                       - xpost_record_mask_bytes(a),
+                  "the coverage a mask holds is counted, so twice the"
+                  " distinct masks costs at least the coverage of the"
+                  " difference");
+        }
+        xpost_record_free(a);
+        xpost_record_free(b);
+
+        /* an image's samples, which are held whole */
+        a = _build((Kind)K_IMAGE, 4);
+        b = _build((Kind)K_IMAGE, 8);
+        check(a != NULL && b != NULL, "two records of images are held");
+        if (a && b)
+        {
+            got = xpost_record_bytes(b) - xpost_record_bytes(a);
+            check(got >= (size_t)4 * 512 * 512,
+                  "an image's samples are counted, so twice the images"
+                  " costs at least the samples of the difference");
+        }
+        xpost_record_free(a);
+        xpost_record_free(b);
+
+        /* and a screen's threshold cell */
+        a = _build((Kind)K_SCREEN, 100);
+        b = _build((Kind)K_SCREEN, 200);
+        check(a != NULL && b != NULL, "two records of screens are held");
+        if (a && b)
+        {
+            got = xpost_record_bytes(b) - xpost_record_bytes(a);
+            check(got >= (size_t)100 * 16 * 16,
+                  "a screen's cell is counted, so twice the screens costs"
+                  " at least the cells of the difference");
+        }
+        xpost_record_free(a);
+        xpost_record_free(b);
+    }
+
+    /* A page boundary empties the runs and keeps their storage, to be
+       filled again by the page after. What the record is resident for
+       does not fall there, so what it says it cost does not either: a
+       record between pages costs the largest page the job has drawn. */
+    page = _build(K_RECT, 40000);
+    check(page != NULL, "a page of rectangles is held");
+    if (page)
+    {
+        real colour[1];
+
+        colour[0] = 0.5;
+        before = xpost_record_bytes(page);
+        xpost_record_clear(page);
+        after = xpost_record_bytes(page);
+        check(xpost_record_count(page) == 0,
+              "a page boundary gives up the marks the page held");
+        check(after == before,
+              "a page boundary keeps the storage those marks were held"
+              " in, so what the record costs does not fall there");
+
+        /* and the page after fills that storage rather than buying more,
+           so a job of like pages costs one of them */
+        for (i = 0; i < 40000; i++)
+        {
+            real ops[4];
+
+            ops[0] = (real)(i % 600);
+            ops[1] = (real)(i % 780);
+            ops[2] = (real)(i % 17) + 1;
+            ops[3] = (real)(i % 23) + 1;
+            if (!xpost_record_mark(page, XPOST_RECORD_FILLRECT,
+                                   colour, ops, 4))
+            {
+                report_failure("the page after a boundary is held");
+                break;
+            }
+        }
+        after = xpost_record_bytes(page);
+        check(after == before,
+              "a second page of the same size costs what the first did,"
+              " the storage being the same storage");
+        xpost_record_free(page);
+    }
+
+    for (k = 0; k < K_COUNT; k++)
+    {
+        xpost_record_free(kept[k]);
+        xpost_record_free(warm[k]);
+    }
+
+    return verdict();
+}
