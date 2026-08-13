@@ -77,14 +77,14 @@
     % and a page put out a band at a time carry the same bytes because
     % they are the same bytes rather than because two writers agree
     /.writepage { % img file
-        2 dict begin
+        2 dict {
         {/f /a}{exch def}forall
         f .writehead
         a f .writeband
         f (%stdout)(w)file ne {
             f closefile
         } if
-        end
+        } //.xpostsys /.indict get exec
     } bind
 >> //.xpostsys /.makerasterclass get exec def
 

@@ -1,0 +1,245 @@
+% A raster device method closes what it opens.
+%
+% A raster device method runs with a dictionary current: the device's own
+% for the methods the machinery calls, a scratch one of its own for the
+% helpers underneath them. The method opens it on the way in and takes it
+% off on the way out, and every name the body reads or defines is read
+% and defined in there. An error part way through the body is a way out
+% of it like returning is, so the close is owed on that path too -- and a
+% method that skips it leaves its dictionary current for whatever runs
+% next. The error handler runs in it, the program that catches the error
+% carries on in it, and a definition either of them makes lands in a
+% dictionary that is not theirs. Where the dictionary is the class's own
+% scratch, which lives in global memory, the program's next definition is
+% not merely misplaced but refused.
+%
+% PLRM 3.11 says what an operator leaves behind when it fails; the
+% dictionary stack is the simple half of it, and the rule needs no
+% adjudicating: a dictionary this method pushed is this method's to pop,
+% whichever way it left.
+%
+% So every method of every raster class is driven to a failure here and
+% the dictionary stack is measured across it. The measurement is the
+% whole test -- the errors are provoked deliberately and nothing is
+% asserted about which one arrives, only that the stack the method was
+% handed is the stack it gives back.
+%
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints
+% SUCCESS iff every method of every class gave the dictionary stack back.
+%
+% Two ways this test could pass while checking nothing, and what holds
+% each of them:
+%
+%   A method renamed or dropped stops being driven, and a roster naming
+%   it goes on passing because nothing answers to the name. Every method
+%   named below has to be found on some device, or the run fails.
+%
+%   A trial that provokes no error measures a method that returned
+%   normally, which every method does. Every method named below has to
+%   have raised on some class and some operand shape, except the ones
+%   named as having no failure path at all -- and those have to still
+%   have none.
+
+/failcount 0 def
+/assert { exch { pop }{ (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } def
+
+% the depth the dictionary stack stands at outside any method
+/d0 countdictstack def
+
+% The operand shapes a method is driven to a failure with. A method takes
+% its operands from the stack, and the two shapes are the two ways that
+% can go wrong: more operands than any method here takes, none of them a
+% type any body can use, and one such operand, which leaves the body
+% reaching past what it was given. Neither is a shape a caller should
+% produce; what they are for is to reach the failure paths a caller
+% cannot be relied on to reach.
+%
+% The operands are null rather than a name or a string because a method
+% may store what it is handed in a dictionary of its own, and one of
+% those dictionaries belongs to the class, which lives in global memory:
+% a simple object stores there, where a composite object of this
+% program's own is refused before the body has got anywhere.
+/shapes [ { null null null null null null } { null } ] def
+/shapenames [ (six unusable operands) (one unusable operand) ] def
+
+% The methods held, each with whether it takes the device dictionary as
+% its last operand. The ones that do are the suite the device machinery
+% calls (data/image.ps); the ones that do not are the helpers a method
+% calls with the device already current, which are reached here from
+% outside that scope, as any caller that has only the device can reach
+% them. Both kinds open a dictionary and so both kinds owe the close.
+/roster [
+    /Create     true
+    /Destroy    true
+    /PutPix     true
+    /GetPix     true
+    /DrawLine   true
+    /DrawRect   true
+    /FillRect   true
+    /FillPoly   true
+    /Ground     true
+    /Emit       true
+    /.moveband  true
+    /.intersect false
+    /.writehead false
+    /.writetail false
+    /.writepage false
+] def
+
+% The methods with no failure path of their own, named rather than
+% counted: each is a body that cannot raise whatever it is handed, so no
+% trial provokes anything and none is expected to. A method that acquires
+% a failure path is caught by the far side of the same check.
+/undrivable [ /Destroy ] def
+
+% The classes held: every raster class the interpreter can make. Each is
+% held twice -- as the class's own suite, and as an instance finished the
+% way the device machinery finishes one, which replaces some of the suite
+% with the compiled rasterisers. A page is marked through the second, so
+% the second is the one a program's error arrives in.
+/makers [
+    /newPGMIMAGEdevice (pgm)
+    /newPPMIMAGEdevice (ppm)
+    /newPBMIMAGEdevice (pbm)
+    /newTIFFIMAGEdevice (tiff)
+] def
+
+% A name this interpreter cannot open for writing, so that the emission
+% methods are driven to a failure rather than made to write a page.
+/unopenable (/nonexistent-xpost-dictstack-guard/page.out) def
+
+% /maker finished  make  device
+% One device to run one trial against, made fresh: a trial provokes an
+% error part way through a method, which leaves the instance in whatever
+% state the method had reached, and the next trial is owed a device that
+% has not been half written to.
+/make {
+    /mk.finish exch def
+    .privatedict 1 index known not {
+        (FAIL: ) print dup 64 string cvs print
+        ( is not in the private dictionary; the makers have moved\n) print
+        /failcount failcount 1 add store
+        pop null
+    }{
+        .privatedict exch get 20 10 3 -1 roll exec
+        dup /.outputfile unopenable put
+        mk.finish { dup 1 1 .privatedict /.completedevice get exec } if
+    } ifelse
+} def
+
+% what was seen of each method across every trial
+/present 32 dict def
+/raised 32 dict def
+
+% /maker finished (tag) /method shape  drive  -
+% Run one method of one device with one operand shape, and measure the
+% dictionary stack across it.
+/drive {
+    /dv.shape exch def
+    /dv.method exch def
+    /dv.tag exch def
+    /dv.finish exch def
+    /dv.maker exch def
+    dv.maker dv.finish make
+    dup null eq { pop }{
+        /dv.dev exch def
+        dv.dev dv.method known {
+            present dv.method true put
+            count /dv.count exch def
+            { shapes dv.shape get exec
+              takesdev dv.method get { dv.dev } if
+              dv.dev dv.method get exec } stopped
+            % What the trial found is read and the dictionary stack put
+            % back before any of it is written down. A dictionary left
+            % current is what this measures, and a definition made while
+            % one is lands in it -- which is the whole complaint, and
+            % would be recorded where the next line cannot read it.
+            countdictstack d0 sub
+            dup 0 gt { dup { end } repeat } if
+            /dv.delta exch def
+            /dv.raised exch def
+            dv.raised { raised dv.method true put } if
+            % the operands a failed method left behind are not this
+            % test's subject: PLRM 3.11 settles those separately, and a
+            % trial that read its own report off the stack would report
+            % the leavings instead
+            count dv.count sub dup 0 gt { { pop } repeat }{ pop } ifelse
+            dv.delta 0 ne {
+                (FAIL: ) print dv.tag print
+                dv.finish { ( finished) }{ ( class) } ifelse print ( ) print
+                dv.method 64 string cvs print
+                ( left ) print dv.delta 20 string cvs print
+                ( dictionaries on the stack, given ) print
+                shapenames dv.shape get print (\n) print
+                /failcount failcount 1 add store
+            } if
+        } if
+    } ifelse
+} def
+
+% the roster read as a dictionary, for the operand question above, and as
+% a list of names, for the walk below
+/methodnames [ 0 2 roster length 2 sub { roster exch get } for ] def
+/takesdev roster length dict def
+0 2 roster length 2 sub {
+    /ri exch def
+    takesdev roster ri get roster ri 1 add get put
+} for
+
+% every class, finished and unfinished, every method, every shape
+0 2 makers length 2 sub {
+    /mi exch def
+    [ false true ] {
+        /fin exch def
+        methodnames {
+            /m exch def
+            0 1 shapes length 1 sub {
+                makers mi get fin makers mi 1 add get m
+                5 -1 roll drive
+            } for
+        } forall
+    } forall
+} for
+
+% --- the two ways this test could go quiet -------------------------
+% Every method named in the roster is a method some device has. One that
+% is not has been renamed or dropped, and the roster has been driving
+% nothing under that name.
+methodnames {
+    /m exch def
+    present m known not {
+        (FAIL: ) print m 64 string cvs print
+        ( is in the roster and on no class; it has been renamed or dropped\n) print
+        /failcount failcount 1 add store
+    } if
+} forall
+
+% Every method the roster drives raised somewhere, except the ones named
+% as having no failure path -- and those raised nowhere. A method that
+% stops raising is a method this test measures nothing across; one that
+% starts is a method the exemption no longer describes.
+methodnames {
+    /m exch def
+    /want true def
+    undrivable { m eq { /want false def } if } forall
+    raised m known want ne {
+        (FAIL: ) print m 64 string cvs print
+        want {
+            ( was driven to no failure by any trial; nothing was measured across it\n) print
+        }{
+            ( is named as having no failure path and raised anyway\n) print
+        } ifelse
+        /failcount failcount 1 add store
+    } if
+} forall
+
+% The trials themselves ran: a roster that emptied, a maker list that
+% emptied or a shape list that emptied would leave every check above with
+% nothing to say and this test reporting success.
+methodnames length 0 gt (the method roster is not empty) assert
+makers length 0 gt (the class roster is not empty) assert
+shapes length 0 gt (the shape roster is not empty) assert
+present length 0 gt (some method of some class was found and driven) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

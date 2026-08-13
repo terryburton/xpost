@@ -95,13 +95,13 @@
     % a page put out a band at a time is required to be the page put out
     % whole, byte for byte (tests/run-band-loop-test.sh).
     /.writepage { % img file
-        2 dict begin
+        2 dict {
         {/f /a}{exch def}forall
         a f //.internaldict /.writeppmrows get exec
         f (%stdout)(w) file ne {
             f closefile
         } if
-        end
+        } //.xpostsys /.indict get exec
     } bind
 >> //.xpostsys /.makerasterclass get exec def
 

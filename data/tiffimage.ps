@@ -57,7 +57,7 @@
 % answer up front, an uncompressed strip of the page's extent being the
 % only thing that can lie between.
 .xpost_TIFFIMAGE /.writehead { % file  .  -
-    8 dict begin
+    8 dict {
     /f exch def
     /hdr 8 string def
     /hp 0 def
@@ -69,7 +69,7 @@
         { 0 b4 }
         { 8 width height mul 3 mul add b4 } ifelse
     f hdr 0 8 getinterval writestring
-    end
+    } //.xpostsys /.indict get exec
 } put
 
 % file  .bandsink  sink
@@ -88,7 +88,7 @@
 % was written, and the entries take the page's own extent rather than
 % the rows of any one run.
 .xpost_TIFFIMAGE /.writetail { % sink file  .  -
-    16 dict begin
+    16 dict {
     {/f /snk}{exch def}forall
     /hdr 200 string def
     /hp 0 def
@@ -134,7 +134,7 @@
         /sl width height mul 3 mul def
         8 sl add 1 sl ifdbuild
     } ifelse
-    end
+    } //.xpostsys /.indict get exec
 } put
 
 % the page whole: the header, the strip, and what follows it, through
@@ -142,14 +142,14 @@
 % carry the same bytes because they are the same bytes rather than
 % because two writers agree
 .xpost_TIFFIMAGE /.writepage { % img file
-    3 dict begin
+    3 dict {
     {/f /a}{exch def}forall
     f .writehead
     /snk f .bandsink def
     a snk .writeband
     snk f .writetail
     f (%stdout)(w) file ne { f closefile } if
-    end
+    } //.xpostsys /.indict get exec
 } put
 
 //.internaldict /QUIET known { }{ (eof tiffimage.ps\n)print } ifelse

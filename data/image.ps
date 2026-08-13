@@ -11,6 +11,11 @@
 % parameter files over this generator, and the bilevel and TIFF classes
 % are dict-copies of those with the emission overridden.
 %
+% A method runs its body with a dictionary current -- the device's own,
+% or a scratch one where the body wants somewhere of its own to work --
+% and every one of them opens it through the bracket that takes it off
+% again however the body ends, error included (.indict, graphics.ps).
+%
 % In the method comments, IMAGE is an instance returned by Create and
 % c1..cN are the .ncomp colour components, each in [0,1].
 
@@ -28,10 +33,10 @@ currentglobal true setglobal
     /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
-    begin {/height /width}{exch def}forall
-    currentdict end
+    { {/height /width}{exch def}forall
+    currentdict } //.xpostsys /.indict get exec
     dup /.copydict get exec
-    begin
+    {
         % The rows of the page this device holds. A program may declare
         % the page's imaging bounding box (PLRM 6.2), asserting that it
         % paints no marks outside it; PLRM 6.2 leaves a device free to
@@ -76,7 +81,7 @@ currentglobal true setglobal
         3 -1 roll add               % bytes elements'
         exch                        % elements' bytes
         //.internaldict /.vmreserve get exec not {
-            setglobal end
+            setglobal
             /Create cvx /VMerror signalerror
         } if
         /ImgData height array def
@@ -106,7 +111,7 @@ currentglobal true setglobal
         /.groundrow .rowalloc def
         setglobal
     currentdict
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     /Destroy { % IMAGE  .  -
         pop
@@ -164,7 +169,7 @@ currentglobal true setglobal
     % naming a run this raster cannot stand for gets the part of it that
     % it can rather than a write past the end of the spine.
     /.moveband { % top rows IMAGE  .  -
-    begin
+    {
         % the row to copy from, and the rows this device made, both
         % taken up at the first move: a device that never moves its band
         % pays nothing for the ability to.
@@ -197,7 +202,7 @@ currentglobal true setglobal
             dup .rowclear
             ImgData 3 1 roll put
         } for
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     /.to-int { floor cvi } bind
 
@@ -296,7 +301,7 @@ currentglobal true setglobal
     % which point the stack is a shape no fixed count of pops answers,
     % and what is left over lands in the operands of whatever called.
     /PutPix { % c1..cN x y IMAGE  .  -
-    begin
+    {
         {
             .to-int exch .to-int exch
             dup 0 lt { stop } if
@@ -312,7 +317,7 @@ currentglobal true setglobal
         } stopped {
             .ncomp 2 add { pop } repeat
         } if
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % A read answers what the page shows at the named pixel, and never
     % refuses: a mark aimed off the page is dropped, so a read from
@@ -324,7 +329,7 @@ currentglobal true setglobal
     % large: where this class screens what it stores, what the page
     % shows differs from one pixel to the next.
     /GetPix { % x y IMAGE  .  c1..cN
-    begin
+    {
         2 copy .onpage {
             .to-int exch .to-int exch   % x y
             2 copy ImgData exch get     % x y x row
@@ -335,7 +340,7 @@ currentglobal true setglobal
         }{
             .groundpix
         } ifelse
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % The pixels a segment covers are the driver contract's (.linepix,
     % src/lib/xpost_dev_driver.h): the pixel centres the segment spans
@@ -343,20 +348,20 @@ currentglobal true setglobal
     % them through PutPix; the window devices walk the same list through
     % their own plot. Neither states the rule.
     /DrawLine { % c1..cN x1 y1 x2 y2 IMAGE  .  -
-    begin {y2 x2 y1 x1}{exch def}forall .takecolor
+    { {y2 x2 y1 x1}{exch def}forall .takecolor
         /lp x1 y1 x2 y2 width height //.internaldict /.linepix get exec def
         0 2 lp length 2 sub {
             /li exch def
             .pushcolor lp li get lp li 1 add get currentdict PutPix
         } for
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     %  -----|
     %  |    |
     %  |    |
     %  |-----
     /DrawRect { % c1..cN x y w h IMAGE  .  -
-    begin {h w y x}{exch def}forall .takecolor
+    { {h w y x}{exch def}forall .takecolor
         0 1 h 1 sub {
             x 2 copy % h x h x
             exch y add .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
@@ -369,7 +374,7 @@ currentglobal true setglobal
             h add exch 1 sub exch
             .pushcolor .ncomp 2 add .ncomp roll currentdict PutPix
         } for
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % The rectangle a fill covers is the driver contract's (.rectspan,
     % src/lib/xpost_dev_driver.h): a negative extent reflects through
@@ -379,7 +384,7 @@ currentglobal true setglobal
     % devices' own, take the same span from the same place. Nothing here
     % restates it, and nothing here has to agree with it by accident.
     /FillRect { % c1..cN x y w h IMAGE  .  -
-    begin {h w y x}{exch def}forall .takecolor
+    { {h w y x}{exch def}forall .takecolor
         x y w h width height //.internaldict /.rectspan get exec {
             /ry1 exch def /rx1 exch def /ry0 exch def /rx0 exch def
             .pushcolor
@@ -393,7 +398,7 @@ currentglobal true setglobal
             } for
             .ncomp { pop } repeat
         } if
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % expand a running device-space box to include a point; FillPoly
     % seeds minx/miny/maxx/maxy in the instance before the sweep
@@ -412,7 +417,7 @@ currentglobal true setglobal
     % for the whole suite, so the scanline sweep allocates nothing
     /.intersect {
 		DICT
-		begin
+		{
         {Dy Dx Cy Cx By Bx Ay Ax}{exch def}forall
 
         { %stopped
@@ -453,7 +458,7 @@ currentglobal true setglobal
             Ay ABpos theSin mul add
         } stopped not
 
-    end }
+    } //.xpostsys /.indict get exec }
 	dup 0 16 dict put
 	bind
 
@@ -463,7 +468,7 @@ currentglobal true setglobal
     %implementation in current use (10/8/2014)
 
     /FillPoly { % c1..cN polygon IMAGE  .  -
-    begin {poly}{exch def}forall .takecolor
+    { {poly}{exch def}forall .takecolor
 
         /DEBUGFILL where { pop
             (\nFillPoly)=
@@ -574,7 +579,7 @@ currentglobal true setglobal
 
         } repeat
 
-    end } bind %FillPoly
+    } //.xpostsys /.indict get exec } bind %FillPoly
 
     % c1..cN  Ground  -
     % Take up the colour the page is being cleared to; PLRM 8.2 erases
@@ -601,7 +606,7 @@ currentglobal true setglobal
     % 3.7.3), and the ground the page was cleared to has to keep to the
     % page it describes.
     /Ground { % c1..cN IMAGE  .  -
-    begin
+    {
         currentdict /.groundrow known {
             0 1 width 1 sub {            % c1..cN x
                 .groundrow exch          % c1..cN row x
@@ -617,7 +622,7 @@ currentglobal true setglobal
             setglobal
         } if
         .ground astore pop
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % Whether the row this device shows over a row it does not hold is
     % the same row whatever the row is. A class that stores the colour
@@ -803,7 +808,7 @@ currentglobal true setglobal
     % page below, which is why a device that has not been asked to band
     % cannot be handed part of a page by accident.
     /Emit { % IMAGE  .  -
-    begin
+    {
         currentdict /.bandpage known { .emitband }{
         .groundvaries {
             % A class whose ground differs from one row to the next
@@ -843,7 +848,7 @@ currentglobal true setglobal
             .writepage
         } ifelse
         } ifelse
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 >> put
 
 % spec  .makerasterclass  class

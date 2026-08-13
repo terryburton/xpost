@@ -3568,6 +3568,20 @@ test('device-contract',
   suite: cost_slow,
   timeout: 300)
 
+# The other half of the contract: what a method leaves behind when it does
+# not accept its inputs. A raster method runs with a dictionary current and
+# owes the dictionary stack the close on every way out, an error included --
+# one that skips it leaves its dictionary current for the error handler and
+# for everything after, where a definition lands somewhere nobody will look
+# for it and, in the class's own global scratch, is refused outright. Every
+# method of every raster class is driven to a failure and measured across.
+test('device-dictstack',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/device_dictstack_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # One page, one erase, one ground: every device has to read the same
 # colour where it holds no pixel. Each device is asked what it reads
 # there for three differently cleared pages and the answers are held
