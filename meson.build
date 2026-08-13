@@ -3832,6 +3832,26 @@ test('band-select',
   suite: cost_fast,
   timeout: 300)
 
+# What the mechanism costs where it costs most. Banding a page buys the
+# raster the page does not have to hold, which is the run less one band of
+# it and is bounded by the page; what the marks cost follows the drawing and
+# is bounded by nothing, so a page can be drawn whose record costs several
+# times the raster it saves. This draws that page and reads both sides off
+# the interpreter, at the boundary where a light drawing keeps a record
+# worth having and a heavier one does not -- both directions, at each colour
+# count a record is made in -- and then at full size, where the peak
+# resident size of the two runs says what the excess actually comes to. The
+# figures are printed whether or not anything is wrong with them: what this
+# exists to keep is the measurement. It ends by breaking the statement of
+# what banding saves in both directions and requiring the boundary to go the
+# wrong way each time.
+test('record-excess',
+  find_program('tests/run-record-excess-test.sh'),
+  args: [ xpost_exe, files('tests/record_excess_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_veryslow,
+  timeout: 900)
+
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or
 # its outline into the content a vector writer keeps, or its ink box to a

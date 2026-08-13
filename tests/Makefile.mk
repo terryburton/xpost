@@ -178,6 +178,7 @@ tests/band_replay_cost_test.ps \
 tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_glyph_test.ps \
+tests/record_excess_test.ps \
 tests/record_short_test.ps \
 tests/form_band_test.ps \
 tests/record_span_test.ps \
@@ -323,6 +324,7 @@ tests/run-form-band-test.sh \
 tests/run-record-span-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-record-screen-test.sh \
+tests/run-record-excess-test.sh \
 tests/run-band-loop-test.sh \
 tests/run-band-sparse-test.sh \
 tests/run-band-report-test.sh \
