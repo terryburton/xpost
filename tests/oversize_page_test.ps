@@ -57,7 +57,17 @@
 % account for. Three of the roster's devices keep their page as rows of
 % the interpreter's own memory; the rest keep a buffer of their own, or
 % paint nothing, and there is no entity count to compare.
-/raster getdevice /ImgData known def
+%
+% Two things have to hold and the second is asked of the interpreter
+% rather than guessed from a key the device happens to carry: the device
+% keeps its rows where this run can reach them, and it is holding the
+% whole page rather than a band of it. A device holding a band has no
+% ceiling for the refusal below to find -- one band is one band whatever
+% the page is -- so the largest page this interpreter can name is a page
+% it builds rather than one it refuses, and there is no cost of a
+% refusal to weigh.
+/raster getdevice /ImgData known
+    currentsystemparams /CurBandHeight get 0 eq and def
 /refused 0 def
 
 % Said out loud, because the comparison this file exists to make is

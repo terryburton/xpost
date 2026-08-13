@@ -228,7 +228,11 @@ check_verbose() {
 }
 
 # ---- the two routes ----
-for r in dir:pgm rec:record:pgm; do
+# The direct route is asked for as the mode that holds the page whole:
+# selecting a device by name selects the record in front of it, and a
+# wrapper comparing the two routes would otherwise name one of them
+# twice.
+for r in dir:pgm:whole rec:record:pgm; do
     route=${r%%:*}
     dev=${r#*:}
     run "$dev" "$work/page.$route" "$work/rep.$route"
@@ -262,7 +266,7 @@ fi
 # standard output whenever the run was given nowhere else to put it. So
 # the page a verbose run writes must be the page a quiet one writes, to
 # the byte, and the lines must be on the other stream.
-for r in dir:pgm rec:record:pgm; do
+for r in dir:pgm:whole rec:record:pgm; do
     route=${r%%:*}
     dev=${r#*:}
     XPOST_DATA_DIR=$datadir "$xpost" -v -d "$dev" -o "$work/vpage.$route" \

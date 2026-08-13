@@ -55,7 +55,10 @@ render() {
     return 0
 }
 
-render ppm "$work/direct.ppm" || fail=1
+# The painter by itself, asked for as the mode that holds the page whole:
+# selecting a device by name selects the record in front of it, and the
+# comparison here is between a recorder and a painter.
+render ppm:whole "$work/direct.ppm" || fail=1
 direct=$out
 render record "$work/played.ppm" || fail=1
 played=$out

@@ -96,7 +96,10 @@ render() {  # $1 device; sets out
 
 render record || fail=1
 recorded=$out
-render ppm || fail=1
+# The device holding the whole page, asked for as the mode that says so:
+# selecting a device by name selects the record in front of it, and what
+# is compared here is a recorded page against a painted one.
+render ppm:whole || fail=1
 direct=$out
 
 if [ "$fail" -ne 0 ]; then

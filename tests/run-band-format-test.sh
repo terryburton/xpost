@@ -50,6 +50,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # The runs below are started in the directory the pages are written to,
 # so what they were handed has to name the same thing from there.
@@ -90,8 +91,13 @@ rowfactor() {
 
 check_device() {  # $1 device
     dev=$1
-    out=$( cd "$work" && "$xpost" -q $ns -d "$dev" -o unused.out "$script" \
-           </dev/null 2>&1 )
+    # The subject is the raster class's own band loop, which the run
+    # drives by hand through the device's .moveband. Selecting a device
+    # by name selects the record in front of it, and a record carries no
+    # such method: the device is asked for as the mode that holds the
+    # page whole, and the run divides that page itself.
+    out=$( cd "$work" && "$xpost" -q $ns -d "$(fleet_whole "$dev")" \
+           -o unused.out "$script" </dev/null 2>&1 )
     st=$?
     verdict_run "$st" "$out" "the $dev run" || { fail=1; return; }
 

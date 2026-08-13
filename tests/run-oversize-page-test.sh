@@ -40,7 +40,14 @@ for dev in $devices; do
 done
 
 for dev in $devices; do
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    # The device holding the whole page, asked for as the mode that says
+    # so. Selecting a device by name selects the record in front of it,
+    # which holds a band: a band is one band whatever the page is, so
+    # there is no ceiling for the refusal to find and none of the roster
+    # would be left keeping its page where the cost of one can be
+    # counted.
+    out=$("$xpost" -q $ns -d "$(fleet_whole "$dev")" -o "$work/out.$dev" \
+          "$script" </dev/null 2>&1)
     st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;

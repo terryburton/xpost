@@ -91,7 +91,10 @@ render() {
 field() { printf '%s\n' "$1" | sed -n "s/^$2 //p" | head -1 \
           | sed 's/[[:blank:]]*$//'; }
 
-render pgm "$work/direct.pgm" || fail=1
+# The painter by itself, asked for as the mode that holds the page whole:
+# selecting a device by name selects the record in front of it, and the
+# comparison here is between a recorder and a painter.
+render pgm:whole "$work/direct.pgm" || fail=1
 direct=$out
 render record:pgm "$work/played.pgm" || fail=1
 played=$out

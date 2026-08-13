@@ -82,7 +82,10 @@ render() {  # $1 device, $2 output name relative to $work; sets out
     return 0
 }
 
-render ppm whole.ppm || fail=1
+# The painter by itself, asked for as the mode that holds the page whole:
+# selecting a device by name selects the record in front of it, and the
+# comparison here is between a region replay and a whole render.
+render ppm:whole whole.ppm || fail=1
 direct=$out
 render record played.ppm || fail=1
 played=$out

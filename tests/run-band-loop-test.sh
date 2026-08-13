@@ -82,7 +82,10 @@ render() {  # $1 device; sets out
 
 render record || fail=1
 banded=$out
-render ppm || fail=1
+# The device holding the whole page, asked for as the mode that says so:
+# selecting a device by name selects the record in front of it, and the
+# comparison here is between a band loop and a device holding the page.
+render ppm:whole || fail=1
 direct=$out
 
 if [ "$fail" -ne 0 ]; then
