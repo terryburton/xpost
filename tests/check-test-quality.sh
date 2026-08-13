@@ -36,6 +36,11 @@
 #      pipes the interpreter into a text filter and then reads $? is
 #      answered by the filter, which reports on its own reading rather
 #      than on what it was reading, so a run that died passes.
+#   9. A bracket expression in a sed script is a set of characters, and
+#      a backslash in one is a character: where \t in a bracket is read
+#      as a backslash and a letter rather than as a tab, a scan that
+#      trims blanks that way takes a letter off the words it trims, and
+#      the guard counts a population the host it ran on gave it.
 #
 # This check reads a directory, so it says which directory it will
 # accept. It used to accept any: pointed at a directory that does not
@@ -304,6 +309,70 @@ for f in "$dir"/*.c; do
     printf '%s\n' "$faults" | sed 's/^/      /'
     fail=1
 done
+
+# 9. a scan reads the same population wherever it runs
+#
+# A bracket expression in a sed script is a set of characters, and a
+# backslash inside one is a character rather than an escape: one sed
+# reads \t there as a tab, another as the backslash and the letter t.
+# A scan written that way takes a t off the end of every word it trims
+# on the second, and reports about the population that leaves without
+# saying it read a different one -- a guard whose count depends on which
+# host ran it. A blank is written [[:blank:]], and a tab outside a
+# bracket is read as one by either.
+#
+# Read on the lines that invoke sed, which is where every sed script in
+# this suite is written; a bracket earlier on the line belongs to
+# whatever feeds the invocation, and a line that is all comment is prose.
+sedclass() {
+    awk '
+        /^[[:blank:]]*#/ { next }
+        match($0, /(^|[^A-Za-z0-9_])sed[[:blank:]]/) {
+            if (substr($0, RSTART) ~ /\[\^?[^]]*\\t/)
+                print "line " FNR ": " $0
+        }' "$1"
+}
+nsed=0
+for f in "$dir"/*.sh; do
+    [ -e "$f" ] || continue
+    nsed=$((nsed + 1))
+    bad=$(sedclass "$f")
+    [ -n "$bad" ] || continue
+    echo "FAIL: $(basename "$f") writes a blank as an escape inside a bracket,"
+    echo "      which one sed reads as a tab and another as a backslash and a"
+    echo "      letter -- write [[:blank:]]:"
+    printf '%s\n' "$bad" | sed 's/^/      /'
+    fail=1
+done
+if [ "$nsed" -eq 0 ]; then
+    echo "FAIL: no shell file was read for the dialect its scans are written"
+    echo "      in; the rule above found nothing because it looked at nothing"
+    fail=1
+fi
+# and the rule has to be able to find one, or it is quiet for the same
+# reason a suite in good order is. The lines it is given are assembled
+# from the escape rather than written out, so that this file does not
+# hold the fault it is here to refuse.
+esc='\t'
+{
+    printf "x | sed 's/[ %s]*\$//'\\n" "$esc"
+    printf "sed -n 's/^[^%s]*%s//p'\\n" "$esc" "$esc"
+} > "$work/dialect"
+if [ "$(sedclass "$work/dialect" | grep -c .)" -ne 2 ]; then
+    echo "FAIL: the dialect rule does not find a blank written as an escape"
+    echo "      inside a bracket; it would pass every scan in the suite"
+    fail=1
+fi
+{
+    printf "x | sed 's/[[:blank:]]*\$//'\\n"
+    printf "awk '{ sub(/[ %s]+\$/, \\\"\\\") }'\\n" "$esc"
+    printf "# one sed reads [ %s] as a tab\\n" "$esc"
+} > "$work/dialect"
+if [ -n "$(sedclass "$work/dialect")" ]; then
+    echo "FAIL: the dialect rule refuses the portable spelling, an awk that"
+    echo "      does read the escape, or prose about the rule"
+    fail=1
+fi
 
 # and the rule itself has to hold, under the pattern matcher this host has
 #
