@@ -872,6 +872,12 @@ size_t xpost_record_bytes(const Xpost_Record *rec)
          + rec->scr.cap + rec->scrbytes;
 }
 
+void xpost_record_lost(Xpost_Record *rec)
+{
+    if (rec)
+        rec->short_of_a_mark = 1;
+}
+
 int xpost_record_failed(const Xpost_Record *rec)
 {
     return rec ? rec->short_of_a_mark : 0;

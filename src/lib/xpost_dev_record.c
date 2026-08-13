@@ -193,6 +193,35 @@ static int _private_get(Xpost_Context *ctx, Xpost_Object devdic,
                                  private, sizeof *private);
 }
 
+/* Answer @p err, having said that the page this device is holding has
+ * lost what the call was carrying.
+ *
+ * The record refuses a mark it cannot hold and remembers the refusal, so
+ * that a page it could not hold whole is refused rather than put out
+ * short. A mark that fails here never reaches it to be refused: the
+ * device was asked to paint something and returns an error instead, and
+ * the record it is keeping goes on describing a page without it. So the
+ * loss is carried down to the same flag by hand and the one refusal
+ * covers both.
+ *
+ * Which failures those are is the question this file answers site by
+ * site: a call that was adding to the page loses what it was adding,
+ * where a call that answers a question about a page, or paints a page
+ * already held, leaves the record holding everything it held.
+ *
+ * A device with no state, and one whose record has been given up, hold
+ * no page for anything to be missing from.
+ */
+static int _lost(Xpost_Context *ctx, Xpost_Object devdic, int err)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (_private_get(ctx, devdic, &privatestr, &private))
+        xpost_record_lost(private.rec);
+    return err;
+}
+
 /* Whether a rectangle covers every pixel of the page.
  *
  * The pixels it covers are taken from its operands by the normaliser the
@@ -239,10 +268,13 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
     if (!private.rec)
         return 0;
 
+    /* The mark was made and is not going to be written down, so the page
+       is short of it however far the two counts are apart. */
     if (ncomp != private.ncomp)
     {
         XPOST_LOG_ERR("%d a mark of %d colour values is offered to a record"
                       " holding %d", rangecheck, ncomp, private.ncomp);
+        xpost_record_lost(private.rec);
         return rangecheck;
     }
     for (i = 0; i < ncomp; i++)
@@ -266,8 +298,14 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
         && _covers_page(ops, private.width, private.height))
         xpost_record_clear(private.rec);
 
+    /* The record counts a mark it refused for want of memory against
+       itself. A mark whose shape it will not take it refuses without
+       counting, and the page is short of that one just the same. */
     if (!xpost_record_mark(private.rec, kind, colour, ops, nops))
+    {
+        xpost_record_lost(private.rec);
         return VMerror;
+    }
     return 0;
 }
 
@@ -286,8 +324,10 @@ static int _polymark(Xpost_Context *ctx, Xpost_Object devdic,
 
     n = (int)poly.comp_.sz;
     ops = malloc((size_t)(1 + 2 * n) * sizeof *ops);
+    /* the shape was to be filled and there is nowhere to gather it, so
+       the page is short of the fill */
     if (!ops)
-        return VMerror;
+        return _lost(ctx, devdic, VMerror);
     ops[0] = (real)n;
     for (i = 0; i < n; i++)
     {
@@ -605,6 +645,13 @@ static int _recordimage(Xpost_Context *ctx,
     /* one buffer a component says the rows come a plane at a time, and
        the run handed over is then a plane rather than a row */
     img.planar = xpost_object_get_type(_bdget(ctx, bd, BK_BUFS)) == arraytype;
+
+    /* Whether what arrived describes a picture at all, which is settled
+       before anything is taken from it. A description with no
+       components, no width, no depth or no rows is nothing the caller
+       was about to paint, so refusing it leaves the page as it was and
+       the record holding everything it holds -- unlike every refusal
+       past this point, each of which is a picture the page has lost. */
     if (img.ncomp < 1 || img.ncomp > 4 || img.width < 1
      || img.nat < 1 || img.nat > 3)
         return rangecheck;
@@ -623,7 +670,10 @@ static int _recordimage(Xpost_Context *ctx,
        record takes its own copy. */
     runs = malloc((size_t)nrun * sizeof *runs);
     if (!runs)
-        return VMerror;
+    {
+        ret = VMerror;
+        goto out;
+    }
     for (i = 0; i < (int)nrun; i++)
     {
         unsigned int need = (unsigned int)img.width
@@ -729,6 +779,14 @@ static int _recordimage(Xpost_Context *ctx,
         ret = VMerror;
 
 out:
+    /* Every way out from here is a picture the caller was painting and
+       the record does not hold: the rows it could not read, a table
+       without which the writer would refuse the entry when it came to be
+       played, the memory it could not find, or the record's own refusal.
+       The page is short of the picture in each case, so it is refused
+       rather than put out without it. */
+    if (ret)
+        xpost_record_lost(private.rec);
     free(cspans);
     free(runs);
     return ret;
@@ -1027,6 +1085,8 @@ int xpost_dev_record_takemask(Xpost_Context *ctx, Xpost_Object devdic,
     Xpost_Object privatestr;
     PrivateData private;
 
+    /* a caller with no mask to hand over had no glyph to place, so this
+       takes nothing from the page and the record is left as it is */
     if (!cov || !at)
         return rangecheck;
     if (!_private_get(ctx, devdic, &privatestr, &private))
@@ -1034,8 +1094,16 @@ int xpost_dev_record_takemask(Xpost_Context *ctx, Xpost_Object devdic,
     /* a released record takes a mask as it takes a mark: not at all */
     if (!private.rec)
         return undefined;
+    /* A mask that could not be taken up is a glyph that will not be
+       placed: the caller reads this answer and marks nothing rather than
+       naming a mask the record does not hold, and says nothing further
+       about it. So the page is short of the glyph, and this is where
+       that is said -- an unplaced glyph raises no error of its own. */
     if (!xpost_record_mask(private.rec, cov, w, h, at))
+    {
+        xpost_record_lost(private.rec);
         return VMerror;
+    }
     return 0;
 }
 
@@ -1065,22 +1133,35 @@ static int _glyphmark(Xpost_Context *ctx, Xpost_Object devdic,
     if (!private.rec)
         return 0;
 
+    /* the glyph was painted and is not going to be written down, so the
+       page is short of it, as it is of a mark of the wrong shape */
     if (ncomp != private.ncomp)
     {
         XPOST_LOG_ERR("%d a glyph of %d colour values is offered to a record"
                       " holding %d", rangecheck, ncomp, private.ncomp);
+        xpost_record_lost(private.rec);
         return rangecheck;
     }
     for (i = 0; i < ncomp; i++)
         colour[i] = (real)xpost_object_number(comp[i]);
 
+    /* A placement naming no mask the record holds replays as nothing,
+       which is a page missing a glyph. The record says so of an index
+       past the masks it holds; an index below them is the same defect at
+       the other end and is answered the same way. */
     i = xpost_dev_num_to_int(at);
     if (i < 0)
+    {
+        xpost_record_lost(private.rec);
         return rangecheck;
+    }
     if (!xpost_record_glyph(private.rec, colour, (size_t)i,
                             (real)xpost_object_number(x),
                             (real)xpost_object_number(y)))
+    {
+        xpost_record_lost(private.rec);
         return VMerror;
+    }
     return 0;
 }
 
@@ -1440,14 +1521,24 @@ static int _recordscreen(Xpost_Context *ctx,
     /* read by the rule the painting device reads it by, so that a
        screen written down is one a page could have been painted under */
     cell = xpost_dev_ht_cell(ctx, devdic, &w, &h);
+    /* a change offering no cell says nothing about what the marks after
+       it are painted under, so there is nothing here for the page to be
+       short of and the record is left as it is */
     if (!cell)
     {
         XPOST_LOG_ERR("%d a screen change offers no cell to record",
                       typecheck);
         return typecheck;
     }
+    /* A cell that was offered and is not written down leaves every mark
+       after it replaying under the screen before it, which is a page the
+       record cannot reproduce. It is refused on the terms a mark it
+       cannot hold is refused. */
     if (!xpost_record_screen(private.rec, w, h, cell))
+    {
+        xpost_record_lost(private.rec);
         return VMerror;
+    }
     return 0;
 }
 

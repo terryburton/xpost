@@ -1,0 +1,123 @@
+% A page a recording device could not hold whole is refused, not
+% emitted short of what it could not hold.
+%
+% The record keeps the marking calls a page received and gives them back
+% to be painted again. A mark it cannot hold makes it short of one, and
+% the shortage sticks: every later mark is refused, every replay refuses,
+% and the page is refused when it comes to be put out. That ladder exists
+% because a page missing a mark looks like a page, so silence is the
+% dangerous outcome.
+%
+% The ladder is only whole if every way of losing a mark reaches its
+% bottom rung. A mark can also be lost in the device in front of the
+% record: the device is handed something to put on the page, cannot
+% write it down, and answers an error. The record is not told by that --
+% it was never called -- so it goes on describing a page that no longer
+% has the thing in it, and the page is put out short.
+%
+% This drives that from the outside. The image entry is the one the
+% painter uses for a sampled image (data/paint.ps looks for
+% /.recordimage on the device and hands over the picture whole rather
+% than painting it a rectangle per sample), and it is called here
+% directly, standing in for the painter, so that what the device is
+% handed can be chosen. The glyph entry is the same case for text.
+%
+% Four runs, selected with -Dcase=:
+%
+%   /whole   a picture the device can write down. The page comes out
+%            with it, which is what makes its absence visible in the
+%            next run rather than a page nobody could tell apart.
+%   /bare    no picture at all, which is the page the /short run comes
+%            out as where the loss goes unreported.
+%   /short   a picture whose decode table is withheld. The device
+%            refuses it, and the page is short of it from that moment.
+%   /glyph   a glyph placement naming no mask the record holds. Nothing
+%            is painted for it either.
+%
+% Each run says what the device answered and what became of the page.
+% Which of those answers is right is the wrapper's to judge, since it
+% differs run by run.
+
+/case where { pop case } { /whole } ifelse /case exch def
+
+% The device's own entries are reached the way the machinery reaches
+% them, through the device dictionary, and the record's readings through
+% internaldict -- neither is in the program's namespace.
+/intd 1183615869 internaldict def
+
+% The picture. One component a sample, decoded to the three values the
+% target's pixels take, placed at 20,20 in device space at one sample
+% per pixel. Small: what is being shown is whether it is on the page,
+% not what it looks like.
+/W 24 def
+/H 24 def
+/rows [ H { W string 0 1 W 1 sub { 1 index exch 255 put } for } repeat ] def
+/lut 768 string def
+0 1 255 {
+    /v exch def
+    lut v 3 mul 255 put
+    lut v 3 mul 1 add 0 put
+    lut v 3 mul 2 add 0 put
+} for
+
+/offer {
+    24 dict
+    dup /w W put
+    dup /ncomp 1 put
+    dup /nat 3 put
+    dup /rgbrows true put
+    dup /xoff 20 put
+    dup /xscale 1 put
+    dup /yoff 20 put
+    dup /yscale 1 put
+    dup /cx0 0 put
+    dup /cy0 0 put
+    dup /cx1 612 put
+    dup /cy1 792 put
+    % The one thing the /short run withholds. Everything else about the
+    % offer describes a picture, so what is refused is a picture the
+    % caller was painting rather than a call that never carried one.
+    case /short ne { dup /lut lut put } if
+} def
+
+/say { print (\n) print flush } def
+/said { $error /errorname get 32 string cvs print (\n) print flush } def
+
+% The mark that is on the page whatever happens, so that a page emitted
+% short is a page with this and nothing else. It is not what the runs
+% differ by; the picture is.
+0 0 1 setrgbcolor
+100 100 60 60 rectfill
+
+case /bare eq {
+    (OFFER NONE) say
+}{
+    case /glyph eq {
+        % Standing in for the glyph painter, which reaches this entry
+        % once per glyph it has drawn. A placement naming no mask the
+        % record holds paints nothing when it comes to be played, so
+        % what it stands for is a glyph the page has lost.
+        mark {
+            0 0 0 -1 30 30 DEVICE dup /.recordglyph get exec
+            (OFFER RECORDED) say
+        } stopped { (OFFER REFUSED ) print said } if cleartomark
+    }{
+        mark {
+            offer rows DEVICE dup /.recordimage get exec
+            (OFFER RECORDED) say
+        } stopped { (OFFER REFUSED ) print said } if cleartomark
+    } ifelse
+} ifelse
+
+% The marks the record holds and the pictures among them, which is what
+% says whether the offer reached it at all.
+(HELD ) print
+DEVICE intd /.recordcost get exec pop exch
+20 string cvs print ( ) print 20 string cvs print (\n) print flush
+
+% The page's own line begins with a break: the default page semantics
+% end their showpage banner without one, so a report printed straight
+% after would be the tail of that line and no reader anchored to a line
+% would find it.
+mark { showpage (\nPAGE OUT) say }
+stopped { (\nPAGE REFUSED ) print said } if cleartomark

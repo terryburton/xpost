@@ -3353,6 +3353,25 @@ test('record-glyph',
   suite: cost_fast,
   timeout: 180)
 
+# The other end of both entries: what becomes of the page when one of
+# them cannot take what it is handed. A record refuses a mark it cannot
+# hold and remembers the refusal, so that a page it could not hold whole
+# is refused rather than put out short; a mark lost in the device in
+# front of it never reaches it to be refused. This hands the image entry
+# a picture it must refuse and the glyph entry a placement it must
+# refuse, and requires the page to be refused after each -- against a run
+# whose picture was written down, which puts out a page the two can be
+# told apart by, and a run handed nothing, which is the page a lost mark
+# comes out as. Reading the error the entry answers would establish
+# nothing: it is the same error either way and the fault is what happens
+# after it.
+test('record-short',
+  find_program('tests/run-record-short-test.sh'),
+  args: [ xpost_exe, files('tests/record_short_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # ... and the same entry played into a device that keeps no rows an image
 # can be written into, whose picture is painted through the rectangle
 # fill it declares instead -- one call per run of columns, the runs being

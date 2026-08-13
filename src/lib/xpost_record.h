@@ -457,6 +457,25 @@ size_t xpost_record_count(const Xpost_Record *rec);
 size_t xpost_record_bytes(const Xpost_Record *rec);
 
 /**
+ * @brief Say that a mark the page was given never reached the record.
+ *
+ * The record is short of a mark from here on, on the terms
+ * xpost_record_mark states: every later mark is refused, nothing it
+ * holds is given back, and every replay of it refuses. What that comes
+ * to is a page refused rather than a page put out short.
+ *
+ * It is here because the marks reach a record through a device, and a
+ * device asked to paint something it does not manage to write down has
+ * exactly the page a record that could not hold it has. The record
+ * cannot learn that from a call it never received, so the device says
+ * so, and the one refusal covers both.
+ *
+ * A record already short of a mark stays short: there is nothing here
+ * to undo.
+ */
+void xpost_record_lost(Xpost_Record *rec);
+
+/**
  * @brief Whether a mark was ever refused for want of memory.
  *
  * @return 1 where the record is short of a mark it was given, 0 where

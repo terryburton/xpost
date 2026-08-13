@@ -177,6 +177,7 @@ tests/band_replay_cost_test.ps \
 tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_glyph_test.ps \
+tests/record_short_test.ps \
 tests/record_span_test.ps \
 tests/record_replay_test.ps \
 tests/record_screen_test.ps \
@@ -315,6 +316,7 @@ tests/run-gc-pressure-test.sh \
 tests/run-golden-render.sh \
 tests/run-record-image-test.sh \
 tests/run-record-glyph-test.sh \
+tests/run-record-short-test.sh \
 tests/run-record-span-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-record-screen-test.sh \
