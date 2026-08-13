@@ -109,6 +109,91 @@ currentglobal true setglobal
     }{ ph } ifelse
 end } bind put
 
+% /target w h  .bandsatpage  bool
+% Whether a page of this extent, painted by the named device, is one the
+% recording class would hold in more than one band.
+%
+% Asked of the arithmetic above, over a dictionary standing for the
+% device that would be made rather than one that was: the width prices a
+% row of the target's raster, the budget says how many of those rows a
+% band holds, and a page with more rows than that is a page that bands.
+% Asking the one reading rather than restating the comparison is what
+% keeps the route and the loop from disagreeing about where the boundary
+% falls.
+%
+% A target this build cannot make, or one whose class prices no row, is
+% answered as banding: the answer decides only which of two ways a page
+% is reached, and both of them reach a device that is about to refuse
+% the target for the same reason.
+.xpostsys /.bandsatpage { % /target w h  .  bool
+5 dict begin
+    /ph exch def
+    /pw exch def
+    /tgt exch def
+    /rec .privatedict /.xpost_RECORD get def
+    /targets rec /.playtargets get def
+    targets tgt known {
+        % A class a C driver brings is not in the private dictionary
+        % until the driver has been loaded, and pricing a row asks the
+        % class. This is the load the maker would do, done first and
+        % once: a driver already there is not loaded again, and a build
+        % without it registers no loader and answers nothing here.
+        rec /.playloaders get tgt 2 copy known
+            { get dup where { pop cvx exec }{ pop } ifelse }
+            { pop pop } ifelse
+        /cls targets tgt get def
+        .privatedict cls known {
+            << /width pw /height ph
+               /.playclass cls
+               /.bandbytes rec /.bandbytes get >>
+            //.xpostsys /.bandheight get exec ph lt
+        }{ true } ifelse
+    }{ true } ifelse
+end } bind put
+
+% /name w h  .devicefor  /name'
+% Which device a selection is made through at a page of this extent.
+%
+% A run selecting a device whose page may arrive a band at a time has
+% that selection made through this class (src/lib/xpost_interpreter.c),
+% and this is where that is taken back. A record holds a page in less
+% memory than the page by never holding the page; a page the budget
+% already covers is played into a raster of the whole of it, so its
+% marks are written down, walked once and dropped again for a raster
+% that was going to be whole regardless. Under the budget the device the
+% run asked for is made directly, and the marks of such a page are
+% written down nowhere.
+%
+% Asked wherever a device is made from a selection -- the start device
+% (data/device.ps) and setpagedevice (data/init.ps) -- so which route a
+% page takes follows the page in force rather than the page the run
+% opened at. A page-device request that resizes the page is weighed
+% again, and lands on the same side of the boundary as a run that opened
+% at that size.
+%
+% Only for the selection this run made, and only where the run did not
+% name this class itself: -d record:pgm is a run asking for a record and
+% gets one at any page, and -d pgm:whole is a run refusing one and gets
+% none at any page. What is recognised is either end of the route the
+% selection was given -- this class, or the device it was given for --
+% because a page weighed one way installs the one and a page weighed the
+% other installs the other, and the request after it names whichever is
+% running.
+.xpostsys /.devicefor { % /name w h  .  /name'
+5 dict begin
+    /ph exch def
+    /pw exch def
+    /nm exch def
+    /asked /StartDeviceAsked //.xpostsys /.hostvalue get exec def
+    /StartDevice //.xpostsys /.hostvalue get exec /record eq
+    asked type /nametype eq and
+    asked /record ne and
+    nm /record eq nm asked eq or and {
+        asked pw ph //.xpostsys /.bandsatpage get exec
+            { /record }{ asked } ifelse
+    }{ nm } ifelse
+end } bind put
+
 % dict  .playdrop  -
 % Give up the device a record paints through.
 %

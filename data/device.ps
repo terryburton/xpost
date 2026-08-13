@@ -421,6 +421,16 @@ currentglobal true setglobal
         % here as well
         //.xpostsys /.devicemakers get 1 index known not
             { /.startdevice cvx /undefined signalerror } if
+        % Which device that selection is made through at the page this
+        % run opens at. A selection for a device whose page may arrive a
+        % band at a time is made through the recording class, and a page
+        % the band budget already covers is made on the device the run
+        % asked for instead, recording nothing (.devicefor,
+        % data/recorddev.ps). What is made is what is named below, so a
+        % page-device request afterwards is weighed from the device that
+        % is running.
+        /StartPageSize //.xpostsys /.hostvalue get exec aload pop
+        //.xpostsys /.devicefor get exec
         /StartPageSize //.xpostsys /.hostvalue get exec aload pop
         2 index //.xpostsys /.devicemakers get exch get exec
         % the interpreter's own device takes the same finishing

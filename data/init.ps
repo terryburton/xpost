@@ -1756,7 +1756,18 @@ currentglobal true setglobal
         % on the device it already had. Retiring the incumbent first would
         % leave the graphics state naming a device whose buffers are freed,
         % so the next mark made after the caught error reads freed memory.
-        /newdev pw ph //.xpostsys /.devicemakers get dev get exec def
+        % The device is made through the route that suits the page now in
+        % force: a selection for a device whose page may arrive a band at
+        % a time is made through the recording class, and a page the band
+        % budget already covers is made on the device the run asked for
+        % instead (.devicefor, data/recorddev.ps). Asked here as well as
+        % where the start device is made, so a program that resizes its
+        % page is held on the same side of the boundary as a run that
+        % opened at that size. The selection recorded below is the one
+        % that was made, not the route it took, so the next request is
+        % answered from the selection again.
+        /newdev pw ph //.xpostsys /.devicemakers get
+            dev pw ph //.xpostsys /.devicefor get exec get exec def
         graphicsdict /.exactpagedims undef
         graphicsdict /.rasterband undef
 

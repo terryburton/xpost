@@ -2765,17 +2765,26 @@ static int _record_host_config(Xpost_Context *ctx,
     }
     /* A device that can take its page a band at a time is given to the
        recording class to paint, which is what makes banding what a run
-       gets without asking for it. What that costs a page small enough
-       not to need it is nothing beyond the record itself: the band
-       height follows the budget, so a page fitting inside one band is
-       played into a raster of the whole page and comes out as it always
-       did (.playpage, data/recorddev.ps).
+       gets without asking for it.
+
+       Given to it, not made through it: which of the two routes a page
+       actually takes is settled where the device is made, by weighing
+       the page's raster against the band budget, and a page the budget
+       covers is painted on the device named here with nothing recorded
+       at all (.devicefor, data/recorddev.ps). It cannot be settled here.
+       What a row of a device's raster costs is stated by the device's
+       class and the budget by the recording class, and neither class
+       exists yet: the graphics modules are read when a run begins, which
+       is after the context this is settling has been handed back. So
+       what is settled here is which device a record would paint through
+       if one is made, and the weighing waits for the classes that carry
+       the two numbers.
 
        A selection that names a mode is left alone, which is how a run
        says otherwise: "pgm:whole" holds the page whole, and
-       "record:pgm" asks for the record by name. Naming the mode rather
-       than adding an option is what lets the two be compared by
-       changing one word. */
+       "record:pgm" asks for the record by name and gets one at any page.
+       Naming the mode rather than adding an option is what lets the two
+       be compared by changing one word. */
     subdevice = device ? strchr(device, ':') : NULL;
     if (!subdevice && _bands_by_default(selected, n))
     {
