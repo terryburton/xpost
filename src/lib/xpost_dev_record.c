@@ -1635,24 +1635,51 @@ static int _is_replay_cont(Xpost_Object o)
  * can be made to need. */
 #define XPOST_REPLAY_BATCH 512
 
+/* Make the call standing on the operand stack into a device.
+ *
+ * Where the method is a compiled operator the call is made here, without
+ * going round the interpreter for it: what that saves is not the call
+ * but the journey, two evaluation steps a call.
+ *
+ * Where it is not, the call is left on the stacks: a device method may
+ * be a procedure and what runs a procedure is the interpreter. Whatever
+ * such a method leaves behind it then runs before the caller of this
+ * gets on, which is where a call made straight at a device leaves it.
+ */
+static int _callplay(Xpost_Context *ctx, Xpost_Object m)
+{
+    Xpost_Object caller = ctx->currentobject;
+    int ret;
+
+    if (xpost_object_get_type(m) != operatortype)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, m);
+        if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
+            return execstackoverflow;
+        return 0;
+    }
+    /* The operator is named as the object being executed for the length
+       of the call, so that an error raised inside it is reported against
+       the method and unwinds onto the method's own operands. */
+    ctx->currentobject = m;
+    ret = xpost_operator_exec(ctx, m.mark_.padw);
+    if (ret)
+        return ret;  /* the method is left named, for the error */
+    ctx->currentobject = caller;
+    return 0;
+}
+
 /* Make one call into the device that paints, its operands being on the
  * operand stack already.
  *
- * Where the method is a compiled operator the call is made here, without
- * going round the interpreter for it. What that saves is not the call
- * but the journey -- a mark played by leaving the call on the stacks and
- * returning costs two evaluation steps, and with them a fresh look at
- * the target's method table, for every mark on the page.
- *
- * Where the method is not an operator the call cannot be made here: a
- * device method may be a procedure, and what runs a procedure is the
- * interpreter. Such a call is left on the stacks the way every mark used
- * to be. The same applies to a method that is an operator and leaves
- * work behind it, since the calls after it must be made after that work
- * rather than before it: the walk's own continuation goes on the
- * execution stack before the call and is taken off again after it -- if
- * it is still on top, nothing was left; if it is not, the interpreter
- * has been given something to do.
+ * The call itself is _callplay above, which makes it here where the
+ * method is a compiled operator and leaves it on the stacks where it is
+ * not. What is added here is the walk's own continuation, since the
+ * calls after one that left work behind must be made after that work
+ * rather than before it: the continuation goes on the execution stack
+ * before the call and is taken off again after it -- if it is still on
+ * top, nothing was left; if it is not, the interpreter has been given
+ * something to do.
  *
  * A polygon whose method is the compiled fill is called through @p co
  * instead, the run of coordinates the record already holds it as, over
@@ -1679,25 +1706,30 @@ static int _play_call(Xpost_Context *ctx, Xpost_Object m,
     if (!xpost_stack_push(ctx->lo, ctx->es, cont))
         return execstackoverflow;
 
-    if (xpost_object_get_type(m) != operatortype)
+    if (co && xpost_object_get_type(m) == operatortype)
     {
-        xpost_stack_push(ctx->lo, ctx->os, m);
-        if (!xpost_stack_push(ctx->lo, ctx->es, XPOST_OP(ctx, exec)))
-            return execstackoverflow;
-        *left = 1;
-        return 0;
+        /* The operator is named as the object being executed for the
+           length of the call, so that an error raised inside it is
+           reported against the method and unwinds onto the method's own
+           operands, which is what an error from a mark played by the
+           interpreter does. */
+        ctx->currentobject = m;
+        ret = xpost_dev_fillpoly_run(ctx, co, npts, devdic);
+        if (ret)
+            return ret;  /* the method is left named, for the error */
+        ctx->currentobject = caller;
     }
-
-    /* The operator is named as the object being executed for the length
-       of the call, so that an error raised inside it is reported against
-       the method and unwinds onto the method's own operands, which is
-       what an error from a mark played by the interpreter does. */
-    ctx->currentobject = m;
-    ret = co ? xpost_dev_fillpoly_run(ctx, co, npts, devdic)
-             : xpost_operator_exec(ctx, m.mark_.padw);
-    if (ret)
-        return ret;  /* the method is left named, for the error */
-    ctx->currentobject = caller;
+    else
+    {
+        ret = _callplay(ctx, m);
+        if (ret)
+            return ret;
+        if (xpost_object_get_type(m) != operatortype)
+        {
+            *left = 1;
+            return 0;
+        }
+    }
 
     if (!_is_replay_cont(xpost_stack_topdown_fetch(ctx->lo, ctx->es, 0)))
     {
