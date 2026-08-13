@@ -167,6 +167,7 @@ tests/golden/manifest.sha256 \
 tests/golden_page.ps \
 tests/band_loop_test.ps \
 tests/band_sparse_test.ps \
+tests/band_report_test.ps \
 tests/band_format_test.ps \
 tests/band_writer_test.ps \
 tests/band_device_test.ps \
@@ -318,6 +319,7 @@ tests/run-record-replay-test.sh \
 tests/run-record-screen-test.sh \
 tests/run-band-loop-test.sh \
 tests/run-band-sparse-test.sh \
+tests/run-band-report-test.sh \
 tests/run-band-format-test.sh \
 tests/run-band-writer-test.sh \
 tests/run-band-device-test.sh \

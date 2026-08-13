@@ -879,8 +879,28 @@ setglobal
 /setdevparams [ /stringtype /dicttype ] { pop pop } //.xpostsys /.defop get exec
 /currentdevparams [ /stringtype ] { pop 0 dict } //.xpostsys /.defop get exec
 
+% CurBandHeight states the rows the device now being painted into holds
+% of its page at once, and zero where it holds the page whole. It sits
+% beside the Max* limits as the other Cur* values do: a limit says what
+% may be spent and a Cur* value says what is being spent, and this one
+% says how the page in hand is being held.
+%
+% It is reported and never set. PLRM Appendix G declares the band-device
+% setup operators obsolete and bars them from a page description, so a
+% program may not choose how its marks are held; nothing bars it from
+% being told what happened, and setsystemparams below recognises no
+% parameter at all, so there is no way to write this one back.
+%
+% The rows come from .curbandheight (data/device.ps), which reads them
+% where the band loop reads them, so a program is told what the loop did
+% rather than what a second copy of the arithmetic would say. A run
+% whose graphics never loaded has no device to ask and answers zero.
 /currentsystemparams [ ] {
-    << /RealFormat (IEEE) /ByteOrder true /MaxFontCache 1048576 >>
+    << /RealFormat (IEEE) /ByteOrder true /MaxFontCache 1048576
+       /CurBandHeight
+           //.xpostsys /.curbandheight 2 copy known
+               { get exec }{ pop pop 0 } ifelse
+    >>
 } //.xpostsys /.defop get exec
 /setsystemparams [ /dicttype ] { pop } //.xpostsys /.defop get exec
 

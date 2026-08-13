@@ -47,6 +47,57 @@
 % scan conversion, which would paint spans into a device that has no
 % pixels to paint into and would leave the polygon unrecorded.
 
+% dict  .bandheight  rows
+% How many rows of its page a device holds at once: the page's own
+% height where it holds the whole of it, and fewer where it holds a
+% band of it.
+%
+% This is the one place the reading is taken. The band loop below asks
+% it to size the raster it plays into, and a program asking what
+% happened to its page (CurBandHeight, data/init.ps) asks it too, so
+% what is reported is the reading the loop went by rather than a second
+% copy of the arithmetic that agrees with it until one of them is
+% changed.
+%
+% Whether the page is banded is the comparison of this against the
+% page's own height, which every caller makes for itself: a budget that
+% buys the whole page buys no bands, and a device that is asked for one
+% band covering the page is a device holding the page whole.
+%
+% A device with no record behind it is handed its page and holds it, so
+% the rows it holds at once are the page.
+currentglobal true setglobal
+.xpostsys /.bandheight { % dict  .  rows
+4 dict begin
+    /dev exch def
+    /ph dev /height known { dev /height get }{ 0 } ifelse def
+    dev /.playclass known ph 0 gt and {
+        /cls .privatedict dev /.playclass get get def
+        % What one row of that raster costs, asked of the class that
+        % makes it: the class prices a row for Create and it is the same
+        % row here. The elements a row takes are left out of the
+        % division -- a planar row is three of them against a byte per
+        % pixel per plane -- so the band is priced by the pixels, which
+        % is what the page is priced by.
+        /rowbytes 2 dict begin
+            /width dev /width get def
+            cls /.rowcost get exec
+        end exch pop def
+        % A row whose bytes are past what an integer counts is a row no
+        % band holds one of, so there is nothing to divide: the page is
+        % asked for whole and refused by the raster that cannot hold it,
+        % which is where a page too large to paint has always been
+        % refused.
+        cls /BandedPage known
+            rowbytes type /integertype eq and
+            rowbytes 0 gt and {
+            dev /.bandbytes get rowbytes idiv
+            dup 1 lt { pop 1 } if
+        }{ ph } ifelse
+    }{ ph } ifelse
+end } bind put
+setglobal
+
 /.xpost_RECORD <<
     /dimensions [0 0]
     /NoOutput true  % write the marks down; never rasterize
@@ -238,27 +289,9 @@
         /ph rec /height get def
         /cls .privatedict rec /.playclass get get def
 
-        % What one row of that raster costs, asked of the class that
-        % makes it: the class prices a row for Create and it is the same
-        % row here. The elements a row takes are left out of the division
-        % -- a planar row is three of them against a byte per pixel per
-        % plane -- so the band is priced by the pixels, which is what the
-        % page is priced by.
-        /rowbytes 2 dict begin
-            /width pw def
-            cls /.rowcost get exec
-        end exch pop def
-        % A row whose bytes are past what an integer counts is a row no
-        % band holds one of, so there is nothing to divide: the page is
-        % asked for whole and refused by the raster that cannot hold it,
-        % which is where a page too large to paint has always been
-        % refused.
-        /bandrows cls /BandedPage known
-            rowbytes type /integertype eq and
-            rowbytes 0 gt and {
-            rec /.bandbytes get rowbytes idiv
-            dup 1 lt { pop 1 } if
-        }{ ph } ifelse def
+        % The rows this raster stands on at once, taken where every
+        % reader of it takes it (.bandheight above).
+        /bandrows rec //.xpostsys /.bandheight get exec def
 
         % The raster the page is painted in, holding a band of it or the
         % whole of it. The run of rows a band holds is left where a page

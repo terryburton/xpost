@@ -3399,6 +3399,26 @@ test('band-sparse',
   suite: cost_fast,
   timeout: 120)
 
+# ... and what became of a page, asked of the interpreter rather than
+# worked out from the device's insides. A page is held whole or a band
+# at a time, and a test that reads the machinery which decided it agrees
+# with the thing it is checking. currentsystemparams /CurBandHeight
+# states the rows the device holds of its page at once, zero meaning the
+# whole of it, and a line per page under -v says the same on the
+# standard error; both are held here against what actually happened --
+# the runs of rows the row writer was handed, and the rows the raster
+# was left holding. It covers the case neither route can state, a record
+# whose band budget buys the whole page and so bands nothing, and it
+# breaks the reporter four ways at the end, requiring itself to fail
+# each time: a report that has stopped following the run is exactly what
+# a check written against a report cannot otherwise see.
+test('band-report',
+  find_program('tests/run-band-report-test.sh'),
+  args: [ xpost_exe, files('tests/band_report_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # ... and the two classes whose emission is not raw rows, each of which
 # had a reason of its own for not taking its page in bands: the bilevel
 # one screens every grey against the cell under the pixel, so a screen

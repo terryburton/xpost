@@ -29,7 +29,7 @@
 # dictionaries a loop copies into their home are written down nowhere a
 # scan can read as a definition, so they are held by the first direction
 # alone.
-entries 307
+entries 310
 
 # Graphics-state template slots (data/gstate.ps). The list is the whole
 # fails the check, so a new slot is declared here in the commit that adds
@@ -85,6 +85,7 @@ entries 307
 .xpostsys /.applytransfer
 .xpostsys /.argok
 .xpostsys /.axialsh
+.xpostsys /.bandheight
 .xpostsys /.beginpage
 .xpostsys /.bez1
 .xpostsys /.bindone
@@ -147,6 +148,7 @@ entries 307
 .xpostsys /.csvalidate
 .xpostsys /.ctchannel
 .xpostsys /.ctkeys
+.xpostsys /.curbandheight
 .xpostsys /.cunit
 .xpostsys /.decode
 .xpostsys /.defcategory
@@ -266,6 +268,7 @@ entries 307
 .xpostsys /.rect1
 .xpostsys /.refreshscreencell
 .xpostsys /.reportloadfailure
+.xpostsys /.reportpage
 .xpostsys /.resources
 .xpostsys /.rownorm
 .xpostsys /.runbuild

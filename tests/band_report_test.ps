@@ -1,0 +1,120 @@
+% What became of a page, asked of the interpreter rather than worked out
+% from its insides.
+%
+% A page is held whole or a band at a time, and until this was reported
+% the only way to find out was to reach into the device and read the
+% machinery -- which is a test writing down the answer it expects and
+% then agreeing with itself. currentsystemparams /CurBandHeight states
+% the rows the device holds of its page at once, and zero where it holds
+% the whole of it, so a program can ask.
+%
+% This run asks, at several band budgets, and prints beside every answer
+% the two independent readings of what actually happened: the runs of
+% rows the class's row writer was handed, and the rows the raster the
+% page was painted in was holding. The wrapper knows which route it
+% launched and holds all three to each other. Nothing here sniffs the
+% route to decide what to expect -- the whole point is that the run is
+% told.
+%
+% The budget equal to the page is the case that has no other test: a
+% record whose budget buys every row of the page holds the page whole,
+% so the route a run took and whether its page was banded are different
+% questions, and the answer here must be zero on both routes.
+
+/num { 20 string cvs } bind def
+/sp { ( ) print } bind def
+/nl { (\n) print } bind def
+
+/W 200 def
+/H 400 def
+
+% The class a page ends up in: the one a record plays into, or this
+% device itself. A row of it is priced here because a band budget is in
+% bytes and the cases below are in rows, so the budget that buys a
+% stated number of rows has to be worked out from what a row costs.
+/cls DEVICE /.playclass known
+    { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
+/rowbytes 2 dict begin /width W def cls /.rowcost get exec end exch pop def
+
+% What the row writer was handed. This is the reading of how the page
+% was actually put out, and it is taken from the writer -- the last
+% thing before the bytes -- rather than from anything that decided
+% anything.
+%
+% It goes on whatever will do the writing: the class a record plays
+% into, which is made afresh for every band grid, or this device itself,
+% which setpagedevice makes afresh for every page size. Either way the
+% thing to wrap is found again after each setpagedevice and wrapped
+% where it is not already the one carrying the counter.
+/runs 0 def /maxrun 0 def /sumrows 0 def
+/wbtarget null def
+/wbreset { /runs 0 store /maxrun 0 store /sumrows 0 store } bind def
+/wrapband {
+    /wb.t DEVICE /.playclass known
+        { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse store
+    wb.t wbtarget ne wb.t /.writeband known and {
+        /wbinner wb.t /.writeband get store
+        wb.t /.writeband {
+            /runs runs 1 add store
+            1 index length dup sumrows add /sumrows exch store
+            dup maxrun gt { /maxrun exch store }{ pop } ifelse
+            wbinner
+        } put
+        /wbtarget wb.t store
+    } if
+} bind def
+/wb.t null def /wbinner null def
+
+% The rows the raster that painted the page was holding, which is the
+% other reading. A record keeps the device it played into; a device that
+% paints is the one that held the rows.
+/rasterrows {
+    DEVICE /.playdev known
+        { DEVICE /.playdev get }{ DEVICE } ifelse
+    dup /.bandrows known { /.bandrows get }{ pop 0 } ifelse
+} bind def
+
+% h  paint  -
+% Ink on every row of the page, so that no band comes to nothing but the
+% ground: a band with nothing in it is not painted at all, and the runs
+% of rows counted above would then be fewer than the bands there were
+% for a reason that has nothing to do with what is being asked here.
+/paint { % h  .  -
+    /pt.h exch def
+    gsave
+        0 setgray
+        newpath 4 0 moveto 4 pt.h lineto 1 setlinewidth stroke
+        newpath 12 0 moveto 190 pt.h lineto 1 setlinewidth stroke
+    grestore
+    gsave 0.5 setgray 40 pt.h 0.3 mul 100 pt.h 0.2 mul rectfill grestore
+} bind def
+
+(\nPAGE ) print W num print sp H num print nl
+(\nROWBYTES ) print rowbytes num print nl
+
+% The budgets, in rows of this page. One row and seven rows are bands
+% that fall across everything on the page; the page's own height is the
+% budget that buys every row at once, and the last is a budget far past
+% the page. The last two must both answer that the page was held whole,
+% which is the distinction a route cannot state.
+[ 1 7 25 H 100000 ]
+{
+    /want exch def
+    << /PageSize [W H] >> setpagedevice
+    DEVICE /.bandbytes known
+        { DEVICE /.bandbytes want rowbytes mul put } if
+    wrapband
+    wbreset
+    /before currentsystemparams /CurBandHeight get def
+    H paint
+    showpage
+    /after currentsystemparams /CurBandHeight get def
+    (\nCASE ) print want num print sp
+    before num print sp after num print sp
+    runs num print sp maxrun num print sp sumrows num print sp
+    rasterrows num print nl
+} forall
+
+(\nDONE\n) print
+flush
+quit

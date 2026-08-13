@@ -260,6 +260,9 @@ currentglobal true setglobal
     ifelse
     //.xpostsys /.pagefilename get exec
     1 index exch /.outputfile exch put
+    % what became of this page, for a run that asked to be told
+    //.internaldict /QUIET known
+        { }{ dup //.xpostsys /.reportpage get exec } ifelse
     dup /Emit get exec
 } bind put
 setglobal
@@ -285,6 +288,91 @@ setglobal
     { dup currentdict exch get .privatedict 3 1 roll put }
     { pop } ifelse
 } forall
+
+currentglobal true setglobal
+
+% -  .curbandheight  rows
+% The rows the device now being painted into holds of its page at once,
+% and zero where it holds the page whole. This is the value
+% currentsystemparams reports as CurBandHeight.
+%
+% The rows come from .bandheight (data/recorddev.ps), which is where the
+% band loop takes them. Zero is this reading and not that one: a page
+% held whole is one band covering it, which is a band height only in the
+% sense that there are no bands, and a program asking how its marks were
+% held is asking exactly that.
+%
+% A run whose graphics never loaded has no device to ask and no band
+% loop to report on, and answers zero.
+.xpostsys /.curbandheight { % -  .  rows
+3 dict begin
+    /rows 0 def
+    /graphicsdict where {
+        pop graphicsdict /currgstate get /device get
+        dup type /dicttype eq {
+            /dev exch def
+            dev /height known {
+                dev //.xpostsys /.bandheight get exec
+                dup dev /height get lt { /rows exch def }{ pop } ifelse
+            } if
+        }{ pop } ifelse
+    } if
+    rows
+end } bind put
+
+% dict  .reportpage  -
+% Name what is about to become of one page: the device the page was
+% asked of, the device that paints it, whether it is held whole or a
+% band at a time, how deep a band is, and how large the page is. The
+% last two are the comparison the choice is made by, so a reader is told
+% what was decided and what decided it rather than only the verdict.
+%
+% One line per page, on the standard error. The page itself goes to the
+% standard output whenever the run was given no file to write it to, so
+% a report sharing that stream would arrive inside the page and be read
+% as part of it.
+%
+% The device asked of is the one the page description last named, and
+% the one the run was started with where it named none; the device that
+% paints is the target a record plays into, and otherwise the device
+% asked of, which paints its own page.
+.xpostsys /.reportpage { % dict  .  -
+8 dict begin
+    /dev exch def
+    /out (%stderr) (w) file def
+    /n 20 string def
+    /asked
+        /.pagedevice where {
+            pop .pagedevice /OutputDevice 2 copy known
+                { get }{ pop pop null } ifelse
+        }{ null } ifelse
+        dup null eq {
+            pop /graphicsdict where {
+                pop graphicsdict /.outputdevice 2 copy known
+                    { get }{ pop pop null } ifelse
+            }{ null } ifelse
+        } if def
+    /paints dev /.playclass known { dev /.playclass get }{ asked } ifelse def
+    /pw dev /width known { dev /width get }{ 0 } ifelse def
+    /ph dev /height known { dev /height get }{ 0 } ifelse def
+    /rows dev //.xpostsys /.bandheight get exec def
+    out (xpost: page ) writestring
+    out //.xpostsys /.pageno get exec 1 add n cvs writestring
+    out ( to ) writestring
+    out asked null eq { (an unnamed device) }{ asked n cvs } ifelse writestring
+    out (, painted by ) writestring
+    out paints null eq { (itself) }{ paints n cvs } ifelse writestring
+    out rows ph lt { (, in bands: ) }{ (, whole: ) } ifelse writestring
+    out rows n cvs writestring
+    out ( rows held at once of a ) writestring
+    out pw n cvs writestring
+    out (x) writestring
+    out ph n cvs writestring
+    out ( page\n) writestring
+    out flushfile
+end } bind put
+
+setglobal
 
 % -  .startdevice  -
 % Make the device this run was started with and install it in the
