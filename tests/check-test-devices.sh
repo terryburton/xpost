@@ -249,7 +249,7 @@ fi
 #
 # Reported per command, with a count of everything examined, so an
 # emptied tree fails here rather than passing with nothing to say.
-awk -F'\t' -v OFS='\t' '
+awk -F'\t' '
     function isopt(t,   k) {
         if (t in OPT) return t
         for (k in PREFIX) if (index(t, k) == 1 && t != k) return k
@@ -266,6 +266,7 @@ awk -F'\t' -v OFS='\t' '
     FILENAME == dlongf  { DLONG[$0] = 1; next }
     {
         file = $1; lineno = $2
+        sub("^" root "/", "", file)
         cmd = substr($0, length($1) + length($2) + 3)
         n = split(cmd, tok, /[ \t]+/)
         named = 0; stops = 0; dev = ""; hasdev = 0; xvfb = 0; runvar = 0
@@ -339,7 +340,7 @@ awk -F'\t' -v OFS='\t' '
         }
         exit bad ? 1 : 0
     }
-' optf="$work/opts" prefixf="$work/prefixes" stopf="$work/stops" \
+' root="$src" optf="$work/opts" prefixf="$work/prefixes" stopf="$work/stops" \
   dshortf="$work/devshort" dlongf="$work/devlong" \
   "$work/opts" "$work/prefixes" "$work/stops" "$work/devshort" "$work/devlong" \
   "$work/commands" || fail=1
@@ -354,7 +355,7 @@ displays=$(xargs grep -nE '[$][{]?DISPLAY' < "$work/files" 2>/dev/null || true)
 if [ -n "$displays" ]; then
     echo "check-test-devices: these read the display the run was started" >&2
     echo "with, which is a test whose behaviour depends on who ran it:" >&2
-    printf '%s\n' "$displays" | sed 's/^/      /' >&2
+    printf '%s\n' "$displays" | sed "s|$src/||; s/^/      /" >&2
     echo "A test that wants a display conjures one with xvfb-run." >&2
     fail=1
 fi
