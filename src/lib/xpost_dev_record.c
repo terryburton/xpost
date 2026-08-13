@@ -1322,6 +1322,38 @@ static int _recordplaces(Xpost_Context *ctx,
     return 0;
 }
 
+/* IMAGE  .recordbox  x0 y0 x1 y1 true
+                     false
+   The box the marks a record holds reach, in the coordinates they were
+   made in, or false where it holds none.
+
+   What it is for is the question a caller holding a drawing has to ask
+   before placing it: a drawing is placed whole, and nothing clips it
+   where it lands, so a drawing reaching outside the region its maker
+   was cut to is a drawing that would paint outside that region wherever
+   it is put. */
+static int _recordbox(Xpost_Context *ctx,
+                      Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    real x0, y0, x1, y1;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec || !xpost_record_box(private.rec, &x0, &y0, &x1, &y1))
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(x0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(y0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(x1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(y1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+}
+
 /* IMAGE  .recordcost  marks images bytes
    What a record holds and what holding it costs. The mechanism is worth
    having exactly while a record is smaller than the raster it saves
@@ -3900,6 +3932,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".newformrecord",
                              (Xpost_Op_Func)_newformrecord, 3,
                              integertype, integertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordbox", (Xpost_Op_Func)_recordbox, 1,
+                             dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordplaces",
                              (Xpost_Op_Func)_recordplaces, 1,
                              dicttype); INSTALL;

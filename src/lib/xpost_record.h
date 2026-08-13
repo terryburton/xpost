@@ -713,6 +713,26 @@ int xpost_record_failed(const Xpost_Record *rec);
 int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi);
 
 /**
+ * @brief The box the marks reach, or zero where the record holds none.
+ *
+ * @param[out] x0 the leftmost coordinate any mark reaches, @p x1 the
+ *                rightmost, @p y0 and @p y1 the rows
+ * @return 1 where the record holds a mark, 0 where it holds none
+ *
+ * What xpost_record_extent answers about rows, over both directions. It
+ * is a walk of the marks rather than a reading, since a mark says which
+ * rows it reaches and not which columns: the rows are what a replay
+ * chooses by and are worth the room, and this is asked once of a
+ * finished drawing rather than once per band.
+ *
+ * The box errs outward the way a mark's reach does. A drawing placed
+ * inside it paints nothing outside it; a drawing whose box exceeds
+ * something is a drawing that may paint outside that thing.
+ */
+int xpost_record_box(const Xpost_Record *rec, real *x0, real *y0,
+                     real *x1, real *y1);
+
+/**
  * @brief The last mark reaching rows @p lo to @p hi.
  *
  * @param[out] at where it was found

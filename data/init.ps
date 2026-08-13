@@ -1312,6 +1312,15 @@ setglobal
                     /fc graphicsdict /.formcache get def
                 } if
                 gsave
+                % what the clip has cut so far: a shape the clip cuts is
+                % resolved into whole pixel rows before it reaches a
+                % device, and rows cannot be carried a fraction of a
+                % pixel and stay the rows the shape covers there. So a
+                % capture in which anything was cut is not one to carry
+                % -- a clip the description set for itself, and a form
+                % inside it painted afresh under its own box, are the
+                % two ways that happens.
+                /cuts //.internaldict /.clipcuts get exec def
                 graphicsdict /currgstate get /device cap put
                 % The clip the capture paints under: the form's box, out
                 % to whole pixels and one further, in the device's own
@@ -1325,11 +1334,31 @@ setglobal
                 cm2 setmatrix
                 fd //.xpostsys /.execformcapture get exec
                 grestore
-                fc key << /drawing cap
-                           /tx cm 4 get /ty cm 5 get >> put
+                % Whether what it painted stays inside the box it
+                % declared. A drawing is placed whole and nothing cuts
+                % it where it lands, so a description that paints
+                % outside its box would carry what the box cuts to
+                % every place it is put -- and a page is not the page
+                % it would have been. Such a form is painted afresh
+                % every time, which is what it costs a run that holds
+                % no description at all; the entry says so, so that
+                % the description is not run twice for the answer.
+                /held //.internaldict /.clipcuts get exec cuts eq
+                    cap //.internaldict /.recordbox get exec {
+                        /by1 exch def /bx1 exch def
+                        /by0 exch def /bx0 exch def
+                        bx0 fbx ge by0 fby ge and
+                        bx1 fbx fw add le and by1 fby fh add le and
+                    }{ true } ifelse and def
+                held
+                    { fc key << /drawing cap
+                                /tx cm 4 get /ty cm 5 get >> put }
+                    { cap dup /Destroy get exec
+                      fc key << >> put }
+                ifelse
             } if
         } if
-        fits fc key known and {
+        fits fc key known and { fc key get /drawing known }{ false } ifelse {
             /fe fc key get def
             % Where this execution puts the drawing: how far it is from
             % the position the drawing was painted at, in the device's

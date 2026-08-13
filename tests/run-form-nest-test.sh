@@ -257,15 +257,25 @@ fi
 same "$work/painted-scaled.pgm" "$work/scaled.pgm" \
      "the scaled page painted afresh and the scaled page held"
 
-# What a form painting outside the box it declares costs, stated rather
-# than required. A form is expected to keep inside its box (PLRM 4.7),
-# and a description held carries the marks it made where painting afresh
-# cuts them at the box -- so a form that does not keep inside it is the
-# one thing holding a description changes about a page.
-set -- $(pixdiff "$work/painted-spill.pgm" "$work/spill.pgm")
-echo "NOTE a form reaching past the box it declares differs held from"
-echo "     painted afresh in $1 pixels, largest difference $2: what it"
-echo "     painted outside the box is carried rather than cut"
+# A form painting outside the box it declares is not held at all: a
+# description held carries the marks it made and nothing cuts them where
+# they land, so what the box would have cut would be carried to every
+# place the form is put. Such a form is described afresh at every use,
+# which is what a page holding no description pays, and its page must
+# still be the page painted afresh.
+same "$work/painted-spill.pgm" "$work/spill.pgm" \
+     "the page of a form reaching past its box, painted afresh and held"
+spp=$(field "$sl" PAINTS)
+if [ -n "$spp" ] && [ "$spp" -ge "$uses" ]; then
+    echo "NOTE a form reaching past the box it declares is not held: the"
+    echo "     page describes forms $spp times, against $wp where every"
+    echo "     form keeps inside its box and $pp with nothing held"
+else
+    echo "FAILURES: a form reaching past the box it declares was described"
+    echo "      $spp times, fewer than the $uses uses of it: a form whose"
+    echo "      marks leave its box is not one to hold"
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     exit 1

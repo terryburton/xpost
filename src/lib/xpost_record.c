@@ -1239,6 +1239,123 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
     return any;
 }
 
+/* The columns one mark reaches, from its own operands and from what it
+   names. A kind that paints nothing answers an empty span. */
+static int _span(const Xpost_Record *rec, const _Mark *m, const real *vals,
+                 real *x0, real *x1)
+{
+    const real *ops = m->nops ? vals + m->at + rec->ncomp : NULL;
+    int i, any = 0;
+
+    switch (m->kind)
+    {
+        case XPOST_RECORD_PUTPIX:
+            *x0 = *x1 = ops[0];
+            return 1;
+        case XPOST_RECORD_BLENDPIX:
+            *x0 = *x1 = ops[1];
+            return 1;
+        case XPOST_RECORD_DRAWLINE:
+            *x0 = ops[0] < ops[2] ? ops[0] : ops[2];
+            *x1 = ops[0] < ops[2] ? ops[2] : ops[0];
+            return 1;
+        case XPOST_RECORD_FILLRECT:
+            *x0 = ops[2] < 0 ? ops[0] + ops[2] : ops[0];
+            *x1 = ops[2] < 0 ? ops[0] : ops[0] + ops[2];
+            return 1;
+        case XPOST_RECORD_FILLPOLY:
+            for (i = 0; i * 2 + 2 < m->nops; i++)
+            {
+                real x = ops[i * 2 + 1];
+
+                if (x == XPOST_PATH_BREAK)
+                    continue;
+                if (!any) { *x0 = *x1 = x; any = 1; }
+                else if (x < *x0) *x0 = x;
+                else if (x > *x1) *x1 = x;
+            }
+            return any;
+        case XPOST_RECORD_IMAGE:
+        {
+            const Xpost_Record_Image *img;
+            real a, b, t;
+
+            if (!ops || (size_t)ops[0] >= _nimg(rec))
+                return 0;
+            img = &_imgs(rec)[(size_t)ops[0]];
+            a = img->xoff;
+            b = img->xoff + (real)img->width * img->xscale;
+            if (a > b) { t = a; a = b; b = t; }
+            if (a < img->cx0) a = img->cx0;
+            if (b > img->cx1) b = img->cx1;
+            *x0 = a;
+            *x1 = b;
+            return b >= a;
+        }
+        case XPOST_RECORD_GLYPH:
+        {
+            const _Cover *c;
+
+            if (!ops || (size_t)ops[0] >= _nmsk(rec))
+                return 0;
+            c = &_msks(rec)[(size_t)ops[0]];
+            *x0 = ops[1];
+            *x1 = ops[1] + (real)(c->w - 1);
+            return 1;
+        }
+        case XPOST_RECORD_PLACE:
+        {
+            real sx0, sy0, sx1, sy1;
+
+            if (!ops || (size_t)ops[0] >= _nsub(rec))
+                return 0;
+            if (!xpost_record_box(_subs(rec)[(size_t)ops[0]],
+                                  &sx0, &sy0, &sx1, &sy1))
+                return 0;
+            *x0 = sx0 + ops[1];
+            *x1 = sx1 + ops[1];
+            return 1;
+        }
+        case XPOST_RECORD_SCREEN:
+            return 0;
+    }
+    return 0;
+}
+
+int xpost_record_box(const Xpost_Record *rec, real *x0, real *y0,
+                     real *x1, real *y1)
+{
+    const _Mark *m;
+    const real *vals;
+    size_t i, n;
+    int any = 0;
+
+    if (!rec || !x0 || !y0 || !x1 || !y1)
+        return 0;
+    m = _marks(rec);
+    vals = _vals(rec);
+    n = _nmark(rec);
+    for (i = 0; i < n; i++)
+    {
+        real a, b;
+
+        if (!_span(rec, &m[i], vals, &a, &b))
+            continue;
+        if (!any)
+        {
+            *x0 = a; *x1 = b;
+            *y0 = m[i].lo; *y1 = m[i].hi;
+            any = 1;
+            continue;
+        }
+        if (a < *x0) *x0 = a;
+        if (b > *x1) *x1 = b;
+        if (m[i].lo < *y0) *y0 = m[i].lo;
+        if (m[i].hi > *y1) *y1 = m[i].hi;
+    }
+    return any;
+}
+
 /* Whether a mark reaches a run of rows. A mark meeting the range at all
    is played whole: a shape has to be converted whole to be right about
    any part of it, so the range says which marks are played and never
