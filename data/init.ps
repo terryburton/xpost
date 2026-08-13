@@ -699,6 +699,7 @@ setglobal
 currentglobal true setglobal
 .xpostsys /.endjob {
     { //.xpostsys /.endjobpage get exec } stopped { } if
+    { //.xpostsys /.formcachedrop get exec } stopped { } if
     //clear
     //cleardictstack
 } put
@@ -1181,6 +1182,28 @@ currentglobal true setglobal
 } put
 setglobal
 
+% -  .formcachedrop  -
+% Give up every drawing the form cache is holding.
+%
+% A drawing is held by a recorder, and what a recorder holds is not
+% virtual memory: the collector neither reaches it nor gives it back, so
+% a drawing the cache stops naming would stay held for the life of the
+% run. The cache gives each one up before it stops naming it.
+%
+% Called where the cache stops standing for anything: at the end of a
+% job, and where the page device is replaced, since a drawing is the
+% marks a form made for one device and carries that device's colour
+% space -- placing it in another would be a colour nobody named, and is
+% refused rather than painted.
+currentglobal true setglobal
+.xpostsys /.formcachedrop {
+    graphicsdict /.formcache 2 copy known {
+        get { exch pop /drawing get dup /Destroy get exec } forall
+        graphicsdict /.formcache undef
+    }{ pop pop } ifelse
+} bind put
+setglobal
+
 % formdict  execform  -
 % Paint a form.
 %
@@ -1284,7 +1307,7 @@ setglobal
                 % it is replaced, since what a recorder holds is not
                 % virtual memory and nothing else would give it back
                 fc length 32 ge {
-                    fc { exch pop /drawing get dup /Destroy get exec } forall
+                    //.xpostsys /.formcachedrop get exec
                     graphicsdict /.formcache 32 dict put
                     /fc graphicsdict /.formcache get def
                 } if
@@ -1877,6 +1900,10 @@ currentglobal true setglobal
 
         % the template and the live gstate carry the device; painting
         % and the defaultmatrix operator resolve it through them
+        % what was held for the device being replaced, given up before
+        % anything can reach for it: a drawing carries the colour space
+        % of the device its marks were made for
+        //.xpostsys /.formcachedrop get exec
         .privatedict /.gstatetemplate get exec /device newdev put
         graphicsdict /currgstate get /device newdev put
         % Record the installed device against the save depth it was
