@@ -54,13 +54,17 @@ setglobal
 % device that wrote wherever Emit defaulted to whatever the program had
 % asked for -- which is why this is one procedure rather than a shape
 % each class repeats.
+%
+% The dimensions are written with the copy current, and it is opened
+% through the bracket that takes it off again however the body ends,
+% error included (.indict, graphics.ps): a copy left current is a
+% dictionary the caller's error handler, and everything after it, would
+% go on defining into.
 currentglobal true setglobal
 .xpostsys /.classcopydict { % dict1  .  dict2
     dup length dict copy
     dup /width known {
-        dup begin
-            /dimensions [width height] def
-        end
+        dup { /dimensions [width height] def } //.xpostsys /.indict get exec
     } if
     % the file name in force: what a program bound on the dictionary
     % stack, or failing that what this run was started with

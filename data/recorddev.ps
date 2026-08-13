@@ -10,6 +10,11 @@
 % what is written here is what a record cannot be given from C: the
 % keys the class declares, and the page the record makes at Emit.
 %
+% Each of those bodies runs with a dictionary current -- the device's own,
+% or a scratch one where the body wants somewhere of its own to work --
+% and opens it through the bracket that takes it off again however the
+% body ends, error included (.indict, graphics.ps).
+%
 % The class declares exactly the five marking methods it records --
 % PutPix, BlendPix, DrawLine, FillRect and FillPoly -- and no other
 % optional method. FillPath would bring it a whole path and the clip
@@ -183,14 +188,14 @@ setglobal
     % 3.7.3), and the ground the page was cleared to has to keep to the
     % page it describes.
     /Ground { % c1..cN IMAGE  .  -
-    begin
+    {
         currentdict /.ground known not {
             currentglobal true setglobal
             /.ground .ncomp array def
             setglobal
         } if
         .ground astore pop
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 
     % What the raster a page is played into may cost, in bytes.
     %
@@ -285,7 +290,7 @@ setglobal
     % the page in hand: a page of another size, or a band grid of another
     % height, is a different raster and not this one moved.
     /.playpage { % IMAGE  .  -
-    16 dict begin
+    16 dict {
         /rec exch def
         /pw rec /width get def
         /ph rec /height get def
@@ -396,7 +401,7 @@ setglobal
             rec page //.internaldict /.replaypage get exec
         } ifelse
         page dup /Emit get exec
-    end } bind
+    } //.xpostsys /.indict get exec } bind
 >> def
 
 //.internaldict /QUIET known { }{ (eof recorddev.ps\n)print } ifelse
