@@ -257,7 +257,7 @@ fi
 # neither an anchor nor a literal answers about no line at all -- a rule
 # that never fires, over a suite that then looks to be in good order.
 ctest_faults() {            # <file>; prints a line per fault, else nothing
-    guard_c_source "$1" | sed 's/^[^:]*:[0-9]*://; s/^/ /; s/$/ /' \
+    guard_c_source "$1" | cut -f3- | sed 's/^/ /; s/$/ /' \
         > "$work/ct-code"
     tr -d '\r' < "$1" > "$work/ct-raw"
 

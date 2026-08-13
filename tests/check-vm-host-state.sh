@@ -107,11 +107,10 @@ fi
 # semicolon or brace rather than merely until the parentheses close.
 # Preprocessor lines stand alone: a macro whose body ends in a closing
 # parenthesis would otherwise swallow the file after it.
-awk -F: '
+awk -F'\t' '
 {
     file = $1; ln = $2
-    code = $0
-    sub(/^[^:]*:[^:]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (file != prevfile) {
         if (depth != 0) { print "\t\t@UNBALANCED@"; exit 1 }
         started = 0; prevfile = file
@@ -152,16 +151,14 @@ fi
 # has. A member is a pointer where its declarator carries a star, or
 # where its type is a typedef for one -- an operator's function pointer
 # is spelled Xpost_Op_Func and carries no star of its own.
-awk '
+awk -F'\t' '
 function emit(type, member, isptr, base) {
     if (member == "") return
     print type "\t" member "\t" isptr "\t" base "\t" deffile[type]
 }
 {
-    line = $0
-    match(line, /^[^:]*:[0-9]+:/)
-    base = substr(line, 1, RLENGTH); sub(/:[0-9]+:$/, "", base); sub(/^.*\//, "", base)
-    line = substr(line, RLENGTH + 1)
+    base = $1; sub(/^.*\//, "", base)
+    line = substr($0, length($1) + length($2) + 3)
     lines[++nl] = base "\t" line
 }
 END {

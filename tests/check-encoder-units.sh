@@ -68,8 +68,7 @@ fi
 # ---- the encoder structs, and the scalar counters they carry ----
 awk '
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (inb) {
         if (code ~ /^\}[ \t]*Xpost_[A-Za-z0-9_]*Enc[A-Za-z0-9_]*[ \t]*;/) {
             name = code
@@ -98,7 +97,7 @@ awk '
         next
     }
     if (code ~ /^typedef[ \t]+struct[ \t]*$/) { inb = 1; nb = 0 }
-}' FS=: "$work/code" | sort -u > "$work/fields"
+}' FS='\t' "$work/code" | sort -u > "$work/fields"
 
 if [ ! -s "$work/fields" ]; then
     echo "FAILURES: no encoder struct was found in src/lib/xpost_file.c;"
@@ -131,8 +130,7 @@ while read -r fld; do
             return substr(s, b, i - b)
         }
         {
-            code = $0
-            sub(/^[^:]*:[0-9]*:/, "", code)
+            code = substr($0, length($1) + length($2) + 3)
             if (code ~ /^[ \t]*#/) next
             ref = "->" F
             if (index(code, ref) == 0) next
@@ -162,7 +160,7 @@ while read -r fld; do
             if (code ~ ("[0-9][ \t]*-[ \t]*[A-Za-z_][A-Za-z0-9_]*->" F "([^A-Za-z0-9_]|$)")) {
                 print "yes"; exit
             }
-        }' FS=: "$work/code" | grep -q yes; then
+        }' FS='\t' "$work/code" | grep -q yes; then
         echo "$fld" >> "$work/bearing"
     fi
 done < "$work/fieldnames"
@@ -180,8 +178,7 @@ fi
 # another helper is a write at the site that calls it.
 awk '
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) code = ""
     text[++n] = code
 }
@@ -217,7 +214,7 @@ END {
         if (depth >= 1 && cur != "") body[cur] = body[cur] " "
     }
     for (f in body) print f "\t" body[f]
-}' FS=: "$work/code" > "$work/bodies"
+}' FS='\t' "$work/code" > "$work/bodies"
 
 if [ ! -s "$work/bodies" ]; then
     echo "FAILURES: no function body could be read from src/lib/xpost_file.c"
@@ -252,13 +249,12 @@ fi
 # ---- the windows ----
 awk -v BEARING="$(paste -sd, - < "$work/bearing")" -v EMIT="$(paste -sd, - < "$work/emitters")" '
 BEGIN {
-    FS = ":"
+    FS = "\t"
     n = split(BEARING, b, ","); for (i = 1; i <= n; i++) if (b[i] != "") BEAR[b[i]] = 1
     n = split(EMIT, e, ","); for (i = 1; i <= n; i++) if (e[i] != "") EM[e[i]] = 1
 }
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) code = ""
     file[++n2] = $1; lno[n2] = $2; text[n2] = code
 }
@@ -378,15 +374,14 @@ awk -v BEARING="$(paste -sd, - < "$work/bearing")" \
     -v EMIT="$(paste -sd, - < "$work/emitters")" \
     -v CLEARERS="$clr" '
 BEGIN {
-    FS = ":"
+    FS = "\t"
     n = split(BEARING, b, ","); for (i = 1; i <= n; i++) if (b[i] != "") BEAR[b[i]] = 1
     n = split(EMIT, e, ","); for (i = 1; i <= n; i++) if (e[i] != "") EM[e[i]] = 1
     n = split(CLEARERS, cc, ",")
     for (i = 1; i <= n; i++) if (cc[i] != "") { split(cc[i], q, ":"); CLEARS[q[1] SUBSEP q[2]] = 1 }
 }
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) code = ""
     lno[++n2] = $2; text[n2] = code
 }

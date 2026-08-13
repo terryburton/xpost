@@ -251,11 +251,10 @@ scan() {                    # <root> <file>...; prints a finding per line
         echo "read-nothing: no C source was read"
         return
     fi
-    awk -F: -v enders="$enders" -v win="$window" '
+    awk -F'\t' -v enders="$enders" -v win="$window" '
         {
             path[NR] = $1; lno[NR] = $2
-            code = $0; sub(/^[^:]*:[0-9]+:/, "", code)
-            src[NR] = code
+            src[NR] = substr($0, length($1) + length($2) + 3)
         }
         END {
             for (i = 1; i <= NR; i++) {
@@ -289,9 +288,9 @@ fi
 
 # abort, wherever it is written in the library
 aborts_in() {               # <file>...; prints path:line per call
-    guard_c_source "$@" | awk -F: '
+    guard_c_source "$@" | awk -F'\t' '
         {
-            code = $0; sub(/^[^:]*:[0-9]+:/, "", code)
+            code = substr($0, length($1) + length($2) + 3)
             if (code ~ /(^|[^A-Za-z0-9_])abort[ \t]*\(/) print $1 ":" $2
         }'
 }

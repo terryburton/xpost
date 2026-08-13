@@ -61,9 +61,7 @@ guard_require_srcroot "$src"
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
-# read a tree whose lines end where the scans below expect them to, and
-# whose paths carry no colon: every record here is read as path, line and
-# text split on colons
+# read a tree whose lines end where the scans below expect them to
 guard_mirror_tree "$src"
 src=$mirror
 
@@ -80,14 +78,14 @@ fail=0
 # the line whose brace closes it. Found rather than assumed -- a rename
 # would otherwise put every use outside a range that no longer exists,
 # which reads as a clean tree.
-#   $1 the code file (path:line:text), $2 the file to look in,
+#   $1 the code file (path, line and text separated by tabs, as
+#      guard_c_source writes them), $2 the file to look in,
 #   $3 an ERE matching the line that opens the body
 extent() {
-    awk -F: -v f="$2" -v pat="$3" '
+    awk -F'\t' -v f="$2" -v pat="$3" '
         $1 != f { next }
         {
-            line = $0
-            sub(/^[^:]*:[0-9]+:/, "", line)
+            line = substr($0, length($1) + length($2) + 3)
             if (!started && line ~ pat) { started = 1; first = $2 }
             if (!started) next
             depth += gsub(/\{/, "&", line) - gsub(/\}/, "&", line)
@@ -103,7 +101,9 @@ extent() {
 # Read as code: strings are emptied, because an output name holds a
 # per-cent and a comment marker inside one would end the line early, and
 # comments are dropped, because a brace or a name written in prose is
-# neither.
+# neither. Each record is written as path, line and text separated by
+# tabs, the shape guard_c_source gives the C, so that a path carrying a
+# colon still reads as three parts.
 awk '{
     sub(/\r$/, "")
     line = $0; out = ""; i = 1; n = length(line); d = 0
@@ -119,7 +119,7 @@ awk '{
         if (c == "(") { d = 1; i++; continue }
         out = out c; i++
     }
-    print FILENAME ":" FNR ":" out
+    print FILENAME "\t" FNR "\t" out
 }' "$datadir"/*.ps > "$work/ps"
 if [ ! -s "$work/ps" ]; then
     echo "check-page-output: no PostScript read under $src/data" >&2
@@ -138,7 +138,7 @@ if [ -z "${tstart:-}" ]; then
 fi
 
 # defined once, and in the page machinery
-ndef=$(awk -F: '{ line = $0; sub(/^[^:]*:[0-9]+:/, "", line)
+ndef=$(awk -F'\t' '{ line = substr($0, length($1) + length($2) + 3)
                   if (line ~ /\/\.transmitpage[ \t]*\{/) n++ }
                 END { print n + 0 }' "$work/ps")
 if [ "$ndef" -ne 1 ]; then
@@ -149,18 +149,16 @@ if [ "$ndef" -ne 1 ]; then
 fi
 
 # the substitution is fetched once, inside it
-awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" '
+awk -F'\t' -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if (line !~ /\/\.pagefilename[ \t]+get/) next
         if ($1 == f && $2 >= a && $2 <= b) next
         print $1 ":" $2
     }' "$work/ps" > "$work/pf-outside"
-npf=$(awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" '
+npf=$(awk -F'\t' -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if ($1 == f && $2 >= a && $2 <= b && line ~ /\/\.pagefilename[ \t]+get/) n++
     }
     END { print n + 0 }' "$work/ps")
@@ -197,10 +195,9 @@ fi
 # substituting a page number again -- is the hazard this guard exists
 # for and fails here.
 recps="$datadir/recorddev.ps"
-awk -F: -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" -v r="$recps" '
+awk -F'\t' -v f="$datadir/device.ps" -v a="$tstart" -v b="$tend" -v r="$recps" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if ($1 == r && line ~ /\/\.outputfile[ \t]+get/) carried++
         if ($1 == r && line ~ /OutputFileName/) settles++
         if (line !~ /\/Emit[ \t]+get/) next
@@ -320,11 +317,10 @@ if [ -z "${ostart:-}" ] || [ -z "${cstart:-}" ]; then
     exit 1
 fi
 
-awk -F: -v g="$libdir/xpost_dev_generic.c" \
+awk -F'\t' -v g="$libdir/xpost_dev_generic.c" \
         -v oa="$ostart" -v ob="$oend" -v ca="$cstart" -v cb="$cend" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if (line !~ /(^|[^A-Za-z0-9_])(xpost_diskfile_fopen|xpost_diskfile_fopen_beneath|fclose)[ \t]*\(/) next
         if ($1 == g && (($2 >= oa && $2 <= ob) || ($2 >= ca && $2 <= cb))) next
         print $1 ":" $2
@@ -341,11 +337,10 @@ fi
 callers=0
 for f in "$libdir"/xpost_dev_*.c; do
     [ "$f" = "$libdir/xpost_dev_generic.c" ] && continue
-    uses=$(awk -F: -v F="$f" '
+    uses=$(awk -F'\t' -v F="$f" '
         $1 != F { next }
         {
-            line = $0
-            sub(/^[^:]*:[0-9]+:/, "", line)
+            line = substr($0, length($1) + length($2) + 3)
             if (line ~ /(^|[^A-Za-z0-9_])xpost_device_page_(open|close)[ \t]*\(/)
                 print $2
         }' "$work/code")

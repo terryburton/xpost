@@ -38,12 +38,7 @@ guard_require_file "$src/src/lib/xpost_file.c" "the file layer"
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
-# The scan reads each record as path, line and code, split on colons, so
-# the paths it reads must not carry one themselves. A source root named
-# by a drive letter does, and every record then parsed one field short:
-# the funnel's own extent was never found and the tree read as having no
-# opener in it. The mirror is under the scratch directory, whose name has
-# no drive letter on any platform.
+# Read a tree whose lines end where the scans below expect them to.
 guard_mirror_tree "$src"
 src=$mirror
 funnel_file="$src/src/lib/xpost_file.c"
@@ -62,11 +57,10 @@ fi
 # Found rather than assumed: a rename of the funnel would otherwise leave
 # every call outside a range that no longer exists, which reads as a clean
 # tree.
-awk -F: -v f="$funnel_file" '
+awk -F'\t' -v f="$funnel_file" '
     $1 != f { next }
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if (!started && line ~ /(^|[^A-Za-z0-9_])xpost_raw_fopen[ \t]*\(/) {
             started = 1; first = $2
         }
@@ -85,19 +79,17 @@ if [ -z "${fstart:-}" ]; then
 fi
 
 # ---- the bare name, wherever it is written ----
-awk -F: -v f="$funnel_file" -v a="$fstart" -v b="$fend" '
+awk -F'\t' -v f="$funnel_file" -v a="$fstart" -v b="$fend" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         n = gsub(/(^|[^A-Za-z0-9_])fopen([^A-Za-z0-9_]|$)/, "&", line)
         if (n == 0) next
         if ($1 == f && $2 >= a && $2 <= b) { inside += n; next }
         print $1 ":" $2 ":" n
     }' "$work/code" > "$work/outside"
-inside=$(awk -F: -v f="$funnel_file" -v a="$fstart" -v b="$fend" '
+inside=$(awk -F'\t' -v f="$funnel_file" -v a="$fstart" -v b="$fend" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if ($1 == f && $2 >= a && $2 <= b)
             n += gsub(/(^|[^A-Za-z0-9_])fopen([^A-Za-z0-9_]|$)/, "&", line)
     }
@@ -129,10 +121,9 @@ others='fopen64 fopen_s freopen freopen64 freopen_s
         _fopen _wfopen _wfopen_s _wfreopen _wfreopen_s _fsopen _wfsopen'
 pat=$(printf '%s' "$others" | tr -s ' \n' '|')
 pat=${pat%|}
-if awk -F: -v pat="$pat" '
+if awk -F'\t' -v pat="$pat" '
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         if (line ~ "(^|[^A-Za-z0-9_])(" pat ")([^A-Za-z0-9_]|$)")
             print $1 ":" $2
     }' "$work/code" > "$work/others"; then :; fi
@@ -151,11 +142,10 @@ fi
 # One line: the value reaches awk through -v, and an awk that takes the
 # assignment as a string literal will not have a newline inside one.
 known='xpost_diskfile_fopen xpost_diskfile_fopen_beneath xpost_raw_fopen xpost_confined_fopen'
-awk -F: -v known="$known" '
+awk -F'\t' -v known="$known" '
     BEGIN { split(known, k, /[ \n]+/); for (i in k) if (k[i] != "") ok[k[i]] = 1 }
     {
-        line = $0
-        sub(/^[^:]*:[0-9]+:/, "", line)
+        line = substr($0, length($1) + length($2) + 3)
         while (match(line, /[A-Za-z_][A-Za-z0-9_]*fopen([^A-Za-z0-9_]|$)/)) {
             id = substr(line, RSTART, RLENGTH)
             line = substr(line, RSTART + RLENGTH)

@@ -180,11 +180,22 @@ guard_mirror_tree() {
 }
 
 # Read C sources as C rather than as text: every named file is emitted as
-# "<path>:<line>:<code>" with comments and string literals removed, so a
-# guard scanning for a construct is not answered by a mention of it in a
-# comment or by a word inside a message. Preprocessor lines are kept --
-# a macro that aliases the thing being guarded is a way past the rule,
-# not a comment on it -- and a guard that does not want them drops them.
+# "<path><tab><line><tab><code>" with comments and string literals
+# removed, so a guard scanning for a construct is not answered by a
+# mention of it in a comment or by a word inside a message. Preprocessor
+# lines are kept -- a macro that aliases the thing being guarded is a way
+# past the rule, not a comment on it -- and a guard that does not want
+# them drops them.
+#
+# The three parts are separated by tabs because a path carries colons: a
+# drive letter is one, so a reader splitting on colons takes the file
+# name for two fields and finds the code where the rest of the path is.
+# Nothing on such a line looks like the construct being searched for, so
+# a guard reading it does not fail -- it reports a tree with nothing
+# wrong in it. A reader takes the code as everything after the second
+# tab, by length rather than by matching a prefix, so a line carrying
+# tabs of its own stays one line: `cut -f3-` in a pipe, or in awk with
+# `-F'\t'`, substr($0, length($1) + length($2) + 3).
 #
 # Every guard that reads C goes through here, so that what counts as code
 # is stated once. Take the files by name; a build in the tree leaves
@@ -219,6 +230,6 @@ guard_c_source() {
                 out = out c
                 i++
             }
-            print FILENAME ":" FNR ":" out
+            print FILENAME "\t" FNR "\t" out
         }' "$@"
 }

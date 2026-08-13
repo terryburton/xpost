@@ -81,7 +81,7 @@ fi
 # of that width the day it is written, and a list kept beside this check
 # would not know about it.
 fields=$(guard_c_source "$tree/src/lib/xpost_object.h" "$tree/src/lib/xpost_dict.h" \
-    | sed 's/^[^:]*:[0-9]*://' \
+    | cut -f3- \
     | awk '{ for (i = 1; i < NF; i++)
                  if ($i == "word") {
                      n = $(i + 1); gsub(/[;,*].*/, "", n)
@@ -133,14 +133,13 @@ function is_wordslot(e, key) {
 }
 
 BEGIN {
-    FS = ":"
+    FS = "\t"
     n = split(WF, a, ",")
     for (i = 1; i <= n; i++) if (a[i] != "") WORDFIELD[a[i]] = 1
 }
 
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) next
     lines[++nl] = $1 "\t" $2 "\t" code
 }
@@ -450,7 +449,8 @@ esac
 # Whatever receives it or is compared against it must be wider than the
 # field the size came out of.
 guard_c_source "$tree"/src/lib/*.c "$tree"/src/lib/*.h \
-  | grep -vE ':[[:space:]]*#' | grep 'DICTABN' > "$work/dictabn" || true
+  | awk -F'\t' 'substr($0, length($1) + length($2) + 3) !~ /^[ \t]*#/' \
+  | grep 'DICTABN' > "$work/dictabn" || true
 if [ ! -s "$work/dictabn" ]; then
     echo "FAILURES: DICTABN is named nowhere in src/lib; the table length is"
     echo "      computed some other way now and this rule holds nothing"
@@ -458,10 +458,9 @@ if [ ! -s "$work/dictabn" ]; then
 fi
 
 # the identifier on the other side of the assignment or comparison
-awk -F: '
+awk -F'\t' '
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code !~ /DICTABN[ \t]*\(/) next
     # what receives it, or what is compared against it
     lhs = code
@@ -476,7 +475,8 @@ awk -F: '
 while IFS="$(printf '\t')" read -r df dl who; do
     [ -n "${who:-}" ] || continue
     # a word-typed declaration of that name anywhere in the same file
-    if guard_c_source "$df" | grep -qE ":[[:space:]]*(register[[:space:]]+)?word[[:space:]]+[^;]*(^|[^A-Za-z0-9_])$who[ ,;]"; then
+    if guard_c_source "$df" | cut -f3- \
+       | grep -qE "^[[:space:]]*(register[[:space:]]+)?word[[:space:]]+[^;]*(^|[^A-Za-z0-9_])$who[ ,;]"; then
         echo "FAILURES: ${df#$tree/}:$dl holds the record table's length in '$who',"
         echo "      which is declared a word. The table is 2*sz+1 records and"
         echo "      the size it is derived from fills the field on its own."
@@ -495,10 +495,9 @@ done < "$work/dictabn_who"
 # that. Which constructors those are is read from the tree.
 awk '
 function trim(s) { gsub(/^[ \t]+/, "", s); gsub(/[ \t]+$/, "", s); return s }
-BEGIN { FS = ":" }
+BEGIN { FS = "\t" }
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) code = ""
     file[NR] = $1
     line[NR] = $2

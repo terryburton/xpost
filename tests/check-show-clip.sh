@@ -87,8 +87,7 @@ fi
 # every function and its body, so a call can be followed
 awk '
 {
-    code = $0
-    sub(/^[^:]*:[0-9]*:/, "", code)
+    code = substr($0, length($1) + length($2) + 3)
     if (code ~ /^[ \t]*#/) code = ""
     text[++n] = code
 }
@@ -124,7 +123,7 @@ END {
         if (depth >= 1 && cur != "") body[cur] = body[cur] " "
     }
     for (f in body) print f "\t" body[f]
-}' FS=: "$work/code" > "$work/bodies"
+}' FS='\t' "$work/code" > "$work/bodies"
 
 if [ ! -s "$work/bodies" ]; then
     echo "FAILURES: no function body could be read from src/lib/xpost_op_font.c"
@@ -160,7 +159,8 @@ fi
 # the operator names, and the functions behind them. guard_c_source
 # takes string literals out, which is where the names are: the lines
 # that are code are found there and read back off the mirrored file.
-awk -F: '$3 ~ /xpost_operator_cons/ { print $2 }' "$work/code" | sort -un > "$work/oplines"
+awk -F'\t' 'substr($0, length($1) + length($2) + 3) ~ /xpost_operator_cons/ { print $2 }' \
+    "$work/code" | sort -un > "$work/oplines"
 awk 'NR == FNR { want[$1] = 1; next }
      (FNR in want) {
          if (match($0, /xpost_operator_cons\([^,]*,[ \t]*"[^"]*"[ \t]*,[ \t]*\(Xpost_Op_Func\)[A-Za-z_][A-Za-z0-9_]*/)) {

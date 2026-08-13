@@ -94,7 +94,7 @@ fi
         sub(/\r$/, "")
         s = ""
         if (match($0, /"[^"\\]*"/)) s = substr($0, RSTART + 1, RLENGTH - 2)
-        print FILENAME ":" FNR ":" s
+        print FILENAME "\t" FNR "\t" s
     }' src/lib/*.c ) > "$work/strings"
 
 # ---- route one: the Destroy slot of every device method table ----
@@ -109,14 +109,13 @@ fi
 # with the colour space it was installed for has a table per space -- and
 # those tables name one Destroy between them, a device going away being
 # the one call that does not depend on the space it painted in.
-awk -F: '
-    NR == FNR { str[$1 ":" $2] = $3; next }
+awk -F'\t' '
+    NR == FNR { str[$1 SUBSEP $2] = substr($0, length($1) + length($2) + 3); next }
     {
-        code = $0
-        sub(/^[^:]*:[0-9]*:/, "", code)
+        code = substr($0, length($1) + length($2) + 3)
         if (code ~ /Xpost_Dev_Method/ || code ~ /xpost_dev_class_install/) tab[$1] = 1
         if (code !~ /\{[ \t]*,[ \t]*,[ \t]*\(Xpost_Op_Func\)[ \t]*[A-Za-z_]/) next
-        if (str[$1 ":" $2] != "Destroy") next
+        if (str[$1 SUBSEP $2] != "Destroy") next
         match(code, /\(Xpost_Op_Func\)[ \t]*[A-Za-z_][A-Za-z0-9_]*/)
         fn = substr(code, RSTART, RLENGTH)
         sub(/\(Xpost_Op_Func\)[ \t]*/, "", fn)
@@ -256,14 +255,13 @@ if [ -s "$work/psopaque" ]; then
 fi
 
 # the C function behind each of those operators
-awk -F: '
-    NR == FNR { str[$1 ":" $2] = $3; next }
+awk -F'\t' '
+    NR == FNR { str[$1 SUBSEP $2] = substr($0, length($1) + length($2) + 3); next }
     {
-        code = $0
-        sub(/^[^:]*:[0-9]*:/, "", code)
+        code = substr($0, length($1) + length($2) + 3)
         if (code !~ /xpost_operator_cons[ \t]*\(/) next
         if (code !~ /\(Xpost_Op_Func\)[ \t]*[A-Za-z_]/) next
-        name = str[$1 ":" $2]
+        name = str[$1 SUBSEP $2]
         if (name == "") next
         match(code, /\(Xpost_Op_Func\)[ \t]*[A-Za-z_][A-Za-z0-9_]*/)
         fn = substr(code, RSTART, RLENGTH)
@@ -302,14 +300,13 @@ npop=$(grep -c . "$work/population" || true)
 # makes, the members of the private struct it names, and where each is
 # handed over or cleared.
 analyse() {         # <file> <function>
-    awk -F: -v F="$1" -v FN="$2" '
+    awk -F'\t' -v F="$1" -v FN="$2" '
     BEGIN {
         KW["if"] = 1; KW["for"] = 1; KW["while"] = 1; KW["switch"] = 1
         KW["return"] = 1; KW["sizeof"] = 1; KW["do"] = 1; KW["else"] = 1
     }
     $1 == F {
-        code = $0
-        sub(/^[^:]*:[0-9]*:/, "", code)
+        code = substr($0, length($1) + length($2) + 3)
         nl++; L[nl] = $2; T[nl] = code
     }
     END {

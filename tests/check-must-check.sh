@@ -44,12 +44,7 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 # with the line endings taken out
 guard_mirror register "$golden"
 golden="$mirror/$(basename "$golden")"
-# The scanner strips a leading path and line number from each record by
-# reading up to the second colon, so a source root named by a drive
-# letter leaves the path in place: preprocessor lines no longer begin
-# with their hash and the mark's own #define is read as a declaration.
-# The mirror is under the scratch directory, whose name has no drive
-# letter on any platform.
+# Read a tree whose lines end where the scan below expects them to.
 guard_mirror_tree "$src"
 src=$mirror
 
@@ -73,7 +68,7 @@ fail=0
 # parenthesis records the return type instead.
 scan() {
     guard_c_source "$@" \
-    | sed 's/^[^:]*:[0-9]*://' \
+    | cut -f3- \
     | grep -vE '^[[:space:]]*#' \
     | tr '\n' ' ' | tr ';{}' '\n\n\n' \
     | awk '
