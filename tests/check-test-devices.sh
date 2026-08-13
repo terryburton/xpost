@@ -218,6 +218,21 @@ if [ "$ncommands" -eq 0 ]; then
     exit 1
 fi
 
+# Counts in against counts out. Where the list of files is long enough to
+# be split the reading above is several passes, and one that stopped
+# partway leaves a subset behind: the rules would then be held over some
+# of the tests and reported over all of them, which is the answer that
+# reads like coverage.
+cut -f1 "$work/commands" | sort -u > "$work/read"
+nread=$(grep -c . "$work/read" || true)
+if [ "$nread" -ne "$nfiles" ]; then
+    echo "FAILURES: $nread of the $nfiles shell files under $testdir were" >&2
+    echo "      read; the rules below would be held over part of the tests" >&2
+    echo "      and reported over the whole of them. Absent:" >&2
+    comm -23 "$work/files" "$work/read" | sed "s|$src/||; s/^/        /" >&2
+    exit 1
+fi
+
 # ---- the two rules --------------------------------------------------
 #
 # A command is the interpreter being run when it carries at least one of
