@@ -57,6 +57,11 @@ typedef struct
     Xpost_Handle_Kind kind;      /* what the block holds */
     unsigned int size;           /* bytes the block holds */
     unsigned int release;        /* opcode of a device block's release, or zero */
+    /* what to give up out of the block before the block itself, where
+       the block names memory of its own; run when the entity carrying
+       the handle is reclaimed, which is the one moment a holder that
+       was never told to give up gets to */
+    void (*reclaim)(void *block);
     int held;                    /* the block is the holder's to free */
     void *block;
 } Xpost_Handle_Slot;
@@ -141,6 +146,7 @@ static Xpost_Handle_Slot *_slot_record(Xpost_Memory_File *mem,
     _slots[index].kind = kind;
     _slots[index].size = (unsigned int)size;
     _slots[index].release = 0;
+    _slots[index].reclaim = NULL;
     _slots[index].held = held;
     _slots[index].block = block;
     return &_slots[index];
@@ -326,6 +332,18 @@ unsigned int xpost_handle_device_release(Xpost_Context *ctx,
     return 0;
 }
 
+int xpost_handle_reclaim_set(Xpost_Context *ctx, Xpost_Object anchor,
+                             Xpost_Handle_Kind kind, size_t size,
+                             void (*reclaim)(void *block))
+{
+    Xpost_Handle_Slot *slot = _slot_named(ctx, anchor, kind, size);
+
+    if (!slot)
+        return 0;
+    slot->reclaim = reclaim;
+    return 1;
+}
+
 void xpost_handle_release_entity(Xpost_Memory_File *mem,
                                       unsigned int ent)
 {
@@ -333,6 +351,14 @@ void xpost_handle_release_entity(Xpost_Memory_File *mem,
 
     if (!slot)
         return;
+    /* What the block names goes with the block. A device's state is
+       given up by its Destroy, which the run makes; a device the run
+       never made it to -- one a restore took back, or one nothing named
+       by the time a collection came round -- is never told, and what it
+       held would stay held for the life of the process. This is that
+       device's last word. */
+    if (slot->reclaim && slot->block)
+        slot->reclaim(slot->block);
     /* a block the holder keeps goes when the holder says so: the file
        layer frees a stream's struct once nothing reads through it, which
        can be after the entity naming it has gone */
@@ -348,6 +374,11 @@ void xpost_handle_release_memory_file(Xpost_Memory_File *mem)
     for (i = 1; i < _nslots; i++)
         if ((_slots[i].ent != 0) && (_slots[i].mem == mem))
         {
+            /* what the block names goes with the block here as it does
+               at a reclamation: a run that ends without retiring
+               everything it made is the ordinary way a run ends */
+            if (_slots[i].reclaim && _slots[i].block)
+                _slots[i].reclaim(_slots[i].block);
             if (!_slots[i].held)
                 free(_slots[i].block);
             memset(&_slots[i], 0, sizeof(_slots[i]));

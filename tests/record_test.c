@@ -481,6 +481,117 @@ int main(void)
         report_failure("a record given only marks it could hold reports"
                        " itself whole");
 
+    /* A drawing placed in a page is named and not copied, so what the
+       page pays for the second placement is the placement. The drawing
+       here is a rectangle over rows 0..9; the page places it three
+       times, twice at one offset apart and once further down. */
+    {
+        Xpost_Record *page;
+        Xpost_Record *draw;
+        size_t before, after;
+
+        page = xpost_record_new(1);
+        draw = xpost_record_new(1);
+        if (!page || !draw)
+        {
+            report_failure("a record to place and a record to place it in");
+            return verdict();
+        }
+        grey[0] = 7.0;
+        ops[0] = 0.0; ops[1] = 0.0; ops[2] = 4.0; ops[3] = 9.0;
+        if (!xpost_record_mark(draw, XPOST_RECORD_FILLRECT, grey, ops, 4))
+            report_failure("a drawing holds a mark");
+
+        if (!xpost_record_place(page, draw, 0.0, 100.0))
+            report_failure("a drawing is placed");
+        before = xpost_record_bytes(page);
+        if (!xpost_record_place(page, draw, 50.0, 100.0))
+            report_failure("the same drawing is placed again");
+        if (!xpost_record_place(page, draw, 0.0, 300.0))
+            report_failure("and placed a third time");
+        after = xpost_record_bytes(page);
+
+        if (xpost_record_count(page) != 3)
+            report_failure("a page places a drawing once per placement");
+        if (xpost_record_place_count(page) != 1)
+            report_failure("a drawing placed three times is one drawing:"
+                           " %d", (int)xpost_record_place_count(page));
+        if (xpost_record_place_get(page, 0) != draw)
+            report_failure("the drawing a placement names is the drawing"
+                           " placed");
+        /* what two further placements cost is two marks, not two
+           drawings: the whole of why a placement is a placement */
+        if (after - before >= xpost_record_bytes(draw))
+            report_failure("two more placements cost less than the drawing"
+                           " they place: %d against %d",
+                           (int)(after - before), (int)xpost_record_bytes(draw));
+
+        /* a placement reaches the rows the drawing reaches from where it
+           was put, so a run meeting neither placement plays neither */
+        if (!xpost_record_extent(page, &lo, &hi) || lo != 100.0 || hi != 309.0)
+            report_failure("a page reaches the rows its placements reach:"
+                           " %d..%d", (int)lo, (int)hi);
+        s = _play(page, 100.0, 109.0);
+        if (s.n != 2)
+            report_failure("the run the first two placements were put on"
+                           " plays them and not the third: %d", s.n);
+        s = _play(page, 200.0, 250.0);
+        if (s.n != 0)
+            report_failure("a run between two placements plays neither:"
+                           " %d", s.n);
+        /* and a placement is handed over as the mark it is: what it
+           stands for is the drawing's marks, which a caller that
+           descends plays */
+        if (s.n == 0)
+        {
+            s = _play(page, 300.0, 309.0);
+            if (s.n != 1 || s.kind[0] != XPOST_RECORD_PLACE)
+                report_failure("a placement plays as one mark naming a"
+                               " drawing");
+        }
+
+        /* A drawing outlives whoever made it while a page still places
+           it: what the page holds is a reference. Given up here, the
+           drawing is still the page's, and the page still plays. */
+        xpost_record_free(draw);
+        s = _play(page, 100.0, 109.0);
+        if (s.n != 2)
+            report_failure("a page plays a drawing its maker has given up");
+
+        /* A record placed inside itself would be played until something
+           ran out, and a drawing nested deeper than a replay descends
+           could not be played at all. Both are refused where the
+           placement is made. */
+        if (xpost_record_place(page, page, 0.0, 0.0))
+            report_failure("a record is not placed inside itself");
+        {
+            Xpost_Record *chain[XPOST_RECORD_NEST + 2];
+            int k, refused = 0;
+
+            memset(chain, 0, sizeof chain);
+            chain[0] = page;
+            for (k = 1; k < XPOST_RECORD_NEST + 2 && !refused; k++)
+            {
+                chain[k] = xpost_record_new(1);
+                if (!chain[k])
+                    break;
+                if (!xpost_record_place(chain[k], chain[k - 1], 0.0, 0.0))
+                    refused = k;
+            }
+            if (!refused)
+                report_failure("a drawing nested past what a replay descends"
+                               " is refused");
+            else if (refused < XPOST_RECORD_NEST - 2)
+                report_failure("a drawing is refused at %d and not at the"
+                               " depth a replay descends", refused);
+            for (k = 1; k < XPOST_RECORD_NEST + 2; k++)
+                if (chain[k])
+                    xpost_record_free(chain[k]);
+        }
+
+        xpost_record_free(page);
+    }
+
     xpost_record_free(rec);
     xpost_record_free(NULL);   /* nothing is not something to give up */
 

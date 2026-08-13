@@ -1,0 +1,225 @@
+% A page of forms inside forms, painted twice: directly by a device that
+% paints, and through a device that writes down what it was asked to
+% paint and plays it back into one. run-form-nest-test.sh runs this file
+% once per route, compares the pages it leaves against a page painted
+% with the copy withdrawn, and reads the numbers printed below.
+%
+% A form is a self-contained description painted at several locations,
+% and the language allows an interpreter to keep the graphical output of
+% one and substitute it for a later execution rather than running the
+% description again (PLRM 4.7). What is kept here is the marks the
+% description made, held once and placed wherever the form is used.
+%
+% The figure is three forms deep and each of them is used more than
+% once, because that is where holding a description once and placing it
+% differs from holding a copy per use: the middle form is used three
+% times by the outer one, the innermost three times by the middle one
+% and once by the outer one directly, and the outer one four times by
+% the page. So the page shows the innermost figure forty times and the
+% middle one twelve, and a page that expanded each use into the marks it
+% stands for would hold those forty and twelve copies.
+%
+% Four properties of the figure, each there to make a comparison able to
+% fail:
+%
+%   Every placement falls between pixels, and no two of them fall at the
+%   same place between pixels. A description held is placed wherever it
+%   is wanted, so what the comparison has to catch is a drawing landing
+%   at the place it was made at rather than the place it was asked for
+%   -- and a figure placed at whole numbers could not show it.
+%
+%   The transformations are not whole numbers either: the innermost form
+%   is placed under a scale of 0.9 and a rotation of thirteen degrees,
+%   so its marks do not lie along an axis and its box does not fall on
+%   the pixel grid. The run can put a scale of 1.07 on the outer form as
+%   well (-DSCALE).
+%
+%   A form is held only where the clip is an axis-aligned rectangle in
+%   the device's own coordinates holding the whole of the form's box:
+%   what reaches a recorder is already cut to the clip. So the rotation
+%   is at the innermost level, where what it rotates is marks; a
+%   rotation at an outer level would leave every form inside it standing
+%   in a clip that is a rotated rectangle, and those are painted afresh.
+%
+%   Every form marks the edges of its own bounding box, since that is
+%   where a copy quantized to the grid parts company with a description
+%   painted afresh.
+%
+%   The innermost form is used at two depths under the same
+%   transformation -- once by the outer form and once inside the middle
+%   one -- so a page that holds a description once holds one of it and a
+%   page that holds one per level holds two.
+%
+%   Every form keeps inside the box it declares, which is what a form is
+%   expected to do (PLRM 4.7): a description held carries the marks it
+%   made, and painting afresh cuts them at the box, so the two agree
+%   exactly where the marks were never outside it. -DSPILL asks the
+%   innermost form to reach past its box, and the run reports what that
+%   comes to.
+%
+% What is printed, and why each is needed:
+%
+%   PLACEMENTS  how many times the page used a form, at every depth.
+%   PAINTS      how many times a form's description was executed, and
+%               PAINTA, PAINTB, PAINTC the same per form. It is the
+%               whole quantity: a page comparison cannot see it, since a
+%               description re-executed paints what a description held
+%               paints.
+%   MARKS       what the device wrote down, where it writes anything.
+%   DRAWINGS    how many descriptions it is holding: three, however many
+%               times the page uses them.
+%
+% The run varies three things through -D:
+%
+%   RO     make the form dictionaries read-only, which is what the copy
+%          is recorded in and so withdraws it, nothing else about the
+%          run changing. It is how the run reaches a page painted by
+%          running every description at every use -- the page the
+%          comparisons are made against.
+%   NUDGE  move one placement a fraction of a pixel. The page must
+%          change, which is what says the comparisons can see a
+%          placement that has moved by less than a pixel.
+%   BB     what a band of the page may cost in bytes, so that the figure
+%          is played into several bands and crosses their edges.
+%   SPILL  let the innermost form paint outside the bounding box it
+%          declares. A form is expected to keep inside the box it
+%          declares (PLRM 4.7) and this one does; asked for, it does
+%          not, and the run reports what that costs.
+
+/RO where { pop }{ /RO 0 def } ifelse
+/SCALE where { pop }{ /SCALE 1 def } ifelse
+/NUDGE where { pop }{ /NUDGE 0 def } ifelse
+/BB where { pop }{ /BB 0 def } ifelse
+/SPILL where { pop }{ /SPILL 0 def } ifelse
+
+/W 400 def
+/H 400 def
+<< /PageSize [W H] >> setpagedevice
+
+globaldict /pa 0 put
+globaldict /pb 0 put
+globaldict /pc 0 put
+globaldict /pl 0 put
+
+/counta { globaldict /pa globaldict /pa get 1 add put } bind def
+/countb { globaldict /pb globaldict /pb get 1 add put } bind def
+/countc { globaldict /pc globaldict /pc get 1 add put } bind def
+
+% formdict  place  -
+% Use a form, counting the use. Every use in the figure goes through
+% this, so PLACEMENTS is what the page asked for however much of it the
+% interpreter had to paint.
+/place { globaldict /pl globaldict /pl get 1 add put execform } bind def
+
+% The innermost figure. Its marks reach every edge of its box: the
+% filled square is the box, the diagonal ends in two of its corners and
+% the triangle stands on the top edge.
+/FC <<
+    /FormType 1
+    /BBox [0 0 12 12]
+    /Matrix [1 0 0 1 0 0]
+    /PaintProc {
+        pop
+        countc
+        0.15 setgray 0 0 12 12 rectfill
+        0.85 setgray 1.5 1.5 9 9 rectfill
+        % A stroke inside the box the form declares. Asked for, the
+        % same stroke reaches the corners instead, where half its width
+        % falls outside that box: painting afresh cuts it there and a
+        % drawing held carries it, which is the one thing holding a
+        % description changes about a page.
+        0 setgray 0.8 setlinewidth
+        SPILL 0 ne
+            { 0 0 moveto 12 12 lineto }
+            { 1 1 moveto 11 11 lineto } ifelse
+        stroke
+        0.45 setgray
+        newpath 0 12 moveto 6 6.5 lineto 12 12 lineto closepath fill
+    }
+>> def
+
+% The middle figure: a bar along the foot of its box and three uses of
+% the innermost, each at a fractional offset and all under one scale and
+% rotation, so the three share one description.
+/FB <<
+    /FormType 1
+    /BBox [0 0 46 46]
+    /Matrix [1 0 0 1 0 0]
+    /PaintProc {
+        pop
+        countb
+        0.55 setgray 0 0 46 1.5 rectfill
+        gsave 3.7 3.1 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 16.9 15.4 translate 0.9 0.9 scale 13 rotate FC place grestore
+        gsave 30.3 28.6 translate 0.9 0.9 scale 13 rotate FC place grestore
+    }
+>> def
+
+% The outer figure: a frame on its box, three uses of the middle figure,
+% and one use of the innermost under the transformation the middle
+% figure uses it under -- so that one description serves both depths.
+/FA <<
+    /FormType 1
+    /BBox [0 0 120 120]
+    /Matrix [1 0 0 1 0 0]
+    /PaintProc {
+        pop
+        counta
+        0.35 setgray
+        0 0 120 2 rectfill
+        0 118 120 2 rectfill
+        0 0 2 120 rectfill
+        118 0 2 120 rectfill
+        gsave 4.3 7.1 translate FB place grestore
+        gsave 38.9 41.7 translate FB place grestore
+        gsave 70.1 72.3 translate FB place grestore
+        gsave 92.7 10.4 translate 0.9 0.9 scale 13 rotate FC place grestore
+    }
+>> def
+
+% A read-only form dictionary is painted rather than held, the
+% dictionary being what the description is recorded in.
+RO 0 ne {
+    /FC FC readonly def
+    /FB FB readonly def
+    /FA FA readonly def
+} if
+
+% What a band of this page may cost, where the device holds one. Under
+% the budget the page arrives in several bands, so the figure is played
+% into each of them and crosses their edges; a device that paints its
+% page whole has no such number and is left alone.
+BB 0 ne { DEVICE /.bandbytes known { DEVICE /.bandbytes BB put } if } if
+
+% The page: the outer figure at four fractional positions, all under one
+% scale and rotation. One of them moves a fraction of a pixel when the
+% run asks for it.
+/nx NUDGE 0 ne { 205.3 0.37 add }{ 205.3 } ifelse def
+
+gsave  10.3   9.7 translate SCALE SCALE scale FA place grestore
+gsave  nx     13.1 translate SCALE SCALE scale FA place grestore
+gsave  14.9 190.7 translate SCALE SCALE scale FA place grestore
+gsave 201.4 187.3 translate SCALE SCALE scale FA place grestore
+
+% Read before the page is put out: what a device wrote down is the
+% page's, and the page ends when it is put out.
+(PLACEMENTS ) print globaldict /pl get =print (\n) print
+(PAINTS ) print
+    globaldict /pa get globaldict /pb get add globaldict /pc get add
+    =print (\n) print
+(PAINTA ) print globaldict /pa get =print (\n) print
+(PAINTB ) print globaldict /pb get =print (\n) print
+(PAINTC ) print globaldict /pc get =print (\n) print
+(BANDROWS ) print
+    currentsystemparams /CurBandHeight get =print (\n) print
+DEVICE /.recordplace known {
+    (MARKS ) print
+        DEVICE 1183615869 internaldict /.recordcost get exec
+        pop pop =print (\n) print
+    (DRAWINGS ) print
+        DEVICE 1183615869 internaldict /.recordplaces get exec =print (\n) print
+} if
+flush
+
+showpage
+quit

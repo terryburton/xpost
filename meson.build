@@ -1765,6 +1765,18 @@ test('execform-cache',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Forms inside forms, on both routes, against the same page painted with
+# nothing held. A form's description is kept and substituted for a later
+# execution (PLRM 4.7), and the claim is that the substitution changes
+# nothing: three pages, byte for byte, and a fourth that must differ so
+# the comparison is known to see a placement moved by less than a pixel.
+test('form-nest',
+  find_program('tests/run-form-nest-test.sh'),
+  args: [ xpost_exe, files('tests/form_nest_test.ps') ],
+  suite: cost_slow,
+  timeout: 180,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Bounding-box device: render a known fill through -d bbox and check the box.
 test('bbox-device',
   find_program('tests/run-bbox-test.sh'),

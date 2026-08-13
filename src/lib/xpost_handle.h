@@ -215,6 +215,28 @@ unsigned int xpost_handle_device_release(Xpost_Context *ctx,
 /**
  * @brief Give up the block an entity's handle names.
  */
+/**
+ * @brief Say what to give up out of a block when the block is reclaimed.
+ *
+ * @param[in] anchor the handle the block was issued under
+ * @return 1, or 0 where no such block is recorded
+ *
+ * A block that names memory of its own is given up by whoever was told
+ * to give it up -- a device's Destroy, run by the interpreter. A holder
+ * that is never told is the case this is for: a device a restore took
+ * back, or one nothing named by the time a collection came round, whose
+ * block is reclaimed with the entity carrying its handle and would
+ * otherwise take what it named with it for the life of the process.
+ *
+ * What is registered runs at reclamation, which is inside the collector:
+ * it may touch nothing in virtual memory, only what the block names. It
+ * runs once, before the block itself goes, and a holder that has already
+ * given up what the block named leaves nothing for it to do.
+ */
+int xpost_handle_reclaim_set(Xpost_Context *ctx, Xpost_Object anchor,
+                             Xpost_Handle_Kind kind, size_t size,
+                             void (*reclaim)(void *block));
+
 void xpost_handle_release_entity(Xpost_Memory_File *mem,
                                  unsigned int ent);
 

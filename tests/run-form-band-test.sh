@@ -183,20 +183,6 @@ else
     fail=1
 fi
 
-# The control that says the byte comparison can see a difference: a copy
-# is taken at one phase against the pixel grid and replayed at both, so
-# the copied page and the painted page are not the same page.
-if cmp -s "$work/fcopy.pgm" "$work/fdirect.pgm"; then
-    echo "FAILURES: a form copied and a form painted afresh gave the same"
-    echo "      bytes where the placements fall at two phases against the"
-    echo "      pixel grid; the comparisons below then rest on a"
-    echo "      comparison that has never been shown to see anything"
-    fail=1
-else
-    echo "OK   a copy replayed at a phase it was not taken at differs from"
-    echo "     a fresh painting: the page comparison sees a difference"
-fi
-
 # The route makes no difference to the page.
 if cmp -s "$work/whole25.pgm" "$work/band25.pgm"; then
     echo "OK   a recorded page of forms is the painted page, byte for byte"
@@ -207,26 +193,53 @@ else
     fail=1
 fi
 
-# The same, where the placements fall between pixels. Compared against
-# the painting with the copy withdrawn, since that is what the record
-# route does: neither route copies here, so the pages must agree exactly
-# and a difference is banding losing something.
-if cmp -s "$work/fdirect.pgm" "$work/fband.pgm"; then
-    echo "OK   the same holds where the placements fall between pixels"
+# ... and the holding has to be in use there, or the comparison below is
+# made where nothing is held and would pass whatever the holding did.
+fcp=$(field "$fc" PAINTS)
+if [ -n "$fcp" ] && [ "$fcp" -lt "$n25" ]; then
+    echo "OK   at placements falling between pixels the form is described"
+    echo "     $fcp times for $n25 placements, so the comparison below is"
+    echo "     made where a drawing is being held and placed at a point"
+    echo "     between pixels it was not made at"
 else
-    echo "FAILURES: a page of forms placed between pixels differs between"
-    echo "      the two routes"
-    cmp "$work/fdirect.pgm" "$work/fband.pgm" 2>&1 | sed 's/^/      /' | head -3
+    echo "FAILURES: at placements falling between pixels the form was"
+    echo "      described $fcp times for $n25 placements, so nothing was"
+    echo "      held and the comparison below sees nothing"
     fail=1
 fi
 
-# Stated, not required: what the record route costs. The copy is keyed
-# on the device holding the page as rows of its own, which a record does
-# not, so the description is run at every placement. The numbers are
-# printed so that a change to them is visible in this run's output.
-echo "NOTE the record route described the form $b9p times at $n9"
-echo "     placements and $b25p at $n25, no copy being kept for a"
-echo "     device that holds no rows to copy into"
+# The same where the placements fall between pixels, and against the
+# page painted with nothing held rather than against one of the two: two
+# routes can agree and both be wrong, which is what a page of forms did
+# when what was held was pixels quantized to the grid.
+for pair in "fcopy the page held whole" "fband the page held in bands"; do
+    name=${pair%% *}
+    what=${pair#* }
+    if cmp -s "$work/fdirect.pgm" "$work/$name.pgm"; then
+        echo "OK   $what is the page painted afresh, byte for byte, where"
+        echo "     the placements fall between pixels"
+    else
+        echo "FAILURES: $what differs from the page painted afresh where the"
+        echo "      placements fall between pixels"
+        cmp "$work/fdirect.pgm" "$work/$name.pgm" 2>&1 | sed 's/^/      /' | head -3
+        fail=1
+    fi
+done
+
+# The same reading on the route that writes the page down. It is a
+# requirement and not a note: what a drawing is held by is a recorder,
+# which a record device can be stood in front of as readily as a raster,
+# so the count must stand still on this route too.
+if [ "$b9p" -eq "$b25p" ] && [ "$b9p" -le "$cachedmax" ]; then
+    echo "OK   the record route describes the form $b9p times at $n9"
+    echo "     placements and $b25p at $n25: the same reading as the route"
+    echo "     that holds its page"
+else
+    echo "FAILURES: on the record route the form was described $b9p times"
+    echo "      at $n9 placements and $b25p at $n25; a drawing held is"
+    echo "      held on both routes"
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     exit 1

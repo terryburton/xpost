@@ -66,6 +66,12 @@ struct _Xpost_Record
 {
     int ncomp;
     int short_of_a_mark;        /* a mark was given and could not be held */
+    /* How many holders there are: whoever made it, and every record
+       placing it. The record goes with the last of them. */
+    int refs;
+    /* How many drawings deep this one goes, counting itself: one for a
+       record placing none, and one more than the deepest it places. */
+    int depth;
     Xpost_String_Buffer mark;   /* a run of _Mark */
     Xpost_String_Buffer val;    /* colour and operands, run together */
     Xpost_String_Buffer img;    /* a run of Xpost_Record_Image */
@@ -74,6 +80,9 @@ struct _Xpost_Record
     size_t mskbytes;            /* what the coverage they point at costs */
     Xpost_String_Buffer scr;    /* a run of _Screen */
     size_t scrbytes;            /* what the cells they point at cost */
+    /* a run of Xpost_Record *, the drawings this one places: one entry
+       per distinct drawing, however many placements name it */
+    Xpost_String_Buffer sub;
     /* The most the runs have ever held at once. The runs keep their
        storage over a page boundary and are filled again, so what they
        are resident for after one is the largest page rather than the
@@ -133,13 +142,23 @@ static size_t _nscr(const Xpost_Record *rec)
     return rec->scr.len / sizeof(_Screen);
 }
 
+static Xpost_Record **_subs(const Xpost_Record *rec)
+{
+    return (Xpost_Record **)rec->sub.s;
+}
+
+static size_t _nsub(const Xpost_Record *rec)
+{
+    return rec->sub.len / sizeof(Xpost_Record *);
+}
+
 /* What is in the runs now. Read where a page boundary is about to empty
    them, and again where what the record costs is asked for, so it is
    stated once. */
 static size_t _runfill(const Xpost_Record *rec)
 {
     return rec->mark.len + rec->val.len + rec->img.len
-         + rec->msk.len + rec->scr.len;
+         + rec->msk.len + rec->scr.len + rec->sub.len;
 }
 
 Xpost_Record *xpost_record_new(int ncomp)
@@ -155,17 +174,23 @@ Xpost_Record *xpost_record_new(int ncomp)
         xpost_strbuf_init(&rec->val, 0) ||
         xpost_strbuf_init(&rec->img, 0) ||
         xpost_strbuf_init(&rec->msk, 0) ||
-        xpost_strbuf_init(&rec->scr, 0))
+        xpost_strbuf_init(&rec->scr, 0) ||
+        xpost_strbuf_init(&rec->sub, 0))
     {
         xpost_strbuf_free(&rec->mark);
         xpost_strbuf_free(&rec->val);
         xpost_strbuf_free(&rec->img);
         xpost_strbuf_free(&rec->msk);
         xpost_strbuf_free(&rec->scr);
+        xpost_strbuf_free(&rec->sub);
         free(rec);
         return NULL;
     }
     rec->ncomp = ncomp;
+    /* the one holder a record begins with is whoever made it */
+    rec->refs = 1;
+    /* a record placing no drawing is one drawing deep */
+    rec->depth = 1;
     return rec;
 }
 
@@ -206,23 +231,48 @@ static void _masks_free(Xpost_Record *rec)
     rec->mskbytes = 0;
 }
 
+/* and the drawings it places, one reference apiece however many
+   placements name each of them */
+static void _places_free(Xpost_Record *rec)
+{
+    size_t i, n = _nsub(rec);
+
+    for (i = 0; i < n; i++)
+        xpost_record_free(_subs(rec)[i]);
+    rec->sub.len = 0;
+}
+
+Xpost_Record *xpost_record_hold(Xpost_Record *rec)
+{
+    if (rec)
+        rec->refs++;
+    return rec;
+}
+
 void xpost_record_free(Xpost_Record *rec)
 {
     size_t i, n;
 
     if (!rec)
         return;
+    /* one holder's claim given up. A drawing a page still places is
+       still held, so what a caller finished with a drawing gives up here
+       is its own reference and not, on its own, the drawing. */
+    if (--rec->refs > 0)
+        return;
     n = _nimg(rec);
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
     _masks_free(rec);
     _screens_free(rec);
+    _places_free(rec);
     free(rec->htcell);
     xpost_strbuf_free(&rec->mark);
     xpost_strbuf_free(&rec->val);
     xpost_strbuf_free(&rec->img);
     xpost_strbuf_free(&rec->msk);
     xpost_strbuf_free(&rec->scr);
+    xpost_strbuf_free(&rec->sub);
     free(rec);
 }
 
@@ -237,12 +287,13 @@ static int _fixed_nops(Xpost_Record_Kind kind)
         case XPOST_RECORD_DRAWLINE: return 4;
         case XPOST_RECORD_FILLRECT: return 4;
         /* a polygon states its own length, and none of an image, a
-           screen and a glyph is written down through xpost_record_mark
-           at all */
+           screen, a glyph and a placement is written down through
+           xpost_record_mark at all */
         case XPOST_RECORD_FILLPOLY:
         case XPOST_RECORD_IMAGE:
         case XPOST_RECORD_SCREEN:
-        case XPOST_RECORD_GLYPH:    return -1;
+        case XPOST_RECORD_GLYPH:
+        case XPOST_RECORD_PLACE:    return -1;
     }
     return -1;
 }
@@ -316,6 +367,12 @@ static void _extent(Xpost_Record_Kind kind, const real *ops, int nops,
             /* a glyph's reach is its mask's height at the row it is put
                on, and is taken where it is written down: the operands
                name the mask rather than describing it */
+            *lo = *hi = 0.0;
+            return;
+        case XPOST_RECORD_PLACE:
+            /* and a placement's is the reach of the drawing it names,
+               carried down by the offset it is placed at, taken where it
+               is written down for the same reason */
             *lo = *hi = 0.0;
             return;
     }
@@ -724,6 +781,115 @@ const unsigned char *xpost_record_mask_get(const Xpost_Record *rec, size_t i,
     return m->cov;
 }
 
+int xpost_record_place(Xpost_Record *rec, Xpost_Record *sub,
+                       real dx, real dy)
+{
+    Xpost_Record **held;
+    real *colour;
+    real ops[3];
+    real lo, hi;
+    size_t i, at, count;
+    int ok;
+
+    if (!rec || !sub)
+        return 0;
+    /* a record already short of a mark describes a page it cannot
+       reproduce, and adding to it would only make the gap harder to
+       see */
+    if (rec->short_of_a_mark)
+        return 0;
+    /* a drawing short of a mark cannot be played, so a page placing it
+       is a page that cannot be painted whole */
+    if (sub->short_of_a_mark)
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+    /* A record placed inside itself would be played until something ran
+       out, and a drawing nested deeper than a replay descends could not
+       be played at all. Both are refused here, where the run making the
+       placement is still in a position to be told, rather than when the
+       page is painted. */
+    if (sub == rec || sub->depth >= XPOST_RECORD_NEST)
+        return 0;
+
+    /* the one entry this drawing already has, if it has one: a drawing
+       is named once however many placements name it, so what the table
+       holds is the drawings and what the marks hold is the places */
+    held = _subs(rec);
+    count = _nsub(rec);
+    at = count;
+    for (i = 0; i < count; i++)
+    {
+        if (held[i] == sub)
+        {
+            at = i;
+            break;
+        }
+    }
+    if (at == count)
+    {
+        if (xpost_strbuf_append(&rec->sub, &sub, sizeof sub))
+        {
+            rec->short_of_a_mark = 1;
+            return 0;
+        }
+        /* the run holds the drawing now, so the reference is the
+           record's and the drawing outlives whatever else named it */
+        (void)xpost_record_hold(sub);
+    }
+
+    /* a placement paints in the colours the drawing's own marks carry,
+       so the place a mark's colour takes is filled with zeros and every
+       entry's values stay laid out the one way */
+    colour = calloc((size_t)rec->ncomp, sizeof *colour);
+    if (!colour)
+    {
+        rec->short_of_a_mark = 1;
+        return 0;
+    }
+
+    /* the rows the drawing reaches, carried down to where it is put. A
+       drawing that reaches no row paints nothing wherever it is placed,
+       and the placement is met only by the run its own origin falls in. */
+    if (!xpost_record_extent(sub, &lo, &hi))
+        lo = hi = 0.0;
+    lo += dy;
+    hi += dy;
+
+    ops[0] = (real)at;
+    ops[1] = dx;
+    ops[2] = dy;
+    ok = _put(rec, XPOST_RECORD_PLACE, colour, ops, 3, lo, hi);
+    free(colour);
+    if (!ok)
+        return 0;
+    /* and how deep the page now goes, which is what says whether a
+       further placement of it could be played */
+    if (sub->depth + 1 > rec->depth)
+        rec->depth = sub->depth + 1;
+    return 1;
+}
+
+size_t xpost_record_place_count(const Xpost_Record *rec)
+{
+    return rec ? _nsub(rec) : 0;
+}
+
+int xpost_record_depth(const Xpost_Record *rec)
+{
+    return rec ? rec->depth : 0;
+}
+
+Xpost_Record *xpost_record_place_get(const Xpost_Record *rec, size_t i)
+{
+    /* a record short of a mark gives none of what it holds back, on the
+       same terms as a replay of one */
+    if (!rec || rec->short_of_a_mark || i >= _nsub(rec))
+        return NULL;
+    return _subs(rec)[i];
+}
+
 /* Write one screen entry down, its cell copied into the record's own
    memory. Shared by a screen the painting announced and by the one a
    page boundary opens the page after with. */
@@ -860,6 +1026,10 @@ void xpost_record_clear(Xpost_Record *rec)
         _image_free(&_imgs(rec)[i]);
     _masks_free(rec);
     _screens_free(rec);
+    /* the drawings the page placed are given up with the placements that
+       named them, and one no other page places goes with them */
+    _places_free(rec);
+    rec->depth = 1;
     /* the runs keep what they took: a record is filled again by the page
        after, and what it costs is then the largest page rather than the
        sum of them */
@@ -878,9 +1048,9 @@ void xpost_record_clear(Xpost_Record *rec)
 }
 
 /* Give up the entries a caller has finished with, which is everything
-   but the coverage: the marks, the pictures they name and the screens
-   they were made under. The masks stay because a placement names one by
-   an index into the record and arrives after it. */
+   but the coverage: the marks, the pictures and drawings they name and
+   the screens they were made under. The masks stay because a placement
+   names one by an index into the record and arrives after it. */
 void xpost_record_spent(Xpost_Record *rec)
 {
     size_t i, n;
@@ -891,6 +1061,8 @@ void xpost_record_spent(Xpost_Record *rec)
     for (i = 0; i < n; i++)
         _image_free(&_imgs(rec)[i]);
     _screens_free(rec);
+    _places_free(rec);
+    rec->depth = 1;
     rec->mark.len = 0;
     rec->val.len = 0;
     rec->img.len = 0;
@@ -908,6 +1080,8 @@ void xpost_record_release(Xpost_Record *rec)
         _image_free(&_imgs(rec)[i]);
     _masks_free(rec);
     _screens_free(rec);
+    _places_free(rec);
+    rec->depth = 1;
     free(rec->htcell);
     rec->htcell = NULL;
     rec->htw = rec->hth = 0;
@@ -920,6 +1094,7 @@ void xpost_record_release(Xpost_Record *rec)
     xpost_strbuf_free(&rec->img);
     xpost_strbuf_free(&rec->msk);
     xpost_strbuf_free(&rec->scr);
+    xpost_strbuf_free(&rec->sub);
     /* and the mark of how full they ever were goes with them: it says
        what the runs are resident for, and they are resident for nothing */
     rec->runhigh = 0;
@@ -953,6 +1128,7 @@ static size_t _blocks(const Xpost_Record *rec)
     if (rec->img.s)  n++;
     if (rec->msk.s)  n++;
     if (rec->scr.s)  n++;
+    if (rec->sub.s)  n++;
     if (rec->htcell) n++;
     n += _nmsk(rec);            /* a mask's coverage is one block */
     n += _nscr(rec);            /* a screen's cell is one block */
@@ -1059,6 +1235,123 @@ int xpost_record_extent(const Xpost_Record *rec, real *lo, real *hi)
         }
         if (m[i].lo < *lo) *lo = m[i].lo;
         if (m[i].hi > *hi) *hi = m[i].hi;
+    }
+    return any;
+}
+
+/* The columns one mark reaches, from its own operands and from what it
+   names. A kind that paints nothing answers an empty span. */
+static int _span(const Xpost_Record *rec, const _Mark *m, const real *vals,
+                 real *x0, real *x1)
+{
+    const real *ops = m->nops ? vals + m->at + rec->ncomp : NULL;
+    int i, any = 0;
+
+    switch (m->kind)
+    {
+        case XPOST_RECORD_PUTPIX:
+            *x0 = *x1 = ops[0];
+            return 1;
+        case XPOST_RECORD_BLENDPIX:
+            *x0 = *x1 = ops[1];
+            return 1;
+        case XPOST_RECORD_DRAWLINE:
+            *x0 = ops[0] < ops[2] ? ops[0] : ops[2];
+            *x1 = ops[0] < ops[2] ? ops[2] : ops[0];
+            return 1;
+        case XPOST_RECORD_FILLRECT:
+            *x0 = ops[2] < 0 ? ops[0] + ops[2] : ops[0];
+            *x1 = ops[2] < 0 ? ops[0] : ops[0] + ops[2];
+            return 1;
+        case XPOST_RECORD_FILLPOLY:
+            for (i = 0; i * 2 + 2 < m->nops; i++)
+            {
+                real x = ops[i * 2 + 1];
+
+                if (x == XPOST_PATH_BREAK)
+                    continue;
+                if (!any) { *x0 = *x1 = x; any = 1; }
+                else if (x < *x0) *x0 = x;
+                else if (x > *x1) *x1 = x;
+            }
+            return any;
+        case XPOST_RECORD_IMAGE:
+        {
+            const Xpost_Record_Image *img;
+            real a, b, t;
+
+            if (!ops || (size_t)ops[0] >= _nimg(rec))
+                return 0;
+            img = &_imgs(rec)[(size_t)ops[0]];
+            a = img->xoff;
+            b = img->xoff + (real)img->width * img->xscale;
+            if (a > b) { t = a; a = b; b = t; }
+            if (a < img->cx0) a = img->cx0;
+            if (b > img->cx1) b = img->cx1;
+            *x0 = a;
+            *x1 = b;
+            return b >= a;
+        }
+        case XPOST_RECORD_GLYPH:
+        {
+            const _Cover *c;
+
+            if (!ops || (size_t)ops[0] >= _nmsk(rec))
+                return 0;
+            c = &_msks(rec)[(size_t)ops[0]];
+            *x0 = ops[1];
+            *x1 = ops[1] + (real)(c->w - 1);
+            return 1;
+        }
+        case XPOST_RECORD_PLACE:
+        {
+            real sx0, sy0, sx1, sy1;
+
+            if (!ops || (size_t)ops[0] >= _nsub(rec))
+                return 0;
+            if (!xpost_record_box(_subs(rec)[(size_t)ops[0]],
+                                  &sx0, &sy0, &sx1, &sy1))
+                return 0;
+            *x0 = sx0 + ops[1];
+            *x1 = sx1 + ops[1];
+            return 1;
+        }
+        case XPOST_RECORD_SCREEN:
+            return 0;
+    }
+    return 0;
+}
+
+int xpost_record_box(const Xpost_Record *rec, real *x0, real *y0,
+                     real *x1, real *y1)
+{
+    const _Mark *m;
+    const real *vals;
+    size_t i, n;
+    int any = 0;
+
+    if (!rec || !x0 || !y0 || !x1 || !y1)
+        return 0;
+    m = _marks(rec);
+    vals = _vals(rec);
+    n = _nmark(rec);
+    for (i = 0; i < n; i++)
+    {
+        real a, b;
+
+        if (!_span(rec, &m[i], vals, &a, &b))
+            continue;
+        if (!any)
+        {
+            *x0 = a; *x1 = b;
+            *y0 = m[i].lo; *y1 = m[i].hi;
+            any = 1;
+            continue;
+        }
+        if (a < *x0) *x0 = a;
+        if (b > *x1) *x1 = b;
+        if (m[i].lo < *y0) *y0 = m[i].lo;
+        if (m[i].hi > *y1) *y1 = m[i].hi;
     }
     return any;
 }

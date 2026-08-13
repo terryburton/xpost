@@ -81,6 +81,7 @@
 #include "xpost_array.h"
 #include "xpost_name.h"
 
+#include "xpost_handle.h"
 #include "xpost_operator.h"
 #include "xpost_op_dict.h"
 #include "xpost_dev_generic.h" /* the ground a read answers */
@@ -97,6 +98,46 @@
    the class the run selected a target for. */
 #define RECORD_MAXCOMP 3
 
+/* Where a replay has got to in one drawing, and where that drawing's
+   marks are put on the page.
+
+   A record may hold a placement of another record, so what a replay
+   keeps is a stack of these: it descends where it meets a placement and
+   comes back to the entry after it. The offset is what every placement
+   above has carried the coordinates by, added up, so playing a mark is
+   one addition however deep the drawing sits. */
+typedef struct
+{
+    const Xpost_Record *rec;
+    real dx, dy;       /* where the drawing's coordinates land */
+    real lo, hi;       /* the rows asked of it, in its own coordinates */
+    size_t idx;        /* the entry to look at next */
+    size_t pixat;      /* how far into a coverage mask */
+    int inmask;        /* whether that place belongs to the entry at idx */
+} _Level;
+
+/* The walk a record device is making of what it holds.
+ *
+ * Kept beside the device's state rather than in it: the state is read
+ * and written once per mark as a page is drawn, and a walk deep enough
+ * to descend into every placement there can be would be carried past
+ * every one of those marks. It is taken up at the first replay and given
+ * up with the device.
+ *
+ * One walk, because a device plays one run of rows at a time: a band is
+ * played, put out, and the next band asked for. A replay begun while one
+ * is running would be walking the same record from two places. */
+typedef struct
+{
+    int depth;                    /* placements descended into */
+    _Level at[XPOST_RECORD_NEST];
+    /* a placed polygon's coordinates with the placement's offset in
+       them, since what the record holds is the drawing's own coordinates
+       and the drawing is played wherever it was placed */
+    real *poly;
+    size_t npoly;
+} _Walk;
+
 typedef struct
 {
     int width, height;
@@ -104,6 +145,8 @@ typedef struct
        component count of the device its page is played into */
     int ncomp;
     Xpost_Record *rec;
+    /* where a replay of it has got to, or nothing where none has begun */
+    _Walk *walk;
     /* how many times a recorded image has been painted through this
        device, which is what .recordplays answers */
     unsigned int plays;
@@ -1197,6 +1240,120 @@ static int _recordglyph_g(Xpost_Context *ctx,
     return _glyphmark(ctx, devdic, comp, 1, at, x, y);
 }
 
+/* subdev dx dy IMAGE  .recordplace  -
+ * Write down a placement of the drawing another recorder holds.
+ *
+ * What is written down is a reference: the drawing is held once however
+ * many places it is put and however deep it sits, and what this page
+ * pays for the placement is the mark. The drawing is played where the
+ * page is played, at the offset given, so a drawing made once is painted
+ * at every place it was put and at the phase each of those places falls
+ * at.
+ *
+ * The two recorders must hold their marks in the same colour space, for
+ * the reason a record must be played into a device declaring the space
+ * it was made in: a mark carries one value per component, and a drawing
+ * whose marks carry another count would paint a colour nobody named.
+ *
+ * A drawing that cannot be placed is a mark the page has lost, and is
+ * answered as one: the page is refused rather than put out without it.
+ */
+static int _recordplace(Xpost_Context *ctx,
+                        Xpost_Object subdic,
+                        Xpost_Object dx, Xpost_Object dy,
+                        Xpost_Object devdic)
+{
+    Xpost_Object privatestr, substr;
+    PrivateData private, subprivate;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    /* a released record takes no placement, as it takes no mark */
+    if (!private.rec)
+        return 0;
+    if (!_private_get(ctx, subdic, &substr, &subprivate)
+        || !subprivate.rec)
+    {
+        XPOST_LOG_ERR("%d a placement names no drawing", undefined);
+        return _lost(ctx, devdic, undefined);
+    }
+    if (subprivate.ncomp != private.ncomp
+        || xpost_dict_compare_objects(
+               ctx, xpost_dict_get(ctx, devdic, namenativecolorspace),
+               xpost_dict_get(ctx, subdic, namenativecolorspace)) != 0)
+    {
+        XPOST_LOG_ERR("%d a drawing made in one colour space is placed in a"
+                      " page made in another", rangecheck);
+        return _lost(ctx, devdic, rangecheck);
+    }
+    /* A page placing itself, or placing a drawing nested as deep as a
+       replay descends, is refused here rather than when the page is
+       painted: the run making the placement is still in a position to
+       hear about it. */
+    if (subprivate.rec == private.rec
+        || xpost_record_depth(subprivate.rec) >= XPOST_RECORD_NEST)
+    {
+        XPOST_LOG_ERR("%d a page places drawings deeper than a replay"
+                      " descends", limitcheck);
+        return _lost(ctx, devdic, limitcheck);
+    }
+    if (!xpost_record_place(private.rec, subprivate.rec,
+                            (real)xpost_object_number(dx),
+                            (real)xpost_object_number(dy)))
+        return _lost(ctx, devdic, VMerror);
+    return 0;
+}
+
+/* IMAGE  .recordplaces  drawings
+   How many distinct drawings a record places, which is the count a
+   caller asking whether a drawing is held once rather than once per
+   place wants. */
+static int _recordplaces(Xpost_Context *ctx,
+                         Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_int_cons((integer)
+                                    xpost_record_place_count(private.rec)));
+    return 0;
+}
+
+/* IMAGE  .recordbox  x0 y0 x1 y1 true
+                     false
+   The box the marks a record holds reach, in the coordinates they were
+   made in, or false where it holds none.
+
+   What it is for is the question a caller holding a drawing has to ask
+   before placing it: a drawing is placed whole, and nothing clips it
+   where it lands, so a drawing reaching outside the region its maker
+   was cut to is a drawing that would paint outside that region wherever
+   it is put. */
+static int _recordbox(Xpost_Context *ctx,
+                      Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    real x0, y0, x1, y1;
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec || !xpost_record_box(private.rec, &x0, &y0, &x1, &y1))
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(x0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(y0));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(x1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(y1));
+    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(1));
+    return 0;
+}
+
 /* IMAGE  .recordcost  marks images bytes
    What a record holds and what holding it costs. The mechanism is worth
    having exactly while a record is smaller than the raster it saves
@@ -1666,6 +1823,97 @@ static int _play_poly(Xpost_Context *ctx, const real *ops,
     return 0;
 }
 
+/* A mark's operands where the drawing holding it is placed somewhere:
+   the coordinates carried by the placement's offset, everything else as
+   it stands.
+ *
+ * The operands a record holds are the drawing's own, so a drawing placed
+ * in three places is played three times against three offsets and
+ * written down once. The offset is added to the coordinate rather than
+ * to the pixel it lands in -- which pixels a coordinate names is the
+ * painting device's answer and is taken after this -- so a placement
+ * paints at the sub-pixel phase it was placed at.
+ *
+ * A polygon's coordinates are as many as its vertices and are carried in
+ * the walk's own buffer; the other kinds carry four at most and are
+ * carried in the caller's.
+ */
+static void _place_ops(Xpost_Record_Kind kind, const real *ops, int nops,
+                       real dx, real dy, real *dst)
+{
+    int i;
+
+    for (i = 0; i < nops; i++)
+        dst[i] = ops[i];
+    switch (kind)
+    {
+        case XPOST_RECORD_PUTPIX:
+            dst[0] = ops[0] + dx;
+            dst[1] = ops[1] + dy;
+            return;
+        case XPOST_RECORD_BLENDPIX:
+            /* the coverage is not a coordinate */
+            dst[1] = ops[1] + dx;
+            dst[2] = ops[2] + dy;
+            return;
+        case XPOST_RECORD_DRAWLINE:
+            dst[0] = ops[0] + dx;
+            dst[1] = ops[1] + dy;
+            dst[2] = ops[2] + dx;
+            dst[3] = ops[3] + dy;
+            return;
+        case XPOST_RECORD_FILLRECT:
+            /* a rectangle is a corner and an extent, and an extent is
+               not carried anywhere */
+            dst[0] = ops[0] + dx;
+            dst[1] = ops[1] + dy;
+            return;
+        default:
+            return;
+    }
+}
+
+/* and a polygon's, into a buffer the walk keeps and grows.
+ *
+ * A pair marking a subpath break is a separator and not a point, so it
+ * is copied as it stands: carried, it would become a coordinate pair
+ * nothing recognises and the subpaths either side of it would be scanned
+ * as one shape.
+ *
+ * Answers the coordinates to play, or NULL where there was no memory to
+ * carry them. */
+static const real *_place_poly(_Walk *w, const real *ops, int nops,
+                               real dx, real dy)
+{
+    int n, i;
+
+    if (nops < 1)
+        return NULL;
+    if ((size_t)nops > w->npoly)
+    {
+        real *grown = realloc(w->poly, (size_t)nops * sizeof *grown);
+
+        if (!grown)
+            return NULL;
+        w->poly = grown;
+        w->npoly = (size_t)nops;
+    }
+    n = (int)ops[0];
+    w->poly[0] = ops[0];
+    for (i = 0; i < n; i++)
+    {
+        if (ops[1 + 2 * i] == XPOST_PATH_BREAK)
+        {
+            w->poly[1 + 2 * i] = ops[1 + 2 * i];
+            w->poly[2 + 2 * i] = ops[2 + 2 * i];
+            continue;
+        }
+        w->poly[1 + 2 * i] = ops[1 + 2 * i] + dx;
+        w->poly[2 + 2 * i] = ops[2 + 2 * i] + dy;
+    }
+    return w->poly;
+}
+
 /* Whether an object is the walk's own continuation, which is how the
    loop below tells an execution stack a call left alone from one it
    left work on. */
@@ -1828,14 +2076,25 @@ static int _play_call(Xpost_Context *ctx, Xpost_Object m,
  * glyph of a thousand pixels played in one go would be a thousand calls
  * during which memory is not reclaimed and a request to stop is not
  * heard, which is what the batch exists to bound.
+ *
+ * A placement is not played by calling anything: it names a drawing the
+ * record holds and says where that drawing's coordinates land, so the
+ * walk descends into it and plays its marks against the offset,
+ * returning to the entry after the placement when it runs out. What it
+ * keeps is a level per placement descended into (@ref _Walk), so a
+ * drawing placed at several depths is played wherever it was placed and
+ * is written down once. The descent is bounded: a page nested deeper
+ * than the levels there are is refused with a limitcheck rather than
+ * followed until something runs out.
+ *
+ * The rows asked of a drawing are the rows asked of the page, less the
+ * offset it was placed at, so a placement whose drawing falls outside
+ * the run is stepped over as a mark is and its marks are never looked
+ * at.
  */
 static int _replay_step(Xpost_Context *ctx,
                         Xpost_Object recdic,
-                        Xpost_Object targetdic,
-                        Xpost_Object idx,
-                        Xpost_Object lo,
-                        Xpost_Object hi,
-                        Xpost_Object pix)
+                        Xpost_Object targetdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
@@ -1846,38 +2105,29 @@ static int _replay_step(Xpost_Context *ctx,
        target's and does not change while its own methods are running */
     Xpost_Object method[5];
     char looked[5];
-    real rlo, rhi;
-    size_t from, pixat, resumeat;
+    _Walk *w;
     int batch, k;
     int ret = 0;
 
     if (!_private_get(ctx, recdic, &privatestr, &private))
         return undefined;
-    if (!private.rec)
+    /* a record given up, and one no replay has been started on, have
+       nothing to go on with */
+    if (!private.rec || !private.walk)
         return 0;
+    w = private.walk;
 
     memset(looked, 0, sizeof looked);
     cont = xpost_operator_cons_opcode(_replay_step_opcode);
-    rlo = (real)xpost_object_number(lo);
-    rhi = (real)xpost_object_number(hi);
-    from = (size_t)idx.int_.val;
-    pixat = pix.int_.val > 0 ? (size_t)pix.int_.val : 0;
-    /* the entry the place inside an entry belongs to, which is the one
-       the walk was resumed at. Anything else starts at its own beginning,
-       so a cursor left by a glyph cannot be read as a place inside some
-       later one and have that one start part way through. */
-    resumeat = from;
 
     /* The walk's own operands, which every return below leaves in place
        for the continuation to be resumed with. They go on once for the
        batch rather than once for each mark, the marks being played over
-       the top of them. */
+       the top of them. How far the walk has got is not among them: it is
+       a stack of levels rather than a place, and it is kept where the
+       record is. */
     xpost_stack_push(ctx->lo, ctx->os, recdic);
     xpost_stack_push(ctx->lo, ctx->os, targetdic);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)from));
-    xpost_stack_push(ctx->lo, ctx->os, lo);
-    xpost_stack_push(ctx->lo, ctx->os, hi);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)pixat));
     /* a push the stack would not take leaves the walk standing on
        operands that are not there; the run is told about it at the next
        evaluation step, and nothing is played in the meantime */
@@ -1886,16 +2136,21 @@ static int _replay_step(Xpost_Context *ctx,
 
     for (batch = 0; batch < XPOST_REPLAY_BATCH; )
     {
+        _Level *f = &w->at[w->depth];
         Xpost_Record_Kind kind;
         const real *colour;
         const real *ops;
+        real placed[4];
         Xpost_Object m;
         Xpost_Object poly = null;
         /* a polygon's coordinates where the call takes them as they are
            held, and nothing for every other mark */
         const real *co = NULL;
-        size_t at;
-        int nops, npts = 0, i, left, fresh;
+        size_t at, waspix;
+        /* the rows asked for, on the page, which is where the drawing
+           this level is walking has been carried to */
+        real rlo = f->lo + f->dy, rhi = f->hi + f->dy;
+        int nops, npts = 0, i, left, fresh, inmask;
 
         /* The rows asked for choose which marks are played, and the
            marks between are stepped over rather than played and
@@ -1904,31 +2159,93 @@ static int _replay_step(Xpost_Context *ctx,
            marks each run meets rather than every mark once per run.
 
            Nothing further reaching those rows, or an entry that cannot
-           be read: either way the walk is over and its operands go
-           back. */
-        if (!xpost_record_next(private.rec, from, rlo, rhi, &at))
+           be read: the drawing is finished with, so the walk comes back
+           out to the record that placed it and goes on after the
+           placement. At the drawing it began in there is nothing to come
+           back to, and the walk is over: its operands go back. */
+        if (!xpost_record_next(f->rec, f->idx, f->lo, f->hi, &at)
+            || !xpost_record_get(f->rec, at, &kind, &colour, &ops, &nops))
+        {
+            if (w->depth > 0)
+            {
+                w->depth--;
+                continue;
+            }
             goto refused;
-        if (!xpost_record_get(private.rec, at, &kind, &colour, &ops, &nops))
-            goto refused;
+        }
         batch++;
 
-        /* Every entry played moves the walk past itself, whether it was
-           a mark, a picture or a screen. Resuming where it was looking
-           from instead would find the same entry again for every mark
-           the rows asked for had it step over.
+        /* Whether the walk is coming back into the middle of this
+           entry, and how far into it -- read before the walk is moved
+           past the entry below. Only a coverage mask is left in the
+           middle of: it stands for a run of pixel calls rather than one
+           call, and a batch may end inside it. */
+        inmask = f->inmask;
+        waspix = f->pixat;
 
-           Written over the operand the continuation reads it from, the
-           fourth of the six the walk stands on. There is no reaching
-           for a place the stack does not have: the six went on above,
-           the push that would not have taken them was answered there,
-           and each turn of the loop leaves them where it found them --
-           a method takes the operands its own shape states and this
-           returns rather than looping past a method whose shape is not
-           stated. */
-        from = at + 1;
-        XPOST_REFUSAL_IMPOSSIBLE(
-            xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
-                                        xpost_int_cons((integer)from)));
+        /* Every entry played moves the walk past itself, whether it was
+           a mark, a picture, a screen or a placement. Resuming where it
+           was looking from instead would find the same entry again for
+           every mark the rows asked for had it step over. A mask left
+           part way puts the walk back on its own entry below. */
+        f->idx = at + 1;
+        f->inmask = 0;
+
+        /* A placement names a drawing this record holds and says where
+           the drawing's own coordinates land. It is played by playing
+           that drawing, so the walk descends: the level below carries
+           the offset this one carries and the placement's on top of it,
+           and is asked for the rows this level was asked for, less the
+           offset -- the drawing's own coordinates being what its marks
+           are in.
+
+           A drawing may place drawings itself, and the descent is
+           bounded rather than open. What bounds it is the levels there
+           are: a page nested past them is refused here, with a
+           limitcheck, rather than descended into until the run has no
+           stack left. */
+        if (kind == XPOST_RECORD_PLACE)
+        {
+            const Xpost_Record *sub;
+            _Level *into;
+
+            sub = xpost_record_place_get(f->rec,
+                                         nops > 0 ? (size_t)ops[0]
+                                                  : (size_t)-1);
+            if (!sub)
+            {
+                XPOST_LOG_ERR("%d a recorded placement names no drawing",
+                              undefined);
+                ret = undefined;
+                goto refused;
+            }
+            if (w->depth + 1 >= XPOST_RECORD_NEST)
+            {
+                XPOST_LOG_ERR("%d a page places drawings deeper than a replay"
+                              " descends", limitcheck);
+                ret = limitcheck;
+                goto refused;
+            }
+            into = &w->at[++w->depth];
+            into->rec = sub;
+            into->dx = f->dx + (nops > 1 ? ops[1] : (real)0);
+            into->dy = f->dy + (nops > 2 ? ops[2] : (real)0);
+            /* The rows asked of the drawing are the rows asked of this
+               level, less where the placement puts it, and a row either
+               side of those. A placement at a fractional distance puts
+               a mark of the drawing's row on one of two rows of the
+               page, so a range taken exactly would leave the drawing
+               judging a mark not to reach a run it is painted into --
+               and a mark judged not to reach a band is absent from the
+               page. Erring outward costs a visit to a mark that then
+               paints nothing there. */
+            into->lo = f->lo - (nops > 2 ? ops[2] : (real)0) - (real)1;
+            into->hi = f->hi - (nops > 2 ? ops[2] : (real)0) + (real)1;
+            into->idx = 0;
+            into->pixat = 0;
+            into->inmask = 0;
+            continue;
+        }
 
         /* An image is not one of the marking calls and is not made by
            calling one: its rows are written into the target's raster
@@ -1944,10 +2261,11 @@ static int _replay_step(Xpost_Context *ctx,
         if (kind == XPOST_RECORD_IMAGE)
         {
             const Xpost_Record_Image *img;
+            Xpost_Record_Image put;
             Xpost_Object dims;
             int nrows;
 
-            img = xpost_record_image_get(private.rec,
+            img = xpost_record_image_get(f->rec,
                                          nops > 0 ? (size_t)ops[0]
                                                   : (size_t)-1);
             if (!img)
@@ -1955,6 +2273,21 @@ static int _replay_step(Xpost_Context *ctx,
                 XPOST_LOG_ERR("%d a recorded image names no entry", undefined);
                 ret = undefined;
                 goto refused;
+            }
+            /* Where the drawing holding it has been placed, the picture
+               goes there: what places it is the transform written down
+               with it, and the region it is written through moves with
+               it. The samples do not move and are not copied. */
+            if (f->dx != (real)0 || f->dy != (real)0)
+            {
+                put = *img;
+                put.xoff += f->dx;
+                put.yoff += f->dy;
+                put.cx0 += f->dx;
+                put.cx1 += f->dx;
+                put.cy0 += f->dy;
+                put.cy1 += f->dy;
+                img = &put;
             }
             dims = xpost_dict_get(ctx, targetdic, namebdkey[BK_DIMENSIONS]);
             if (xpost_object_get_type(dims) != arraytype || dims.comp_.sz < 2)
@@ -1988,12 +2321,12 @@ static int _replay_step(Xpost_Context *ctx,
         if (kind == XPOST_RECORD_SCREEN)
         {
             const unsigned char *cell;
-            int w = 0, h = 0;
+            int cw = 0, ch = 0;
 
-            cell = xpost_record_screen_get(private.rec,
+            cell = xpost_record_screen_get(f->rec,
                                            nops > 0 ? (size_t)ops[0]
                                                     : (size_t)-1,
-                                           &w, &h);
+                                           &cw, &ch);
             if (!cell)
             {
                 XPOST_LOG_ERR("%d a recorded screen names no entry",
@@ -2001,7 +2334,7 @@ static int _replay_step(Xpost_Context *ctx,
                 ret = undefined;
                 goto refused;
             }
-            ret = _install_screen(ctx, targetdic, cell, w, h);
+            ret = _install_screen(ctx, targetdic, cell, cw, ch);
             if (ret)
                 goto refused;
             continue;
@@ -2025,9 +2358,9 @@ static int _replay_step(Xpost_Context *ctx,
             int mw = 0, mh = 0;
             int r0, r1;
             real gx, gy;
-            size_t first, last;
+            size_t pixat, first, last;
 
-            cov = xpost_record_mask_get(private.rec,
+            cov = xpost_record_mask_get(f->rec,
                                         nops > 0 ? (size_t)ops[0]
                                                  : (size_t)-1, &mw, &mh);
             if (!cov)
@@ -2036,13 +2369,20 @@ static int _replay_step(Xpost_Context *ctx,
                 ret = undefined;
                 goto refused;
             }
-            gx = nops > 1 ? ops[1] : (real)0;
-            gy = nops > 2 ? ops[2] : (real)0;
+            /* Where the mask goes, carried by the placement of the
+               drawing holding it and put back on the pixel grid: a mask
+               is a rectangle of pixels painted a pixel at a time, and it
+               is rendered against the grid rather than against the phase
+               its origin falls at (src/lib/xpost_op_font.c), so it lands
+               on whole pixels wherever the drawing was placed. */
+            gx = (real)floor((double)(nops > 1 ? ops[1] : (real)0)
+                             + (double)f->dx + 0.5);
+            gy = (real)floor((double)(nops > 2 ? ops[2] : (real)0)
+                             + (double)f->dy + 0.5);
             /* whether the walk is meeting this entry for the first
                time, rather than coming back into the middle of it */
-            fresh = at != resumeat || pixat == 0;
-            if (at != resumeat)
-                pixat = 0;
+            pixat = inmask ? waspix : 0;
+            fresh = !inmask;
 
             /* Which of the mask's rows reach the rows asked for. Row k
                of it lands on device row gy + k, so this is that question
@@ -2080,9 +2420,8 @@ static int _replay_step(Xpost_Context *ctx,
             /* the walk stays on this entry while any of the mask is
                left, so what it comes back to is this one and not the
                one after it */
-            XPOST_REFUSAL_IMPOSSIBLE(
-                xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
-                                            xpost_int_cons((integer)at)));
+            f->idx = at;
+            f->inmask = 1;
 
             while (pixat < last)
             {
@@ -2115,11 +2454,8 @@ static int _replay_step(Xpost_Context *ctx,
                 }
 
                 /* where inside the mask to come back to, written before
-                   the call's own operands go on top of the walk's */
-                XPOST_REFUSAL_IMPOSSIBLE(
-                    xpost_stack_topdown_replace(
-                        ctx->lo, ctx->os, 0,
-                        xpost_int_cons((integer)(pixat + 1))));
+                   the call is made */
+                f->pixat = pixat + 1;
 
                 for (i = 0; i < private.ncomp; i++)
                     xpost_stack_push(ctx->lo, ctx->os,
@@ -2150,13 +2486,9 @@ static int _replay_step(Xpost_Context *ctx,
 
             /* the mask is spent: the walk moves past it and the entry
                after it starts at its own first pixel */
-            pixat = 0;
-            XPOST_REFUSAL_IMPOSSIBLE(
-                xpost_stack_topdown_replace(ctx->lo, ctx->os, 3,
-                                            xpost_int_cons((integer)from)));
-            XPOST_REFUSAL_IMPOSSIBLE(
-                xpost_stack_topdown_replace(ctx->lo, ctx->os, 0,
-                                            xpost_int_cons(0)));
+            f->idx = at + 1;
+            f->pixat = 0;
+            f->inmask = 0;
             continue;
         }
 
@@ -2190,6 +2522,34 @@ static int _replay_step(Xpost_Context *ctx,
            one the target offers, so what the count says is marks made
            and not marks looked at. */
         private.played++;
+
+        /* Where the drawing holding this mark has been placed, the mark
+           goes there. The coordinates are carried into a buffer and the
+           call is made from that, the record holding the drawing's own
+           and the drawing being played wherever it was placed. Nothing
+           carries a mark of a drawing nobody placed, which is every mark
+           of an ordinary page. */
+        if (f->dx != (real)0 || f->dy != (real)0)
+        {
+            if (kind == XPOST_RECORD_FILLPOLY)
+            {
+                const real *put = _place_poly(w, ops, nops, f->dx, f->dy);
+
+                if (!put)
+                {
+                    XPOST_LOG_ERR("%d no memory to place a recorded polygon",
+                                  VMerror);
+                    ret = VMerror;
+                    goto refused;
+                }
+                ops = put;
+            }
+            else if (nops > 0 && nops <= (int)(sizeof placed / sizeof *placed))
+            {
+                _place_ops(kind, ops, nops, f->dx, f->dy, placed);
+                ops = placed;
+            }
+        }
 
         /* A polygon reaches the compiled fill as the run the record
            holds it as, and reaches any other method as the array that
@@ -2261,7 +2621,7 @@ static int _replay_step(Xpost_Context *ctx,
        working state. An error raised by a method that did run leaves
        them where they are, which is where a mark played by the
        interpreter leaves them. */
-    for (k = 0; k < 6; k++)
+    for (k = 0; k < 2; k++)
         (void)xpost_stack_pop(ctx->lo, ctx->os);
 
   done:
@@ -2319,22 +2679,65 @@ static int _replay_refuse(Xpost_Context *ctx,
 
 /* Start the walk: the marks that reach rows lo to hi, in the order they
    were made, which is the order they were painted in and so the order
-   they must be painted in again. */
+   they must be painted in again.
+ *
+ * The walk begins at the record this device holds and at no offset,
+ * which is the drawing the page is. Where it meets a placement it
+ * descends, and the levels it descends through are taken up here: they
+ * are the walk's and not the page's, so they are made once for the
+ * device and filled again by each run of rows it is asked for.
+ *
+ * @p dx and @p dy carry the whole page, which is what a caller asking
+ * for a drawing to be painted somewhere hands down; a page painted where
+ * it was drawn hands down nothing. The rows are the rows of the page,
+ * and the record is asked for its own, which is the rows less the
+ * offset.
+ */
 static int _replay_walk(Xpost_Context *ctx,
                         Xpost_Object recdic,
                         Xpost_Object targetdic,
                         Xpost_Object lo,
-                        Xpost_Object hi)
+                        Xpost_Object hi,
+                        real dx, real dy)
 {
+    Xpost_Object privatestr;
+    PrivateData private;
+    _Level *f;
+
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec)
+        return 0;
+    if (!private.walk)
+    {
+        private.walk = calloc(1, sizeof *private.walk);
+        if (!private.walk)
+            return VMerror;
+        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        {
+            /* the state is the only thing that would have named it */
+            free(private.walk);
+            return VMerror;
+        }
+    }
+
+    /* The walk starts over whatever a walk before it left, which is
+       nothing where one ran out and its own end where one finished. A
+       run of rows is asked for from the beginning of the record either
+       way. */
+    private.walk->depth = 0;
+    f = &private.walk->at[0];
+    f->rec = private.rec;
+    f->dx = dx;
+    f->dy = dy;
+    f->lo = (real)xpost_object_number(lo) - dy;
+    f->hi = (real)xpost_object_number(hi) - dy;
+    f->idx = 0;
+    f->pixat = 0;
+    f->inmask = 0;
+
     xpost_stack_push(ctx->lo, ctx->os, recdic);
     xpost_stack_push(ctx->lo, ctx->os, targetdic);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
-    xpost_stack_push(ctx->lo, ctx->os, lo);
-    xpost_stack_push(ctx->lo, ctx->os, hi);
-    /* and the place inside the entry it is looking at, which only a
-       glyph has one of: a mask is a run of pixel calls and a batch may
-       end in the middle of it */
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(0));
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_operator_cons_opcode(_replay_step_opcode)))
         return execstackoverflow;
@@ -2361,7 +2764,7 @@ static int _replaypage_rows(Xpost_Context *ctx,
     ret = _replay_refuse(ctx, recdic, targetdic);
     if (ret)
         return ret;
-    return _replay_walk(ctx, recdic, targetdic, lo, hi);
+    return _replay_walk(ctx, recdic, targetdic, lo, hi, (real)0, (real)0);
 }
 
 /* recdev pagedev  .replaypage  -
@@ -2385,7 +2788,49 @@ static int _replaypage(Xpost_Context *ctx,
     if (!private.rec || !xpost_record_extent(private.rec, &lo, &hi))
         return 0;
     return _replay_walk(ctx, recdic, targetdic,
-                        xpost_real_cons(lo), xpost_real_cons(hi));
+                        xpost_real_cons(lo), xpost_real_cons(hi),
+                        (real)0, (real)0);
+}
+
+/* recdev pagedev dx dy  .replayplace  -
+   Paint a drawing into a device that paints, put at dx dy.
+
+   What .replaypage is for a page a record holds, this is for a drawing
+   the record is: the marks are played into the device with the offset
+   added to every coordinate, so a drawing made once is painted wherever
+   it is put. The rows are the rows the drawing reaches from where it has
+   been put, since a device that paints its page whole holds all of them;
+   a device holding a run of them keeps its own part, as it does of a
+   page.
+
+   It is how a drawing reaches a device that paints. A device holding a
+   record of its own is given the placement to write down instead
+   (.recordplace above), so that the drawing is held once for the page
+   rather than played once per placement into a raster that does not
+   exist yet. */
+static int _replayplace(Xpost_Context *ctx,
+                        Xpost_Object recdic,
+                        Xpost_Object targetdic,
+                        Xpost_Object dx,
+                        Xpost_Object dy)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    real ox, oy, lo, hi;
+    int ret;
+
+    ret = _replay_refuse(ctx, recdic, targetdic);
+    if (ret)
+        return ret;
+    if (!_private_get(ctx, recdic, &privatestr, &private))
+        return undefined;
+    if (!private.rec || !xpost_record_extent(private.rec, &lo, &hi))
+        return 0;
+    ox = (real)xpost_object_number(dx);
+    oy = (real)xpost_object_number(dy);
+    return _replay_walk(ctx, recdic, targetdic,
+                        xpost_real_cons(lo + oy), xpost_real_cons(hi + oy),
+                        ox, oy);
 }
 
 /* Whether a page of this extent could be painted at all.
@@ -2465,6 +2910,25 @@ static int _extent_ok(Xpost_Object width, Xpost_Object height)
         || (dword)h > XPOST_OBJECT_COMP_MAX_SZ)
         return 0;
     return 1;
+}
+
+/* What a record device holds, given up where the run never got to it:
+   the record, and the levels a replay of it descended through. Called
+   from the collector with the block this device's state is kept in, so
+   it touches nothing in virtual memory. A device the run retired has
+   cleared both and leaves this nothing to do. */
+static void _reclaim(void *block)
+{
+    PrivateData *private = block;
+
+    xpost_record_free(private->rec);
+    private->rec = NULL;
+    if (private->walk)
+    {
+        free(private->walk->poly);
+        free(private->walk);
+        private->walk = NULL;
+    }
 }
 
 /* create an instance of the device, using the class .copydict procedure */
@@ -2548,10 +3012,21 @@ static int _create_cont(Xpost_Context *ctx,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
+    /* What this device holds is a record, which is not virtual memory:
+       a device the run never retires -- a drawing a restore took back,
+       or one nothing named by the time a collection came round -- would
+       take its record with it. This is what gives it up there. A device
+       the run does retire has given it up already and leaves this
+       nothing to do. */
+    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
+                                   sizeof(PrivateData), _reclaim);
 
     private.width = width;
     private.height = height;
     private.ncomp = ncomp.int_.val;
+    /* no replay has begun, so there are no levels to descend through
+       yet: they are taken up at the first one */
+    private.walk = NULL;
     private.plays = 0;
     private.played = 0;
     private.imgrows = 0;
@@ -2586,6 +3061,12 @@ static int _create_cont(Xpost_Context *ctx,
        of the instance the procedure takes and the one this Create
        answers with. */
     make = xpost_dict_get(ctx, devdic, namedotplaymake);
+    /* A recorder that paints no page of its own builds nothing to paint
+       it in: what it holds is a drawing, played into a device that was
+       going to be painted anyway. */
+    if (xpost_object_get_type(make) == nulltype
+        || xpost_object_get_type(make) == invalidtype)
+        return 0;
     if (!xpost_object_is_exe(make))
         return undefined;
     xpost_stack_push(ctx->lo, ctx->os, devdic);
@@ -2739,6 +3220,14 @@ static int _destroy(Xpost_Context *ctx,
 
     xpost_record_free(private.rec);
     private.rec = NULL;
+    /* and the levels a replay of it descended through, which are the
+       device's for as long as it has a record to walk */
+    if (private.walk)
+    {
+        free(private.walk->poly);
+        free(private.walk);
+        private.walk = NULL;
+    }
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
@@ -2762,6 +3251,332 @@ static int newrecorddevice(Xpost_Context *ctx,
     if (!xpost_stack_push(ctx->lo, ctx->es,
                           xpost_dict_get(ctx, classdic,
                                          xpost_name_cons(ctx, "Create"))))
+        return execstackoverflow;
+    return 0;
+}
+
+/* The slots a recorder is built from: the five marking methods, the
+   three a page device must have, the read, and the three entries the
+   painters look for rather than dispatch.
+
+   Named here because a recorder is built more than once in a run -- one
+   for the page and one for each drawing held for it -- and asking for a
+   method twice would register a second signature for the same call. The
+   suite is made once per colour count and put into every class after. */
+static const char *const _suiteslot[] =
+{
+    "Create", "PutPix", "GetPix", "BlendPix", "DrawLine", "FillRect",
+    "FillPoly", "Emit", "Destroy",
+    ".recordimage", ".recordglyph", "ScreenChanged", ".recordplace"
+};
+
+#define RECORD_SUITE_SLOTS ((int)(sizeof _suiteslot / sizeof *_suiteslot))
+
+/* The opcodes of the suite, and not the operator objects: what is kept
+   in C is a number the operator table is indexed by rather than an
+   object, so there is nothing here for the collector to be told about
+   (tests/check-c-held-objects.sh). */
+static unsigned int _suite[2][RECORD_SUITE_SLOTS];
+static int _suite_made[2];
+
+/* Fill a class's slots with the recorder's suite at this colour count,
+   making the suite if it has not been made. */
+static int _install_suite(Xpost_Context *ctx, Xpost_Object classdic, int ncomp)
+{
+    /* This device's whole suite, for a target declaring DeviceRGB. It is
+       the five marking methods a record holds and nothing else that
+       marks: a method it did not bring is resolved above the device into
+       these, and one it brought would be a call the record has no entry
+       for. */
+    static const Xpost_Dev_Method methods[] =
+    {
+        { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "recordPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "recordGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "recordBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
+        { "DrawLine", "recordDrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
+        { "FillRect", "recordFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
+        { "FillPoly", "recordFillPoly", (Xpost_Op_Func)_fillpoly, XPOST_DEV_M_POLY },
+        { "Emit", "recordEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
+    /* ... and the same suite for a target declaring DeviceGray, whose
+       marks carry one colour value where these carry three. Two tables
+       and not one, because a method's operand count is fixed when it is
+       installed and an entry point's signature is fixed when it is
+       compiled. The read is in both: its operands do not follow the
+       colour space, so there is one of it. */
+    static const Xpost_Dev_Method greymethods[] =
+    {
+        { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
+        { "PutPix", "recordGrayPutPix", (Xpost_Op_Func)_putpix_g, XPOST_DEV_M_PUTPIX },
+        { "GetPix", "recordGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
+        { "BlendPix", "recordGrayBlendPix", (Xpost_Op_Func)_blendpix_g, XPOST_DEV_M_BLEND },
+        { "DrawLine", "recordGrayDrawLine", (Xpost_Op_Func)_drawline_g, XPOST_DEV_M_LINE },
+        { "FillRect", "recordGrayFillRect", (Xpost_Op_Func)_fillrect_g, XPOST_DEV_M_RECT },
+        { "FillPoly", "recordGrayFillPoly", (Xpost_Op_Func)_fillpoly_g, XPOST_DEV_M_POLY },
+        { "Emit", "recordEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
+        { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
+    };
+
+    Xpost_Object op;
+    int suite = ncomp == 1 ? 0 : 1;
+    int i, ret;
+
+    /* the suite as it was made, where it has been made: a class built
+       after the first is filled from what the first registered */
+    if (_suite_made[suite])
+    {
+        for (i = 0; i < RECORD_SUITE_SLOTS; i++)
+        {
+            Xpost_Object key = xpost_name_cons(ctx, _suiteslot[i]);
+
+            if (xpost_object_get_type(key) == invalidtype)
+                return VMerror;
+            ret = xpost_dict_put(ctx, classdic, key,
+                                 xpost_operator_cons_opcode(
+                                     (int)_suite[suite][i]));
+            if (ret)
+                return ret;
+        }
+        return 0;
+    }
+
+    op = xpost_operator_cons(ctx, "recordCreateCont",
+                             (Xpost_Op_Func)_create_cont, 3,
+                             integertype, integertype, dicttype);
+    _create_cont_opcode = op.mark_.padw;
+
+    ret = ncomp == 1
+        ? xpost_dev_class_install(ctx, classdic, ncomp, 1, greymethods,
+                                  XPOST_DEV_METHOD_COUNT(greymethods))
+        : xpost_dev_class_install(ctx, classdic, ncomp, 1, methods,
+                                  XPOST_DEV_METHOD_COUNT(methods));
+    if (ret)
+        return ret;
+
+    /* How a sampled image reaches the record. It is not one of the
+       device methods and is not dispatched as one: the image painter
+       looks for it, and finding it writes the image down instead of
+       painting it a rectangle per sample into a device that keeps no
+       rows. A device method here would be a marking call the record
+       holds no entry for, which is the one thing this class must not
+       declare (tests/check-device-skeleton.sh). */
+    op = xpost_operator_cons(ctx, "recordImage",
+                             (Xpost_Op_Func)_recordimage, 3,
+                             dicttype, arraytype, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, ".recordimage"), op);
+    if (ret)
+        return ret;
+
+    /* How a glyph reaches the record, for the same reason and by the
+       same route. The glyph painter looks for it, and finding it hands
+       over one coverage mask and a placement of it rather than the mark
+       per inked pixel a device that paints is sent -- which costs a
+       raster nothing and would cost this record tens of bytes a pixel.
+       Like the image entry it is not a device method and is not
+       dispatched as one: a method here would be a marking call the
+       record holds no entry for, which is the one thing this class must
+       not declare (tests/check-device-skeleton.sh).
+
+       The mask itself does not come this way. It is handed over as the
+       glyph is rendered, through xpost_dev_record_takemask, and this
+       writes down which of the record's masks was painted where -- the
+       two being separate because the order a string's glyphs are
+       rendered in is not the order they are painted in, and a record
+       holds its marks in the order they were painted. */
+    op = ncomp == 1
+        ? xpost_operator_cons(ctx, "recordGrayGlyph",
+                              (Xpost_Op_Func)_recordglyph_g, 5,
+                              numbertype, numbertype, numbertype, numbertype,
+                              dicttype)
+        : xpost_operator_cons(ctx, "recordGlyph",
+                              (Xpost_Op_Func)_recordglyph, 7,
+                              numbertype, numbertype, numbertype, numbertype,
+                              numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, ".recordglyph"), op);
+    if (ret)
+        return ret;
+
+    /* What the painting machinery calls where the screen changes, for a
+       target that screens. Like the image entry it is not a device
+       method and is not dispatched as one: a method here would be a
+       marking call the record holds no entry for, which is the one
+       thing this class must not declare. A recorder whose target does
+       not screen declares no ScreenPaint, and nothing calls this. */
+    op = xpost_operator_cons(ctx, "recordScreen",
+                             (Xpost_Op_Func)_recordscreen, 1, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, "ScreenChanged"), op);
+    if (ret)
+        return ret;
+
+    /* How a drawing another recorder holds is placed in this one. It is
+       not a device method either: what the machinery above a device
+       paints is marks, and a placement is something a caller holding a
+       drawing writes down. */
+    op = xpost_operator_cons(ctx, "recordPlace",
+                             (Xpost_Op_Func)_recordplace, 4,
+                             dicttype, numbertype, numbertype, dicttype);
+    ret = xpost_dict_put(ctx, classdic,
+                         xpost_name_cons(ctx, ".recordplace"), op);
+    if (ret)
+        return ret;
+
+    /* what was registered, kept so that a class built after this one is
+       filled rather than registering the same calls again */
+    for (i = 0; i < RECORD_SUITE_SLOTS; i++)
+    {
+        Xpost_Object key = xpost_name_cons(ctx, _suiteslot[i]);
+        Xpost_Object slot;
+
+        if (xpost_object_get_type(key) == invalidtype)
+            return VMerror;
+        slot = xpost_dict_get(ctx, classdic, key);
+        if (xpost_object_get_type(slot) != operatortype)
+            return undefined;
+        _suite[suite][i] = slot.mark_.padw;
+    }
+    _suite_made[suite] = 1;
+    return 0;
+}
+
+/* Whether a dictionary carries a name at all, which is what asking
+   whether a device declares something comes to. */
+static int _declares(Xpost_Context *ctx, Xpost_Object dic, const char *name)
+{
+    Xpost_Object key = xpost_name_cons(ctx, name);
+
+    if (xpost_object_get_type(key) == invalidtype)
+        return 0;
+    return xpost_dict_known_key(ctx, xpost_context_select_memory(ctx, dic),
+                                dic, key);
+}
+
+/* A class for a recorder that holds a drawing for this device, or a null
+ * where a drawing cannot be held for it.
+ *
+ * A drawing is held as a record and is played into the device that
+ * paints, so the recorder that takes it must be sent what that device
+ * would have been sent and must hold all of it. Four things settle
+ * whether it can be:
+ *
+ *   The colour. A mark carries one value per component of the space it
+ *   was made in and is played by handing those values to a method whose
+ *   operands the receiving device's space decides, so the recorder
+ *   declares the device's space and component count and no other.
+ *
+ *   The path. A device that declares FillPath is handed whole paths and
+ *   the clip shape beside them, neither of which a record holds; what
+ *   reaches a device that declares none is already cut to the region.
+ *   So a drawing is held for the second kind and not the first.
+ *
+ *   The screen. A device rendering a grey as a pattern of pixels reads
+ *   the threshold under each pixel, which is device state rather than
+ *   something a mark carries. A drawing whose marks changed that state
+ *   would leave it changed for the marks after it wherever the drawing
+ *   was placed, so no drawing is held for such a device.
+ *
+ *   The marks. A replay plays each mark by calling the method for its
+ *   kind, so the device must offer all five.
+ *
+ * The class is built for each drawing rather than kept. What is kept is
+ * the suite it is built from, since asking for a method twice would
+ * register a second signature for the same call; the dictionary around
+ * that suite costs a dictionary.
+ */
+static Xpost_Object _form_class(Xpost_Context *ctx, Xpost_Object devdic)
+{
+    /* what the recorder takes from the class every recorder is made
+       from: how a page is cleared, how an instance is copied out of a
+       class, that it paints nothing, and the extent it will carry */
+    static const char *const carry[] =
+    {
+        "Ground", ".copydict", "NoOutput", "dimensions"
+    };
+    Xpost_Object src, cls, o;
+    int ncomp, i, ret;
+
+    o = xpost_dict_get(ctx, devdic, namedotncomp);
+    if (xpost_object_get_type(o) != integertype
+        || o.int_.val < 1 || o.int_.val > RECORD_MAXCOMP)
+        return null;
+    ncomp = (int)o.int_.val;
+    if (!_declares(ctx, devdic, "nativecolorspace")
+        || _declares(ctx, devdic, "FillPath")
+        || _declares(ctx, devdic, "ScreenPaint"))
+        return null;
+    for (i = 0; i < (int)(sizeof nameslot / sizeof *nameslot); i++)
+        if (!xpost_dict_known_key(ctx,
+                                  xpost_context_select_memory(ctx, devdic),
+                                  devdic, nameslot[i]))
+            return null;
+
+    src = xpost_dict_get(ctx, ctx->privatedict,
+                         xpost_name_cons(ctx, ".xpost_RECORD"));
+    if (xpost_object_get_type(src) != dicttype)
+        return null;
+
+    cls = xpost_dict_cons(ctx, 32);
+    if (xpost_object_get_type(cls) != dicttype)
+        return null;
+    for (i = 0; i < (int)(sizeof carry / sizeof *carry); i++)
+    {
+        Xpost_Object key = xpost_name_cons(ctx, carry[i]);
+
+        if (xpost_object_get_type(key) == invalidtype)
+            return null;
+        if (!xpost_dict_known_key(ctx, xpost_context_select_memory(ctx, src),
+                                  src, key))
+            continue;
+        ret = xpost_dict_put(ctx, cls, key, xpost_dict_get(ctx, src, key));
+        if (ret)
+            return null;
+    }
+    /* and what it takes from the device it is standing in for */
+    ret = xpost_dict_put(ctx, cls, namedotncomp, o);
+    if (!ret)
+        ret = xpost_dict_put(ctx, cls, namenativecolorspace,
+                             xpost_dict_get(ctx, devdic, namenativecolorspace));
+    if (!ret && _declares(ctx, devdic, "TextAlphaBits"))
+        ret = xpost_dict_put(ctx, cls, nametextalphabits,
+                             xpost_dict_get(ctx, devdic, nametextalphabits));
+    if (!ret)
+        ret = _install_suite(ctx, cls, ncomp);
+    return ret ? null : cls;
+}
+
+/* w h DEVICE  .newformrecord  recdev
+                               null
+   A recorder to hold a drawing for this device, at a page of this
+   extent, or a null where a drawing cannot be held for it.
+
+   The extent is the page's, not the drawing's: the marks are the
+   device's own coordinates and the clip they were cut to is the page's,
+   so a recorder standing in for the device stands at the same extent. */
+static int _newformrecord(Xpost_Context *ctx,
+                          Xpost_Object width,
+                          Xpost_Object height,
+                          Xpost_Object devdic)
+{
+    Xpost_Object cls = _form_class(ctx, devdic);
+    Xpost_Object create;
+
+    if (xpost_object_get_type(cls) != dicttype)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, null);
+        return 0;
+    }
+    create = xpost_dict_get(ctx, cls, xpost_name_cons(ctx, "Create"));
+    if (xpost_object_get_type(create) != operatortype)
+        return undefined;
+    xpost_stack_push(ctx->lo, ctx->os, width);
+    xpost_stack_push(ctx->lo, ctx->os, height);
+    xpost_stack_push(ctx->lo, ctx->os, cls);
+    if (!xpost_stack_push(ctx->lo, ctx->es, create))
         return execstackoverflow;
     return 0;
 }
@@ -2999,43 +3814,6 @@ static int _play_target(Xpost_Context *ctx, Xpost_Object classdic,
 static int loadrecorddevicecont(Xpost_Context *ctx,
                                 Xpost_Object classdic)
 {
-    /* This device's whole suite, for a target declaring DeviceRGB. It is
-       the five marking methods a record holds and nothing else that
-       marks: a method it did not bring is resolved above the device into
-       these, and one it brought would be a call the record has no entry
-       for. */
-    static const Xpost_Dev_Method methods[] =
-    {
-        { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
-        { "PutPix", "recordPutPix", (Xpost_Op_Func)_putpix, XPOST_DEV_M_PUTPIX },
-        { "GetPix", "recordGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
-        { "BlendPix", "recordBlendPix", (Xpost_Op_Func)_blendpix, XPOST_DEV_M_BLEND },
-        { "DrawLine", "recordDrawLine", (Xpost_Op_Func)_drawline, XPOST_DEV_M_LINE },
-        { "FillRect", "recordFillRect", (Xpost_Op_Func)_fillrect, XPOST_DEV_M_RECT },
-        { "FillPoly", "recordFillPoly", (Xpost_Op_Func)_fillpoly, XPOST_DEV_M_POLY },
-        { "Emit", "recordEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
-        { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
-    };
-
-    /* ... and the same suite for a target declaring DeviceGray, whose
-       marks carry one colour value where these carry three. Two tables
-       and not one, because a method's operand count is fixed when it is
-       installed and an entry point's signature is fixed when it is
-       compiled. The read is in both: its operands do not follow the
-       colour space, so there is one of it. */
-    static const Xpost_Dev_Method greymethods[] =
-    {
-        { "Create", "recordCreate", (Xpost_Op_Func)_create, XPOST_DEV_M_CREATE },
-        { "PutPix", "recordGrayPutPix", (Xpost_Op_Func)_putpix_g, XPOST_DEV_M_PUTPIX },
-        { "GetPix", "recordGetPix", (Xpost_Op_Func)_getpix, XPOST_DEV_M_GETPIX },
-        { "BlendPix", "recordGrayBlendPix", (Xpost_Op_Func)_blendpix_g, XPOST_DEV_M_BLEND },
-        { "DrawLine", "recordGrayDrawLine", (Xpost_Op_Func)_drawline_g, XPOST_DEV_M_LINE },
-        { "FillRect", "recordGrayFillRect", (Xpost_Op_Func)_fillrect_g, XPOST_DEV_M_RECT },
-        { "FillPoly", "recordGrayFillPoly", (Xpost_Op_Func)_fillpoly_g, XPOST_DEV_M_POLY },
-        { "Emit", "recordEmit", (Xpost_Op_Func)_emit, XPOST_DEV_M_PAGE },
-        { "Destroy", "recordDestroy", (Xpost_Op_Func)_destroy, XPOST_DEV_M_PAGE }
-    };
-
     Xpost_Object userdict;
     Xpost_Object op;
     int ncomp;
@@ -3047,74 +3825,7 @@ static int loadrecorddevicecont(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    op = xpost_operator_cons(ctx, "recordCreateCont",
-                             (Xpost_Op_Func)_create_cont, 3,
-                             integertype, integertype, dicttype);
-    _create_cont_opcode = op.mark_.padw;
-
-    ret = ncomp == 1
-        ? xpost_dev_class_install(ctx, classdic, ncomp, 1, greymethods,
-                                  XPOST_DEV_METHOD_COUNT(greymethods))
-        : xpost_dev_class_install(ctx, classdic, ncomp, 1, methods,
-                                  XPOST_DEV_METHOD_COUNT(methods));
-    if (ret)
-        return ret;
-
-    /* How a sampled image reaches the record. It is not one of the
-       device methods and is not dispatched as one: the image painter
-       looks for it, and finding it writes the image down instead of
-       painting it a rectangle per sample into a device that keeps no
-       rows. A device method here would be a marking call the record
-       holds no entry for, which is the one thing this class must not
-       declare (tests/check-device-skeleton.sh). */
-    op = xpost_operator_cons(ctx, "recordImage",
-                             (Xpost_Op_Func)_recordimage, 3,
-                             dicttype, arraytype, dicttype);
-    ret = xpost_dict_put(ctx, classdic,
-                         xpost_name_cons(ctx, ".recordimage"), op);
-    if (ret)
-        return ret;
-
-    /* How a glyph reaches the record, for the same reason and by the
-       same route. The glyph painter looks for it, and finding it hands
-       over one coverage mask and a placement of it rather than the mark
-       per inked pixel a device that paints is sent -- which costs a
-       raster nothing and would cost this record tens of bytes a pixel.
-       Like the image entry it is not a device method and is not
-       dispatched as one: a method here would be a marking call the
-       record holds no entry for, which is the one thing this class must
-       not declare (tests/check-device-skeleton.sh).
-
-       The mask itself does not come this way. It is handed over as the
-       glyph is rendered, through xpost_dev_record_takemask, and this
-       writes down which of the record's masks was painted where -- the
-       two being separate because the order a string's glyphs are
-       rendered in is not the order they are painted in, and a record
-       holds its marks in the order they were painted. */
-    op = ncomp == 1
-        ? xpost_operator_cons(ctx, "recordGrayGlyph",
-                              (Xpost_Op_Func)_recordglyph_g, 5,
-                              numbertype, numbertype, numbertype, numbertype,
-                              dicttype)
-        : xpost_operator_cons(ctx, "recordGlyph",
-                              (Xpost_Op_Func)_recordglyph, 7,
-                              numbertype, numbertype, numbertype, numbertype,
-                              numbertype, numbertype, dicttype);
-    ret = xpost_dict_put(ctx, classdic,
-                         xpost_name_cons(ctx, ".recordglyph"), op);
-    if (ret)
-        return ret;
-
-    /* What the painting machinery calls where the screen changes, for a
-       target that screens. Like the image entry it is not a device
-       method and is not dispatched as one: a method here would be a
-       marking call the record holds no entry for, which is the one
-       thing this class must not declare. A recorder whose target does
-       not screen declares no ScreenPaint, and nothing calls this. */
-    op = xpost_operator_cons(ctx, "recordScreen",
-                             (Xpost_Op_Func)_recordscreen, 1, dicttype);
-    ret = xpost_dict_put(ctx, classdic,
-                         xpost_name_cons(ctx, "ScreenChanged"), op);
+    ret = _install_suite(ctx, classdic, ncomp);
     if (ret)
         return ret;
 
@@ -3191,6 +3902,12 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
             == invalidtype)
             return VMerror;
 
+    /* The suite is a set of operators and an operator is an index into
+       this context's table, so what was registered in another context's
+       is not this one's to hand out. Cleared where a context installs
+       its operators, which is the one place a new table appears. */
+    _suite_made[0] = _suite_made[1] = 0;
+
     optab = xpost_operator_table(ctx->gl);
     op = xpost_operator_cons(ctx, "loadrecorddevice", (Xpost_Op_Func)loadrecorddevice, 0); INSTALL;
     op = xpost_operator_cons(ctx, "loadrecorddevicecont", (Xpost_Op_Func)loadrecorddevicecont, 1, dicttype);
@@ -3206,10 +3923,20 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
                              (Xpost_Op_Func)_replaypage_rows, 4,
                              dicttype, dicttype, numbertype, numbertype);
     INSTALL;
-    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 6,
-                             dicttype, dicttype, integertype,
-                             numbertype, numbertype, integertype);
+    op = xpost_operator_cons(ctx, ".replaystep", (Xpost_Op_Func)_replay_step, 2,
+                             dicttype, dicttype);
     _replay_step_opcode = op.mark_.padw;
+    op = xpost_operator_cons(ctx, ".replayplace", (Xpost_Op_Func)_replayplace,
+                             4, dicttype, dicttype, numbertype, numbertype);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".newformrecord",
+                             (Xpost_Op_Func)_newformrecord, 3,
+                             integertype, integertype, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordbox", (Xpost_Op_Func)_recordbox, 1,
+                             dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordplaces",
+                             (Xpost_Op_Func)_recordplaces, 1,
+                             dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordcost", (Xpost_Op_Func)_recordcost, 1,
                              dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordplays", (Xpost_Op_Func)_recordplays,

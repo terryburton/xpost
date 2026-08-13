@@ -116,6 +116,7 @@ record test band-*
 record test record
 record test record-*
 record test form-band
+record test form-nest
 record test region-replay
 record test reloc-fused
 record test sparse-rows

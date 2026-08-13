@@ -1162,6 +1162,28 @@ int _fillpolyargs(Xpost_Context *ctx)
     return 0;
 }
 
+/* How many times the question below has been answered no: the clip may
+   cut what is about to be painted, so what reaches the device is the
+   shape resolved against the region rather than the shape.
+ *
+ * It is counted because a caller keeping marks to paint again elsewhere
+ * has to know whether they were resolved: a shape cut to a region is
+ * resolved into whole pixel rows, and rows carried a fraction of a pixel
+ * are not the rows the shape covers there. A count rather than a flag,
+ * so that a caller reads it before and after the painting it is asking
+ * about and no one has to clear it.
+ */
+static unsigned int _clipcuts;
+
+/* -  .clipcuts  int
+   How many paintings so far may have been cut by a clip region. */
+static
+int _clipcutsop(Xpost_Context *ctx)
+{
+    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons((integer)_clipcuts));
+    return 0;
+}
+
 /* clip trivial-accept test.
    Push true when the clip region is an axis-aligned rectangle and the
    current path lies entirely inside it: clipping the path against such
@@ -1204,6 +1226,8 @@ int _cliptrivial(Xpost_Context *ctx)
                   pminy >= cminy && pmaxy <= cmaxy);
     }
 
+    if (!accept)
+        _clipcuts++;
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(accept));
     return 0;
 }
@@ -2213,6 +2237,8 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".cliprect", (Xpost_Op_Func)_cliprect, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".pathisrect", (Xpost_Op_Func)_pathisrect, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".clipcuts", (Xpost_Op_Func)_clipcutsop, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".cliptrivial", (Xpost_Op_Func)_cliptrivial, 0);
     INSTALL;
