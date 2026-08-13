@@ -213,8 +213,10 @@ setglobal
     %
     % It is not a page-device parameter and must not become one. PLRM
     % Appendix G declares the band-device setup operators obsolete and
-    % bars them from page descriptions, so a program may neither tell how
-    % many times its marks were played nor choose it.
+    % bars them from page descriptions, so a program may not choose how
+    % its marks are held. Being told what happened is the other thing:
+    % currentsystemparams reports the band a page was held in and there
+    % is no way to write it back.
     /.bandbytes 1048576
 
     % IMAGE  .playpage  -
