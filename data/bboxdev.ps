@@ -13,6 +13,10 @@
 % clear must not contribute to the box, so the device carries an Erase no-op
 % and erasepage never reaches the marking methods.
 %
+% A method runs its body with the device dictionary current, and opens it
+% through the bracket that takes it off again however the body ends, error
+% included (.indict, graphics.ps).
+%
 % Glyphs need no rasterization here -- whose cost grows with the square of
 % the resolution -- so the device declares /GlyphExtents: each glyph
 % contributes its ink box through FillRect instead.
@@ -26,16 +30,16 @@
     /.copydict //.xpostsys /.classcopydict get
 
     /Create { % width height IMAGE  .  IMAGE'
-        begin {/height /width}{exch def}forall
-        currentdict end
+        { {/height /width}{exch def}forall
+        currentdict } //.xpostsys /.indict get exec
         dup /.copydict get exec
-        begin
+        {
             /minx 1e30 def   % empty box: min > max
             /miny 1e30 def
             /maxx -1e30 def
             /maxy -1e30 def
         currentdict
-        end
+        } //.xpostsys /.indict get exec
     }
 
     /Destroy { % IMAGE  .  -
@@ -62,9 +66,9 @@
     }
 
     /PutPix { % val x y IMAGE  .  -
-        begin
+        {
             3 -1 roll .opaque { .maxmin }{ pop pop } ifelse
-        end
+        } //.xpostsys /.indict get exec
     }
 
     /GetPix { % x y IMAGE  .  val
@@ -72,21 +76,21 @@
     }
 
     /DrawLine { % val x1 y1 x2 y2 IMAGE  .  -
-        begin {y2 x2 y1 x1 val}{exch def}forall
+        { {y2 x2 y1 x1 val}{exch def}forall
             val .opaque {
                 x1 y1 .maxmin
                 x2 y2 .maxmin
             } if
-        end
+        } //.xpostsys /.indict get exec
     }
 
     /DrawRect { % val x y w h IMAGE  .  -
-        begin {h w y x val}{exch def}forall
+        { {h w y x val}{exch def}forall
             val .opaque {
                 x y .maxmin
                 x w add  y h add  .maxmin
             } if
-        end
+        } //.xpostsys /.indict get exec
     }
 
     % the page clear (erasepage) is not a mark
@@ -95,16 +99,16 @@
     }
 
     /FillRect { % val x y w h IMAGE  .  -
-        begin {h w y x val}{exch def}forall
+        { {h w y x val}{exch def}forall
             val .opaque {
                 x y .maxmin
                 x w add  y h add  .maxmin
             } if
-        end
+        } //.xpostsys /.indict get exec
     }
 
     /FillPoly { % val polygon IMAGE  .  -
-        begin
+        {
             exch .opaque {
                 {
                     dup type /arraytype eq {
@@ -114,11 +118,11 @@
             }{
                 pop
             } ifelse
-        end
+        } //.xpostsys /.indict get exec
     }
 
     /Emit { % IMAGE  .  -
-        begin
+        {
             minx maxx gt {  % nothing was marked
                 (%%BoundingBox: 0 0 0 0\n) print
                 (%%HiResBoundingBox: 0 0 0 0\n) print
@@ -144,7 +148,7 @@
                 uxmax 30 string cvs print ( ) print
                 uymax 30 string cvs print (\n) print
             } ifelse
-        end
+        } //.xpostsys /.indict get exec
     }
 >> def
 
