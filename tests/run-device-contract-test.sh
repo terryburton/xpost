@@ -36,6 +36,16 @@ script=$2
 NO_READBACK='null bbox pdfwrite svgwrite record'
 readback=
 
+# Of those, the ones that answer a read with the page's ground rather
+# than refusing it: the recording device, which holds the marks and not
+# the pixels. That is a behaviour of its own and is asserted rather than
+# excused -- a device that had begun answering the ink, or nothing,
+# would otherwise read exactly like one legitimately quiet. The test
+# reports GROUNDBACK where it made those assertions and the runs are
+# held to this list.
+GROUND_READBACK='record'
+groundback=
+
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
 else
@@ -47,7 +57,13 @@ devices=$DEVICE_FLEET_MARKING
 fail=0
 
 for dev in $devices; do
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    # The device holding the whole page, asked for as the mode that says
+    # so. The behaviour tier asserts what a marking method painted by
+    # reading the pixel back, and selecting a device by name selects the
+    # record in front of it, which holds no pixel to read. What a record
+    # does answer is asserted of it below.
+    out=$("$xpost" -q $ns -d "$(fleet_whole "$dev")" -o "$work/out.$dev" \
+          "$script" </dev/null 2>&1)
     st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
@@ -59,6 +75,9 @@ for dev in $devices; do
     fi
     if printf '%s\n' "$out" | grep -q '^READBACK$'; then
         readback="$readback $dev"
+    fi
+    if printf '%s\n' "$out" | tr -s '-' '\n' | grep -q '^GROUNDBACK$'; then
+        groundback="$groundback $dev"
     fi
     if verdict_ok "$out" "$dev"; then
         echo "OK   $dev"
@@ -100,6 +119,43 @@ else
     echo "SKIP xcb (no xvfb-run)"
 fi
 
+# The same contract on the route a selection takes without asking for
+# one. The roster above asked for each device with the mode that holds
+# the page whole, because that is where a pixel can be read back; a
+# selection naming the device alone reaches it through the record, and
+# that is what an ordinary run gets. Without this the route most runs
+# take would be the one never asked.
+#
+# Such a run is held to the record's contract rather than the painter's:
+# it keeps the marks a page made and not the pixels they cover, so it
+# answers a read with the ground, which the test reports as GROUNDBACK.
+for dev in $DEVICE_FLEET_BANDS; do
+    out=$("$xpost" -q $ns -d "$dev" -o "$work/band.$dev" "$script" \
+          </dev/null 2>&1)
+    st=$?
+    case "$out" in
+        *"wrong device"*) echo "SKIP $dev banded (not built in)"; continue ;;
+    esac
+    if [ "$st" -ne 0 ]; then
+        echo "FAIL $dev banded: the interpreter exited with status $st"
+        fail=1
+        continue
+    fi
+    if printf '%s\n' "$out" | tr -s '-' '\n' | grep -q '^GROUNDBACK$'; then
+        if verdict_ok "$out" "$dev banded"; then
+            echo "OK   $dev banded"
+        else
+            fail=1
+        fi
+    else
+        echo "FAILURES: -d $dev answered a read with something other than the"
+        echo "      page's ground; the route a selection takes without asking"
+        echo "      holds the marks and not the pixels, and what it answers"
+        echo "      there is asserted rather than assumed"
+        fail=1
+    fi
+done
+
 rm -rf "$work"
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a device rejected a boundary input"
@@ -137,5 +193,20 @@ if [ "$want" != "$got" ]; then
     done
     exit 1
 fi
-echo "SUCCESS ($(printf '%s' "$readback" | wc -w) devices witnessed the behaviour tier)"
+
+# And the ones that answered with the ground, held the same way round: a
+# device excused the tier above for holding no pixel has to have said so
+# by answering, and one that stopped answering has stopped being
+# asserted about.
+gwant=$(printf '%s\n' $GROUND_READBACK | grep . | sort | tr '\n' ' ')
+ggot=$(printf '%s\n' $groundback | grep . | sort | tr '\n' ' ')
+if [ "$gwant" != "$ggot" ]; then
+    echo "FAILURES: the devices answering a read with the page's ground are"
+    echo "      [$ggot], and the ones named here as doing so are [$gwant]"
+    exit 1
+fi
+
+echo "SUCCESS ($(printf '%s' "$readback" | wc -w) devices witnessed the behaviour"
+echo "      tier, $(printf '%s' "$groundback" | wc -w) the ground it is excused for,"
+echo "      and $(printf '%s' "$DEVICE_FLEET_BANDS" | wc -w) the route a selection takes without asking)"
 exit 0

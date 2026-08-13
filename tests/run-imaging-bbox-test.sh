@@ -135,9 +135,17 @@ done
 one_device() {
     dev=$1
     d_fail=0
+    # The device holding the whole page, asked for as the mode that says
+    # so. What the box buys is the rows a device does not hold, and a
+    # device already holding a band of the page holds fewer of them than
+    # any box would leave it: selecting a device by name selects the
+    # record in front of it, and none of the roster would be left
+    # reading a page a row at a time. The record answers for itself as a
+    # member of the roster.
+    d_sel=$(fleet_whole "$dev")
 
     # 1. what the program observes
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/probe.$dev" "$script" \
+    out=$("$xpost" -q $ns -d "$d_sel" -o "$work/probe.$dev" "$script" \
           </dev/null 2>&1)
     st=$?
     case "$out" in
@@ -163,10 +171,10 @@ one_device() {
     wrote=no
     for case in $CASES; do
         rm -f "$work/h-$case.$dev" "$work/p-$case.$dev"
-        out=$("$xpost" -q $ns -d "$dev" -o "$work/h-$case.$dev" \
+        out=$("$xpost" -q $ns -d "$d_sel" -o "$work/h-$case.$dev" \
               "$work/hinted-$case.ps" </dev/null 2>&1)
         verdict_run "$?" "$out" "the hinted $case page on $dev" || d_fail=1
-        out=$("$xpost" -q $ns -d "$dev" -o "$work/p-$case.$dev" \
+        out=$("$xpost" -q $ns -d "$d_sel" -o "$work/p-$case.$dev" \
               "$work/plain-$case.ps" </dev/null 2>&1)
         verdict_run "$?" "$out" "the unhinted $case page on $dev" || d_fail=1
 

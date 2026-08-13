@@ -167,6 +167,30 @@ dev /GetPix known {
     } for
 } def
 
+% A read, and the comparison of two of them. Both tiers below read
+% pixels: one asserts what a marking method left on the raster, the
+% other that a device holding no raster answers the ground.
+%
+% A read that refuses answers no components rather than ending the run,
+% so that which read a device refuses is the diagnosis.
+/readpix { % x y  .  [c1..cN] or [ ]
+    % the depth the read is handed, taken before the name of the place
+    % it is kept is pushed, so a read that fails is unwound to where it
+    % started whatever it left behind
+    count 2 sub /rp.depth exch def
+    { getpix ncomp array astore } stopped {
+        count rp.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
+        [ ]
+    } if
+} def
+/eqpix { % [a] [b]  .  bool
+    2 copy length exch length eq {
+        true 0 1 3 index length 1 sub {
+            3 index 1 index get 3 index 3 -1 roll get eq and
+        } for 3 1 roll pop pop
+    }{ pop pop false } ifelse
+} def
+
 /readable false def
 dev /GetPix known dev /PutPix known and {
     /rb.depth count def
@@ -209,24 +233,9 @@ readable {
     %
     % A read that refuses answers no components, and every check below
     % reports for itself rather than ending the run on the first of
-    % them: which read a device refuses is the diagnosis.
-    /readpix { % x y  .  [c1..cN] or [ ]
-        % the depth the read is handed, taken before the name of the
-        % place it is kept is pushed, so a read that fails is unwound to
-        % where it started whatever it left behind
-        count 2 sub /rp.depth exch def
-        { getpix ncomp array astore } stopped {
-            count rp.depth sub dup 0 gt { { pop } repeat }{ pop } ifelse
-            [ ]
-        } if
-    } def
-    /eqpix { % [a] [b]  .  bool
-        2 copy length exch length eq {
-            true 0 1 3 index length 1 sub {
-                3 index 1 index get 3 index 3 -1 roll get eq and
-            } for 3 1 roll pop pop
-        }{ pop pop false } ifelse
-    } def
+    % them: which read a device refuses is the diagnosis. readpix and
+    % eqpix are defined above, because the tier after this one reads
+    % pixels too.
 
     % the cell the device tiles the plane with, and a pixel of the page
     % with the positions a whole number of cells before and past it
@@ -433,6 +442,79 @@ readable {
         160 100 12 12 clear4
         white [ [166 106] [166 106] [166 106] ] fillpoly
         166 106 white? not (a polygon of one point marks nothing) assert
+    } if
+} if
+
+% --- what a device that retains marks answers a read -----------------
+%
+% The tier above needs a device that holds pixels. A device that keeps
+% the marks a page made rather than the pixels they cover holds none,
+% and the contract has such a device answer a read with the page's
+% ground -- the colour erasepage left -- wherever it holds no pixel,
+% which for this one is everywhere. That is an answer and not a refusal,
+% and it is the same answer after a mark as before it, because the mark
+% went into the record rather than onto a raster.
+%
+% So the device is not merely excused the tier above: what it does
+% answer is asserted here. A device that began answering something else
+% -- the ink it was handed, or nothing at all -- would otherwise read
+% exactly like one that had gone quiet for a reason.
+%
+% Which kind of device is in hand is asked of the interpreter rather
+% than read off a method the device happens to carry. The smallest band
+% there is is asked for and currentsystemparams is read back: a device
+% that paints holds its page whole whatever budget is set on it, and one
+% playing a record into a painter holds it in bands. The budget is put
+% back afterwards, so the asking changes nothing.
+/retains? {
+    2 dict begin
+    /rt.had dev /.bandbytes known def
+    /rt.was rt.had { dev /.bandbytes get }{ 0 } ifelse def
+    dev /.bandbytes 1 put
+    currentsystemparams /CurBandHeight get 0 gt
+    rt.had { dev /.bandbytes rt.was put }
+           { dev /.bandbytes undef } ifelse
+    end
+} def
+
+retains? {
+    (GROUNDBACK\n) print
+    dev /GetPix known (a device retaining marks answers a read) assert
+    dev /GetPix known {
+        erasepage
+        /rt.page 4 4 readpix def
+        rt.page length ncomp eq
+            (a device retaining marks answers every component) assert
+
+        % off the page and on it read alike: the device holds no pixel
+        % of either, so both are the ground
+        /rt.off -8 -8 readpix def
+        rt.page rt.off eqpix
+            (a pixel off the page reads as one on it) assert
+
+        % and a mark changes neither. The mark is made through every
+        % method the device carries, because a device answering the ink
+        % for one of them and the ground for the rest would pass a check
+        % that asked about one.
+        black 4 4 putpix
+        dev /FillRect known { black 4 4 8 8 fillrect } if
+        dev /DrawLine known { black 4 4 12 12 drawline } if
+        /rt.marked 4 4 readpix def
+        rt.page rt.marked eqpix
+            (a mark leaves a retained page reading as the ground) assert
+
+        % the ground it answers is the one the page was cleared to, not
+        % a value the device carries: cleared through a transfer
+        % function that is not the identity, a device answering white
+        % regardless is caught
+        gsave { 0.35 mul 0.2 add } settransfer erasepage grestore
+        /rt.other 4 4 readpix def
+        rt.other length ncomp eq
+            (a retained page cleared through a transfer function reads)
+            assert
+        rt.other rt.page eqpix not
+            (the ground a retained page answers is the one it was cleared to)
+            assert
     } if
 } if
 

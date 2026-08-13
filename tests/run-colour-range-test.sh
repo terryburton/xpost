@@ -35,7 +35,14 @@ devices=$DEVICE_FLEET_MARKING
 fail=0
 
 for dev in $devices; do
-    out=$("$xpost" -q $ns -d "$dev" -o "$work/out.$dev" "$script" </dev/null 2>&1)
+    # The device holding the whole page, asked for as the mode that says
+    # so. The coverage tier reads back what BlendPix left, and selecting
+    # a device by name selects the record in front of it, which keeps
+    # the marks a page made rather than the pixels they cover and
+    # answers a read with the ground. The record answers for itself as a
+    # member of the roster below.
+    out=$("$xpost" -q $ns -d "$(fleet_whole "$dev")" -o "$work/out.$dev" \
+          "$script" </dev/null 2>&1)
     st=$?
     case "$out" in
         *"wrong device"*) echo "SKIP $dev (not built in)"; continue ;;
