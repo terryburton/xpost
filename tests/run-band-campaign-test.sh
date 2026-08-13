@@ -883,16 +883,24 @@ else
 fi
 
 # $1 selection, $2 directory, $3 page height, $4 band; sets memvm, memrss
+#
+# The selection is spelled the way the rest of this file spells one: the
+# route is weighed at the page a device is made at, and the pages here
+# are the tall ones, so a device named without a mode is a device this
+# arm would find a record in front of at exactly the heights it is
+# weighing. The whole-page spelling is what says which of the two routes
+# this cell is, which is what the comparison below is between.
 weigh() {
+    w_sel=$(whole "$1")
     w_dir=$work/mem-$2
     rm -rf "$w_dir"; mkdir -p "$w_dir"
     if [ "$havetime" = yes ]; then
         ( cd "$w_dir" && /usr/bin/time -f '%M' -o rss.txt \
-          "$xpost" -q $ns -d "$1" -o /dev/null -DW=$MEMW \
+          "$xpost" -q $ns -d "$w_sel" -o /dev/null -DW=$MEMW \
           -DMEMH="$3" -DMEMB="$4" $sabarg "$script" </dev/null ) \
           >"$w_dir/run.log" 2>&1
     else
-        ( cd "$w_dir" && "$xpost" -q $ns -d "$1" -o /dev/null -DW=$MEMW \
+        ( cd "$w_dir" && "$xpost" -q $ns -d "$w_sel" -o /dev/null -DW=$MEMW \
           -DMEMH="$3" -DMEMB="$4" $sabarg "$script" </dev/null ) \
           >"$w_dir/run.log" 2>&1
     fi
