@@ -64,25 +64,6 @@ path_anchor() {
     esac
 }
 
-# Anchor a path so that it names the same thing from anywhere.
-#
-# A wrapper that starts its runs in a directory of its own has to do this
-# to everything it was handed, because what it was handed is relative to
-# where the wrapper itself was started. What counts as already anchored
-# is not a leading slash alone: a host whose names carry the volume they
-# are on writes them as C:/dir, which is relative to nothing, and putting
-# the current directory in front of one produces a name for nowhere.
-#
-# Stated once because it is the same question in every wrapper, and one
-# wrapper answering it differently is one platform's worth of runs
-# looking for their arguments in a place that does not exist.
-path_anchor() {
-    case $1 in
-        /* | ?:[/\\]*) printf '%s\n' "$1" ;;
-        *)             printf '%s/%s\n' "$PWD" "$1" ;;
-    esac
-}
-
 # Whether the peak resident size of a run of the program under test can
 # be read on this machine.
 #
@@ -132,6 +113,17 @@ peak_rss_reads() {  # $1 the program under test
     # Eight mebibytes tells the two apart with room to spare in both.
     [ $((_pr_big - _pr_small)) -ge 8000 ]
 }
+
+# Not everything a run is handed is a path. A -Dname=/token argument
+# names something inside the interpreter, and one host's shell runtime
+# rewrites arguments that look like paths on their way into a program it
+# did not itself build: /token arrives volume-qualified, and the run
+# executes it and stops on a name it has never heard of. Arguments
+# carrying a token are excluded from that rewriting here, once, for every
+# wrapper; paths are left to be converted as they must be. The variable
+# means nothing to hosts that do no such rewriting.
+MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+$MSYS2_ARG_CONV_EXCL;}-D"
+export MSYS2_ARG_CONV_EXCL
 
 # What a run prints to report a failure. Every spelling the suite uses
 # starts with one of these: FAIL, FAILURE, FAILURES, MISMATCH.
