@@ -75,13 +75,47 @@ trap 'rm -rf "$work"' EXIT
 # ground and nothing but the ground.
 devices="$DEVICE_FLEET_MARKING xcb"
 
-# The members that cannot answer, with the reason each cannot. null
-# paints nothing and bbox records a page's extent rather than its pixels,
-# so neither has a page to clear; the vector writers keep a document
-# rather than a raster and answer a read with a fixed value; and the
-# alpha device clears its page to transparent rather than to a colour, so
-# what it was cleared to is not a colour a read can report.
-NO_GROUND='null bbox pdfwrite svgwrite pngalpha'
+# The members that cannot answer.
+#
+# A device with a page to clear declares how to clear it, under /Ground;
+# one with no page to clear declares nothing. So which devices those are
+# is asked of the interpreter rather than written down here: null paints
+# nothing and bbox records a page's extent rather than its pixels, so
+# neither has a page to clear, and the vector writers keep a document
+# rather than a raster and answer a read with a fixed value. All four
+# are silent about /Ground, and the question below is what finds them.
+#
+# The alpha device is the one that has to be named, and it is named with
+# its reason: it does declare a ground, and clears its page to
+# transparent rather than to a colour, so what it was cleared to is not
+# a colour a read can report. A device that stopped clearing to
+# transparent would start answering, and fleet_hold_unasked at the end
+# is what would say so.
+{
+    echo "["
+    for d in $devices; do
+        case $d in xcb) continue ;; esac
+        printf '/%s\n' "$d"
+    done
+    cat <<'PSEOF'
+]
+{ /D exch def
+  { << /OutputDevice D /PageSize [ 8 8 ] >> setpagedevice } stopped
+  { pop }
+  { DEVICE /Ground known not { D 60 string cvs print ( ) print } if }
+  ifelse
+} forall
+PSEOF
+} > "$work/noground.ps"
+NO_GROUND=$("$xpost" -q $ns -d null -o "$work/noground.out" \
+            "$work/noground.ps" </dev/null 2>/dev/null || :)
+if [ -z "$NO_GROUND" ]; then
+    echo "FAILURES: no device came back from the question of which of them"
+    echo "      has a page to clear, and four of the roster have none."
+    echo "      The question is being asked wrong."
+    exit 1
+fi
+NO_GROUND="$NO_GROUND pngalpha"
 
 # What this interpreter was built with. A device needing a library the
 # build did not find is absent, and is named below rather than quietly
