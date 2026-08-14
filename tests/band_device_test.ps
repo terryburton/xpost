@@ -152,8 +152,17 @@ banding {
     % one mark and not as one per inked pixel, so a page carrying text at
     % a single height holds too few marks for what a band was played to
     % be told from what the page holds.
+    %
+    % Grey rather than black, and painted with the device asked for more
+    % bits of a glyph's edge coverage than a bilevel one takes
+    % (transmit, below). A device that shows a grey as a pattern of
+    % pixels is sent whole pixels whatever the number says, and what
+    % decides that is an entry on the device the marks are written down
+    % against -- so a record that did not carry it would be sent blends
+    % here and would play a coverage into a pixel that cannot hold one.
+    % Black text at whole pixels reaches neither decision.
     gsave
-        0 setgray
+        0.55 setgray
         /Times-Roman findfont 20 scalefont setfont
         [ 0.10 0.30 0.50 0.68 0.86 ] {
             16 exch ph mul moveto (Bands) show
@@ -192,7 +201,11 @@ banding {
     /tr.file exch store
     /tr.rows exch store
     /tr.h exch store
-    << /PageSize [W tr.h] /OutputFile tr.file >> setpagedevice
+    % More bits of a glyph's edge coverage than a bilevel page can hold,
+    % asked of every route alike: a run may name any number it likes and
+    % what it reaches is settled by the device the marks are made for.
+    % The two routes are held to reaching the same one.
+    << /PageSize [W tr.h] /OutputFile tr.file /TextAlphaBits 4 >> setpagedevice
     % the device this page goes to, named while it is the current one:
     % the row writer wrapped above reads the record through it, and by
     % then the page machinery has moved on
