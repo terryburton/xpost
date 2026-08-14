@@ -1960,6 +1960,18 @@ test('font-private',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Nothing retires a font, so a face is given back by the release the
+# collector runs over the block a font dictionary's handle named. A face
+# is shared where a device's raster is not -- the name cache keeps the
+# one findfont opened, and every copy of a dictionary carries the same
+# handle -- so what that release may reach is held to pages: a
+# dictionary that survives a collection draws what it drew before it.
+test('font-face-release',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_face_release_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The glyph cache is keyed by the serial a font dictionary carries, and
 # that dictionary is the program's to write: a serial that is not an
 # integer, or one whose pair with the character code leaves the integer

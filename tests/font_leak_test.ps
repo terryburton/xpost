@@ -82,10 +82,11 @@
 } for
 
 % ---- one name defined over and over ----
-% Each definefont past the first replaces the face under that name, and the
-% face it replaces takes its program with it. Only the last of these is
-% still held at the end; the rest go as they are replaced, or a program
-% that redefines a font grows without bound.
+% Each definefont past the first builds a dictionary of its own and opens a
+% face over a program of its own, and the dictionary the name held before is
+% then named by nothing. Only the last of these is still held at the end;
+% the rest go with the dictionaries they belonged to, as the collector
+% reaches them, or a program that redefines a font grows without bound.
 1 1 24 {
     pop
     mark

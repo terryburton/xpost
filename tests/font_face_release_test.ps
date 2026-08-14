@@ -1,0 +1,166 @@
+%!
+% What happens to a face when the font dictionary naming it goes. Run
+% through `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints
+% SUCCESS iff every assertion holds.
+%
+% A face is FreeType state held outside virtual memory, reached through a
+% handle the font dictionary carries under /Private. Nothing retires a
+% font: the dictionary is ordinary virtual memory and goes when nothing
+% names it, so what gives the face back is the release the collector runs
+% over the block the handle named.
+%
+% Which faces that release may give back is the whole of what is asserted
+% here, because a face is shared in ways a device's raster is not:
+%
+%   findfont opens a face by name and the name cache keeps it. Every
+%   dictionary that name produces names that one face, and the cache
+%   still names it after the last of them has gone.
+%
+%   A font dictionary is copied -- scalefont and makefont copy one, and a
+%   re-encoded copy shares its parent's face -- and a copy carries the
+%   same handle, so the block outlives whichever of them goes first.
+%
+%   A font dictionary carrying a program of its own -- an embedded Type 1
+%   font, a Type 42's sfnts, a CID font -- has a face opened for it
+%   alone, which is the block's to give back.
+%
+% None of that is visible from PostScript: a program cannot count faces,
+% and a face given back too early is not an error but a page drawn
+% through freed memory. So the assertions are pages. A dictionary that
+% survives a collection draws what it drew before the collection, and
+% every drawing here is held against a render taken before anything was
+% dropped. A release reaching a face something still names shows up as a
+% page that changed, or as a run that does not reach the end.
+
+/faildict 1 dict def
+faildict /n 0 put
+/require { % bool (label)  .  -
+    exch { (ok   ) print print (\n) print }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- a page to mark -----------------------------------------------------
+
+/id 1183615869 internaldict def
+/DEV 120 40 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 40 ] def
+    /FillPoly id /.fillpoly get def
+    /FillRect id /.fillrectgray get def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+
+/blank { initgraphics erasepage 0 setgray } bind def
+/snap { [ DEV /ImgData get { dup length string copy } forall ] } bind def
+/ink { 0 DEV /ImgData get { { 128 lt { 1 add } if } forall } forall } bind def
+/samepage { % snap snap  .  bool
+    2 dict begin
+    /q exch def /p exch def
+    /ok p length q length eq def
+    ok { 0 1 p length 1 sub { dup p exch get exch q exch get ne
+                              { /ok false def } if } for } if
+    ok
+    end
+} bind def
+
+% draw the same text with the font on the operand stack, and answer the
+% page it made
+/render { % font  .  snap
+    blank
+    18 scalefont setfont
+    6 12 moveto (Hg) show
+    snap
+} bind def
+
+% --- the page every later one is held to --------------------------------
+
+/Base /Times-Roman findfont def
+/Control Base render def
+Control ink 0 gt (the control render marks the page) require
+
+% --- a face the name cache holds --------------------------------------
+
+% three dictionaries from one name, naming one face
+/Keep /Times-Roman findfont def
+/Times-Roman findfont pop
+/Times-Roman findfont pop
+1 vmreclaim
+1 vmreclaim
+
+Keep render Control samepage
+    (a kept dictionary draws what it drew before) require
+/Times-Roman findfont render Control samepage
+    (the name still resolves to a working face) require
+
+% --- a copy outliving the dictionary it was copied from -----------------
+
+% scalefont copies the dictionary, and the copy carries the same handle
+/Copy Base 1 scalefont def
+/Base null def
+1 vmreclaim
+1 vmreclaim
+Copy render Control samepage
+    (a copy draws after the dictionary it came from is gone) require
+
+% a re-encoded copy defined under a name of its own shares the face
+/Reenc Keep dup length dict copy def
+Reenc /Encoding Keep /Encoding get dup length array copy put
+/FaceReleaseReenc Reenc definefont pop
+/Keep null def
+1 vmreclaim
+1 vmreclaim
+/FaceReleaseReenc findfont render Control samepage
+    (a re-encoded copy draws after its parent is gone) require
+
+% --- faces opened for one dictionary alone ------------------------------
+
+% An embedded Type 1 font: every definefont writes the dictionary back
+% out as a font program and opens a face over it, so each of these is a
+% face of its own, named by that dictionary and nothing else. They are
+% loaded, dropped and collected in bulk; the face the name cache holds is
+% not among them, and the page drawn through it afterwards says so.
+/mkfont { % -  .  fontdict
+    10 dict dup begin
+        /FontType 1 def
+        /FontMatrix [0.001 0 0 0.001 0 0] def
+        /FontBBox [0 0 700 700] def
+        /Encoding 256 array def
+        0 1 255 { Encoding exch /.notdef put } for
+        Encoding 65 /A put
+        /CharStrings 3 dict def
+        CharStrings /.notdef <10bf317079bb21e4> put
+        CharStrings /A <10bf317079bb21e4> put
+        /Private 4 dict def
+        Private /lenIV 4 put
+        Private /Subrs 6 array put
+        Private /Subrs get 0 <10bf3170f9> put
+    end
+} bind def
+
+/loaded 0 def
+1 1 24 {
+    pop
+    mark
+    { mkfont /FaceReleaseOwn exch definefont pop
+      /FaceReleaseOwn undefinefont
+      /loaded loaded 1 add store } stopped
+    { (FAIL: a font would not load\n) print
+      faildict /n 2 copy get 1 add put } if
+    cleartomark
+    1 vmreclaim
+} for
+loaded 24 eq (every font of its own loaded) require
+
+/Times-Roman findfont render Control samepage
+    (the cached face survives the faces given back around it) require
+
+% the copy taken before all of that still draws, so the collection that
+% gave those faces back did not reach the one it names
+Copy render Control samepage
+    (a face named by a live copy survives the collections) require
+
+faildict /n get 0 eq { (SUCCESS\n) print } if
+flush

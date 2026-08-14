@@ -45,7 +45,7 @@
  * memory, which is not part of VM (PLRM 3.7.3), so a `restore` reaches
  * neither a page's pixels nor a writer's accumulated content. A font's
  * is: it names the face the font program was opened as, which the font
- * machinery holds for the process. A file's is: it names the stream the
+ * machinery holds outside it. A file's is: it names the stream the
  * file layer reaches its bytes through, along with the coding state and
  * buffers a filter keeps. What virtual memory holds is a handle on the
  * block rather than the block itself.

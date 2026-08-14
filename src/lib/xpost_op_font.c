@@ -73,15 +73,38 @@
  */
 
 /* What a font dictionary's /Private names: the face its font program
-   was opened as. The face is held for the process, outside virtual
-   memory, so what the dictionary carries under that key is a handle on
-   the block holding it rather than the block itself -- a font
-   dictionary is an ordinary dictionary and what it holds under any key
-   is whatever was last stored there. */
+   was opened as. The face is held outside virtual memory, so what the
+   dictionary carries under that key is a handle on the block holding it
+   rather than the block itself -- a font dictionary is an ordinary
+   dictionary and what it holds under any key is whatever was last
+   stored there.
+
+   Whether the face is the block's says who gives it up. A face opened
+   for one dictionary -- the program a Type 42, Type 1 or CID font
+   dictionary carries, assembled and opened here -- is named by that
+   block alone and goes with it. A face findfont opened by name is the
+   name cache's: the cache hands the same face to every dictionary that
+   name produces, and holds it after the last of them has gone. */
 typedef struct fontdata
 {
     void *face;
+    int own;
 } fontdata;
+
+/* Give up the face the block holds, where the face is the block's.
+   Called from the collector with the block, so it touches nothing in
+   virtual memory: what it reaches is the face and what the font
+   machinery holds against it. A block whose face belongs to the name
+   cache, and one already given up, leave this nothing to do. */
+static void _reclaim(void *block)
+{
+    fontdata *fd = block;
+
+    if (fd->own)
+        xpost_font_face_free(fd->face);
+    fd->face = NULL;
+    fd->own = 0;
+}
 
 /* The block a font dictionary's /Private names, or NULL where the value
    there is not a handle on one. A font dictionary is copied --
@@ -96,14 +119,22 @@ static XPOST_NOINLINE fontdata *_font_data(Xpost_Context *ctx,
                XPOST_HANDLE_FONT, sizeof(fontdata));
 }
 
-/* Give a font dictionary a face, releasing the face it holds. The
-   dictionary keeps the block it was issued, so the copies of it sharing
-   that face reach the new one; a dictionary holding a handle issued
-   elsewhere is issued one of its own and leaves the other face to the
-   dictionary it belongs to. */
+/* Give a font dictionary a face, saying whether the face is the
+   dictionary's to give up, and releasing the face it holds where that
+   one was. The dictionary keeps the block it was issued, so the copies
+   of it sharing that face reach the new one; a dictionary holding a
+   handle issued elsewhere is issued one of its own and leaves the other
+   face to the dictionary it belongs to.
+
+   A block issued here is issued with the release the collector runs
+   when it reclaims a block nothing told anyone to give up, which is the
+   arrangement every other class holding memory out there makes. Nothing
+   retires a font: a font dictionary is ordinary virtual memory and goes
+   when nothing names it. */
 static int _font_data_set(Xpost_Context *ctx,
                           Xpost_Object fontdict,
-                          void *face)
+                          void *face,
+                          int own)
 {
     Xpost_Object key = xpost_name_cons(ctx, "Private");
     Xpost_Object anchor;
@@ -123,10 +154,13 @@ static int _font_data_set(Xpost_Context *ctx,
                                             sizeof(fontdata));
         if (!fd)
             return VMerror;
+        (void)xpost_handle_reclaim_set(ctx, anchor, XPOST_HANDLE_FONT,
+                                       sizeof(fontdata), _reclaim);
     }
-    else if (fd->face)
+    else if (fd->own)
         xpost_font_face_free(fd->face);
     fd->face = face;
+    fd->own = own;
     return 0;
 }
 
@@ -919,6 +953,7 @@ int _findfont(Xpost_Context *ctx,
     Xpost_Object sfnts_obj = null;
     int istt = 0;
     int cffreal = 0;
+    int uncached = 0;
     int ret;
 
     if (xpost_object_get_type(fontname) == nametype)
@@ -969,6 +1004,7 @@ int _findfont(Xpost_Context *ctx,
                 slot = face_cache_n++;
             }
         }
+        uncached = slot < 0;
         if (data.face == NULL){
             free(fname);
             return invalidfont;
@@ -1233,7 +1269,10 @@ have_charstrings: ;
         }
     }
 
-    ret = _font_data_set(ctx, fontdict, data.face);
+    /* a face the cache took is the cache's, and every dictionary this
+       name produces names it; one the cache had no room for is named by
+       this dictionary alone */
+    ret = _font_data_set(ctx, fontdict, data.face, uncached);
     if (ret)
     {
         free(fname);
@@ -1311,7 +1350,7 @@ int _loadfont42(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    ret = _font_data_set(ctx, fontdict, data.face);
+    ret = _font_data_set(ctx, fontdict, data.face, 1);
     if (ret)
         return ret;
     return 0;
@@ -3171,7 +3210,7 @@ int _loadcidfont0(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    ret = _font_data_set(ctx, fontdict, data.face);
+    ret = _font_data_set(ctx, fontdict, data.face, 1);
     if (ret)
         return ret;
     return 0;
@@ -3398,7 +3437,7 @@ int _loadfont1(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    ret = _font_data_set(ctx, fontdict, data.face);
+    ret = _font_data_set(ctx, fontdict, data.face, 1);
     if (ret)
         return ret;
     ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, ".emunits"),
@@ -4073,7 +4112,7 @@ int _loadcidfont2(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    ret = _font_data_set(ctx, fontdict, data.face);
+    ret = _font_data_set(ctx, fontdict, data.face, 1);
     if (ret)
         return ret;
     return 0;
