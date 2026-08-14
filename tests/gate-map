@@ -125,6 +125,7 @@ record test sparse-rows
 record test check-clip-writer
 record test check-page-output
 record test check-device-skeleton
+record test check-device-facts
 record width witness
 
 # ---- device: what a page is painted into and written out as

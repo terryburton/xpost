@@ -1,0 +1,401 @@
+# What every device states, and why any of them states something else.
+#
+# A device says what it is by the entries on its class. The machinery
+# above it reads them and sends it different work accordingly: a device
+# offering a process colour model is moved to it by a page-device
+# request, one asking for a glyph's edge pixels as coverage is sent
+# blends rather than whole pixels, one that renders a grey as a pattern
+# is told which screen is in force. So an entry is a question the family
+# has been asked, and every device answers it -- including the ones
+# whose author never heard it, which answer by inheriting whatever the
+# class they were copied from said.
+#
+# This is the register of those entries. tests/check-device-facts.sh
+# installs every device in a running interpreter, reads its dictionary
+# and holds what it finds to what is written here, in both directions:
+# an entry no line classifies fails, and a line naming an entry no
+# device carries fails. The devices carrying an entry are named and are
+# held to the ones that do.
+#
+# The point of the first direction is that a new mechanism cannot be
+# added quietly. Every mechanism has to show up as something -- a key on
+# a class is what a device fact shows up as -- so enumerating what the
+# devices carry and refusing anything unaccounted for stops the author
+# of the next one here until they say which kind it is. They do not have
+# to remember; they cannot proceed without it.
+#
+# ---- the kinds
+#
+#   question   every device carrying it answers, and the answers are
+#              written down. One answer is the family's; a device
+#              answering otherwise names the file it states its own
+#              answer in and says why, in prose that says what would
+#              make it false. An answer that has come back to the
+#              family's may not keep its reason.
+#
+#   elsewhere  a fact another guard already holds. The line says which,
+#              so that the same fact is not held twice and differently.
+#
+#   open       a fact no guard holds and this does not yet ask as a
+#              family question. The line says why not and what making it
+#              one would cost. This is the register's own residue, kept
+#              where it can be read rather than left as silence.
+#
+#   method     a call the device takes. Which calls a device must offer
+#              is held by tests/check-device-skeleton.sh and the raster
+#              slot completeness beside it; what is held here is which
+#              devices offer each, so a method spreading to a device
+#              that should not have one, or leaving one that should,
+#              fails.
+#
+#   state      what an instance carries while it works. Not a statement
+#              about the device: two devices holding different values
+#              here are not differing about anything.
+#
+#   part       a constant or table the class reads only itself.
+#
+# ---- reading a line
+#
+#   <kind> <entry> <device>...
+#
+# naming every device whose class carries the entry, or `every` for the
+# whole roster. A device this build cannot make states nothing and is
+# left out of both sides rather than counted absent.
+#
+# The recorder is a device that paints nothing: it stands in front of one
+# that does, writes down what it was asked to paint and plays it back.
+# Its answers are its target's, so it is named here only for the entries
+# it carries whatever it stands in front of. The rest are its target's
+# showing through, and the guard holds those to the target directly by
+# making a record over each target in turn.
+
+# ---------------------------------------------------------------------
+# The questions
+
+question .colormodels pdfwrite dscwrite
+    The process colour models a page-device request may move this device
+    to. data/device.ps reads it: a request naming a model this device
+    offers makes that model the device's native space, and the colour
+    pipeline then delivers that model's components to the marking
+    methods. A device that states nothing offers nothing but the space
+    it already has, which is the safe answer -- a request it cannot
+    honour changes nothing rather than sending it components it has no
+    method for.
+    There is no family answer. What a device can offer is what its
+    output can express, and no two of these express the same set by
+    accident: each states its own, and states it where it is, so that a
+    claim made about one device is never made on behalf of another.
+family per-device
+answer pdfwrite set:DeviceCMYK,DeviceRGB,Process data/pdfwrite.ps
+    A PDF content stream names a paint in the space it was set in and
+    carries an operator for each of the three: g and G for grey, rg and
+    RG for rgb, k and K for cmyk. So a press workflow receives pure-K
+    ink as pure K rather than a converted black.
+    This stops being true if the content writer stops emitting one of
+    those operators, or if a reader of the stream is no longer given
+    the space a paint was written in.
+answer dscwrite set:DeviceCMYK,DeviceRGB,Process data/dscwrite.ps
+    The same three, on this device's own ground rather than on the class
+    it copies: its prolog defines g, rg and k over setgray, setrgbcolor
+    and setcmykcolor, so a paint made in any of the three is written in
+    the space it was made in and read back in that space.
+    This stops being true if the prolog stops defining one of them,
+    which would leave the claim standing over an operator no reader is
+    given.
+
+question .groundvaries bgr jpeg pbm pgm png pngalpha ppm raster tiff record
+    Whether the row this device shows over a row of the page it holds no
+    pixel of is the same row whatever the row is. A class storing the
+    colour it is handed shows one row of that colour wherever it shows
+    the ground; one that varies has to fill a row for the row it stands
+    for, and data/image.ps then puts its page out through the walk a
+    band's rows go out through rather than laying one row over every row
+    it does not hold.
+    The family answer is that it does not vary, which is the cheap
+    answer and the one a device holding a whole page of its own never
+    has to think about. Answering otherwise costs a fill per unheld row
+    and is only worth it where the ground genuinely differs down the
+    page.
+family false
+answer pgm false
+answer ppm false
+answer tiff false
+answer raster false
+answer bgr false
+answer png false
+answer pngalpha false
+answer jpeg false
+answer pbm true data/pbmimage.ps
+    This device stores a grey by ranking the pixel against a threshold
+    that the screen in force picks from the pixel's position, and the
+    cell tiles the page. So the ground is one colour and what stands for
+    it at one row is not what stands for it at the next.
+    This stops being true if the device stops screening -- it is the
+    tiling that makes the row depend on which row it is, and a device
+    storing the grey it is handed would show the same row everywhere.
+
+question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
+    How many bits of a glyph's edge coverage this device is sent. Above
+    one, the text machinery (src/lib/xpost_op_font.c) blends a partly
+    covered edge pixel against what the page already holds; at one it
+    sends whole pixels and the edge is hard. A page-device request may
+    name it, so what a class states is the starting point rather than
+    the last word.
+    The family answer is four, which is what a device storing a value
+    per pixel can take. A device answering otherwise is one whose stored
+    pixel cannot hold the intermediate value a blend produces, and
+    sending it blends would have it round each of them and show an edge
+    it never agreed to.
+family 4
+answer pgm 4
+answer ppm 4
+answer tiff 4
+answer raster 4
+answer bgr 4
+answer png 4
+answer pngalpha 4
+answer jpeg 4
+answer pbm 1 data/pbmimage.ps
+    A pixel of this device is one bit. There is no value between the two
+    it can store, so a coverage-weighted blend has nowhere to land: it
+    is thresholded back to one of the two, and which one depends on the
+    screen rather than on the coverage.
+    This stops being true if the device grows a pixel that can hold an
+    intermediate value, which is the same change that would let it show
+    a grey without screening for one.
+
+question ScreenPaint pbm
+    Whether a grey reaches this device as a pattern of pixels rather
+    than as a value. data/gstate.ps reads it: a device declaring it is
+    given the cell built from the current screen and is kept up to date
+    as the screen changes, since the screen a mark was made under is
+    state a marking call does not otherwise carry.
+    There is no family answer. Screening is a property of what a device
+    can store, not a setting, and a device that does not screen is never
+    told of a screen and holds none -- which is the safe answer, since a
+    device holding a cell it never reads would be carrying page state
+    that nothing keeps right.
+family per-device
+answer pbm true data/pbmimage.ps
+    Every grey painted on this device screens through the halftone in
+    force: the cell ranks the pixels it tiles, and a grey whitens the
+    pixel it covers where it reaches the threshold under that pixel.
+    This stops being true if the device grows a pixel that can store a
+    grey directly, at which point the screen would be a choice about
+    rendering rather than the only way it can show one.
+
+# ---------------------------------------------------------------------
+# Facts another guard holds
+
+elsewhere BandedPage jpeg pbm pgm png ppm tiff record
+    Whether this device's page may arrive a band at a time.
+    tests/check-device-roster.sh holds it against .playtargets and the
+    C table the selection is rewritten from, so a device declaring it
+    and not routed for it, or routed and not declaring it, fails there;
+    tests/check-device-skeleton.sh holds each compiled class to saying
+    it again or taking it back out rather than inheriting the answer.
+    What is held here is only which devices carry it.
+
+elsewhere .rowcost bgr jpeg pbm pgm png pngalpha ppm tiff record
+    What one row of this device's raster costs, as the elements and the
+    bytes it takes. tests/check-device-skeleton.sh holds every class
+    derived from one that prices a row to pricing its own or taking the
+    price back out with the reason, in C and in PostScript alike.
+    What is held here is only which devices carry it.
+
+# ---------------------------------------------------------------------
+# Facts no guard holds and this does not yet ask
+
+open nativecolorspace every
+    The colour space this device's marking methods take components in.
+    Every device states one and no two of them are wrong to differ: the
+    space is what the device IS, not a way it varies from a family.
+    It is not a question here because making it one would require every
+    device to own the space it answers with, and two of them inherit it
+    -- the bilevel class takes grey from the class it copies and the
+    TIFF class takes rgb from its own. Both are right and neither says
+    so. That is the next thing to ask, and asking it costs those two a
+    restatement each.
+    Two of the answers are not a name but a procedure: the compiled
+    drivers store the space as an executable name, which is why
+    data/device.ps fetches it with get and holds it literal rather than
+    naming it again.
+
+open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
+    How many components a paint carries to this device's marking
+    methods. It follows from nativecolorspace -- one for grey, three for
+    rgb -- and data/image.ps derives the colour take and push helpers
+    from it when it builds a class.
+    It is not a question here for the reason above: it is the device
+    rather than a difference within a family. It is also the one entry
+    a record refuses outright rather than copying, since a record whose
+    component count disagreed with its target would replay a colour
+    nobody named (src/lib/xpost_dev_record.c).
+
+open NoOutput bbox dscwrite null pdfwrite svgwrite record
+    That this device puts no pixels down, so data/device.ps leaves it
+    the class's own polygon fill rather than substituting the compiled
+    scanline rasterizers: rasterizing into a device that discards spans
+    would burn the whole render cost of a page to throw it away.
+    It is not a question here because it is not a difference of degree
+    -- a device either resolves a path into spans or it does not -- and
+    the devices carrying it are held by the line above. Making it a
+    question would ask nine devices to state a thing that follows from
+    whether they carry a raster at all.
+
+open VectorGlyphs dscwrite pdfwrite svgwrite
+    That text reaches this device as glyph outlines rather than as a
+    bitmap of the glyph. The three carrying it are the three that write
+    a document rather than a raster, and for them a glyph rendered to
+    pixels would be a picture of text in a file whose whole point is
+    that the text is still text.
+    It is not a question here because it follows from the same thing
+    NoOutput follows from. What would make it one is a device that
+    writes a document and wants bitmapped glyphs anyway, and there is
+    none.
+
+open VectorSyntax svgwrite
+    Which vector syntax this device's content is spelled in. Only the
+    SVG writer states one; the PDF writer's syntax is the default the
+    shared content accumulator was written for, and the DSC writer
+    re-spells that same content in its prolog rather than accumulating
+    anything else.
+    It is not a question here because one device carrying an entry is
+    not yet a family answering anything. It becomes one the moment a
+    third syntax arrives, and the line above is what will notice.
+
+open AlphaChannel pngalpha
+    That this device's page carries transparency, so a page reset clears
+    it to transparent rather than to a colour and a read of a pixel
+    cannot report what it was cleared to.
+    It is not a question here for the reason VectorSyntax is not: one
+    device carries it. What it does already do is stand as the reason
+    that device is named in the ground test's list of devices with no
+    ground to report (tests/run-device-ground-test.sh), which is the one
+    place its difference is currently written down.
+
+# ---------------------------------------------------------------------
+# The rest of the census
+
+# The calls a device takes.
+method .bandsink bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .bandwrite bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method BlendPix bgr jpeg pbm pgm png pngalpha ppm raster tiff record
+method .claimdoc dscwrite pdfwrite
+method ClipPath dscwrite pdfwrite svgwrite
+method .copydict every
+method Create every
+method Destroy every
+method DrawLine every
+method DrawRect bbox bgr dscwrite jpeg null pbm pdfwrite pgm png pngalpha ppm raster svgwrite tiff
+method Emit every
+method .emitband bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .emitpage dscwrite pdfwrite
+method .emitwhole dscwrite pdfwrite
+method .endfile dscwrite pdfwrite
+method Erase bbox pngalpha
+method .escname dscwrite pdfwrite
+method FillPath dscwrite pdfwrite svgwrite
+method FillPoly every
+method FillRect every
+method Flush bgr raster record
+method GetPix every
+method GlyphExtents bbox
+method Ground bgr jpeg pbm pgm png pngalpha ppm raster tiff record
+method .groundpix bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .groundrowat bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .intersect bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .maxmin bbox bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .moveband bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .onpage bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method PaintImage pdfwrite svgwrite
+method .pdfnum dscwrite pdfwrite
+method .pdfnumstr dscwrite pdfwrite
+method .playmake record
+method .pushcolor bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .put dscwrite pdfwrite svgwrite
+method .putelems dscwrite pdfwrite svgwrite
+method PutPix every
+method .recordglyph record
+method .recordimage record
+method .recordoff dscwrite pdfwrite
+method .recordplace record
+method .registersep pdfwrite
+method .rowalloc bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .rowclear bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .rowempty bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .rowget bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .rowheld bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .rowput bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method ScreenChanged record
+method .screenpix bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .setupoutput dscwrite pdfwrite
+method .strcat dscwrite pdfwrite
+method StrokePath dscwrite pdfwrite svgwrite
+method .svgnum svgwrite
+method .svgrgb svgwrite
+method .t0build dscwrite pdfwrite
+method .t4build dscwrite pdfwrite
+method .takecolor bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .to-int bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .unitclamp bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .vw dscwrite pdfwrite
+method .vwnum dscwrite
+method .vwoff dscwrite pdfwrite
+method .writeband bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .writehead bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .writepage bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .writetail bgr jpeg pbm pgm png pngalpha ppm raster tiff
+
+# What an instance carries while it works.
+state b svgwrite
+state .bandbytes record
+state .bandrows jpeg pbm pgm png pngalpha ppm tiff record
+state .bandtop jpeg pbm pgm png pngalpha ppm tiff
+state .chan bgr jpeg pbm pgm png pngalpha ppm raster tiff
+state defaultmatrix every
+state dimensions every
+state .docinfo dscwrite pdfwrite
+state .emptyrow pbm pgm ppm tiff
+state g svgwrite
+state .ground bgr jpeg pbm pgm png ppm raster tiff record
+state .groundrow pbm pgm ppm tiff
+state h dscwrite pdfwrite svgwrite
+state height every
+state .htang pbm
+state .htcell pbm
+state .htfreq pbm
+state .hth pbm
+state .htsrc pbm
+state .htw pbm
+state ImgData pbm pgm ppm tiff
+state maxx bbox
+state maxy bbox
+state minx bbox
+state miny bbox
+state .ncomps dscwrite pdfwrite
+state .nextobj dscwrite pdfwrite
+state .opaque bbox
+state OutputFileName every
+state .pdffillcolor dscwrite pdfwrite
+state .pdfimages dscwrite pdfwrite
+state .pdfstrokecolor dscwrite pdfwrite
+state .playclass record
+state .playdev record
+state .playpage record
+state .playrows record
+state .playrun record
+state Private bgr dscwrite jpeg pdfwrite png pngalpha raster svgwrite record
+state r svgwrite
+state .vecticket dscwrite pdfwrite
+state w dscwrite pdfwrite svgwrite
+state width every
+state x dscwrite pdfwrite svgwrite
+state y dscwrite pdfwrite svgwrite
+
+# The class's own constants and tables.
+part .playloaders record
+part .playtargets record
+part .pnmmagic bgr jpeg pbm pgm png pngalpha ppm raster
+part .pnmmaxval bgr jpeg pbm pgm png pngalpha ppm raster
+part .t4ops dscwrite pdfwrite

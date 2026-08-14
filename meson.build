@@ -4423,6 +4423,24 @@ test('check-device-roster',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# A device says what it is by the entries on its class, and the machinery
+# above it reads them and sends it different work accordingly. Every such
+# entry is a question the whole family is answering, including the
+# devices whose author never heard it and answer by inheriting whatever
+# they were copied from. This enumerates what the devices actually carry
+# and holds it to the register beside it in both directions, so a new
+# mechanism cannot be added without saying whether every device must
+# answer it; where they answer differently, the difference carries a
+# reason. The interpreter is handed over for the same reason the roster
+# check takes it -- a class is built rather than spelled -- and the
+# recorder is made over each target in turn, since what it copies off
+# that target is settled at the moment it is specialised and no file
+# shows it.
+test('check-device-facts',
+  find_program('tests/check-device-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A test runs on the device it names, and a test that wants a window
 # opens it on a display it conjured. A run with no device named takes
 # whichever one the build was configured with, which where the window
