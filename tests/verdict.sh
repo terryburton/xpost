@@ -91,6 +91,23 @@ _peak_rss_of() {    # $1 program; $2 directory; $3 case; sets _pr_kib
 }
 
 peak_rss_reads() {  # $1 the program under test
+    peak_rss_why='the peak resident size of a run cannot be read on this machine'
+    # A runtime that keeps what a run gives back, and maps memory of its
+    # own beside it, is what the reading follows once one is there: a
+    # route that finishes a band and takes the next reads as a route that
+    # kept both, and a weighing of one route against another comes out
+    # the wrong way round rather than merely large. The runtimes that do
+    # it -- the address, leak, memory and thread ones -- answer when
+    # asked for their flags. The instrumentation that does not, which
+    # leaves the heap where it was, is not asked, and a build carrying
+    # only that one still weighs.
+    for _pr_v in ASAN_OPTIONS LSAN_OPTIONS MSAN_OPTIONS TSAN_OPTIONS; do
+        if env "$_pr_v=help=1" "$1" -q -d null /dev/null </dev/null 2>&1 |
+           grep -q 'Available flags for'; then
+            peak_rss_why='this build carries a sanitizer runtime, which keeps what a run gives back and maps memory of its own, so what a run holds is not what the reading would follow'
+            return 1
+        fi
+    done
     /usr/bin/time -f '%M' true >/dev/null 2>&1 || return 1
     _pr_dir=$(mktemp -d) || return 1
     # What the two runs differ by is thirty mebibytes the interpreter is

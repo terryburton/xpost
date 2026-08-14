@@ -882,9 +882,8 @@ if peak_rss_reads "$xpost"; then
     havetime=yes
 else
     havetime=no
-    echo "SKIP the peak resident size of a run cannot be read on this" \
-         "machine, so the two devices whose raster is a buffer of their" \
-         "own are not weighed here"
+    echo "SKIP $peak_rss_why, so the two devices whose raster is a" \
+         "buffer of their own are not weighed here"
 fi
 
 # $1 selection, $2 directory, $3 page height, $4 band; sets memvm, memrss

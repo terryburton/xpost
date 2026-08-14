@@ -329,8 +329,8 @@ if peak_rss_reads "$xpost"; then
         note "the cost page could not be weighed on both routes"
     fi
 else
-    echo "SKIP the peak resident size of a run cannot be read on this" \
-         "machine, so what banding the cost page is out by is not weighed"
+    echo "SKIP $peak_rss_why, so what banding the cost page is out by" \
+         "is not weighed"
 fi
 
 # ---- and the comparison broken on purpose ----

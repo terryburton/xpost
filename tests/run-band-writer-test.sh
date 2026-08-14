@@ -373,8 +373,7 @@ if peak_rss_reads "$xpost"; then
         fi
     done
 else
-    echo "SKIP the peak resident size of a run cannot be read on this" \
-         "machine, so what the bands hold is not weighed here"
+    echo "SKIP $peak_rss_why, so what the bands hold is not weighed here"
 fi
 
 [ "$fail" -eq 0 ] || exit 1
