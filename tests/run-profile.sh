@@ -70,8 +70,16 @@ profile=${1:?usage: run-profile.sh <quick|full|corpus|vendor|everything> [meson 
 shift
 build=${MESON_BUILD_ROOT:-$PWD}
 
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The reading of a listing line, shared with the other readers of one.
+listing="$here/listing.awk"
+
 if [ ! -f "$build/meson-info/meson-info.json" ]; then
     echo "FAILURES: $build is not a meson build directory"
+    exit 1
+fi
+if [ ! -r "$listing" ]; then
+    echo "FAILURES: no listing reader at $listing"
     exit 1
 fi
 
@@ -197,45 +205,9 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
 fi
 trap 'rm -rf "$work"' EXIT
 
-# How a listing line is laid out is the meson version's to choose. A test
-# carrying suites is written either as
-#
-#     <project>:<suite>+<suite> / <name>
-#     <suite>+<suite> - <project>:<name>
-#
-# and the separator standing after the first field says which. The suites
-# are that first field, less the project name where the layout qualifies
-# it with one; the test's own name is what the line ends with, less the
-# same qualification. A line with neither separator names no suite and is
-# passed over, which is how both layouts write a test that carries none.
-#
-# Read off the fields rather than by searching the line for a separator,
-# so that a test whose name contains one is read by its layout and not by
-# its name. The record meson writes of a run names each test as the
-# listing does, so the same reading serves there too.
-cat > "$work/listing.awk" <<'AWK'
-function listing_suites(line,   n, f, s) {
-    n = split(line, f, " ")
-    if (n < 3) return ""
-    if (f[2] == "/") { s = f[1]; sub(/^[^:]*:/, "", s); return s }
-    if (f[2] == "-") return f[1]
-    return ""
-}
-
-function listing_name(line,   n, f, s) {
-    n = split(line, f, " ")
-    if (n < 3) return line
-    if (f[2] == "/") return substr(line, index(line, " / ") + 3)
-    if (f[2] == "-") {
-        s = substr(line, index(line, " - ") + 3)
-        sub(/^[^:]*:/, "", s)
-        return s
-    }
-    return line
-}
-AWK
-
-# Read the suites off each line and apply the predicate.
+# Read the suites off each line and apply the predicate. What a line
+# says and how it says it is tests/listing.awk, which every reader of a
+# listing or of a record is handed.
 if ! meson test -C "$build" --list > "$work/all" 2>"$work/err"; then
     echo "FAILURES: could not list the tests in $build"
     sed 's/^/      /' "$work/err"
@@ -260,7 +232,7 @@ cat > "$work/pick.awk" <<'AWK'
 }
 AWK
 awk -v want="$want" -v without="$without" \
-    -f "$work/listing.awk" -f "$work/pick.awk" "$work/all" | sort > "$work/want"
+    -f "$listing" -f "$work/pick.awk" "$work/all" | sort > "$work/want"
 
 if [ ! -s "$work/want" ]; then
     echo "FAILURES: the $profile profile names no test"
@@ -312,7 +284,7 @@ cat > "$work/count.awk" <<'AWK'
 END { print c + 0 }
 AWK
 count_suite() {
-    awk -v want="$2" -f "$work/listing.awk" -f "$work/count.awk" "$1"
+    awk -v want="$2" -f "$listing" -f "$work/count.awk" "$1"
 }
 nmemacct=$(count_suite "$work/all" memacct)
 nmemacct_sel=$(count_suite "$work/want" memacct)
@@ -440,7 +412,7 @@ AWK
     : > "$work/excused"
     : > "$work/lapsed"
     for name in ${XPOST_ALLOW_SKIP:-}; do
-        if ! awk -v n="$name" -f "$work/listing.awk" -f "$work/named.awk" \
+        if ! awk -v n="$name" -f "$listing" -f "$work/named.awk" \
              "$work/skipped" >> "$work/excused"; then
             printf '%s\n' "$name" >> "$work/lapsed"
         fi

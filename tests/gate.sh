@@ -66,6 +66,8 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src=$(CDPATH= cd -- "$here/.." && pwd)
 map="$here/gate-map"
+# The reading of a listing line, shared with the other readers of one.
+listing="$here/listing.awk"
 
 narrow=${XPOST_NARROW_BUILD:-build}
 wide=${XPOST_WIDE_BUILD:-blarge}
@@ -102,6 +104,10 @@ esac
 
 if [ ! -f "$map" ]; then
     echo "FAILURES: no gate map at $map"
+    exit 1
+fi
+if [ ! -r "$listing" ]; then
+    echo "FAILURES: no listing reader at $listing"
     exit 1
 fi
 for b in "$narrow" "$wide"; do
@@ -453,7 +459,25 @@ fi
 # either way, and a run that fell over partway leaves a record shorter
 # than the selection. Both read as green from the summary line, so the
 # record is cleared first, read after, and held to the names asked for.
+#
+# A record names a test as its suites, its project and the name itself; a
+# selection names it as the build lists it. The name is read off the
+# record's layout by tests/listing.awk, so the two are the same thing
+# before they are compared.
 status=0
+cat > "$work/ran.awk" <<'AWK'
+{
+    name = ""; res = ""
+    if (match($0, /^\{"name": "[^"]*"/))
+        name = substr($0, RSTART + 10, RLENGTH - 11)
+    if (match($0, /, "result": "[A-Z]+"/)) {
+        res = substr($0, RSTART, RLENGTH)
+        sub(/^, "result": "/, "", res); sub(/"$/, "", res)
+    }
+    if (name != "" && res != "")
+        print listing_name(name) "\t" res
+}
+AWK
 run_leg() {
     leg=$1; build=$2; sel=$3
     logdir="$build/meson-logs"
@@ -477,24 +501,7 @@ run_leg() {
         echo "FAILURES: the $leg leg ran nothing -- meson wrote no record"
         return 1
     fi
-    # A record names a test as its project and suites and then the name
-    # itself; a selection names it as the build lists it. Read the name
-    # off the record's form so the two are the same thing before they
-    # are compared.
-    awk '{
-        name = ""; res = ""
-        if (match($0, /^\{"name": "[^"]*"/))
-            name = substr($0, RSTART + 10, RLENGTH - 11)
-        if (match($0, /, "result": "[A-Z]+"/)) {
-            res = substr($0, RSTART, RLENGTH)
-            sub(/^, "result": "/, "", res); sub(/"$/, "", res)
-        }
-        if (name != "" && res != "") {
-            i = index(name, " / ")
-            if (i) name = substr(name, i + 3)
-            print name "\t" res
-        }
-    }' "$record" | sort > "$work/ran.$leg"
+    awk -f "$listing" -f "$work/ran.awk" "$record" | sort > "$work/ran.$leg"
 
     cut -f1 "$work/ran.$leg" | sort -u > "$work/ranames.$leg"
     if ! cmp -s "$sel" "$work/ranames.$leg"; then
