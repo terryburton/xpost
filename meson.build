@@ -2733,6 +2733,18 @@ test('check-env-traps',
   args: [ xpost_exe, meson.current_source_dir() ],
   timeout: 120)
 
+# The suite's own guards are shell and awk, so they run on every host the
+# build reaches and before anything is built. A redirection target written
+# as an unparenthesised concatenation parses differently between awks --
+# accepted here, refused outright by the one in a base system this suite is
+# also run on -- and a guard that will not parse stops watching whatever it
+# was written for.
+test('check-awk-portability',
+  find_program('tests/check-awk-portability.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ],
+  timeout: 60)
+
 # The binary form of the error report, which has to be checked on the
 # bytes rather than from inside the interpreter.
 test('error-binary',
