@@ -229,21 +229,21 @@ awk '
     NF == 0 { next }
     $1 == "question" || $1 == "method" || $1 == "state" || $1 == "part" ||
     $1 == "elsewhere" || $1 == "open" {
-        print "KIND", $2, $1 > out "/reg.kind"
+        print "KIND", $2, $1 > (out "/reg.kind")
         line = ""
         for (i = 3; i <= NF; i++) line = line " " $i
-        print $2 line > out "/reg.carry"
+        print $2 line > (out "/reg.carry")
         key = $2; last = "kind:" $2; next
     }
-    $1 == "family" { print key, $2 > out "/reg.family"; last = "family:" key; next }
+    $1 == "family" { print key, $2 > (out "/reg.family"); last = "family:" key; next }
     $1 == "answer" {
-        print key, $2, $3, ($4 == "" ? "-" : $4) > out "/reg.answer"
+        print key, $2, $3, ($4 == "" ? "-" : $4) > (out "/reg.answer")
         last = "answer:" key ":" $2; next
     }
     { print "check-device-facts: unreadable register line: " $0 > "/dev/stderr"
       bad = 1 }
     END {
-        for (k in prose) print k, prose[k] > out "/reg.prose"
+        for (k in prose) print k, prose[k] > (out "/reg.prose")
         exit bad ? 1 : 0
     }
 ' out="$work" "$work/reg" || fail=1
