@@ -16,9 +16,11 @@ name: analysers
 # Blocking today: the leak count under the address sanitizer, every
 # class the gcc analyser reports, all of cppcheck's but memleak and the
 # style severities, unreachable code outside the sites that declare
-# themselves parked, and the compile of the tree with the optimiser on --
-# which is here rather than in meson.build because two of the promotions
-# meson.build makes are answered with silence until something optimises.
+# themselves parked, every diagnostic the release configuration reports
+# about a file this tree carries, and the compile of the tree with the
+# optimiser on -- which is here rather than in meson.build because two of
+# the promotions meson.build makes are answered with silence until
+# something optimises.
 
 on:
   push:
@@ -701,5 +703,85 @@ jobs:
       with:
         name: leak-unsuppressed-log
         path: builddir/meson-logs/testlog.txt
+        retention-days: 30
+      if: always()
+
+  # The release configuration, which no other lane compiles. Every other
+  # build in every workflow is debug or debugoptimized, and the release
+  # one is a different compiler: -O3 rather than -O0 or -O2, and
+  # link-time optimisation on top, which meson.build turns on for this
+  # buildtype alone. What that reaches is what the optimiser only sees
+  # once it has propagated a value through an inlined callee and merged
+  # the whole library into one unit -- a truncation, an unread result, a
+  # comparison the caller's constant decides. So the diagnostics here are
+  # not the ones the other lanes have already answered, and a lane that
+  # does not compile this configuration cannot report them.
+  #
+  # It is held to no warnings at all rather than to a count, and the
+  # reason is that a count is what this configuration had. Forty-six of
+  # them were carried long enough that every reader learned the number
+  # and stopped reading the list, which is how the four that arrived
+  # after it was written down arrived unnoticed. A lane whose clean state
+  # is zero has no number to learn.
+  #
+  # Both object widths, because a warning about a comparison or a
+  # conversion is a warning about a type's width, and word is a different
+  # type in each.
+  #
+  # The build only. What the release configuration is here to answer is
+  # what its compiler says, and the suite's verdict on the code is the
+  # same verdict at every optimisation level -- it is run at -O0 by the
+  # linux workflow at both widths, and under three sanitisers besides.
+  release:
+    strategy:
+      # one run reports every lane: a red lane hides the others otherwise,
+      # and a backlog is then found one failure per run
+      fail-fast: false
+      matrix:
+        object: [small, large]
+    name: release build - ${{ matrix.object }}-object
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libpng-dev libjpeg-dev \
+          libfreetype6-dev libfontconfig1-dev meson ninja-build
+    - name: setup
+      run: |
+        meson setup builddir \
+          -Dlarge-object=${{ matrix.object == 'large' }} \
+          --buildtype=release
+    # The build's own status is read through the tee, so a build that
+    # broke is a red job here rather than a log with nothing in it --
+    # which the check below would otherwise read as a clean compile.
+    #
+    # What blocks is a diagnostic naming a file this tree carries. A
+    # warning whose location is a system header is one the tree cannot
+    # answer and does not own, and blocking on it would make the lane red
+    # for a distribution's choice of headers rather than for anything a
+    # change did.
+    - name: build and check
+      run: |
+        ninja -C builddir 2>&1 | tee release.log
+        status=${PIPESTATUS[0]}
+        grep 'warning:' release.log \
+          | sed -E 's@^\.\./(src|tests)/@\1/@' \
+          | grep -E '^(src|tests)/' > release.warnings || true
+        if [ -s release.warnings ]; then
+          echo '--- by file ---'
+          sed -E 's@^([^:]+):.*@\1@' release.warnings | sort | uniq -c | sort -rn
+          echo '--- by class ---'
+          grep -oE '\[-W[a-z0-9=-]+\]' release.warnings | sort | uniq -c | sort -rn
+          echo '--- in full ---'
+          cat release.warnings
+        fi
+        test "$status" -eq 0
+        ! [ -s release.warnings ]
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.object }}
+        path: release.log
         retention-days: 30
       if: always()
