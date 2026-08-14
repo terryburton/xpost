@@ -1981,6 +1981,18 @@ test('font-face-release',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a font name means does not depend on how many names came before
+# it. findfont keeps a fixed number of faces, and a name past that number
+# opens its file again and builds again what the face publishes -- the
+# same FontType, the same glyphs, the same program where the type carries
+# one. The names are spellings of one name, so one font on the host
+# exercises a boundary counted in names.
+test('font-cache-bound',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_cache_bound_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A loader that fails between opening a face and handing it over gives
 # the face back: nothing else can, because the block carrying the release
 # is what the handover was going to make. The failure is arranged with a

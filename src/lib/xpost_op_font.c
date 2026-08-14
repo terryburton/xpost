@@ -951,6 +951,7 @@ int _findfont(Xpost_Context *ctx,
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
     Xpost_Object sfnts_obj = null;
+    const char *ffile = NULL;
     int istt = 0;
     int cffreal = 0;
     int uncached = 0;
@@ -976,17 +977,29 @@ int _findfont(Xpost_Context *ctx,
        holds FreeType state, so creating one per findfont grows the
        process by a mapping per lookup. The face is shared between
        font dictionaries exactly as a FontDirectory-cached dictionary
-       already shares it. */
+       already shares it.
+
+       The cache holds a fixed number of names and the run may ask for
+       more. What a name past that number costs is a face of its own
+       and the derived objects built again; what it does not cost is a
+       different font. Everything below reads the name and the file the
+       face was opened from rather than the cache entry, so a name the
+       cache had no room for states the same FontType, the same
+       CharStrings and the same sfnts as the same name asked for first
+       would. The entry, where there is one, is what keeps that work
+       from being repeated -- not what decides its outcome. */
     {
         static struct { char *name; void *face; char *file; int csreal; }
             face_cache[32];
         static int face_cache_n = 0;
+        Xpost_Object cs_cached;
         int fi, slot = -1;
         for (fi = 0; fi < face_cache_n; fi++)
         {
             if (strcmp(face_cache[fi].name, fname) == 0)
             {
                 data.face = face_cache[fi].face;
+                ffile = face_cache[fi].file;
                 slot = fi;
                 break;
             }
@@ -994,14 +1007,17 @@ int _findfont(Xpost_Context *ctx,
         if (data.face == NULL)
         {
             data.face = xpost_font_face_new_from_name(fname);
+            /* the file the face was just opened from: the library
+               answers for the last open, so it is read here and not
+               after anything else may have opened a face */
+            ffile = xpost_font_face_last_file();
             if (data.face != NULL && face_cache_n < 32)
             {
-                const char *ff = xpost_font_face_last_file();
-
-                face_cache[face_cache_n].file = ff ? strdup(ff) : NULL;
+                face_cache[face_cache_n].file = ffile ? strdup(ffile) : NULL;
                 face_cache[face_cache_n].name = strdup(fname);
                 face_cache[face_cache_n].face = data.face;
                 slot = face_cache_n++;
+                ffile = face_cache[slot].file;
             }
         }
         uncached = slot < 0;
@@ -1022,20 +1038,19 @@ int _findfont(Xpost_Context *ctx,
         istt = xpost_font_face_is_truetype(data.face);
         /* a TrueType-backed dictionary is a Type 42 font outright:
            publish the program as sfnts, chunked under the string
-           limit, read once per face and shared between every
+           limit, read once per cached face and shared between every
            dictionary the name produces. Only a plain sfnt file
            qualifies: a compressed wrapper or a collection is not
            the program a Type 42 dictionary carries, and such a
            face keeps the Type 1 presentation */
-        if (istt && slot >= 0)
+        if (istt)
         {
-            if (xpost_object_get_type(
-                    _face_get(ctx, face_cache[slot].name, "sfnts")) != arraytype
-             && face_cache[slot].file)
+            if (slot >= 0)
+                sfnts_obj = _face_get(ctx, fname, "sfnts");
+            if (xpost_object_get_type(sfnts_obj) != arraytype && ffile)
             {
                 int ferrcode = 0;
-                FILE *fp = xpost_diskfile_fopen(face_cache[slot].file,
-                                                "rb", 1, &ferrcode);
+                FILE *fp = xpost_diskfile_fopen(ffile, "rb", 1, &ferrcode);
 
                 if (fp)
                 {
@@ -1075,26 +1090,27 @@ int _findfont(Xpost_Context *ctx,
                         }
                         free(cbuf);
                         if (cbuf && ci == nchunks)
-                            _face_put(ctx, face_cache[slot].name, "sfnts", arr);
+                        {
+                            sfnts_obj = arr;
+                            if (slot >= 0)
+                                _face_put(ctx, fname, "sfnts", arr);
+                        }
                         ctx->vmmode = oldmode;
                     }
                     fclose(fp);
                 }
             }
-            sfnts_obj = _face_get(ctx, face_cache[slot].name, "sfnts");
             if (xpost_object_get_type(sfnts_obj) != arraytype)
                 istt = 0;
         }
 
-        if (slot >= 0
-         && xpost_object_get_type(
-                _face_get(ctx, face_cache[slot].name, "CharStrings")) == dicttype)
+        cs_cached = slot >= 0 ? _face_get(ctx, fname, "CharStrings") : null;
+        if (xpost_object_get_type(cs_cached) == dicttype)
         {
             if (face_cache[slot].csreal && xpost_font_face_is_cff(data.face))
                 cffreal = 1;
             ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
-                               _face_get(ctx, face_cache[slot].name,
-                                         "CharStrings"));
+                                 cs_cached);
             if (ret)
                 goto fail;
         }
@@ -1107,16 +1123,17 @@ int _findfont(Xpost_Context *ctx,
                dictionary holds what running the program would build;
                a CFF face likewise publishes its Type 2 charstrings,
                and the dictionary then states FontType 2 */
-            if (slot >= 0 && face_cache[slot].file
-             && xpost_font_face_is_type1(data.face))
+            if (ffile && xpost_font_face_is_type1(data.face))
             {
-                Xpost_Object cs =
-                    _t1_charstrings_from_file(ctx, face_cache[slot].file);
+                Xpost_Object cs = _t1_charstrings_from_file(ctx, ffile);
 
                 if (xpost_object_get_type(cs) == dicttype)
                 {
-                    _face_put(ctx, face_cache[slot].name, "CharStrings", cs);
-                    face_cache[slot].csreal = 1;
+                    if (slot >= 0)
+                    {
+                        _face_put(ctx, fname, "CharStrings", cs);
+                        face_cache[slot].csreal = 1;
+                    }
                     ret = xpost_dict_put(ctx, fontdict,
                                        xpost_name_cons(ctx, "CharStrings"), cs);
                     if (ret)
@@ -1124,17 +1141,18 @@ int _findfont(Xpost_Context *ctx,
                     goto have_charstrings;
                 }
             }
-            if (slot >= 0 && face_cache[slot].file
-             && xpost_font_face_is_cff(data.face))
+            if (ffile && xpost_font_face_is_cff(data.face))
             {
                 Xpost_Object cs =
-                    _cff_charstrings_from_file(ctx, face_cache[slot].file,
-                                               data.face);
+                    _cff_charstrings_from_file(ctx, ffile, data.face);
 
                 if (xpost_object_get_type(cs) == dicttype)
                 {
-                    _face_put(ctx, face_cache[slot].name, "CharStrings", cs);
-                    face_cache[slot].csreal = 1;
+                    if (slot >= 0)
+                    {
+                        _face_put(ctx, fname, "CharStrings", cs);
+                        face_cache[slot].csreal = 1;
+                    }
                     cffreal = 1;
                     ret = xpost_dict_put(ctx, fontdict,
                                        xpost_name_cons(ctx, "CharStrings"), cs);
@@ -1180,7 +1198,7 @@ int _findfont(Xpost_Context *ctx,
                         csdict = sealed;
                 }
                 if (slot >= 0)
-                    _face_put(ctx, face_cache[slot].name, "CharStrings", csdict);
+                    _face_put(ctx, fname, "CharStrings", csdict);
                 ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
                                    csdict);
                 if (ret)

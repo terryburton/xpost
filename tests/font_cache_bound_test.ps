@@ -1,0 +1,193 @@
+%!
+% What a font name means does not depend on how many names came before
+% it. Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh:
+% prints SUCCESS iff every assertion holds.
+%
+% findfont keeps the faces it opens, so that a name asked for twice does
+% not open its file twice, and it keeps a fixed number of them. Past that
+% number a name still resolves -- the file is opened again, and the
+% objects the face publishes are built again -- and what it must not do
+% is resolve to something else. Everything the dictionary states is
+% derived from the face and the file it came from: whether the program is
+% a TrueType one and so a Type 42 font carrying its sfnts, whether its
+% charstrings are the genuine article and so a Type 1 or a Type 2 font,
+% how many glyphs it names, where its bounding box is. None of that is a
+% property of a cache entry, and a name the cache had no room for states
+% it all the same.
+%
+% The names here are spellings of one name. A face is matched by a name
+% read without regard to case, so one font answers to as many spellings
+% as its letters allow, and each spelling is a name of its own as far as
+% the cache is concerned. That is what lets a host with a single font
+% exercise a boundary counted in names, and it is what makes the
+% comparison exact: every spelling names the same file, so two
+% dictionaries that differ differ because of where the name fell. The
+% candidates are spelt in letters alone, so that every bit of a variant's
+% number changes one and no two variants collide.
+%
+% Two faces are asked for where the host has them, of different FontType,
+% because what a dictionary states about its glyphs depends on what its
+% face is: a TrueType program is published whole as sfnts, a program
+% whose charstrings can be read publishes those, and a face offering
+% neither publishes the glyph indices its names map to. Those are
+% different code paths and a host carrying one kind of font only exercises
+% the one.
+%
+% Each reference dictionary is taken while its name still holds a face,
+% and the spellings it is compared against come after enough names to
+% have pushed any cache past its end.
+
+/faildict 1 dict def
+faildict /n 0 put
+/require { % bool (label)  .  -
+    exch { (ok   ) print print (\n) print }{
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/note { print (\n) print } def
+
+% ---- the faces this host resolves -------------------------------------
+
+/b0 null def /t0 0 def /b1 null def
+[ (DejaVuSans) (LiberationSans) (NotoSans) (FreeSans) (Helvetica)
+  (FreeSerif) (NimbusSans) (NimbusRoman) (DejaVuSerif) (Courier) ]
+{ /nm exch def
+  mark { nm findfont } stopped
+  { cleartomark }
+  { /fd exch def cleartomark
+    b0 null eq
+    { /b0 nm def /t0 fd /FontType get def }
+    { b1 null eq { fd /FontType get t0 ne { /b1 nm def } if } if } ifelse
+  } ifelse
+} forall
+
+/variant { % base n  .  string
+    /vn exch def
+    /vb exch def
+    /vs vb length string def
+    vs 0 vb putinterval
+    0 1 vb length 1 sub {
+        /vi exch def
+        vn vi neg bitshift 1 and 1 eq {
+            /vc vs vi get def
+            vc 65 ge vc 90 le and { vs vi vc 32 add put } if
+            vc 97 ge vc 122 le and { vs vi vc 32 sub put } if
+        } if
+    } for
+    vs
+} bind def
+
+% ---- what a dictionary states about its face --------------------------
+
+% The charstrings themselves are not read: a Type 1 program's are sealed
+% against reading, which is a property of the charstrings and not of this
+% question. Their type is what says whether they are the genuine article
+% or the glyph indices a face without a readable program publishes, and
+% the type of a sealed object is readable.
+/csshape { % font  .  count code
+    dup /CharStrings known {
+        /CharStrings get
+        dup length exch
+        /code 0 def
+        { exch pop type /stringtype eq { /code 1 }{ /code 2 } ifelse
+          def exit } forall
+        code
+    }{ pop 0 0 } ifelse
+} bind def
+
+/shape { % font  .  array
+    /f exch def
+    f /FontType get
+    f /FontMatrix get 0 get
+    f /FontBBox get aload pop
+    f dup /sfnts known { /sfnts get length }{ pop -1 } ifelse
+    f csshape
+    9 array astore
+} bind def
+
+% Two arrays hold the same values. The operators compare composite
+% objects by identity, and no two of these are one object.
+/same { % a b  .  bool
+    /sb exch def
+    /sa exch def
+    sa length sb length eq {
+        /sr true def
+        0 1 sa length 1 sub {
+            /si exch def
+            sa si get sb si get eq not { /sr false def } if
+        } for
+        sr
+    }{ false } ifelse
+} bind def
+
+/show9 { { 20 string cvs print ( ) print } forall } bind def
+
+% Every spelling from 40 to 47 states what the reference states.
+/agrees { % base ref (label)  .  -
+    /alabel exch def
+    /aref exch def
+    /abase exch def
+    /abad 0 def
+    40 1 47 {
+        /spelling exch def
+        /agot abase spelling variant findfont shape def
+        aref agot same not { /abad abad 1 add def
+            (  differs at spelling ) print spelling 20 string cvs print
+            (: ) print aref show9 (vs ) print agot show9 (\n) print
+        } if
+    } for
+    abad 0 eq alabel require
+} bind def
+
+% What a dictionary must state whatever its face: a FontType the type
+% conventions define, glyphs and something to name them with, a bounding
+% box with an inside, and the program a Type 42 font is defined by.
+% Without these an implementation stating nothing at all about any face
+% would agree with itself and satisfy the comparisons above.
+/sound { % ref (label)  .  -
+    /slabel exch def
+    /sref exch def
+    sref 0 get dup 1 eq exch dup 2 eq exch 42 eq or or
+    sref 7 get 0 ne and
+    sref 8 get 0 ne and
+    sref 2 get sref 4 get ne and
+    sref 3 get sref 5 get ne and
+    sref 0 get 42 eq { sref 6 get 0 gt and } if
+    slabel require
+} bind def
+
+b0 null eq {
+    (skip no font resolves on this host: a name past the cache is not reached)
+      note
+}{
+    (reference: ) print b0 print
+    b1 null eq { ( and no second FontType on this host) print }
+              { ( and ) print b1 print } ifelse
+    (\n) print
+
+    % taken while each name still holds a face
+    /held0 b0 0 variant findfont shape def
+    b1 null eq not { /held1 b1 0 variant findfont shape def } if
+
+    % fill past whatever the cache holds; each is a name of its own and
+    % none is asked for again
+    1 1 39 { b0 exch variant findfont pop } for
+
+    held0 (the first font states what its type conventions define) sound
+    b0 held0
+    (a name past the cache states what the first font's name first stated)
+      agrees
+    b1 null eq not {
+        held1 (the second font states what its type conventions define) sound
+        held0 0 get held1 0 get ne
+        (the two fonts publish their glyphs by different conventions) require
+        b1 held1
+        (a name past the cache states what the second font's name first stated)
+          agrees
+    } if
+} ifelse
+
+faildict /n get 0 eq { (SUCCESS\n) print }{
+    (FAILURES: ) print faildict /n get 20 string cvs print (\n) print
+} ifelse
