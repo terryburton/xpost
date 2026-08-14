@@ -161,8 +161,16 @@ fi
 # Out of the record meson writes at configure time. A test object states
 # its name between the command it runs and the directory it runs in,
 # which is the one place in the file that shape occurs.
-sed 's/, "name": "/\n@@/g' "$narrow/meson-info/intro-tests.json" |
-    sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u > "$work/tests.all"
+#
+# How that record is laid out is not fixed -- some meson versions write
+# it as one line and others indent it over thousands, and a host whose
+# text files end their lines in CRLF leaves a return on each -- so the
+# whole file is flattened to one line of single-spaced text first and the
+# shape above is looked for in that.
+tr '\r\n\t' '   ' < "$narrow/meson-info/intro-tests.json" | tr -s ' ' |
+    sed 's/, "name": "/\
+@@/g' | sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u \
+    > "$work/tests.all"
 if [ "$(grep -c . "$work/tests.all")" -lt 2 ]; then
     echo "FAILURES: read no tests out of $narrow/meson-info/intro-tests.json"
     exit 1

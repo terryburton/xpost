@@ -58,8 +58,16 @@ fail=0
 # directory it runs in, which is the one place in the file that shape
 # occurs: an environment variable's name is a key and carries no space
 # before its value.
-sed 's/, "name": "/\n@@/g' "$build/meson-info/intro-tests.json" |
-    sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u > "$work/tests"
+#
+# How that record is laid out is not fixed. Some meson versions write it
+# as one line and others indent it over thousands, and a host whose text
+# files end their lines in CRLF leaves a return on each. The whole file
+# is therefore flattened to one line of single-spaced text before the
+# shape above is looked for, so that the same rule reads every layout
+# rather than one of them reading as a build defining no tests.
+tr '\r\n\t' '   ' < "$build/meson-info/intro-tests.json" | tr -s ' ' |
+    sed 's/, "name": "/\
+@@/g' | sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u > "$work/tests"
 ntests=$(grep -c . "$work/tests" || true)
 if [ "$ntests" -lt 2 ]; then
     echo "FAILURES: read $ntests test name(s) out of"
