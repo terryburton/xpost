@@ -86,15 +86,16 @@ fi
 # The device that paints has no band loop and must not be reporting one:
 # a run reporting bands through both devices would not be comparing a
 # band loop against a device holding the whole page.
-if printf '%s\n' "$direct" | tr -s '-' '\n' | grep -qE '^CASE '; then
+if printf '%s\n' "$direct" | grep -qE '^CASE '; then
     note "the directly painted run reported what a band loop put out, so" \
          "the comparison is not between a band loop and a device holding" \
          "the whole page"
 fi
 
-# The showpage banner of the default page semantics ends without a
-# newline, so a reported line can arrive with it on the front.
-lines=$(printf '%s\n' "$banded" | tr -s '-' '\n')
+# What the run wrote is what the program wrote: these runs name an output
+# file and have no terminal on their standard input, so the interpreter
+# frames nothing around it and each reported line starts a line.
+lines=$banded
 field() { printf '%s\n' "$lines" | sed -n "s/^$1 //p"; }
 
 width=$(field PAGE | head -1 | awk '{ print $1 }')

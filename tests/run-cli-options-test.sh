@@ -49,12 +49,56 @@ render() {  # $1 what to call it in a complaint, $2... the arguments
     verdict_run "$?" "$r_out" "$r_who" || fail=1
 }
 
-# the reports each name the program and each says something of its own
-"$xpost" --version 2>&1 | grep -q 'Xpost' || note "--version does not name the program"
-"$xpost" --license 2>&1 | grep -qi 'redistribution\|license\|BSD' \
+# The three options that report and exit. Each says its own thing, and
+# each says nothing else: what these write is read by scripts -- a
+# package asking the interpreter its version, a build asking whether an
+# option exists -- and a report with anything else around it is one a
+# reader has to know the shape of to use. So the reports are read on
+# their own channel and the other one is required to be empty, and
+# --version is held to a single line: a reader taking the version off it
+# takes the whole of it, and stays right whatever else the program later
+# has to say for itself.
+#
+# The runs below give the reporting options nothing else, which is how a
+# script asks. Standard input is left as this wrapper found it rather
+# than redirected, because a report is a report whoever is asking and
+# none of the three reads standard input.
+report() {  # $1 what to call it, $2 the option
+    r_err=$("$xpost" "$2" 2>&1 >"$work/report.out")
+    r_st=$?
+    got=$(cat "$work/report.out")
+    [ "$r_st" -eq 0 ] || note "$2 exited $r_st"
+    [ -z "$r_err" ] || note "$2 wrote to the log channel: $r_err"
+    [ -n "$got" ] || note "$2 reported nothing"
+}
+
+report "the version" --version
+lines=$(printf '%s\n' "$got" | wc -l)
+[ "$lines" -eq 1 ] || note "--version reported $lines lines, and a reader of it takes one"
+printf '%s\n' "$got" | grep -q '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' \
+    || note "--version does not end in a version: $got"
+
+report "the licence" --license
+printf '%s\n' "$got" | grep -qi 'redistribution\|license\|licence\|BSD' \
     || note "--license does not state the licence"
-"$xpost" --help 2>&1 | grep -q -- '--geometry\|-g' \
+
+report "the usage" --help
+printf '%s\n' "$got" | grep -q -- '--geometry\|-g' \
     || note "--help does not list the geometry option"
+
+# and the other direction: usage the caller did not ask for is a
+# complaint, so it goes where complaints go and leaves the output
+# channel alone. A script reading the output of a run that mistyped an
+# option gets nothing, rather than a page of usage to mistake for one.
+bad_out=$("$xpost" --no-such-option 2>/dev/null)
+bad_st=$?
+bad_err=$("$xpost" --no-such-option 2>&1 >/dev/null)
+[ "$bad_st" -eq 0 ] && note "an unknown option was accepted"
+[ -n "$bad_out" ] && note "an unknown option put its usage on the output channel"
+printf '%s\n' "$bad_err" | grep -q -- '--geometry' \
+    || note "an unknown option did not put its usage on the log channel"
+printf '%s\n' "$bad_err" | grep -q -- 'no-such-option' \
+    || note "an unknown option did not say which option it was"
 
 # a geometry sets the page size: the raster carries its dimensions
 render "a 200x100 geometry" -g 200x100+0+0 -d pgm -o "$work/g.pgm"
@@ -308,9 +352,13 @@ on_terminal() {  # $1 the command line to run with a terminal on stdin
     esac
 }
 
+# A page the interpreter announces and waits at, for the terminal cases
+# below. The wait is answered by the line the terminal is fed.
+printf '%%!PS\nshowpage\n(program-ran) print flush\n' > "$work/showpage.ps"
+
 if [ "$pty" = none ]; then
     echo "held unasked: a run at a terminal, with and without an output"
-    echo "      file -- $held"
+    echo "      file, and what such a run is told about itself -- $held"
 else
     # with -o: a file to produce, so the run ends with the program and
     # what the terminal went on to send is never executed
@@ -326,6 +374,42 @@ else
     got=$(on_terminal "'$xpost' -q --no-sandbox -d null '$work/noquit.ps'")
     printf '%s\n' "$got" | grep -qF '1967' \
         || note "a run at a terminal with no output file offered no executive"
+
+    # What the interpreter says about itself is said to whoever is there
+    # to read it, and the same three things decide that as decide whether
+    # a session is offered at all. A session is opened with a greeting.
+    got=$(on_terminal "'$xpost' --no-sandbox -d null '$work/noquit.ps'")
+    printf '%s\n' "$got" | grep -q '^Xpost [0-9]' \
+        || note "a session at a terminal was not opened with a greeting"
+    printf '%s\n' "$got" | grep -q 'program-ran' \
+        || note "a greeted run at a terminal did not run its program"
+
+    # asked for quiet, it is not
+    got=$(on_terminal "'$xpost' -q --no-sandbox -d null '$work/noquit.ps'")
+    printf '%s\n' "$got" | grep -q '^Xpost [0-9]' \
+        && note "a run asked for quiet greeted the terminal anyway"
+
+    # and with a file waiting for the run, there is no session to open
+    got=$(on_terminal "'$xpost' --no-sandbox -d null -o '$work/tty2.null' '$work/noquit.ps'")
+    printf '%s\n' "$got" | grep -q '^Xpost [0-9]' \
+        && note "a run with an output file greeted the terminal it was started from"
+
+    # The page boundary is the other thing said to a person: the
+    # interpreter names the page and waits for a return. It is said at a
+    # terminal, where there is somebody to press one --
+    got=$(on_terminal "'$xpost' --no-sandbox -d null '$work/showpage.ps'")
+    printf '%s\n' "$got" | grep -qF -- '----showpage----' \
+        || note "a page shown at a terminal was not announced"
+
+    # -- and not to a run of the same program with nobody there, where
+    # the name would land in the middle of what the program is writing
+    # and the wait would take a line of whatever the standard input was
+    # carrying for its own purposes
+    got=$("$xpost" --no-sandbox -d null "$work/showpage.ps" </dev/null 2>/dev/null)
+    printf '%s\n' "$got" | grep -qF -- '----showpage----' \
+        && note "a page shown with nobody watching was announced on the output channel"
+    printf '%s\n' "$got" | grep -q 'program-ran' \
+        || note "the unwatched run of the page program did not run it"
 fi
 
 [ "$fail" = 0 ] || { echo "FAILURES: the options above"; exit 1; }

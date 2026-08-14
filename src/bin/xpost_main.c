@@ -47,9 +47,10 @@
 
 #include "xpost.h"
 #include "xpost_log.h"
-#ifdef _MSC_VER
-# include "xpost_compat.h"
-#endif
+/* xpost_isatty: the same question the interpreter asks of standard
+   input when it decides whether this run has a user at the other end
+   of it, so that the program and the interpreter answer it alike */
+#include "xpost_compat.h"
 
 #include "xpost_main.h"
 
@@ -68,7 +69,7 @@ if ((!strcmp(argv[i], so)) || \
         else \
         { \
             XPOST_LOG_ERR("missing option value"); \
-            _xpost_main_usage(filename); \
+            _xpost_main_usage(stderr, filename); \
             goto quit_xpost; \
         } \
     } \
@@ -77,7 +78,7 @@ if ((!strcmp(argv[i], so)) || \
         if (!*(argv[i] + sizeof(lo) - 1)) \
         { \
             XPOST_LOG_ERR("missing option value"); \
-            _xpost_main_usage(filename); \
+            _xpost_main_usage(stderr, filename); \
             goto quit_xpost; \
         } \
         else \
@@ -135,6 +136,54 @@ _xpost_main_version(const char *filename)
     printf("%s %d.%d.%d\n", filename, maj, min, mic);
 }
 
+/* The greeting a session opens with: what the program is, and who owns
+   it. It is addressed to somebody, so it is printed to somebody and to
+   nobody else -- see _xpost_main_greeted below for who that is.
+
+   It goes to the standard output because that is the channel the
+   session it opens is conducted on: the prompt that follows it, the
+   statements typed at that prompt and the answers to them all travel
+   there. A run with nobody at the other end is not given it at all,
+   which is what keeps that channel carrying the program's output and
+   nothing else. */
+static void
+_xpost_main_banner(void)
+{
+    int maj;
+    int min;
+    int mic;
+
+    xpost_version_get(&maj, &min, &mic);
+    printf("Xpost %d.%d.%d\n", maj, min, mic);
+    printf("Copyright (C) 2013, Michael Joshua Ryan. All rights reserved.\n");
+    printf("This software is supplied under the BSD 3 clause and comes with NO WARRANTY:\n");
+    printf("see the file COPYING for details.\n");
+}
+
+/* Whether this run has somebody to greet.
+
+   Two of the three conditions are the ones the interpreter itself reads
+   to decide whether to offer the interactive session once the program
+   has ended: standard input must be a terminal, and no output file may
+   have been named, because naming one says the invocation is something
+   waiting for that file rather than somebody typing. A run that will
+   not be offered a session is a run with nobody to open one for.
+
+   The third is that the caller did not ask for quiet. -q suppresses the
+   interpreter's messages about itself, and a greeting is the first of
+   them.
+
+   The three options that report and exit -- -V, -L and -h -- never
+   reach here: each is answered inside the option loop and leaves from
+   there, so what such a run writes is its report and nothing else. That
+   is what makes -V readable by a script: one line, the version, however
+   this greeting later changes. */
+static int
+_xpost_main_greeted(int quiet_asked, const char *output_file)
+{
+    return !quiet_asked && !output_file && xpost_isatty(fileno(stdin));
+}
+
 /* permit the directory containing `path`, for writing when `forwrite` */
 static void
 _xpost_permit_file_dir(const char *path, int forwrite)
@@ -163,73 +212,73 @@ _xpost_permit_file_dir(const char *path, int forwrite)
 }
 
 static void
-_xpost_main_usage(const char *filename)
+_xpost_main_usage(FILE *out, const char *filename)
 {
     int i;
 
-    printf("Usage: %s [options] [file.ps]\n\n", filename);
-    printf("Postscript level 2 interpreter\n\n");
-    printf("Options:\n");
-    printf("  -o, --output=[FILE]                output file; the run ends with the program\n");
-    printf("  -d, --device=[STRING]              device name\n");
-    printf("  -Dname=token, --define name=token  add definition to userdict\n");
-    printf("  -I[DIR], --include [DIR]           add a resource search directory\n");
-    printf("  --no-graphics                      lock down and run without loading graphics\n");
-    printf("  --no-sandbox                       allow the program unrestricted file access\n");
-    printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
-    printf("  -s, --spill=auto|never|always      where a retained page's marks are held\n");
-    printf("  -b, --band-bytes=BYTES             what one band of a page may cost\n");
-    printf("  -q, --quiet                        suppress interpreter messages (default)\n");
-    printf("  -v, --verbose                      do not go quiet into that good night\n");
-    printf("  -t, --trace                        add additional tracing messages, implies -v\n");
-    printf("  -L, --license                      show program license\n");
-    printf("  -V, --version                      show program version\n");
-    printf("  -h, --help                         show this message\n");
-    printf("\n");
-    printf("  Supported devices:\n");
+    fprintf(out, "Usage: %s [options] [file.ps]\n\n", filename);
+    fprintf(out, "Postscript level 2 interpreter\n\n");
+    fprintf(out, "Options:\n");
+    fprintf(out, "  -o, --output=[FILE]                output file; the run ends with the program\n");
+    fprintf(out, "  -d, --device=[STRING]              device name\n");
+    fprintf(out, "  -Dname=token, --define name=token  add definition to userdict\n");
+    fprintf(out, "  -I[DIR], --include [DIR]           add a resource search directory\n");
+    fprintf(out, "  --no-graphics                      lock down and run without loading graphics\n");
+    fprintf(out, "  --no-sandbox                       allow the program unrestricted file access\n");
+    fprintf(out, "  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
+    fprintf(out, "  -s, --spill=auto|never|always      where a retained page's marks are held\n");
+    fprintf(out, "  -b, --band-bytes=BYTES             what one band of a page may cost\n");
+    fprintf(out, "  -q, --quiet                        suppress interpreter messages (default)\n");
+    fprintf(out, "  -v, --verbose                      do not go quiet into that good night\n");
+    fprintf(out, "  -t, --trace                        add additional tracing messages, implies -v\n");
+    fprintf(out, "  -L, --license                      show program license\n");
+    fprintf(out, "  -V, --version                      show program version\n");
+    fprintf(out, "  -h, --help                         show this message\n");
+    fprintf(out, "\n");
+    fprintf(out, "  Supported devices:\n");
     i = 0;
     while (_xpost_main_devices[i])
-        printf("\t%s\n", _xpost_main_devices[i++]);
-    printf("\n");
-    printf("  A device whose page may arrive a band at a time holds a\n");
-    printf("  band of it rather than the page: pgm, ppm, pbm, tiff, png\n");
-    printf("  and jpeg. A page small enough to fit one band is held\n");
-    printf("  whole, so this costs a small page nothing.\n");
-    printf("\n");
-    printf("  How large a band is is --band-bytes, in bytes of raster\n");
-    printf("  held at once, and it decides both things above: a page the\n");
-    printf("  budget covers arrives in one band, which is the page, so\n");
-    printf("  it is painted directly and nothing is written down. The\n");
-    printf("  default covers every ordinary sheet, so lowering it is\n");
-    printf("  what bands an ordinary page. It bounds the marks too --\n");
-    printf("  they go to a scratch file past a budget's worth of them --\n");
-    printf("  so a banded page costs a band of raster and a budget of\n");
-    printf("  marks whatever the drawing. currentsystemparams reports\n");
-    printf("  the budget as MaxBandBytes and the band it bought as\n");
-    printf("  CurBandHeight.\n");
-    printf("\n");
-    printf("  A device may be given a mode after a colon:\n");
-    printf("\tDEVICE:whole    hold the whole page rather than a band of\n");
-    printf("\t                it, which is what to compare against\n");
-    printf("\tDEVICE:band     hold a band of it whatever the page size\n");
-    printf("\traster:FORMAT   the pixel format a lent framebuffer is in\n");
-    printf("\t                (rgb, argb, bgr, bgra)\n");
-    printf("\n");
-    printf("  record is the class a banded page is held by, and takes no\n");
-    printf("  mode: selecting it is the same as ppm:band.\n");
-    printf("\n");
-    printf("  A page held a band at a time is held as the marks that made\n");
-    printf("  it, and --spill says where those marks go:\n");
-    printf("\tauto      in memory while they come to less than the\n");
-    printf("\t          raster banding the page saves, and in a scratch\n");
-    printf("\t          file past that. The default, and the only one\n");
-    printf("\t          that bounds what a page costs without touching\n");
-    printf("\t          a disk for a page that does not need it\n");
-    printf("\tnever     in memory whatever they come to, touching no\n");
-    printf("\t          scratch file at all. What a page costs then\n");
-    printf("\t          follows its drawing with no limit\n");
-    printf("\talways    in a scratch file from the first mark; refused\n");
-    printf("\t          at start-up where no scratch file can be made\n");
+        fprintf(out, "\t%s\n", _xpost_main_devices[i++]);
+    fprintf(out, "\n");
+    fprintf(out, "  A device whose page may arrive a band at a time holds a\n");
+    fprintf(out, "  band of it rather than the page: pgm, ppm, pbm, tiff, png\n");
+    fprintf(out, "  and jpeg. A page small enough to fit one band is held\n");
+    fprintf(out, "  whole, so this costs a small page nothing.\n");
+    fprintf(out, "\n");
+    fprintf(out, "  How large a band is is --band-bytes, in bytes of raster\n");
+    fprintf(out, "  held at once, and it decides both things above: a page the\n");
+    fprintf(out, "  budget covers arrives in one band, which is the page, so\n");
+    fprintf(out, "  it is painted directly and nothing is written down. The\n");
+    fprintf(out, "  default covers every ordinary sheet, so lowering it is\n");
+    fprintf(out, "  what bands an ordinary page. It bounds the marks too --\n");
+    fprintf(out, "  they go to a scratch file past a budget's worth of them --\n");
+    fprintf(out, "  so a banded page costs a band of raster and a budget of\n");
+    fprintf(out, "  marks whatever the drawing. currentsystemparams reports\n");
+    fprintf(out, "  the budget as MaxBandBytes and the band it bought as\n");
+    fprintf(out, "  CurBandHeight.\n");
+    fprintf(out, "\n");
+    fprintf(out, "  A device may be given a mode after a colon:\n");
+    fprintf(out, "\tDEVICE:whole    hold the whole page rather than a band of\n");
+    fprintf(out, "\t                it, which is what to compare against\n");
+    fprintf(out, "\tDEVICE:band     hold a band of it whatever the page size\n");
+    fprintf(out, "\traster:FORMAT   the pixel format a lent framebuffer is in\n");
+    fprintf(out, "\t                (rgb, argb, bgr, bgra)\n");
+    fprintf(out, "\n");
+    fprintf(out, "  record is the class a banded page is held by, and takes no\n");
+    fprintf(out, "  mode: selecting it is the same as ppm:band.\n");
+    fprintf(out, "\n");
+    fprintf(out, "  A page held a band at a time is held as the marks that made\n");
+    fprintf(out, "  it, and --spill says where those marks go:\n");
+    fprintf(out, "\tauto      in memory while they come to less than the\n");
+    fprintf(out, "\t          raster banding the page saves, and in a scratch\n");
+    fprintf(out, "\t          file past that. The default, and the only one\n");
+    fprintf(out, "\t          that bounds what a page costs without touching\n");
+    fprintf(out, "\t          a disk for a page that does not need it\n");
+    fprintf(out, "\tnever     in memory whatever they come to, touching no\n");
+    fprintf(out, "\t          scratch file at all. What a page costs then\n");
+    fprintf(out, "\t          follows its drawing with no limit\n");
+    fprintf(out, "\talways    in a scratch file from the first mark; refused\n");
+    fprintf(out, "\t          at start-up where no scratch file can be made\n");
 }
 
 static int
@@ -375,16 +424,8 @@ int main(int argc, char *argv[])
     int xsign = 1;
     int ysign = 1;
     int have_geometry = 0;
-    int maj;
-    int min;
-    int mic;
+    int quiet_asked = 0;
     int i;
-
-    xpost_version_get(&maj, &min, &mic);
-    printf("Xpost %d.%d.%d\n", maj, min, mic);
-    printf("Copyright (C) 2013, Michael Joshua Ryan. All rights reserved.\n");
-    printf("This software is supplied under the BSD 3 clause and comes with NO WARRANTY:\n");
-    printf("see the file COPYING for details.\n");
 
 #ifdef HAVE_SIGACTION
     struct sigaction sa, oldsa;
@@ -394,8 +435,10 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef DEBUG_ENTS
-    printf("EXTRA_BITS_SIZE = %u\n", (unsigned int)XPOST_OBJECT_TAG_EXTRA_BITS_SIZE);
-    printf("COMP_MAX_ENT = %u\n", (unsigned int)XPOST_OBJECT_COMP_MAX_ENT);
+    fprintf(stderr, "EXTRA_BITS_SIZE = %u\n",
+            (unsigned int)XPOST_OBJECT_TAG_EXTRA_BITS_SIZE);
+    fprintf(stderr, "COMP_MAX_ENT = %u\n",
+            (unsigned int)XPOST_OBJECT_COMP_MAX_ENT);
 #endif
 
 #ifdef _WIN32
@@ -445,7 +488,11 @@ int main(int argc, char *argv[])
             if ((!strcmp(argv[i], "-h")) ||
                 (!strcmp(argv[i], "--help")))
             {
-                _xpost_main_usage(filename);
+                /* asked for, so it is this run's output and goes where
+                   output goes; the usage printed over a command line
+                   nobody could follow is a complaint and goes with the
+                   rest of them */
+                _xpost_main_usage(stdout, filename);
                 xpost_quit();
                 return EXIT_SUCCESS;
             }
@@ -480,7 +527,7 @@ int main(int argc, char *argv[])
                     else
                     {
                         XPOST_LOG_ERR("missing option value");
-                        _xpost_main_usage(filename);
+                        _xpost_main_usage(stderr, filename);
                         goto quit_xpost;
                     }
 
@@ -506,7 +553,7 @@ int main(int argc, char *argv[])
                 else
                 {
                     XPOST_LOG_ERR("missing option value");
-                    _xpost_main_usage(filename);
+                    _xpost_main_usage(stderr, filename);
                     goto quit_xpost;
                 }
                 if (!_xpost_main_list_add(&incs, &num_incs, inc))
@@ -519,10 +566,18 @@ int main(int argc, char *argv[])
             {
                 no_sandbox = 1;
             }
+            /* Quiet is where the messages start, so it is also what the
+               run is left at when nothing says otherwise -- and the two
+               are not the same answer to the same question. Whether the
+               caller asked is recorded beside how much was asked for,
+               because a greeting is owed to a session that said nothing
+               and not to one that asked for silence. -v and -t ask for
+               more rather than less, so each takes the request back. */
             else if ((!strcmp(argv[i], "-q")) ||
                      (!strcmp(argv[i], "--quiet")))
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_QUIET;
+                quiet_asked = 1;
             }
             else if (!strcmp(argv[i], "--no-graphics"))
             {
@@ -532,11 +587,13 @@ int main(int argc, char *argv[])
                      (!strcmp(argv[i], "--verbose")))
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_VERBOSE;
+                quiet_asked = 0;
             }
             else if ((!strcmp(argv[i], "-t")) ||
                      (!strcmp(argv[i], "--trace")))
             {
                 output_msg = XPOST_OUTPUT_MESSAGE_TRACING;
+                quiet_asked = 0;
             }
             else XPOST_MAIN_IF_OPT("-o", "--output=", output_file)
             else XPOST_MAIN_IF_OPT("-d", "--device=", device)
@@ -545,8 +602,8 @@ int main(int argc, char *argv[])
             else XPOST_MAIN_IF_OPT("-b", "--band-bytes=", band_bytes)
             else
             {
-                printf("unknown option\n");
-                _xpost_main_usage(filename);
+                fprintf(stderr, "%s: unknown option %s\n", filename, argv[i]);
+                _xpost_main_usage(stderr, filename);
                 goto quit_xpost;
             }
         }
@@ -556,11 +613,14 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* parse geometry if any */
-    if (output_msg != XPOST_OUTPUT_MESSAGE_QUIET)
-    {
-        printf("geom 1 : %s\n", geometry);
-    }
+    /* The options are all in, so what this run is is settled and the
+       run can be opened to whoever is watching it. Nothing has been
+       written to either channel yet: a run given an option it does not
+       know leaves above with its complaint and its usage on the log
+       channel and its output channel untouched. */
+    if (_xpost_main_greeted(quiet_asked, output_file))
+        _xpost_main_banner();
+
     /* the parse answers whether it understood the geometry, so a
        geometry that was given and not understood is the error; one that
        was not given at all leaves the default page size standing */
@@ -575,13 +635,15 @@ int main(int argc, char *argv[])
             XPOST_LOG_ERR("bad formatted geometry");
             goto quit_xpost;
         }
-    }
-    if (output_msg != XPOST_OUTPUT_MESSAGE_QUIET)
-    {
-        printf("geom 2 : %dx%d%c%d%c%d\n",
-               width, height,
-               (xsign == 1) ? '+' : '-', xoffset,
-               (ysign == 1) ? '+' : '-', yoffset);
+        /* a run being narrated is told what its geometry came to, on
+           the log channel the rest of the narration goes to */
+        if (output_msg != XPOST_OUTPUT_MESSAGE_QUIET)
+        {
+            fprintf(stderr, "geometry %s reads %dx%d%c%d%c%d\n",
+                    geometry, width, height,
+                    (xsign == 1) ? '+' : '-', xoffset,
+                    (ysign == 1) ? '+' : '-', yoffset);
+        }
     }
 
     {
@@ -612,7 +674,7 @@ int main(int argc, char *argv[])
     if (!have_device)
     {
         XPOST_LOG_ERR("wrong device.");
-        _xpost_main_usage(filename);
+        _xpost_main_usage(stderr, filename);
         goto quit_xpost;
     }
 

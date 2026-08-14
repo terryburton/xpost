@@ -21,11 +21,15 @@ trap 'rm -f "$scratch" "$job" "$out"' EXIT
 
 { echo "/SCRATCH ($scratch) def"; cat "$corpus"; echo quit; } > "$job"
 
-# -a: name tokens may carry bytes 160..255, which would otherwise trip
-# grep's binary-file heuristic and truncate the stream
-"$xpost" -q -d null "$job" </dev/null 2>/dev/null > "$out.raw"
+# The golden is the whole of what the run wrote. A run with no terminal on
+# its standard input is one the interpreter says nothing of its own to --
+# no greeting, no page-boundary announcement, no prompt -- so the output
+# channel carries the corpus's answers alone and the record is compared
+# against it whole. Nothing is taken out on the way: a line of the
+# interpreter's arriving here is a divergence from the record and is
+# reported as one rather than being removed before the comparison.
+"$xpost" -q -d null "$job" </dev/null 2>/dev/null > "$out"
 status=$?
-grep -av '^Xpost\|^Copyright\|WARRANTY\|COPYING\|^PS' < "$out.raw" > "$out"
 verdict_run "$status" "$(cat "$out")" "the corpus run" || exit 1
 
 # --strip-trailing-cr: the golden may be checked out with CRLF on a host that

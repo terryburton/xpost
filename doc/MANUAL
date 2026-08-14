@@ -89,24 +89,30 @@ it is written to. A page is letter unless the program says otherwise or
 `-g 2550x3300+0+0` rather than `-g 2550x3300`. `xpost --help` lists
 every option and every device the build was configured with.
 
-Every run opens with a banner and a copyright notice on the standard
-output. It is elided from the transcripts below except where the
-transcript is about start-up.
+Two things about a run are worth knowing before the first one, and both
+turn on the same question: whether there is somebody at the other end of
+it. There is, when the standard input is a terminal and no output file
+was named -- naming one with `-o` says the run is something waiting for
+that file rather than somebody typing.
 
-Two things about a run are worth knowing before the first one.
+A run with somebody there is a session. It opens with a banner and a
+copyright notice on the standard output, is offered the interactive
+executive after the named program ends (see below), and announces each
+page: at the end of one the interpreter prints `----showpage----` on the
+standard output and reads a line from the terminal, so it waits there
+until it is given one. That is the announcing behaviour PLRM 2.4.4
+describes for interactive use.
 
-`showpage` announces the page. At the end of each page the interpreter
-prints `----showpage----` on the standard output and reads a line from
-the terminal, so a run of a program that calls `showpage` waits there
-until it is given one. Redirect the standard input from /dev/null, or
-close it, for a run that should not stop. This is the announcing
-behaviour PLRM 2.4.4 describes for interactive use; a program embedding
-the library chooses something else through xpost_create.
+A run with nobody there gets none of it. Its standard output carries
+what its program printed and nothing else, so a run whose answer is read
+by a script is read as it stands: `xpost -V` prints the version on a
+line of its own, and a program's output arrives with nothing of the
+interpreter's around it. A program embedding the library chooses its own
+page behaviour through xpost_create.
 
-A run with a terminal on its standard input is offered the interactive
-session after the named program ends -- see below. Naming an output file
-with `-o` says the run is something waiting for that file rather than
-somebody typing, and the session is not offered.
+The transcripts below are of runs at a terminal where the transcript is
+about a session, and of runs with the standard input redirected
+otherwise.
 
 The examples under data/ draw pages:
 

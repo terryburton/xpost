@@ -26,8 +26,21 @@ XP  = os.environ.get("XPOST", "build/src/bin/xpost")
 ENV = dict(os.environ, XPOST_DATA_DIR=os.path.abspath("data"),
            LD_LIBRARY_PATH=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(XP))),"lib"))
 
-# Dump every name key of systemdict, one per line, as a plain string.
-DUMP = r"systemdict { pop dup type /nametype eq { 128 string cvs print (\n) print }{ pop } ifelse } forall"
+# Dump every name key of systemdict, one per line, as a plain string,
+# between two markers of the program's own. The interpreter says nothing of
+# its own to a run with no terminal on its standard input, so the markers
+# are the first and last lines of what comes back and everything between
+# them is a key. Reading them rather than counting on that is what makes a
+# line of the interpreter's a hard failure here: it would have to arrive
+# outside the markers, and the reader below refuses anything outside them.
+# A generator that instead skipped the lines it recognised would take a
+# line it did not recognise for a key and write it into the golden set.
+BEGIN = "%%<<keys>>%%"
+END   = "%%<</keys>>%%"
+DUMP = (r"(" + BEGIN + r"\n) print"
+        r" systemdict { pop dup type /nametype eq"
+        r" { 128 string cvs print (\n) print }{ pop } ifelse } forall"
+        r" (" + END + r"\n) print")
 
 # systemdict names whose presence depends on the build's optional libraries
 # (device loaders behind HAVE_LIBJPEG / HAVE_LIBPNG / HAVE_XCB) or the target
@@ -47,13 +60,16 @@ OPTIONAL = {
 def live_keys():
     r = subprocess.run([XP, "-q", "--no-sandbox", "-d", "null", "/dev/stdin"],
                        input=DUMP.encode(), capture_output=True, env=ENV, timeout=60)
-    keys = []
-    for line in r.stdout.decode("latin1").splitlines():
-        s = line.rstrip("\r")
-        # skip the interpreter banner lines
-        if not s or s.startswith(("Xpost", "Copyright", "This software", "PS>", "see the file")):
-            continue
-        keys.append(s)
+    lines = [s.rstrip("\r") for s in r.stdout.decode("latin1").splitlines()]
+    if not lines or lines[0] != BEGIN or lines[-1] != END:
+        sys.exit("the interpreter wrote something other than the key dump to "
+                 "its output channel; the golden set is not regenerated from "
+                 "it.\n--- what it wrote ---\n"
+                 + "\n".join(lines[:12]))
+    keys = lines[1:-1]
+    if BEGIN in keys or END in keys:
+        sys.exit("the key dump is not bracketed once; the golden set is not "
+                 "regenerated from it")
     # de-dupe defensively, keep sorted for a stable, reviewable diff
     return sorted(set(keys))
 

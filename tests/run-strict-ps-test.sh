@@ -1,9 +1,17 @@
 #!/bin/sh
-# Meson test wrapper: run a PostScript test and require that, apart from the
-# interpreter's fixed startup banner and prompt, the output is exactly
-# "SUCCESS" -- every assertion must hold AND nothing else may print. Guards
-# machinery that must stay silent: a stray diagnostic from a device method
-# interleaves with a page stream written to standard output and corrupts it.
+# Meson test wrapper: run a PostScript test and require that its output is
+# exactly "SUCCESS" -- every assertion must hold AND nothing else may print.
+# Guards machinery that must stay silent: a stray diagnostic from a device
+# method interleaves with a page stream written to standard output and
+# corrupts it.
+#
+# The comparison is against what the run wrote, whole and unfiltered. A run
+# nobody is watching -- no terminal on the standard input, and here not even
+# an open one -- is one the interpreter says nothing of its own to: no
+# greeting, no page-boundary announcement, no prompt. So the output channel
+# carries the program's answer alone, and anything of the interpreter's
+# arriving on it is a failure of the thing this asserts rather than
+# something to filter out before asserting it.
 #   $1  path to the built xpost binary
 #   $2  path to the test script
 set -u
@@ -19,13 +27,6 @@ if [ "$status" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$out"
-filtered=$(printf '%s\n' "$out" \
-    | grep -v '^Xpost ' \
-    | grep -v '^Copyright (C)' \
-    | grep -v '^This software is supplied' \
-    | grep -v '^see the file COPYING' \
-    | sed 's/^PS> *$//' \
-    | grep -v '^$')
-verdict_ok "$filtered" "the run" || exit 1
+verdict_ok "$out" "the run" || exit 1
 # and nothing but: the silence is the other half of what is asserted here
-test "$filtered" = "SUCCESS"
+test "$out" = "SUCCESS"
