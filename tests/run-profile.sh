@@ -197,8 +197,45 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
 fi
 trap 'rm -rf "$work"' EXIT
 
-# A listing line is "<project>:<suite>+<suite> / <name>". Read the
-# suites off it and apply the predicate.
+# How a listing line is laid out is the meson version's to choose. A test
+# carrying suites is written either as
+#
+#     <project>:<suite>+<suite> / <name>
+#     <suite>+<suite> - <project>:<name>
+#
+# and the separator standing after the first field says which. The suites
+# are that first field, less the project name where the layout qualifies
+# it with one; the test's own name is what the line ends with, less the
+# same qualification. A line with neither separator names no suite and is
+# passed over, which is how both layouts write a test that carries none.
+#
+# Read off the fields rather than by searching the line for a separator,
+# so that a test whose name contains one is read by its layout and not by
+# its name. The record meson writes of a run names each test as the
+# listing does, so the same reading serves there too.
+cat > "$work/listing.awk" <<'AWK'
+function listing_suites(line,   n, f, s) {
+    n = split(line, f, " ")
+    if (n < 3) return ""
+    if (f[2] == "/") { s = f[1]; sub(/^[^:]*:/, "", s); return s }
+    if (f[2] == "-") return f[1]
+    return ""
+}
+
+function listing_name(line,   n, f, s) {
+    n = split(line, f, " ")
+    if (n < 3) return line
+    if (f[2] == "/") return substr(line, index(line, " / ") + 3)
+    if (f[2] == "-") {
+        s = substr(line, index(line, " - ") + 3)
+        sub(/^[^:]*:/, "", s)
+        return s
+    }
+    return line
+}
+AWK
+
+# Read the suites off each line and apply the predicate.
 if ! meson test -C "$build" --list > "$work/all" 2>"$work/err"; then
     echo "FAILURES: could not list the tests in $build"
     sed 's/^/      /' "$work/err"
@@ -209,20 +246,21 @@ if [ ! -s "$work/all" ]; then
     exit 1
 fi
 
-awk -v want="$want" -v without="$without" '
-    {
-        i = index($0, " / ")
-        if (i == 0) next
-        suites = substr($0, 1, i - 1)
-        sub(/^[^:]*:/, "", suites)
-        n = split(suites, s, "+")
-        hit = 0; barred = 0
-        for (j = 1; j <= n; j++) {
-            if (index(" " want " ", " " s[j] " ")) hit = 1
-            if (without != "" && index(" " without " ", " " s[j] " ")) barred = 1
-        }
-        if (hit && !barred) print $0
-    }' "$work/all" | sort > "$work/want"
+cat > "$work/pick.awk" <<'AWK'
+{
+    suites = listing_suites($0)
+    if (suites == "") next
+    n = split(suites, s, "+")
+    hit = 0; barred = 0
+    for (j = 1; j <= n; j++) {
+        if (index(" " want " ", " " s[j] " ")) hit = 1
+        if (without != "" && index(" " without " ", " " s[j] " ")) barred = 1
+    }
+    if (hit && !barred) print $0
+}
+AWK
+awk -v want="$want" -v without="$without" \
+    -f "$work/listing.awk" -f "$work/pick.awk" "$work/all" | sort > "$work/want"
 
 if [ ! -s "$work/want" ]; then
     echo "FAILURES: the $profile profile names no test"
@@ -264,15 +302,17 @@ echo "profile $profile: $what -- $selected of $(wc -l < "$work/all" | tr -d ' ')
 # number written here, so neither can drift from what the tree carries,
 # and both read the suite field rather than the line, so a test whose
 # name happens to say memacct is not one of them.
+cat > "$work/count.awk" <<'AWK'
+{
+    suites = listing_suites($0)
+    if (suites == "") next
+    n = split(suites, s, "+")
+    for (j = 1; j <= n; j++) if (s[j] == want) { c++; break }
+}
+END { print c + 0 }
+AWK
 count_suite() {
-    awk -v want="$2" '{
-        i = index($0, " / ")
-        if (i == 0) next
-        suites = substr($0, 1, i - 1)
-        sub(/^[^:]*:/, "", suites)
-        n = split(suites, s, "+")
-        for (j = 1; j <= n; j++) if (s[j] == want) { c++; break }
-    } END { print c + 0 }' "$1"
+    awk -v want="$2" -f "$work/listing.awk" -f "$work/count.awk" "$1"
 }
 nmemacct=$(count_suite "$work/all" memacct)
 nmemacct_sel=$(count_suite "$work/want" memacct)
@@ -393,14 +433,15 @@ fi
 
 if [ "$profile" = everything ]; then
     # A name may be given as meson writes it or as the test is called.
+    cat > "$work/named.awk" <<'AWK'
+$0 == n || listing_name($0) == n { found = 1; print }
+END { exit !found }
+AWK
     : > "$work/excused"
     : > "$work/lapsed"
     for name in ${XPOST_ALLOW_SKIP:-}; do
-        if awk -F' / ' -v n="$name" '$0 == n || $NF == n { found = 1 }
-                                     END { exit !found }' "$work/skipped"; then
-            awk -F' / ' -v n="$name" '$0 == n || $NF == n' "$work/skipped" \
-                >> "$work/excused"
-        else
+        if ! awk -v n="$name" -f "$work/listing.awk" -f "$work/named.awk" \
+             "$work/skipped" >> "$work/excused"; then
             printf '%s\n' "$name" >> "$work/lapsed"
         fi
     done
