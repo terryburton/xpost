@@ -289,7 +289,7 @@ int _create_cont(Xpost_Context *ctx,
        Either way the run still says which rows take marks, so a caller
        playing a page back a band at a time gets the page it would have
        got; what it does not get is the bound. */
-    xpost_dev_band_take(ctx, height,
+    xpost_dev_band_take(ctx, devdic, height,
                         private.interlaced == PNG_INTERLACE_ADAM7
                         || xpost_object_get_type(
                                xpost_context_host_setting(ctx, "OutputBufferOut"))
@@ -995,7 +995,7 @@ int _moveband(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    xpost_dev_band_move(&private.band, private.height,
+    xpost_dev_band_move(ctx, devdic, &private.band, private.height,
                         xpost_dev_num_to_int(top),
                         xpost_dev_num_to_int(rows));
     /* rows put in front of a device whose page is finished are the next

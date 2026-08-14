@@ -414,12 +414,60 @@ typedef struct
     unsigned int done : 1;   /* the page has been finished */
 } Xpost_Dev_Band;
 
-/* Hold a run to the page there is and to the buffer there is, and say
-   where the buffer's first row sits. A run naming rows the page does
-   not have, or more rows than the buffer holds, is cut to what it can
-   be rather than followed off the end of either. */
+/*
+ * State on the device dictionary the run of the page's rows this device
+ * is taking marks for, under the two names every device holding a run
+ * states it by (.bandtop and .bandrows, data/image.ps).
+ *
+ * It is the answer to one question -- which of the page's rows a mark
+ * may land on -- and the fill pipeline asks it of the dictionary before
+ * converting a shape, so that a shape crossing the page is converted
+ * over this run and not over the whole of it. A device that says
+ * nothing is asked for nothing and has its shapes converted whole,
+ * which is what a device holding its page some other way wants.
+ *
+ * Written where the run is set and nowhere else, so the two cannot come
+ * apart: the run is what xpost_dev_band_move() assigns, and this is the
+ * tail of it.
+ *
+ * A pair that cannot be written is left unwritten rather than half
+ * written, and a run with no dictionary to be stated on is not stated.
+ * The entries are how a conversion is bounded and not where the pixels
+ * are -- every marking method asks xpost_dev_band_row() -- so a device
+ * with neither of them paints the same page more slowly, while one
+ * carrying a run it has since left would have marks dropped that it
+ * does hold.
+ */
 static inline void
-xpost_dev_band_move(Xpost_Dev_Band *b, int height, int top, int rows)
+xpost_dev_band_publish(Xpost_Context *ctx, Xpost_Object devdic,
+                       const Xpost_Dev_Band *b)
+{
+    Xpost_Object top, rows;
+
+    if (xpost_object_get_type(devdic) != dicttype)
+        return;
+
+    top = xpost_name_cons(ctx, ".bandtop");
+    rows = xpost_name_cons(ctx, ".bandrows");
+
+    if (xpost_dict_put(ctx, devdic, top, xpost_int_cons((integer)b->top))
+        || xpost_dict_put(ctx, devdic, rows, xpost_int_cons((integer)b->rows)))
+    {
+        (void)xpost_dict_undef(ctx, devdic, top);
+        (void)xpost_dict_undef(ctx, devdic, rows);
+    }
+}
+
+/* Hold a run to the page there is and to the buffer there is, and say
+   where the buffer's first row sits, and state the run the device is
+   left standing on. A run naming rows the page does not have, or more
+   rows than the buffer holds, is cut to what it can be rather than
+   followed off the end of either -- and it is the cut run that is
+   stated, this being where a device says what it holds rather than what
+   it was offered. */
+static inline void
+xpost_dev_band_move(Xpost_Context *ctx, Xpost_Object devdic,
+                    Xpost_Dev_Band *b, int height, int top, int rows)
 {
     if (top < 0 || top > height)
         top = 0;
@@ -433,6 +481,7 @@ xpost_dev_band_move(Xpost_Dev_Band *b, int height, int top, int rows)
     b->rows = rows;
     b->whole = b->bufrows >= height;
     b->origin = b->whole ? 0 : top;
+    xpost_dev_band_publish(ctx, devdic, b);
 }
 
 /* The buffer row page row @p y is held in, or -1 for a row this device
@@ -510,10 +559,13 @@ xpost_dev_band_clip(const Xpost_Dev_Band *b, int *y0, int *y1)
  * every row of the page and banding it bounds nothing. Saying so here
  * is what keeps the two questions apart: which rows a mark may land on,
  * and how many rows there are to land in.
+ *
+ * The run taken is stated on @p devdic as it is set, that being where
+ * the fill pipeline reads which rows to convert a shape over.
  */
 static inline void
-xpost_dev_band_take(Xpost_Context *ctx, int height, int wholepage,
-                    Xpost_Dev_Band *b)
+xpost_dev_band_take(Xpost_Context *ctx, Xpost_Object devdic,
+                    int height, int wholepage, Xpost_Dev_Band *b)
 {
     Xpost_Object gd, run, key;
     int top = 0, rows = height;
@@ -545,7 +597,7 @@ xpost_dev_band_take(Xpost_Context *ctx, int height, int wholepage,
             (void)xpost_dict_undef(ctx, gd, key);
         }
     }
-    xpost_dev_band_move(b, height, top, rows);
+    xpost_dev_band_move(ctx, devdic, b, height, top, rows);
 }
 
 /*

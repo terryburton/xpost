@@ -55,6 +55,59 @@ static void rect(const char *what,
         printf("  got [%d..%d]x[%d..%d]\n", x0, x1, y0, y1);
 }
 
+/* Move a run without a dictionary to state it on. What a device states
+   is what these fields hold, so the arithmetic is what the checks below
+   are about; a device's dictionary is exercised where a page is put
+   out. */
+static void band_move(Xpost_Dev_Band *b, int height, int top, int rows)
+{
+    Xpost_Object nodict = { 0 };
+
+    xpost_dev_band_move(NULL, nodict, b, height, top, rows);
+}
+
+/* The rows a run takes marks for, read one row at a time either side of
+   it, against the run it says it is holding. A device states @p lo and
+   @p hi on its dictionary and the fill pipeline converts a shape over
+   exactly them, so the two must name the same rows. */
+static void accepts(const char *what, const Xpost_Dev_Band *b,
+                    int height, int lo, int hi)
+{
+    int y, bad = -1;
+
+    for (y = -2; y < height + 2; y++)
+    {
+        int held = xpost_dev_band_row(b, y) >= 0;
+
+        if (held != (y >= lo && y <= hi))
+        {
+            bad = y;
+            break;
+        }
+    }
+    check(bad < 0 && b->top == lo && b->rows == hi - lo + 1, what);
+    if (bad >= 0)
+        printf("  row %d: held=%d, stated run [%d..%d]\n",
+               bad, xpost_dev_band_row(b, bad) >= 0,
+               b->top, b->top + b->rows - 1);
+}
+
+/* The row clip a rectangle fill goes through, against the same run. */
+static void clips(const char *what, const Xpost_Dev_Band *b,
+                  int y0, int y1, int expect_nonempty, int ey0, int ey1)
+{
+    int r = xpost_dev_band_clip(b, &y0, &y1);
+
+    if (!expect_nonempty)
+    {
+        check(r == 0, what);
+        return;
+    }
+    check(r == 1 && y0 == ey0 && y1 == ey1, what);
+    if (r && (y0 != ey0 || y1 != ey1))
+        printf("  got rows [%d..%d]\n", y0, y1);
+}
+
 /* Walk a segment and render the pixels it paints as "x,y x,y ..." so an
    expectation reads as the picture it is. */
 static void line(const char *what,
@@ -114,6 +167,95 @@ int main(void)
         lo = 20; hi = 30;
         check(xpost_dev_span_clip(&lo, &hi, 8) == 0,
               "a span wholly past the extent survives nothing");
+    }
+
+    /* The run of the page's rows a device holds, which is the row half
+       of the same contract. Two readings come off it and they are not
+       the same question: which rows take a mark, and which rows there
+       are pixels stored for. The run a device states on its dictionary
+       is the first of them, and the fill pipeline converts a shape over
+       exactly that -- so a run that named any other set of rows would
+       have marks formed for rows that drop them, or rows dropped that
+       the device holds. */
+    {
+        /* a band-sized buffer: 10 rows of a 50-row page */
+        Xpost_Dev_Band b;
+
+        b.bufrows = 10;
+        band_move(&b, 50, 20, 10);
+        check(b.top == 20 && b.rows == 10 && b.origin == 20 && !b.whole,
+              "a band-sized buffer stands where it was put");
+        accepts("a run takes marks for its own rows and no others",
+                &b, 50, 20, 29);
+        check(xpost_dev_band_row(&b, 20) == 0
+              && xpost_dev_band_row(&b, 29) == 9,
+              "a run's rows index from the buffer's first");
+
+        /* the clip a rectangle fill goes through must cut to the same
+           rows the per-pixel reading accepts */
+        clips("a rectangle crossing the run keeps the run's part",
+              &b, 0, 49, 1, 20, 29);
+        clips("a rectangle inside the run is untouched",
+              &b, 22, 25, 1, 22, 25);
+        clips("a rectangle wholly above the run survives nothing",
+              &b, 0, 19, 0, 0, 0);
+        clips("a rectangle wholly below the run survives nothing",
+              &b, 30, 49, 0, 0, 0);
+
+        /* a buffer the size of a band stores exactly what it takes */
+        check(xpost_dev_band_stored(&b, 19) == -1
+              && xpost_dev_band_stored(&b, 20) == 0
+              && xpost_dev_band_stored(&b, 29) == 9
+              && xpost_dev_band_stored(&b, 30) == -1,
+              "a band-sized buffer stores the run it takes marks for");
+
+        /* moving it leaves the rows given up holding nothing */
+        band_move(&b, 50, 40, 10);
+        accepts("a moved run takes marks for where it moved to",
+                &b, 50, 40, 49);
+
+        /* a run naming rows the page does not have is cut to the page */
+        band_move(&b, 50, 45, 10);
+        check(b.top == 45 && b.rows == 5,
+              "a run running off the page is cut to the page");
+        accepts("a cut run takes marks for what is left of it",
+                &b, 50, 45, 49);
+
+        /* a run larger than the buffer is cut to the buffer: the bound
+           is what the buffer has, not what was asked for */
+        band_move(&b, 50, 0, 50);
+        check(b.rows == 10, "a run larger than the buffer is cut to it");
+        accepts("a run cut to the buffer takes marks for that much",
+                &b, 50, 0, 9);
+
+        /* a run of no rows takes no mark at all */
+        band_move(&b, 50, 20, 0);
+        check(b.rows == 0, "a run of no rows keeps none");
+        accepts("a run of no rows takes no mark", &b, 50, 20, 19);
+        {
+            int y0 = 0, y1 = 49;
+            check(xpost_dev_band_clip(&b, &y0, &y1) == 0,
+                  "a rectangle meets no row of an empty run");
+        }
+    }
+    {
+        /* a buffer holding every row of the page, asked for a run of it:
+           the run says which marks it takes, and the rows it is not
+           standing on are still stored -- the runs before this one
+           painted into the same buffer and their pixels are still there */
+        Xpost_Dev_Band b;
+
+        b.bufrows = 50;
+        band_move(&b, 50, 20, 10);
+        check(b.whole && b.origin == 0,
+              "a whole-page buffer keeps the page's own row numbering");
+        accepts("a whole-page buffer takes marks for the run it was given",
+                &b, 50, 20, 29);
+        check(xpost_dev_band_row(&b, 25) == 25,
+              "a whole-page buffer puts a mark at the page's own row");
+        check(xpost_dev_band_stored(&b, 0) == 0
+              && xpost_dev_band_stored(&b, 49) == 49,
+              "a whole-page buffer stores every row whatever run it takes");
     }
 
     /* DrawLine: the pixels whose centres the segment covers along its

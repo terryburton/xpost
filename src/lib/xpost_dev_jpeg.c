@@ -309,7 +309,7 @@ int _create_cont(Xpost_Context *ctx,
        for, which is the whole page by the contract it asked under
        (XPOST_OUTPUT_BUFFEROUT, xpost.h). The run still says which rows
        take marks either way. */
-    xpost_dev_band_take(ctx, height,
+    xpost_dev_band_take(ctx, devdic, height,
                         xpost_object_get_type(
                             xpost_context_host_setting(ctx, "OutputBufferOut"))
                         == stringtype,
@@ -992,7 +992,7 @@ int _moveband(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    xpost_dev_band_move(&private.band, private.height,
+    xpost_dev_band_move(ctx, devdic, &private.band, private.height,
                         xpost_dev_num_to_int(top),
                         xpost_dev_num_to_int(rows));
     /* rows put in front of a device whose page is finished are the next
