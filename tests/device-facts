@@ -116,6 +116,13 @@ question .groundvaries bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     has to think about. Answering otherwise costs a fill per unheld row
     and is only worth it where the ground genuinely differs down the
     page.
+    A device that shows a grey as a pattern of pixels -- ScreenPaint,
+    below -- answers this true and is held to it there, since the cell
+    it ranks against is whatever screen the program set and no class can
+    promise one row over the page while that is so. The entries stay
+    apart because the implication is one-way and the two are read for
+    different things: this by the walk that puts a page out row by row,
+    that by the machinery that tells a device which screen is in force.
 family false
 answer pgm false
 answer ppm false
@@ -193,6 +200,20 @@ question ScreenPaint pbm
     told of a screen and holds none -- which is the safe answer, since a
     device holding a cell it never reads would be carrying page state
     that nothing keeps right.
+    One device carries this and one carries .groundvaries, and they are
+    not the same entry said twice. This one is about how a colour is
+    stored; that one is about whether a row the device holds no pixel of
+    can be shown by one row of bytes wherever it stands. What relates
+    them runs one way only: a class that screens cannot promise the
+    second, because the cell is the screen in force and the screen is
+    the program's to set, so a device that screens must answer
+    .groundvaries true whatever cell it is holding today. The converse
+    is not implied -- a device could vary its ground for a reason of its
+    own and store the grey it is handed -- so folding the two would make
+    the band walk read a question about storage to answer a question
+    about rows. The implication is held instead: check-device-facts.sh
+    fails a device that declares this and does not answer .groundvaries
+    true, over the roster and over the record standing in for it.
 family per-device
 answer pbm true data/pbmimage.ps
     Every grey painted on this device screens through the halftone in
