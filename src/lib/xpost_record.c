@@ -2215,6 +2215,12 @@ static int _span_of(const Xpost_Record *rec, Xpost_Record_Kind kind,
 {
     int i, any = 0;
 
+    /* Every kind an entry can be written down under carries at least one
+       operand, so an entry with none is an entry naming no position:
+       it reaches no column, and the kinds below may read the operands
+       their own kind states. */
+    if (!ops || nops < 1)
+        return 0;
     switch (kind)
     {
         case XPOST_RECORD_PUTPIX:
