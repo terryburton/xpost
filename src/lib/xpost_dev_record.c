@@ -866,6 +866,7 @@ out:
  * only be played back one way.
  */
 static int _play_image(Xpost_Context *ctx,
+                       const Xpost_Record *rec, size_t which,
                        const Xpost_Record_Image *img,
                        Xpost_Object targetdic,
                        real lo, real hi,
@@ -987,10 +988,15 @@ static int _play_image(Xpost_Context *ctx,
         PUTSTR(BK_TLUTG, img->tlutrgb + 256, 256);
         PUTSTR(BK_TLUTB, img->tlutrgb + 512, 256);
     }
-    if (img->mbits)
+    if (img->mrowb > 0)
     {
-        PUTSTR(BK_MBITS, img->mbits, (size_t)img->mrowb * img->height);
-        PUT(BK_MROWB, xpost_int_cons(img->mrowb));
+        const unsigned char *bits = xpost_record_image_mbits(rec, which);
+
+        if (bits)
+        {
+            PUTSTR(BK_MBITS, bits, (size_t)img->mrowb * img->height);
+            PUT(BK_MROWB, xpost_int_cons(img->mrowb));
+        }
     }
     if (img->nranges)
     {
@@ -1086,33 +1092,51 @@ static int _play_image(Xpost_Context *ctx,
     if (img->interp)
         PUT(BK_LAST, xpost_bool_cons(0));
 
+    /* The rows are taken one run at a time, which is the shape the writer
+       below wants and is also what holds a picture's residency to the
+       run in hand: a record that has spilled reads the run it is asked
+       for and holds no more of the picture than that. Each run is copied
+       into the buffer the writer fills before the next is asked for,
+       since the one a spilled record answers with is the one place it
+       reads a run into. */
     for (y = y0; y < y1; y++)
     {
         int p = y > 0 ? y - 1 : 0;
+        const unsigned char *run;
 
         if (img->planar)
         {
             for (c = 0; c < img->ncomp; c++)
             {
+                run = xpost_record_image_run(rec, which, y * img->ncomp + c);
+                if (!run)
+                    { ret = ioerror; goto out; }
                 memcpy(xpost_string_get_pointer(ctx,
-                           xpost_array_get(ctx, bufs, c)),
-                       img->samples + ((size_t)y * img->ncomp + c) * rowbytes,
-                       rowbytes);
+                           xpost_array_get(ctx, bufs, c)), run, rowbytes);
                 if (img->interp)
+                {
+                    run = xpost_record_image_run(rec, which,
+                                                 p * img->ncomp + c);
+                    if (!run)
+                        { ret = ioerror; goto out; }
                     memcpy(xpost_string_get_pointer(ctx,
-                               xpost_array_get(ctx, prevs, c)),
-                           img->samples
-                           + ((size_t)p * img->ncomp + c) * rowbytes,
-                           rowbytes);
+                               xpost_array_get(ctx, prevs, c)), run, rowbytes);
+                }
             }
         }
         else
         {
-            memcpy(xpost_string_get_pointer(ctx, buf),
-                   img->samples + (size_t)y * rowbytes, rowbytes);
+            run = xpost_record_image_run(rec, which, y);
+            if (!run)
+                { ret = ioerror; goto out; }
+            memcpy(xpost_string_get_pointer(ctx, buf), run, rowbytes);
             if (img->interp)
-                memcpy(xpost_string_get_pointer(ctx, prev),
-                       img->samples + (size_t)p * rowbytes, rowbytes);
+            {
+                run = xpost_record_image_run(rec, which, p);
+                if (!run)
+                    { ret = ioerror; goto out; }
+                memcpy(xpost_string_get_pointer(ctx, prev), run, rowbytes);
+            }
         }
         PUT(BK_Y, xpost_int_cons(y));
         if (img->interp)
@@ -2299,7 +2323,8 @@ static int _replay_step(Xpost_Context *ctx,
                is: the replay chooses the sample rows that reach them and
                narrows the region it paints to them, so a run of rows
                takes only its own part of an image that crosses it */
-            ret = _play_image(ctx, img, targetdic, rlo, rhi, &nrows);
+            ret = _play_image(ctx, f->rec, (size_t)ops[0], img,
+                              targetdic, rlo, rhi, &nrows);
             if (ret)
                 goto refused;
             private.plays++;
