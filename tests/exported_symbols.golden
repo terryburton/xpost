@@ -369,6 +369,7 @@ xpost_record_bytes
 xpost_record_clear
 xpost_record_count
 xpost_record_depth
+xpost_record_error
 xpost_record_extent
 xpost_record_failed
 xpost_record_free
@@ -378,7 +379,9 @@ xpost_record_hold
 xpost_record_image
 xpost_record_image_count
 xpost_record_image_get
+xpost_record_image_mbits
 xpost_record_image_rows
+xpost_record_image_run
 xpost_record_last
 xpost_record_lost
 xpost_record_mark
@@ -393,10 +396,13 @@ xpost_record_place_count
 xpost_record_place_get
 xpost_record_release
 xpost_record_replay
+xpost_record_resident
 xpost_record_screen
 xpost_record_screen_count
 xpost_record_screen_get
 xpost_record_spent
+xpost_record_spill
+xpost_record_spilled
 xpost_renameat_beneath
 xpost_run
 xpost_save_create_snapshot_object
