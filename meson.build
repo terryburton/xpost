@@ -1981,6 +1981,36 @@ test('font-face-release',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What a font name means does not depend on how many names came before
+# it. findfont keeps a fixed number of faces, and a name past that number
+# opens its file again and builds again what the face publishes -- the
+# same FontType, the same glyphs, the same program where the type carries
+# one. The names are spellings of one name, so one font on the host
+# exercises a boundary counted in names.
+test('font-cache-bound',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_cache_bound_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# A loader that fails between opening a face and handing it over gives
+# the face back: nothing else can, because the block carrying the release
+# is what the handover was going to make. The failure is arranged with a
+# font dictionary the loader cannot write its answers into, and the
+# assertion is how many faces the module holds either side of it -- a
+# number nothing at the end of a run can answer, since the library takes
+# every face still open with it when the font machinery goes down.
+font_face_error_exe = executable('font_face_error_test',
+  'tests/font_face_error_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('font-face-error', font_face_error_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The glyph cache is keyed by the serial a font dictionary carries, and
 # that dictionary is the program's to write: a serial that is not an
 # integer, or one whose pair with the character code leaves the integer

@@ -647,6 +647,19 @@ _xpost_font_face_filename_and_index_get(const char *name, int *idx)
 
 static char *_xpost_font_last_file = NULL;
 
+/* How many faces the module has open. A face is host state outside
+   virtual memory and its bookkeeping shows nowhere else: the library
+   takes every face still open with it when the font machinery goes
+   down, so a run that ends says nothing about how many it was holding
+   while it ran. This is that number while it runs. */
+static long _xpost_font_faces = 0;
+
+long
+xpost_font_faces_held(void)
+{
+    return _xpost_font_faces;
+}
+
 /* the file behind the face most recently opened by name: the caller
    reads the program itself (a Type 42 dictionary publishes it as
    sfnts) */
@@ -686,6 +699,7 @@ xpost_font_face_new_from_name(const char *name)
     }
 
     _xpost_font_last_file = filename;
+    _xpost_font_faces++;
 
     return face;
 #else
@@ -717,6 +731,7 @@ xpost_font_face_new_from_memory(const unsigned char *data, size_t len)
         FT_Done_Face(face);
         return NULL;
     }
+    _xpost_font_faces++;
 
     return face;
 #else
@@ -830,6 +845,7 @@ xpost_font_face_free(void *face)
     bytes = program_take(face);
     FT_Done_Face(face);
     free(bytes);
+    _xpost_font_faces--;
 #else
     (void)face;
 #endif

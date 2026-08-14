@@ -209,6 +209,7 @@ xpost_font_face_new_from_name
 xpost_font_face_scale
 xpost_font_face_transform
 xpost_font_face_units
+xpost_font_faces_held
 xpost_font_init
 xpost_font_quit
 xpost_fpurge
