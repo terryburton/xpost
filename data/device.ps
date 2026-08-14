@@ -76,6 +76,57 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% dict  .bandfits  -
+% Refuse a device whose band budget will not buy one row of its page.
+%
+% How deep a band is is the budget divided by what one row of the raster
+% costs, and that division answers one row for everything at or below a
+% row: a budget of a single byte and a budget of a whole row cut the same
+% bands. So a budget under a row is a budget the run did not get, and a
+% run told nothing would have every reason to think it had -- which is a
+% control that appears to select something and does not.
+%
+% Asked of every device as it is finished, which is the one point every
+% device made passes through, and answered only for a device carrying a
+% budget: a device holding its page whole has no band for a budget to
+% cut, and puts out the same page at any budget at all.
+%
+% The budget and the least it may be are both named, on the standard
+% error, because an error names an operator and a condition and carries
+% no numbers of its own. The page goes to the standard output whenever
+% the run was given no file to write it to, which is why the complaint
+% does not go there.
+currentglobal true setglobal
+.xpostsys /.bandfits { % dict  .  -
+4 dict {
+    /bf.dev exch def
+    /bf.budget bf.dev /.bandbytes 2 copy known
+        { get }{ pop pop null } ifelse def
+    /bf.row bf.budget type /integertype eq
+        { bf.dev //.xpostsys /.rowbytes get exec }{ null } ifelse def
+    % A class that prices no row in bytes is a class no band arithmetic
+    % can be done for, and nothing here can say whether its budget is
+    % short.
+    bf.row type /integertype eq
+        { bf.row 0 gt { bf.budget bf.row lt }{ false } ifelse }
+        { false } ifelse
+    {
+        4 dict begin
+            /out (%stderr) (w) file def
+            /n 24 string def
+            out (xpost: a band budget of ) writestring
+            out bf.budget n cvs writestring
+            out ( bytes will not buy one row of this page, which costs )
+                writestring
+            out bf.row n cvs writestring
+            out ( bytes\n) writestring
+            out flushfile
+        end
+        /.completedevice cvx /rangecheck signalerror
+    } if
+} //.xpostsys /.indict get exec } bind put
+setglobal
+
 % devdict sx sy  .completedevice  -
 % Finish a freshly created device, on every path that creates one: the
 % device the interpreter starts with and the device setpagedevice makes
@@ -91,6 +142,11 @@ setglobal
 % reach the compiled rasterisers, and a global object may not hold a
 % local one.
 .privatedict /.completedevice { % devdict sx sy  .  -
+    % Whether the budget this device's bands were cut to bought any of
+    % them, asked before anything is written on the device and before
+    % the scratch dictionary below is opened, so that a refusal leaves
+    % nothing to be taken back.
+    2 index //.xpostsys /.bandfits get exec
     % the scratch dictionary and the matrix built below hold the device,
     % which is a local object, so they are made in local VM whatever the
     % caller was allocating in
@@ -295,6 +351,75 @@ setglobal
 
 currentglobal true setglobal
 
+% -  .settlebandbudget  -
+% Bring the budget this run works to and the class that works to it into
+% line, and leave the number where both sides of the interpreter read it.
+%
+% How deep a band is is that budget divided by what one row of the raster
+% costs, and the same number is what a page is weighed against to decide
+% whether it is held as its marks at all: a page the budget covers
+% arrives in one band, which is the page. So the budget is the one
+% control over both, and lowering it is what holds a smaller page in
+% bands.
+%
+% The class carries the budget a run that names none works to, and states
+% what that number rests on (data/recorddev.ps). Where the invocation
+% named one it goes on the class, in place of that; where it named none
+% the class's own goes into the settings. Either way one number stands in
+% both places afterwards, which matters because the two halves of the
+% interpreter reach it by different routes: the band arithmetic takes it
+% off the class or off a device copied from it, and the driver holding a
+% record takes it out of the settings, where what a run decided lives.
+%
+% The driver takes it from there and not off the device it is holding,
+% because the two are not the same question. What a device carries is the
+% grid its own page is cut into, and something making a device may cut it
+% as fine as it likes; what bounds the marks is what this run said it
+% would spend on a page, which no page may raise or lower for itself. A
+% record weighed against the grid of a one-row band would put a page's
+% marks in a file at the first of them.
+%
+% Done as the run's device is made, and not as this file is read. The
+% language a run is given may have been read whole out of an image of the
+% virtual memory another run built it in, and that other run's
+% invocation is not this one's: a budget written where the class is
+% defined would be written once, into the image, and every run after
+% would band to whatever the run that wrote the file was given. What is
+% settled afresh on every launch lives in the settings this reads from
+% (data/init.ps), and this is the point at which the two are brought into
+% line -- before the first device, which is before the first page is
+% weighed.
+.xpostsys /.settlebandbudget { % -  .  -
+    .privatedict /.xpost_RECORD known {
+        currentglobal true setglobal
+        /MaxBandBytes //.xpostsys /.hostvalue get exec
+        dup type /integertype eq
+            { .privatedict /.xpost_RECORD get exch /.bandbytes exch put }
+            { pop //.xpostsys /.hostdict get /MaxBandBytes
+              .privatedict /.xpost_RECORD get /.bandbytes get put }
+        ifelse
+        setglobal
+    } if
+} bind put
+
+% -  .bandbudget  bytes
+% What one band of a page may cost this run, in bytes of the raster a
+% device holds at once. This is the value currentsystemparams reports as
+% MaxBandBytes.
+%
+% Read off the recording class, which is where the budget is settled
+% above and where every reading of it is taken, so a program is told the
+% number the band loop divided rather than a second copy of it.
+%
+% A run whose graphics never loaded carries no such class and holds no
+% page in bands, and answers nought -- the same nothing .curbandheight
+% answers for the band it would have reported.
+.xpostsys /.bandbudget { % -  .  bytes
+    .privatedict /.xpost_RECORD 2 copy known
+        { get /.bandbytes 2 copy known { get }{ pop pop 0 } ifelse }
+        { pop pop 0 } ifelse
+} bind put
+
 % -  .curbandheight  rows
 % The rows the device now being painted into holds of its page at once,
 % and zero where it holds the page whole. This is the value
@@ -455,6 +580,10 @@ setglobal
 % them.
 currentglobal true setglobal
 .xpostsys /.startdevice {
+    % The budget this run's pages are cut into bands by, brought into
+    % line with what this run was started with before anything is weighed
+    % against it (.settlebandbudget above).
+    //.xpostsys /.settlebandbudget get exec
     graphicsdict /currgstate get /device 2 copy known
         { get null ne }{ pop pop false } ifelse
     { }{

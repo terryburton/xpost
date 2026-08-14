@@ -419,6 +419,7 @@ StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE -
 RecordSpill /auto
+MaxBandBytes -
 OutputFileName -
 OutputBufferIn -
 OutputBufferOut -
@@ -435,7 +436,28 @@ StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE bgra
 RecordSpill /never
+MaxBandBytes -
 OutputFileName $hwork/page.out
+OutputBufferIn -
+OutputBufferOut -
+"
+
+# and the one setting a run states as a number rather than a word: a
+# budget the invocation named stands where the null stands above, and the
+# recording class works to its own wherever that null is left standing
+probe_run "$work/out3" -d null --band-bytes=250000
+compare_values "a run given a band budget" \
+    "$work/out3" "DATA_DIR $src/data
+.resourcepath 
+.interactive false
+ShowpageSemantics 0
+StartDevice /null
+StartDeviceAsked /null
+StartPageSize  612 792
+SUBDEVICE -
+RecordSpill /auto
+MaxBandBytes 250000
+OutputFileName -
 OutputBufferIn -
 OutputBufferOut -
 "

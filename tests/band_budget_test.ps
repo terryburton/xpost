@@ -1,0 +1,75 @@
+% What this run's band budget is, what it bought, and which route the
+% page took, printed for the wrapper beside it to read.
+%
+% Four readings and not one, because each is the other's instrument. The
+% budget is what the run asked for; the rows are what the arithmetic made
+% of it; the route says which of the two ways the page was reached; and
+% what the device carries says the same thing a second way. A check
+% holding only the rows would pass a run that banded at a budget nobody
+% named, and one holding only the budget would pass a run that reported
+% the number back and went on painting the page whole.
+%
+% Then a drawing, so that the page the wrapper compares across budgets is
+% a page whose marks reach every band. A page whose ink sits in one band
+% is painted the same by a route that never looked at the others.
+
+/ID 1183615869 internaldict def
+/num { 24 string cvs } bind def
+/sp { ( ) print } bind def
+/nl { (\n) print } bind def
+
+% How many marks to draw, which the wrapper names: a page compared
+% across routes wants enough to cross every band, and a page weighing a
+% record against a budget wants enough to pass it.
+/MARKS /MARKS where { pop MARKS }{ 400 } ifelse def
+
+/W DEVICE /width get def
+/H DEVICE /height get def
+
+% The class the page ends up painted in: the one a record plays into, or
+% this device itself. A row of it is priced because the budget is in
+% bytes and a band is in rows, so what the budget bought is only
+% checkable against what a row costs.
+/cls DEVICE /.playclass known
+    { .privatedict DEVICE /.playclass get get }{ DEVICE } ifelse def
+/rowbytes 2 dict begin /width W def cls /.rowcost get exec end exch pop def
+
+currentsystemparams
+(BUDGET ) print dup /MaxBandBytes get num print
+( ROWS ) print /CurBandHeight get num print
+( ROUTE ) print DEVICE /.playclass known { (record) }{ (direct) } ifelse print
+( CARRIES ) print
+DEVICE /.bandbytes 2 copy known { get num }{ pop pop (-) } ifelse print
+( ROWBYTES ) print rowbytes num print
+( PAGE ) print W num print (x) print H num print
+nl
+
+% The drawing. Bars right across the page at every height, so that no
+% band holds all of it, and a grey per bar so that a band replaying the
+% wrong mark shows.
+0 1 MARKS 1 sub {
+    /i exch def
+    newpath
+    0 i 3 mul H mod moveto
+    W 0 rlineto
+    0 2 rlineto
+    W neg 0 rlineto
+    closepath
+    i 16 mod 1 add 17 div setgray
+    fill
+} for
+
+% What became of the marks, read after they were made: a record that
+% passed what it was allowed to hold has put them in a file by now. And
+% what the record came to, which is what that bound is a bound on.
+(SPILL ) print
+DEVICE /.playclass known
+    { DEVICE ID /.recordspill get exec exch num print sp num print
+      ( RECORD ) print
+      DEVICE ID /.recordcost get exec num print pop pop }
+    { (- - RECORD 0) print }
+ifelse
+nl
+flush
+
+showpage

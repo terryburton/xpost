@@ -178,6 +178,7 @@ _xpost_main_usage(const char *filename)
     printf("  --no-sandbox                       allow the program unrestricted file access\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
     printf("  -s, --spill=auto|never|always      where a retained page's marks are held\n");
+    printf("  -b, --band-bytes=BYTES             what one band of a page may cost\n");
     printf("  -q, --quiet                        suppress interpreter messages (default)\n");
     printf("  -v, --verbose                      do not go quiet into that good night\n");
     printf("  -t, --trace                        add additional tracing messages, implies -v\n");
@@ -194,6 +195,18 @@ _xpost_main_usage(const char *filename)
     printf("  band of it rather than the page: pgm, ppm, pbm, tiff, png\n");
     printf("  and jpeg. A page small enough to fit one band is held\n");
     printf("  whole, so this costs a small page nothing.\n");
+    printf("\n");
+    printf("  How large a band is is --band-bytes, in bytes of raster\n");
+    printf("  held at once, and it decides both things above: a page the\n");
+    printf("  budget covers arrives in one band, which is the page, so\n");
+    printf("  it is painted directly and nothing is written down. The\n");
+    printf("  default covers every ordinary sheet, so lowering it is\n");
+    printf("  what bands an ordinary page. It bounds the marks too --\n");
+    printf("  they go to a scratch file past a budget's worth of them --\n");
+    printf("  so a banded page costs a band of raster and a budget of\n");
+    printf("  marks whatever the drawing. currentsystemparams reports\n");
+    printf("  the budget as MaxBandBytes and the band it bought as\n");
+    printf("  CurBandHeight.\n");
     printf("\n");
     printf("  A device may be given a mode after a colon:\n");
     printf("\tDEVICE:whole    hold the whole page rather than a band of\n");
@@ -343,6 +356,7 @@ int main(int argc, char *argv[])
     const char *output_file = NULL;
     const char *device = NULL;
     const char *spill = NULL;
+    const char *band_bytes = NULL;
     const char *ps_file = NULL;
     const char *filename = argv[0];
     const char *define = NULL;
@@ -528,6 +542,7 @@ int main(int argc, char *argv[])
             else XPOST_MAIN_IF_OPT("-d", "--device=", device)
             else XPOST_MAIN_IF_OPT("-g", "--geometry=", geometry)
             else XPOST_MAIN_IF_OPT("-s", "--spill=", spill)
+            else XPOST_MAIN_IF_OPT("-b", "--band-bytes=", band_bytes)
             else
             {
                 printf("unknown option\n");
@@ -620,6 +635,29 @@ int main(int argc, char *argv[])
                       " marks; the ways there are: auto, never, always",
                       spill);
         goto quit_xpost;
+    }
+
+    /* What one band of a page may cost, which the context reads as it is
+       made. Refused naming what was given and the range it takes, for
+       the reason the state above is: a budget nothing recognises would
+       be dropped and the run would band to a number the caller never
+       chose. What the budget will not buy a single row of is refused
+       further on, where a device says what a row of it costs. */
+    if (band_bytes)
+    {
+        char *end;
+        long budget;
+
+        errno = 0;
+        budget = strtol(band_bytes, &end, 10);
+        if (errno || end == band_bytes || *end
+            || !xpost_band_bytes_set(budget))
+        {
+            XPOST_LOG_ERR("\"%s\" is no budget for a band of a page; what one"
+                          " may cost is a whole number of bytes from 1 to %ld",
+                          band_bytes, XPOST_BAND_BYTES_MAX);
+            goto quit_xpost;
+        }
     }
 
     if (!(ctx = xpost_create(device,

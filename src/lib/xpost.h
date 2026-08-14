@@ -360,6 +360,53 @@ XPAPI void xpost_vm_image_refuse(void);
 XPAPI int xpost_record_spill_set(const char *state);
 
 /**
+ * @brief The largest budget a band of a page may be given.
+ *
+ * The budget is divided by what one row of the raster costs to say how
+ * deep a band is, and that division is done in the interpreter's own
+ * integers, the narrower of which counts to this. It is the same number
+ * at both object widths so that one invocation is taken the same way by
+ * either build.
+ */
+#define XPOST_BAND_BYTES_MAX 2147483647L
+
+/**
+ * @brief Choose what one band of a page may cost.
+ *
+ * @param bytes the raster a device may hold at once, in bytes
+ * @return 1, or 0 where the count is outside 1 to
+ *         @ref XPOST_BAND_BYTES_MAX
+ *
+ * A device whose page may arrive a band at a time holds this many bytes
+ * of raster at once and as many rows of the page as that buys. It is
+ * also what a page is weighed against to decide whether it is held that
+ * way at all: a page the budget covers arrives in one band, which is the
+ * page, so it is painted directly and no mark is written down. So this
+ * one number says both which pages are held as their marks and how much
+ * of such a page is in memory at once, and lowering it holds a smaller
+ * page in bands.
+ *
+ * It bounds the marks as well as the raster. A page held as its marks
+ * puts them in a scratch file once they come to more than this, so what
+ * such a page costs is a band of raster and a budget's worth of marks
+ * whatever the drawing (see xpost_record_spill_set, which says where
+ * those marks may go).
+ *
+ * A budget that cannot buy one row of the page in hand is refused when
+ * the device that would hold it is made, rather than quietly taken as
+ * one row.
+ *
+ * PLRM Appendix G declares the band-device setup operators obsolete and
+ * bars them from a page description, so a program may not choose how its
+ * marks are held. This is settled by whoever starts the run, and
+ * currentsystemparams reports it as MaxBandBytes.
+ *
+ * Asked before xpost_create, which reads it. A count outside the range
+ * changes nothing.
+ */
+XPAPI int xpost_band_bytes_set(long bytes);
+
+/**
  * @brief Declare that this context serves no interactive user.
  *
  * A program named to xpost_run() as XPOST_INPUT_FILENAME is a job, and a

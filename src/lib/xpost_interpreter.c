@@ -2692,6 +2692,7 @@ static const char *const host_settings[] =
     "StartPageSize",
     "SUBDEVICE",
     "RecordSpill",
+    "MaxBandBytes",
     "OutputFileName",
     "OutputBufferIn",
     "OutputBufferOut",
@@ -2723,6 +2724,32 @@ xpost_record_spill_set(const char *state)
         && strcmp(state, "always"))
         return 0;
     _record_spill = state;
+    return 1;
+}
+
+/* What one band of a page may cost this run, in bytes of raster held at
+   once, and nought where this run named nothing. The recording class
+   carries the budget a run that names none works to, and states what
+   that number is for (data/recorddev.ps); this is where a run puts
+   another in its place, so there is one number in the tree and one place
+   it is argued for.
+
+   Settled by whoever starts the run and not by the page description, for
+   the reason above it: PLRM Appendix G bars a page description from
+   choosing how its marks are held. currentsystemparams reports the
+   budget in force as MaxBandBytes and the band it bought as
+   CurBandHeight.
+
+   Kept for the process rather than passed to xpost_create, the way the
+   state above is. */
+static long _band_bytes = 0;
+
+XPAPI int
+xpost_band_bytes_set(long bytes)
+{
+    if (bytes < 1 || bytes > XPOST_BAND_BYTES_MAX)
+        return 0;
+    _band_bytes = bytes;
     return 1;
 }
 
@@ -3019,6 +3046,16 @@ static int _record_host_config(Xpost_Context *ctx,
     if ((ret = _host_put(ctx, "RecordSpill",
                          xpost_object_cvlit(
                              xpost_name_cons(ctx, _record_spill)))) != 0)
+        goto done;
+
+    /* What one band of a page may cost. A null where this run named no
+       budget, which is how the recording class is left working to its
+       own (data/recorddev.ps): a number here would be a second copy of
+       that one, and the two would agree until one of them was changed. */
+    if ((ret = _host_put(ctx, "MaxBandBytes",
+                         _band_bytes
+                             ? xpost_int_cons((integer)_band_bytes)
+                             : null)) != 0)
         goto done;
 
     /* Where this run's pages go when the page device names nothing and

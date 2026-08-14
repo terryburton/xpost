@@ -357,7 +357,8 @@ by changing one word.
 What :band settles is that the page is held as its marks whatever its
 size. How deep a band is still comes from the budget, so a page the
 budget covers is held in one band that covers it, and CurBandHeight
-reads 0 there just as it does for :whole.
+reads 0 there just as it does for :whole. What bands an ordinary page
+is a smaller budget, below.
 
 A mode outside those two words is refused before the run begins,
 naming what was given and what the device takes. It has to be: a
@@ -378,13 +379,44 @@ a grayscale page with /OutputDevice /pgm and how its marks are held is
 settled by whoever runs the interpreter.
 
 
+== How deep a band is ==
+
+  -b, --band-bytes=BYTES
+
+How deep a band is comes from a byte budget divided by what one row of
+the device's raster costs. The budget is four million bytes unless
+this says otherwise, and that covers the sheets a page is normally cut
+to, so those are painted directly: letter and A4 and A3 in colour all
+read CurBandHeight 0.
+
+The same number decides whether a page is held as its marks at all. A
+page the budget covers arrives in one band, which is the page, so it
+is painted on the device the run asked for and nothing is written
+down. So lowering the budget is the way to band a page that would
+otherwise be painted whole, and it is the only way: :band asks for the
+recording route and not for a second band, and a page under the budget
+takes that route and still arrives whole.
+
+  xpost -d pgm --band-bytes=100000 -o page.pgm job.ps
+
+bands a letter page at the default resolution into 163-row bands,
+because a row of it is 612 bytes. The same run at 612 gets one-row
+bands. A budget that will not buy a single row of the page in hand is
+refused when the device is made, naming the budget and what a row
+costs, rather than quietly taken as one row; and a budget that is not
+a whole number of bytes from 1 to 2147483647 is refused before the run
+begins, naming what was given and the range.
+
+The budget bounds the marks as well as the raster: see below.
+
+
 == Where a banded page's marks go ==
 
   -s, --spill=auto|never|always
 
   auto     in memory while they come to less than the raster banding
-           the page saves, and in a scratch file past that. This is
-           the default
+           the page saves and less than the band budget, and in a
+           scratch file past either. This is the default
   never    in memory whatever they come to, touching no scratch file
            at all. What the page costs then follows its drawing with
            no limit
@@ -392,6 +424,15 @@ settled by whoever runs the interpreter.
 
 The scratch file has no name, nothing else can open it, and it goes
 when the run does.
+
+Two bounds under auto rather than one, because they answer for
+different pages. What banding saves is the tighter of the two for a
+page whose bands save little, and it says nothing at all about a page
+whose bands save nothing -- a page held whole has no raster its marks
+could cost more than, which is what a page reached with :band under
+the budget is. The band budget answers for that page and for every
+other, so a page held as its marks costs a band of raster and a
+budget's worth of marks whatever is drawn on it.
 
 Under auto and always, whether a scratch file can be made is settled
 when the run starts, by making one and writing to it -- a permissions
@@ -413,8 +454,12 @@ file does not demote a run to it.
 
 == What a program can ask about it ==
 
-currentsystemparams reports three names. All three are reported and
-none can be set, for the reason above.
+currentsystemparams reports four names. All four are reported and none
+can be set, for the reason above.
+
+  MaxBandBytes    what one band of a page may cost this run, in bytes
+                  of raster held at once: the budget --band-bytes set,
+                  or four million where it set none
 
   CurBandHeight   the rows the device now being painted into holds of
                   its page at once, and 0 where it holds the page
@@ -431,10 +476,11 @@ run that asked to be weighed, on a machine that will take no scratch
 file, reports auto and refused, and a reader given only the first
 could not tell that from a page that never needed to spill.
 
-How deep a band is comes from a byte budget divided by what one row of
-the device's raster costs. The budget is four million bytes and it
-cannot be set at run time. It covers the sheets a page is normally cut
-to, so those are painted directly: letter and A4 and A3 in colour all
-read 0. A letter sheet at 300 dpi in grey, which is 2550 by 3300,
-reads 1568; a 612 by 40000 strip in colour reads 2178.
+The two band names are a limit and what it bought, and reading them
+together is how a run's banding is checked: MaxBandBytes divided by
+what one row of the raster costs is CurBandHeight, and a budget that
+buys every row of the page reads 0 for the second, meaning the page
+was held whole. At the default budget a letter sheet at 300 dpi in
+grey, which is 2550 by 3300, reads 1568; a 612 by 40000 strip in
+colour reads 2178; and the ordinary sheets read 0.
 
