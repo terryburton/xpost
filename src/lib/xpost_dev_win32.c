@@ -75,6 +75,9 @@ typedef struct
     int height;
 } PrivateData;
 
+/* Defined below, next to the render data it gives up. */
+static void _reclaim(void *block);
+
 typedef struct
 {
    BITMAPINFOHEADER bih;
@@ -254,6 +257,13 @@ int _create_cont(Xpost_Context *ctx,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
+    /* What this device holds is a window and the framebuffer behind it,
+       which are not virtual memory: a device the run never retires --
+       one a restore took back, or one nothing named by the time a
+       collection came round -- would take them with it. This is what
+       gives them up there. */
+    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
+                                   sizeof(PrivateData), _reclaim);
 
     /* create and map window */
     private.instance = GetModuleHandle(NULL);
@@ -979,6 +989,54 @@ int _destroy(Xpost_Context *ctx,
         return VMerror;
 
     return 0;
+}
+
+/* Give up the window the instance names and the render data the window
+   carries. Called from the collector with the block the instance state
+   is kept in, so it touches nothing in virtual memory -- including the
+   context's record of which device the window is, which names a device
+   the collector has not reached. A device the run retired has given the
+   window up already and leaves this nothing to do. */
+static void _reclaim(void *block)
+{
+    PrivateData *p = block;
+    Render_Data *rd;
+
+    if (!p->window)
+        return;
+
+    rd = (Render_Data *)GetWindowLongPtr(p->window, GWLP_USERDATA);
+    if (rd)
+    {
+        /* the window stops naming the render data before the render
+           data goes, so the window procedure cannot reach it while the
+           window is being torn down */
+        SetWindowLongPtr(p->window, GWLP_USERDATA, (LONG_PTR)0);
+
+        switch (rd->backend_type)
+        {
+            case RENDER_BACKEND_GDI:
+                /* the framebuffer belongs to the bitmap the device
+                   created, and goes with it */
+                DeleteObject(rd->backend.gdi.bitmap);
+                free(rd->backend.gdi.bitmap_info);
+                break;
+            case RENDER_BACKEND_GL:
+                wglMakeCurrent(NULL, NULL);
+                wglDeleteContext(rd->backend.gl.glrc);
+                break;
+        }
+
+        ReleaseDC(p->window, rd->dc);
+        free(rd);
+    }
+
+    DestroyWindow(p->window);
+    p->window = NULL;
+
+    if (!UnregisterClass(TEXT("XPOST_DEV_WIN32"), p->instance))
+        XPOST_LOG_INFO("UnregisterClass() failed");
+    p->instance = NULL;
 }
 
 /* operator function to instantiate a new window device.

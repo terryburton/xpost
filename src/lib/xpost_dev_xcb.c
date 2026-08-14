@@ -80,6 +80,22 @@ typedef struct
     xcb_colormap_t cmap;
 } PrivateData;
 
+/* Give up the display connection the instance names, and the window and
+   the drawing state the server holds behind it. Called from the
+   collector with the block the instance state is kept in, so it touches
+   nothing in virtual memory -- including the context's record of which
+   device the window is, which names a device the collector has not
+   reached. A device the run retired has given the connection up already
+   and leaves this nothing to do. */
+static void _reclaim(void *block)
+{
+    PrivateData *p = block;
+
+    if (p->c)
+        xcb_disconnect(p->c);
+    p->c = NULL;
+}
+
 static int _flush(Xpost_Context *ctx, Xpost_Object devdic);
 
 static
@@ -193,6 +209,13 @@ int _create_cont(Xpost_Context *ctx,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
+    /* What this device holds is a display connection, which is not
+       virtual memory: a device the run never retires -- one a restore
+       took back, or one nothing named by the time a collection came
+       round -- would take its connection with it. This is what gives it
+       up there. */
+    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
+                                   sizeof(PrivateData), _reclaim);
 
     private.width = width;
     private.height = height;
