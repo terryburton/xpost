@@ -87,7 +87,17 @@ run() {
         "$xpost" -q -d pgm:band -o page.pgm -DM="$r_m" "$@" "$script" \
         </dev/null ) >"$r_dir/out.txt" 2>"$r_dir/err.txt"
     r_st=$?
+    laststatus=$r_st
+    lastout=$(cat "$r_dir/out.txt" 2>/dev/null)
     return $r_st
+}
+
+# ... and whether the run that just went is one this arm can read
+# anything off: a run that died on the way out has left every figure
+# below it. The stderr is not judged here, because one of the arms below
+# requires a warning on it.
+judged() {                      # <what to call it>
+    verdict_run "$laststatus" "$lastout" "$1"
 }
 
 # What one run said, and whether it finished.
@@ -105,7 +115,8 @@ mkdir -p "$scratch"
 for arm in "light $LIGHT memory" "heavy $HEAVY file"; do
     set -- $arm
     a_tag=$1; a_m=$2; a_want=$3
-    if ! run "$a_tag" "$scratch" "$a_m" || ! finished "$a_tag"; then
+    if ! run "$a_tag" "$scratch" "$a_m" \
+        || ! judged "the $a_tag run" || ! finished "$a_tag"; then
         note "the $a_tag page did not finish" \
              "$(sed -n 1,3p "$work/$a_tag/err.txt" 2>/dev/null)"
         continue
@@ -142,6 +153,7 @@ fi
 
 # ---- each state does what it says, whatever the drawing ----
 run never-heavy "$scratch" "$HEAVY" -s never
+judged "the never run" || :
 if finished never-heavy && [ "$(said never-heavy SPILL)" = never ] \
     && [ "$(said never-heavy WHERE)" = memory ]; then
     ok "never: a drawing far past the rule keeps its marks in memory"
@@ -151,6 +163,7 @@ else
 fi
 
 run always-light "$scratch" "$LIGHT" -s always
+judged "the always run" || :
 if finished always-light && [ "$(said always-light SPILL)" = always ] \
     && [ "$(said always-light WHERE)" = file ]; then
     ok "always: a drawing far under the rule puts its marks in a file"

@@ -260,7 +260,7 @@ int main(void)
     {
         printf("SKIP no scratch file can be made in %s (%s), so a record"
                " has nowhere to spill to\n", xpost_spill_dir(), why);
-        return 0;
+        return verdict();
     }
 
     /* ---- the same answers, before and after ---- */

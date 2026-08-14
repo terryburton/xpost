@@ -116,7 +116,7 @@ record path data/recorddev.ps
 record test band-*
 record test record
 record test record-*
-record test spill-*
+record test record-spill-unit
 record test form-band
 record test form-nest
 record test region-replay

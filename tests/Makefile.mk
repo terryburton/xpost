@@ -102,6 +102,7 @@ tests/dct_truncated_test.ps \
 tests/dev_gray_row_test.ps \
 tests/dev_rect_test.c \
 tests/record_test.c \
+tests/spill_test.c \
 tests/record_cost_test.c \
 tests/device-fleet.sh \
 tests/device_completion_test.ps \
@@ -181,6 +182,7 @@ tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_glyph_test.ps \
 tests/record_excess_test.ps \
+tests/record_spill_test.ps \
 tests/record_short_test.ps \
 tests/form_band_test.ps \
 tests/form_nest_test.ps \
@@ -331,6 +333,7 @@ tests/run-record-span-test.sh \
 tests/run-record-replay-test.sh \
 tests/run-record-screen-test.sh \
 tests/run-record-excess-test.sh \
+tests/run-record-spill-test.sh \
 tests/run-band-loop-test.sh \
 tests/run-band-sparse-test.sh \
 tests/run-band-report-test.sh \
