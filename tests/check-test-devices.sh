@@ -100,7 +100,12 @@ awk '
             }
         }
     }
-    line ~ /return EXIT_SUCCESS;/ && pending != "" {
+    # An option that reports and stops leaves the reading either by
+    # answering success where it stands or by going to the ending that
+    # gives back what the reading took and answers success there. Both
+    # spellings are the same thing to this scan: an option after which
+    # nothing runs.
+    line ~ /return EXIT_SUCCESS;|goto quit_asked;/ && pending != "" {
         n = split(pending, w, /[ \t]+/)
         for (k = 1; k <= n; k++)
             if (w[k] != "") print "STOP\t" w[k]

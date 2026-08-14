@@ -162,12 +162,29 @@ faildict /n 0 put
     /sft sref 0 get def
     sft 1 eq sft 2 eq or sft 42 eq or
       (the FontType is one the type conventions define) part
-    sref 7 get 0 ne (the face names glyphs) part
-    sref 8 get 0 ne (the glyphs are published by a convention) part
     sref 2 get sref 4 get ne (the bounding box has a width) part
     sref 3 get sref 5 get ne (the bounding box has a height) part
-    sft 42 eq { sref 6 get 0 gt
-        (a Type 42 font carries the program it is defined by) part } if
+    % What the face publishes its glyphs as, which is not the same
+    % question for the two kinds of program. A font whose charstrings can
+    % be read publishes those and is worth nothing without them. A
+    % TrueType program is carried whole as sfnts, and the names its
+    % glyphs are reached by come from the file: a file that names none
+    % gets no CharStrings, so on such a host the program is what the
+    % dictionary has to state and the mapping is a separate matter.
+    sft 42 eq
+    { sref 6 get 0 gt
+        (a Type 42 font carries the program it is defined by) part }
+    { sref 7 get 0 ne (the face names glyphs) part
+      sref 8 get 0 ne (the glyphs are published by a convention) part }
+    ifelse
+    % Said rather than passed over: a face carrying its program and
+    % naming no glyph states less than the type asks of it, and a host
+    % where that is so is one where a name reaches no glyph.
+    sft 42 eq sref 7 get 0 eq and
+    { (note this host's face names no glyph, so it publishes no)
+        print (\n) print
+      (     CharStrings and a name cannot reach a glyph through it\n)
+        print } if
     sbad 0 eq not { (  saw: ) print sref show9 (\n) print } if
     sbad 0 eq slabel require
 } bind def
