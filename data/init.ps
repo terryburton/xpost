@@ -301,6 +301,30 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% key  .isclassname  bool
+% Whether a dictionary key names a device class. A class is defined
+% under a name of one shape and nothing else in the dictionaries the
+% mirror and the lockdown walk carries it, so the shape is what says
+% which keys are classes and no list of them has to be kept anywhere.
+%
+% What it reads is the spelling of a name, so it is about the language
+% rather than about graphics, and it lives here rather than beside the
+% device classes for that reason: the lockdown walks systemdict and asks
+% this of every key it finds, on a run that has loaded the device
+% classes and on one that has loaded no graphics at all. A predicate
+% reached only through a graphics module would answer the first and
+% raise on the second, taking the lockdown -- and with it every start
+% procedure -- down with it.
+currentglobal true setglobal
+.xpostsys /.isclassname { % key  .  bool
+    dup type /nametype eq {
+        60 string cvs dup length 7 ge {
+            0 7 getinterval (.xpost_) eq
+        }{ pop false } ifelse
+    }{ pop false } ifelse
+} bind put
+setglobal
+
 % The bind sweep the module loaders and the lockdown share. .bindone freezes
 % one value: bind substitutes an operator wherever a name in a procedure
 % currently resolves to one, so a program's later redefinition governs what
