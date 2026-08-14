@@ -64,6 +64,75 @@ path_anchor() {
     esac
 }
 
+# Anchor a path so that it names the same thing from anywhere.
+#
+# A wrapper that starts its runs in a directory of its own has to do this
+# to everything it was handed, because what it was handed is relative to
+# where the wrapper itself was started. What counts as already anchored
+# is not a leading slash alone: a host whose names carry the volume they
+# are on writes them as C:/dir, which is relative to nothing, and putting
+# the current directory in front of one produces a name for nowhere.
+#
+# Stated once because it is the same question in every wrapper, and one
+# wrapper answering it differently is one platform's worth of runs
+# looking for their arguments in a place that does not exist.
+path_anchor() {
+    case $1 in
+        /* | ?:[/\\]*) printf '%s\n' "$1" ;;
+        *)             printf '%s/%s\n' "$PWD" "$1" ;;
+    esac
+}
+
+# Whether the peak resident size of a run of the program under test can
+# be read on this machine.
+#
+# The timer answering is not the question. A machine can carry a timer
+# that reports a figure for everything it starts and follows only the
+# processes it built itself: what it then says about a program built
+# another way is a constant, the same for a page of ten rows as for a
+# page of four thousand. A weighing made from that reads every route as
+# holding nothing, which is the answer a route that held the whole page
+# would want.
+#
+# So the timer is put to the program itself, over two pages whose rasters
+# differ by tens of mebibytes, and is believed only where its two
+# readings do. A machine it cannot be believed on is told so by the
+# wrappers, which weigh nothing there rather than weighing a constant.
+_peak_rss_of() {    # $1 program; $2 directory; $3 case; sets _pr_kib
+    _pr_kib=''
+    ( cd "$2" && /usr/bin/time -f '%M' -o "$3.rss" \
+        "$1" -q -d null "$3.ps" </dev/null >"$3.out" 2>/dev/null )
+    grep -q PROBEDONE "$2/$3.out" 2>/dev/null || return 1
+    [ -f "$2/$3.rss" ] || return 1
+    _pr_kib=$(tail -1 "$2/$3.rss")
+    case ${_pr_kib:-x} in *[!0-9]*) return 1 ;; esac
+    return 0
+}
+
+peak_rss_reads() {  # $1 the program under test
+    /usr/bin/time -f '%M' true >/dev/null 2>&1 || return 1
+    _pr_dir=$(mktemp -d) || return 1
+    # What the two runs differ by is thirty mebibytes the interpreter is
+    # holding when it reports, and nothing else: no device is asked for
+    # a page, so what a class does or does not keep a raster of decides
+    # nothing here.
+    printf '%%!PS\n(PROBEDONE) print\n' > "$_pr_dir/small.ps"
+    printf '%%!PS\n/a 500 array def\n0 1 499 { a exch 60000 string put } for\n(PROBEDONE) print\n' \
+        > "$_pr_dir/big.ps"
+    _pr_ok=1
+    _peak_rss_of "$1" "$_pr_dir" small || _pr_ok=0
+    _pr_small=${_pr_kib:-0}
+    _peak_rss_of "$1" "$_pr_dir" big || _pr_ok=0
+    _pr_big=${_pr_kib:-0}
+    rm -rf "$_pr_dir"
+    [ "$_pr_ok" -eq 1 ] || return 1
+    # A timer reading this program's own size answers most of those
+    # thirty mebibytes; one reading something else answers the few
+    # hundred kibibytes a machine moves about by, in either direction.
+    # Eight mebibytes tells the two apart with room to spare in both.
+    [ $((_pr_big - _pr_small)) -ge 8000 ]
+}
+
 # What a run prints to report a failure. Every spelling the suite uses
 # starts with one of these: FAIL, FAILURE, FAILURES, MISMATCH.
 #

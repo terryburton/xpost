@@ -285,7 +285,7 @@ fi
 # Each reading is a run and is judged like one. A run that died on the
 # way took little, and little is exactly the reading the band route is
 # here to produce.
-if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
+if peak_rss_reads "$xpost"; then
     lo=1000; hi=8000; rounds=3
     peak() {  # $1 device; $2 height; $3 band; sets peakkib
         peakkib=''

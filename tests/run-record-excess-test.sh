@@ -253,7 +253,7 @@ done
 # The peak resident size of a process is what answers here: the raster of
 # a device keeping a buffer of its own is not interpreter memory, so the
 # interpreter's own count of what it took cannot see the page at all.
-if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
+if peak_rss_reads "$xpost"; then
     if weigh pgm:whole "$work/cost-whole" "$GRID" 1 \
         && c_whole=$peakkib \
         && weigh pgm:band "$work/cost-band" "$GRID" 1 \

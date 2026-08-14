@@ -878,7 +878,7 @@ done
 # grows by the whole page's own growth, which is ten times what any of
 # this moves by.
 # ---------------------------------------------------------------------
-if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
+if peak_rss_reads "$xpost"; then
     havetime=yes
 else
     havetime=no
