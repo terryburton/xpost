@@ -83,9 +83,18 @@ fi
 # directories are outside it: this tree carries several, each holding a
 # copy of every generated header, and a path rule that matched one of
 # those would read as live while classifying nothing anyone edits.
-if ( cd "$src" && git rev-parse --git-dir >/dev/null 2>&1 ); then
-    ( cd "$src" && git ls-files ) > "$work/files" 2>/dev/null
-else
+#
+# Which of the two is used is decided by what the first one answers,
+# not by where it is being asked. A tree unpacked for a release check
+# sits under a build directory, which is under the working copy, so a
+# question about the context -- is there a repository here -- is
+# answered yes for a tree the repository lists nothing of: the files
+# there are ignored, being generated, and asking git about them yields
+# an empty list rather than an error. Taking the answer instead means
+# the walk is reached wherever the listing comes back short, which is
+# the case the walk is for.
+( cd "$src" && git ls-files ) > "$work/files" 2>/dev/null
+if [ "$(grep -c . "$work/files" || true)" -lt 100 ]; then
     ( cd "$src" && find data doc m4 src tests tools -type f -print \
         2>/dev/null ) > "$work/files"
     ( cd "$src" && find . -maxdepth 1 -type f -print 2>/dev/null |
