@@ -85,24 +85,6 @@
     /.writeband { % rows file  .  -
         //.internaldict /.writergbrows get exec
     } bind
-
-    % The whole page is the header and every row. The compiled writer
-    % reached here writes both, taking the extent from the rows it is
-    % given; the run of rows a band puts out is not the page's extent,
-    % so a band writes the header from the page through .writehead and
-    % the rows through the same walk. The two headers are the same bytes,
-    % and what holds them to that is the band gate rather than a comment:
-    % a page put out a band at a time is required to be the page put out
-    % whole, byte for byte (tests/run-band-loop-test.sh).
-    /.writepage { % img file
-        2 dict {
-        {/f /a}{exch def}forall
-        a f //.internaldict /.writeppmrows get exec
-        f (%stdout)(w) file ne {
-            f closefile
-        } if
-        } //.xpostsys /.indict get exec
-    } bind
 >> //.xpostsys /.makerasterclass get exec def
 
 /TESTGRAPHICS where {pop

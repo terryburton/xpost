@@ -2106,29 +2106,9 @@ int _rgb_raster_target(Xpost_Context *ctx,
     return _rgb_planes(ctx, row, 0, NULL, width);
 }
 
-/* Emit a planar rgb raster as a binary P6 PPM: header, then the
-   raster walk. */
-static
-int _writeppmrows(Xpost_Context *ctx,
-                  Xpost_Object imgdata,
-                  Xpost_Object F)
-{
-    Xpost_File *f;
-    char head[32];
-    int width, height, hn, ret;
-
-    ret = _rgb_raster_target(ctx, imgdata, F, &f, &width, &height);
-    if (ret)
-        return ret;
-    hn = snprintf(head, sizeof head, "P6\n%d %d\n255\n", width, height);
-    if (_emit_write(ctx, f, (unsigned char *)head, (size_t)hn) < 0)
-        return ioerror;
-    return _write_rgb_raster(ctx, imgdata, f, width, height);
-}
-
-/* Emit the raster bytes alone: a device whose format frames the
-   pixel data with its own header (TIFF) writes that itself and
-   takes the walk from here. */
+/* Emit the raster bytes alone. What frames them is the class's own
+   header and tail, written either side of this by the one page writer
+   every raster class puts its page out through (data/image.ps). */
 static
 int _writergbrows(Xpost_Context *ctx,
                   Xpost_Object imgdata,
@@ -3238,8 +3218,13 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     a.seps = NULL;
     a.nseps = 0;
     a.sepcap = 0;
+    /* What this device holds is a buffer, which is not virtual memory: a
+       device the run never retires -- one a restore took back, or one
+       nothing named by the time a collection came round -- would take
+       its buffer with it. This is what gives it up there. */
     ret = xpost_handle_cons(ctx, devdic, namepdfPrivate, &priv,
-                            XPOST_HANDLE_CONTENT, sizeof(a));
+                            XPOST_HANDLE_CONTENT, sizeof(a),
+                            _pdf_acc_reclaim);
     if (ret)
     {
         xpost_strbuf_free(&a.content);
@@ -3247,12 +3232,6 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     }
     if (!_pdf_acc_put(ctx, priv, &a))
         return VMerror;
-    /* What this device holds is a buffer, which is not virtual memory: a
-       device the run never retires -- one a restore took back, or one
-       nothing named by the time a collection came round -- would take
-       its buffer with it. This is what gives it up there. */
-    (void)xpost_handle_reclaim_set(ctx, priv, XPOST_HANDLE_CONTENT,
-                                   sizeof(a), _pdf_acc_reclaim);
     return 0;
 }
 
@@ -3816,8 +3795,6 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
                              numbertype, numbertype, numbertype, numbertype,
                              numbertype, numbertype, numbertype, dicttype); INSTALL;
     op = xpost_operator_cons(ctx, ".base64", (Xpost_Op_Func)_base64, 1, stringtype); INSTALL;
-    op = xpost_operator_cons(ctx, ".writeppmrows", (Xpost_Op_Func)_writeppmrows, 2,
-                             arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writebitrows", (Xpost_Op_Func)_writebitrows, 2,
                              arraytype, filetype); INSTALL;
     op = xpost_operator_cons(ctx, ".writergbrows", (Xpost_Op_Func)_writergbrows, 2,

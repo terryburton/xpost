@@ -682,6 +682,30 @@ currentglobal true setglobal
         pop pop
     } bind
 
+    % img file  .writepage  -
+    % The page whole: the header, the rows and whatever the format
+    % carries after them, through the same three a page arriving in
+    % bands goes out through. The two carry the same bytes because they
+    % are the same bytes rather than because two writers agree.
+    %
+    % A class states its format by stating those three and says nothing
+    % here. One that wrote its page here as well would be a second
+    % writer to hold in step with the first, and a class that stated
+    % only its header would have that header on the page it bands and
+    % the inherited one on the page it writes whole -- one device
+    % putting out two files for one page, and neither of them wrong
+    % anywhere it could be seen.
+    /.writepage { % img file  .  -
+        3 dict {
+        {/f /a}{exch def}forall
+        f .writehead
+        /snk f .bandsink def
+        a snk .writeband
+        snk f .writetail
+        f (%stdout)(w) file ne { f closefile } if
+        } //.xpostsys /.indict get exec
+    } bind
+
     % lo hi  .bandwrite  -
     % Hand one run of the page's rows to the class's row writer. A row
     % the device does not hold is the page's ground, which is what a

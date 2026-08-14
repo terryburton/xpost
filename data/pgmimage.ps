@@ -72,20 +72,6 @@
         exch { 1 index exch writestring } forall pop
     } bind
 
-    % the whole page is the header and every row, written through the
-    % same two the bands are written through, so a page put out at once
-    % and a page put out a band at a time carry the same bytes because
-    % they are the same bytes rather than because two writers agree
-    /.writepage { % img file
-        2 dict {
-        {/f /a}{exch def}forall
-        f .writehead
-        a f .writeband
-        f (%stdout)(w)file ne {
-            f closefile
-        } if
-        } //.xpostsys /.indict get exec
-    } bind
 >> //.xpostsys /.makerasterclass get exec def
 
 //.internaldict /QUIET known { }{ (eof pgmimage.ps\n)print } ifelse
