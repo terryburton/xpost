@@ -43,9 +43,24 @@
 #
 #   A compiled device opens and closes a page's file through the one
 #   pair, xpost_device_page_open/xpost_device_page_close, and calls them
-#   only from the functions its method table registers for the Emit and
+#   only from the three functions that can be the last to hold a page's
+#   file. Two are the ones its method table registers for the Emit and
 #   Destroy slots -- the method that writes a page, and the one that
-#   gives back the file of a page that was never finished.
+#   gives back the file of a page that was never finished. The third is
+#   the one it registers to run when the block its instance state is
+#   kept in is reclaimed, which is all that runs for a device the run
+#   never retires: one a restore took back, or one nothing named by the
+#   time a collection came round. Such a device reaches no Destroy, so
+#   without this its file would be held until the process ended.
+#
+#   That third is read out of the registration and not from a name, so
+#   what earns the permission is having been registered as the reclaim
+#   of that block; a function that merely looks like one is outside the
+#   rule with everything else. And it may close, never open. Opening
+#   reads the settled name off the device dictionary, which is virtual
+#   memory a reclaim may not touch (src/lib/xpost_handle.h), so an open
+#   there is a call that could not work, and is reported as one that may
+#   not be made.
 #
 # The tests are outside this: a test that drives a device's methods
 # one at a time is exercising the device and not transmitting a page, and
@@ -78,6 +93,12 @@ fail=0
 # the line whose brace closes it. Found rather than assumed -- a rename
 # would otherwise put every use outside a range that no longer exists,
 # which reads as a clean tree.
+#
+# A name may be written before it is defined, and a declaration has no
+# body: one taken for a body runs from the declaration to the end of
+# whatever function comes next, which is a range covering code that is
+# not the named function's at all. So a match whose statement ends
+# before any brace is passed over and the scan goes on to the definition.
 #   $1 the code file (path, line and text separated by tabs, as
 #      guard_c_source writes them), $2 the file to look in,
 #   $3 an ERE matching the line that opens the body
@@ -90,6 +111,7 @@ extent() {
             if (!started) next
             depth += gsub(/\{/, "&", line) - gsub(/\}/, "&", line)
             if (depth > 0) seen = 1
+            if (!seen && line ~ /;[ \t]*$/) { started = 0; next }
             if (seen && depth == 0) { print first " " $2; exit }
         }' "$1"
 }
@@ -271,8 +293,18 @@ fi
 #    what makes several Emit calls into one page; and it must name the
 #    shared closer, so that the page it holds the file for ends by giving
 #    it back rather than by being forgotten.
-for f in "$libdir"/xpost_dev_*.c; do
-    hits=$(awk -v F="$f" '
+#
+#    And a page whose device the run never retires is not written by an
+#    Emit and not retired by a Destroy, so a device holding a stream
+#    gives it back from the reclaim of its instance state as well. That
+#    is where the rule is checked; here it is only that such a device
+#    holds one at all.
+
+# Where a device declares a stream in the struct its instance state is
+# kept in, and nothing if it declares none.
+#   $1 the device source
+privfile() {
+    awk -v F="$1" '
         /^typedef struct/ { n = 0; delete buf; inb = 1; next }
         inb && /^\}[ \t]*PrivateData[ \t]*;/ {
             for (i = 1; i <= n; i++)
@@ -282,7 +314,11 @@ for f in "$libdir"/xpost_dev_*.c; do
         }
         inb && /^\}/ { inb = 0; next }
         inb { buf[++n] = $0; lno[n] = FNR }
-    ' "$f")
+    ' "$1"
+}
+
+for f in "$libdir"/xpost_dev_*.c; do
+    hits=$(privfile "$f")
     [ -n "$hits" ] || continue
     if ! grep -qE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)' "$f"; then
         echo "check-page-output: a device keeps a stream in its private struct" >&2
@@ -335,14 +371,19 @@ fi
 
 # 4. and the pair is called from the Emit slot, in the file's own table
 callers=0
+reclaimers=0
 for f in "$libdir"/xpost_dev_*.c; do
     [ "$f" = "$libdir/xpost_dev_generic.c" ] && continue
+    # Each use, and which half of the pair it is: the reclaim below may
+    # give a file back and may not ask for one.
     uses=$(awk -F'\t' -v F="$f" '
         $1 != F { next }
         {
             line = substr($0, length($1) + length($2) + 3)
-            if (line ~ /(^|[^A-Za-z0-9_])xpost_device_page_(open|close)[ \t]*\(/)
-                print $2
+            if (line ~ /(^|[^A-Za-z0-9_])xpost_device_page_open[ \t]*\(/)
+                print $2 ":open"
+            else if (line ~ /(^|[^A-Za-z0-9_])xpost_device_page_close[ \t]*\(/)
+                print $2 ":close"
         }' "$work/code")
     [ -n "$uses" ] || continue
     callers=$((callers + 1))
@@ -386,17 +427,96 @@ $(extent "$work/code" "$f" "(^|[^A-Za-z0-9_])$destfn[ \t]*\\\\(")
 EOF
         dstart=${dstart:-0}; dend=${dend:-0}
     fi
-    for l in $uses; do
+
+    # The third: what this file registers to run when the block its
+    # instance state is kept in is reclaimed. A device the run never
+    # retires reaches no Destroy and nothing else runs for it, so this is
+    # where its file goes back.
+    #
+    # Taken from the registration rather than from a name, so a function
+    # is inside this rule because it was named to xpost_handle_reclaim_set
+    # and for no other reason. The call is read whole -- it is written
+    # over two lines -- and what it names last is the function.
+    recfn=$(awk '{ sub(/\r$/, "")
+                   if (buf == "" && !index($0, "xpost_handle_reclaim_set")) next
+                   buf = buf " " $0
+                   if (!index($0, ";")) next
+                   sub(/.*xpost_handle_reclaim_set[ \t]*\(/, "", buf)
+                   sub(/\)[ \t]*;.*$/, "", buf)
+                   n = split(buf, a, ",")
+                   gsub(/[ \t]+/, "", a[n])
+                   if (a[n] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print a[n]
+                   buf = "" }' "$f" | sort -u)
+    rstart=0; rend=0
+    if [ -n "$recfn" ]; then
+        if [ "$(printf '%s\n' "$recfn" | wc -l)" -ne 1 ]; then
+            echo "check-page-output: ${f#"$src"/} registers more than one reclaim" >&2
+            echo "for its instance state:" >&2
+            printf '%s\n' "$recfn" | sed 's/^/  /' >&2
+            echo "One block is given up once, so one function gives it up." >&2
+            fail=1
+            continue
+        fi
+        read -r rstart rend <<EOF
+$(extent "$work/code" "$f" "(^|[^A-Za-z0-9_])$recfn[ \t]*\\\\(")
+EOF
+        if [ -z "${rstart:-}" ]; then
+            echo "check-page-output: $recfn(), the reclaim ${f#"$src"/} registers" >&2
+            echo "for its instance state, could not be read; the closes below" >&2
+            echo "would be held to nothing." >&2
+            fail=1
+            continue
+        fi
+        reclaimers=$((reclaimers + 1))
+    fi
+
+    # A device holding a stream between Emit calls gives it back there.
+    # Registering a reclaim and leaving the file out of it is the case
+    # this whole extent was widened for, and it reads from the outside
+    # exactly like a device that never had one.
+    if [ -n "$(privfile "$f")" ]; then
+        if [ "$rstart" -eq 0 ]; then
+            echo "check-page-output: ${f#"$src"/} keeps a page's stream and" >&2
+            echo "registers no reclaim for the block it keeps it in. A device" >&2
+            echo "the run never retires reaches no Destroy, and its file is then" >&2
+            echo "held until the process ends." >&2
+            fail=1
+        elif ! printf '%s\n' "$uses" | awk -F: -v a="$rstart" -v b="$rend" \
+                 '$2 == "close" && $1 >= a && $1 <= b { found = 1 }
+                  END { exit !found }'; then
+            echo "check-page-output: $recfn(), the reclaim ${f#"$src"/} registers," >&2
+            echo "gives back what the block names and not the file. A device the" >&2
+            echo "run never retires reaches no Destroy, so this is the last thing" >&2
+            echo "that can close it." >&2
+            fail=1
+        fi
+    fi
+
+    for u in $uses; do
+        l=${u%:*}
+        what=${u##*:}
         if [ "$l" -ge "$estart" ] && [ "$l" -le "$eend" ]; then
             continue
         fi
         if [ "$dstart" -gt 0 ] && [ "$l" -ge "$dstart" ] && [ "$l" -le "$dend" ]; then
             continue
         fi
+        if [ "$rstart" -gt 0 ] && [ "$l" -ge "$rstart" ] && [ "$l" -le "$rend" ]; then
+            [ "$what" = open ] || continue
+            echo "check-page-output: ${f#"$src"/}:$l opens a page's file in" >&2
+            echo "$recfn(), the reclaim of this device's instance state." >&2
+            echo "A reclaim runs inside the collector and reads nothing in" >&2
+            echo "virtual memory, and the name a page is opened under is on the" >&2
+            echo "device dictionary. It gives a file back; it does not ask for" >&2
+            echo "one." >&2
+            fail=1
+            continue
+        fi
         echo "check-page-output: ${f#"$src"/}:$l opens or closes a page's file" >&2
         echo "outside $emitfn(), the method that writes a page (lines" >&2
-        echo "$estart-$eend), and outside the Destroy that gives back the file" >&2
-        echo "of a page never finished (lines $dstart-$dend)." >&2
+        echo "$estart-$eend), outside the Destroy that gives back the file" >&2
+        echo "of a page never finished (lines $dstart-$dend), and outside the" >&2
+        echo "reclaim of a device the run never retired (lines $rstart-$rend)." >&2
         echo "The name is settled per page, so the file is opened per page." >&2
         fail=1
     done
@@ -411,5 +531,19 @@ if [ "$callers" -lt 2 ]; then
     fail=1
 fi
 
+# The same for the third extent, which is reached through a registration
+# rather than through a method table and is the one a rename would
+# silently retire. A registration nothing found leaves the reclaim
+# outside the rule, which is the safe direction and not the intended
+# one: every device holding a stream between Emit calls is a device that
+# has to give it back where the run never asks.
+if [ "$reclaimers" -lt 2 ]; then
+    echo "check-page-output: $reclaimers compiled devices give a page's file" >&2
+    echo "back from a registered reclaim, and the fleet has more than one that" >&2
+    echo "holds a stream. The registration is being read wrong, or a device" >&2
+    echo "holding one has stopped registering a reclaim for it." >&2
+    fail=1
+fi
+
 [ "$fail" = 0 ] || exit 1
-echo "check-page-output: ok (one substitution at data/device.ps:$tstart-$tend, $callers compiled devices opening per page)"
+echo "check-page-output: ok (one substitution at data/device.ps:$tstart-$tend, $callers compiled devices opening per page, $reclaimers giving a file back on reclaim)"

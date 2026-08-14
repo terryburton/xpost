@@ -577,9 +577,11 @@ int _fillrect(Xpost_Context *ctx,
    more of it with.
 
    The file is the one thing left: it is the page machinery that named
-   it, and it is given back by the method that writes the page, where it
-   was opened (tests/check-page-output.sh). What says it is to be given
-   back is the page ending, which is what this records. */
+   it, and it is given back by whichever of this device's callers is the
+   last to hold it -- the method that writes the page, the one that
+   retires the device, or the reclaim of a device the run never retired
+   (tests/check-page-output.sh). What says it is to be given back is the
+   page ending, which is what this records. */
 static void _stream_drop(PrivateData *p)
 {
     p->band.open = 0;
@@ -592,19 +594,36 @@ static void _stream_drop(PrivateData *p)
     p->ground = NULL;
 }
 
-/* Give up the memory the instance names: the writer a page was going
-   out through, and the raster where the device owns it. Called from the
-   collector with the block the instance state is kept in, so it touches
-   nothing in virtual memory. The page a device reclaimed part way
-   through was writing ends where it got to, nothing being left to write
-   the rest with; the file it was going to is the page machinery's, and
-   is given back where it was opened. A device the run retired has given
-   the rest up already and leaves this nothing to do. */
+/* Give up everything the instance names: the writer a page was going
+   out through, the raster where the device owns it, and the file the
+   page was being written to. Called from the collector with the block
+   the instance state is kept in, so it touches nothing in virtual
+   memory.
+
+   This is the last thing to touch a device the run never retires -- one
+   a restore took back, or one nothing named by the time a collection
+   came round. Such a device reaches no Destroy, so the file of a page it
+   was part way through is given back here, through the same closer and
+   for the same reason Destroy gives it back: nothing else is going to be
+   called on it, and a file nobody closes is one the process holds until
+   it ends.
+
+   The page is ended and not finished. What the writer had already handed
+   the file stands, and no ending is written after it, so what a job
+   leaves behind is what it would have left had this never run: a
+   collection decides which descriptors a process holds and never what a
+   page came to. A device the run does retire has given all of this up
+   already and leaves it nothing to do. */
 static void _reclaim(void *block)
 {
     PrivateData *p = block;
 
     _stream_drop(p);
+    if (p->file)
+    {
+        xpost_device_page_close(p->file);
+        p->file = NULL;
+    }
     /* a raster handed to the client is the client's to give back */
     if (p->bufowned)
         free(p->buf);
