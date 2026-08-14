@@ -14,8 +14,8 @@ this one.)
 
 ## What was measured
 
-The **full** profile: 205 of the tests defined in that build, all of
-which passed (205 ok, 0 failed). A coverage report over a run with
+The **full** profile: 310 of the tests defined in that build, all of
+which passed (310 ok, 0 failed). A coverage report over a run with
 failures in it is a measurement of what the sources did while getting an
 answer wrong, and it looks exactly like a report over a run without, so
 the generator reads the exit status and writes nothing at all when the
@@ -37,8 +37,8 @@ as uncovered whatever the other CI lanes do with it.
 
 ## The two numbers
 
-**81.8% of 18521 lines** and **64.7% of 13320 branch outcomes**, across
-49 files. 4708 outcomes are never taken.
+**82.4% of 23916 lines** and **65.6% of 17959 branch outcomes**, across
+55 files. 6179 outcomes are never taken.
 
 Branch coverage is the harder of the two and the one worth reading. A
 line is covered when control reaches it; an outcome is covered when the
@@ -74,34 +74,34 @@ of these, which is reason enough to want the refusals driven on purpose
 rather than waited for. The eight most evaluated, discounted rows
 taken out:
 
-- `src/lib/xpost_interpreter.c:707`, 833,305,252 evaluations, 2 of 4 outcomes never taken -- `if (btype == invalidtype || btype >= XPOST_OBJECT_NTYPES)`
-- `src/lib/xpost_interpreter.c:697`, 833,305,252 evaluations, 1 of 2 outcomes never taken -- `if (abase)`
-- `src/lib/xpost_interpreter.c:675`, 833,305,252 evaluations, 1 of 2 outcomes never taken -- `if (ctx->quit)`
-- `src/lib/xpost_op_path.c:225`, 630,982,979 evaluations, 1 of 2 outcomes never taken -- `if (esz > used - o)   /* the element must fit the decla...`
-- `src/lib/xpost_op_path.c:222`, 630,982,979 evaluations, 2 of 4 outcomes never taken -- `if (p[o] < PATH_CMD_MOVE || p[o] > PATH_CMD_CLOSE)`
-- `src/lib/xpost_stack.c:134`, 464,297,436 evaluations, 1 of 2 outcomes never taken -- `if (xpost_object_get_type(obj) == invalidtype)`
-- `src/lib/xpost_free.c:296`, 440,726,998 evaluations, 2 of 4 outcomes never taken -- `if (e > XPOST_OBJECT_COMP_MAX_ENT ||`
-- `src/lib/xpost_interpreter.c:1113`, 312,148,770 evaluations, 2 of 4 outcomes never taken -- `slot.comp_.off != off + 1 ||`
+- `src/lib/xpost_interpreter.c:551`, 10,181,694,965 evaluations, 1 of 4 outcomes never taken -- `if (ctx->gl && ctx->gl->garbage_collect_pending)`
+- `src/lib/xpost_interpreter.c:546`, 10,181,694,965 evaluations, 1 of 4 outcomes never taken -- `if (ctx->lo && ctx->lo->garbage_collect_pending)`
+- `src/lib/xpost_interpreter.c:742`, 8,592,973,042 evaluations, 2 of 4 outcomes never taken -- `if (btype == invalidtype || btype >= XPOST_OBJECT_NTYPES)`
+- `src/lib/xpost_interpreter.c:732`, 8,592,973,042 evaluations, 1 of 2 outcomes never taken -- `if (abase)`
+- `src/lib/xpost_interpreter.c:725`, 8,592,973,042 evaluations, 1 of 2 outcomes never taken -- `if (ctx->lo->push_refused)`
+- `src/lib/xpost_interpreter.c:701`, 8,592,973,042 evaluations, 1 of 2 outcomes never taken -- `if (ctx->quit)`
+- `src/lib/xpost_stack.c:134`, 5,291,056,930 evaluations, 1 of 2 outcomes never taken -- `if (xpost_object_get_type(obj) == invalidtype)`
+- `src/lib/xpost_interpreter.c:855`, 3,897,620,630 evaluations, 1 of 4 outcomes never taken -- `if (w == (unsigned int)XPOST_OP_CODE(ctx, optype) && ot...`
 
 **Global VM is barely exercised.** Two banks of memory, one of them
 tested. The conditions that ask which bank an object is in, and
 never once this run came out saying the global one:
 
-- `src/lib/xpost_garbage.c:894` -- `if (isglobal)`
-- `src/lib/xpost_garbage.c:890` -- `if (!isglobal && getenv("XPOST_GC_XBANK_CHECK") && ctx ...`
-- `src/lib/xpost_garbage.c:888` -- `if (!isglobal && getenv("XPOST_GC_VERIFY") && ctx)`
-- `src/lib/xpost_garbage.c:758` -- `if (isglobal)`
+- `src/lib/xpost_garbage.c:1076` -- `if (isglobal)`
+- `src/lib/xpost_garbage.c:1223` -- `Xpost_Memory_File *globalmem = isglobal ? mem : other;`
+- `src/lib/xpost_garbage.c:1222` -- `Xpost_Memory_File *localmem  = isglobal ? other : mem;`
+- `src/lib/xpost_garbage.c:1209` -- `if (!isglobal && getenv("XPOST_GC_XBANK_CHECK") && ctx ...`
 
-**Functions nothing in the suite enters.** 24 of them, listed in full
+**Functions nothing in the suite enters.** 32 of them, listed in full
 further down. A function nothing reaches is not partly tested, and
 where they cluster is where the suite stops short:
 
-- `src/lib/xpost_file.c`: 15
+- `src/lib/xpost_file.c`: 19
 - `src/lib/xpost_op_context.c`: 2
+- `src/lib/xpost_dev_record.c`: 2
 - `src/lib/xpost_dev_jpeg.c`: 2
-- `src/lib/xpost_operator.c`: 1
-- `src/lib/xpost_interpreter.c`: 1
-- `src/lib/xpost_free.c`: 1
+- `src/lib/xpost_record.c`: 1
+- `src/lib/xpost_op_file.c`: 1
 
 **Discounted as unreachable in this configuration**, so that nobody
 spends effort on them. Every ranking above is built with these taken
@@ -121,24 +121,24 @@ take, the file-backed VM paths, and the 4 GiB growth clamp.
 **Largest raw uncovered but lower consequence**, for completeness. The
 biggest blocks of unexecuted lines outside the discount:
 
-- `src/lib/xpost_file.c`: 457 lines never executed (branch 70.47%)
-- `src/lib/xpost_op_font.c`: 444 lines never executed (branch 60.34%)
-- `src/lib/xpost_interpreter.c`: 210 lines never executed (branch 60.13%)
-- `src/lib/xpost_dev_generic.c`: 209 lines never executed (branch 69.81%)
+- `src/lib/xpost_file.c`: 474 lines never executed (branch 71.87%)
+- `src/lib/xpost_op_font.c`: 423 lines never executed (branch 62.43%)
+- `src/lib/xpost_dev_record.c`: 322 lines never executed (branch 62.34%)
+- `src/lib/xpost_record.c`: 275 lines never executed (branch 65.24%)
 
 and the lowest branch coverage outside it:
 
 - `src/lib/xpost_dsc_parse.c`: 45.18% of branch outcomes, over 587 lines
-- `src/lib/xpost_free.c`: 48.81% of branch outcomes, over 138 lines
-- `src/lib/xpost_oplib.c`: 50.00% of branch outcomes, over 73 lines
+- `src/lib/xpost_oplib.c`: 50.00% of branch outcomes, over 75 lines
+- `src/lib/xpost_spill.c`: 53.26% of branch outcomes, over 105 lines
 
 These are last here rather than first because size is the one thing
 about a gap that says nothing about what it costs.
 
 ## Conditions whose refusing side nothing takes
 
-3084 conditions are reached by the suite and have an outcome it never
-produces, 2988 of them outside the discount above. The count is how many
+3950 conditions are reached by the suite and have an outcome it never
+produces, 3848 of them outside the discount above. The count is how many
 times the condition was evaluated, so the top of this list is code the
 suite leans on constantly without ever testing what it is there for.
 This table is the measurement rather than the reading of it, so the
@@ -146,46 +146,46 @@ discount is not applied here. The 40 most-evaluated:
 
 | Evaluations | Site | Never taken | Condition |
 |---:|---|---:|---|
-| 833,305,252 | `src/lib/xpost_interpreter.c:707` | 2 of 4 | `if (btype == invalidtype \|\| btype >= XPOST_OBJECT_NTYPES)` |
-| 833,305,252 | `src/lib/xpost_interpreter.c:697` | 1 of 2 | `if (abase)` |
-| 833,305,252 | `src/lib/xpost_interpreter.c:675` | 1 of 2 | `if (ctx->quit)` |
-| 630,982,979 | `src/lib/xpost_op_path.c:225` | 1 of 2 | `if (esz > used - o)   /* the element must fit the declared ...` |
-| 630,982,979 | `src/lib/xpost_op_path.c:222` | 2 of 4 | `if (p[o] < PATH_CMD_MOVE \|\| p[o] > PATH_CMD_CLOSE)` |
-| 517,773,782 | `src/lib/xpost_memory.c:931` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
-| 464,297,436 | `src/lib/xpost_stack.c:134` | 1 of 2 | `if (xpost_object_get_type(obj) == invalidtype)` |
-| 440,726,998 | `src/lib/xpost_free.c:296` | 2 of 4 | `if (e > XPOST_OBJECT_COMP_MAX_ENT \|\|` |
-| 312,148,770 | `src/lib/xpost_interpreter.c:1113` | 2 of 4 | `slot.comp_.off != off + 1 \|\|` |
-| 309,529,385 | `src/lib/xpost_stack.c:181` | 1 of 2 | `if (s->prevseg) s = xpost_stack_at(mem, s->prevseg); /* fin...` |
-| 287,985,204 | `src/lib/xpost_interpreter.c:820` | 1 of 4 | `if (w == (unsigned int)XPOST_OP_CODE(ctx, optype) && ot >= 1)` |
-| 262,227,415 | `src/lib/xpost_operator.c:1050` | 1 of 4 | `if (!sp[i].fp && (xpost_object_get_type(op.proc) == arrayty...` |
-| 261,879,815 | `src/lib/xpost_operator.c:709` | 1 of 2 | `assert(n < XPOST_STACK_SEGMENT_SIZE);` |
-| 261,879,815 | `src/lib/xpost_operator.c:1077` | 1 of 10 | `switch(sp[i].in)` |
-| 247,614,477 | `src/lib/xpost_dict.c:229` | 1 of 2 | `if (xpost_object_is_composite(k))` |
-| 244,012,203 | `src/lib/xpost_memory.c:838` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
-| 235,812,365 | `src/lib/xpost_object.c:215` | 1 of 4 | `if (type == dicttype && xpost_object_dict_get_access)` |
-| 223,675,816 | `src/lib/xpost_memory.c:906` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
-| 220,363,499 | `src/lib/xpost_memory.c:860` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
-| 220,363,499 | `src/lib/xpost_free.c:316` | 1 of 2 | `if (!ret)` |
-| 220,363,499 | `src/lib/xpost_free.c:298` | 1 of 2 | `mem->table.tab[e].tag != 0)` |
-| 217,095,389 | `src/lib/xpost_file.c:5171` | 1 of 2 | `if (!xpost_memory_get(mem, f.mark_.padw, 0, sizeof fp, &fp))` |
-| 217,095,389 | `src/lib/xpost_file.c:5169` | 2 of 4 | `if (!xpost_memory_table_get_tag(mem, f.mark_.padw, &tag) \|\|...` |
-| 214,635,818 | `src/lib/xpost_free.c:338` | 1 of 2 | `if (!ret)` |
-| 213,792,659 | `src/lib/xpost_file.c:737` | 1 of 2 | `if (df->poll_before_read)` |
-| 201,199,157 | `src/lib/xpost_interpreter.c:1079` | 11 of 30 | `EVALARRAY_SYNC_SLOT();` |
-| 197,921,857 | `src/lib/xpost_object.c:217` | 1 of 4 | `else if (type == filetype && xpost_object_file_get_access)` |
-| 191,763,276 | `src/lib/xpost_interpreter.c:1385` | 2 of 4 | `if (type == invalidtype \|\| type >= XPOST_OBJECT_NTYPES)` |
-| 191,763,276 | `src/lib/xpost_interpreter.c:1364` | 1 of 2 | `if (_xpost_interpreter_is_tracing)` |
-| 187,488,020 | `src/lib/xpost_interpreter.c:1089` | 1 of 2 | `if (_xpost_interpreter_is_tracing)` |
-| 179,401,082 | `src/lib/xpost_dict.c:586` | 1 of 4 | `if (xpost_object_get_type(a) == nametype &&` |
-| 171,158,726 | `src/lib/xpost_memory.c:954` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
-| 165,369,112 | `src/lib/xpost_dict.c:729` | 1 of 2 | `if (!dp)` |
-| 156,074,385 | `src/lib/xpost_interpreter.c:1112` | 1 of 2 | `slot.comp_.sz != remaining - 1 \|\|` |
-| 156,074,385 | `src/lib/xpost_interpreter.c:1111` | 1 of 2 | `if (slot.tag != a.comp_.tag \|\|` |
-| 117,962,595 | `src/lib/xpost_op_stack.c:119` | 1 of 2 | `if (!xpost_stack_push(ctx->lo, ctx->os, src[i]))` |
-| 111,592,076 | `src/lib/xpost_interpreter.c:668` | 2 of 4 | `EVALARRAY_RESOLVE_ABASE();` |
-| 101,330,522 | `src/lib/xpost_save.c:166` | 1 of 2 | `if (!xpost_ent_valid(mem, ent))` |
-| 89,497,662 | `src/lib/xpost_dict.c:590` | 1 of 2 | `a.mark_.padw == b.mark_.padw;` |
-| 87,296,798 | `src/lib/xpost_array.c:151` | 1 of 2 | `if (ret)` |
+| 10,181,694,965 | `src/lib/xpost_interpreter.c:551` | 1 of 4 | `if (ctx->gl && ctx->gl->garbage_collect_pending)` |
+| 10,181,694,965 | `src/lib/xpost_interpreter.c:546` | 1 of 4 | `if (ctx->lo && ctx->lo->garbage_collect_pending)` |
+| 8,592,973,042 | `src/lib/xpost_interpreter.c:742` | 2 of 4 | `if (btype == invalidtype \|\| btype >= XPOST_OBJECT_NTYPES)` |
+| 8,592,973,042 | `src/lib/xpost_interpreter.c:732` | 1 of 2 | `if (abase)` |
+| 8,592,973,042 | `src/lib/xpost_interpreter.c:725` | 1 of 2 | `if (ctx->lo->push_refused)` |
+| 8,592,973,042 | `src/lib/xpost_interpreter.c:701` | 1 of 2 | `if (ctx->quit)` |
+| 5,291,056,930 | `src/lib/xpost_stack.c:134` | 1 of 2 | `if (xpost_object_get_type(obj) == invalidtype)` |
+| 3,897,620,630 | `src/lib/xpost_interpreter.c:855` | 1 of 4 | `if (w == (unsigned int)XPOST_OP_CODE(ctx, optype) && ot >= 1)` |
+| 3,670,867,755 | `src/lib/xpost_object.c:215` | 1 of 4 | `if (type == dicttype && xpost_object_dict_get_access)` |
+| 3,591,689,297 | `src/lib/xpost_memory.c:1111` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
+| 3,374,326,768 | `src/lib/xpost_interpreter.c:1150` | 2 of 4 | `slot.comp_.off != off + 1 \|\|` |
+| 2,879,445,262 | `src/lib/xpost_object.c:217` | 1 of 4 | `else if (type == filetype && xpost_object_file_get_access)` |
+| 2,827,110,765 | `src/lib/xpost_stack.c:192` | 1 of 2 | `if (s->prevseg) s = xpost_stack_at(mem, s->prevseg); /* fin...` |
+| 2,567,649,400 | `src/lib/xpost_operator.c:1103` | 1 of 4 | `if (!sp[i].fp && (xpost_object_get_type(op.proc) == arrayty...` |
+| 2,545,935,253 | `src/lib/xpost_operator.c:737` | 1 of 2 | `assert(n < XPOST_STACK_SEGMENT_SIZE);` |
+| 2,545,935,253 | `src/lib/xpost_operator.c:1130` | 1 of 10 | `switch(sp[i].in)` |
+| 2,192,579,950 | `src/lib/xpost_interpreter.c:1116` | 11 of 30 | `EVALARRAY_SYNC_SLOT();` |
+| 2,165,064,859 | `src/lib/xpost_dict.c:603` | 1 of 4 | `if (xpost_object_get_type(a) == nametype &&` |
+| 2,039,684,051 | `src/lib/xpost_interpreter.c:1126` | 1 of 2 | `if (_xpost_interpreter_is_tracing)` |
+| 1,796,894,832 | `src/lib/xpost_dict.c:246` | 1 of 2 | `if (xpost_object_is_composite(k))` |
+| 1,687,163,384 | `src/lib/xpost_interpreter.c:1149` | 1 of 2 | `slot.comp_.sz != remaining - 1 \|\|` |
+| 1,687,163,384 | `src/lib/xpost_interpreter.c:1148` | 1 of 2 | `if (slot.tag != a.comp_.tag \|\|` |
+| 1,588,721,916 | `src/lib/xpost_interpreter.c:1432` | 2 of 4 | `if (type == invalidtype \|\| type >= XPOST_OBJECT_NTYPES)` |
+| 1,588,721,916 | `src/lib/xpost_interpreter.c:1411` | 1 of 2 | `if (_xpost_interpreter_is_tracing)` |
+| 1,588,720,344 | `src/lib/xpost_interpreter.c:1945` | 1 of 2 | `if (ctx->lo->push_refused)` |
+| 1,555,026,361 | `src/lib/xpost_memory.c:1134` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
+| 1,501,938,612 | `src/lib/xpost_handle.c:108` | 1 of 2 | `if (!xpost_memory_get(mem, ent, 0, sizeof(index), &index))` |
+| 1,501,865,839 | `src/lib/xpost_handle.c:112` | 1 of 4 | `if ((_slots[index].mem != mem) \|\| (_slots[index].ent != ent))` |
+| 1,468,451,098 | `src/lib/xpost_memory.c:1086` | 1 of 2 | `CHECK_VALID_ENT(ent,mem,0)` |
+| 1,468,442,824 | `src/lib/xpost_handle.c:171` | 2 of 6 | `if (!slot \|\| (slot->kind != kind) \|\| (slot->size != size))` |
+| 1,468,442,824 | `src/lib/xpost_file.c:5737` | 2 of 4 | `if (!xpost_memory_table_get_tag(mem, f.mark_.padw, &tag) \|\|...` |
+| 1,089,721,262 | `src/lib/xpost_string.c:225` | 1 of 4 | `if (i < 0 \|\| i >= s.comp_.sz)` |
+| 1,089,721,260 | `src/lib/xpost_string.c:228` | 1 of 2 | `if (!ret)` |
+| 1,081,962,827 | `src/lib/xpost_dict.c:607` | 1 of 2 | `a.mark_.padw == b.mark_.padw;` |
+| 1,079,477,451 | `src/lib/xpost_string.c:207` | 1 of 2 | `if (!xpost_object_is_writeable(ctx, s))` |
+| 1,079,477,451 | `src/lib/xpost_string.c:206` | 1 of 2 | `if (!ctx->gl->interpreter_get_initializing())` |
+| 1,079,477,451 | `src/lib/xpost_string.c:190` | 1 of 2 | `if (!ret)` |
+| 1,079,477,451 | `src/lib/xpost_string.c:187` | 2 of 4 | `if (i < 0 \|\| i >= s.comp_.sz)` |
+| 1,060,068,163 | `src/lib/xpost_dict.c:641` | 1 of 2 | `if (!dp)` |
+| 1,060,068,163 | `src/lib/xpost_dict.c:637` | 1 of 2 | `if (xpost_object_get_type(k) == invalidtype)` |
 
 ## By file, most uncovered lines first
 
@@ -194,61 +194,67 @@ small file at 50% hides less than a large one at 85%.
 
 | File | Lines | Line % | Branch % | Uncovered |
 |---|---:|---:|---:|---:|
-| `src/lib/xpost_file.c` | 2403 | 80.98% | 70.47% | 457 |
-| `src/lib/xpost_op_font.c` | 2285 | 80.57% | 60.34% | 444 |
-| `src/lib/xpost_interpreter.c` | 1136 | 81.51% | 60.13% | 210 |
-| `src/lib/xpost_dev_generic.c` | 1598 | 86.92% | 69.81% | 209 |
+| `src/lib/xpost_file.c` | 2628 | 81.96% | 71.87% | 474 |
+| `src/lib/xpost_op_font.c` | 2406 | 82.42% | 62.43% | 423 |
+| `src/lib/xpost_dev_record.c` | 1515 | 78.75% | 62.34% | 322 |
+| `src/lib/xpost_record.c` | 1237 | 77.77% | 65.24% | 275 |
+| `src/lib/xpost_interpreter.c` | 1486 | 83.31% | 64.42% | 248 |
+| `src/lib/xpost_dev_generic.c` | 1598 | 87.48% | 70.39% | 200 |
 | `src/lib/xpost_dsc_parse.c` | 587 | 70.70% | 45.18% | 172 |
-| `src/lib/xpost_font.c` | 606 | 76.73% | 56.32% | 141 |
-| `src/lib/xpost_op_file.c` | 950 | 86.84% | 66.39% | 125 |
-| `src/lib/xpost_op_path.c` | 1026 | 89.86% | 70.59% | 104 |
-| `src/lib/xpost_op_token.c` | 670 | 84.63% | 78.69% | 103 |
-| `src/lib/xpost_operator.c` | 472 | 78.81% | 86.84% | 100 |
-| `src/lib/xpost_garbage.c` | 321 | 71.96% | 62.31% | 90 |
-| `src/lib/xpost_compat_posix.c` | 204 | 58.33% | 39.44% | 85 |
-| `src/lib/xpost_memory.c` | 241 | 66.39% | 52.14% | 81 |
-| `src/lib/xpost_dev_xcb.c` | 276 | 71.74% | 52.17% | 78 |
-| `src/lib/xpost_dev_png.c` | 328 | 77.44% | 61.86% | 74 |
-| `src/lib/xpost_op_control.c` | 414 | 84.54% | 70.21% | 64 |
-| `src/lib/xpost_dev_raster.c` | 317 | 80.44% | 66.48% | 62 |
-| `src/lib/xpost_log.c` | 113 | 46.02% | 28.30% | 61 |
-| `src/lib/xpost_dev_jpeg.c` | 242 | 77.27% | 58.73% | 55 |
-| `src/lib/xpost_free.c` | 138 | 61.59% | 48.81% | 53 |
-| `src/lib/xpost_dict.c` | 368 | 85.60% | 77.83% | 53 |
-| `src/lib/xpost_op_dict.c` | 304 | 83.88% | 67.74% | 49 |
-| `src/lib/xpost_context.c` | 175 | 72.57% | 56.41% | 48 |
-| `src/lib/xpost_object.c` | 124 | 62.10% | 53.33% | 47 |
-| `src/lib/xpost_dev_bgr.c` | 175 | 78.86% | 58.18% | 37 |
-| `src/bin/xpost_main.c` | 266 | 86.09% | 65.93% | 37 |
-| `src/lib/xpost_op_array.c` | 243 | 85.60% | 71.26% | 35 |
-| `src/lib/xpost_oplib.c` | 73 | 54.79% | 50.00% | 33 |
-| `src/lib/xpost_op_string.c` | 213 | 84.98% | 66.43% | 32 |
-| `src/lib/xpost_name.c` | 157 | 80.89% | 67.95% | 30 |
-| `src/lib/xpost_save.c` | 123 | 78.86% | 63.64% | 26 |
-| `src/lib/xpost_op_type.c` | 307 | 91.53% | 68.73% | 26 |
-| `src/lib/xpost_garbage_diag.c` | 125 | 83.20% | 68.63% | 21 |
-| `src/lib/xpost_op_misc.c` | 191 | 90.05% | 68.42% | 19 |
-| `src/lib/xpost_op_context.c` | 77 | 81.82% | 58.82% | 14 |
-| `src/lib/xpost_op_stack.c` | 109 | 88.99% | 67.65% | 12 |
+| `src/lib/xpost_font.c` | 608 | 77.14% | 57.46% | 139 |
+| `src/lib/xpost_op_file.c` | 1013 | 86.57% | 64.29% | 136 |
+| `src/lib/xpost_vm_image.c` | 577 | 76.60% | 61.23% | 135 |
+| `src/lib/xpost_op_path.c` | 1105 | 89.86% | 70.18% | 112 |
+| `src/lib/xpost_compat_posix.c` | 213 | 49.77% | 34.72% | 107 |
+| `src/lib/xpost_op_token.c` | 711 | 85.79% | 80.80% | 101 |
+| `src/lib/xpost_operator.c` | 496 | 80.44% | 87.34% | 97 |
+| `src/lib/xpost_dev_png.c` | 469 | 80.17% | 69.18% | 93 |
+| `src/lib/xpost_garbage.c` | 409 | 79.95% | 66.67% | 82 |
+| `src/lib/xpost_dev_jpeg.c` | 405 | 80.25% | 67.98% | 80 |
+| `src/lib/xpost_memory.c` | 283 | 72.44% | 54.38% | 78 |
+| `src/lib/xpost_log.c` | 122 | 38.52% | 22.03% | 75 |
+| `src/lib/xpost_dev_xcb.c` | 310 | 77.74% | 55.75% | 69 |
+| `src/lib/xpost_op_control.c` | 408 | 84.31% | 68.10% | 64 |
+| `src/lib/xpost_context.c` | 229 | 76.86% | 59.00% | 53 |
+| `src/lib/xpost_object.c` | 127 | 62.99% | 53.33% | 47 |
+| `src/lib/xpost_op_dict.c` | 306 | 84.97% | 66.23% | 46 |
+| `src/lib/xpost_dict.c` | 363 | 87.33% | 79.46% | 46 |
+| `src/lib/xpost_dev_bgr.c` | 210 | 80.48% | 62.50% | 41 |
+| `src/lib/xpost_free.c` | 137 | 71.53% | 59.52% | 39 |
+| `src/lib/xpost_dev_raster.c` | 312 | 88.46% | 73.06% | 36 |
+| `src/lib/xpost_op_array.c` | 244 | 85.66% | 68.69% | 35 |
+| `src/lib/xpost_oplib.c` | 75 | 54.67% | 50.00% | 34 |
+| `src/lib/xpost_op_string.c` | 213 | 84.98% | 64.20% | 32 |
+| `src/bin/xpost_main.c` | 310 | 89.68% | 70.59% | 32 |
+| `src/lib/xpost_name.c` | 159 | 81.13% | 67.95% | 30 |
+| `src/lib/xpost_op_misc.c` | 213 | 87.79% | 65.10% | 26 |
+| `src/lib/xpost_op_param.c` | 172 | 85.47% | 66.43% | 25 |
+| `src/lib/xpost_op_type.c` | 314 | 92.36% | 67.70% | 24 |
+| `src/lib/xpost_handle.c` | 145 | 84.83% | 68.27% | 22 |
+| `src/lib/xpost_garbage_diag.c` | 127 | 82.68% | 67.92% | 22 |
+| `src/lib/xpost_spill.c` | 105 | 80.95% | 53.26% | 20 |
+| `src/lib/xpost_save.c` | 127 | 84.25% | 70.45% | 20 |
+| `src/lib/xpost_op_context.c` | 82 | 82.93% | 58.00% | 14 |
+| `src/lib/xpost_op_stack.c` | 109 | 89.91% | 64.77% | 11 |
 | `src/lib/xpost_dsc_file.c` | 47 | 76.60% | 61.54% | 11 |
-| `src/lib/xpost_op_param.c` | 61 | 83.61% | 58.33% | 10 |
-| `src/lib/xpost_string.c` | 64 | 85.94% | 63.89% | 9 |
-| `src/lib/xpost_op_matrix.c` | 255 | 96.47% | 64.52% | 9 |
+| `src/lib/xpost_string.c` | 68 | 86.76% | 63.16% | 9 |
+| `src/lib/xpost_op_matrix.c` | 257 | 96.50% | 61.05% | 9 |
 | `src/lib/xpost_main.c` | 41 | 78.05% | 54.17% | 9 |
-| `src/lib/xpost_stack.c` | 151 | 94.70% | 88.24% | 8 |
-| `src/lib/xpost_array.c` | 56 | 89.29% | 80.56% | 6 |
-| `src/lib/xpost_op_math.c` | 187 | 97.33% | 59.57% | 5 |
-| `src/lib/xpost_op_save.c` | 90 | 95.56% | 76.92% | 4 |
-| `src/lib/xpost_op_packedarray.c` | 33 | 90.91% | 65.00% | 3 |
-| `src/lib/xpost_compat.c` | 33 | 90.91% | 60.00% | 3 |
-| `src/lib/xpost_op_boolean.c` | 104 | 98.08% | 60.87% | 2 |
+| `src/lib/xpost_op_save.c` | 109 | 93.58% | 75.64% | 7 |
+| `src/lib/xpost_array.c` | 58 | 89.66% | 80.56% | 6 |
+| `src/lib/xpost_stack.c` | 152 | 96.71% | 91.18% | 5 |
+| `src/lib/xpost_span.c` | 117 | 95.73% | 88.18% | 5 |
+| `src/lib/xpost_op_math.c` | 188 | 97.34% | 55.77% | 5 |
+| `src/lib/xpost_op_packedarray.c` | 33 | 90.91% | 61.54% | 3 |
+| `src/lib/xpost_op_boolean.c` | 106 | 98.11% | 58.75% | 2 |
+| `src/lib/xpost_compat.c` | 33 | 96.97% | 60.00% | 1 |
 | `src/lib/xpost_matrix.c` | 42 | 100.00% | -- | 0 |
 
 ## Functions the suite never enters
 
-The blind spots: 24 functions nothing in the suite reaches.
+The blind spots: 32 functions nothing in the suite reaches.
 
-(A further 25 are defined in headers, so every object that includes
+(A further 28 are defined in headers, so every object that includes
 one carries its own copy and the copies that are not called read as
 zero. They are listed at the end rather than here.)
 
@@ -257,27 +263,32 @@ zero. They are listed at the end rather than here.)
 - `_JPEGErrorHandler`
 - `_JPEGErrorHandler2`
 
-**`src/lib/xpost_dev_xcb.c`**
+**`src/lib/xpost_dev_record.c`**
 
-- `_fillpoly`
+- `_lost`
+- `_place_ops`
 
 **`src/lib/xpost_file.c`**
 
-- `a85_flush`
 - `a85_writech`
 - `dctenc_error_exit`
 - `dctenc_output_message`
 - `enc_readch`
 - `enc_unreadch`
 - `_filter_cons_abandon`
-- `filter_flush`
 - `filter_writech`
 - `memory_flush`
 - `memory_purge`
 - `memory_seek`
 - `memory_tell`
 - `memory_writech`
-- `rsd_flush`
+- `proc_purge`
+- `proc_seek`
+- `procsrc_writech`
+- `proc_tell`
+- `proctgt_flush`
+- `proctgt_readch`
+- `proc_unreadch`
 
 **`src/lib/xpost_font.c`**
 
@@ -291,6 +302,10 @@ zero. They are listed at the end rather than here.)
 
 - `evalquit`
 
+**`src/lib/xpost_log.c`**
+
+- `_xpost_log_dump`
+
 **`src/lib/xpost_op_context.c`**
 
 - `_i_am_free_`
@@ -300,13 +315,21 @@ zero. They are listed at the end rather than here.)
 
 - `_stack_number_number`
 
+**`src/lib/xpost_op_file.c`**
+
+- `xpost_op_proc_filter_int`
+
+**`src/lib/xpost_record.c`**
+
+- `_spill_rows`
+
 ## Header-defined functions with an uncalled copy
 
 Not blind spots: each is compiled into every object that includes its
 header, and only the copies nothing calls are counted here.
 
-- `xpost_isatty` (in `src/lib/xpost_compat.c`)
 - `xpost_fd_realpath` (in `src/lib/xpost_compat_posix.c`)
+- `xpost_mkstemp` (in `src/lib/xpost_compat_posix.c`)
 - `xpost_renameat_beneath` (in `src/lib/xpost_compat_posix.c`)
 - `xpost_context_dump` (in `src/lib/xpost_context.c`)
 - `xpost_dev_jpeg_options_set` (in `src/lib/xpost_dev_jpeg.c`)
@@ -323,10 +346,13 @@ header, and only the copies nothing calls are counted here.
 - `xpost_memory_table_set_addr` (in `src/lib/xpost_memory.c`)
 - `xpost_memory_table_set_mark` (in `src/lib/xpost_memory.c`)
 - `xpost_memory_table_set_size` (in `src/lib/xpost_memory.c`)
-- `xpost_memory_table_set_tag` (in `src/lib/xpost_memory.c`)
 - `xpost_object_install_file_get_access` (in `src/lib/xpost_object.c`)
 - `xpost_object_install_file_set_access` (in `src/lib/xpost_object.c`)
 - `xpost_memory_name_stack_adr` (in `src/lib/xpost_op_dict.c`)
 - `xpost_operator_dump` (in `src/lib/xpost_operator.c`)
 - `xpost_object_is_exe` (in `src/lib/xpost_op_font.c`)
 - `xpost_op_breakhere` (in `src/lib/xpost_oplib.c`)
+- `xpost_record_release` (in `src/lib/xpost_record.c`)
+- `xpost_record_spent` (in `src/lib/xpost_record.c`)
+- `xpost_vm_image_bank_field_name` (in `src/lib/xpost_vm_image.c`)
+- `xpost_vm_image_row_field_name` (in `src/lib/xpost_vm_image.c`)
