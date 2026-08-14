@@ -2,7 +2,7 @@
 option('doc',
   type: 'boolean',
   value: true,
-  description: 'uild documentation with Doxygen'
+  description: 'build documentation with Doxygen'
 )
 
 option('debug-hooks',
