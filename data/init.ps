@@ -1320,6 +1320,18 @@ setglobal
             /cap DEVICE /dimensions get aload pop
                 DEVICE //.internaldict /.newformrecord get exec def
             cap null ne {
+                % What the page weighs its own marks against, given to
+                % the drawing captured for it. A drawing is part of what
+                % the page holds -- held once rather than once per place,
+                % but held -- so it is weighed by the same number, and a
+                % drawing large enough to be worth more than the raster
+                % the page is saving goes where the page's own marks
+                % would go. A capture made for a device that holds no
+                % record has no such number and is not weighed.
+                DEVICE /.playclass known {
+                    cap DEVICE //.internaldict /.recordsaving get exec
+                        //.internaldict /.playsaving get exec
+                } if
                 % the drawings the cache is holding are given up before
                 % it is replaced, since what a recorder holds is not
                 % virtual memory and nothing else would give it back

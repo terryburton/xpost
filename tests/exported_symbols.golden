@@ -403,6 +403,7 @@ xpost_record_screen_get
 xpost_record_spent
 xpost_record_spill
 xpost_record_spill_set
+xpost_record_spill_shorten
 xpost_record_spilled
 xpost_renameat_beneath
 xpost_run

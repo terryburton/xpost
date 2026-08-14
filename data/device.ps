@@ -358,8 +358,11 @@ end } bind put
     /graphicsdict where {
         pop graphicsdict /currgstate get /device get
         dup type /dicttype eq {
-            dup /.recordspill known {
-                dup /.recordspill get exec
+            % a device holding a record is the one to ask; one painting
+            % its own page holds its marks nowhere and answers /memory,
+            % which is where the pixels of such a page are
+            dup /.playclass known {
+                dup //.internaldict /.recordspill get exec
                 /held exch def pop
             } if
         } if

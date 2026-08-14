@@ -271,6 +271,9 @@ static size_t _runfill(const Xpost_Record *rec)
 static int _span_of(const Xpost_Record *rec, Xpost_Record_Kind kind,
                     const real *ops, int nops, real *x0, real *x1);
 
+/* Say the record is short of a mark, and what took it. */
+static void _short(Xpost_Record *rec, int why);
+
 /*
  * Where a record puts what it need not hold.
  *
@@ -338,10 +341,24 @@ static int _sp_pull(Xpost_Record *rec, Xpost_Spill_Off at, void *p, size_t n)
     _Spill *sp = rec->sp;
     size_t want;
 
+    /* Every way out of here without the bytes is a page the record can
+       no longer reproduce: the file has been shortened under a
+       descriptor nobody else holds, or the read failed below us. The
+       record is short of a mark from here, on the terms a mark it could
+       not hold puts it there, so what a caller gets is a refusal naming
+       the file rather than a page that stops where the reading did.
+       Said here rather than at each caller, because every caller of this
+       is reading a mark. */
     if (at < 0 || at + (Xpost_Spill_Off)n > sp->end)
+    {
+        _short(rec, ioerror);
         return 0;
+    }
     if (sp->wbuf.len && !_sp_flush(rec))
+    {
+        _short(rec, ioerror);
         return 0;
+    }
     if (sp->rbuf.len && at >= sp->rat
         && at + (Xpost_Spill_Off)n <= sp->rat + (Xpost_Spill_Off)sp->rbuf.len)
     {
@@ -351,12 +368,20 @@ static int _sp_pull(Xpost_Record *rec, Xpost_Spill_Off at, void *p, size_t n)
     /* more than the window holds is read where it is wanted; the window
        is for the many small reads a walk of the entries makes */
     if (n > sp->rbuf.cap)
-        return xpost_spill_read(sp->f, at, p, n);
+    {
+        if (xpost_spill_read(sp->f, at, p, n))
+            return 1;
+        _short(rec, ioerror);
+        return 0;
+    }
     want = sp->rbuf.cap;
     if ((Xpost_Spill_Off)want > sp->end - at)
         want = (size_t)(sp->end - at);
     if (!xpost_spill_read(sp->f, at, sp->rbuf.s, want))
+    {
+        _short(rec, ioerror);
         return 0;
+    }
     sp->rat = at;
     sp->rbuf.len = want;
     memcpy(p, sp->rbuf.s, n);
@@ -910,10 +935,9 @@ static void _image_extent(const Xpost_Record_Image *img, real *lo, real *hi)
     *hi = b < *lo ? *lo : b;
 }
 
-/* Say the record is short of a mark, and what took it. The first answer
-   stands: a record already short of one is describing a page it cannot
-   reproduce, and a later failure on the way out of that is not the
-   reason a caller wants to be told. */
+/* The first answer stands: a record already short of a mark is
+   describing a page it cannot reproduce, and a later failure on the way
+   out of that is not the reason a caller wants to be told. */
 static void _short(Xpost_Record *rec, int why)
 {
     if (!rec->short_of_a_mark)
@@ -1987,6 +2011,16 @@ int xpost_record_spill(Xpost_Record *rec)
     return 0;
 }
 
+int xpost_record_spill_shorten(Xpost_Record *rec, long long keep)
+{
+    if (!rec || !rec->sp || keep < 0)
+        return 0;
+    /* the buffers may be holding what is about to stop being there */
+    rec->sp->rbuf.len = 0;
+    rec->sp->wbuf.len = 0;
+    return xpost_spill_truncate(rec->sp->f, (Xpost_Spill_Off)keep);
+}
+
 int xpost_record_spilled(const Xpost_Record *rec)
 {
     return rec && rec->sp ? 1 : 0;
@@ -2498,6 +2532,13 @@ int xpost_record_replay(const Xpost_Record *rec, real lo, real hi,
                 return ret;
             at++;
         }
+        /* A walk that ended because the record stopped answering is not
+           a walk that reached the end of the page. The file has been
+           shortened under a descriptor nobody else holds, or a read
+           failed below; either way what has been played is part of a
+           page, and a part of a page looks like a page. */
+        if (rec->short_of_a_mark)
+            return rec->why ? rec->why : VMerror;
         return 0;
     }
     marks = _marks(rec);

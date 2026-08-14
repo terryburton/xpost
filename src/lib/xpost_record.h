@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "xpost_object.h"   /* real: what a coordinate arrives as */
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
 #include "xpost_spill.h"    /* where a record puts what it need not hold */
 
 /**
@@ -763,6 +764,23 @@ int xpost_record_spill(Xpost_Record *rec);
  * @brief Whether a record's marks are in a file rather than in memory.
  */
 int xpost_record_spilled(const Xpost_Record *rec);
+
+/**
+ * @brief Shorten the file a spilled record's marks are in, keeping the
+ *        first @p keep bytes of it.
+ *
+ * @return 1, or 0 where the record holds no file or it could not be
+ *         shortened
+ *
+ * Nothing in a run does this. It is here so that a test can see what a
+ * record does when its scratch file has been shortened under a
+ * descriptor nobody else holds -- which is a defect here or a fault
+ * below, and which must end in a refusal naming the file rather than in
+ * a page that stops where the reading did. A failure path with no test
+ * is a failure path that does not work.
+ */
+XPOST_TEST_VISIBLE int xpost_record_spill_shorten(Xpost_Record *rec,
+                                                  long long keep);
 
 /**
  * @brief Which failure left a record short of a mark.

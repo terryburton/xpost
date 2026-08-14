@@ -2398,6 +2398,21 @@ static int _replay_step(Xpost_Context *ctx,
         if (!xpost_record_next(f->rec, f->idx, f->lo, f->hi, &at)
             || !xpost_record_get(f->rec, at, &kind, &colour, &ops, &nops))
         {
+            /* Unless the drawing stopped answering rather than running
+               out. A record whose scratch file could not be read is
+               short of a mark from that point, and a walk that took the
+               refusal for the end of the drawing would leave the band
+               painted as far as the reading got -- which is a page
+               missing something, and a page missing something looks like
+               a page. */
+            if (xpost_record_failed(f->rec))
+            {
+                XPOST_LOG_ERR("%d a page cannot be painted from a record"
+                              " that stopped answering for it",
+                              xpost_record_error(f->rec));
+                ret = xpost_record_error(f->rec);
+                goto refused;
+            }
             if (w->depth > 0)
             {
                 w->depth--;
