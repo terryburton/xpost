@@ -389,10 +389,11 @@ host test run-status
 host test single-instance
 host width witness
 
-# ---- guards: the checks over the tree's own shape, and the helper they
-# all read a path through. A change to that helper reaches every one of
-# them, which is why it is named here rather than left to the file a
-# single test is built from.
+# ---- guards: the checks over the tree's own shape, the helper they all
+# read a path through, and the one the readers of a test listing read a
+# line through. A change to either reaches every check that shares it,
+# which is why they are named here rather than left to the file a single
+# test is built from.
 guards path doc/GATING.md
 guards path tests/guard-paths.sh
 guards path tests/check-guard-paths.sh
@@ -400,6 +401,7 @@ guards path tests/gate-map
 guards path tests/gate.sh
 guards path tests/check-gate-map.sh
 guards path tests/run-profile.sh
+guards path tests/listing.awk
 guards test check-*
 guards test guard-paths
 guards test c-held-objects

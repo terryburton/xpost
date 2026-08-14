@@ -289,8 +289,9 @@ fi
 
 # ---- what the tests measured, against what they declare ----
 #
-# Everything from here is a report. It prints and does not fail, for the
-# reasons in the header.
+# What this finds about a tag is a report: it prints and does not fail,
+# for the reasons in the header. Being unable to read the record it was
+# pointed at is not a finding about a tag, and does fail.
 #
 # The record is meson's own, one JSON object a line, and is read as the
 # profile wrapper reads it: a key is the unescaped form of its name, and
@@ -302,51 +303,60 @@ fi
 #
 # The suites are read off the record too, not off meson.build. What a
 # test was tagged when it ran is what the run is evidence about; a tag
-# edited since is a tag no measurement here speaks for.
+# edited since is a tag no measurement here speaks for. How a record
+# names a test is what tests/listing.awk reads, which is the same
+# reading the gate and the profile wrapper are handed.
 guard_require_dir "$build" "the build directory"
 record="$build/meson-logs/testlog.json"
 guard_require_file "$record" "the test record"
+listing="$(dirname "$0")/listing.awk"
+guard_require_file "$listing" "the listing reader"
 
-awk '
-    {
-        name = ""; res = ""; dur = ""; st = ""
-        if (match($0, /^\{"name": "[^"]*"/)) {
-            name = substr($0, RSTART, RLENGTH)
-            sub(/^\{"name": "/, "", name); sub(/"$/, "", name)
-        }
-        if (match($0, /, "result": "[A-Z]+"/)) {
-            res = substr($0, RSTART, RLENGTH)
-            sub(/^, "result": "/, "", res); sub(/"$/, "", res)
-        }
-        if (match($0, /, "duration": [0-9]+\.?[0-9]*/)) {
-            dur = substr($0, RSTART, RLENGTH); sub(/^, "duration": /, "", dur)
-        }
-        if (match($0, /, "starttime": [0-9]+\.?[0-9]*/)) {
-            st = substr($0, RSTART, RLENGTH); sub(/^, "starttime": /, "", st)
-        }
-        i = index(name, " / ")
-        if (name == "" || res == "" || dur == "" || st == "" || i == 0) next
-        suites = substr(name, 1, i - 1)
-        sub(/^[^:]*:/, "", suites)
-        tag = ""
-        n = split(suites, s, "+")
-        for (j = 1; j <= n; j++)
-            if (s[j] == "fast" || s[j] == "slow" || s[j] == "veryslow")
-                tag = (tag == "" ? s[j] : "?")
-        print substr(name, i + 3) "\t" tag "\t" res "\t" st "\t" dur
-    }' "$record" > "$work/measured"
+cat > "$work/measure.awk" <<'AWK'
+{
+    name = ""; res = ""; dur = ""; st = ""
+    if (match($0, /^\{"name": "[^"]*"/)) {
+        name = substr($0, RSTART, RLENGTH)
+        sub(/^\{"name": "/, "", name); sub(/"$/, "", name)
+    }
+    if (match($0, /, "result": "[A-Z]+"/)) {
+        res = substr($0, RSTART, RLENGTH)
+        sub(/^, "result": "/, "", res); sub(/"$/, "", res)
+    }
+    if (match($0, /, "duration": [0-9]+\.?[0-9]*/)) {
+        dur = substr($0, RSTART, RLENGTH); sub(/^, "duration": /, "", dur)
+    }
+    if (match($0, /, "starttime": [0-9]+\.?[0-9]*/)) {
+        st = substr($0, RSTART, RLENGTH); sub(/^, "starttime": /, "", st)
+    }
+    if (name == "" || res == "" || dur == "" || st == "") next
+    tag = ""
+    n = split(listing_suites(name), s, "+")
+    for (j = 1; j <= n; j++)
+        if (s[j] == "fast" || s[j] == "slow" || s[j] == "veryslow")
+            tag = (tag == "" ? s[j] : "?")
+    print listing_name(name) "\t" tag "\t" res "\t" st "\t" dur
+}
+AWK
+awk -f "$listing" -f "$work/measure.awk" "$record" > "$work/measured"
 
 # Counts in against counts out. A record whose shape has moved on would
 # leave the scan reading a fraction of the run and reporting on it as
 # though it were the run, which is the one way a report like this turns
 # into a lie rather than into silence.
+#
+# It is the one thing here that fails. Everything below it is a report on
+# the tags, which a machine's load can make wrong; this is the reading
+# itself having stopped working, and a guard that names its own defect
+# and then exits as though it had looked is a guard whose caller is told
+# nothing went wrong.
 held=$(grep -c . "$record")
 read_back=$(grep -c . "$work/measured")
 if [ "$read_back" -eq 0 ] || [ "$read_back" -ne "$held" ]; then
-    echo "      $read_back of $held records could be read from $record;"
+    echo "FAILURES: $read_back of $held records could be read from $record;"
     echo "      the shape of the record has moved and nothing is reported"
     echo "      from it -- fix the scan above"
-    exit 0
+    exit 1
 fi
 
 # Whether the run was one test at a time, which is half of what the
