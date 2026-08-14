@@ -1,335 +1,170 @@
-This is the first draft of a description of xpost from the user side.
-What can it do? How much of Postscript is written? How much is tested?
+Xpost from the user's side
+=========================
 
-All of these are very good questions. Hopefully we'll address some of
-them in the following.
+Xpost is an interpreter for the PostScript language, written in C and
+distributed under the BSD 3-clause licence. The whole of it is a library,
+libxpost; the `xpost` program is a small application over that library
+(src/bin/xpost_main.c), and src/bin/xpost_client.c is a smaller example
+of embedding it.
 
-Xpost is still in the "under-construction" phase. But I'm happy enough
-with it that I think it should be considered an "alpha" status product.
-The testing is not extensive, but it is in place, and has been used
-throughout the development. 
+It implements PostScript LanguageLevel 2, including the graphics: paths,
+paint, colour spaces, clipping, images, patterns, shadings, halftones,
+and text through host faces found by fontconfig and rendered by
+freetype, through Type 3 fonts described in PostScript, and through
+Type 42 fonts carrying a TrueType program in /sfnts. COMPLIANCE marks
+each operator implemented, partly implemented or not, and closes with
+the behavioural deviations and the implementation limits; doc/COMPAT
+says where each user-visible name comes from.
 
+How much is tested is a fair question to ask of an interpreter. The
+suite is 316 tests, run at both of the object widths the tree builds at;
+doc/GATING.md says which run answers which question. Beside it are
+corpora of real programs, fetched rather than committed, rendered and
+compared page by page (tests/corpus/README.md). doc/COVERAGE.md and
+doc/COVERAGE-large.md report how much of the C sources a full run
+executes, one per object width, and are explicit that executing a line
+is not the same as pinning down what it does.
 
-== Download and get a PS> prompt ==
 
-Requires a working gnu gcc installation with make and /bin/sh and
-everything. Tested on cygwin, should work fine on Linux.
+== Getting the source ==
 
-Clone the Mercurial repository with
+  git clone https://github.com/luser-dr00g/xpost.git
+  cd xpost
 
-  hg clone https://luser.droog@code.google.com/p/xpost/
 
-Configure and compile all the source objects.
+== Building ==
 
-  ./autogen.sh (or ./configure if autogen.sh has already been launched)
-  make
-  make install   # or sudo make install
+Meson is the build the tree is developed and released against, and the
+one every CI lane uses. It needs meson 1.0 or later, ninja, and a C
+compiler.
 
-Run the interpreter. Type 'runtest' and enter to run the operator and 
-graphics tests.
+  meson setup build
+  ninja -C build
+
+leaves the interpreter at build/src/bin/xpost, runnable from where it
+was built: an xpost started out of a build tree finds the PostScript
+files it boots from under the source tree's data directory, so nothing
+has to be installed to try a change to them.
 
-  ./xpost
+  ninja -C build install
+
+installs the program, the library and the data files. `meson setup
+-Dprefix=/somewhere build` chooses where.
+
+Every library it uses is optional and sought rather than required, so a
+build with none of them present still produces an interpreter. What each
+one buys:
 
-loading init.ps...
-loading err.ps...
-Xpost Version 0.0.1
-PS> runtest
-
-Type `quit` or send an EOF (ctrl-D or maybe ctrl-Z) to quit
-the interpreter.
-
-
-
-== Examples ==
-
-There are a few example programs demonstrating xpost's base
-functionality without graphics. These are in the /ex subdirectory.
-
-binshape.ps  -  draw an infinite output of random 0s and 1s
-digit.ps - (doesn't work yet. uses <~ascii85~>, which xpost won't process (yet))
-hwbin.ps - hello world using binary radix numbers
-hwhex.ps - hello world using hexstring
-tab340.ps - the smmaller golfed tablature generator
-tab418.ps - the larger golfed tablature generator
-tabref.ps - the large reference tablature generator
-ubf119.ps - the 119 char universal binary-function lookup table
-ubf70.ps - the 70 char universal binary-function lookup table
-
-Some of these were written to make use of Ghostscript's argument
-processing option `gs -- prog.ps arg0 arg1 arg2`. But xpost doesn't
-do that yet, so you'll have to define
-
-  /ARGUMENTS [ (A) (Bm) (F#m) (F#m) ] def
-
-as an array of strings before you `(tab340.ps)run` or whatever.
-Check the source to see if it uses ARGUMENTS to know if you need
-to set this variable before running.
-
-For example, to run ex/binshape.ps which is a silly little program
-attempting to display vertical streams of 0 and 1 reminiscent of
-'The Matrix'. Launch xpost from the /ex directory.
-
-  PS> /ARGUMENTS [ 80 ] def
-  PS> (binshape.ps) run
-
-Other examples with graphics have been added to the /data directory which is
-also installed with `make install`.
-
-  cd data
-  xpost dancingmen.ps  (some figures from a Sherlock Holmes episode)
-  xpost sin1x.ps     (approximating a function graphic with bezier interpolation)
-  xpost tea1.ps   (this one has some issues, try it with gs to see it)
-  xpost bitfont.ps  (a non-caching Type 3 font using 8-bit images)
-
-== Postscript arithmetic and function-calling ==
-
-Just a brief review of what you should already know if you're trying
-to use xpost. Postscript uses a Reverse-Polish Syntax where the
-operator follows the operands.
-
-  a + b      Infix Notation (ALGOL, C)
-  ( + a b )  "Cambridge" Polish Notation (Lisp)
-  a b +      Reverse Polish Notation (RPN)
-
-Postscript does not use punctuation symbols for the operators,
-but short words.
-
-    add sub mul div
-    idiv mod            2 operand
-    atan exp
-
-    cos sin sqrt
-    ln log              1 operand
-    abs neg
-    floor ceiling
-    truncate round
-
-note:
-%<-- Postscript comments begin with '%' and run till the end of line -->$
-
-For example, if you define /a, /b, and /c to contain values for
-the variables in the formula "ax^2 + bx + c",
-
-    /a 25 def   % define the variables a b and c
-    /b 10 def
-    /c 3 def
-
-and a definition for x,
-
-    /x 12 def
-
-you can calculate the value of the formula like this:
-
-                   % stack picture:
-    a x x mul mul  % ax^2
-    b x mul        % ax^2 bx
-    c   add   add  % ax^2+bx+c
-
-== Stack manipulation ==
-
-To turn this formula into a function, we need to take the input
-for the function and define it as x before applying the formula.
-
-    % x  quadratic  ax^2+bx+c
-    /quadratic {
-        /x exch def    % define x from stack
-        a x x mul mul  % calculate quadratic as above
-        b x mul
-        c add add
-    } def
-
-When the function is entered, the input value is on the operand stack.
-
-    number
-   |------|
-
-Then we push the (literal) name /x.
-
-      /x
-    number
-   |------|
-
-Unfortunately, `def` expects them to be in this order:
-
-    number
-      /x
-   |------|
-
-Hence `exch` is used to reorder the top two elements of the stack.
-When reading a postscript sequence like `/name exch def` one way to
-think of `exch` is like a pronoun whose antecedent is just below
-the name.
-
-    whatev  /x  exch  def
-       ^         |
-        ---------
-
-The function so far isn't very general. So let's tease out a, b, and
-c and make them parameters, too, instead of hard-coded names.
-
-    % a b c x  quadratic  ax^2+bx+c
-    /quadratic {
-        /x exch def   % a b c   % define x
-        3 1 roll      % c a b   % reorder elements
-        x mul         % c a bx  % calculate the bx term
-        3 1 roll      % bx c a  % reorder elements
-        x x mul mul   % bx c ax^2  % calculate the ax^2 term
-        add add                    % sum up
-    } def
-
-This brings us to `roll`. As you can see from the stack comments,
-`3 1 roll` permutes three elements of the stack. The first
-number is how many elements to manipulate. And the second number
-indicates how many elements to move and in which direction.
-
-    /a /b /c   % a b c
-    3 1 roll   % c a b
-    3 -1 roll  % a b c
-    3 2 roll   % b c a
-    3 3 roll   % b c a
-    3 0 roll   % b c a
-    3 2 roll   % c a b
-    3 -1 roll  % a b c
-
-
-    n j roll
-
-    __ j > 0 __     move top j elements to the bottom of n
-
-    n            TOS
-     -------------|
-    |       j     |
-    |        -----|
-    |       |     |
-    V       V     |
-    a b c d e f g h
-   ^       |       |
-   |       |-------|
-   ^           |
-    -<-<-<-<-<-
-
-
-    __ j < 0 __   move j elements from the bottom of n to the top
-
-    n            TOS
-     -------------|
-    |     j       |
-    |-----        |
-    |     |       |
-    V     V       |
-    a b c d e f g h
-   |       |       ^
-   |-------|       |
-       |           ^
-        ->->->->->-
-
-    "Positive J to roll away", "Negative to bring 'em back".
-
-So the next step in revising/optimizing our function is to remove the /x name
-as well.
-
-  % a b c x  quadratic  ax^2+bx+c
-  /quadratic {
-      4 2 roll     % c x a b     % reorder elements
-      1 index mul  % c x a bx    % copy and multiply
-      4 1 roll     % bx c x a    % reorder elements
-      1 index mul  % bx c x ax   % copy and multiply
-      mul          % bx c ax^2   % multiply
-      add add                    % sum up
-  } def
-
-If we apply `bind` to the procedure, all the operator names will
-be replaced by the operators themselves, and the function now
-performs no dictionary lookups at all.
-
-  /quadratic load bind ==
-{ 4 2 -roll- 1 -index- -mul- 4 1 -roll- 1 -index- -mul- -mul- -add- -add- }
-
-This function will now execute as quickly as possible,
-and it will not interact with the current namespace
-and it does not allocate any data.
-
-
-== Arrays ==
-
-It should be apparent from the last example that a procedure is
-just an array, wrapped in curly braces rather than square brackets.
-
-So we could construct the same procedure in the following way.
-
-  /quadratic [
-  4 2 /roll load 1 /index load /mul load
-  4 1 /roll load 1 /index load /mul load
-  /mul load /add load /add load
-  ] cvx def
-
-This is similar to the way bind constructs its bound procedure,
-by loading the operator objects by name and embedding them in
-the array. One must be careful in using the direct method shown
-here. Some operators are implemented as procedures and will
-not be executed if simply substituted as above. `bind` replaces
-only names that refer to operator objects. A more general approach
-would inject `exec` calls after sub-procedures.
-
-For example, suppose we want (for some crazy reason) this procedure
-to simply print its result, and not leave it on the stack.
-There's an operator `=` to do just that. But ... `=` is a procedure!
-
-So, this won't work:
-  /quadratic [
-  4 2 /roll load 1 /index load /mul load
-  4 1 /roll load 1 /index load /mul load
-  /mul load /add load /add load
-  /= load %<-- NO! Bad! procedure will not execute
-  ] cvx def
-
-This will:
-  /quadratic [
-  4 2 /roll load 1 /index load /mul load
-  4 1 /roll load 1 /index load /mul load
-  /mul load /add load /add load
-  /= load /exec load  %<-- must explicitly execute "procedure" operators
-  ] cvx def
-
-You see the convenience of bind. It performs all those loads for you,
-but leaves the procedure invocation intact.
-
-  /quadratic {
-      4 2 roll 1 index mul
-      4 1 roll 1 index mul
-      mul add add = } bind def
-  /quadratic load ==
-
-{ 4 2 -roll- 1 -index- -mul- 4 1 -roll- 1 -index- -mul- -mul- -add- -add- = }
-
-
-== Sub-prompts ==
-
-Xpost's %statementedit special file features secondary prompts at each
-newline, reminding you of which open constructs are awaiting a terminator.
-
-$ ./xpost
-
-loading init.ps...
-loading err.ps...
-$error
-Xpost Version 0.0.1
-PS>{
-{.:}
-PS<1>(
-(.:)
-PS<2>[
-PS<3>]
-PS<3>pstack
-[ ]
-(
-)
-{ }
-PS<3>{{{
-{{{.:}
-{{.:}
-{.:}
-PS<4>
+  libpng                 the png and pngalpha devices
+  libjpeg                the jpeg device
+  freetype, fontconfig   scalable fonts, and finding them by name
+  xcb                    the xcb window device, on X11
+  zlib                   the FlateDecode and FlateEncode filters, and
+                         with them the compressed streams pdfwrite puts
+                         in a PDF
+
+`meson configure build` lists the options an already configured build
+took. The one worth knowing about is `-Dlarge-object=true`, which widens
+the fields of the PostScript object; the tree is built and tested both
+ways and the narrow build is the primary one.
+
+The tree also carries an autotools build (`./autogen.sh`, `make`). It is
+not what CI builds, and at present `make` does not run to completion
+where xcb is installed: src/bin/xpost_view is compiled against xcb and
+linked without it. Build with meson.
+
+
+== Running a program ==
+
+  xpost [options] [file.ps]
+
+`xpost` below is the installed program or the one in the build tree,
+whichever is to hand:
+
+  build/src/bin/xpost -d png -o page.png data/dancingmen.ps
+
+`-d` names the device the page is painted into and `-o` names the file
+it is written to. A page is letter unless the program says otherwise or
+`-g` does; `-g` wants the whole geometry and refuses less, so it is
+`-g 2550x3300+0+0` rather than `-g 2550x3300`. `xpost --help` lists
+every option and every device the build was configured with.
+
+Every run opens with a banner and a copyright notice on the standard
+output. It is elided from the transcripts below except where the
+transcript is about start-up.
+
+Two things about a run are worth knowing before the first one.
+
+`showpage` announces the page. At the end of each page the interpreter
+prints `----showpage----` on the standard output and reads a line from
+the terminal, so a run of a program that calls `showpage` waits there
+until it is given one. Redirect the standard input from /dev/null, or
+close it, for a run that should not stop. This is the announcing
+behaviour PLRM 2.4.4 describes for interactive use; a program embedding
+the library chooses something else through xpost_create.
+
+A run with a terminal on its standard input is offered the interactive
+session after the named program ends -- see below. Naming an output file
+with `-o` says the run is something waiting for that file rather than
+somebody typing, and the session is not offered.
+
+The examples under data/ draw pages:
+
+  xpost -d png -o men.png   data/dancingmen.ps   figures from a Sherlock
+                                                 Holmes story
+  xpost -d png -o sin1x.png data/sin1x.ps        a function plotted by
+                                                 bezier interpolation
+
+Both are installed by `ninja -C build install` along with the data files
+the interpreter boots from.
+
+
+== The devices ==
+
+A device is what a page is painted into and written out as. `-d NAME`
+selects one; `xpost --help` prints the list this build actually has,
+which is shorter where an optional library was missing at configure
+time.
+
+  pgm        grayscale raster, binary portable graymap (P5)
+  ppm        colour raster, binary portable pixmap (P6)
+  pbm        bilevel raster, binary portable bitmap (P4); greys reach it
+             through the halftone in force
+  tiff       colour raster, TIFF; one strip, LZW-compressed to a file
+             and uncompressed to the standard output
+  png        colour raster, PNG
+  pngalpha   the same with an alpha channel, so the paper is transparent
+  jpeg       colour raster, JPEG
+
+  pdfwrite   PDF
+  dscwrite   PostScript, conforming to the Document Structuring
+             Conventions
+  svgwrite   SVG
+
+  bbox       draws nothing and reports the bounding box of what would
+             have been drawn
+  null       executes the drawing and discards it
+
+  raster     hands the page back to an embedding program as a raw
+             framebuffer
+  bgr        the same, in a fixed byte order
+  record     the class that holds a page as the marks that made it,
+             rather than as pixels
+
+  xcb        an X11 window (a build on X11)
+  gdi, gl    a window on Windows
+
+The two paginated container formats, pdfwrite and dscwrite, hold every
+page of a run in one file; a name containing %d selects a file per page
+instead. Nothing else can hold more than one page in a file, so for the
+rasters and for svgwrite a %d gives a file per page and a fixed name
+keeps the last page, every page having rewritten the one file.
+
+A colon after the device name introduces a mode. On raster it is the
+byte order a lent framebuffer is in -- `raster:rgb`, `raster:argb`,
+`raster:bgr`, `raster:bgra` -- and a word outside those four leaves the
+format at rgb rather than being refused. Everywhere else the mode is
+how much of a page is held at once, which is the next section.
 
 
 == Big pages, and holding one a band at a time ==
@@ -438,3 +273,322 @@ to, so those are painted directly: letter and A4 and A3 in colour all
 read 0. A letter sheet at 300 dpi in grey, which is 2550 by 3300,
 reads 1568; a 612 by 40000 strip in colour reads 2178.
 
+
+== The interactive session ==
+
+PLRM 2.4.4 describes an interactive executive: a prompt that reads a
+statement from the standard input, executes it, and prompts again.
+Xpost offers one where there is somebody to type at it -- that is,
+where the standard input is a terminal -- either with no program named
+at all, or after the named program has ended.
+
+  $ build/src/bin/xpost
+  Xpost 0.0.1
+  Copyright (C) 2013, Michael Joshua Ryan. All rights reserved.
+  This software is supplied under the BSD 3 clause and comes with NO WARRANTY:
+  see the file COPYING for details.
+  PS>
+
+Type `quit`, or send an end of file (ctrl-D, or ctrl-Z on Windows), to
+leave.
+
+The prompt carries a digest of the operand stack between `<` and `>`,
+which is one character per object: a digit for a small integer, `S` for
+a string, `D` for a dictionary, `}` for a procedure, and so on
+(data/prepr.ps has the table). So an empty stack prompts `PS>` and one
+holding 7, 8 and a procedure prompts `PS<78}>`.
+
+A statement is read whole, however many lines it takes. While a
+procedure, a string or a hexadecimal string is still open, each newline
+brings a sub-prompt naming the constructs waiting to be closed, one
+character each, followed by `.:`
+
+  PS>{
+  {.:(
+  {(.:)
+  {.:}
+  PS<}>pstack
+  {(\n)}
+  PS<}>
+
+Nothing else reads the standard input while the session has it, so a
+program that reads its own data from the file it is in cannot be run
+through the session; run it as a named file instead. PLRM 2.4.4 says
+the same, and adds that a program-generating application should never
+invoke `executive`.
+
+
+== The example programs ==
+
+Under ex/ are programs that use no graphics at all. Several read an
+array of strings named ARGUMENTS, which they expect to be defined
+before they run:
+
+  binshape.ps  vertical streams of 0 and 1; ARGUMENTS is the width
+  digit.ps     draws its argument in seven-segment digits
+  tab340.ps    the smaller golfed guitar tablature generator
+  tab418.ps    the larger golfed tablature generator
+  tabref.ps    the reference tablature generator
+  hwbin.ps     hello world, written with binary radix numbers
+  hwhex.ps     hello world, written as a hexadecimal string
+  ubf119.ps    the 119-character universal binary-function table
+  ubf70.ps     the 70-character universal binary-function table
+
+The four that take no argument run as they are:
+
+  xpost ex/hwhex.ps
+
+For the rest, define ARGUMENTS and then run the program by name. From
+the ex directory:
+
+  $ cat >tab.ps <<'EOF'
+  /ARGUMENTS [ (A) (Bm) (F#m) (F#m) ] def
+  (tab340.ps) run
+  EOF
+  $ xpost tab.ps
+  e 0---2---2---2---
+  B 2---3---2---2---
+  G 2---4---2---2---
+  D 2---4---4---4---
+  A 0---2---4---4---
+  E 0---2---2---2---
+
+`-DNAME=TOKEN` defines a name in userdict from the command line, which
+is enough for a number or a string but not for the array these want:
+the value is one token.
+
+
+== PostScript arithmetic and function-calling ==
+
+Just a brief review of what you should already know if you're trying
+to use xpost. PostScript uses a Reverse-Polish Syntax where the
+operator follows the operands.
+
+  a + b      Infix Notation (ALGOL, C)
+  ( + a b )  "Cambridge" Polish Notation (Lisp)
+  a b +      Reverse Polish Notation (RPN)
+
+PostScript does not use punctuation symbols for the operators,
+but short words.
+
+    add sub mul div
+    idiv mod            2 operand
+    atan exp
+
+    cos sin sqrt
+    ln log              1 operand
+    abs neg
+    floor ceiling
+    truncate round
+
+note:
+%<-- PostScript comments begin with '%' and run till the end of line -->$
+
+For example, if you define /a, /b, and /c to contain values for
+the variables in the formula "ax^2 + bx + c",
+
+    /a 25 def   % define the variables a b and c
+    /b 10 def
+    /c 3 def
+
+and a definition for x,
+
+    /x 12 def
+
+you can calculate the value of the formula like this:
+
+                   % stack picture:
+    a x x mul mul  % ax^2
+    b x mul        % ax^2 bx
+    c   add   add  % ax^2+bx+c
+
+which for those values is 3723.
+
+
+== Stack manipulation ==
+
+To turn this formula into a function, we need to take the input
+for the function and define it as x before applying the formula.
+
+    % x  quadratic  ax^2+bx+c
+    /quadratic {
+        /x exch def    % define x from stack
+        a x x mul mul  % calculate quadratic as above
+        b x mul
+        c add add
+    } def
+
+When the function is entered, the input value is on the operand stack.
+
+    number
+   |------|
+
+Then we push the (literal) name /x.
+
+      /x
+    number
+   |------|
+
+Unfortunately, `def` expects them to be in this order:
+
+    number
+      /x
+   |------|
+
+Hence `exch` is used to reorder the top two elements of the stack.
+When reading a PostScript sequence like `/name exch def` one way to
+think of `exch` is like a pronoun whose antecedent is just below
+the name.
+
+    whatev  /x  exch  def
+       ^         |
+        ---------
+
+The function so far isn't very general. So let's tease out a, b, and
+c and make them parameters, too, instead of hard-coded names.
+
+    % a b c x  quadratic  ax^2+bx+c
+    /quadratic {
+        /x exch def   % a b c   % define x
+        3 1 roll      % c a b   % reorder elements
+        x mul         % c a bx  % calculate the bx term
+        3 1 roll      % bx c a  % reorder elements
+        x x mul mul   % bx c ax^2  % calculate the ax^2 term
+        add add                    % sum up
+    } def
+
+This brings us to `roll`. As you can see from the stack comments,
+`3 1 roll` permutes three elements of the stack. The first
+number is how many elements to manipulate. And the second number
+indicates how many elements to move and in which direction.
+
+    /a /b /c   % a b c
+    3 1 roll   % c a b
+    3 -1 roll  % a b c
+    3 2 roll   % b c a
+    3 3 roll   % b c a
+    3 0 roll   % b c a
+    3 2 roll   % c a b
+    3 -1 roll  % a b c
+
+
+    n j roll
+
+    __ j > 0 __     move top j elements to the bottom of n
+
+    n            TOS
+     -------------|
+    |       j     |
+    |        -----|
+    |       |     |
+    V       V     |
+    a b c d e f g h
+   ^       |       |
+   |       |-------|
+   ^           |
+    -<-<-<-<-<-
+
+
+    __ j < 0 __   move j elements from the bottom of n to the top
+
+    n            TOS
+     -------------|
+    |     j       |
+    |-----        |
+    |     |       |
+    V     V       |
+    a b c d e f g h
+   |       |       ^
+   |-------|       |
+       |           ^
+        ->->->->->-
+
+    "Positive J to roll away", "Negative to bring 'em back".
+
+So the next step in revising/optimizing our function is to remove the /x name
+as well. Without a name for x, the copy of it each term needs has to be
+fetched off the stack, which is what `index` does: `n index` pushes a
+copy of the element n below the top.
+
+  % a b c x  quadratic  ax^2+bx+c
+  /quadratic {
+      4 2 roll     % c x a b     % reorder elements
+      2 index mul  % c x a bx    % copy x and multiply
+      4 1 roll     % bx c x a    % reorder elements
+      1 index mul  % bx c x ax   % copy x and multiply
+      mul          % bx c ax^2   % multiply
+      add add                    % sum up
+  } def
+
+  25 10 3 12 quadratic ==
+3723
+
+The two `index` counts differ because the two terms are reached from
+different places: after the first `roll` the top is b and x is two
+below it, and after the second the top is a and x is one below.
+
+If we apply `bind` to the procedure, all the operator names will
+be replaced by the operators themselves, and the function now
+performs no dictionary lookups at all.
+
+  /quadratic load bind ==
+{4 2 --roll-- 2 --index-- --mul-- 4 1 --roll-- 1 --index-- --mul-- --mul
+-- --add-- --add--}
+
+`==` breaks its output at 72 columns, which is where that second line
+comes from.
+
+This function will now execute as quickly as possible,
+and it will not interact with the current namespace
+and it does not allocate any data.
+
+
+== Arrays ==
+
+It should be apparent from the last example that a procedure is
+just an array, wrapped in curly braces rather than square brackets.
+
+So we could construct the same procedure in the following way.
+
+  /quadratic [
+  4 2 /roll load 2 /index load /mul load
+  4 1 /roll load 1 /index load /mul load
+  /mul load /add load /add load
+  ] cvx def
+
+This is similar to the way bind constructs its bound procedure,
+by loading the operator objects by name and embedding them in
+the array. One must be careful in using the direct method shown
+here. It works for a name whose value is an operator object;
+a name whose value is a PostScript procedure lands in the array
+as the procedure itself, and an executable array nested inside
+another is pushed rather than executed.
+
+Nearly everything in systemdict here is an operator object. Of its 395
+entries, 20 hold a procedure and 2 hold a literal array (the two
+standard encodings), so the caveat bites rarely; which side of it a name
+falls on can be asked outright:
+
+  /add load type    %  operatortype
+  /=print load type %  arraytype
+
+`=print` is one of the 20, so this prints nothing and leaves both the
+string and the procedure behind:
+
+  [ (hi) /=print load ] cvx exec
+
+and this prints it:
+
+  [ (hi) /=print load /exec load ] cvx exec
+
+You see the convenience of bind. It performs all those loads for you,
+but leaves the procedure invocation intact.
+
+  /quadratic {
+      4 2 roll 2 index mul
+      4 1 roll 1 index mul
+      mul add add = } bind def
+  /quadratic load ==
+
+{4 2 --roll-- 2 --index-- --mul-- 4 1 --roll-- 1 --index-- --mul-- --mul
+-- --add-- --add-- --=--}
