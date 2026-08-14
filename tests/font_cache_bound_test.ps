@@ -145,16 +145,31 @@ faildict /n 0 put
 % box with an inside, and the program a Type 42 font is defined by.
 % Without these an implementation stating nothing at all about any face
 % would agree with itself and satisfy the comparisons above.
+% Each part is asked separately and names itself when it fails, because
+% which one failed is the whole of what the answer is worth: the parts
+% describe different properties of a face, and a host is entitled to
+% resolve a name to a font this one does not.
+/part { % bool (why)  .  -
+    /plabel exch def
+    not { (  not so: ) print plabel print (\n) print
+          /sbad sbad 1 add def } if
+} bind def
+
 /sound { % ref (label)  .  -
     /slabel exch def
     /sref exch def
-    sref 0 get dup 1 eq exch dup 2 eq exch 42 eq or or
-    sref 7 get 0 ne and
-    sref 8 get 0 ne and
-    sref 2 get sref 4 get ne and
-    sref 3 get sref 5 get ne and
-    sref 0 get 42 eq { sref 6 get 0 gt and } if
-    slabel require
+    /sbad 0 def
+    /sft sref 0 get def
+    sft 1 eq sft 2 eq or sft 42 eq or
+      (the FontType is one the type conventions define) part
+    sref 7 get 0 ne (the face names glyphs) part
+    sref 8 get 0 ne (the glyphs are published by a convention) part
+    sref 2 get sref 4 get ne (the bounding box has a width) part
+    sref 3 get sref 5 get ne (the bounding box has a height) part
+    sft 42 eq { sref 6 get 0 gt
+        (a Type 42 font carries the program it is defined by) part } if
+    sbad 0 eq not { (  saw: ) print sref show9 (\n) print } if
+    sbad 0 eq slabel require
 } bind def
 
 b0 null eq {
