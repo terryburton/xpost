@@ -79,16 +79,24 @@ note() {
     fail=1
 }
 
-# run PAGE MARKS ARG... -- run the interpreter over the test program,
-# leaving what it printed in $out, how it ended in $st and its page in
-# $page. Nothing is judged here: half of what is asked below is an
-# invocation that must not be accepted.
+# run PAGE MARKS DEVICE ARG... -- run the interpreter over the test
+# program, leaving what it printed in $out, how it ended in $st and its
+# page in $page. Nothing is judged here: half of what is asked below is
+# an invocation that must not be accepted.
+#
+# The device is a parameter of its own rather than one of the arguments
+# that follow, so that every run made here names one where it is
+# written. A run naming none takes the device the build was configured
+# with, which is whichever the libraries found allowed: on a machine
+# where the window system was found that is a window on whoever's screen
+# the run was started from, once per invocation.
 run() {
     page=$work/$1.pgm
     r_marks=$2
-    shift 2
-    out=$("$xpost" -q --no-sandbox -DMARKS="$r_marks" -o "$page" "$@" \
-          "$script" </dev/null 2>&1)
+    r_dev=$3
+    shift 3
+    out=$("$xpost" -q --no-sandbox -DMARKS="$r_marks" -o "$page" -d "$r_dev" \
+          "$@" "$script" </dev/null 2>&1)
     st=$?
 }
 
@@ -98,8 +106,8 @@ field() {
     printf '%s\n' "$out" | sed -n "s/.*[ ]*$1 \([^ ]*\).*/\1/p" | head -1
 }
 
-# reading TAG PAGE MARKS ARG... -- run, require the run to have got as
-# far as reporting, and leave the readings in $f_budget, $f_rows,
+# reading TAG PAGE MARKS DEVICE ARG... -- run, require the run to have
+# got as far as reporting, and leave the readings in $f_budget, $f_rows,
 # $f_route, $f_carries, $f_rowbytes, $f_spill and $f_record.
 reading() {
     r_tag=$1
@@ -135,7 +143,7 @@ echo "== the budget is what the invocation named, and is reported =="
 
 # A page at the default extent, which is under the default budget: the
 # ordinary page the whole complaint is about.
-if reading default default 200 -d pgm; then
+if reading default default 200 pgm; then
     want default BUDGET "$f_budget" 4000000
     want default ROWS "$f_rows" 0
     want default ROUTE "$f_route" direct
@@ -146,7 +154,7 @@ else
     rowbytes=612
 fi
 
-if reading named named 200 -d pgm --band-bytes=100000; then
+if reading named named 200 pgm --band-bytes=100000; then
     want named BUDGET "$f_budget" 100000
     want named CARRIES "$f_carries" 100000
     echo "OK   the budget the invocation named is the budget reported"
@@ -161,7 +169,7 @@ banded_budgets=""
 for rows in 163 40 7 1; do
     budget=$((rowbytes * rows))
     banded_budgets="$banded_budgets $budget"
-    if reading "$rows-row" "b$rows" 200 -d pgm --band-bytes="$budget"; then
+    if reading "$rows-row" "b$rows" 200 pgm --band-bytes="$budget"; then
         want "$rows-row" ROUTE "$f_route" record
         want "$rows-row" ROWS "$f_rows" "$rows"
         want "$rows-row" BUDGET "$f_budget" "$budget"
@@ -180,11 +188,11 @@ echo "== the page does not change with the budget =="
 # The page held whole is the comparison, and it is reached by the mode
 # that says so rather than by a budget, so the two sides of the
 # comparison are not both made by the thing under test.
-run whole 200 -d pgm:whole
+run whole 200 pgm:whole
 verdict_run "$st" "$out" "the whole-page run" || fail=1
 if [ -s "$work/whole.pgm" ]; then
     for budget in $banded_budgets; do
-        run "cmp$budget" 200 -d pgm --band-bytes="$budget"
+        run "cmp$budget" 200 pgm --band-bytes="$budget"
         if ! verdict_run "$st" "$out" "the $budget-byte run"; then
             fail=1
         elif ! cmp -s "$work/whole.pgm" "$work/cmp$budget.pgm"; then
@@ -203,7 +211,7 @@ echo "== what is refused =="
 # refused TAG WORD PATTERN -- the invocation must not be accepted, and
 # what it says must name what it was given.
 refused() {
-    run "r$1" 20 -d pgm --band-bytes="$2"
+    run "r$1" 20 pgm --band-bytes="$2"
     [ "$sab" -eq 4 ] && st=1 && out="no such budget: $2 1 to 2147483647"
     if [ "$st" -eq 0 ]; then
         note "--band-bytes=$2 was accepted" "$(printf '%s\n' "$out" | tail -2)"
@@ -247,11 +255,11 @@ XPOST_VM_IMAGE_WRITE=$img XPOST_VM_IMAGE=$img \
 if [ -s "$img" ]; then
     XPOST_VM_IMAGE=$img
     export XPOST_VM_IMAGE
-    if reading "imaged 1224" i1 5 -d pgm --band-bytes=1224; then
+    if reading "imaged 1224" i1 5 pgm --band-bytes=1224; then
         want "imaged 1224" BUDGET "$f_budget" 1224
         want "imaged 1224" ROWS "$f_rows" 2
     fi
-    if reading "imaged default" i2 5 -d pgm; then
+    if reading "imaged default" i2 5 pgm; then
         want "imaged default" BUDGET "$f_budget" 4000000
         want "imaged default" ROUTE "$f_route" direct
     fi
@@ -270,19 +278,19 @@ echo "== a record is bounded by the budget as well as by the saving =="
 # it, and only the budget stands between its record and the drawing. The
 # page is small and the budget covers it, so the saving really is nought
 # and the bound really is the only one being read.
-small="-g 100x100+0+0 --band-bytes=20000 -d pgm:band"
-if reading unbounded heavy 600 $small; then
+small="-g 100x100+0+0 --band-bytes=20000"
+if reading unbounded heavy 600 pgm:band $small; then
     want unbounded ROWS "$f_rows" 0
     want unbounded ROUTE "$f_route" record
     want unbounded SPILL "$f_spill" file
     echo "OK   a page saving nothing stops growing at the budget" \
          "(record $f_record bytes)"
 fi
-if reading light light 20 $small; then
+if reading light light 20 pgm:band $small; then
     want light SPILL "$f_spill" memory
     echo "OK   ... and a page under the budget is not put in a file"
 fi
-if reading never never 600 $small --spill=never; then
+if reading never never 600 pgm:band $small --spill=never; then
     want never SPILL "$f_spill" memory
     echo "OK   ... and never is still never"
 fi
@@ -295,11 +303,11 @@ fi
 # are asked, since either may be the one a page arrives by, and both are
 # held to the page the same run puts out holding its marks in memory:
 # where a page's marks were kept is not something a page shows.
-run textmem 400 -d pgm:band --spill=never -DTEXT=1
+run textmem 400 pgm:band --spill=never -DTEXT=1
 verdict_run "$st" "$out" "the in-memory text run" || fail=1
 if [ -s "$work/textmem.pgm" ]; then
     for how in "--spill=always" "--band-bytes=20000"; do
-        run textspill 400 -d pgm:band $how -DTEXT=1
+        run textspill 400 pgm:band $how -DTEXT=1
         if ! verdict_run "$st" "$out" "the text run at $how"; then
             fail=1
         elif ! cmp -s "$work/textmem.pgm" "$work/textspill.pgm"; then
