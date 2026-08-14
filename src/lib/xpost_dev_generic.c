@@ -2350,7 +2350,7 @@ _blit_row_spans(Xpost_Context *ctx, Xpost_Object cspans, int ncspans,
    of mrowb bytes (set = leave unpainted), and mranges, raw min,max
    pairs (a pixel inside every range is left unpainted). Pixels cover
    device pixels by the any-part-of-pixel rule, the high edge
-   exclusive, matching the rectangle fills this replaces.
+   exclusive, which is the rule the rectangle fills cover them by.
 
    It is reachable as a function too (xpost_dev_generic.h), so that a
    page played back from a record writes its image rows through this
