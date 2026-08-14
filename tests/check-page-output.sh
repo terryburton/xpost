@@ -433,15 +433,18 @@ EOF
     # retires reaches no Destroy and nothing else runs for it, so this is
     # where its file goes back.
     #
-    # Taken from the registration rather than from a name, so a function
-    # is inside this rule because it was named to xpost_handle_reclaim_set
-    # and for no other reason. The call is read whole -- it is written
-    # over two lines -- and what it names last is the function.
+    # Taken from where the block is issued rather than from a name, so a
+    # function is inside this rule because it was named as the block's
+    # reclaim and for no other reason. A block is issued and its reclaim
+    # named in the one call, so there is one place to read and no way to
+    # issue a block without answering this. The call is read whole -- it
+    # is written over three lines -- and what it names last is the
+    # function.
     recfn=$(awk '{ sub(/\r$/, "")
-                   if (buf == "" && !index($0, "xpost_handle_reclaim_set")) next
+                   if (buf == "" && !index($0, "xpost_handle_cons")) next
                    buf = buf " " $0
                    if (!index($0, ";")) next
-                   sub(/.*xpost_handle_reclaim_set[ \t]*\(/, "", buf)
+                   sub(/.*xpost_handle_cons[ \t]*\(/, "", buf)
                    sub(/\)[ \t]*;.*$/, "", buf)
                    n = split(buf, a, ",")
                    gsub(/[ \t]+/, "", a[n])

@@ -147,15 +147,14 @@ static int _font_data_set(Xpost_Context *ctx,
     if (!fd)
     {
         ret = xpost_handle_cons(ctx, fontdict, key, &anchor,
-                                XPOST_HANDLE_FONT, sizeof(fontdata));
+                                XPOST_HANDLE_FONT, sizeof(fontdata),
+                                _reclaim);
         if (ret)
             return ret;
         fd = (fontdata *)xpost_handle_block(ctx, anchor, XPOST_HANDLE_FONT,
                                             sizeof(fontdata));
         if (!fd)
             return VMerror;
-        (void)xpost_handle_reclaim_set(ctx, anchor, XPOST_HANDLE_FONT,
-                                       sizeof(fontdata), _reclaim);
     }
     else if (fd->own)
         xpost_font_face_free(fd->face);

@@ -252,18 +252,18 @@ int _create_cont(Xpost_Context *ctx,
         }
     }
 
-    /* create a string to contain device data structure */
-    ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
-                            XPOST_HANDLE_DEVICE, sizeof(PrivateData));
-    if (ret)
-        return ret;
-    /* What this device holds is a window and the framebuffer behind it,
+    /* The block this device's instance state lives in, and, named with
+       it rather than after it, what gives up whatever that state names.
+       What this device holds is a window and the framebuffer behind it,
        which are not virtual memory: a device the run never retires --
        one a restore took back, or one nothing named by the time a
        collection came round -- would take them with it. This is what
        gives them up there. */
-    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
-                                   sizeof(PrivateData), _reclaim);
+    ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
+                            XPOST_HANDLE_DEVICE, sizeof(PrivateData),
+                            _reclaim);
+    if (ret)
+        return ret;
 
     /* create and map window */
     private.instance = GetModuleHandle(NULL);

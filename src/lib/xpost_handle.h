@@ -123,21 +123,43 @@ typedef enum
 } Xpost_Handle_Kind;
 
 /**
- * @brief Issue a block of the given kind and store its handle in the
- * dictionary under key.
+ * @brief Issue a block of the given kind, say what gives up what the
+ * block names, and store its handle in the dictionary under key.
  *
  * The block is zeroed. For a device's instance state the operator the
  * dictionary then holds under /Destroy is recorded with the block as the
  * release it is to be given up by, taken here where a device's own
  * Create has just filled the dictionary from its class and the program
  * has not yet reached it. Returns 0, or an error code.
+ *
+ * @p reclaim is what gives up whatever the block names, or NULL where
+ * the block names nothing beyond itself. It is taken here rather than
+ * registered afterwards because a block that names memory and was
+ * issued without saying so is a leak nothing reports: the block goes,
+ * what it named stays, and the only trace is a total that grows.
+ * Issuing and saying are one call, so the question is put to whoever
+ * issues a block rather than left for them to remember.
+ *
+ * A block that names memory of its own is ordinarily given up by
+ * whoever was told to give it up -- a device's Destroy, run by the
+ * interpreter. A holder that is never told is what @p reclaim is for: a
+ * device a restore took back, or one nothing named by the time a
+ * collection came round, whose block is reclaimed with the entity
+ * carrying its handle and would otherwise take what it named with it
+ * for the life of the process.
+ *
+ * It runs at reclamation, which is inside the collector: it may touch
+ * nothing in virtual memory, only what the block names. It runs once,
+ * before the block itself goes, and a holder that has already given up
+ * what the block named leaves it nothing to do.
  */
 int xpost_handle_cons(Xpost_Context *ctx,
                       Xpost_Object dic,
                       Xpost_Object key,
                       Xpost_Object *anchor,
                       Xpost_Handle_Kind kind,
-                      size_t size);
+                      size_t size,
+                      void (*reclaim)(void *block));
 
 /**
  * @brief Record a block the caller holds against an entity that already
@@ -215,28 +237,6 @@ unsigned int xpost_handle_device_release(Xpost_Context *ctx,
 /**
  * @brief Give up the block an entity's handle names.
  */
-/**
- * @brief Say what to give up out of a block when the block is reclaimed.
- *
- * @param[in] anchor the handle the block was issued under
- * @return 1, or 0 where no such block is recorded
- *
- * A block that names memory of its own is given up by whoever was told
- * to give it up -- a device's Destroy, run by the interpreter. A holder
- * that is never told is the case this is for: a device a restore took
- * back, or one nothing named by the time a collection came round, whose
- * block is reclaimed with the entity carrying its handle and would
- * otherwise take what it named with it for the life of the process.
- *
- * What is registered runs at reclamation, which is inside the collector:
- * it may touch nothing in virtual memory, only what the block names. It
- * runs once, before the block itself goes, and a holder that has already
- * given up what the block named leaves nothing for it to do.
- */
-int xpost_handle_reclaim_set(Xpost_Context *ctx, Xpost_Object anchor,
-                             Xpost_Handle_Kind kind, size_t size,
-                             void (*reclaim)(void *block));
-
 void xpost_handle_release_entity(Xpost_Memory_File *mem,
                                  unsigned int ent);
 

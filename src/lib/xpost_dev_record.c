@@ -3288,18 +3288,19 @@ static int _create_cont(Xpost_Context *ctx,
         return rangecheck;
     }
 
-    ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
-                            XPOST_HANDLE_DEVICE, sizeof(PrivateData));
-    if (ret)
-        return ret;
-    /* What this device holds is a record, which is not virtual memory:
+    /* The block this device's instance state lives in, and, named
+       with it rather than after it, what gives up whatever that
+       state names. What this device holds is a record, which is not virtual memory:
        a device the run never retires -- a drawing a restore took back,
        or one nothing named by the time a collection came round -- would
        take its record with it. This is what gives it up there. A device
        the run does retire has given it up already and leaves this
        nothing to do. */
-    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
-                                   sizeof(PrivateData), _reclaim);
+    ret = xpost_handle_cons(ctx, devdic, namePrivate, &privatestr,
+                            XPOST_HANDLE_DEVICE, sizeof(PrivateData),
+                            _reclaim);
+    if (ret)
+        return ret;
 
     private.width = width;
     private.height = height;

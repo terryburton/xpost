@@ -188,7 +188,8 @@ int xpost_handle_cons(Xpost_Context *ctx,
                       Xpost_Object key,
                       Xpost_Object *anchor,
                       Xpost_Handle_Kind kind,
-                      size_t size)
+                      size_t size,
+                      void (*reclaim)(void *block))
 {
     Xpost_Memory_File *mem;
     Xpost_Handle_Slot *slot;
@@ -235,6 +236,7 @@ int xpost_handle_cons(Xpost_Context *ctx,
         return VMerror;
     }
 
+    slot->reclaim = reclaim;
     slot->ownermem = xpost_context_select_memory(ctx, dic);
     slot->owner = (unsigned int)owner;
 
@@ -330,18 +332,6 @@ unsigned int xpost_handle_device_release(Xpost_Context *ctx,
             (_slots[i].owner == (unsigned int)ent))
             return _slots[i].release;
     return 0;
-}
-
-int xpost_handle_reclaim_set(Xpost_Context *ctx, Xpost_Object anchor,
-                             Xpost_Handle_Kind kind, size_t size,
-                             void (*reclaim)(void *block))
-{
-    Xpost_Handle_Slot *slot = _slot_named(ctx, anchor, kind, size);
-
-    if (!slot)
-        return 0;
-    slot->reclaim = reclaim;
-    return 1;
 }
 
 void xpost_handle_release_entity(Xpost_Memory_File *mem,
