@@ -88,6 +88,8 @@ static Xpost_Object nameImgData;
 static Xpost_Object nameFillRect;
 static Xpost_Object namepdfPrivate;
 static Xpost_Object namedotground;
+static Xpost_Object namedotbandtop;
+static Xpost_Object namedotbandrows;
 
 int xpost_device_raster_bytes(int w, int h, size_t pixel, size_t reserve,
                               size_t *bytes)
@@ -367,12 +369,15 @@ int _rspan_collect(Xpost_Span_Consumer *c, int band, real lo, real hi)
 /* Scan-convert a run of vertices, keeping the winding-resolved band
    spans rather than painting them. A break entry ends one subpath and
    begins the next; evenodd selects the insideness rule (PLRM 4.5.2).
+   rows, when given, is the run of the page's rows to keep spans for,
+   and a caller wanting the whole shape gives none.
    The vertices are consumed -- the buffer is freed whichever way the
    walk leaves -- and the caller owns the returned spans. 0 on
    success. */
 static
 int _points_resolved_spans(Xpost_Span_Vertex *points,
                            integer npoints,
+                           const Xpost_Span_Rows *rows,
                            struct rspan **out,
                            int *nout,
                            int evenodd)
@@ -387,7 +392,7 @@ int _points_resolved_spans(Xpost_Span_Vertex *points,
     k.rsp = NULL;
     k.n = k.cap = 0;
 
-    code = xpost_span_scanconvert(points, npoints, evenodd, NULL, &k.consumer);
+    code = xpost_span_scanconvert(points, npoints, evenodd, rows, &k.consumer);
     if (code)
     {
         free(k.rsp);
@@ -490,7 +495,9 @@ int _poly_vertices(Xpost_Context *ctx,
 }
 
 /* The same polygon, scan-converted to winding-resolved band spans the
-   caller owns. 0 on success. */
+   caller owns. The whole of it: a region is an answer about a shape and
+   not about a device's rows, so nothing here is windowed. 0 on
+   success. */
 static
 int _poly_resolved_spans(Xpost_Context *ctx,
                          Xpost_Object poly,
@@ -508,7 +515,7 @@ int _poly_resolved_spans(Xpost_Context *ctx,
     if (code)
         return code;
 
-    return _points_resolved_spans(points, (integer)poly.comp_.sz,
+    return _points_resolved_spans(points, (integer)poly.comp_.sz, NULL,
                                   out, nout, evenodd);
 }
 
@@ -544,7 +551,53 @@ int _path_resolved_spans(Xpost_Context *ctx,
     if (code)
         return code;
 
-    return _points_resolved_spans(points, (integer)npts, out, nout, evenodd);
+    return _points_resolved_spans(points, (integer)npts, NULL,
+                                  out, nout, evenodd);
+}
+
+/* The run of the page's rows a device takes marks for, as the band
+ * range a fill of it states spans for. 1 where the device says which
+ * rows those are, 0 where it does not -- and a caller given no range
+ * takes the spans of the whole shape, which is what a device holding
+ * its page some other way wants.
+ *
+ * A raster device stands on one run of the page's rows at a time and
+ * shows the page's ground over the rest: a mark landing on a row the
+ * device does not hold is dropped against the row it was about to be
+ * written to (data/image.ps), so the pixels are the same whether that
+ * span is formed or not, and the range is what keeps it from being
+ * formed. Which matters most where a page is put out a band at a time,
+ * since every mark crossing more than one band is played into each of
+ * the bands it crosses.
+ *
+ * The run is read off the device under the names a raster device holds
+ * it by, and the device is the only authority on it: a device is free
+ * to move which rows it stands on between one mark and the next.
+ */
+static int _device_rows(Xpost_Context *ctx, Xpost_Object devdic,
+                        Xpost_Span_Rows *rows)
+{
+    Xpost_Object top, nrows;
+    integer lo, n;
+
+    top = xpost_dict_get(ctx, devdic, namedotbandtop);
+    nrows = xpost_dict_get(ctx, devdic, namedotbandrows);
+    if (xpost_object_get_type(top) != integertype
+        || xpost_object_get_type(nrows) != integertype)
+        return 0;
+
+    lo = top.int_.val;
+    n = nrows.int_.val;
+    /* A run of no rows takes no mark and is not a range; nor is one
+       whose end lies past the rows a band range counts in. Either way
+       the device has said nothing a fill can be held to, and the shape
+       is converted whole. */
+    if (n < 1 || lo < 0 || n - 1 > (integer)INT_MAX - lo)
+        return 0;
+
+    rows->lo = (int)lo;
+    rows->hi = (int)(lo + n - 1);
+    return 1;
 }
 
 /* The consumer that paints a span where it lands: the device's own
@@ -608,6 +661,10 @@ int _rect_paint(Xpost_Span_Consumer *c, int band, real lo, real hi)
  * the callers is only how the boundary reached them, and each turns it
  * into this run first: the vertices are consumed here, whichever way the
  * fill leaves.
+ *
+ * The spans are taken over the rows this device takes marks for, which
+ * for a device holding the whole page is the whole of the shape and for
+ * one standing on a band is the part of it that band can show.
  */
 static
 int _fillpoly_points(Xpost_Context *ctx,
@@ -623,6 +680,8 @@ int _fillpoly_points(Xpost_Context *ctx,
     Xpost_Object drawline;
     Xpost_Object fillrect;
     int usefillrect;
+    Xpost_Span_Rows rows;
+    const Xpost_Span_Rows *window;
     struct rspan *rsp;
     int nrsp;
     int i;
@@ -675,6 +734,10 @@ int _fillpoly_points(Xpost_Context *ctx,
     fillrect = xpost_dict_get(ctx, devdic, nameFillRect);
     usefillrect = xpost_object_get_type(fillrect) == operatortype;
 
+    /* and the rows of the page this device takes marks for, which both
+       ways of painting a span below are held to */
+    window = _device_rows(ctx, devdic, &rows) ? &rows : NULL;
+
     /* A device whose rectangle fill is compiled takes each span as the
        conversion states it, so no part of the fill is carried by a
        PostScript loop. A device whose FillRect is a procedure -- or
@@ -699,11 +762,12 @@ int _fillpoly_points(Xpost_Context *ctx,
         /* the device's raster is the page's own rows */
         p.firstrow = 0;
 
-        return xpost_span_scanconvert(points, npoints, 0, NULL, &p.consumer);
+        return xpost_span_scanconvert(points, npoints, 0, window, &p.consumer);
     }
 
     {
-        int code = _points_resolved_spans(points, npoints, &rsp, &nrsp, 0);
+        int code = _points_resolved_spans(points, npoints, window,
+                                          &rsp, &nrsp, 0);
 
         if (code)
             return code;
@@ -3785,6 +3849,10 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namepdfPrivate = xpost_name_cons(ctx, "Private"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namedotground = xpost_name_cons(ctx, ".ground"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotbandtop = xpost_name_cons(ctx, ".bandtop"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotbandrows = xpost_name_cons(ctx, ".bandrows"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
         return VMerror;

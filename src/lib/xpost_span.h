@@ -60,9 +60,13 @@ struct _Xpost_Span_Consumer
 };
 
 /* The rows of the page a conversion states spans for: an inclusive
-   band range. A shape reaching outside it is converted whole -- the
-   insideness rule needs the whole boundary to be right about any part
-   of it -- and only the spans within the range are stated. */
+   band range. The whole boundary of a shape reaching outside it is
+   walked -- the insideness rule needs the whole boundary to be right
+   about any part of it, and a chain's extent in one band is where the
+   walk into the next one starts -- but only the bands within the range
+   have their passages kept, sorted and wound. So a shape crossing the
+   range costs the walk over its whole height and the spans of the
+   range alone. */
 typedef struct
 {
     int lo, hi;
