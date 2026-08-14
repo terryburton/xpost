@@ -420,9 +420,9 @@ if [ ! -s "$work/sel.narrow" ] || [ ! -s "$work/sel.wide" ]; then
 fi
 
 # ---- say what this is
-nall=$(wc -l < "$work/tests.all")
-nnarrow=$(wc -l < "$work/sel.narrow")
-nwide=$(wc -l < "$work/sel.wide")
+nall=$(wc -l < "$work/tests.all" | tr -d ' ')
+nnarrow=$(wc -l < "$work/sel.narrow" | tr -d ' ')
+nwide=$(wc -l < "$work/sel.wide" | tr -d ' ')
 echo "gate: $(grep -c . "$work/changed") path(s) from $origin"
 echo "gate: areas $(tr '\n' ' ' < "$work/areas")"
 if [ -s "$work/unclaimed" ]; then
@@ -498,8 +498,8 @@ run_leg() {
 
     cut -f1 "$work/ran.$leg" | sort -u > "$work/ranames.$leg"
     if ! cmp -s "$sel" "$work/ranames.$leg"; then
-        echo "FAILURES: the $leg leg selected $(wc -l < "$sel") test(s) and its record"
-        echo "      holds $(wc -l < "$work/ranames.$leg"). A run reporting on a fraction of"
+        echo "FAILURES: the $leg leg selected $(wc -l < "$sel" | tr -d ' ') test(s) and its record"
+        echo "      holds $(wc -l < "$work/ranames.$leg" | tr -d ' '). A run reporting on a fraction of"
         echo "      what it selected agrees with whatever the rest would say."
         comm -23 "$sel" "$work/ranames.$leg" | head -5 | sed 's/^/      unrun: /'
         comm -13 "$sel" "$work/ranames.$leg" | head -5 | sed 's/^/      extra: /'
@@ -507,7 +507,7 @@ run_leg() {
     fi
     nskip=$(awk -F'\t' '$2 == "SKIP"' "$work/ran.$leg" | grep -c . || true)
     if [ "$nskip" -ne 0 ]; then
-        echo "gate: $leg -- $nskip of $(wc -l < "$sel") tests did not run:"
+        echo "gate: $leg -- $nskip of $(wc -l < "$sel" | tr -d ' ') tests did not run:"
         awk -F'\t' '$2 == "SKIP" { print "      " $1 }' "$work/ran.$leg"
     fi
     return $legstatus

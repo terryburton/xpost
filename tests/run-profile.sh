@@ -244,11 +244,11 @@ if ! cmp -s "$work/want" "$work/got"; then
     missing=$(comm -23 "$work/want" "$work/got")
     extra=$(comm -13 "$work/want" "$work/got")
     if [ -n "$missing" ]; then
-        echo "      it leaves out $(printf '%s\n' "$missing" | wc -l) test(s) the profile names, among them:"
+        echo "      it leaves out $(printf '%s\n' "$missing" | wc -l | tr -d ' ') test(s) the profile names, among them:"
         printf '%s\n' "$missing" | head -5 | sed 's/^/        /'
     fi
     if [ -n "$extra" ]; then
-        echo "      it takes in $(printf '%s\n' "$extra" | wc -l) test(s) the profile excludes, among them:"
+        echo "      it takes in $(printf '%s\n' "$extra" | wc -l | tr -d ' ') test(s) the profile excludes, among them:"
         printf '%s\n' "$extra" | head -5 | sed 's/^/        /'
     fi
     echo "      a suite name that matches nothing is silently inert in a"
@@ -256,8 +256,8 @@ if ! cmp -s "$work/want" "$work/got"; then
     exit 1
 fi
 
-selected=$(wc -l < "$work/want")
-echo "profile $profile: $what -- $selected of $(wc -l < "$work/all") tests"
+selected=$(wc -l < "$work/want" | tr -d ' ')
+echo "profile $profile: $what -- $selected of $(wc -l < "$work/all" | tr -d ' ') tests"
 
 # How many tests carry a named suite: in the build, and in what this
 # profile selected. Both are counted off the listing rather than from a
@@ -370,7 +370,7 @@ awk '
         if (name != "" && res != "") print name "\t" res
     }' "$record" > "$work/results"
 
-ran=$(wc -l < "$work/results")
+ran=$(wc -l < "$work/results" | tr -d ' ')
 if [ "$ran" -ne "$selected" ]; then
     echo "FAILURES: the $profile profile named $selected tests and the record"
     echo "      holds $ran. A run that reports on a fraction of what it"
@@ -379,7 +379,7 @@ if [ "$ran" -ne "$selected" ]; then
 fi
 
 awk -F'\t' '$2 == "SKIP" { print $1 }' "$work/results" | sort > "$work/skipped"
-nskip=$(wc -l < "$work/skipped")
+nskip=$(wc -l < "$work/skipped" | tr -d ' ')
 
 # A skipped test is named whatever the profile, because a profile that
 # reports no failures over tests that never ran is reporting on less
@@ -424,7 +424,7 @@ if [ "$profile" = everything ]; then
         exit 1
     fi
     if [ -s "$work/excused.u" ]; then
-        echo "profile everything: this run does not speak for $(wc -l < "$work/excused.u") excused test(s)"
+        echo "profile everything: this run does not speak for $(wc -l < "$work/excused.u" | tr -d ' ') excused test(s)"
     fi
     # Said again in this profile's own terms, because this is the profile
     # whose claim is that every test ran: where the heap is displaced that
