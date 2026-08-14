@@ -212,6 +212,13 @@ device whose page cannot arrive a band at a time takes neither word,
 so bgr:band is refused too. raster:FORMAT is a different selector on a
 different device and still means the pixel format.
 
+The rule has no exceptions. A device that takes no mode refuses every
+word rather than only the ones it has heard of, so bgr:zzz is refused
+where bgr:band is. Nothing downstream reads a mode it does not
+recognise, so a word accepted here would be a misspelling that changed
+nothing and said nothing, which is the one way a selection can be
+wrong and leave no trace of it.
+
   -d record   selects the recording class itself. It names no device
               to play into, so it plays into the colour raster, which
               makes it the same as -d ppm:band. It takes no mode.

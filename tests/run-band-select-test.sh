@@ -321,6 +321,30 @@ for dev in bgr raster null; do
     echo "OK   -d $dev takes neither whole nor band"
 done
 
+# And the rule that has no exceptions: whatever a device takes, a word
+# outside it is refused. The devices with words to take are held to
+# their own above; this is asked of the whole roster at once, because
+# the device it would find is the one nothing above thinks to ask about
+# -- a device declaring nothing would take every misspelling silently,
+# and a selection read as a run having asked for something specific is
+# the one reading that no page and no error can show. Each refusal is
+# required to name the device and the word, which is what a caller has
+# to have to spell it again.
+held=0
+for dev in $DEVICE_FLEET_ALL; do
+    printf '%s\n' "$have" | grep -qx "[[:space:]]*$dev" || continue
+    if refused "$dev:notamode" "$dev" notamode $sabword; then
+        held=$((held + 1))
+    fi
+    [ "$sab" -ne 0 ] && break
+done
+if [ "$held" -eq 0 ]; then
+    note "no device was held to refusing a word outside everything it takes"
+else
+    echo "OK   $held device(s) refuse a mode that is in no vocabulary," \
+         "naming the device and the word"
+fi
+
 # and the name that is not a device at all, which is refused before any
 # mode is looked at. No word is required of that refusal here: the option
 # parser answers it by printing the devices this build has, which is the
