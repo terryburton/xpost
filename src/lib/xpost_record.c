@@ -1340,6 +1340,43 @@ static unsigned long long _digest(const unsigned char *p, size_t n,
     return d;
 }
 
+/* Whether the run of bytes a spilled record wrote at @p at is these
+ * bytes.
+ *
+ * A spilled record keeps a coverage mask's entry in memory and its bytes
+ * in the file, so the entry has nothing to compare and the comparison is
+ * made against the file. A piece at a time, into a buffer on the stack:
+ * the one place a record reads a whole blob into is holding the mask
+ * being painted, which has to stay standing across every pixel of it,
+ * and a comparison made while the next page is being written down must
+ * not take it away.
+ *
+ * A read that fails leaves the record short of a mark, which the caller
+ * reads for itself.
+ */
+static int _cov_same(Xpost_Record *rec, Xpost_Spill_Off at,
+                     const unsigned char *cov, size_t n)
+{
+    unsigned char buf[256];
+    size_t done = 0;
+
+    if (!rec->sp)
+        return 0;
+    while (done < n)
+    {
+        size_t want = n - done;
+
+        if (want > sizeof buf)
+            want = sizeof buf;
+        if (!_sp_pull(rec, at + (Xpost_Spill_Off)done, buf, want))
+            return 0;
+        if (memcmp(buf, cov + done, want) != 0)
+            return 0;
+        done += want;
+    }
+    return 1;
+}
+
 int xpost_record_mask(Xpost_Record *rec, const unsigned char *cov,
                       int w, int h, size_t *at)
 {
@@ -1362,16 +1399,31 @@ int xpost_record_mask(Xpost_Record *rec, const unsigned char *cov,
 
     /* the one the record already holds, if it holds it. Backwards,
        because a page's text repeats the glyph it last used far more
-       often than the one it used first. */
+       often than the one it used first.
+       The digest and the extents narrow it to a candidate and the bytes
+       settle it, which is the whole of the saving this makes: a page of
+       text costs its distinct glyphs and a placement apiece, and a
+       digest believed on its own would cost it a glyph that was not the
+       one it asked for. Where the record has spilled the bytes are in
+       the file rather than under the entry, and the comparison is made
+       there. */
     m.digest = _digest(cov, n, w, h);
     held = _msks(rec);
     count = _nmsk(rec);
     for (i = count; i--; )
     {
+        int same;
+
         if (held[i].digest != m.digest
             || held[i].w != w || held[i].h != h)
             continue;
-        if (memcmp(held[i].cov, cov, n) != 0)
+        same = held[i].cov ? (memcmp(held[i].cov, cov, n) == 0)
+                           : _cov_same(rec, held[i].at, cov, n);
+        /* a record that could not read back what it wrote is short of
+           the mark it is holding, and gives nothing back from here */
+        if (rec->short_of_a_mark)
+            return 0;
+        if (!same)
             continue;
         *at = i;
         return 1;

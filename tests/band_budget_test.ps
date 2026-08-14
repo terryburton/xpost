@@ -44,6 +44,23 @@ DEVICE /.bandbytes 2 copy known { get num }{ pop pop (-) } ifelse print
 ( PAGE ) print W num print (x) print H num print
 nl
 
+% Whether the drawing is text rather than bars. A glyph does not reach a
+% device as a mark: the painter hands the record one coverage mask and a
+% placement of it, and the mask is shared by every placement it is the
+% mask for, so a page of text is the one page whose record is mostly a
+% table the marks point into. It is asked for where what a record does
+% with the bytes it is holding is the question.
+/TEXT /TEXT where { pop TEXT }{ 0 } ifelse def
+
+TEXT 0 gt {
+    /Courier findfont 12 scalefont setfont
+    0 1 MARKS 1 sub {
+        /i exch def
+        5 i 7 mul H 20 sub mod 5 add moveto
+        (Sphinx of black quartz judge my vow 0123456789) show
+    } for
+}{
+
 % The drawing. Bars right across the page at every height, so that no
 % band holds all of it, and a grey per bar so that a band replaying the
 % wrong mark shows.
@@ -58,6 +75,8 @@ nl
     i 16 mod 1 add 17 div setgray
     fill
 } for
+
+} ifelse
 
 % What became of the marks, read after they were made: a record that
 % passed what it was allowed to hold has put them in a file by now. And

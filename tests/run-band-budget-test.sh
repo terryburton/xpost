@@ -287,6 +287,33 @@ if reading never never 600 $small --spill=never; then
     echo "OK   ... and never is still never"
 fi
 
+# A page of text is the page the bound reaches differently. A glyph does
+# not arrive as a mark: the record holds one coverage mask per distinct
+# glyph and a placement apiece, so what a page of text mostly holds is a
+# table the marks point into -- and a record that has put what it holds
+# in a file has to go on answering from there. Both ways of getting there
+# are asked, since either may be the one a page arrives by, and both are
+# held to the page the same run puts out holding its marks in memory:
+# where a page's marks were kept is not something a page shows.
+run textmem 400 -d pgm:band --spill=never -DTEXT=1
+verdict_run "$st" "$out" "the in-memory text run" || fail=1
+if [ -s "$work/textmem.pgm" ]; then
+    for how in "--spill=always" "--band-bytes=20000"; do
+        run textspill 400 -d pgm:band $how -DTEXT=1
+        if ! verdict_run "$st" "$out" "the text run at $how"; then
+            fail=1
+        elif ! cmp -s "$work/textmem.pgm" "$work/textspill.pgm"; then
+            note "the page of text whose marks went to a file at $how" \
+                 "differs from the same page holding them in memory"
+        else
+            echo "OK   a page of text is the same page once its marks are in" \
+                 "a file ($how)"
+        fi
+    done
+else
+    note "the in-memory text run wrote no page to compare against"
+fi
+
 # ---- the controls
 #
 # Each breaks one reading and requires this to notice. Two are broken in
