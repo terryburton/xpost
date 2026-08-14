@@ -142,11 +142,13 @@ question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     apart; at one it sends whole pixels and the edge is hard. The
     number is the number it says: two bits is four values of coverage
     and four bits is sixteen, and the greys a page of text holds can be
-    counted to see it. A page-device request may name it, and a program
-    may write it onto the device directly, so what a class states is
-    where a run starts rather than where it ends -- except on a device
-    that shows a grey as a pattern of pixels, which is sent whole pixels
-    whatever the number says (ScreenPaint, below).
+    counted to see it. A page-device request may name it -- as an
+    integer, which setpagedevice refuses it for not being
+    (data/device.ps) -- and a program may write it onto the device
+    directly, so what a class states is where a run starts rather than
+    where it ends. Except on a device that shows a grey as a pattern of
+    pixels, which is sent whole pixels whatever the number says
+    (ScreenPaint, below).
     The family answer is eight, which is every value there is: a
     rasterised glyph carries one byte of coverage a pixel, so eight bits
     is the whole of what a device can be sent and a device asking for

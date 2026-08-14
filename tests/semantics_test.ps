@@ -873,6 +873,21 @@ currentrgbcolor
 DEVICE /dimensions get dup 0 get 100 eq exch 1 get 50 eq and
     (setpagedevice sizes the device from PageSize and HWResolution) assert
 DEVICE /TextAlphaBits get 3 eq (device features land on the device) assert
+% A feature the machinery reads as a number is refused where the value
+% is not one, at the request rather than at the page it would have made:
+% the number of bits of a glyph's edge coverage a device is sent is one,
+% and a value that is not a number of anything reads as no number at
+% all, which is what the machinery does for a device asking for none. So
+% a misspelt request would otherwise come out as a request that asked
+% for nothing, silently. PLRM 6.2.7 has setpagedevice raise typecheck
+% besides refusing what it cannot satisfy.
+{ << /TextAlphaBits 4.0 >> setpagedevice } stopped
+{ $error /errorname get /typecheck eq }{ false } ifelse
+    (a page-device feature read as a number is typechecked) assert
+{ << /TextAlphaBits (four) >> setpagedevice } stopped
+{ $error /errorname get /typecheck eq }{ false } ifelse
+    (and so is one spelt as a string) assert
+DEVICE /TextAlphaBits get 3 eq (a refused request leaves the device as it was) assert
 currentpagedevice /HWResolution get 0 get 144 eq (currentpagedevice reports the request) assert
 1 0 dtransform pop 2 sub abs 0.01 lt (the device matrix carries the resolution) assert
 << /PageSize [25 25] >> setpagedevice
