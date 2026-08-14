@@ -416,6 +416,32 @@ XPAPI int xpost_record_spill_set(const char *state);
 XPAPI int xpost_band_bytes_set(long bytes);
 
 /**
+ * @brief The devices whose page may arrive a band at a time.
+ *
+ * Selecting one of these selects banding, and a colon after its name may
+ * then say which of the two ways such a page is held. Every other device
+ * holds the page whole and takes no such word.
+ *
+ * Written as a list a caller expands, because more than one thing is
+ * made from it and none of them may be the one that is wrong: the
+ * selection, which is settled before any boot file is read and so cannot
+ * ask a device dictionary that does not exist yet, and the usage text,
+ * which says which devices the mode words apply to. A sentence naming
+ * them in prose beside the list is a second statement, and a device
+ * added to the list does not reach it -- the help then describes a fleet
+ * the program does not have, and nothing says so.
+ *
+ * Expand it by passing a macro taking one string:
+ * @code
+ * #define BAND_NAME(name) name,
+ * static const char *const bands[] = { XPOST_BANDS_BY_DEFAULT(BAND_NAME) NULL };
+ * #undef BAND_NAME
+ * @endcode
+ */
+#define XPOST_BANDS_BY_DEFAULT(X) \
+    X("pgm") X("ppm") X("pbm") X("tiff") X("png") X("jpeg")
+
+/**
  * @brief Declare that this context serves no interactive user.
  *
  * A program named to xpost_run() as XPOST_INPUT_FILENAME is a job, and a

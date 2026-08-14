@@ -241,9 +241,13 @@ _xpost_main_usage(FILE *out, const char *filename)
         fprintf(out, "\t%s\n", _xpost_main_devices[i++]);
     fprintf(out, "\n");
     fprintf(out, "  A device whose page may arrive a band at a time holds a\n");
-    fprintf(out, "  band of it rather than the page: pgm, ppm, pbm, tiff, png\n");
-    fprintf(out, "  and jpeg. A page small enough to fit one band is held\n");
-    fprintf(out, "  whole, so this costs a small page nothing.\n");
+    fprintf(out, "  band of it rather than the page:");
+#define XPOST_BAND_HELP(name) fprintf(out, " %s", name);
+    XPOST_BANDS_BY_DEFAULT(XPOST_BAND_HELP)
+#undef XPOST_BAND_HELP
+    fprintf(out, "\n");
+    fprintf(out, "  A page small enough to fit one band is held whole, so\n");
+    fprintf(out, "  this costs a small page nothing.\n");
     fprintf(out, "\n");
     fprintf(out, "  How large a band is is --band-bytes, in bytes of raster\n");
     fprintf(out, "  held at once, and it decides both things above: a page the\n");

@@ -2245,19 +2245,20 @@ static const char *const device_strings[] =
    dictionary that does not exist yet. tests/check-device-roster.sh holds
    the two to naming the same devices, so the duplication cannot drift.
 
+   The names are the list stated in xpost_interpreter.h, expanded here as
+   a table. The usage text expands the same list as a sentence, so the
+   two cannot come to describe different fleets.
+
    The mode selector a run may write after a colon says which of the two
    ways such a page is held: banded whatever its size, or whole whatever
    its size. A selection naming neither is the one that is weighed. */
+#define XPOST_BAND_ENTRY(name) name,
 static const char *const bands_by_default[] =
 {
-    "pgm",
-    "ppm",
-    "pbm",
-    "tiff",
-    "png",
-    "jpeg",
+    XPOST_BANDS_BY_DEFAULT(XPOST_BAND_ENTRY)
     NULL
 };
+#undef XPOST_BAND_ENTRY
 
 /* The class a banded page is held by. It is a device of its own -- a
    page-device request may name it, and the boot files make it from the

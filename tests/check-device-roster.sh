@@ -192,11 +192,12 @@ if [ ! -s "$work/bands-fleet" ]; then
     fail=1
 fi
 
-sed -n '/^static const char \*const bands_by_default\[\] =/,/^};/p' \
-    "$src/src/lib/xpost_interpreter.c" \
-    | sed -n 's/^  *"\([a-z0-9]*\)",$/\1/p' | sort -u > "$work/bands-c"
+awk '/^#define XPOST_BANDS_BY_DEFAULT\(X\)/ { inmacro = 1 }
+     inmacro { print; if ($0 !~ /\\$/) exit }' \
+    "$src/src/lib/xpost.h" \
+    | grep -o 'X("[a-z0-9]*")' | sed 's/^X("//; s/")$//' | sort -u > "$work/bands-c"
 if [ ! -s "$work/bands-c" ]; then
-    echo "FAIL: no bands_by_default table found in src/lib/xpost_interpreter.c"
+    echo "FAIL: no XPOST_BANDS_BY_DEFAULT list found in src/lib/xpost.h"
     fail=1
 fi
 
@@ -208,7 +209,7 @@ if [ ! -s "$work/bands-ps" ]; then
     fail=1
 fi
 
-for pair in 'bands-c:the C table the selection is rewritten from' \
+for pair in 'bands-c:the list the C selection is compiled from' \
             'bands-ps:the recording class roster in data/recorddev.ps'; do
     other=${pair%%:*}
     what=${pair#*:}
