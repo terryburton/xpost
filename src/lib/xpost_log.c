@@ -294,16 +294,44 @@ xpost_log_init(void)
             _xpost_log_level = (int)l;
     }
 
-    if (!xpost_mkstemp(dump_filename, &fd))
-        return 0;
+    (void)dump_filename;
+    (void)fd;
+    /* The file the tracing dump goes to is not made here. It is made by
+       the first thing written to it, which on a run that is not tracing
+       is nothing at all -- and a run that is not tracing has no business
+       leaving a file in the scratch directory, nor any business refusing
+       to start where one cannot be made. */
+    return 1;
+}
 
+/* The file a dump goes to, made where the first dump is written.
+ *
+ * A run makes one of these only if something is dumped into it, which
+ * means only if the run is tracing. It is named and stays named, unlike
+ * the scratch a record spills into: a dump is written to be read
+ * afterwards, so it is a file in the ordinary sense and not storage with
+ * no name.
+ *
+ * A run that cannot make one loses its dump and goes on, which is the
+ * right way round for a diagnostic: an interpreter that would not start
+ * because it could not open a debugging aid is refusing the job for the
+ * sake of the notes about the job. */
+static FILE *_xpost_log_dump(void)
+{
+    static int tried = 0;
+    char dump_filename[] = "xdumpXXXXXX";
+    int fd;
+
+    if (_xpost_log_dump_file || tried)
+        return _xpost_log_dump_file;
+    tried = 1;
+    if (!xpost_mkstemp(dump_filename, &fd))
+        return NULL;
     _xpost_log_dump_file = fdopen(fd, "wb");
     if (!_xpost_log_dump_file)
-        return 0;
-
+        return NULL;
     XPOST_LOG_INFO("dump interpreter errors in file %s", dump_filename);
-
-    return 1;
+    return _xpost_log_dump_file;
 }
 
 void
@@ -421,6 +449,11 @@ xpost_log_print_dump(Xpost_Log_Level level,
     str[s] = '\n';
     str[s + 1] = '\0';
 
+    if (!_xpost_log_dump())
+    {
+        free(str);
+        return;
+    }
     fprintf(_xpost_log_dump_file, "%s() : ", fct);
     res = fprintf(_xpost_log_dump_file, "%s", str);
     free(str);
