@@ -39,6 +39,17 @@
 % standing over an operator no reader is given.
 .xpost_DSCWRITE /.colormodels << /Process true /DeviceRGB true /DeviceCMYK true >> put
 
+% The colour space this device's marking methods take components in,
+% which for a device offering process colour models is the model in
+% force rather than a fixed space. Said again rather than inherited for
+% the reason above: what it means here is that a paint is written in the
+% space it was made in, through this device's own prolog, and the class
+% this one copies means it of the PDF content operators. The two are the
+% same word for two mechanisms, and a device answering with a space
+% nobody stated is one whose colour pipeline was settled on another
+% device's behalf.
+.xpost_DSCWRITE /nativecolorspace /Process put
+
 % no separation registry: paints fall back to process colours
 .xpost_DSCWRITE /.registersep undef
 % no image consumer either: sampled images paint through the

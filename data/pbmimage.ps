@@ -39,6 +39,18 @@
     0 width
 } bind put
 
+% The colour space this device's marking methods take components in.
+% Said again rather than inherited, because a copy carries what it was
+% copied from and the class this one copies takes one grey component
+% because that is what its byte per pixel stores. What this device
+% stores is one bit per pixel, and what makes that a grey space is the
+% screen: a paint arrives as one component, the cell ranks the pixel it
+% covers, and a bit is what the ranking leaves. A device answering with
+% a space nobody stated is one whose colour pipeline was settled on
+% another device's behalf -- the component count, the compiled fills and
+% the glyph colour conversion all follow this key.
+.xpost_PBMIMAGE /nativecolorspace /DeviceGray put
+
 % every grey painted screens through the halftone in force
 .xpost_PBMIMAGE /ScreenPaint true put
 
