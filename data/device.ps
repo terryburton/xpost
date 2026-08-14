@@ -327,6 +327,19 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% key  .isclassname  bool
+% Whether a dictionary key names a device class. A class is defined
+% under a name of one shape and nothing else in these dictionaries
+% carries it, so the shape is what says which keys are classes and no
+% list of them has to be kept anywhere.
+.xpostsys /.isclassname { % key  .  bool
+    dup type /nametype eq {
+        60 string cvs dup length 7 ge {
+            0 7 getinterval (.xpost_) eq
+        }{ pop false } ifelse
+    }{ pop false } ifelse
+} bind put
+
 (/image.ps) //.xpostsys /.loadmodule get exec  % image.ps implements device base classes
 (/nulldev.ps) //.xpostsys /.loadmodule get exec  % nulldevice
 (/bboxdev.ps) //.xpostsys /.loadmodule get exec  % bounding-box device
@@ -341,10 +354,14 @@ setglobal
 % copies in privatedict and drops those anchors. The device files define into
 % the dictionary current here, which is the one the language is being read
 % into.
-[ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
-  /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE
-  /.xpost_RECORD ]
-{ dup currentdict exch known
+% Which dictionaries those are is read off the one they were defined in
+% rather than named here. A class states itself by the name it is
+% defined under; a list beside it is a second statement, and a class
+% added later reaches the first without reaching the second -- it is
+% then never mirrored, and the maker that reaches for it answers
+% undefined at the first page of the only run that selects it.
+[ currentdict { pop } forall ]
+{ dup //.xpostsys /.isclassname get exec
     { dup currentdict exch get .privatedict 3 1 roll put }
     { pop } ifelse
 } forall

@@ -2286,10 +2286,14 @@ currentglobal true setglobal
     % and the makers, the C drivers and setpagedevice reach them through
     % privatedict.
     currentglobal false setglobal
-    [ /.xpost_BBOX /.xpost_NULLDEV /.xpost_PGMIMAGE /.xpost_PPMIMAGE /.xpost_PBMIMAGE
-      /.xpost_TIFFIMAGE /.xpost_PDFWRITE /.xpost_DSCWRITE /.xpost_SVGWRITE
-      /.xpost_RECORD ]
-    { systemdict 1 index known
+    % Which dictionaries those are is read off the one holding them
+    % rather than named here, for the reason data/device.ps reads the
+    % mirror the same way: a class states itself by the name it is
+    % defined under, and a list beside it is a second statement a class
+    % added later does not reach. The keys are taken before any of them
+    % is dropped, since what is walked here is what is being written to.
+    [ systemdict { pop } forall ]
+    { dup //.xpostsys /.isclassname get exec
         { dup systemdict 1 index get dup length 16 add dict copy % name name localcopy
           .privatedict 3 1 roll put                              % name (privatedict/name = localcopy)
           systemdict exch undef }                                % drop the load-time anchor
