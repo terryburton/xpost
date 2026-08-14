@@ -178,6 +178,7 @@ tests/band_writer_test.ps \
 tests/band_device_test.ps \
 tests/band_campaign_test.ps \
 tests/band_replay_cost_test.ps \
+tests/band_budget_test.ps \
 tests/page_lifetime_test.ps \
 tests/record_image_test.ps \
 tests/record_glyph_test.ps \
@@ -345,6 +346,7 @@ tests/run-band-replay-cost-test.sh \
 tests/run-band-extent-test.sh \
 tests/run-band-route-test.sh \
 tests/run-band-select-test.sh \
+tests/run-band-budget-test.sh \
 tests/run-page-lifetime-test.sh \
 tests/run-region-replay-test.sh \
 tests/run-imaging-bbox-test.sh \
