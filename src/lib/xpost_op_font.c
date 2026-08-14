@@ -1626,6 +1626,58 @@ int _clip_band_row(const textstate *ts, int y)
     return lo;
 }
 
+/* Whether a glyph's partly covered edge pixels reach this device as
+   coverage-weighted blends rather than as whole pixels, and what blends
+   them if they do.
+
+   Three things have to hold. The device must offer BlendPix, since that
+   is the call a blend is made through. Its class must state
+   TextAlphaBits above one, which is what says its stored pixel can hold
+   a value between covered and not; a page-device request may name that
+   number, so what arrives here is the run's answer rather than the
+   class's.
+
+   And the device must not be one that shows a grey as a pattern of
+   pixels. Such a device declares ScreenPaint and stores a grey by
+   ranking the pixel against the threshold the screen in force picks for
+   its position -- that ranking is the only means it has of showing a
+   grey at all, and it lives in the pixel store the blend does not go
+   through. A blend on such a device writes a coverage straight into the
+   stored pixel, so the pixels a glyph's edges cover are the pixels its
+   screen is not applied to, and what it holds afterwards is a range of
+   values it has no way to show. Reading it back reports them.
+
+   That is a property of the device rather than a setting, so it settles
+   the question here rather than being guarded: a run naming any number
+   it likes reaches a device that screens and still gets whole pixels. */
+static
+int _text_blends(Xpost_Context *ctx,
+                 Xpost_Object devdic,
+                 Xpost_Object *blendpix)
+{
+    Xpost_Object bp, tab, key;
+
+    bp = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
+    if (blendpix)
+        *blendpix = bp;
+    if (xpost_object_get_type(bp) != operatortype
+        && !(xpost_object_get_type(bp) == arraytype
+             && xpost_object_is_exe(bp)))
+        return 0;
+
+    tab = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
+    if (xpost_object_get_type(tab) != integertype || tab.int_.val <= 1)
+        return 0;
+
+    key = xpost_name_cons(ctx, "ScreenPaint");
+    if (xpost_object_get_type(key) != invalidtype
+        && xpost_dict_known_key(ctx, xpost_context_select_memory(ctx, devdic),
+                                devdic, key))
+        return 0;
+
+    return 1;
+}
+
 static
 textstate _text_state_get(Xpost_Context *ctx,
                           Xpost_Object gs,
@@ -1633,20 +1685,14 @@ textstate _text_state_get(Xpost_Context *ctx,
                           Xpost_Object devdic)
 {
     textstate ts;
-    Xpost_Object tab, vec, sep;
+    Xpost_Object vec, sep;
 
     ts.encoding = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Encoding"));
     ts.charstrings = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"));
     ts.metrics = xpost_dict_get(ctx, fontdict, xpost_name_cons(ctx, "Metrics"));
     ts.cdmat_ok = xpost_object_get_type(ts.metrics) == dicttype
                && _char_device_matrix(ctx, gs, fontdict, ts.cdmat);
-    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
-    tab = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
-    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
-             || (xpost_object_get_type(ts.blendpix) == arraytype
-              && xpost_object_is_exe(ts.blendpix)))
-            && xpost_object_get_type(tab) == integertype
-            && tab.int_.val > 1;
+    ts.blend = _text_blends(ctx, devdic, &ts.blendpix);
     vec = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "VectorGlyphs"));
     ts.vector = xpost_object_get_type(vec) == booleantype && vec.int_.val;
     /* an extent-tracking device (the bbox device) needs no glyph
@@ -3529,13 +3575,7 @@ int _stencilaa(Xpost_Context *ctx,
         goto refuse;
 
     memset(&ts, 0, sizeof ts);
-    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
-    o = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
-    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
-             || (xpost_object_get_type(ts.blendpix) == arraytype
-              && xpost_object_is_exe(ts.blendpix)))
-            && xpost_object_get_type(o) == integertype
-            && o.int_.val > 1;
+    ts.blend = _text_blends(ctx, devdic, &ts.blendpix);
     if (!ts.blend)
         goto refuse;
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
@@ -3763,7 +3803,7 @@ int _maskcachehit(Xpost_Context *ctx,
                   Xpost_Object key,
                   Xpost_Object cliparr)
 {
-    Xpost_Object userdict, gd, gs, devdic, putpix, o;
+    Xpost_Object userdict, gd, gs, devdic, putpix;
     textstate ts;
     unsigned long long k2;
     long m[4];
@@ -3792,13 +3832,7 @@ int _maskcachehit(Xpost_Context *ctx,
         goto refuse;
 
     memset(&ts, 0, sizeof ts);
-    ts.blendpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "BlendPix"));
-    o = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "TextAlphaBits"));
-    ts.blend = (xpost_object_get_type(ts.blendpix) == operatortype
-             || (xpost_object_get_type(ts.blendpix) == arraytype
-              && xpost_object_is_exe(ts.blendpix)))
-            && xpost_object_get_type(o) == integertype
-            && o.int_.val > 1;
+    ts.blend = _text_blends(ctx, devdic, &ts.blendpix);
     putpix = xpost_dict_get(ctx, devdic, xpost_name_cons(ctx, "PutPix"));
 
     if (_device_color(ctx, gs, devdic, &ncomp, comp))

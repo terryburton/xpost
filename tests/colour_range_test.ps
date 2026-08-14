@@ -42,6 +42,86 @@ faildict /n 0 put
     }{ false } ifelse
 } bind def
 
+% --- how many bits of glyph coverage a device may be asked for --------
+% A grey reaches a screening device as a pattern of pixels: the cell
+% ranks each pixel against a threshold picked from its position, and
+% that ranking is the only means such a device has of showing a grey at
+% all. Between covered and not it stores nothing.
+%
+% TextAlphaBits says how many bits of a glyph's edge coverage a device
+% is sent, and it is settable -- a page-device request names it, and a
+% program may write it onto the device directly. Above one, a partly
+% covered edge pixel is blended against what the page holds and the
+% result written to the stored pixel, which on a screening device is a
+% value it cannot show, written to exactly the pixels the screen would
+% otherwise have decided. So a run may ask for more than the device has,
+% and asking must not change what the raster holds.
+%
+% Asked of every device that reports its pixels back, in both
+% directions: raising it on a screening device changes nothing, and
+% raising it on a device that blends and does not screen does change
+% something. The second is what says the first is a property of the
+% device rather than the machinery having stopped blending anywhere.
+/levelcount { % x0 y0 n  .  int   (distinct stored pixels in an n-square)
+    /lc.n exch def /lc.y exch def /lc.x exch def
+    /lc.seen 400 dict def
+    0 1 lc.n 1 sub {
+        /lc.i exch def
+        0 1 lc.n 1 sub {
+            /lc.j exch def
+            lc.x lc.i add lc.y lc.j add getpix
+            ncomp 1 sub { pop } repeat
+            lc.seen exch 0 put
+        } for
+    } for
+    lc.seen length
+} bind def
+
+% A recorder reports the ground wherever it is asked, since it holds no
+% pixel of its own: what it was asked to paint is settled by the device
+% it plays into. Told apart by asking, so a device that stops answering
+% is told apart from one that never could.
+/reportsback false def
+dev /GetPix known dev /BlendPix known and {
+    { white 3 3 putpix
+      /probe.w 3 3 readpix def
+      black 3 3 putpix
+      /reportsback probe.w 3 3 readpix arreq not def
+    } stopped { /reportsback false def } if
+} if
+
+reportsback {
+    /tab.was dev /TextAlphaBits 2 copy known { get }{ pop pop null } ifelse def
+    {
+        dev /TextAlphaBits 4 put
+        erasepage
+        /Times-Roman findfont 20 scalefont setfont
+        0 setgray
+        2 6 moveto (Ag) show
+        % the glyphs sit just above the user-space origin, which is the
+        % bottom of the page, so the rows they cover are the last ones
+        2 dev /height get 28 sub 24 levelcount
+    } stopped {
+        (SKIP: the device did not answer the glyph-coverage probe\n) print
+    }{
+        dev /ScreenPaint known {
+            2 le (a screening device stores no blended edge) assert
+        }{
+            % A device whose page carries transparency is cleared to
+            % transparent rather than to a colour, so an edge pixel has
+            % no colour under it to be weighed against and what is
+            % stored is the ink at full whatever the coverage. It says
+            % nothing either way about the edges being blended, so it is
+            % not asked.
+            dev /AlphaChannel known { pop }
+            { 2 gt (a device that does not screen blends its edges) assert }
+            ifelse
+        } ifelse
+    } ifelse
+    tab.was null eq { dev /TextAlphaBits undef }{ dev /TextAlphaBits tab.was put } ifelse
+    erasepage
+} if
+
 % --- the vector writers' number formatter is total --------------------
 % Every byte of a PDF content stream or an SVG attribute that is meant to
 % be a number comes from this one formatter, colour levels included. A
