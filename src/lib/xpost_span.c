@@ -51,11 +51,22 @@ int _bandspancomp (const void *left, const void *right)
     return lt->dirn - rt->dirn;
 }
 
-/* append a span, growing the array as needed; 0 on success */
+/* Append a boundary passage, growing the array as needed; 0 on
+   success.
+
+   A passage in a band outside rows is not kept. Insideness is settled
+   one band at a time -- a band's spans come from the passages through
+   that band and from nothing else -- so keeping only the bands asked
+   for settles those bands exactly as keeping every band would, and
+   the ones dropped were about to be sorted, wound and thrown away. */
 static
 int _span_push(struct band_span **spans, int *cap, int *n,
+               const Xpost_Span_Rows *rows,
                int band, int dirn, real lo, real hi)
 {
+    if (rows && (band < rows->lo || band > rows->hi))
+        return 0;
+
     if (*n == *cap)
     {
         struct band_span *tmp;
@@ -85,9 +96,11 @@ int _span_push(struct band_span **spans, int *cap, int *n,
    and clip use), 1 counts boundary passages by parity (the even-odd
    rule, which eofill and eoclip use).
 
-   rows, when given, is the inclusive band range to state spans for; the
-   whole boundary is converted either way, since an insideness rule can
-   only answer about part of a shape by counting all of it.
+   rows, when given, is the inclusive band range to state spans for. The
+   whole boundary is walked either way -- a chain's extent in one band
+   is where the walk into the next one starts -- but nothing outside the
+   range is kept, so the shape's parts above and below the range cost
+   the walk and no more.
 
    The vertices are consumed -- the buffer is freed here whichever way
    the walk leaves. 0 on success; a consumer's refusal is returned
@@ -113,7 +126,12 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
        travel exactly on a band boundary, which meets no band interior
        (an integer-aligned bottom edge must not leak into the band
        below). Sorting each band's extents by left edge and
-       accumulating winding numbers then yields the fill spans. */
+       accumulating winding numbers then yields the fill spans.
+
+       A band the caller did not ask for keeps no extent: the walk still
+       passes through it, since that is how it arrives at the bands
+       below and above, but nothing it deposits there is sorted or
+       wound. */
     spans = NULL;
     nspans = 0;
     spancap = 0;
@@ -185,7 +203,8 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
                 /* direction reversal: the vertex row holds two passages */
                 if (dirn != 0)
                 {
-                    code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                    code = _span_push(&spans, &spancap, &nspans, rows,
+                                      ib, dirn, lo, hi);
                     lo = hi = P.x;
                 }
                 dirn = d;
@@ -194,7 +213,8 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
             else if (eb != ib)
             {
                 /* the previous edge ended exactly on our starting boundary */
-                code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                code = _span_push(&spans, &spancap, &nspans, rows,
+                                  ib, dirn, lo, hi);
                 lo = hi = P.x;
                 ib = eb;
             }
@@ -210,7 +230,8 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
 
                     if (xb < lo) lo = xb;
                     if (xb > hi) hi = xb;
-                    code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                    code = _span_push(&spans, &spancap, &nspans, rows,
+                                      ib, dirn, lo, hi);
                     ib += d;
                     lo = hi = xb;
                 }
@@ -226,14 +247,17 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
         if (code == 0)
         {
             if (dirn != 0)
-                code = _span_push(&spans, &spancap, &nspans, ib, dirn, lo, hi);
+                code = _span_push(&spans, &spancap, &nspans, rows,
+                                  ib, dirn, lo, hi);
             else
             {
                 /* no vertical travel at all: the subpath still meets its
                    row; deposit a balanced pair over its whole x extent */
-                code = _span_push(&spans, &spancap, &nspans, ib, 1, submin, submax);
+                code = _span_push(&spans, &spancap, &nspans, rows,
+                                  ib, 1, submin, submax);
                 if (code == 0)
-                    code = _span_push(&spans, &spancap, &nspans, ib, -1, submin, submax);
+                    code = _span_push(&spans, &spancap, &nspans, rows,
+                                      ib, -1, submin, submax);
             }
         }
         if (code)
@@ -255,7 +279,9 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
        extent's left edge and closes where the winding count returns to
        zero (or the band runs out), covering the rightmost extent seen.
        Every span the walk settles on passes through the consumer, and
-       nothing here knows what becomes of it. */
+       nothing here knows what becomes of it. Every one of them is in a
+       band the caller asked for, no other band having kept an extent to
+       settle a span out of. */
     {
         int s = 0;
 
@@ -274,9 +300,6 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
                 s++;
             } while ((evenodd ? (wind & 1) : wind) != 0
                      && s < nspans && spans[s].band == b);
-
-            if (rows && (b < rows->lo || b > rows->hi))
-                continue;
 
             code = consumer->take(consumer, b, L, R);
             if (code)
