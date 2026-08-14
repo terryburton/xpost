@@ -27,10 +27,26 @@ doc: all
 
 endif
 
+# Everything under doc that a release carries: the documents themselves,
+# and what the doc target above reads -- the Doxyfile, the two .dox
+# sources it names as input, and the figures they draw.
+#
+# tests/check-dist-lists.sh holds this list to the directory in both
+# directions, so a document added and not named here fails.
 EXTRA_DIST += \
 doc/COMPAT \
+doc/CONTRIBUTING.md \
+doc/COVERAGE.md \
+doc/COVERAGE-large.md \
+doc/GATING.md \
 doc/INTERNALS \
 doc/ROOTS \
 doc/NEWINTERNALS \
 doc/MANUAL \
-doc/Doxyfile
+doc/Doxyfile \
+doc/xpost.dox \
+doc/xpost_design.dox \
+doc/mtab.eps \
+doc/mtab.png \
+doc/stack.eps \
+doc/stack.png

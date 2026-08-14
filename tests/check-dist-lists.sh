@@ -105,6 +105,38 @@ hold "interpreter data" "$tree/data/Makefile.mk" data "$work/data" '\.ps$'
 ( cd "$tree" && find tests -type f -print ) > "$work/tests"
 hold "test suite" "$tree/tests/Makefile.mk" tests "$work/tests" '.'
 
+# ---- the documents, and the figures the reference draws ----
+#
+# A release is read before it is built. The documents are the only
+# account of what the interpreter covers, how it is gated and how to
+# work on it, and the reference the doc target produces is assembled
+# from the .dox sources and the figures beside them -- so a tarball
+# missing any of them either says nothing or builds a reference with
+# holes in it.
+#
+# doc is not one of the directories the tree mirror carries, so the list
+# is mirrored here for the reason the mirror exists: read straight from
+# a checkout that brought carriage returns in, every line ends before
+# `$` can match and the list reads as empty.
+#
+# What the doc target makes is not what it reads. It writes the
+# reference into doc/html and doc/latex, in the build directory, which
+# for a build in the tree is the directory being walked here; the same
+# two names are what it cleans. They are pruned from the walk, and left
+# out of the list by the kind, which asks for a token that does not end
+# in a slash.
+#
+# Two files in the directory are not named by it either: doc/Makefile.mk
+# is the list, distributed by Makefile.am's include of it, and
+# doc/meson.build is held by the comparison below.
+guard_require_file "$src/doc/Makefile.mk" "the documentation list"
+mkdir -p "$tree/doc"
+tr -d '\r' < "$src/doc/Makefile.mk" > "$tree/doc/Makefile.mk"
+( cd "$src" && find doc -name html -prune -o -name latex -prune \
+      -o -type f -print ) \
+  | grep -vE '^doc/(Makefile\.mk|meson\.build)$' > "$work/doc"
+hold "documentation" "$tree/doc/Makefile.mk" doc "$work/doc" '[^/]$'
+
 # ---- the other build system, which the tarball has to carry too ----
 #
 # The tests are registered in meson and CI builds with it, so a release
