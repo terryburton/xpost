@@ -1,12 +1,11 @@
 % One page, put out through every device a record can be played into,
 % in bands and whole and by a device that never had a record at all.
 %
-% run-band-device-test.sh runs this file once per selection: -d ppm:whole
-% and -d ppm:band, -d pgm:whole and -d pgm:band, -d tiff:whole and
-% -d tiff:band. Which device paints a recorded page is the device the
-% run selected, so what this covers is that choice: three devices and two
-% colour spaces, where a record was wired to one class and every other
-% device's banding was driven by hand.
+% run-band-device-test.sh runs this file once per selection -- -d ppm:whole
+% and -d ppm:band, and so on for every device a record plays into. Which
+% device paints a recorded page is the device the run selected, so what
+% this covers is that choice, where a record was wired to one class and
+% every other device's banding was driven by hand.
 %
 % The claim is the one doc/NEWINTERNALS makes for banding anywhere, asked
 % of each of them:
@@ -91,8 +90,15 @@
 /wbprev 0 def
 /wbreset { /wbn 0 store /wbrows 0 store /wbsum 0 store
            /wbmax 0 store /wbmin 0 store /wbprev 0 store } bind def
+%
+% A device whose page is assembled in compiled code is never asked for
+% the class's row writer, so there is nothing here to wrap and nothing to
+% count. Which kind this is, is said below and the wrapper reads it: the
+% pages such a device puts out are compared like any other's, and the
+% marks each of its bands was played are counted by nobody.
+/assembles cls /Emit get type /arraytype eq def
 /wbinner cls /.writeband get def
-banding {
+banding assembles and {
     cls /.writeband { % rows file  .  -
         /wbn wbn 1 add store
         1 index length /wbrows exch wbrows add store
@@ -218,6 +224,7 @@ banding {
     showpage
 } bind def
 
+(\nASSEMBLY ) print assembles { (class) }{ (compiled) } ifelse print (\n) print
 (\nNCOMP ) print cls /.ncomp get num print (\n) print
 (\nROWBYTES ) print rowbytes num print (\n) print
 (\nPLAY ) print banding { (yes) }{ (no) } ifelse print (\n) print

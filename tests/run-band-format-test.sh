@@ -1,12 +1,26 @@
 #!/bin/sh
-# Meson test wrapper: the two raster classes whose emission is not raw
-# rows put their pages out a band at a time, and the page they assemble
-# is the page they paint whole.
+# Meson test wrapper: every raster class that assembles its own page puts
+# it out a band at a time, and the page it assembles is the page it
+# paints whole.
 #
-# tests/run-band-loop-test.sh holds the band loop itself, through the
-# colour class whose rows are the bytes the file carries. Two classes
-# derive from the two it covers and neither had earned the declaration
-# that its page may arrive in bands, each for a reason of its own:
+# WHICH DEVICES. The roster is derived, not listed. It is the devices
+# that say their page may arrive a band at a time -- DEVICE_FLEET_BANDS,
+# held by check-device-roster.sh against the C table the selection is
+# rewritten from and against the recording class's own roster -- less the
+# ones whose page is assembled in compiled code rather than by the class.
+# Which those are is asked of a running interpreter: a device whose Emit
+# is an operator writes its page from C, so the class's row writer this
+# run counts calls into is never reached, and there is nothing here to
+# read. Those are the PNG writers and the JPEG one, and their bands are
+# held by tests/run-band-writer-test.sh, which weighs the process instead
+# and decodes what the bytes come to.
+#
+# A list of two names is what stood here, and for as long as it did the
+# grayscale and colour classes put out no banded page in this wrapper at
+# all -- each was covered by another test for its own reasons, and
+# nothing in the tree said which formats this one had left out.
+#
+# What the four devices bring to it, one at a time:
 #
 #   The bilevel class packs its rows to bits, and every grey it stores
 #   passes through the halftone cell under the pixel. A screen phased on
@@ -22,6 +36,12 @@
 #   whatever it arrives in, so nothing in the file says where the bands
 #   fell; what is asked here is that the promise made ahead of the rows
 #   is the one the rows keep, which the byte comparison answers exactly.
+#
+#   The grayscale and colour classes carry the writers those two are
+#   derived from, and a row of each is a different shape -- one byte a
+#   pixel against three planes of one. What a row costs is what the band
+#   budget is divided by, so the two are the two ends of the arithmetic
+#   the bound below is read against.
 #
 # Three claims, and no two of them imply each other:
 #
@@ -76,19 +96,6 @@ note() {
     fail=1
 }
 
-# How many bytes one row of the device's raster costs, per pixel of
-# width. It is what the whole-page route's growth per row of page has to
-# come to, and it is the one thing that differs between the two devices
-# here: the bilevel class stores a byte a pixel and packs to bits only
-# as it writes, and the colour class three.
-rowfactor() {
-    case $1 in
-        pbm)  echo 1 ;;
-        tiff) echo 3 ;;
-        *)    echo 0 ;;
-    esac
-}
-
 check_device() {  # $1 device
     dev=$1
     # The subject is the raster class's own band loop, which the run
@@ -97,7 +104,7 @@ check_device() {  # $1 device
     # such method: the device is asked for as the mode that holds the
     # page whole, and the run divides that page itself.
     out=$( cd "$work" && "$xpost" -q $ns -d "$(fleet_whole "$dev")" \
-           -o unused.out "$script" </dev/null 2>&1 )
+           -o unused.out "-DDEVNAME=/$dev" "$script" </dev/null 2>&1 )
     st=$?
     verdict_run "$st" "$out" "the $dev run" || { fail=1; return; }
 
@@ -110,9 +117,11 @@ check_device() {  # $1 device
 
     width=$(field PAGE | head -1)
     said=$(field DEVICE | head -1)
-    if [ -z "${width:-}" ] || [ "${said:-}" != "$dev" ]; then
-        note "the $dev run did not say what page it painted, so nothing" \
-             "here can be read out of what it wrote"
+    rowbytes=$(field ROWBYTES | head -1)
+    if [ -z "${width:-}" ] || [ "${said:-}" != "$dev" ] ||
+       [ -z "${rowbytes:-}" ] || [ "$rowbytes" -le 0 ]; then
+        note "the $dev run did not say what page it painted or what a row" \
+             "of it costs, so nothing here can be read out of what it wrote"
         return
     fi
 
@@ -205,7 +214,10 @@ check_device() {  # $1 device
     wholeslope=$((1000 * (wholehi - wholelo) / rows))
     echo "OK   $dev held: band $bandlo -> $bandhi bytes over $lo -> $hi rows"
     echo "OK   $dev held: whole $wholelo -> $wholehi bytes over $lo -> $hi rows"
-    rowbytes=$(( $(rowfactor "$dev") * width ))
+    # what a row of this device's raster costs is the device's own answer,
+    # read off the run rather than tabulated here: it is what the band
+    # budget is divided by, so a table beside it would be a second
+    # statement of the arithmetic under test
     if [ "$wholeslope" -lt $((800 * rowbytes)) ]; then
         note "holding the whole $dev page grew by $wholeslope/1000 bytes a" \
              "row where a row of it is $rowbytes bytes; the measurement is" \
@@ -237,10 +249,55 @@ check_device() {  # $1 device
     fi
 }
 
-for dev in pbm tiff; do
+# The devices whose page the class assembles, out of the ones that band.
+# Asked of a running interpreter: a device whose Emit is an operator
+# assembles its page in compiled code, so the class's row writer the run
+# counts calls into is never reached and there is nothing here to read.
+ask="$work/emit.ps"
+{
+    echo "["
+    for dev in $DEVICE_FLEET_BANDS; do echo "/$dev"; done
+    cat <<'ASKEOF'
+]
+{ /D exch def
+  { << /OutputDevice D /PageSize [ 8 8 ] >> setpagedevice } stopped
+  { (EMIT ) print D 60 string cvs print ( unmade\n) print }
+  { (EMIT ) print D 60 string cvs print ( ) print
+    DEVICE /Emit get type 60 string cvs print (\n) print }
+  ifelse
+} forall
+quit
+ASKEOF
+} > "$ask"
+said=$( cd "$work" && "$xpost" -q $ns -d null -o emit.scratch emit.ps \
+        </dev/null 2>&1 )
+if ! printf '%s\n' "$said" | grep -q '^EMIT '; then
+    echo "FAILURES: the interpreter could not be asked which of its band"
+    echo "      devices assemble their own page:"
+    printf '%s\n' "$said" | sed 's/^/      /' | head -8
+    exit 1
+fi
+devices=$(printf '%s\n' "$said" \
+          | awk '$1 == "EMIT" && $3 == "arraytype" { print $2 }')
+elsewhere=$(printf '%s\n' "$said" \
+            | awk '$1 == "EMIT" && $3 != "arraytype" { printf " %s", $2 }')
+if [ -z "$devices" ]; then
+    echo "FAILURES: no device that bands assembles its page through its"
+    echo "      class, and the raster classes do. The question is being"
+    echo "      asked wrong."
+    exit 1
+fi
+# named, so that what this wrapper does not reach is read rather than
+# inferred from a shorter report
+[ -n "$elsewhere" ] &&
+    echo "NOTE assembled in compiled code, held by band-writer instead:$elsewhere"
+
+ndev=0
+for dev in $devices; do
     check_device "$dev"
+    ndev=$((ndev + 1))
 done
 
 [ "$fail" -eq 0 ] || exit 1
-echo "SUCCESS"
+echo "SUCCESS ($ndev raster class(es) assembling the page they band)"
 exit 0

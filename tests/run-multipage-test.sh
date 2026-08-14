@@ -18,15 +18,29 @@
 #
 # Two shapes, by device:
 #
-#  * Paginated container formats (PDF, DSC) default to ONE file holding every
-#    page; a %d in the output name selects a file per page instead. So a plain
+#  * Paginated container formats default to ONE file holding every page; a %d
+#    in the output name selects a file per page instead. So a plain
 #    multi-showpage job to a fixed name yields a single N-page document, and the
 #    same job to a %d name yields N one-page files.
 #
-#  * The raster devices, SVG, PNG and JPEG cannot hold more than one page in a
-#    file, so a %d gives a file per page and a fixed name keeps the last page
-#    (every page rewrites the one file). This is also what a single-page
-#    consumer -- which reads the file right after showpage -- depends on.
+#  * Everything else cannot hold more than one page in a file, so a %d gives a
+#    file per page and a fixed name keeps the last page (every page rewrites the
+#    one file). This is also what a single-page consumer -- which reads the file
+#    right after showpage -- depends on.
+#
+# WHICH DEVICES, AND WHICH SHAPE. Both are read rather than listed. The roster
+# is tests/device-fleet.sh's, so a device the interpreter gains is swept here
+# the day it is added; which of them leave nothing at the output path is
+# DEVICE_FLEET_NOFILE, held by check-device-roster.sh against what each device
+# leaves there; and which of them hold a run's pages in one document is asked of
+# the running interpreter, since a device that does carries the method that
+# accumulates a page into an open one and a device that does not carries none.
+# A list here was how a device came to be registered everywhere the framework
+# asks for and swept in neither shape, with nothing in the tree saying so.
+#
+# The output name carries one extension for every device. What a device writes
+# is the name it was handed, so the extension names nothing about the format and
+# a per-device one would be a fourth roster to keep in step.
 #
 # The %d name is the only page-specific step in either shape, and it is taken
 # once for every device, in .transmitpage (data/device.ps), so the numbering a
@@ -36,10 +50,10 @@
 # under the file-access sandbox is bound by the same rules a single-page write
 # is either way.
 #
-# The devices that hand their raster to the embedder rather than writing it --
-# raster and bgr -- leave nothing at the output path, and that is checked here
-# too: "no file" is their answer and not an omission. The devices that paint
-# nothing, null and bbox, are the `devices` test's.
+# The devices that leave nothing at the output path -- the two that hand their
+# raster to the embedder and the two that paint nothing -- are swept here too:
+# "no file" is their answer and not an omission, and a job of any length must
+# leave that answer unchanged.
 #
 # WHAT THIS DOES NOT COVER, plainly. Every reading below compares one of this
 # run's outputs against another of them: the three %d pages must differ from
@@ -58,6 +72,10 @@ set -u
 xpost=$1
 . "$(dirname "$0")/verdict.sh"
 . "$(dirname "$0")/device-fleet.sh"
+
+# One run below is started in the directory it writes to, so what this
+# was handed has to name the same thing from there
+xpost=$(path_anchor "$xpost")
 
 # Reach the interpreter's data directory outside any sandbox root: disable the
 # file-access sandbox when this build has one (detected from the usage text),
@@ -84,13 +102,56 @@ printf '%s\n' \
 pagedev="$work/pagesdev.ps"
 { printf '%s\n' '<< /PageSize [100 100] >> setpagedevice'; cat "$plain"; } > "$pagedev"
 
-# device:extension:paginated(1=one file holds all pages, 0=one page per file)
-devices='pgm:pgm:0 ppm:ppm:0 pbm:pbm:0 tiff:tiff:0 svgwrite:svg:0 pdfwrite:pdf:1
-         dscwrite:ps:1 png:png:0 pngalpha:png:0 jpeg:jpg:0'
+ext=out
 
-# the devices whose raster goes to the embedder, and which therefore write no
-# file whatever the output name says
-buffer_devices='raster bgr'
+# The devices whose page is a file, and the devices whose page is not. The
+# second is the roster's answer; the first is the rest of it.
+buffer_devices=$DEVICE_FLEET_NOFILE
+file_devices=
+for dev in $DEVICE_FLEET_ALL; do
+    case " $buffer_devices " in *" $dev "*) continue ;; esac
+    file_devices="$file_devices $dev"
+done
+
+# Which of them hold every page of a run in one document. Asked of a running
+# interpreter rather than listed: a device that accumulates a page into an open
+# document carries the method that does it, and one that writes each page whole
+# carries none. Each is installed by a page-device request and its dictionary
+# read, exactly as check-device-roster.sh reads what a device says about taking
+# its page in bands.
+ask="$work/paginated.ps"
+{
+    echo "["
+    for dev in $file_devices; do echo "/$dev"; done
+    cat <<'ASKEOF'
+]
+{ /D exch def
+  { << /OutputDevice D /PageSize [ 8 8 ] >> setpagedevice } stopped
+  { (PAGINATED ) print D 60 string cvs print ( unmade\n) print }
+  { (PAGINATED ) print D 60 string cvs print ( ) print
+    DEVICE /.emitpage known { (yes) }{ (no) } ifelse print (\n) print }
+  ifelse
+} forall
+quit
+ASKEOF
+} > "$ask"
+said=$( cd "$work" && "$xpost" -q $ns -d null -o paginated.scratch \
+        paginated.ps </dev/null 2>&1 )
+paginated=$(printf '%s\n' "$said" \
+            | awk '$1 == "PAGINATED" && $3 == "yes" { printf " %s", $2 }')
+if ! printf '%s\n' "$said" | grep -q '^PAGINATED '; then
+    echo "FAILURES: the interpreter could not be asked which devices hold a"
+    echo "      run's pages in one document:"
+    printf '%s\n' "$said" | sed 's/^/      /' | head -8
+    rm -rf "$work"
+    exit 1
+fi
+if [ -z "$paginated" ]; then
+    echo "FAILURES: no device holds a run's pages in one document, and two of"
+    echo "      them do. The question is being asked wrong."
+    rm -rf "$work"
+    exit 1
+fi
 
 fail=0
 
@@ -116,15 +177,15 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
     # library the build may not have, which are the only ones entitled to
     # answer "wrong device".
     want=0
-    for de in $devices; do
-        case " $DEVICE_FLEET_OPTIONAL " in *" ${de%%:*} "*) continue ;; esac
+    for dev in $file_devices; do
+        case " $DEVICE_FLEET_OPTIONAL " in *" $dev "*) continue ;; esac
         want=$((want + 1))
     done
-    for de in $devices; do
-        dev=${de%%:*}
-        rest=${de#*:}
-        ext=${rest%%:*}
-        pag=${rest#*:}
+    for dev in $file_devices; do
+        case " $paginated " in
+            *" $dev "*) pag=1 ;;
+            *) pag=0 ;;
+        esac
         rm -f "$work"/page_* "$work"/fixed.* 2>/dev/null
 
         # every device: a %d gives one file per page, all three distinct
@@ -151,7 +212,25 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
             echo "FAIL $dev ($job): fixed-name render failed"; fail=1; continue
         fi
         if [ "$pag" = 1 ]; then
-            # one file holding all three pages
+            # one file holding all three pages, which is a claim about its
+            # size before it is a claim about its structure: a document
+            # carrying three pages is larger than any one of them.
+            fsz=$(LC_ALL=C wc -c < "$work/fixed.$ext" | tr -d ' ')
+            for p in "$p1" "$p2" "$p3"; do
+                psz=$(LC_ALL=C wc -c < "$p" | tr -d ' ')
+                if [ "$fsz" -le "$psz" ]; then
+                    echo "FAIL $dev ($job): the one file is $fsz bytes and the page"
+                    echo "     $(basename "$p") alone is $psz; three pages did not land in it"
+                    fail=1
+                fi
+            done
+            [ "$fail" -ne 0 ] && continue
+            # ... and how the format says how many pages it holds, which is
+            # the format's own and has to be read in the format's own terms.
+            # A paginated device with no reading here fails rather than
+            # passing on the size alone: a document whose page count says two
+            # and whose bytes hold three is a document every reader of it
+            # gets wrong, and that is exactly what no size can see.
             case "$dev" in
             pdfwrite)
                 # the document says how many pages it has three times over, and a
@@ -170,6 +249,14 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
                 np=$(grep -ac '^%%Page:' "$work/fixed.$ext")
                 [ "$np" = 3 ] || { echo "FAIL $dev ($job): $np %%Page sections, want 3"; fail=1; continue; }
                 grep -aq '^%%Pages: 3' "$work/fixed.$ext" || { echo "FAIL $dev ($job): no %%Pages: 3 trailer"; fail=1; continue; }
+                ;;
+            *)
+                echo "FAIL $dev ($job): this device holds a run's pages in one"
+                echo "     document and nothing here reads how many that document"
+                echo "     says it holds. Say it in this device's format, beside"
+                echo "     the two above."
+                fail=1
+                continue
                 ;;
             esac
             echo "OK   $dev ($job: one file, three pages; %d gives three files)"
@@ -192,8 +279,9 @@ sweep() {   # $1=job label ; renders $prog through every device and checks the s
 }
 
 # The devices that own no file: a job of any length leaves nothing at the
-# output path, with a %d in it or without. Their raster goes to the
-# embedder, so this is their answer and not a page that went missing.
+# output path, with a %d in it or without. Two of them hand their raster to
+# the embedder and two paint nothing at all, so this is their answer and not
+# a page that went missing.
 buffersweep() {   # $1=job label
     job=$1
     for dev in $buffer_devices; do
@@ -207,13 +295,13 @@ buffersweep() {   # $1=job label
             verdict_run "$status" "$err" "$dev" || exit 1
             left=$(ls "$work"/buf*.out 2>/dev/null | wc -l | tr -d ' ')
             if [ "$left" -ne 0 ]; then
-                echo "FAIL $dev ($job): wrote $left file(s) for a device that hands"
-                echo "     its raster to the embedder"
+                echo "FAIL $dev ($job): wrote $left file(s) for a device the roster"
+                echo "     names as leaving nothing at the output path"
                 fail=1
             fi
         done
         rm -f "$work"/buf*.out
-        [ "$fail" -eq 0 ] && echo "OK   $dev ($job: hands the raster over, writes no file)"
+        [ "$fail" -eq 0 ] && echo "OK   $dev ($job: writes no file, whatever the name)"
     done
 }
 

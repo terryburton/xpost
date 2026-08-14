@@ -3618,8 +3618,9 @@ test('band-budget',
   suite: cost_fast,
   timeout: 300)
 
-# ... and the two classes whose emission is not raw rows, each of which
-# had a reason of its own for not taking its page in bands: the bilevel
+# ... and every raster class that assembles its own page, which is the
+# ones that band less the ones written from compiled code. Two of them
+# had a reason of their own for not taking a page in bands: the bilevel
 # one screens every grey against the cell under the pixel, so a screen
 # phased on the band rather than on the page dithers differently and does
 # so invisibly at any band deeper than a cell; the TIFF one promises in
@@ -3675,18 +3676,23 @@ test('page-lifetime',
 # the run selected (-d pgm:band), so this renders one page
 # through every device a record can be played into -- in bands, whole,
 # and by that device with no record at all -- and requires the three to
-# be the same bytes. Two colour spaces, because a mark carries one value
-# per component of the space it was made in and a record recording in
-# the wrong one paints a colour nobody named. And the marks each band
-# was played, because a replay handed the whole page for every band
-# paints this same page: the pixels cannot see the difference between
-# the bound and no bound at all, and the count can.
+# be the same bytes. Which devices those are is the recording class's own
+# roster of play targets and is read from it, so a target added to the
+# class is played into here the day it is added rather than covered by
+# whichever of these wrappers happens to name it. Two colour spaces,
+# because a mark carries one value per component of the space it was made
+# in and a record recording in the wrong one paints a colour nobody
+# named. And the marks each band was played, because a replay handed the
+# whole page for every band paints this same page: the pixels cannot see
+# the difference between the bound and no bound at all, and the count
+# can -- where the class assembles the page, which is where the count is
+# taken.
 test('band-device',
   find_program('tests/run-band-device-test.sh'),
   args: [ xpost_exe, files('tests/band_device_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
-  suite: cost_fast,
-  timeout: 120)
+  suite: cost_slow,
+  timeout: 300)
 
 # ... and all of them at once, which is the question a reader of the
 # feature asks and no test above answers. Every one of the checks before

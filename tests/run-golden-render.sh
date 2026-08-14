@@ -5,9 +5,31 @@
 #
 # This is the instrument behind every "no behavioral change" refactor:
 # a restructuring that claims zero cost must leave these bytes exactly
-# as they were. Devices whose bytes depend on external library versions
-# (png, jpeg) are exercised elsewhere and excluded here; the window
-# devices need a display and are likewise out.
+# as they were.
+#
+# WHICH DEVICES. Every device the roster names, less two kinds, and the
+# roster is what settles it rather than a list here: a list of its own
+# was how a device came to be registered in every place the framework
+# asks for and compared in none of them, since nothing in the tree said
+# it was missing from this one.
+#
+#   The devices whose page never arrives at the output path, which have
+#   no bytes here to compare -- the two that hand their raster to an
+#   embedding program and the two that paint nothing. That is
+#   DEVICE_FLEET_NOFILE, held by check-device-roster.sh against what each
+#   device leaves there.
+#
+#   The devices that need a library the build may not have, which is
+#   DEVICE_FLEET_OPTIONAL. What such a build may be missing is the
+#   library that writes the page, so those bytes are that library's
+#   version rather than this interpreter's arithmetic, and a manifest of
+#   them would report a drift on every machine with a different one.
+#   Their pages are held by the raster-formats and band-writer wrappers
+#   instead, which read what the bytes decode to.
+#
+# A device outside neither is rendered, and a device rendered and absent
+# from the manifest fails below -- so a device added to the roster
+# arrives here on the day it is added and says so.
 #
 # Regenerate after an INTENDED rendering change (declare it in the same
 # commit) with:
@@ -23,8 +45,27 @@ page=$2
 golden=$3
 regen=${4:-}
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
-devices='pgm ppm pbm tiff pdfwrite svgwrite dscwrite'
+devices=
+skipped=
+for dev in $DEVICE_FLEET_ALL; do
+    case " $DEVICE_FLEET_NOFILE " in
+        *" $dev "*) skipped="$skipped $dev(no file)"; continue ;;
+    esac
+    case " $DEVICE_FLEET_OPTIONAL " in
+        *" $dev "*) skipped="$skipped $dev(library bytes)"; continue ;;
+    esac
+    devices="$devices $dev"
+done
+if [ -z "$devices" ]; then
+    echo "FAILURES: the roster left no device to render, so this gate would"
+    echo "      compare nothing and report the bytes held"
+    exit 1
+fi
+# named, so that what is not held here is read rather than inferred from
+# a shorter report
+echo "NOTE not held to the byte here:$skipped"
 
 # The two object widths are two personalities, and they do not render
 # byte for byte alike: the wide build's integers reach further, so

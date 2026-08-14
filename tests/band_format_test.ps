@@ -1,12 +1,17 @@
 % One page put out a band at a time, and the same page put out whole,
-% through the two raster classes whose emission is not raw rows: the
-% bilevel one, which packs its rows to bits and screens every grey
-% against the halftone cell under the pixel, and the TIFF one, whose
-% header promises where the strip begins and how long it runs before a
-% row of it is written.
+% through a raster class that assembles its page from the rows it is
+% handed.
 %
-% run-band-format-test.sh runs this file once per device. What it claims
-% is what doc/NEWINTERNALS claims for any device taking its page in bands:
+% run-band-format-test.sh runs this file once per such device and hands
+% the device's name in with -D, since it is the wrapper that chose one:
+% a program working out which device it is running on would be a second
+% roster to keep in step with the first, and this file carried exactly
+% that -- a two-way branch naming two classes, which is why for as long
+% as it existed the other raster formats were put out in bands by nothing
+% at all.
+%
+% What it claims is what doc/NEWINTERNALS claims for any device taking
+% its page in bands:
 %
 %   The bytes. The page assembled from bands is the page a raster
 %   holding all of it paints, byte for byte, at several band heights
@@ -23,10 +28,10 @@
 %
 %   The rows reached the writer as they were finished. A device that
 %   collected the page and wrote it at the end would pass both of the
-%   above. So the class's row writer is wrapped before any raster is made
-%   from it, and the run counts the calls and the rows: a page put out in
-%   n bands must reach the writer in n pieces and one page's worth of
-%   rows, and a page put out whole in one piece.
+%   above. So the row writer of each device this run makes is wrapped as
+%   the device is made, and the run counts the calls and the rows: a page
+%   put out in n bands must reach the writer in n pieces and one page's
+%   worth of rows, and a page put out whole in one piece.
 %
 % The marks are offered whole to every band and each band keeps what
 % lands on the rows it holds, which is what a replay of a record does.
@@ -56,9 +61,17 @@
 } bind def
 /num { 20 string cvs } bind def
 
-/DEV DEVICE /nativecolorspace get /DeviceGray eq { (pbm) }{ (tiff) } ifelse def
-/cls .privatedict
-    DEV (pbm) eq { /.xpost_PBMIMAGE }{ /.xpost_TIFFIMAGE } ifelse get def
+% The device this run was started on, as the wrapper named it. It goes
+% into the names of the files written below and into the line the wrapper
+% reads them back through.
+/DEV DEVNAME 20 string cvs def
+
+% What one row of this device's raster costs in bytes, at the width the
+% pages here are painted at. The class answers it, and the whole-page
+% route's growth per row of page has to come to it -- a measurement that
+% did not see the raster would say nothing about what the band bounds.
+/rowbytes 2 dict begin /width W def
+    DEVICE /.rowcost get exec end exch pop def
 
 % -  gvm  int
 % What the global half of virtual memory has taken. Raster memory is
@@ -71,19 +84,29 @@
     exch setglobal
 } bind def
 
-% How the page reached the writer. The class's row writer is wrapped
-% here, before any raster is copied from the class, so every device the
-% run makes carries the count: one call per run of rows handed over, and
-% the rows in it.
+% How the page reached the writer: one call per run of rows handed over,
+% and the rows in it.
 /callsout [ 0 ] def
 /rowsout [ 0 ] def
-/innerband cls /.writeband get def
-cls /.writeband { % rows file  .  -
-    callsout 0 callsout 0 get 1 add put
-    1 index length
-    rowsout 0 3 -1 roll rowsout 0 get add put
-    innerband
-} put
+/innerband null def
+
+% -  watch  -
+% Wrap the row writer of the device a page-device request has just made.
+%
+% It goes on the instance rather than on the class it was copied from,
+% because which class that is, is the thing this file is not allowed to
+% know: a page-device request makes a fresh copy, so the wrapping is
+% renewed with the device and the writer reached through the device is
+% the one the count sees.
+/watch {
+    /innerband DEVICE /.writeband get store
+    DEVICE /.writeband { % rows file  .  -
+        callsout 0 callsout 0 get 1 add put
+        1 index length
+        rowsout 0 3 -1 roll rowsout 0 get add put
+        innerband
+    } put
+} bind def
 
 % h  paint  -
 % A page reaching all five kinds of mark and a sampled image, laid out
@@ -190,6 +213,7 @@ cls /.writeband { % rows file  .  -
     count0
     /wh.before gvm store
     << /PageSize [W wh.h] >> setpagedevice
+    watch
     DEVICE /.outputfile wh.h wholename put
     wh.h paint
     DEVICE dup /Emit get exec
@@ -211,6 +235,7 @@ cls /.writeband { % rows file  .  -
     /bd.before gvm store
     graphicsdict /.rasterband [ 0 bd.b ] put
     << /PageSize [W bd.h] >> setpagedevice
+    watch
     DEVICE /.outputfile bd.h bd.b bandname put
     % what the page's emission keeps between bands: the file it is going
     % to and how far down the page it has reached
@@ -237,6 +262,7 @@ cls /.writeband { % rows file  .  -
 
 (DEVICE ) print DEV print (\n) print
 (PAGE ) print W num print (\n) print
+(ROWBYTES ) print rowbytes num print (\n) print
 
 % A page painted and thrown away first: the fonts and the tables the
 % marks above build are built once, and a measurement taken across the

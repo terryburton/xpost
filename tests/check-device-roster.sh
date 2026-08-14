@@ -17,6 +17,13 @@
 # platform exclusions declared below, and its cross-product subsets are
 # held to naming only members of it.
 #
+# The fifth is prose: doc/MANUAL's table of devices, and the two
+# sentences in it that name which devices hold a run's pages in one file
+# and which can take a page a band at a time. A table cannot be derived
+# at build time and it can be held to what is, which is what the last
+# section does -- a device added to the interpreter and not to the manual
+# is one no reader of the manual will hear about.
+#
 # Sources are read by name rather than by scanning a directory: a built
 # tree leaves object files beside them whose debug information matches
 # every pattern here, so a directory scan reads green where nothing was
@@ -54,6 +61,7 @@ esac
 guard_workdir
 trap 'rm -rf "$work"' EXIT
 # read a tree whose lines end where the scans below expect them to
+srcdir=$src
 guard_mirror_tree "$src"
 src=$mirror
 
@@ -330,6 +338,255 @@ if ! cmp -s "$work/says-yes" "$work/routed"; then
     fi
 fi
 
+# ---------------------------------------------------------------------
+# And which of them leave nothing at the output path
+#
+# A page is a file for all but four devices: two hand their raster to the
+# program embedding the interpreter and two paint nothing, and a run
+# naming -o leaves that name untouched. Every wrapper that compares the
+# bytes of a page has to know which four, and each of them used to know
+# separately -- the byte-identity gate, the multi-page shapes and the
+# smoke wrapper carried the same four names three times over, so a device
+# added to the roster and to none of them was rendered and never
+# compared, with nothing anywhere saying so.
+#
+# The list is DEVICE_FLEET_NOFILE and this is what holds it. It is a
+# reading rather than a declaration: a page is asked for through each
+# device and the output path is looked at afterwards, which is the same
+# question the wrappers ask and answers it the same way. Both directions
+# are held, so a device that stopped writing its page fails here as
+# surely as one that started.
+( . "$fleet"; for v in $DEVICE_FLEET_NOFILE; do echo "$v"; done ) \
+    2>/dev/null | sort -u > "$work/nofile-fleet"
+if [ ! -s "$work/nofile-fleet" ]; then
+    echo "FAIL: DEVICE_FLEET_NOFILE is empty or unset in tests/device-fleet.sh"
+    fail=1
+fi
+stray=$(comm -23 "$work/nofile-fleet" "$work/fleet-all")
+if [ -n "$stray" ]; then
+    echo "FAIL: DEVICE_FLEET_NOFILE names devices the roster does not:"
+    printf '%s\n' "$stray" | sed 's/^/      /'
+    fail=1
+fi
+
+# one page, small, through each device in turn
+printf '%s\n' 'newpath 2 2 moveto 6 6 lineto stroke showpage' \
+    > "$work/onepage.ps"
+: > "$work/wrote"
+: > "$work/left"
+: > "$work/pathasked"
+asked=0
+while read -r dev; do
+    rm -f "$work/path.$dev"
+    said=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+            "$xpost" -q -d "$dev" -o "path.$dev" onepage.ps \
+            </dev/null 2>&1 )
+    case "$said" in
+        *"wrong device"*) continue ;;
+    esac
+    asked=$((asked + 1))
+    echo "$dev" >> "$work/pathasked"
+    if [ -e "$work/path.$dev" ]; then
+        echo "$dev" >> "$work/wrote"
+    else
+        echo "$dev" >> "$work/left"
+    fi
+done < "$work/fleet-all"
+sort -u "$work/left" -o "$work/left"
+sort -u "$work/pathasked" -o "$work/pathasked"
+if [ "$asked" -lt 8 ]; then
+    echo "FAILURES: only $asked device(s) could be asked for a page, and the"
+    echo "      roster names $(wc -l < "$work/fleet-all" | tr -d ' '). The question is being asked wrong."
+    exit 1
+fi
+if [ ! -s "$work/wrote" ]; then
+    echo "FAILURES: no device left a file at the output path, so every device"
+    echo "      reads as one whose page is not a file. The question is being"
+    echo "      asked wrong."
+    exit 1
+fi
+# a device this build could not make was never asked, so the list it is
+# held to is narrowed rather than the device counted absent from it
+comm -12 "$work/nofile-fleet" "$work/pathasked" > "$work/nofile-want"
+if ! cmp -s "$work/left" "$work/nofile-want"; then
+    quiet=$(comm -23 "$work/left" "$work/nofile-want")
+    wrote=$(comm -13 "$work/left" "$work/nofile-want")
+    if [ -n "$quiet" ]; then
+        echo "FAIL: these devices left nothing at the output path and"
+        echo "      DEVICE_FLEET_NOFILE does not name them:"
+        printf '%s\n' "$quiet" | sed 's/^/      /'
+        echo "      Every wrapper that compares the bytes of a page reads that"
+        echo "      list to know which devices have none, so a device missing"
+        echo "      from it is one they will each ask for a file and find"
+        echo "      nothing. Name it there with what its page arrives as"
+        echo "      instead."
+        fail=1
+    fi
+    if [ -n "$wrote" ]; then
+        echo "FAIL: DEVICE_FLEET_NOFILE names these devices and they wrote a"
+        echo "      file:"
+        printf '%s\n' "$wrote" | sed 's/^/      /'
+        echo "      A device whose page is a file is one the byte comparisons"
+        echo "      can hold, and naming it there is what keeps them off it."
+        fail=1
+    fi
+fi
+
+# ---------------------------------------------------------------------
+# And the copies of all of it written in prose
+#
+# doc/MANUAL is where a reader learns which devices there are, which of
+# them hold a run's pages in one file and which can take a page a band at
+# a time. Those are three more spellings of the rosters above, and prose
+# cannot be derived at build time -- but it can be held, which is what
+# this does. A device added to the interpreter and not to the manual is
+# a device nobody reading the manual knows about, and until now nothing
+# said so.
+#
+# The manual is read from the tree rather than from the mirror above,
+# which does not carry doc/, so its line endings are taken off here.
+guard_require_file "$srcdir/doc/MANUAL" "the manual"
+tr -d '\r' < "$srcdir/doc/MANUAL" > "$work/manual"
+
+# a small number said as a word, which is how the manual says one
+numword() {
+    case $1 in
+        1) echo one ;;   2) echo two ;;   3) echo three ;;
+        4) echo four ;;  5) echo five ;;  6) echo six ;;
+        7) echo seven ;; 8) echo eight ;; 9) echo nine ;;
+        10) echo ten ;;  11) echo eleven ;; 12) echo twelve ;;
+        *) echo "$1" ;;
+    esac
+}
+# and the same word with its first letter raised, for a sentence opening
+# on it
+numword_cap() {
+    w=$(numword "$1")
+    printf '%s%s\n' "$(printf '%s' "$w" | cut -c1 | tr a-z A-Z)" \
+        "$(printf '%s' "$w" | cut -c2-)"
+}
+
+# ---- the table of devices
+#
+# The first column of the section that lists them. One row names two
+# devices, so the column is split rather than read as a word.
+awk '/^== The devices ==/ { on = 1; next }
+     on && /^== / { exit }
+     on && /^  [a-z]/ {
+         line = $0
+         sub(/^  /, "", line)
+         sub(/[ \t][ \t].*$/, "", line)
+         gsub(/,/, " ", line)
+         n = split(line, a, / +/)
+         for (i = 1; i <= n; i++) if (a[i] != "") print a[i]
+     }' "$work/manual" | sort -u > "$work/manual-devices"
+if [ ! -s "$work/manual-devices" ]; then
+    echo "FAILURES: doc/MANUAL's table of devices could not be read; the"
+    echo "      shape this guard reads for has changed. Fix the guard."
+    exit 1
+fi
+if ! cmp -s "$work/manual-devices" "$work/maker"; then
+    undocumented=$(comm -13 "$work/manual-devices" "$work/maker")
+    invented=$(comm -23 "$work/manual-devices" "$work/maker")
+    if [ -n "$undocumented" ]; then
+        echo "FAIL: the interpreter makes these devices and doc/MANUAL's table"
+        echo "      does not name them:"
+        printf '%s\n' "$undocumented" | sed 's/^/      /'
+        echo "      A device absent from that table is one a reader of the"
+        echo "      manual has no way of hearing about."
+        fail=1
+    fi
+    if [ -n "$invented" ]; then
+        echo "FAIL: doc/MANUAL's table names devices the interpreter cannot"
+        echo "      make:"
+        printf '%s\n' "$invented" | sed 's/^/      /'
+        fail=1
+    fi
+fi
+
+# ---- the sentence about which devices band
+#
+# Read out of the whole file as one stream, since the list is wrapped
+# across lines and where it wraps is the typesetting rather than the
+# claim.
+band_said=$(tr '\n' ' ' < "$work/manual" | tr -s ' ' \
+    | sed -n 's/.*[^A-Za-z]\([A-Za-z][a-z]*\) devices can take their page a band at a time instead -- \([^-]*\) --.*/\1|\2/p')
+if [ -z "$band_said" ]; then
+    echo "FAILURES: doc/MANUAL's sentence naming the devices that band could"
+    echo "      not be read; the shape this guard reads for has changed."
+    echo "      Fix the guard."
+    exit 1
+fi
+printf '%s\n' "${band_said#*|}" | tr ',' ' ' | sed 's/ and / /g' \
+    | tr ' ' '\n' | grep . | sort -u > "$work/manual-bands"
+if ! cmp -s "$work/manual-bands" "$work/bands-fleet"; then
+    echo "FAIL: doc/MANUAL names these devices as taking their page a band"
+    echo "      at a time and the roster names those:"
+    echo "      manual: $(tr '\n' ' ' < "$work/manual-bands")"
+    echo "      roster: $(tr '\n' ' ' < "$work/bands-fleet")"
+    fail=1
+fi
+want=$(numword_cap "$(wc -l < "$work/bands-fleet" | tr -d ' ')")
+if [ "${band_said%%|*}" != "$want" ]; then
+    echo "FAIL: doc/MANUAL opens that sentence with"
+    echo "      \"${band_said%%|*}\" and the roster names $want of them"
+    fail=1
+fi
+
+# ---- and the sentence about which devices hold a run's pages in one file
+#
+# The same fact tests/run-multipage-test.sh chooses a page shape by, and
+# asked the same way: a device that accumulates a page into an open
+# document carries the method that does it.
+{
+    echo "["
+    sed 's|^|/|' "$work/fleet-all"
+    cat <<'EOF'
+]
+{ /D exch def
+  { << /OutputDevice D /PageSize [ 8 8 ] >> setpagedevice } stopped
+  { pop }
+  { DEVICE /.emitpage known
+    { (PAGES ) print D 60 string cvs print (\n) print } if }
+  ifelse
+} forall
+EOF
+} > "$work/pages.ps"
+said=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+        "$xpost" -q -d null -o pages.scratch pages.ps \
+        </dev/null 2>&1 )
+printf '%s\n' "$said" | awk '$1 == "PAGES" { print $2 }' | sort -u \
+    > "$work/paginated"
+if [ ! -s "$work/paginated" ]; then
+    echo "FAILURES: no device holds a run's pages in one document, and the"
+    echo "      manual says two do:"
+    printf '%s\n' "$said" | sed 's/^/      /' | head -8
+    exit 1
+fi
+pag_said=$(tr '\n' ' ' < "$work/manual" | tr -s ' ' \
+    | sed -n 's/.*The \([a-z]*\) paginated container formats, \([^;]*\), hold every page.*/\1|\2/p')
+if [ -z "$pag_said" ]; then
+    echo "FAILURES: doc/MANUAL's sentence naming the paginated formats could"
+    echo "      not be read; the shape this guard reads for has changed."
+    echo "      Fix the guard."
+    exit 1
+fi
+printf '%s\n' "${pag_said#*|}" | tr ',' ' ' | sed 's/ and / /g' \
+    | tr ' ' '\n' | grep . | sort -u > "$work/manual-paginated"
+if ! cmp -s "$work/manual-paginated" "$work/paginated"; then
+    echo "FAIL: doc/MANUAL names these devices as holding a run's pages in"
+    echo "      one file and the interpreter's devices say those:"
+    echo "      manual: $(tr '\n' ' ' < "$work/manual-paginated")"
+    echo "      devices: $(tr '\n' ' ' < "$work/paginated")"
+    fail=1
+fi
+want=$(numword "$(wc -l < "$work/paginated" | tr -d ' ')")
+if [ "${pag_said%%|*}" != "$want" ]; then
+    echo "FAIL: doc/MANUAL calls them \"the ${pag_said%%|*} paginated container"
+    echo "      formats\" and the devices say there are $want"
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the device rosters disagree"
     exit 1
@@ -338,6 +595,9 @@ fi
 skipped=''
 [ -s "$work/unmade" ] &&
     skipped=", $(wc -l < "$work/unmade" | tr -d ' ') not built into this interpreter"
-echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files;\
- $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one$skipped)"
+echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files and in the manual;\
+ $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one;\
+ $(wc -l < "$work/paginated" | tr -d ' ') holding a run's pages in one file;\
+ $(wc -l < "$work/wrote" | tr -d ' ') leaving a page at the output path and\
+ $(wc -l < "$work/left" | tr -d ' ') leaving none$skipped)"
 exit 0
