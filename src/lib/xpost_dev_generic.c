@@ -3140,6 +3140,28 @@ _pdf_acc_put(Xpost_Context *ctx, Xpost_Object priv, Pdf_Acc *a)
     return 1;
 }
 
+/* Give up the buffer and the separations the accumulator names. Called
+   from the collector with the block the accumulator is kept in, so it
+   touches nothing in virtual memory. A device the run retired has given
+   both up already and leaves this nothing to do. */
+static void _pdf_acc_reclaim(void *block)
+{
+    Pdf_Acc *a = block;
+    int i;
+
+    xpost_strbuf_free(&a->content);
+    for (i = 0; i < a->nseps; i++)
+    {
+        free(a->seps[i].name);
+        free(a->seps[i].csdef);
+        free(a->seps[i].func);
+    }
+    free(a->seps);
+    a->seps = NULL;
+    a->nseps = 0;
+    a->sepcap = 0;
+}
+
 /* Create the content accumulator and stash it in the device's /Private. Called
    from the device Create method, before any user save/restore. */
 static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
@@ -3161,6 +3183,12 @@ static int _pdfinit(Xpost_Context *ctx, Xpost_Object devdic)
     }
     if (!_pdf_acc_put(ctx, priv, &a))
         return VMerror;
+    /* What this device holds is a buffer, which is not virtual memory: a
+       device the run never retires -- one a restore took back, or one
+       nothing named by the time a collection came round -- would take
+       its buffer with it. This is what gives it up there. */
+    (void)xpost_handle_reclaim_set(ctx, priv, XPOST_HANDLE_CONTENT,
+                                   sizeof(a), _pdf_acc_reclaim);
     return 0;
 }
 
