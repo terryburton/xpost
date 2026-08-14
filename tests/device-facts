@@ -139,8 +139,11 @@ question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     one, the text machinery (src/lib/xpost_op_font.c) blends a partly
     covered edge pixel against what the page already holds; at one it
     sends whole pixels and the edge is hard. A page-device request may
-    name it, so what a class states is the starting point rather than
-    the last word.
+    name it, and a program may write it onto the device directly, so
+    what a class states is where a run starts rather than where it ends
+    -- except on a device that shows a grey as a pattern of pixels,
+    which is sent whole pixels whatever the number says (ScreenPaint,
+    below).
     The family answer is four, which is what a device storing a value
     per pixel can take. A device answering otherwise is one whose stored
     pixel cannot hold the intermediate value a blend produces, and
@@ -157,9 +160,17 @@ answer pngalpha 4
 answer jpeg 4
 answer pbm 1 data/pbmimage.ps
     A pixel of this device is one bit. There is no value between the two
-    it can store, so a coverage-weighted blend has nowhere to land: it
-    is thresholded back to one of the two, and which one depends on the
-    screen rather than on the coverage.
+    it can store, so a coverage-weighted blend has nowhere to land, and
+    the blend does not pass through the pixel store the screen is
+    applied in: what it writes is the weighted value itself, to exactly
+    the pixels a glyph's edges cover, and those are the pixels the
+    screen would otherwise have decided. A page that took them would
+    hold a range of values this device cannot show and would report
+    them back to a program reading a pixel.
+    So the number here is not only what the class starts at. The text
+    machinery reads it together with ScreenPaint and sends whole pixels
+    to a device declaring one, which is what makes a run naming a
+    larger number reach the same page as a run naming none.
     This stops being true if the device grows a pixel that can hold an
     intermediate value, which is the same change that would let it show
     a grey without screening for one.
@@ -209,13 +220,32 @@ elsewhere .rowcost bgr jpeg pbm pgm png pngalpha ppm tiff record
 open nativecolorspace every
     The colour space this device's marking methods take components in.
     Every device states one and no two of them are wrong to differ: the
-    space is what the device IS, not a way it varies from a family.
-    It is not a question here because making it one would require every
-    device to own the space it answers with, and two of them inherit it
-    -- the bilevel class takes grey from the class it copies and the
-    TIFF class takes rgb from its own. Both are right and neither says
-    so. That is the next thing to ask, and asking it costs those two a
-    restatement each.
+    space is what the device IS, not a way it varies from a family. It
+    decides how many components a paint carries (data/paint.ps), which
+    compiled fills the device is given (data/device.ps), and what a
+    glyph's colour is converted to (src/lib/xpost_op_font.c), so a
+    device answering with a space it does not have is one whose whole
+    colour pipeline was settled elsewhere.
+    Every device now owns the space it answers with. Three of them
+    inherited it and three now say it again -- the bilevel class, the
+    TIFF class and the DSC writer -- so the shape a claim made on
+    another device's behalf takes is gone from this entry whether or not
+    it is ever asked as a question.
+    It is not asked as one because there is no family for a device to
+    differ from. A question is worth asking where devices ought to agree
+    and one does not; here fifteen devices would each carry a reason for
+    differing from nothing, and a reason that cannot be wrong is a
+    reason nobody rereads.
+    What would make it one: a device whose space can move after it is
+    installed and whose components then follow. That happens where a
+    device offers process colour models -- .colormodels above -- since
+    a page-device request naming one writes this key (data/device.ps).
+    Today only the two document writers offer any, and they carry no
+    raster to disagree with. A raster class declaring .colormodels would
+    make this a movable value on every class copied from it, and .ncomp
+    below does not move with it, so the components a device is sent
+    would part company with the space it says it takes them in. That is
+    the day to ask.
     Two of the answers are not a name but a procedure: the compiled
     drivers store the space as an executable name, which is why
     data/device.ps fetches it with get and holds it literal rather than
@@ -231,6 +261,14 @@ open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     a record refuses outright rather than copying, since a record whose
     component count disagreed with its target would replay a colour
     nobody named (src/lib/xpost_dev_record.c).
+    What would make it one is the two parting company. They are one
+    statement said twice, and nothing holds them to agreeing: the
+    page-device request that moves a device's colour space writes that
+    key and not this one, so a raster class that ever offered a process
+    colour model would be moved to it and go on taking the old number
+    of components. Either they are held to each other, or this becomes
+    the question and each device says how many it takes and why that is
+    what its space implies.
 
 open NoOutput bbox dscwrite null pdfwrite svgwrite record
     That this device puts no pixels down, so data/device.ps leaves it
@@ -242,6 +280,13 @@ open NoOutput bbox dscwrite null pdfwrite svgwrite record
     the devices carrying it are held by the line above. Making it a
     question would ask nine devices to state a thing that follows from
     whether they carry a raster at all.
+    What would make it one is a device on both sides of that: one that
+    holds a raster and wants the class's own fill anyway, or one that
+    holds none and wants the compiled rasterizers. Either would be a
+    device choosing how a path is resolved rather than being told by
+    what it is, and the answer would then be worth asking each device
+    for. There is none, and the two lists this follows from -- who
+    carries a raster, who carries this -- name the same devices.
 
 open VectorGlyphs dscwrite pdfwrite svgwrite
     That text reaches this device as glyph outlines rather than as a
@@ -273,6 +318,11 @@ open AlphaChannel pngalpha
     that device is named in the ground test's list of devices with no
     ground to report (tests/run-device-ground-test.sh), which is the one
     place its difference is currently written down.
+    What would make it one is a second device whose page carries
+    transparency, at which point the two would be answering the same
+    question and could answer it differently -- what a page reset clears
+    to, and what a read of an untouched pixel may report, are separate
+    consequences and a device could take one without the other.
 
 # ---------------------------------------------------------------------
 # The rest of the census
@@ -294,6 +344,18 @@ method .emitpage dscwrite pdfwrite
 method .emitwhole dscwrite pdfwrite
 method .endfile dscwrite pdfwrite
 method Erase bbox pngalpha
+    How this device clears its page, where clearing it is not painting
+    it white. A device without one is painted white by erasepage, which
+    fills the page with the ground through the ordinary marking methods
+    (data/paint.ps). These two cannot be cleared that way: the extent
+    tracker would take the full-page fill into the box it is
+    accumulating, and the alpha device clears to transparent, which is
+    not a colour any fill can name.
+    The device that paints nothing carries none, and that is the right
+    answer rather than an omission: it holds nothing a page reset
+    changes, and the fill erasepage sends it instead lands in marking
+    methods that discard their operands. Giving it one would be a method
+    whose body did what the absence of the method already does.
 method .escname dscwrite pdfwrite
 method FillPath dscwrite pdfwrite svgwrite
 method FillPoly every
