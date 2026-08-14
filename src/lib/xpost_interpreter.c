@@ -3049,9 +3049,13 @@ static int _record_host_config(Xpost_Context *ctx,
         goto done;
 
     /* What one band of a page may cost. A null where this run named no
-       budget, which is how the recording class is left working to its
-       own (data/recorddev.ps): a number here would be a second copy of
-       that one, and the two would agree until one of them was changed. */
+       budget: the number such a run works to is the recording class's
+       own (data/recorddev.ps), and a copy of it written here would agree
+       with it only until one of the two was changed. The boot files put
+       that class's number here as the run's device is made, so what a
+       reader finds afterwards is the budget in force either way
+       (.settlebandbudget, data/device.ps); the null stands where the
+       graphics never loaded and there is no such class. */
     if ((ret = _host_put(ctx, "MaxBandBytes",
                          _band_bytes
                              ? xpost_int_cons((integer)_band_bytes)

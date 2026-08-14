@@ -80,10 +80,13 @@ RecordSpill
 # once: --band-bytes. It says both which pages are held as their marks --
 # a page the budget covers arrives in one band, which is the page, so it
 # is painted directly and nothing is written down -- and how much of such
-# a page is in memory at once. A null where this run named none, the
-# recording class working to its own budget then. PLRM Appendix G bars a
-# page description from choosing how its marks are held, so it is settled
-# by the invocation and reported back through currentsystemparams
+# a page is in memory at once. Where this run named none it is the budget
+# the recording class carries, put here as the run's device is made so
+# that the band arithmetic and the driver bounding a record go by one
+# number; a null in a run whose graphics never loaded, which carries no
+# such class and holds no page in bands. PLRM Appendix G bars a page
+# description from choosing how its marks are held, so it is settled by
+# the invocation and reported back through currentsystemparams
 MaxBandBytes
 
 # where this run's pages go when the page device names nothing and the
