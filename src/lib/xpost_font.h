@@ -139,6 +139,25 @@ int xpost_font_face_is_cff(void *face);
 void xpost_font_face_free(void *face);
 
 /**
+ * @brief Return how many faces the font machinery currently holds open.
+ *
+ * A face is host state outside virtual memory, and how many are open
+ * shows nowhere else: the library takes every face still open with it
+ * when the font machinery goes down, so what a run held while it ran
+ * leaves no trace in what it held at the end. This answers that number
+ * during the run, for the callers that have to say a face was given
+ * back rather than merely reclaimed at teardown.
+ *
+ * @return The number of faces open, counting both those opened from a
+ *         file and those opened over a program in memory.
+ *
+ * @see xpost_font_face_new_from_name()
+ * @see xpost_font_face_new_from_memory()
+ * @see xpost_font_face_free()
+ */
+long xpost_font_faces_held(void);
+
+/**
  * @brief Scale the given font.
  * @param[in] face The font face.
  * @param[in] scale The scale factor in point.
