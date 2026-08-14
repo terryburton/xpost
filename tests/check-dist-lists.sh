@@ -12,7 +12,10 @@
 # from every tarball, so a release shipped a tree in which not one
 # structural invariant could be checked, and nothing anywhere said so.
 #
-# Each directory below is held to its list both ways.
+# Each directory below is held to its lists both ways, and to each list
+# it carries rather than to the file they are written in: a name
+# appearing anywhere in a makefile once satisfied every list in it, which
+# is how a boot file came to be packed and never installed.
 #
 # Usage: check-dist-lists.sh <source tree root>
 
@@ -27,16 +30,44 @@ tree=$mirror
 
 fail=0
 
-# What a list holds: every "dir/file" token in it, whatever the line
-# shape. Continuations, leading tabs and trailing backslashes are not
-# part of a filename.
+# What a list holds: every "dir/file" token in the assignments that
+# distribute, whatever the line shape. Continuations, leading tabs and
+# trailing backslashes are not part of a filename.
+#
+# The assignments, and not the whole file. A name appearing anywhere in a
+# makefile used to satisfy every list in it, which is how a boot file
+# came to be packed and never installed -- it was named in one list, and
+# the reading could not tell that from being named in the other. The same
+# reading is what says a source is distributed here, and a makefile
+# carries plenty that is not a distribution: the programs it builds, the
+# libraries it links, the arguments it hands a checker. A file named only
+# in one of those is a file the tarball does not carry and this would
+# call listed.
+#
+# Which assignments distribute is automake's answer rather than a list
+# here: EXTRA_DIST, and the _SOURCES, _HEADERS and _DATA of any target.
+# A new target's sources are therefore read the day the target is added.
 #
 # A build target named in the same file -- src/lib/libxpost.la, the
 # programs under src/bin -- is not a distributed file, so the comparison
 # is confined to the kinds of file the directory contributes.
+dist_assignments() {    # <makefile>
+    [ -f "$1" ] || return 0
+    tr -d '\r' < "$1" | sed 's/#.*//' | awk '
+        /^[A-Za-z_][A-Za-z0-9_]*[ \t]*[+]?=/ {
+            name = $1
+            sub(/[ \t]*[+]?=.*$/, "", name)
+            keep = (name == "EXTRA_DIST" || name ~ /_SOURCES$/ ||
+                    name ~ /_HEADERS$/ || name ~ /_DATA$/)
+        }
+        keep { print }
+        !/\\[ \t]*$/ { keep = 0 }
+    '
+}
+
 listed() {          # <makefile> <dir> <kinds>
     [ -f "$1" ] || return 0
-    tr -d '\r' < "$1" | sed 's/#.*//' \
+    dist_assignments "$1" \
       | tr ' \t\\' '\n\n\n' \
       | grep -E "^$2/[^/]" | grep -E "$3" || true
 }
@@ -87,6 +118,44 @@ hold "library source" "$tree/src/lib/Makefile.mk" src/lib "$work/lib" '\.[ch]$'
     > "$work/bin"
 hold "program source" "$tree/src/bin/Makefile.mk" src/bin "$work/bin" \
     '\.([ch]|rc|ico)$'
+
+# ... and the second claim those two directories make, which is a
+# different one from the first. A file reaches the tarball through any of
+# the assignments above; it reaches the compiler only through a target's
+# _SOURCES. So a source named in a header list alone is packed, shipped
+# and built by nothing -- present in every release and in no binary --
+# and the comparison above cannot see it, both lists being satisfied by
+# either. It is the same shape as a boot file packed and never installed.
+compiled() {        # <makefile> <dir>
+    dist_assignments "$1" \
+      | awk '/^[A-Za-z_][A-Za-z0-9_]*[ \t]*[+]?=/ {
+                 name = $1; sub(/[ \t]*[+]?=.*$/, "", name)
+                 keep = (name ~ /_SOURCES$/)
+             }
+             keep { print }
+             !/\\[ \t]*$/ { keep = 0 }' \
+      | tr ' \t\\' '\n\n\n' | grep -E "^$2/[^/]*\.c$" || true
+}
+for dir in src/lib src/bin; do
+    ( cd "$tree" && ls "$dir"/*.c 2>/dev/null ) | LC_ALL=C sort -u \
+        > "$work/csrc"
+    compiled "$tree/$dir/Makefile.mk" "$dir" | LC_ALL=C sort -u \
+        > "$work/ccompiled"
+    if [ ! -s "$work/ccompiled" ]; then
+        echo "FAILURES: $dir/Makefile.mk names no source for any target; the"
+        echo "      lists were emptied or their shape changed and this check"
+        echo "      no longer reads them"
+        exit 1
+    fi
+    LC_ALL=C comm -23 "$work/csrc" "$work/ccompiled" > "$work/cunbuilt"
+    if [ -s "$work/cunbuilt" ]; then
+        echo "FAIL: present in the tree and in no target's sources in"
+        echo "      $dir/Makefile.mk (a release would carry these and build"
+        echo "      none of them):"
+        sed 's/^/      /' "$work/cunbuilt"
+        fail=1
+    fi
+done
 
 # ---- the interpreter's PostScript, and both lists that carry it ----
 #
