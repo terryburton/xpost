@@ -449,11 +449,17 @@ A class states whether its page may arrive a band at a time with
 it. The raster and BGR devices take it back out, the page they hold being an
 embedder's and whole by contract; so do the window devices, whose drivers
 write the page whole, and every compiled device keeping a raster of its own.
-A class made by copying another carries what it was copied from, so pbm and
-tiff restate the declaration rather than inherit it, and
-tests/check-device-skeleton.sh holds every class to having said something.
+tests/check-device-skeleton.sh holds every class to having said
+something. pbm and tiff are copies of the grayscale and colour classes
+and keep the answer they were copied with, each having earned it: the
+comments at the head of data/pbmimage.ps and data/tiffimage.ps say what
+stood in the way of a banded page in each format and why it does not.
+
 A class states what one row of its raster costs the same way, as /.rowcost,
-a pair of the elements a row takes and its bytes.
+a pair of the elements a row takes and its bytes. That one a copy must
+restate rather than inherit, and the guard holds a derived class to it:
+a budget divided by a number nobody restated buys a band of some other
+height than the one it paid for.
 
 One raster, moved, rather than one device per band: a raster comes out of the
 half of virtual memory a restore does not rewind, and a device the page

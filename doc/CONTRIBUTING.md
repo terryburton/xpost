@@ -1,0 +1,232 @@
+# Working on xpost
+
+What this tree expects of a change, written down because most of it is
+not obvious from the files and none of it is enforced by anything a new
+contributor would meet first.
+
+Read `doc/MANUAL` for building and running, `doc/NEWINTERNALS` for how
+the interpreter works, and `doc/GATING.md` for the reference version of
+the test selection this page introduces.
+
+## Two builds, always
+
+The tree builds the PostScript object at two widths. The narrow build is
+primary; the wide build is equally important and neither is ever
+dropped. Set both up once and keep them:
+
+```
+  meson setup build
+  meson setup blarge -Dlarge-object=true
+  ninja -C build && ninja -C blarge
+```
+
+The names matter only in that everything below defaults to them
+(`tests/gate.sh` reads `XPOST_NARROW_BUILD` and `XPOST_WIDE_BUILD` if
+you would rather they were called something else).
+
+A width bug is not a rare bug. Field widths, composite bounds, the
+integer horizon and the shifts that pack an object all move with the
+object size, and a change that is right in one build can be wrong in the
+other while every test in front of you passes.
+
+## Gate the change, not the tree
+
+```
+  tests/gate.sh --narrow build --wide blarge
+```
+
+reads what the working tree has changed, works out which areas of the
+suite answer for it, runs those in the narrow build, and runs the tests
+that read the object width in the wide one. A documentation change gates
+in about twenty seconds; a change to the object and the memory it lives
+in runs the whole suite at both widths, because that is the layer a
+width is a property of.
+
+```
+  --area NAME     gate against an area outright, whatever changed
+  --since REF     take the change from what REF does not have
+  --list          say what would run, and stop
+  --batch         every test, both widths
+  -j N            tests at once (16 is the cap and the default)
+```
+
+Naming paths on the command line gates against those instead of against
+the working tree, which is how to ask what a change would cost before
+making it.
+
+The table behind it is `tests/gate-map`: which part of the tree each area
+answers for, and which tests answer for each area, in one table read both
+ways so the two directions cannot come to disagree. `doc/GATING.md`
+tabulates the areas and their sizes.
+
+Two things stop the table quietly shrinking a gate. A path no rule
+classifies falls through to a catch-all and selects the whole suite at
+both widths, so the failure mode of an incomplete table is a slow gate
+and never a small one. And every test the build defines must be named by
+some area, which `check-gate-map` holds the table to on every gate --
+otherwise a test could become one that no proportionate selection ever
+runs.
+
+Before a branch goes anywhere:
+
+```
+  tests/gate.sh --batch --narrow build --wide blarge
+```
+
+Every test, both widths. That is one run per batch of branches rather
+than one per branch per rebase: accumulate two or three green branches,
+rebase them together, gate once. A rebase whose commits touch no file
+the other branch touched does not need re-gating, but the disjointness
+has to be shown -- `git diff --name-only` over both, with no name in
+common -- rather than assumed.
+
+The cost profiles (`ninja -C build quick`, `full`, ...) are the other
+axis and answer a different question: how much of the suite ran, rather
+than whether what ran could have noticed what changed. Both are worth
+having and neither substitutes for the other.
+
+## The corpora
+
+Under `tests/corpus` are sets of real PostScript programs, rendered to
+catch the faults a unit suite does not reach, because a page of real
+PostScript is not a test and does things no test thought to. The
+programs are **not** committed -- they belong to other people -- so each
+corpus is a directory holding only what is ours, and its programs are
+fetched on demand:
+
+```
+  tests/corpus/fetch.sh [name ...]      populate them from their sources
+  tests/corpus/evaluate.sh [name ...]   render and compare what is there
+```
+
+Every step degrades to a skip when a corpus is absent, so none of it is
+a build-time dependency, and a checkout that has fetched nothing reports
+success over a suite that compared nothing. `ninja -C build everything`
+is the run that refuses to pass while anything merely skipped.
+
+A rendering difference is a lead, not a failure. What fails a corpus run
+is a crash, a hang, a program the corpus named and the run did not
+reach, and a disagreement between what drew and what the corpus says
+draws -- in both directions, an undeclared absence being a comparison
+quietly doing less than it was asked to and a declared absence that
+rendered being a reason that has lapsed. The registers that make those
+checkable -- `heldout`, `nopage`, `pages` -- and the reasoning behind
+each are in `tests/corpus/README.md`.
+
+**Do not fetch a corpus twice.** A fresh git worktree has the
+directories and none of the programs, and the obvious move -- run
+`fetch.sh` again -- asks other people's machines for a second copy of a
+file already on this disk. Take it from the checkout that has one:
+
+```
+  tests/corpus/share.sh                 from the default source
+  tests/corpus/share.sh /path/to/xpost  or from a named checkout
+```
+
+It copies rather than links, deliberately: a worktree is a place work
+happens and gets thrown away, and a link would point a harness at
+another checkout's files, where a stray write lands on the corpus
+everything else is measured against.
+
+## The guards
+
+Beside the tests that ask what the interpreter computes are guards that
+ask about the shape of the tree itself: that every device class declares
+what a row of its raster costs, that every operator's signature is
+written where the writer can find it, that every name a register lists
+still exists, that a wrapper cannot pass a run that crashed. They live
+in `tests/check-*.sh` and are the `guards` area of the map.
+
+They are cheap and they are the part of the suite most easily made
+useless, so the tree holds them to a discipline of their own.
+
+**A guard must be able to fail.** `tests/check-test-quality.sh` encodes
+nine defects found in this suite, each of which once let a test report
+success over broken code: a counter written into a scratch dictionary
+that `end` discards; a wrapper that captures output without the exit
+status; a wrapper that accepts an empty golden file; a test whose
+content was commented out; a verdict read off the last stage of a
+pipeline. Read it before writing a wrapper.
+
+**A guard must be reading the tree it was pointed at.** Every guard that
+derives a path from an argument passes it through `tests/guard-paths.sh`
+first, and `tests/check-guard-paths.sh` holds each one to three things
+at once: it refuses a decoy path, it succeeds on the real one, and it
+reports a population it refuses to let be zero. The middle one is what
+separates a guard that refuses a wrong path from a guard that refuses
+everything; the last is what stops a guard passing over a tree with
+nothing in it, which is the dangerous answer because it looks exactly
+like coverage.
+
+**Sabotage what you have just written.** A new test or guard that passes
+proves nothing until the thing it is supposed to catch has been put in
+front of it and it has failed. Break the code, watch it go red, put the
+code back. `doc/COVERAGE.md` ranks the untested code by consequence and
+puts first the guards nothing has ever made refuse -- conditions the
+suite reaches by the hundred million and never once makes come out the
+other way -- because the refusing side of a guard is the whole point of
+it. A dictionary-growth use-after-free was found on the far side of one
+of those.
+
+## Adding a test
+
+Register it in `meson.build` with a cost tag: `fast`, `slow` or
+`veryslow`. `check-test-cost` fails a registration that declares none, so
+a slow test added later cannot quietly settle into the quick profile.
+
+Name it in `tests/gate-map` under the area it answers for.
+`check-gate-map` fails a test named by no area, and fails a rule that
+names no test or wins no file -- a stale rule being one that quietly
+stopped selecting what it names.
+
+A shell wrapper reaches its verdict through `tests/verdict.sh`, which
+carries the rule that a run's own verdict counts only when the same run
+printed no failure, and that what a run left behind and what it said are
+separate answers a pass needs both of. A C test reports through
+`tests/xpost_test.h`, which carries the same rule one layer down.
+
+Renders are held to `tests/golden/manifest.sha256` and
+`manifest-large.sha256`, one per object width. A refactor that is meant
+to change no pixel is gated on those bytes.
+
+## Changing the C
+
+The one rule that will bite immediately, from `doc/NEWINTERNALS`:
+
+> Do Not hold a pointer while allocating.
+
+Virtual memory may move whenever it grows, so a `char *` into it is
+valid only until the next thing that allocates -- a new array, string,
+dict or name, a dict grown past its maxlength, a push onto a stack past
+its current level. Lines commented `//recalc` show how to refresh a
+pointer where one really must be held.
+
+Comments state what the code does now, not what it used to do or which
+bug it fixes; the history is in the history. Where a comment cites the
+language specification it cites it by section, and the section has to
+say what the comment claims.
+
+## The commit
+
+The subject is a subsystem prefix, a colon, and a lowercase imperative
+phrase:
+
+```
+  record: answer an entry carrying no operands with no span
+  tests: trim the blanks a count arrives with
+  device: state the image row writer's coverage rule as behaviour
+```
+
+The body is prose -- sentences and paragraphs, no bullet lists. It says
+what was wrong, what the tree now does, and why that is the right answer,
+in enough detail that someone reading the log a year later does not have
+to reconstruct the reasoning from the diff. Across the last hundred
+commits not one body uses a bullet.
+
+No issue numbers. A bare `#NNN` in a message renders as a link to
+whatever issue holds that number on whichever repository the message is
+read through, which is not the one meant.
+
+Where a message was written with the help of a language model, the last
+line says so; every one of the last three hundred commits carries that
+line.

@@ -1,79 +1,109 @@
 [![Linux CI](https://github.com/luser-dr00g/xpost/actions/workflows/linux.yml/badge.svg)](https://github.com/luser-dr00g/xpost/actions/workflows/linux.yml)
 [![Windows CI](https://github.com/luser-dr00g/xpost/actions/workflows/msys2.yml/badge.svg)](https://github.com/luser-dr00g/xpost/actions/workflows/msys2.yml)
 [![OS X CI](https://github.com/luser-dr00g/xpost/actions/workflows/osx.yml/badge.svg)](https://github.com/luser-dr00g/xpost/actions/workflows/osx.yml)
-[![Build Status](https://drone.io/github.com/luser-dr00g/xpost/status.png)](https://drone.io/github.com/luser-dr00g/xpost/latest)
-
-**Note**: The original README has moved to doc/INTERNALS, and has been superceded by doc/NEWINTERNALS.
 
 ## Xpost
 
 Xpost is a cross-platform interpreter for the PostScript Language
-written in C. It has autotools for building on unix systems, and
-Visual C solutions for building on Windows. Currently, a windows
-build cannot run because there's no installer to coordinate the 
-location for the postscript-language data files that are needed.
+written in C. It implements LanguageLevel 2, graphics included, and is
+built and tested on Linux, Windows and macOS.
+
+The whole interpreter is a library, `libxpost`. The `xpost` program is a
+small application over it (`src/bin/xpost_main.c`), and
+`src/bin/xpost_client.c` is a smaller example of embedding it in
+something else.
+
+A page can be painted into a raster (PGM, PPM, PBM, TIFF, PNG, JPEG), a
+window (X11 or Windows), a page description (PDF, PostScript with the
+Document Structuring Conventions, SVG), a framebuffer lent by the
+calling program, or nothing at all. Large pages need not be held whole:
+six of the raster devices can take their page a band at a time.
+`doc/MANUAL` lists every device and says how to choose one.
 
 The core of the interpreter was written by M Joshua Ryan (luser droog).
-The autotools build system, logging system, and win32 device were 
+The autotools build system, logging system, and win32 device were
 written by Vincent Torri. Individual files bear the copyright of their
 respective contributors.
 
-Xpost has rudimentary graphics support. MS Windows or X11 windows.
-PGM or PPM file output. Or a nulldevice, which executes the drawing
-operations and discards the output. A Raster device is in development
-which will yield the image data in BGR, BGRA, ARGB, or RGB byte orders
-to a calling program which uses xpost as a library component.
+Xpost is distributed under the BSD 3-clause licence; see `COPYING`.
 
-Xpost is currently distributed with a BSD-3-Clause licence which may
-allow its use in projects where Ghostscript is not available.
+## Building
 
-The entire interpreter is implemented as a library which is used
-by a relatively small application file /src/bin/xpost_main.c. A simpler
-example of using the libary is in /src/bin/xpost_client.c.
+Meson is the build the tree is developed and released against, and the
+one every CI lane uses. It wants meson 1.0 or later, ninja, and a C
+compiler.
 
-## Quick Installation Instructions
-
-Currently the intepreter source is in src/bin and the commands
-```
-  ./autogen.sh (or ./configure if autogen.sh has already been launched)
-  make
-```
-will create the interpreter binary xpost(.exe)? in src/bin.
-```
-  make install
-```
-will install the application, so xpost can be run as a command.
-
-Many more installation and configuration options desribed in ./INSTALL.
-
-## Meson Build System
-
-A meson support has been added. To install xpost with meson, run these commands:
 ```
   meson setup builddir
   ninja -C builddir
   ninja -C builddir install
 ```
 
-To run the test suite:
+Every library it uses is optional and sought rather than required, so a
+build with none of them present still produces an interpreter: libpng
+buys the png and pngalpha devices, libjpeg the jpeg device, freetype and
+fontconfig the scalable fonts and finding them by name, xcb the X11
+window device, and zlib the Flate filters and the compressed streams in
+a PDF.
+
+Install somewhere else:
+
+```
+  meson setup -Dprefix=/foo/bar builddir
+```
+
+and to see what an already configured build took:
+
+```
+  meson configure builddir
+```
+
+The option worth knowing about is `-Dlarge-object=true`, which widens
+the fields of the PostScript object. The tree is built and tested at
+both widths; the narrow one is primary and neither is ever dropped.
+
+To build the Doxygen documentation, into `builddir/doc`:
+
+```
+  meson compile -C builddir doc
+```
+
+`meson compile -C builddir splint` runs splint, where splint is
+installed; the target does not exist in a build configured without it.
+
+The tree also carries an autotools build (`./autogen.sh`, `make`). It is
+not what CI builds, and at present `make` does not run to completion
+where xcb is installed: `src/bin/xpost_view` is compiled against xcb and
+linked without it. Build with meson.
+
+## The test suite
+
 ```
   meson test -C builddir
 ```
 
-That runs all of it. Four profiles select less, from the one you can
-afford between edits to the one that leaves nothing out:
+That runs all of it. Five named profiles say how much, from the one you
+can afford between edits to the one that leaves nothing out:
+
 ```
-  ninja -C builddir quick     the fast tests             -- while editing
-  ninja -C builddir full      every cost                 -- before a commit
-  ninja -C builddir corpus    the differential corpus
-  ninja -C builddir vendor    a downstream consumer's suite
+  ninja -C builddir quick        the fast tests             -- while editing
+  ninja -C builddir full         every cost                 -- before a commit
+  ninja -C builddir corpus       the differential corpora
+  ninja -C builddir vendor       a downstream consumer's suite
+  ninja -C builddir everything   all of it, and nothing skipped
 ```
+
+`everything` is the only one of the five that is a verdict on the tree:
+it refuses to pass while any test merely skipped, so in a checkout whose
+corpora have not been fetched it fails, and says which tests it failed
+over.
 
 They are meson suite selections, and the suites are two independent
 axes: what a test is about (`xpost`, `corpus`, `vendor`, `memacct`) and
 what it costs (`fast`, `slow`, `veryslow`). Either can be named without
 the other, so any crossing is available by hand -- the corpora that run
 quickly, without the ones that take minutes, being the useful one:
+
 ```
   meson test -C builddir --suite corpus --no-suite veryslow
 ```
@@ -100,8 +130,8 @@ memory held past its last use, a read outside the object it belongs to
 that hands back a plausible value -- which is why the run before a
 commit is `full`.
 
-The differential corpus under `tests/corpus` is part of the suite; it
-is fetched on demand and skips until you populate it (see
+The differential corpora under `tests/corpus` are part of the suite;
+they are fetched on demand and skip until you populate them (see
 `tests/corpus/README.md`).
 
 The `vendor` profile runs the test suite of a downstream consumer,
@@ -112,31 +142,28 @@ program does rather than the way a conformance test does. Point
 profile runs it; without one it skips, so it is never a build
 dependency.
 
-You can install Xpost in another location:
-```
-  meson setup -Dprefix=/foo/bar builddir
-  ninja -C builddir
-  ninja -C builddir install
-```
+A profile is not the only way to select. `tests/gate.sh` runs the tests
+a *change* can be answered by, at the widths it can be wrong at, which
+is what to run in the edit-run-edit loop. `doc/GATING.md` says which run
+answers which question.
 
-To know the options of an already configured build:
-```
-  meson configure builddir
-```
-The meson build system is lacking some features like splint and valgrind, and
-will be added in the future.
+## Where the rest is written down
 
-To build the doc:
-```
-meson compile -C builddir doc
-```
-
-To run `splint`
-```
-meson compile -C builddir splint
-```
+| | |
+| --- | --- |
+| `doc/MANUAL` | using xpost: building it, running it, the devices, the interactive session, and the language by example |
+| `doc/CONTRIBUTING.md` | working on xpost: the gate, the guards, the corpora, and what a commit looks like |
+| `doc/GATING.md` | which test run answers which question |
+| `doc/NEWINTERNALS` | how it works: the object, the memory, the operators, the devices, the recorded page and the band loop |
+| `doc/INTERNALS` | the module map: which file holds what, and the parts of the memory file nothing else describes |
+| `doc/ROOTS` | what the garbage collector marks from, and which bank each root lives in |
+| `doc/COMPAT` | where each user-visible name comes from |
+| `doc/COVERAGE.md`, `doc/COVERAGE-large.md` | how much of the C sources a full run executes, one per object width |
+| `COMPLIANCE` | operator by operator: implemented, partly, or not; then the behavioural deviations and the implementation limits |
+| `data/DICTIONARIES.md` | every dictionary the interpreter carries, and what belongs in it |
 
 ## Support
 
-Questions about Xpost can be addressed in the Google Group xpost-discuss
-https://groups.google.com/forum/#!forum/xpost-discuss or in the Github issues.
+Questions about Xpost can be addressed in the Google Group
+[xpost-discuss](https://groups.google.com/g/xpost-discuss) or in the
+GitHub issues.
