@@ -4576,7 +4576,8 @@ if host_machine.system() == 'linux'
     link_args: internals_link_args,
     include_directories: [ config_dir, include_directories('src/lib') ],
     install: false)
-  test('record-cost', record_cost_exe, suite: cost_fast + ['memacct'])
+  test('record-cost', record_cost_exe, suite: cost_fast + ['memacct'],
+    env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 endif
 
 # Where a record puts what it need not hold, and what happens when the
