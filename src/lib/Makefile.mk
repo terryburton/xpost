@@ -14,6 +14,7 @@ src/lib/xpost_array.c \
 src/lib/xpost_compat.c \
 src/lib/xpost_context.c \
 src/lib/xpost_dev_bgr.c \
+src/lib/xpost_dev_driver.c \
 src/lib/xpost_dev_generic.c \
 src/lib/xpost_dev_jpeg.c \
 src/lib/xpost_dev_png.c \
