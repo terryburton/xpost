@@ -56,6 +56,23 @@ if [ ! -s "$work/files" ]; then
     exit 1
 fi
 
+# Those files have to carry awk, not merely be named as though they
+# might. A tree of empty files has the right shape and holds no program,
+# and a rule reading it finds nothing for the same reason it finds
+# nothing in a tree written correctly -- so the two would read alike, and
+# the rule would be answering about a tree it never read. The count is
+# well under what this suite carries, being a floor rather than a census.
+carrying=0
+while IFS= read -r f; do
+    if grep -q 'awk' "$f"; then carrying=$((carrying + 1)); fi
+done < "$work/files"
+if [ "$carrying" -lt 20 ]; then
+    echo "FAILURES: only $carrying of the files read carry an awk program,"
+    echo "      so this tree cannot be told from one whose files are empty"
+    echo "      and the rule would report success having read nothing"
+    exit 1
+fi
+
 # A print or printf, then a redirection, then a target that begins with a
 # name, a field or a string and carries straight on into another term.
 # The three shapes are `> name "..."`, `> $1 "..."` and `> "..." name`.
