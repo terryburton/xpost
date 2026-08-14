@@ -28,7 +28,8 @@
 #   reported and held to the space the device painting its page declares,
 #   and the run is held to covering more than one of them.
 #
-#   The marks each band was given. This is the half no page can show. A
+#   The marks each band was given, wherever they can be counted. This is
+#   the half no page can show. A
 #   mark played into a run of rows it does not reach paints nothing, so a
 #   replay handed the whole page for every band puts out exactly the page
 #   a replay handed each band's own rows puts out; the pixels are equal
@@ -39,12 +40,19 @@
 #   page has, the bands must differ from one another, and their total
 #   must stay near the marks rather than near the marks times the bands.
 #
+#   That count is available where the class assembles the page. A device
+#   whose page is written from compiled code never reaches the class's
+#   row writer, so its bands are compared as pages and counted by nobody;
+#   the run says which kind each device is and this reports it rather
+#   than leaving a device looking counted.
+#
 #   $1  path to the built xpost binary
 #   $2  path to band_device_test.ps
 set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # Each run is started in a directory of its own, so a page names the same
 # file whichever device wrote it and the two are compared across the
@@ -71,12 +79,17 @@ note() {
     fail=1
 }
 
-# $1 the device selection, $2 the directory it runs in
+# $1 the device selection, $2 the directory it runs in. Answers 2 where
+# the device is not built into this interpreter, which is what an
+# optional member may legitimately say.
 render() {
     mkdir -p "$work/$2" || return 1
     r_out=$( cd "$work/$2" && "$xpost" -q $ns -d "$1" "$script" \
              </dev/null 2>&1 )
     r_st=$?
+    case "$r_out" in
+        *"wrong device"*) return 2 ;;
+    esac
     verdict_run "$r_st" "$r_out" "the $1 run" || return 1
     printf '%s\n' "$r_out" > "$work/$2.log"
     return 0
@@ -85,23 +98,59 @@ render() {
 # $1 directory, $2 field name; prints the field's lines
 field() { sed -n "s/^$2 //p" "$work/$1.log"; }
 
-# The devices a record can be played into. Each is rendered twice: once
-# with the record between the page and it, and once by itself.
+# The devices a record can be played into: DEVICE_FLEET_BANDS, which is
+# the recording class's own roster of play targets and is held to it by
+# check-device-roster.sh. It is read rather than listed here, because a
+# list here is one a device added to the class's roster is not on -- and
+# then it is played into by nothing, with the class saying it can be and
+# no test saying it is not.
 #
-# Selecting one of these by name selects banding, so the run that wants
-# the device by itself asks for the mode that holds the page whole. The
-# comparison is between the two routes, and naming the device alone
-# would now name the same route twice.
-formats='ppm pgm tiff'
-
-for f in $formats; do
-    render "$f:band" "rec-$f" || fail=1
+# Each is rendered twice: once with the record between the page and it,
+# and once by itself. Selecting one of these by name selects banding, so
+# the run that wants the device by itself asks for the mode that holds
+# the page whole. The comparison is between the two routes, and naming
+# the device alone would now name the same route twice.
+formats=
+unbuilt=
+for f in $DEVICE_FLEET_BANDS; do
+    render "$f:band" "rec-$f"; rc=$?
+    if [ "$rc" -eq 2 ]; then
+        unbuilt="$unbuilt $f"
+        echo "SKIP $f (not built in)"
+        continue
+    fi
+    [ "$rc" -eq 0 ] || fail=1
     render "$f:whole" "dir-$f" || fail=1
+    formats="$formats $f"
 done
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: a page could not be rendered"
     exit 1
 fi
+
+# A device that could not be asked is one this build has no library for,
+# and nothing else. A roster that skipped from end to end compares
+# nothing and reports the same SUCCESS as one that held.
+floor=0
+for f in $DEVICE_FLEET_BANDS; do
+    case " $DEVICE_FLEET_OPTIONAL " in *" $f "*) continue ;; esac
+    floor=$((floor + 1))
+done
+nran=0
+for f in $formats; do nran=$((nran + 1)); done
+if [ "$nran" -lt "$floor" ]; then
+    echo "FAILURES: $nran of the play targets were rendered and at least"
+    echo "      $floor of them are built from this tree; the rest said they"
+    echo "      were not built in, which is a build to fix"
+    exit 1
+fi
+for f in $unbuilt; do
+    case " $DEVICE_FLEET_OPTIONAL " in
+        *" $f "*) ;;
+        *) echo "FAILURES: $f could not be asked and needs no optional library"
+           exit 1 ;;
+    esac
+done
 
 nspace=$(for f in $formats; do field "rec-$f" NCOMP; done | sort -u | wc -l)
 if [ "$nspace" -lt 2 ]; then
@@ -132,6 +181,20 @@ for f in $formats; do
         continue
     fi
     echo "OK   a record played into $f holds the $rec colour value(s) $f takes"
+
+    # Whether the marks a band was played can be counted here at all: the
+    # count is taken in the class's row writer, and a device whose page is
+    # written from compiled code never reaches it.
+    counted=$(field "rec-$f" ASSEMBLY)
+    if [ "${counted:-}" != class ] && [ "${counted:-}" != compiled ]; then
+        note "the $f run did not say whether its page is assembled by the" \
+             "class, so nothing here knows what its band counts mean"
+        continue
+    fi
+    [ "$counted" = compiled ] &&
+        echo "NOTE $f assembles its page in compiled code, so the marks each" \
+             "band was played are counted by nobody here; its pages are" \
+             "compared like any other's"
 
     # The page put out whole through the record, against the page the
     # device paints with no record at all.
@@ -181,6 +244,9 @@ for f in $formats; do
             echo "      is not the page put out whole"
             continue
         fi
+        # ... and everything below is read out of the class's row writer,
+        # which a page assembled in compiled code does not go through
+        [ "$counted" = compiled ] && continue
         # The page was divided, and divided into runs that between them
         # are the page: every row of it reached the writer, once.
         if [ "$nb" -lt 2 ]; then
@@ -239,12 +305,14 @@ for f in $formats; do
         echo "      each page three ways; the checks above were made over an"
         echo "      empty list and held nothing"
         fail=1
-    else
+    elif [ "$counted" = class ]; then
         echo "OK   $f: $nband banded pages are the page put out whole, each" \
              "played the marks its own rows meet"
+    else
+        echo "OK   $f: $nband banded pages are the page put out whole"
     fi
 done
 
 [ "$fail" -eq 0 ] || exit 1
-echo "SUCCESS"
+echo "SUCCESS ($nran device(s) a record was played into)"
 exit 0
