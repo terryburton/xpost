@@ -157,6 +157,23 @@ The register is checked by `tests/check-c-held-objects.sh`, which fails
 on a holder that is not in it. The collector cannot be taught to look in
 a variable it has never heard of, so nothing else would catch one.
 
+The converse case is a holder with nothing to register. A device's
+C-level instance state is a block outside virtual memory, reached through
+the handle its instance dictionary carries under `/Private`, so it is
+exempt from `restore` the way raster memory is (PLRM 3.7.3). A recording
+device's marks are held there: the record holds no `Xpost_Object` at all,
+so there is nothing for the walk to reach and nothing to register, and
+past a threshold its bytes are in an unnamed scratch file and are not in
+the process's memory either. So `restore` does not reach a record and
+`vmstatus` does not count it, however large the drawing it holds. What
+the walk does reach is the device instance dictionary, and the record
+goes when that device is retired and its `Destroy` runs.
+
+The rasters of the compiled devices that keep a buffer of their own --
+png, jpeg, raster and BGR -- are outside virtual memory for the same
+reason and are likewise uncounted; the raster classes' `ImgData` rows,
+above, are the ones `vmstatus` sees.
+
 Which bank a collection may sweep
 ---------------------------------
 

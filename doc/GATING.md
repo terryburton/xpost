@@ -1,13 +1,8 @@
 # What to run, and when
 
-The suite is three hundred and eleven tests at two object widths. Run
-whole, at both widths, it costs about ten minutes of wall clock and
-sixteen cores. That is the right price for a verdict on the tree and the
-wrong price for an edit, and paying it for every edit is how a suite
-stops being run at all.
-
-This page says which run answers which question, so that a piece of work
-can name one rather than describe one.
+The suite is 316 tests at two object widths. This page says which run
+answers which question, so that a piece of work can name one rather than
+describe one.
 
 ## The per-change gate
 
@@ -41,10 +36,10 @@ making it.
 | `filter` | files, filters, the scanner's reading | 38 |
 | `guards` | the checks over the tree's own shape, and the path helper they share | 43 |
 | `graphics` | paths, paint, colour, clipping, images | 49 |
-| `record` | the recorded page, its spans, the band devices | 29 |
+| `record` | the recorded page, its spans, the band devices | 34 |
 | `device` | what a page is painted into and written out as | 63 |
 | `language` | operators, errors, names, the programs that install them | 103 |
-| `vm`, `build` | the object and its memory; the build description | all 311, both widths |
+| `vm`, `build` | the object and its memory; the build description | all 316, both widths |
 
 Counts include the four guards every gate runs whatever was touched, and
 overlap: a test may answer for several areas.
@@ -63,14 +58,13 @@ change is gated against:
 * a change reaching the object, the memory it lives in, or the build
   description runs its whole selection at both widths;
 * every other change runs the wide build over the tests that read the
-  width directly -- twenty-seven of them, about fifteen seconds.
+  width directly -- twenty-seven of them, stated in the `width` area of
+  the map.
 
-Those twenty-seven are a tripwire and not a verdict. They were derived
-by running the whole suite at both widths and comparing the two records
-test by test, and they are stated in the `width` area of the map,
-together with the three banding tests that also differ by width and are
-too expensive to run on every edit. The wide run of everything is the
-batch gate.
+Those twenty-seven are a tripwire and not a verdict. Three further tests
+differ by width and are named in the map's prose rather than run on
+every edit, being too expensive for one: band-writer, band-replay-cost
+and band-campaign. The wide run of everything is the batch gate.
 
 ## The batch gate
 
@@ -102,26 +96,14 @@ to pass while any test merely skipped. `full` is every test but the ones
 needing something the tree does not carry, and a green `full` says
 nothing whatever about the corpus or the consumer suite.
 
-## What each costs
-
-Measured on sixteen cores of a machine also doing other work, so read
-the ratios rather than the seconds. The old rule was the whole suite at
-both widths whatever the change was, which is the first row.
-
-| gate | narrow | wide | both |
-| --- | --- | --- | --- |
-| everything, both widths | 5m04s | 5m12s | 10m16s |
-| a change to doc/ | 2s | 7s | 9s |
-| a change to one device | 32s | 15s | 47s |
-| a change to the object | 5m04s | 5m12s | 10m05s |
-
-So a doc change costs a hundredth of what it used to and a device change
-a fourteenth, and a change to the object costs exactly what it did,
-which is the point: what was dropped is the re-verification of things
-the change could not reach.
+Every test declares its cost where it is registered, as `fast`, `slow`
+or `veryslow`, and `tests/check-test-cost.sh` fails a registration that
+declares none. The profiles above are ranges over those tags, so what a
+selection costs follows from them rather than from a table of seconds
+kept somewhere else.
 
 The whole-suite figure is set by one test. The banding campaign takes
-five minutes of it and everything else fits alongside it several times
-over -- the same suite without it runs in one minute forty-three. It is
-reached first so that a run does not spend its opening minute doing
-something else, and it is outside every selection that cannot see it.
+minutes of it and everything else fits alongside it several times over.
+It is reached first so that a run does not spend its opening minute
+doing something else, and it is outside every selection that cannot see
+it.

@@ -332,3 +332,109 @@ PS<3>{{{
 PS<4>
 
 
+== Big pages, and holding one a band at a time ==
+
+A page's raster costs its width times its height whatever is drawn on
+it, and at large sizes that is what a run runs out of. Six devices can
+take their page a band at a time instead -- pgm, ppm, pbm, tiff, png
+and jpeg -- and hold one run of rows rather than the whole page. What
+is held in place of it is the marks, so a big page costs what its
+drawing costs rather than what its paper costs. Every other device
+holds the whole page.
+
+A page small enough to fit in one band is held whole, so this costs a
+small page nothing and there is nothing to turn on. A device may be
+given a mode after a colon to say otherwise:
+
+  xpost -d pgm       -o page.pgm job.ps    banded where banding pays
+  xpost -d pgm:whole -o page.pgm job.ps    the page held whole
+  xpost -d pgm:band  -o page.pgm job.ps    the page held as its marks
+
+The bare name is the only one of the three that is weighed. The other
+two say which route they want at any page, so the three are compared
+by changing one word.
+
+What :band settles is that the page is held as its marks whatever its
+size. How deep a band is still comes from the budget, so a page the
+budget covers is held in one band that covers it, and CurBandHeight
+reads 0 there just as it does for :whole.
+
+A mode outside those two words is refused before the run begins,
+naming what was given and what the device takes. It has to be: a
+selection carrying any mode at all is one the weighing leaves alone,
+so pgm:bnad accepted would turn the weighing off without saying so. A
+device whose page cannot arrive a band at a time takes neither word,
+so bgr:band is refused too. raster:FORMAT is a different selector on a
+different device and still means the pixel format.
+
+  -d record   selects the recording class itself. It names no device
+              to play into, so it plays into the colour raster, which
+              makes it the same as -d ppm:band. It takes no mode.
+
+Nothing in a page description chooses any of this. PLRM Appendix G
+calls banddevice an obsolete LanguageLevel 1 device setup operator
+that should never be used in a page description, so a program asks for
+a grayscale page with /OutputDevice /pgm and how its marks are held is
+settled by whoever runs the interpreter.
+
+
+== Where a banded page's marks go ==
+
+  -s, --spill=auto|never|always
+
+  auto     in memory while they come to less than the raster banding
+           the page saves, and in a scratch file past that. This is
+           the default
+  never    in memory whatever they come to, touching no scratch file
+           at all. What the page costs then follows its drawing with
+           no limit
+  always   in a scratch file from the first mark
+
+The scratch file has no name, nothing else can open it, and it goes
+when the run does.
+
+Under auto and always, whether a scratch file can be made is settled
+when the run starts, by making one and writing to it -- a permissions
+check would say yes for a directory on a full filesystem, for one a
+system-call filter refuses, and for one mounted read-only. Under
+always a run that cannot have one is refused there with an ioerror.
+Under auto the run is told once, naming the directory and the reason
+the system gave, and goes on; a page that then needs to spill holds
+its marks in memory instead. That message goes out at the log's error
+level, so -q does not gate it: -q sets the interpreter's own quiet
+flag and does not touch the log level at all.
+
+Under never nothing reaches the scratch directory, not even to look,
+which is one of the reasons the state exists -- a sandbox forbidding
+file creation wants it. What is being chosen is unbounded memory.
+Nothing else ever selects never: a scratch directory that refuses a
+file does not demote a run to it.
+
+
+== What a program can ask about it ==
+
+currentsystemparams reports three names. All three are reported and
+none can be set, for the reason above.
+
+  CurBandHeight   the rows the device now being painted into holds of
+                  its page at once, and 0 where it holds the page
+                  whole
+
+  RecordSpill     what this run asked for: /never, /auto or /always
+
+  CurRecordSpill  where the page in hand actually has its marks:
+                  /memory, /file, or /refused, meaning in memory
+                  having been refused a file it wanted
+
+Two names for the spill rather than one, because they can differ: a
+run that asked to be weighed, on a machine that will take no scratch
+file, reports auto and refused, and a reader given only the first
+could not tell that from a page that never needed to spill.
+
+How deep a band is comes from a byte budget divided by what one row of
+the device's raster costs. The budget is four million bytes and it
+cannot be set at run time. It covers the sheets a page is normally cut
+to, so those are painted directly: letter and A4 and A3 in colour all
+read 0. A letter sheet at 300 dpi in grey, which is 2550 by 3300,
+reads 1568; a 612 by 40000 strip in colour reads 2178.
+
