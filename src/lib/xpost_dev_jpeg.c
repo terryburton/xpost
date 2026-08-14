@@ -148,6 +148,9 @@ typedef struct
     int bufowned;
 } PrivateData;
 
+/* Defined below, next to the stream it gives up. */
+static void _reclaim(void *block);
+
 static Xpost_Object namePrivate;
 static Xpost_Object namewidth;
 static Xpost_Object nameheight;
@@ -278,6 +281,14 @@ int _create_cont(Xpost_Context *ctx,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
+    /* What this device holds is a raster and the stream a page goes out
+       through, which are not virtual memory: a device the run never
+       retires -- one a restore took back, or one nothing named by the
+       time a collection came round -- would take them with it. This is
+       what gives them up there. A device the run does retire has given
+       them up already and leaves this nothing to do. */
+    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
+                                   sizeof(PrivateData), _reclaim);
 
     private.width = width;
     private.height = height;
@@ -603,6 +614,27 @@ static void _stream_drop(PrivateData *p)
     p->out = NULL;
     free(p->ground);
     p->ground = NULL;
+}
+
+/* Give up the memory the instance names: the compressor a page was
+   going out through, and the raster where the device owns it. Called
+   from the collector with the block the instance state is kept in, so
+   it touches nothing in virtual memory. The page a device reclaimed
+   part way through was compressing ends where it got to, nothing being
+   left to write the rest with; the file it was going to is the page
+   machinery's, and is given back where it was opened. A device the run
+   retired has given the rest up already and leaves this nothing to
+   do. */
+static void _reclaim(void *block)
+{
+    PrivateData *p = block;
+
+    _stream_drop(p);
+    /* a raster handed to the client is the client's to give back */
+    if (p->bufowned)
+        free(p->buf);
+    p->buf = NULL;
+    p->bufowned = 0;
 }
 
 /* Start the stream this page is compressed through: the file the page

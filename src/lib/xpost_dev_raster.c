@@ -110,6 +110,21 @@ typedef struct
                      client through OutputBufferOut, so Destroy frees it */
 } PrivateData;
 
+/* Give up the raster the instance names, where the device owns it: a
+   raster handed to the client is the client's to give back. Called from
+   the collector with the block the instance state is kept in, so it
+   touches nothing in virtual memory. A device the run retired has given
+   the raster up already and leaves this nothing to do. */
+static void _reclaim(void *block)
+{
+    PrivateData *p = block;
+
+    if (p->bufowned)
+        free(p->buf);
+    p->buf = NULL;
+    p->bufowned = 0;
+}
+
 
 static Xpost_Object namePrivate;
 static Xpost_Object namewidth;
@@ -222,6 +237,12 @@ int _create_cont(Xpost_Context *ctx,
                             XPOST_HANDLE_DEVICE, sizeof(PrivateData));
     if (ret)
         return ret;
+    /* What this device holds is a raster, which is not virtual memory:
+       a device the run never retires -- one a restore took back, or one
+       nothing named by the time a collection came round -- would take
+       its raster with it. This is what gives it up there. */
+    (void)xpost_handle_reclaim_set(ctx, privatestr, XPOST_HANDLE_DEVICE,
+                                   sizeof(PrivateData), _reclaim);
 
     private.width = width;
     private.height = height;
