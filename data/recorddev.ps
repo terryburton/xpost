@@ -518,14 +518,23 @@ setglobal
     % is far heavier than its sheets suggest is a page this number is not
     % answering for.
     %
+    % Four million is what a run that names no budget of its own works
+    % to. An invocation may name another, and the one it names is written
+    % under this name as that run's device is made (.settlebandbudget,
+    % data/device.ps), before the first page is weighed; so what stands
+    % here is the budget in force either way, and whichever of the two
+    % readings above is taken is taken of that.
+    %
     % It is not a page-device parameter and must not become one. PLRM
     % Appendix G declares the band-device setup operators obsolete and
     % bars them from page descriptions, so a program may not choose how
-    % its marks are held. What a run chooses instead is the device:
-    % selecting one that bands selects banding, and selecting it with the
-    % mode that holds the page whole does not. Being told what happened is
-    % the other thing: currentsystemparams reports the band a page was
-    % held in and there is no way to write it back.
+    % its marks are held. What a run chooses instead is the device and
+    % this number: selecting a device that bands selects banding,
+    % selecting it with the mode that holds the page whole does not, and
+    % naming a smaller budget is how a run bands a page four million
+    % would cover. Being told what happened is the other thing:
+    % currentsystemparams reports the budget and the band a page was held
+    % in, and there is no way to write either back.
     /.bandbytes 4000000
 
     % IMAGE  Flush  -
