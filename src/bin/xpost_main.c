@@ -391,6 +391,21 @@ _xpost_main_list_add(char ***list, int *count, const char *str)
     return 1;
 }
 
+/* Give back a list and everything in it, leaving it as one that has
+   taken nothing. Answering for a list already given back costs nothing,
+   so an ending may call it without knowing which ones were reached. */
+static void
+_xpost_main_list_free(char ***list, int *count)
+{
+    int n;
+
+    for (n = 0; n < *count; ++n)
+        free((*list)[n]);
+    free(*list);
+    *list = NULL;
+    *count = 0;
+}
+
 static void
 _xpost_main_interrupt(int sig)
 {
@@ -497,22 +512,19 @@ int main(int argc, char *argv[])
                    nobody could follow is a complaint and goes with the
                    rest of them */
                 _xpost_main_usage(stdout, filename);
-                xpost_quit();
-                return EXIT_SUCCESS;
+                goto quit_asked;
             }
             else if ((!strcmp(argv[i], "-V")) ||
                      (!strcmp(argv[i], "--version")))
             {
                 _xpost_main_version(filename);
-                xpost_quit();
-                return EXIT_SUCCESS;
+                goto quit_asked;
             }
             else if ((!strcmp(argv[i], "-L")) ||
                      (!strcmp(argv[i], "--license")))
             {
                 _xpost_main_license();
-                xpost_quit();
-                return EXIT_SUCCESS;
+                goto quit_asked;
             }
             else if ((!strncmp(argv[i], "-D", 2)) ||
                      (!strcmp(argv[i], "--define")))
@@ -824,7 +836,27 @@ int main(int argc, char *argv[])
              ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
+    /* What the run was asked for has been printed and there is nothing
+       further to do, which is an ending like the one below and gives
+       back what the reading had taken in the same way. Kept apart from
+       it only by what it answers the caller with: this is the run doing
+       what it was told. */
+  quit_asked:
+    _xpost_main_list_free(&defs, &num_defs);
+    _xpost_main_list_free(&incs, &num_incs);
+    xpost_quit();
+
+    return EXIT_SUCCESS;
+
   quit_xpost:
+    /* An ending reached from anywhere in the option reading gives back
+       whatever the reading had taken by then. The lists are given back
+       on the way through as well, once what they hold has been passed
+       on, and giving back a list already given back costs nothing --
+       which is what lets one ending answer for every way of reaching
+       it. */
+    _xpost_main_list_free(&defs, &num_defs);
+    _xpost_main_list_free(&incs, &num_incs);
     xpost_quit();
 
     return EXIT_FAILURE;
