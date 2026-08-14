@@ -953,18 +953,16 @@ countink 20 ge (the nested-text glyph paints) assert
 initgraphics
 
 % a base font dictionary states the type of the program behind it,
-% and its conventions follow: a Type 42 font carries its program in
-% sfnts over a unit character space, a Type 1 dictionary a
-% thousandth
+% and its conventions follow: a Type 1 or Type 2 dictionary works over
+% a thousandth of the em and a Type 2 holds its charstrings as strings,
+% while a Type 42 carries its program in sfnts over the em itself
 basefont null ne {
+    basefont /FontType get dup 1 eq exch dup 2 eq exch 42 eq or or
+    (a base font states its backing program's type) assert
     basefont /FontType get 42 eq {
-        basefont /sfnts known
-        (a Type 42 base font carries its program in sfnts) assert
         basefont /FontMatrix get 0 get 1.0 sub abs 0.0001 lt
         (Type 42 character space is the em) assert
     }{
-        basefont /FontType get dup 1 eq exch 2 eq or
-        (a base font states its backing program's type) assert
         basefont /FontMatrix get 0 get 0.001 sub abs 0.0001 lt
         (Type 1 and 2 character space is a thousandth of the em) assert
         basefont /FontType get 2 eq basefont /CharStrings known and {
@@ -976,6 +974,43 @@ basefont null ne {
         } if
     } ifelse
 } if
+
+% The Type 42 conventions are not left to whichever face the host
+% resolves for the base font. That face is a Type 1, a Type 2 or a
+% Type 42 according to the machine, so an arm holding a Type 42 to them
+% runs on one host and not on another with nothing said either way. A
+% TrueType-backed face is sought by name instead, and the run says
+% which of the two it got: the conventions checked against a face this
+% host resolves, or no such face here and them left unchecked. Nothing
+% is sought where the base font itself did not resolve, since that is
+% the build carrying no fonts at all.
+/ttfont null def
+/ttname null def
+basefont null ne {
+    [ /DejaVuSans /LiberationSans /NotoSans /FreeSans /Arial /Helvetica ] {
+        /ttname exch def
+        { ttname findfont } stopped {
+            clear $error /newerror false put
+        }{
+            dup type /dicttype eq {
+                dup /FontType known { dup /FontType get 42 eq }{ false } ifelse
+            }{ false } ifelse
+            { /ttfont exch def }{ pop } ifelse
+        } ifelse
+        ttfont null ne { exit } if
+    } forall
+} if
+ttfont null eq {
+    (note: no Type 42 face resolves here, so the sfnts and em) print
+    ( conventions go unchecked\n) print
+}{
+    ttfont /sfnts known
+    (a Type 42 font carries its program in sfnts) assert
+    ttfont /FontMatrix get 0 get 1.0 sub abs 0.0001 lt
+    (a Type 42 character space is the em) assert
+    (note: the Type 42 conventions were checked against a face this) print
+    ( host resolves\n) print
+} ifelse
 
 % a sub-pixel stroke's round and projecting caps reach half the width
 % past the segment ends; a butt cap adds nothing
