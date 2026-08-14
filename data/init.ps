@@ -1841,6 +1841,10 @@ currentglobal true setglobal
         % caught one does not leave the dictionary stack deeper than it
         % was found.
         dup //.xpostsys /.checkpagehandlers get exec pop
+        % and a device feature whose value is not of the type the
+        % machinery reads it as, refused where the request naming it can
+        % still be told about it
+        dup //.xpostsys /.checkpagefeatures get exec pop
         17 dict begin
         /pd exch def
         % PLRM 6.2.6: an operator that deactivates the page device calls

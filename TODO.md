@@ -69,8 +69,9 @@ described in `doc/INTERNALS`.
 **Anti-aliasing, Porter/Duff compositing, an alpha channel, and the
 `/DeviceN` colour space.** Three of the four are done. `/DeviceN` is
 implemented. Glyphs are anti-aliased -- `/TextAlphaBits` is a device
-parameter, 4 by default (`data/image.ps`), and a bilevel page takes it
-back down to 1. An output alpha channel is the `pngalpha` device.
+parameter naming how many bits of a glyph's edge coverage the device is
+sent, 8 by default (`data/image.ps`), and a bilevel page takes it back
+down to 1. An output alpha channel is the `pngalpha` device.
 Porter/Duff compositing is not implemented and no operator asks for it.
 
 **Expose Type 1 font data to PostScript, and accept a modified Type 1

@@ -178,6 +178,12 @@ typedef struct clipband
    once per glyph. */
 static Xpost_Object namedotrecordglyph;
 
+/* The bits of coverage a glyph raster carries. A rasterised glyph
+   arrives as one byte of coverage per pixel, so this is the most a
+   device asking for a glyph's edge coverage can be sent, whatever
+   number it asks for. */
+#define COVERAGE_BITS 8
+
 /* How the clip region in force meets device pixels. The glyph raster
    route paints pixels straight through the device, so it meets the
    region itself rather than through the fill pipeline; what it meets is
@@ -200,7 +206,7 @@ typedef struct textstate
     real cdmat[4];          /* character space -> device space (FontMatrix o CTM) */
     int cdmat_ok;           /* the matrix above is usable */
     Xpost_Object blendpix;  /* the device's BlendPix method, or invalid */
-    int blend;              /* anti-alias: TextAlphaBits > 1 and BlendPix present */
+    int blend;              /* bits of edge coverage the device is sent, 0 for none */
     int vector;             /* the device consumes glyph outlines, not bitmaps */
     int extents;            /* the device consumes glyph ink extents, not marks */
     Xpost_Object fillrect;  /* the device's FillRect, for extent reporting */
@@ -1626,16 +1632,18 @@ int _clip_band_row(const textstate *ts, int y)
     return lo;
 }
 
-/* Whether a glyph's partly covered edge pixels reach this device as
-   coverage-weighted blends rather than as whole pixels, and what blends
-   them if they do.
+/* How many bits of a glyph's partly covered edge pixels reach this
+   device, and what blends them where any do. Zero says the device is
+   sent whole pixels and the edge is hard.
 
    Three things have to hold. The device must offer BlendPix, since that
    is the call a blend is made through. Its class must state
    TextAlphaBits above one, which is what says its stored pixel can hold
    a value between covered and not; a page-device request may name that
    number, so what arrives here is the run's answer rather than the
-   class's.
+   class's. Eight is as many as there are: the rasteriser resolves a
+   coverage to a byte, so a device asking for more is answered with the
+   whole of what there is rather than with a precision nobody has.
 
    And the device must not be one that shows a grey as a pattern of
    pixels. Such a device declares ScreenPaint and stores a grey by
@@ -1675,7 +1683,29 @@ int _text_blends(Xpost_Context *ctx,
                                 devdic, key))
         return 0;
 
-    return 1;
+    return tab.int_.val >= COVERAGE_BITS ? COVERAGE_BITS : (int)tab.int_.val;
+}
+
+/* A coverage rounded to the nearest of the values a device asking for
+   that many bits of it can tell apart. Eight bits is every value the
+   rasteriser produced, and the coverage passes through.
+
+   The steps are the gaps between the values, not the values: n bits
+   name (1 << n) values with one fewer gap between them, and a coverage
+   lands on the step it is nearest and is carried back out over the
+   whole range. Full coverage and none of it are the ends of that range
+   whatever n is, so a pixel a glyph fills stays filled and one it
+   misses stays missed. */
+static
+unsigned char _cov_bits(int cov, int bits)
+{
+    int steps;
+
+    if (bits >= COVERAGE_BITS)
+        return (unsigned char)cov;
+    steps = (1 << bits) - 1;
+    return (unsigned char)(((cov * steps + 127) / 255 * 255 + steps / 2)
+                           / steps);
 }
 
 static
@@ -2088,7 +2118,8 @@ int _device_color(Xpost_Context *ctx,
    scan conversion of the outline would produce -- unless the device
    anti-aliases text (ts->blend), in which case fully covered pixels go
    through PutPix and partially covered edge pixels through the
-   device's BlendPix with their coverage.
+   device's BlendPix with their coverage, rounded to the number of
+   values the bits the device asked for can tell apart.
    A device that writes down what it is asked to paint rather than
    painting it declares /.recordglyph, and is handed the coverage that
    walk resolves as one mask and one placement of it instead of a call
@@ -2225,7 +2256,15 @@ void _draw_bitmap(Xpost_Context *ctx,
                 case XPOST_FONT_PIXEL_MODE_GRAY:
                     pix = tmp[j];
                     if (ts->blend)
+                    {
+                        /* the coverage the device asked for as many bits
+                           of as it can tell apart: full coverage is the
+                           whole pixel PutPix lays, none of it is no
+                           pixel at all, and what is between goes to the
+                           blend */
+                        pix = _cov_bits((int)pix, ts->blend);
                         cov = pix == 255 ? -1 : (int)pix;
+                    }
                     else
                         cov = pix >= 128 ? -1 : 0;
                     break;

@@ -168,10 +168,24 @@ setglobal
     % adopts it as its native space; the colour pipeline then delivers
     % that model's components to the marking methods. Before the fills
     % are chosen below, because which compiled fill fits depends on it.
+    % A paint carries one value per component of the space it is made
+    % in, so the count moves with the space: a device left saying how
+    % many it took in the space it has stopped taking them in would hand
+    % its marking methods one value in the place of another. Moved only
+    % where the device states a count and the space it has adopted has
+    % one -- a device offering the model that is whatever space a paint
+    % was made in carries no fixed count to move.
     dev /ProcessColorModel 2 copy known {
         get dev /.colormodels 2 copy known {
             get 1 index known {
-                dev /nativecolorspace 3 -1 roll put
+                dup dev /nativecolorspace 3 -1 roll put
+                dev /.ncomp known {
+                    //.xpostsys /.spacecomps get 1 index known {
+                        //.xpostsys /.spacecomps get 1 index get
+                        dev /.ncomp 3 -1 roll put
+                    } if
+                } if
+                pop
             }{ pop } ifelse
         }{ pop pop pop } ifelse
     }{ pop pop } ifelse
@@ -795,6 +809,33 @@ currentglobal true setglobal
             and not { /setpagedevice cvx /typecheck signalerror } if
             pop
         }{ pop } ifelse
+    } forall
+} bind put
+
+% dict  .checkpagefeatures  dict
+% A device feature the machinery reads as a number is refused as it is
+% offered where the value is not one. PLRM 6.2.7 has setpagedevice raise
+% typecheck as well as refusing a request it cannot satisfy, and this is
+% what that is for: a request is the one place the value has a caller to
+% answer to. Read at the point of use instead, a value that is not a
+% number would be a number the machinery could not find, and finding no
+% number is what it does for a device asking for nothing -- so a request
+% naming its feature and misspelling the value would come out as a
+% request that named nothing, silently and a page later.
+%
+% TextAlphaBits, the bits of a glyph's edge coverage a device is sent
+% (data/image.ps, src/lib/xpost_op_font.c), is the one such feature. It
+% is refused for its type and not for its size: a number below one asks
+% for no coverage at all and a number above eight for more than a
+% rasterised glyph carries, and each of those is a number the machinery
+% meets with what there is.
+.xpostsys /.checkpagefeatures {
+    [ /TextAlphaBits ] {
+        2 copy known {
+            2 copy get type /integertype ne
+                { /setpagedevice cvx /typecheck signalerror } if
+        } if
+        pop
     } forall
 } bind put
 

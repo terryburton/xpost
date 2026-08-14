@@ -445,6 +445,60 @@ if [ "$nq" -eq 0 ]; then
 fi
 
 # ---------------------------------------------------------------------
+# One answer another answer settles
+#
+# A device that shows a grey as a pattern of pixels ranks each pixel
+# against a threshold the screen in force picks from its position, and
+# the screen is the program's to set. So such a device cannot say that
+# the row it shows over a row it holds no pixel of is one row wherever
+# it stands: what stands for a colour at one row is what the cell says
+# there, and the cell is not the class's to know. ScreenPaint therefore
+# obliges .groundvaries true.
+#
+# Only that way round. A device could vary its ground for a reason of
+# its own and store the grey it is handed, so the two entries stay
+# separate and this holds the one implication between them rather than
+# folding them.
+#
+# Asked of the record as well, which takes both off the class it plays
+# into by two different routes in src/lib/xpost_dev_record.c -- the
+# screen through a branch of its own and the ground through the list of
+# facts beside it -- so a record standing in front of a screening device
+# and answering that its ground is one row is the drift this catches.
+nscreen=0
+for side in state rstate; do
+    if [ "$side" = state ]; then
+        who=$(awk '$2 == "ScreenPaint" { print $1 }' "$work/state" | sort -u)
+    else
+        who=$(awk '$2 == "ScreenPaint" { print $1 }' "$work/rstate" | sort -u)
+    fi
+    for d in $who; do
+        nscreen=$((nscreen + 1))
+        gv=$(awk -v d="$d" -v k=".groundvaries" '$1 == d && $2 == k { print $3 }' \
+             "$work/$side")
+        [ -n "$gv" ] || gv='(nothing)'
+        [ "$gv" = true ] && continue
+        if [ "$side" = state ]; then
+            echo "FAIL: $d shows a grey as a pattern of pixels and answers"
+            echo "      .groundvaries '$gv'. The cell it ranks against is the"
+            echo "      screen the program set, so no one row stands for its"
+            echo "      ground down the page."
+        else
+            echo "FAIL: a record made for $d carries ScreenPaint and answers"
+            echo "      .groundvaries '$gv'. It writes down marks a screen will"
+            echo "      be applied to and puts its page out as though one row"
+            echo "      stood for its ground everywhere."
+        fi
+        fail=1
+    done
+done
+if [ "$nscreen" -eq 0 ]; then
+    echo "FAILURES: no device states ScreenPaint, so the rule that a"
+    echo "      screening device varies its ground was held over nothing"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------
 # The recorder carries its target's entries and its own, and nothing else
 #
 # For every entry: the record either carries it over every target, which

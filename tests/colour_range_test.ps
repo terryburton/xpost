@@ -57,11 +57,20 @@ faildict /n 0 put
 % otherwise have decided. So a run may ask for more than the device has,
 % and asking must not change what the raster holds.
 %
+% The number is a number of bits and not a switch. Two bits name four
+% values of coverage, so an edge painted at two bits over a cleared page
+% leaves at most four distinct values behind it -- the paper, the ink,
+% and what lies between at the two coverages there are -- while eight
+% bits, which is every value a rasterised glyph carries, leave more.
+% Counting the values a page holds is the way to see the difference: a
+% number read as a switch makes the two counts equal.
+%
 % Asked of every device that reports its pixels back, in both
 % directions: raising it on a screening device changes nothing, and
-% raising it on a device that blends and does not screen does change
-% something. The second is what says the first is a property of the
-% device rather than the machinery having stopped blending anywhere.
+% raising it on a device that blends and does not screen changes what
+% the page holds and changes it by as much as the number allows. The
+% second is what says the first is a property of the device rather than
+% the machinery having stopped blending anywhere.
 /levelcount { % x0 y0 n  .  int   (distinct stored pixels in an n-square)
     /lc.n exch def /lc.y exch def /lc.x exch def
     /lc.seen 400 dict def
@@ -90,22 +99,31 @@ dev /GetPix known dev /BlendPix known and {
     } stopped { /reportsback false def } if
 } if
 
+% bits  covlevels  int
+% Paint a line of glyphs with the device asked for that many bits of
+% their edge coverage, and count what the page holds under them.
+/covlevels { % bits  .  int
+    dev /TextAlphaBits 3 -1 roll put
+    erasepage
+    /Times-Roman findfont 20 scalefont setfont
+    0 setgray
+    2 6 moveto (Ag) show
+    % the glyphs sit just above the user-space origin, which is the
+    % bottom of the page, so the rows they cover are the last ones
+    2 dev /height get 28 sub 24 levelcount
+} bind def
+
 reportsback {
     /tab.was dev /TextAlphaBits 2 copy known { get }{ pop pop null } ifelse def
     {
-        dev /TextAlphaBits 4 put
-        erasepage
-        /Times-Roman findfont 20 scalefont setfont
-        0 setgray
-        2 6 moveto (Ag) show
-        % the glyphs sit just above the user-space origin, which is the
-        % bottom of the page, so the rows they cover are the last ones
-        2 dev /height get 28 sub 24 levelcount
+        /lev.two 2 covlevels def
+        /lev.eight 8 covlevels def
     } stopped {
         (SKIP: the device did not answer the glyph-coverage probe\n) print
     }{
         dev /ScreenPaint known {
-            2 le (a screening device stores no blended edge) assert
+            lev.two 2 le lev.eight 2 le and
+                (a screening device stores no blended edge) assert
         }{
             % A device whose page carries transparency is cleared to
             % transparent rather than to a colour, so an edge pixel has
@@ -113,8 +131,15 @@ reportsback {
             % stored is the ink at full whatever the coverage. It says
             % nothing either way about the edges being blended, so it is
             % not asked.
-            dev /AlphaChannel known { pop }
-            { 2 gt (a device that does not screen blends its edges) assert }
+            dev /AlphaChannel known { }
+            {
+                lev.eight 4 gt
+                    (a device that does not screen blends its edges) assert
+                lev.two 4 le
+                    (two bits of coverage name four values and no more) assert
+                lev.eight lev.two gt
+                    (eight bits of coverage tell more of them apart) assert
+            }
             ifelse
         } ifelse
     } ifelse

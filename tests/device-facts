@@ -116,6 +116,13 @@ question .groundvaries bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     has to think about. Answering otherwise costs a fill per unheld row
     and is only worth it where the ground genuinely differs down the
     page.
+    A device that shows a grey as a pattern of pixels -- ScreenPaint,
+    below -- answers this true and is held to it there, since the cell
+    it ranks against is whatever screen the program set and no class can
+    promise one row over the page while that is so. The entries stay
+    apart because the implication is one-way and the two are read for
+    different things: this by the walk that puts a page out row by row,
+    that by the machinery that tells a device which screen is in force.
 family false
 answer pgm false
 answer ppm false
@@ -137,27 +144,34 @@ answer pbm true data/pbmimage.ps
 question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     How many bits of a glyph's edge coverage this device is sent. Above
     one, the text machinery (src/lib/xpost_op_font.c) blends a partly
-    covered edge pixel against what the page already holds; at one it
-    sends whole pixels and the edge is hard. A page-device request may
-    name it, and a program may write it onto the device directly, so
-    what a class states is where a run starts rather than where it ends
-    -- except on a device that shows a grey as a pattern of pixels,
-    which is sent whole pixels whatever the number says (ScreenPaint,
-    below).
-    The family answer is four, which is what a device storing a value
-    per pixel can take. A device answering otherwise is one whose stored
-    pixel cannot hold the intermediate value a blend produces, and
-    sending it blends would have it round each of them and show an edge
-    it never agreed to.
-family 4
-answer pgm 4
-answer ppm 4
-answer tiff 4
-answer raster 4
-answer bgr 4
-answer png 4
-answer pngalpha 4
-answer jpeg 4
+    covered edge pixel against what the page already holds, at the
+    coverage rounded to the nearest of the values that many bits tell
+    apart; at one it sends whole pixels and the edge is hard. The
+    number is the number it says: two bits is four values of coverage
+    and four bits is sixteen, and the greys a page of text holds can be
+    counted to see it. A page-device request may name it -- as an
+    integer, which setpagedevice refuses it for not being
+    (data/device.ps) -- and a program may write it onto the device
+    directly, so what a class states is where a run starts rather than
+    where it ends. Except on a device that shows a grey as a pattern of
+    pixels, which is sent whole pixels whatever the number says
+    (ScreenPaint, below).
+    The family answer is eight, which is every value there is: a
+    rasterised glyph carries one byte of coverage a pixel, so eight bits
+    is the whole of what a device can be sent and a device asking for
+    more is answered with that. A device answering otherwise is one
+    whose stored pixel holds fewer values than the coverage has, and
+    sending it more would have it round each of them and show an edge it
+    never agreed to.
+family 8
+answer pgm 8
+answer ppm 8
+answer tiff 8
+answer raster 8
+answer bgr 8
+answer png 8
+answer pngalpha 8
+answer jpeg 8
 answer pbm 1 data/pbmimage.ps
     A pixel of this device is one bit. There is no value between the two
     it can store, so a coverage-weighted blend has nowhere to land, and
@@ -186,6 +200,20 @@ question ScreenPaint pbm
     told of a screen and holds none -- which is the safe answer, since a
     device holding a cell it never reads would be carrying page state
     that nothing keeps right.
+    One device carries this and one carries .groundvaries, and they are
+    not the same entry said twice. This one is about how a colour is
+    stored; that one is about whether a row the device holds no pixel of
+    can be shown by one row of bytes wherever it stands. What relates
+    them runs one way only: a class that screens cannot promise the
+    second, because the cell is the screen in force and the screen is
+    the program's to set, so a device that screens must answer
+    .groundvaries true whatever cell it is holding today. The converse
+    is not implied -- a device could vary its ground for a reason of its
+    own and store the grey it is handed -- so folding the two would make
+    the band walk read a question about storage to answer a question
+    about rows. The implication is held instead: check-device-facts.sh
+    fails a device that declares this and does not answer .groundvaries
+    true, over the roster and over the record standing in for it.
 family per-device
 answer pbm true data/pbmimage.ps
     Every grey painted on this device screens through the halftone in
@@ -237,15 +265,15 @@ open nativecolorspace every
     differing from nothing, and a reason that cannot be wrong is a
     reason nobody rereads.
     What would make it one: a device whose space can move after it is
-    installed and whose components then follow. That happens where a
-    device offers process colour models -- .colormodels above -- since
-    a page-device request naming one writes this key (data/device.ps).
-    Today only the two document writers offer any, and they carry no
-    raster to disagree with. A raster class declaring .colormodels would
-    make this a movable value on every class copied from it, and .ncomp
-    below does not move with it, so the components a device is sent
-    would part company with the space it says it takes them in. That is
-    the day to ask.
+    installed and answers differently from the family because of where
+    it was moved to. That happens where a device offers process colour
+    models -- .colormodels above -- since a page-device request naming
+    one writes this key (data/device.ps). Today only the two document
+    writers offer any, and they carry no raster to disagree with. The
+    count beside it moves with it, so a raster class declaring
+    .colormodels would be moved to a space and sent that space's
+    components; what it would still owe is a raster shaped for them,
+    which is the device's own business and not a family answer.
     Two of the answers are not a name but a procedure: the compiled
     drivers store the space as an executable name, which is why
     data/device.ps fetches it with get and holds it literal rather than
@@ -261,14 +289,25 @@ open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     a record refuses outright rather than copying, since a record whose
     component count disagreed with its target would replay a colour
     nobody named (src/lib/xpost_dev_record.c).
-    What would make it one is the two parting company. They are one
-    statement said twice, and nothing holds them to agreeing: the
-    page-device request that moves a device's colour space writes that
-    key and not this one, so a raster class that ever offered a process
-    colour model would be moved to it and go on taking the old number
-    of components. Either they are held to each other, or this becomes
-    the question and each device says how many it takes and why that is
-    what its space implies.
+    It follows the space rather than standing beside it: the
+    page-device request that moves a device's colour space writes this
+    key too, from the components that space takes, wherever the device
+    states one and the space has a fixed count to give
+    (.completedevice, data/device.ps; tests/device_completion_test.ps).
+    A device offering the model that is whatever space a paint was made
+    in has no fixed count and keeps what it had.
+    What does not follow is what a raster class derives from this when
+    it is built: .takecolor and .pushcolor are written once from the
+    count the class was made with (.makerasterclass, data/image.ps), so
+    a raster class that ever offered a process colour model would be
+    sent the new space's components through helpers shaped for the old
+    count. There is no such class, and the day one arrives is the day
+    those move too.
+    What would make it a question is a device taking a number of
+    components its space does not imply -- a raster holding an alpha
+    plane beside its colour, say -- at which point the count would stop
+    being derivable and each device would have to say what it takes and
+    why.
 
 open NoOutput bbox dscwrite null pdfwrite svgwrite record
     That this device puts no pixels down, so data/device.ps leaves it

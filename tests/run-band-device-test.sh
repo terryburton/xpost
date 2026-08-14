@@ -92,7 +92,19 @@ field() { sed -n "s/^$2 //p" "$work/$1.log"; }
 # the device by itself asks for the mode that holds the page whole. The
 # comparison is between the two routes, and naming the device alone
 # would now name the same route twice.
-formats='ppm pgm tiff'
+#
+# The bilevel device is among them because it is the one that shows a
+# grey as a pattern of pixels, and a record standing in front of it has
+# to say so: what a record writes down is what the machinery above it
+# was willing to send, and the machinery sends a screening device whole
+# pixels rather than a glyph's coverage-weighted edges. A recorder that
+# did not carry the screen would be sent blends, write them down, and
+# play them into a device whose pixel cannot hold one -- so the page the
+# bilevel device puts out in bands would not be the page it puts out
+# whole. The page below raises the coverage the device is asked for
+# above what the bilevel one takes, which is what puts that decision on
+# the route rather than leaving it unreached.
+formats='ppm pgm tiff pbm'
 
 for f in $formats; do
     render "$f:band" "rec-$f" || fail=1
