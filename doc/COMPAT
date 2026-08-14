@@ -68,7 +68,8 @@ internal mirrors another implementation):
   - /OutputFile       setpagedevice key naming the output path
                       (mapped at the boundary onto xpost's own
                       /OutputFileName)
-  - /TextAlphaBits    device feature enabling anti-aliased text
+  - /TextAlphaBits    device feature naming how many bits of a glyph's
+                      edge coverage the device is sent
   - /WhiteIsOpaque    device feature making white marks opaque on the
                       transparent-page device
   - pdfwrite, pngalpha, bbox    device names job streams select

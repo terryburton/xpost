@@ -27,8 +27,10 @@ currentglobal true setglobal
     /dimensions [0 0]
 
     % glyph edges blend by coverage against what the page holds; the
-    % interior takes the solid PutPix path
-    /TextAlphaBits 4
+    % interior takes the solid PutPix path. Eight bits of that coverage,
+    % which is every value a rasterised glyph carries and every value a
+    % pixel storing a byte a component can be moved to.
+    /TextAlphaBits 8
 
     /.copydict //.xpostsys /.classcopydict get
 

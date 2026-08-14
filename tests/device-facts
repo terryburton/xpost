@@ -137,27 +137,32 @@ answer pbm true data/pbmimage.ps
 question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     How many bits of a glyph's edge coverage this device is sent. Above
     one, the text machinery (src/lib/xpost_op_font.c) blends a partly
-    covered edge pixel against what the page already holds; at one it
-    sends whole pixels and the edge is hard. A page-device request may
-    name it, and a program may write it onto the device directly, so
-    what a class states is where a run starts rather than where it ends
-    -- except on a device that shows a grey as a pattern of pixels,
-    which is sent whole pixels whatever the number says (ScreenPaint,
-    below).
-    The family answer is four, which is what a device storing a value
-    per pixel can take. A device answering otherwise is one whose stored
-    pixel cannot hold the intermediate value a blend produces, and
-    sending it blends would have it round each of them and show an edge
-    it never agreed to.
-family 4
-answer pgm 4
-answer ppm 4
-answer tiff 4
-answer raster 4
-answer bgr 4
-answer png 4
-answer pngalpha 4
-answer jpeg 4
+    covered edge pixel against what the page already holds, at the
+    coverage rounded to the nearest of the values that many bits tell
+    apart; at one it sends whole pixels and the edge is hard. The
+    number is the number it says: two bits is four values of coverage
+    and four bits is sixteen, and the greys a page of text holds can be
+    counted to see it. A page-device request may name it, and a program
+    may write it onto the device directly, so what a class states is
+    where a run starts rather than where it ends -- except on a device
+    that shows a grey as a pattern of pixels, which is sent whole pixels
+    whatever the number says (ScreenPaint, below).
+    The family answer is eight, which is every value there is: a
+    rasterised glyph carries one byte of coverage a pixel, so eight bits
+    is the whole of what a device can be sent and a device asking for
+    more is answered with that. A device answering otherwise is one
+    whose stored pixel holds fewer values than the coverage has, and
+    sending it more would have it round each of them and show an edge it
+    never agreed to.
+family 8
+answer pgm 8
+answer ppm 8
+answer tiff 8
+answer raster 8
+answer bgr 8
+answer png 8
+answer pngalpha 8
+answer jpeg 8
 answer pbm 1 data/pbmimage.ps
     A pixel of this device is one bit. There is no value between the two
     it can store, so a coverage-weighted blend has nowhere to land, and
