@@ -34,14 +34,30 @@
 static char *model = NULL;
 static size_t modellen = 0, modelcap = 0;
 
+/* Accumulate the bytes the buffer is expected to be holding.
+
+   A growth arrives in a pointer of its own and the model is moved onto
+   it only once it has arrived, so a growth there is no memory for
+   leaves the bytes already accumulated still reachable through the
+   model, and leaves the capacity still saying what the model holds.
+
+   A model with no buffer grows whatever length is asked of it, so past
+   the growth there is always a buffer to address. That is one test in
+   place of reading the arithmetic below it for the same answer: an
+   accumulation of nothing onto nothing leaves the length no greater
+   than the capacity, and the copy would then be addressing a
+   destination that was never allocated. */
 static void model_add(const void *p, size_t n)
 {
-    if (modellen + n > modelcap)
+    if (!model || modellen + n > modelcap)
     {
-        modelcap = (modellen + n) * 2 + 1024;
-        model = (char *)realloc(model, modelcap);
-        if (!model)
+        size_t cap = (modellen + n) * 2 + 1024;
+        char *grown = (char *)realloc(model, cap);
+
+        if (!grown)
             exit(2);
+        model = grown;
+        modelcap = cap;
     }
     memcpy(model + modellen, p, n);
     modellen += n;
