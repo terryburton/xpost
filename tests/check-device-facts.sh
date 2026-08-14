@@ -77,6 +77,15 @@ case $xpost in
     /*) ;;
     *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$xpost") ;;
 esac
+# Where the interpreter reads its boot files from, named from the tree
+# this guard was handed. Without it the interpreter answers from the tree
+# its binary was built against, and the register is then held against
+# devices belonging to a different tree. Named absolutely because the
+# runs below stand in the scratch directory.
+case $src in
+    /*) srcdata=$src/data ;;
+    *) srcdata=$(cd "$src" && pwd)/data ;;
+esac
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
@@ -149,7 +158,8 @@ EOF
 { cat "$work/enc.ps"; echo "/record .dump"; } > "$work/askrec.ps"
 
 : > "$work/said"
-out=$( cd "$work" && "$xpost" -q -d null -o facts.scratch ask.ps </dev/null 2>&1 )
+out=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+       "$xpost" -q -d null -o facts.scratch ask.ps </dev/null 2>&1 )
 rc=$?
 printf '%s\n' "$out" >> "$work/said"
 if [ $rc -ne 0 ] || ! grep -q '^K ' "$work/said"; then
@@ -163,7 +173,8 @@ fi
 : > "$work/rec"
 recasked=0
 while read -r t; do
-    rout=$( cd "$work" && "$xpost" -q -d "$t:band" -o facts.scratch askrec.ps \
+    rout=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+            "$xpost" -q -d "$t:band" -o facts.scratch askrec.ps \
             </dev/null 2>&1 )
     printf '%s\n' "$rout" | grep '^K record ' \
         | sed "s/^K record /R $t /" >> "$work/rec"

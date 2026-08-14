@@ -40,6 +40,16 @@ case $xpost in
     /*) ;;
     *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$xpost") ;;
 esac
+# Where the interpreter reads its boot files from, named from the tree
+# this guard was handed. Without it the interpreter answers from the tree
+# its binary was built against, and the two halves of the comparison come
+# from different trees: the roster is read here and the devices are asked
+# there. Taken before the mirror below moves src, and named absolutely
+# because the run stands in the scratch directory.
+case $src in
+    /*) srcdata=$src/data ;;
+    *) srcdata=$(cd "$src" && pwd)/data ;;
+esac
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
@@ -266,7 +276,8 @@ EOF
 # Started on the device that paints nothing, so that what a device says
 # is read after a page-device request installed it and never off whatever
 # device this build was configured with.
-said=$( cd "$work" && "$xpost" -q -d null -o roster.scratch "$asked" \
+said=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+        "$xpost" -q -d null -o roster.scratch "$asked" \
         </dev/null 2>&1 )
 if [ $? -ne 0 ] || [ -z "$said" ]; then
     echo "FAILURES: the interpreter could not be asked what its devices say"
