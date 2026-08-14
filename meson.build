@@ -3618,8 +3618,9 @@ test('band-budget',
   suite: cost_fast,
   timeout: 300)
 
-# ... and the two classes whose emission is not raw rows, each of which
-# had a reason of its own for not taking its page in bands: the bilevel
+# ... and every raster class that assembles its own page, which is the
+# ones that band less the ones written from compiled code. Two of them
+# had a reason of their own for not taking a page in bands: the bilevel
 # one screens every grey against the cell under the pixel, so a screen
 # phased on the band rather than on the page dithers differently and does
 # so invisibly at any band deeper than a cell; the TIFF one promises in
