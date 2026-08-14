@@ -312,6 +312,15 @@
             /nbands nbands 1 add def
             DEVICE dup /Emit get exec
         }{ /passed passed 1 add def } ifelse
+        % The marks are offered again to every run of rows, so this loop
+        % draws the page once per band where the whole-page route draws
+        % it once, and the garbage each drawing leaves is the loop's and
+        % not the device's. Automatic collection is paced by the entity
+        % table and a page this cheap never reaches that pace, so what
+        % the run is left holding would otherwise follow the band count
+        % -- which at a fixed band height follows the page's height, and
+        % is exactly what the wrapper weighs the band route for.
+        1 vmreclaim
     } for
     % and the call that holds nothing, which says the page is finished
     0 0 DEVICE dup /.moveband get exec
