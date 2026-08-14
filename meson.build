@@ -46,6 +46,36 @@ cc = meson.get_compiler('c')
 # supplies -Wall -Wextra; these add the rest of the coverage. Unrecognised
 # flags are filtered out per compiler, so the list stays portable across gcc,
 # clang and mingw.
+#
+# -Winline is deliberately absent, and the reason is that the keyword it
+# reads on does not mean here what the flag reads it as. C offers one
+# spelling for a function defined in a header and called from some of
+# the files that include it -- static inline -- because plain static is
+# reported as defined and not used by every file that does not call it.
+# So inline is written on the tree's header helpers to say where the
+# definition lives, and -Winline answers it as a request to copy the
+# body into each caller and reports every place the optimiser decided
+# otherwise.
+#
+# What it reports is then the cost model rather than the code. The same
+# sources give two disjoint sets of it: at -O2 it names the object's
+# entity accessor and the device driver's byte conversion, and at -O3
+# with link-time optimisation it names neither and names the byte
+# buffer's append and the interpreter's execute-access test instead.
+# Raising --param inline-unit-growth alone, with no source touched at
+# all, empties one half of the set and fills the other -- because under
+# LTO the unit whose growth is being budgeted is the whole library, so
+# whether a given call site is reported depends on how much unrelated
+# code was linked beside it.
+#
+# The two things it says about the code rather than about the budget --
+# that a function taking a variable argument list can never be inlined,
+# and that a body is past --param max-inline-insns-single -- are true of
+# a function wherever it is called from, and both are answered by
+# defining such a function once in a .c file rather than in the header.
+# The rest are answered only by dropping inline from a helper that is
+# inlined everywhere else, or by forcing it into a cold call site, and
+# either makes the code worse to make the flag quiet.
 strict_warnings = [
   '-Wshadow',
   '-Wdeclaration-after-statement',
@@ -53,7 +83,6 @@ strict_warnings = [
   '-Wstrict-prototypes',
   '-Wpointer-arith',
   '-Wwrite-strings',
-  '-Winline',
   '-Wno-missing-field-initializers',
 ]
 add_project_arguments(cc.get_supported_arguments(strict_warnings), language: 'c')

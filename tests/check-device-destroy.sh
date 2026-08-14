@@ -35,7 +35,10 @@
 #   calls xpost_dev_class_install, which is the one funnel a device's suite
 #   reaches a class dictionary through and which takes the table as its
 #   argument -- so a device whose Destroy this scan cannot read fails here
-#   rather than being passed over.
+#   rather than being passed over. The funnel's own definition is the one
+#   file that names both and brings no table: it names the type because a
+#   table is what it is handed, so it is read past rather than held to
+#   registering a device it has none of.
 #
 #   A device written in PostScript carries a procedure, and what those hold
 #   outside virtual memory they release through an operator. So every
@@ -113,7 +116,9 @@ awk -F'\t' '
     NR == FNR { str[$1 SUBSEP $2] = substr($0, length($1) + length($2) + 3); next }
     {
         code = substr($0, length($1) + length($2) + 3)
-        if (code ~ /Xpost_Dev_Method/ || code ~ /xpost_dev_class_install/) tab[$1] = 1
+        if ($1 != "src/lib/xpost_dev_driver.c" &&
+            (code ~ /Xpost_Dev_Method/ || code ~ /xpost_dev_class_install/))
+            tab[$1] = 1
         if (code !~ /\{[ \t]*,[ \t]*,[ \t]*\(Xpost_Op_Func\)[ \t]*[A-Za-z_]/) next
         if (str[$1 SUBSEP $2] != "Destroy") next
         match(code, /\(Xpost_Op_Func\)[ \t]*[A-Za-z_][A-Za-z0-9_]*/)

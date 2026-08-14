@@ -94,6 +94,7 @@ xpost_ctx
 xpost_data_dir_get
 xpost_destroy
 xpost_dev_blit_row
+xpost_dev_class_install
 xpost_dev_dict_number
 xpost_dev_fillpoly_compiled
 xpost_dev_fillpoly_run
@@ -439,6 +440,7 @@ xpost_stack_topdown_find_type
 xpost_stack_topdown_replace
 xpost_stderr_handler_set
 xpost_stdout_handler_set
+xpost_strbuf_appendf
 xpost_string_allocate_cstring
 xpost_string_cons
 xpost_string_cons_memory

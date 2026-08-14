@@ -136,28 +136,15 @@ xpost_strbuf_append(Xpost_String_Buffer *b, const void *p, size_t n)
     return 0;
 }
 
-/* append the formatted text, sized before it is written so the buffer
-   grows once and the format runs at most twice */
-static inline int
-xpost_strbuf_appendf(Xpost_String_Buffer *b, const char *fmt, ...)
-{
-    va_list ap;
-    int n, ret;
+/* Append the formatted text, sized before it is written so the buffer
+   grows once and the format runs at most twice.
 
-    va_start(ap, fmt);
-    n = vsnprintf(NULL, 0, fmt, ap);
-    va_end(ap);
-    if (n < 0)
-        return VMerror;
-    ret = xpost_strbuf_reserve(b, (size_t)n + 1);
-    if (ret)
-        return ret;
-    va_start(ap, fmt);
-    vsnprintf(b->s + b->len, b->cap - b->len, fmt, ap);
-    va_end(ap);
-    b->len += (size_t)n;
-    return 0;
-}
+   This one is declared here and defined in xpost_strbuf.c rather than
+   written into every caller. A function reading a variable argument
+   list is not a function a compiler can copy into a call site, so the
+   copies the rest of this header hands out would each be a call to the
+   same body under a different name. */
+int xpost_strbuf_appendf(Xpost_String_Buffer *b, const char *fmt, ...);
 
 static inline void
 xpost_strbuf_free(Xpost_String_Buffer *b)

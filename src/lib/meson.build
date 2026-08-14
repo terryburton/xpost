@@ -6,6 +6,7 @@ libxpost_src = files([
   'xpost_compat.c',
   'xpost_context.c',
   'xpost_dev_bgr.c',
+  'xpost_dev_driver.c',
   'xpost_dev_generic.c',
   'xpost_dev_jpeg.c',
   'xpost_dev_png.c',
@@ -53,6 +54,7 @@ libxpost_src = files([
   'xpost_record.c',
   'xpost_spill.c',
   'xpost_stack.c',
+  'xpost_strbuf.c',
   'xpost_string.c',
   'xpost_vm_image.c'
 ])

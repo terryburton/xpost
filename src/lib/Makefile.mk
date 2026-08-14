@@ -14,6 +14,7 @@ src/lib/xpost_array.c \
 src/lib/xpost_compat.c \
 src/lib/xpost_context.c \
 src/lib/xpost_dev_bgr.c \
+src/lib/xpost_dev_driver.c \
 src/lib/xpost_dev_generic.c \
 src/lib/xpost_dev_jpeg.c \
 src/lib/xpost_dev_png.c \
@@ -39,6 +40,7 @@ src/lib/xpost_span.c \
 src/lib/xpost_record.c \
 src/lib/xpost_spill.c \
 src/lib/xpost_stack.c \
+src/lib/xpost_strbuf.c \
 src/lib/xpost_string.c \
 src/lib/xpost_vm_image.c \
 src/lib/xpost_op_array.c \
