@@ -33,6 +33,15 @@ src_bin_xpost_view_LDADD = \
 src/lib/libxpost.la \
 src/lib/libxpost_dsc.la
 
+# The window the viewer opens is its own, not the library's: the source
+# above calls xcb directly, so the program is linked against what the
+# configure run found rather than reaching those symbols through a
+# library that happens to carry them.
+if HAVE_XCB
+src_bin_xpost_view_LDADD += \
+@XPOST_LIB_LIBS@
+endif
+
 src_bin_xpost_dsc_SOURCES = \
 src/bin/xpost_dsc.c
 
