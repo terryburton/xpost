@@ -324,6 +324,50 @@ currentglobal true setglobal
     rows
 end } bind put
 
+% -  .currecordspill  /asked /held
+% Where this run wants a retained page's marks held, and where the marks
+% of the page now being painted actually are. These are the values
+% currentsystemparams reports as RecordSpill and CurRecordSpill.
+%
+% Two readings rather than one, because they can differ and the
+% difference is what a reader most needs: a run that asked for its marks
+% to be weighed, on a machine that will take no scratch file, holds them
+% in memory and is told so at start-up, and a program given only the
+% state asked for could not tell that from a page that never needed to
+% spill.
+%
+% /never, /auto or /always for the first. /memory, /file or /refused for
+% the second: in memory, in a file, or in memory having been refused a
+% file it wanted.
+%
+% The device now being painted into answers, since it is the one holding
+% the marks. A device that holds no record -- a page under the band
+% budget, painted directly -- holds its marks nowhere and answers
+% /memory, which is where the pixels of such a page are. A run whose
+% graphics never loaded has no device to ask and answers the same.
+.xpostsys /.currecordspill { % -  .  /asked /held
+2 dict begin
+    % What the run asked for, read from the run: it is the run's answer
+    % whatever device happens to be in hand, and a page painted directly
+    % carries no record to ask.
+    /asked /RecordSpill //.xpostsys /.hostvalue get exec def
+    asked type /nametype ne { /asked /auto def } if
+    % not /where: bind bakes the operator of that name into this body,
+    % and a local of the same name would never be the one read back
+    /held /memory def
+    /graphicsdict where {
+        pop graphicsdict /currgstate get /device get
+        dup type /dicttype eq {
+            dup /.recordspill known {
+                dup /.recordspill get exec
+                /held exch def pop
+            } if
+        } if
+        pop
+    } if
+    asked held
+end } bind put
+
 % dict  .reportpage  -
 % Name what is about to become of one page: the device the page was
 % asked of, the device that paints it, whether it is held whole or a

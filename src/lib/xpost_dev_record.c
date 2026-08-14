@@ -88,6 +88,7 @@
 #include "xpost_dev_driver.h"  /* device contract and shared helpers */
 #include "xpost_op_path.h"     /* XPOST_PATH_BREAK: a subpath separator */
 #include "xpost_record.h"
+#include "xpost_spill.h"
 #include "xpost_dev_record.h"
 
 /* The most components a mark can carry here, which is the widest of the
@@ -138,6 +139,42 @@ typedef struct
     size_t npoly;
 } _Walk;
 
+/* Where a run wants its records held.
+ *
+ * The default is to weigh it: a record is worth holding in memory while
+ * it is smaller than the raster banding the page saves, and past that it
+ * is costing more than the page it is buying, so it goes in a file. The
+ * other two take the decision away -- one for a run that would rather
+ * spend memory than touch a disk at all, one for a run that wants the
+ * bound from the first mark. */
+typedef enum
+{
+    SPILL_AUTO,
+    SPILL_NEVER,
+    SPILL_ALWAYS
+} Spill_State;
+
+/* And what became of it, which is the other half of a switch: a state
+   nobody can read back is a state whose mistakes are invisible. */
+typedef enum
+{
+    SPILT_MEMORY,   /* the marks are in memory */
+    SPILT_FILE,     /* the marks are in a file */
+    SPILT_REFUSED   /* they were to go in a file and there was none */
+} Spill_Where;
+
+/* How many marks pass between two weighings of the record.
+ *
+ * What a record costs is a reading rather than a walk, so asking is
+ * cheap; asking on the way past every mark is still a comparison a page
+ * pays for two hundred thousand times. Sixty-four costs a record 1,164
+ * bytes of lateness on a nineteen-megabyte page: that is how far past
+ * the threshold it can get before the next weighing catches it. An
+ * entry carrying more than this many operands is weighed whatever the
+ * count says, so that one large polygon cannot carry a record past the
+ * threshold unnoticed. */
+#define RECORD_WEIGH_EVERY 64
+
 typedef struct
 {
     int width, height;
@@ -166,8 +203,13 @@ typedef struct
        by writing the page down instead of painting it, so it is the
        quantity anything weighing a record against a raster wants.
        Settled where the band grid is settled and handed down from there
-       (.playsaving), and answered by .recordsaving. */
+       (.playsaving), and answered by .recordsaving. It is also what the
+       record is weighed against: a record worth more than the raster it
+       is saving is one to put in a file. */
     size_t saving;
+    /* where this run wants its records held, and where this one is */
+    int spill;
+    int where;
 } PrivateData;
 
 static Xpost_Object namePrivate;
@@ -273,6 +315,106 @@ static int _lost(Xpost_Context *ctx, Xpost_Object devdic, int err)
     return err;
 }
 
+/* Which of the three states a run asked for, read from where the run's
+   own decisions live.
+ *
+ * A run that said nothing is weighed, which is the state that touches
+ * no disk for a page whose marks are worth less than the raster they
+ * save -- an ordinary page, in other words. An unrecognised word is
+ * refused where the selection is read (src/lib/xpost_interpreter.c), so
+ * what arrives here is one of the three or nothing. */
+static int _spill_asked(Xpost_Context *ctx)
+{
+    Xpost_Object o = xpost_context_host_setting(ctx, "RecordSpill");
+
+    if (xpost_object_get_type(o) == nametype)
+    {
+        if (xpost_dict_compare_objects(ctx, o,
+                                       xpost_name_cons(ctx, "never")) == 0)
+            return SPILL_NEVER;
+        if (xpost_dict_compare_objects(ctx, o,
+                                       xpost_name_cons(ctx, "always")) == 0)
+            return SPILL_ALWAYS;
+    }
+    return SPILL_AUTO;
+}
+
+/* Whether a spill file could be made and written, asked once for the
+   process rather than once per device: it is a question about the
+   machine, and a run that makes a device per page would otherwise ask it
+   per page. */
+static int _spill_probed;
+static int _spill_probe_ok;
+static char _spill_probe_why[160];
+
+static int _spill_probe(void)
+{
+    if (!_spill_probed)
+    {
+        _spill_probe_ok = xpost_spill_probe(_spill_probe_why,
+                                            sizeof _spill_probe_why);
+        _spill_probed = 1;
+    }
+    return _spill_probe_ok;
+}
+
+/* Put the marks of this record in a file, saying so where it could not
+   be done.
+ *
+ * A spill that fails leaves the record exactly as it was -- holding
+ * everything, in memory, and able to go on -- so the page is not lost by
+ * it. What is lost is the bound, and that is what the report is about:
+ * the run goes on and the reader is told that it is going on unbounded.
+ */
+static int _spill_now(PrivateData *private)
+{
+    if (private->where == SPILT_FILE)
+        return 1;
+    if (xpost_record_spill(private->rec))
+    {
+        private->where = SPILT_FILE;
+        return 1;
+    }
+    private->where = SPILT_REFUSED;
+    return 0;
+}
+
+/* Weigh what this record costs against what banding its page saves, and
+   put the marks in a file where it costs more.
+ *
+ * The comparison is safe to act on because what crossing it commits to
+ * is bounded: what a page pays for crossing is a write buffer and a
+ * read window, whatever the drawing.
+ *
+ * A record saving nothing is not weighed. It has no raster to be worth
+ * more than: its page is held whole, either because the budget covers it
+ * or because the run asked for a band at a page that needs none.
+ *
+ * Asked every RECORD_WEIGH_EVERY marks, and at any entry large enough to
+ * carry the record past the threshold on its own. What counts the marks
+ * is the record's own count rather than a tally kept here, so that
+ * nothing has to be written back to the device's state on the way past
+ * a mark that changed nothing.
+ *
+ * @return whether the state changed and has to be stored back
+ */
+static int _weigh(PrivateData *private, int now)
+{
+    if (private->spill != SPILL_AUTO || private->where != SPILT_MEMORY)
+        return 0;
+    if (!now && xpost_record_count(private->rec) % RECORD_WEIGH_EVERY)
+        return 0;
+    if (!private->saving
+        || xpost_record_bytes(private->rec) <= private->saving)
+        return 0;
+    if (!_spill_now(private))
+        XPOST_LOG_ERR("a page whose marks came to more than the raster"
+                      " banding it saves could not put them in %s, so this"
+                      " page is held in memory and what it costs follows"
+                      " the drawing without limit", xpost_spill_dir());
+    return 1;
+}
+
 /* Whether a rectangle covers every pixel of the page.
  *
  * The pixels it covers are taken from its operands by the normaliser the
@@ -355,8 +497,15 @@ static int _mark(Xpost_Context *ctx, Xpost_Object devdic,
     if (!xpost_record_mark(private.rec, kind, colour, ops, nops))
     {
         xpost_record_lost(private.rec);
-        return VMerror;
+        return xpost_record_error(private.rec);
     }
+    /* and what the page now costs against what banding it buys. A mark
+       carrying many operands is weighed whatever the count says, so that
+       one large polygon cannot carry the record past the threshold
+       between two weighings. */
+    if (_weigh(&private, nops > RECORD_WEIGH_EVERY)
+        && !xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
     return 0;
 }
 
@@ -827,6 +976,12 @@ static int _recordimage(Xpost_Context *ctx,
     }
 
     if (!xpost_record_image(private.rec, &img, runs, (int)nrun))
+        ret = xpost_record_error(private.rec);
+    /* a picture is the samples rather than a call and carries the record
+       further than any mark, so it is weighed where it arrives */
+    else if (_weigh(&private, 1)
+             && !xpost_dev_private_put(ctx, privatestr, &private,
+                                       sizeof private))
         ret = VMerror;
 
 out:
@@ -1177,8 +1332,13 @@ int xpost_dev_record_takemask(Xpost_Context *ctx, Xpost_Object devdic,
     if (!xpost_record_mask(private.rec, cov, w, h, at))
     {
         xpost_record_lost(private.rec);
-        return VMerror;
+        return xpost_record_error(private.rec);
     }
+    /* a coverage mask is bytes rather than a call and carries the record
+       further than a mark does, so it is weighed where it arrives */
+    if (_weigh(&private, 1)
+        && !xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
     return 0;
 }
 
@@ -1235,8 +1395,11 @@ static int _glyphmark(Xpost_Context *ctx, Xpost_Object devdic,
                             (real)xpost_object_number(y)))
     {
         xpost_record_lost(private.rec);
-        return VMerror;
+        return xpost_record_error(private.rec);
     }
+    if (_weigh(&private, 0)
+        && !xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
     return 0;
 }
 
@@ -1325,6 +1488,9 @@ static int _recordplace(Xpost_Context *ctx,
                             (real)xpost_object_number(dx),
                             (real)xpost_object_number(dy)))
         return _lost(ctx, devdic, VMerror);
+    if (_weigh(&private, 0)
+        && !xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
     return 0;
 }
 
@@ -1443,6 +1609,45 @@ static int _recordsaving(Xpost_Context *ctx,
         return undefined;
     xpost_stack_push(ctx->lo, ctx->os,
                      xpost_int_cons((integer)private.saving));
+    return 0;
+}
+
+/* IMAGE  .recordspill  /asked /where
+   Where this run wants its records held, and where this one's marks
+   actually are.
+
+   Two answers rather than one, because they can differ and the
+   difference is the interesting case: a run that asked for its records
+   to be weighed, on a machine with no scratch space, is holding its
+   marks in memory and has been told so, and a reader given only the
+   state asked for would not know. A switch nobody can read back is half
+   a feature, and the missing half is the half that catches a mistake.
+
+   /never, /auto or /always for the first; /memory, /file or /refused for
+   the second. */
+static int _recordspill(Xpost_Context *ctx,
+                        Xpost_Object devdic)
+{
+    Xpost_Object privatestr;
+    PrivateData private;
+    const char *asked = "auto";
+    const char *where = "memory";
+
+    if (!_private_get(ctx, devdic, &privatestr, &private))
+        return undefined;
+    if (private.spill == SPILL_NEVER)  asked = "never";
+    if (private.spill == SPILL_ALWAYS) asked = "always";
+    /* what the record says rather than what this device remembers, so
+       that the answer is the record's own state and not a second copy of
+       it that could come to disagree */
+    if (xpost_record_spilled(private.rec))
+        where = "file";
+    else if (private.where == SPILT_REFUSED)
+        where = "refused";
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_name_cons(ctx, asked)));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_object_cvlit(xpost_name_cons(ctx, where)));
     return 0;
 }
 
@@ -1772,8 +1977,11 @@ static int _recordscreen(Xpost_Context *ctx,
     if (!xpost_record_screen(private.rec, w, h, cell))
     {
         xpost_record_lost(private.rec);
-        return VMerror;
+        return xpost_record_error(private.rec);
     }
+    if (_weigh(&private, 1)
+        && !xpost_dev_private_put(ctx, privatestr, &private, sizeof private))
+        return VMerror;
     return 0;
 }
 
@@ -3061,9 +3269,57 @@ static int _create_cont(Xpost_Context *ctx,
        record whose page is held whole is left with nothing here: it
        saves nothing, so there is nothing it could cost more than. */
     private.saving = 0;
+    private.spill = _spill_asked(ctx);
+    private.where = SPILT_MEMORY;
     private.rec = xpost_record_new(private.ncomp);
     if (!private.rec)
         return VMerror;
+
+    /* Whether scratch space can be had, asked here rather than at the
+       first page that needs it.
+     *
+     * A page that runs for twenty minutes and only then discovers it
+     * cannot spill has wasted the twenty minutes, and the discovery was
+     * available before the first mark. So the question is asked at the
+     * beginning, and asked by making a spill file and writing to it: a
+     * permissions check would answer yes for a directory on a full
+     * filesystem, for one a system-call filter refuses, and for one
+     * mounted read-only under the caller. The file holds a few bytes and
+     * is given back before the answer comes; it is not a spill.
+     *
+     * A run that said it wants no disk touched is not asked, and that is
+     * the point of it: nothing here reaches the scratch directory in
+     * that state, not even to look.
+     */
+    if (private.spill != SPILL_NEVER && !_spill_probe())
+    {
+        /* the state the run asked for cannot be had, and a run that
+           asked for it outright is told so where it asked */
+        if (private.spill == SPILL_ALWAYS)
+        {
+            XPOST_LOG_ERR("%d no page's marks can be put in %s (%s), and this"
+                          " run asked for every page's to be", ioerror,
+                          xpost_spill_dir(), _spill_probe_why);
+            xpost_record_free(private.rec);
+            return ioerror;
+        }
+        XPOST_LOG_ERR("no page's marks can be put in %s (%s); a page drawing"
+                      " more than the raster banding it saves will be held in"
+                      " memory instead, and what it costs will follow the"
+                      " drawing without limit", xpost_spill_dir(),
+                      _spill_probe_why);
+        private.where = SPILT_REFUSED;
+    }
+    /* and the state that puts them there from the first mark does it
+       here, before one has arrived */
+    else if (private.spill == SPILL_ALWAYS && !_spill_now(&private))
+    {
+        XPOST_LOG_ERR("%d this run asked for every page's marks to be put in"
+                      " %s and the first page's could not be", ioerror,
+                      xpost_spill_dir());
+        xpost_record_free(private.rec);
+        return ioerror;
+    }
 
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
     {
@@ -3988,6 +4244,8 @@ int xpost_oper_init_record_device_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".playsaving", (Xpost_Op_Func)_playsaving,
                              2, dicttype, numbertype); INSTALL;
     op = xpost_operator_cons(ctx, ".recordsaving", (Xpost_Op_Func)_recordsaving,
+                             1, dicttype); INSTALL;
+    op = xpost_operator_cons(ctx, ".recordspill", (Xpost_Op_Func)_recordspill,
                              1, dicttype); INSTALL;
 
     return 0;

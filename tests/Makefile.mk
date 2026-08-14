@@ -90,6 +90,7 @@ tests/corpus/eps/pages \
 tests/corpus/eps/unasked \
 tests/corpus/evaluate.sh \
 tests/corpus/fetch.sh \
+tests/corpus/share.sh \
 tests/corpus/ghostscript/nondeterministic \
 tests/corpus/ghostscript/nopage \
 tests/corpus/ghostscript/pages \

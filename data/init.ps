@@ -907,6 +907,15 @@ setglobal
        /CurBandHeight
            //.xpostsys /.curbandheight 2 copy known
                { get exec }{ pop pop 0 } ifelse
+       % RecordSpill says where a retained page's marks are to be held
+       % and CurRecordSpill where the page in hand has them. Reported and
+       % never set, for the reason CurBandHeight is: PLRM Appendix G bars
+       % a page description from choosing how its marks are held, and
+       % setsystemparams below recognises no parameter at all. What
+       % chooses is the invocation.
+       //.xpostsys /.currecordspill 2 copy known
+           { get exec }{ pop pop /auto /memory } ifelse
+       exch /RecordSpill exch 3 -1 roll /CurRecordSpill exch
     >>
 } //.xpostsys /.defop get exec
 /setsystemparams [ /dicttype ] { pop } //.xpostsys /.defop get exec

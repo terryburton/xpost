@@ -22,7 +22,7 @@
 # A name is added here in the same commit that makes the interpreter
 # settle it, and removed in the one that stops.
 
-entries 11
+entries 12
 
 # where this run found its boot files: XPOST_DATA_DIR, the directory the
 # shared library sits in, the configured data directory, or a relative
@@ -65,6 +65,16 @@ StartPageSize
 # decision reads for the word that says to hold a band of the page
 # whatever its size
 SUBDEVICE
+
+# where a retained page's marks are held: -s, one of auto, never and
+# always. A page too large for the band budget is held as the marks that
+# made it, and this says whether those marks are weighed against the
+# raster banding the page saves (auto), kept in memory whatever they come
+# to (never), or put in a scratch file from the first mark (always).
+# PLRM Appendix G bars a page description from choosing how its marks are
+# held, so it is settled by the invocation and reported back through
+# currentsystemparams
+RecordSpill
 
 # where this run's pages go when the page device names nothing and the
 # program has bound no name of its own: -o
