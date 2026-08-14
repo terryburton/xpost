@@ -28,6 +28,17 @@
 
 /.xpost_DSCWRITE .xpost_PDFWRITE dup length 2 add dict copy def
 
+% The process colour models a setpagedevice request may move this device
+% to. Said again rather than inherited, because a copy carries what it
+% was copied from and the class this one copies offers its three on the
+% strength of the PDF content operators; what this device offers them on
+% is its own prolog, which defines g, rg and k over setgray,
+% setrgbcolor and setcmykcolor, so a paint made in any of the three is
+% written in the space it was made in and read back in that space. A
+% prolog that stopped defining one of them would leave this claim
+% standing over an operator no reader is given.
+.xpost_DSCWRITE /.colormodels << /Process true /DeviceRGB true /DeviceCMYK true >> put
+
 % no separation registry: paints fall back to process colours
 .xpost_DSCWRITE /.registersep undef
 % no image consumer either: sampled images paint through the
