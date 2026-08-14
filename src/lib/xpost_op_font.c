@@ -2997,8 +2997,12 @@ static int
 _cid_emit_num(Xpost_Context *ctx, Xpost_String_Buffer *b, Xpost_Object v)
 {
     (void)ctx;
+    /* The interpreter's integer is as wide as the build makes it, so the
+       decimal is written through the widest integer the language has and
+       every digit of the value reaches the font program at either
+       width. */
     if (xpost_object_get_type(v) == integertype)
-        return xpost_strbuf_appendf(b, "%d", v.int_.val);
+        return xpost_strbuf_appendf(b, "%lld", (long long)v.int_.val);
     if (xpost_object_get_type(v) == realtype)
         return xpost_strbuf_appendf(b, "%g", v.real_.val);
     if (xpost_object_get_type(v) == booleantype)

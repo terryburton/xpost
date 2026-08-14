@@ -39,6 +39,7 @@
 #include <string.h>
 
 #include "xpost_error.h"
+#include "xpost_private.h" /* XPOST_PRINTF */
 
 /* A growable byte buffer: the one allocation discipline behind every
    builder that assembles a byte stream of unknown final size -- the
@@ -143,7 +144,12 @@ xpost_strbuf_append(Xpost_String_Buffer *b, const void *p, size_t n)
    written into every caller. A function reading a variable argument
    list is not a function a compiler can copy into a call site, so the
    copies the rest of this header hands out would each be a call to the
-   same body under a different name. */
+   same body under a different name.
+
+   The format and the arguments are checked against each other: the
+   buffer is the first parameter, so the format is the second and the
+   arguments it names begin at the third. */
+XPOST_PRINTF(2, 3)
 int xpost_strbuf_appendf(Xpost_String_Buffer *b, const char *fmt, ...);
 
 static inline void

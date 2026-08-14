@@ -67,6 +67,24 @@
 # define XPOST_NOINLINE
 #endif
 
+/* Marks a function that takes a printf format string and the arguments
+   it names, so that the compiler checks the two against each other. The
+   numbers are the positions of the format parameter and of the first
+   argument it consumes, counting the whole parameter list from one: a
+   function that carries a destination ahead of the format numbers them
+   2 and 3, not 1 and 2. The pair names parameters rather than variable
+   arguments, so a mark that names the wrong ones checks the wrong
+   parameter and says so with the same confidence as a right one.
+
+   A compiler that does not know the attribute drops the checking, not
+   the declaration. */
+#if defined(__GNUC__) || defined(__clang__)
+# define XPOST_PRINTF(fmt_arg, first_arg) \
+    __attribute__((format(printf, fmt_arg, first_arg)))
+#else
+# define XPOST_PRINTF(fmt_arg, first_arg)
+#endif
+
 /* Consumes the answer of an XPOST_MUST_CHECK function at a site where
    the refusal it reports cannot arise -- an index the line above just
    read from, a resource the caller has already established. Naming the
