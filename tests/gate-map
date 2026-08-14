@@ -535,10 +535,20 @@ width width witness
 # each is a rule about the suite's own shape rather than about what the
 # interpreter computes, so any change that adds, moves or re-costs a
 # test can break one.
+#
+# The registers belong here for the same reason and are named for a
+# sharper one: what they hold is a list of what the tree contains, and
+# a change adds to the tree in whatever area it was working in. A file
+# added under font is registered in a list the font area does not name,
+# so an area gate cannot see the omission and the whole suite finds it
+# later. They are seconds apiece against a class that has reached the
+# published branch more than once.
 always test check-gate-map
 always test check-test-cost
 always test check-test-quality
 always test check-test-timeouts
+always test check-exported-symbols
+always test check-dist-lists
 always width witness
 
 # ---- everything: what a path falls through to

@@ -364,6 +364,7 @@ xpost_path_permit_write
 xpost_path_safe_leaf
 xpost_putenv
 xpost_quit
+xpost_raster_formats
 xpost_real_cons
 xpost_realpath
 xpost_record_box
