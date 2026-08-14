@@ -154,6 +154,73 @@ D /ImgData get 3 get 0 get 2 get 0 gt
     (an rgb device takes the compiled FillPoly) assert
     pop
 
+% --- the process colour model ----------------------------------------
+
+% A device offering process colour models is moved to the one a request
+% named, and how many components its marking methods take moves with it.
+% A paint carries one value per component of the space it was made in,
+% so a device left saying how many it took in the space it has stopped
+% taking them in is handed one value in the place of another -- a grey
+% where a red belongs -- at every mark after the request.
+%
+% No device this interpreter ships is on both sides of that: the two
+% that offer models write documents and carry no component count of
+% their own, and the devices that carry one offer no model to be moved
+% to. So the rule is unreached by the fleet and reachable here, the way
+% the grey side of the fill rule above is.
+
+% w h cs ncomp models model  .mkmodeldev  dev
+% The device above, offering a set of process colour models and carrying
+% a request for one of them.
+/mkmodeldev { % w h cs ncomp models model  .  dev
+    /mm.want exch def /mm.offer exch def
+    mkdev
+    dup /.colormodels mm.offer put
+    dup /ProcessColorModel mm.want put
+} bind def
+
+16 16 /DeviceGray 1 << /DeviceGray true /DeviceRGB true >> /DeviceRGB
+    mkmodeldev complete
+    dup /nativecolorspace get /DeviceRGB eq
+    (a device offering the model a request names adopts it) assert
+    dup /.ncomp get 3 eq
+    (and is sent the components that model carries) assert
+    pop
+
+% A model the device does not offer moves neither.
+16 16 /DeviceGray 1 << /DeviceGray true >> /DeviceRGB
+    mkmodeldev complete
+    dup /nativecolorspace get /DeviceGray eq
+    (a model the device does not offer is not adopted) assert
+    dup /.ncomp get 1 eq
+    (and the components it takes stay where they were) assert
+    pop
+
+% The model that is whatever space a paint was made in has no fixed
+% number of components, so a device adopting it keeps the count it had.
+% Without this the rule above would read as one that writes a number
+% whatever the space, and there is a space with no number to write.
+16 16 /DeviceGray 1 << /Process true >> /Process
+    mkmodeldev complete
+    dup /nativecolorspace get /Process eq
+    (the model that is every space is adopted like any other) assert
+    dup /.ncomp get 1 eq
+    (and carries no component count to be moved to) assert
+    pop
+
+% A device that states no component count is not given one: what it
+% takes is settled somewhere this does not know about, and writing a
+% number onto it would be answering for it.
+16 16 /DeviceGray 1 << /DeviceRGB true >> /DeviceRGB
+    mkmodeldev
+    dup /.ncomp undef
+    complete
+    dup /nativecolorspace get /DeviceRGB eq
+    (a device stating no component count still adopts the model) assert
+    dup /.ncomp known not
+    (and is not given a count it never stated) assert
+    pop
+
 % --- what a completed device does when it is painted on --------------
 
 % The slot assertions above say what was installed; this says what the

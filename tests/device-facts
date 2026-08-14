@@ -244,15 +244,15 @@ open nativecolorspace every
     differing from nothing, and a reason that cannot be wrong is a
     reason nobody rereads.
     What would make it one: a device whose space can move after it is
-    installed and whose components then follow. That happens where a
-    device offers process colour models -- .colormodels above -- since
-    a page-device request naming one writes this key (data/device.ps).
-    Today only the two document writers offer any, and they carry no
-    raster to disagree with. A raster class declaring .colormodels would
-    make this a movable value on every class copied from it, and .ncomp
-    below does not move with it, so the components a device is sent
-    would part company with the space it says it takes them in. That is
-    the day to ask.
+    installed and answers differently from the family because of where
+    it was moved to. That happens where a device offers process colour
+    models -- .colormodels above -- since a page-device request naming
+    one writes this key (data/device.ps). Today only the two document
+    writers offer any, and they carry no raster to disagree with. The
+    count beside it moves with it, so a raster class declaring
+    .colormodels would be moved to a space and sent that space's
+    components; what it would still owe is a raster shaped for them,
+    which is the device's own business and not a family answer.
     Two of the answers are not a name but a procedure: the compiled
     drivers store the space as an executable name, which is why
     data/device.ps fetches it with get and holds it literal rather than
@@ -268,14 +268,25 @@ open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     a record refuses outright rather than copying, since a record whose
     component count disagreed with its target would replay a colour
     nobody named (src/lib/xpost_dev_record.c).
-    What would make it one is the two parting company. They are one
-    statement said twice, and nothing holds them to agreeing: the
-    page-device request that moves a device's colour space writes that
-    key and not this one, so a raster class that ever offered a process
-    colour model would be moved to it and go on taking the old number
-    of components. Either they are held to each other, or this becomes
-    the question and each device says how many it takes and why that is
-    what its space implies.
+    It follows the space rather than standing beside it: the
+    page-device request that moves a device's colour space writes this
+    key too, from the components that space takes, wherever the device
+    states one and the space has a fixed count to give
+    (.completedevice, data/device.ps; tests/device_completion_test.ps).
+    A device offering the model that is whatever space a paint was made
+    in has no fixed count and keeps what it had.
+    What does not follow is what a raster class derives from this when
+    it is built: .takecolor and .pushcolor are written once from the
+    count the class was made with (.makerasterclass, data/image.ps), so
+    a raster class that ever offered a process colour model would be
+    sent the new space's components through helpers shaped for the old
+    count. There is no such class, and the day one arrives is the day
+    those move too.
+    What would make it a question is a device taking a number of
+    components its space does not imply -- a raster holding an alpha
+    plane beside its colour, say -- at which point the count would stop
+    being derivable and each device would have to say what it takes and
+    why.
 
 open NoOutput bbox dscwrite null pdfwrite svgwrite record
     That this device puts no pixels down, so data/device.ps leaves it

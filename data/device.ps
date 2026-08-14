@@ -168,10 +168,24 @@ setglobal
     % adopts it as its native space; the colour pipeline then delivers
     % that model's components to the marking methods. Before the fills
     % are chosen below, because which compiled fill fits depends on it.
+    % A paint carries one value per component of the space it is made
+    % in, so the count moves with the space: a device left saying how
+    % many it took in the space it has stopped taking them in would hand
+    % its marking methods one value in the place of another. Moved only
+    % where the device states a count and the space it has adopted has
+    % one -- a device offering the model that is whatever space a paint
+    % was made in carries no fixed count to move.
     dev /ProcessColorModel 2 copy known {
         get dev /.colormodels 2 copy known {
             get 1 index known {
-                dev /nativecolorspace 3 -1 roll put
+                dup dev /nativecolorspace 3 -1 roll put
+                dev /.ncomp known {
+                    //.xpostsys /.spacecomps get 1 index known {
+                        //.xpostsys /.spacecomps get 1 index get
+                        dev /.ncomp 3 -1 roll put
+                    } if
+                } if
+                pop
             }{ pop } ifelse
         }{ pop pop pop } ifelse
     }{ pop pop } ifelse
