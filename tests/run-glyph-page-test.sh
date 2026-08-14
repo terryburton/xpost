@@ -57,13 +57,12 @@ fail=0
 #
 # A command substitution strips the newlines its command's output ends
 # with, so how much of a run's output survives being captured turns on
-# what the interpreter printed last rather than on what the run left. A
-# run that ends in a page marker keeps the newline before that marker;
-# one that ends the moment its program does loses the newline it ended
-# on. The difference between those two counts is the whole of the
-# measure below, and it comes out one byte wide with no page behind it.
-# The sentinel carries the newlines through the substitution and comes
-# off again here; the status comes out of the subshell the same way.
+# what the run printed last rather than on what it left, and a program
+# that ends on a newline is measured a byte short of one that does not.
+# The measure below is one byte wide with no page behind it, so that byte
+# decides cases. The sentinel carries the newlines through the
+# substitution and comes off again here; the status comes out of the
+# subshell the same way.
 #   sets out to what the run wrote, and st to how it ended
 run_out() {         # the interpreter and its arguments
     out=$( "$@" </dev/null 2>&1; _run_st=$?; printf 'X'; exit "$_run_st" )
@@ -72,19 +71,22 @@ run_out() {         # the interpreter and its arguments
 }
 
 # What a run left, as one number: the bytes of the file it was told to
-# write plus the bytes it wrote to its own output, less the marker the
-# default page semantics print when a page is transmitted. That marker is
-# the interpreter's framing rather than the run's answer, and it is the
-# one thing that differs between a job that asks for its page and a job
-# that does not -- which is the difference every case here turns on. The
-# rest of the framing is the same in every run and cancels in the
-# comparison.
+# write plus the bytes it wrote to its own output.
+#
+# Both halves are the program's. These runs name an output file and have
+# no terminal on their standard input, so the interpreter frames nothing
+# for them -- no greeting, no page-boundary announcement, no prompt --
+# and the output channel carries what the program printed and nothing
+# else. That is what makes the two halves addable: framing that arrived
+# on the second half would be counted as a page. run_case holds the runs
+# to it rather than subtracting it here, so framing that came back would
+# be reported instead of removed.
 left() {            # file output
     _left_n=0
     if [ -s "$1" ]; then
         _left_n=$(wc -c < "$1")
     fi
-    _left_m=$(printf '%s' "$2" | sed 's/----showpage----//g' | wc -c)
+    _left_m=$(printf '%s' "$2" | wc -c)
     echo $((_left_n + _left_m))
 }
 
@@ -96,6 +98,15 @@ run_case() {        # name expect program
     rm -f "$work/$name.$dev"
     run_out "$xpost" -q $ns -d "$dev" -o "$work/$name.$dev" "$work/$name.ps"
     verdict_run "$st" "$out" "the $name job on $dev" || { fail=$((fail + 1)); return; }
+    # what left counts on: the output channel is the program's alone
+    case $out in
+        *----showpage----*)
+            echo "FAILURES: $dev: $name was framed by a page-boundary" \
+                 "announcement on its output, which the measure below would" \
+                 "read as a page"
+            fail=$((fail + 1))
+            return ;;
+    esac
     got=$(left "$work/$name.$dev" "$out")
 
     if [ "$expect" = page ]; then

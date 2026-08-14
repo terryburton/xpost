@@ -158,9 +158,18 @@ typedef struct _Xpost_Context Xpost_Context;
  * @brief Specify the behavior the interpreter should take when executing `showpage`.
  */
 typedef enum {
-    XPOST_SHOWPAGE_DEFAULT, /**< Print "----showpage----\n" to stdout
-                                 and read and discard a line of text
-                                 from stdin (ie. wait for return). */
+    XPOST_SHOWPAGE_DEFAULT, /**< Pause for whoever is watching: print
+                                 "----showpage----" to stdout and read
+                                 and discard a line of text from stdin
+                                 (ie. wait for return). Both are done
+                                 only where the run has somebody to do
+                                 them for -- stdin a terminal, and no
+                                 output filename given -- so a run under
+                                 a script neither writes the marker to
+                                 the output it is sharing with the
+                                 program nor takes a line of what stdin
+                                 was carrying. The page is transmitted
+                                 and erased either way. */
     XPOST_SHOWPAGE_NOPAUSE, /**< Bypasses this action but still
                                  performs a "flush" of the graphics
                                  device. */

@@ -648,11 +648,28 @@ setglobal
 } bind def
 
 % (banner)  .pagepause  -
-% the wait the announcing semantics take at a page boundary: name the
-% page on the standard output and read a line from the line editor
+% The wait the announcing semantics take at a page boundary: name the
+% page on the standard output and read a line from the line editor.
+%
+% Both halves are for a person, so both are done where the run has one
+% and neither where it has not. That is the question the run already
+% answers to decide whether to offer an interactive session at all --
+% a terminal on the standard input, and no output file naming something
+% that waits for one -- and it is read here rather than asked again.
+%
+% Each half does harm without a person to receive it. The name is
+% addressed to a reader, and a run nobody is reading lands it in the
+% middle of what the program is writing on that same channel. The read
+% is somebody pressing return, and where there is nobody the standard
+% input is carrying something else and the read takes a line of it.
 .xpostsys /.pagepause {
-    =print flush
-    [ {(%lineedit)(r)file}stopped cleartomark
+    /.interactive //.xpostsys /.hostvalue get exec
+    {
+        =print flush
+        [ {(%lineedit)(r)file}stopped cleartomark
+    }{
+        pop
+    } ifelse
 } bind put
 
 .xpostsys /ShowpageSemanticsDict <<

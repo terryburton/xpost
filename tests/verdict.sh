@@ -27,17 +27,18 @@
 # that complained its way to a clean exit. What a run left and what it
 # said are separate answers and a pass needs both.
 #
-# Position is deliberately not the rule. The verdict is not the last
-# thing a run prints: the startup banner precedes it, the prompt of an
-# interpreter that reaches its executive follows it, and a wrapper that
-# folds the log channel in gets whatever the device said on its way out.
-# Nor does the verdict have a line to itself -- the showpage banner of
-# the default page semantics ends without one, so a run that showed a
-# page prints its verdict on the end of that. None of it is the test's to
-# arrange, and a rule about it would judge the interpreter's framing
-# rather than the test's answer. What the rule does need is that the word
-# is the run's own and not the tail of a longer one, which is what the
-# leading boundary below is for.
+# Position is deliberately not the rule, and neither is a line of the
+# verdict's own. A wrapper that folds the log channel in gets whatever
+# the device said on its way out, before the verdict and after it. A
+# program that prints without a newline leaves the verdict on the end of
+# what it printed. And a wrapper run at a terminal is greeted before its
+# program starts and told of each page as it goes, either of which can
+# sit against the verdict -- none of which happens to these wrappers,
+# which redirect the standard input away from one, but none of which is
+# the test's to arrange either. A rule about position would judge the
+# framing around the answer rather than the answer. What the rule does
+# need is that the word is the run's own and not the tail of a longer
+# one, which is what the leading boundary below is for.
 #
 # The verdict is SUCCESS everywhere but the one check whose PostScript
 # side answers PASS, FAIL or INCONCLUSIVE because it has a third thing
