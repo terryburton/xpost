@@ -198,7 +198,21 @@ fi
 # the moment it is made, so it cannot be found by looking in the
 # directory afterwards. What can be watched is the calls, where the
 # platform offers a way to watch them.
+#
+# A program of that name is not the question. A machine can carry one
+# that watches something else, or that does not take these options, and
+# what it writes then names no file at all -- which reads exactly like a
+# run that opened none, and is the answer a spill that had stopped
+# happening would want. So the tracer is put to a command that certainly
+# opens a named file, and is believed only where the trace names it.
 tracer=$(command -v strace 2>/dev/null) || tracer=
+if [ -n "$tracer" ]; then
+    probe=$work/tracer-probe
+    mkdir -p "$probe" && : > "$probe/xpost-tracer-probe"
+    "$tracer" -f -e trace=file -o "$probe/trace.txt" \
+        cat "$probe/xpost-tracer-probe" >/dev/null 2>&1
+    grep -q 'xpost-tracer-probe' "$probe/trace.txt" 2>/dev/null || tracer=
+fi
 if [ -n "$tracer" ]; then
     trace() {                   # <tag> <M> <args...>
         t_tag=$1; t_m=$2
@@ -240,8 +254,8 @@ if [ -n "$tracer" ]; then
              "$(ls -A "$scratch" | tr '\n' ' ')"
     fi
 else
-    echo "SKIP no strace on this machine, so what each state does to the" \
-         "scratch directory is not watched"
+    echo "SKIP nothing on this machine reports the files a run opens, so" \
+         "what each state does to the scratch directory is not watched"
 fi
 
 # ---- a scratch directory that will take no file ----
