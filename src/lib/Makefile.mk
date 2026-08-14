@@ -39,6 +39,7 @@ src/lib/xpost_span.c \
 src/lib/xpost_record.c \
 src/lib/xpost_spill.c \
 src/lib/xpost_stack.c \
+src/lib/xpost_strbuf.c \
 src/lib/xpost_string.c \
 src/lib/xpost_vm_image.c \
 src/lib/xpost_op_array.c \
