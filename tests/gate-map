@@ -109,12 +109,14 @@ build width full
 
 # ---- record: the recorded page, its spans, and the band devices
 record path src/lib/xpost_record.*
+record path src/lib/xpost_spill.*
 record path src/lib/xpost_dev_record.*
 record path src/lib/xpost_span.*
 record path data/recorddev.ps
 record test band-*
 record test record
 record test record-*
+record test record-spill-unit
 record test form-band
 record test form-nest
 record test region-replay

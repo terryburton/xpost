@@ -2691,11 +2691,40 @@ static const char *const host_settings[] =
     "StartDeviceAsked",
     "StartPageSize",
     "SUBDEVICE",
+    "RecordSpill",
     "OutputFileName",
     "OutputBufferIn",
     "OutputBufferOut",
     NULL
 };
+
+/* Where this run wants a retained page's marks held: weighed against
+   what banding the page saves, never in a file, or in one from the first
+   mark. It is a property of the machine and of what the caller is
+   willing to spend rather than of the page description, so it is
+   settled before the context exists and read into the settings below.
+
+   PLRM Appendix G bars a page description from choosing how its marks
+   are held, so this is not a page-device parameter and must not become
+   one. What a program may do is be told; currentsystemparams reports
+   both this and what became of it.
+
+   Kept for the process rather than passed to xpost_create, the way a
+   run's refusal to read a virtual memory image is: it is asked for
+   before the context is made and read as the context is made. */
+static const char *_record_spill = "auto";
+
+XPAPI int
+xpost_record_spill_set(const char *state)
+{
+    if (!state)
+        return 0;
+    if (strcmp(state, "auto") && strcmp(state, "never")
+        && strcmp(state, "always"))
+        return 0;
+    _record_spill = state;
+    return 1;
+}
 
 /* The dictionary those settings live in. The namespace holding it is
    sealed read-only once the language is loaded, and the seal is shallow,
@@ -2982,6 +3011,14 @@ static int _record_host_config(Xpost_Context *ctx,
     }
     else if ((ret = _host_put_string(ctx, "SUBDEVICE",
                                      subdevice ? subdevice + 1 : NULL)) != 0)
+        goto done;
+
+    /* Where a retained page's marks are held. A name, being one of three
+       words and read back as one; literal, because a name holding a
+       procedure would be run rather than read wherever it is looked at. */
+    if ((ret = _host_put(ctx, "RecordSpill",
+                         xpost_object_cvlit(
+                             xpost_name_cons(ctx, _record_spill)))) != 0)
         goto done;
 
     /* Where this run's pages go when the page device names nothing and

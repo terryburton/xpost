@@ -282,18 +282,48 @@ if /usr/bin/time -f '%M' true >/dev/null 2>&1; then
             note "the cost page holds $c_cost bytes of record against a" \
                  "saving of $c_save; the adverse case is not drawn"
         fi
-        # What bounds the excess: banding holds the record and one band
-        # where holding the page whole holds the page, so what it is out
-        # by is the record less the rows it does not hold. The record is
-        # therefore a ceiling on it, and one this arm will keep asking
-        # for however the record comes to be held.
-        if [ "$c_excess" -le $(( c_kib + SLACK )) ]; then
+        # What bounds the excess. Banding holds one band where holding
+        # the page whole holds the page, and it holds the marks -- but
+        # only until they come to more than the raster it is saving,
+        # past which they go into a file and stop being resident. So the
+        # two routes come to the same peak, and this is the reading the
+        # whole mechanism exists to produce: a page whose marks are worth
+        # four times what banding it saves costs no more banded than
+        # whole.
+        if [ "$c_excess" -le "$SLACK" ]; then
             ok "cost: banding the page peaks $c_excess KiB over holding it" \
-               "whole, inside the $c_kib KiB of record that explains it"
+               "whole, inside the $SLACK KiB the meter may be out by," \
+               "with $c_kib KiB of marks held"
         else
             note "banding the cost page peaks $c_excess KiB over holding it" \
-                 "whole, past the $c_kib KiB of record and the $SLACK KiB" \
-                 "the meter may be out by"
+                 "whole, past the $SLACK KiB the meter may be out by; the" \
+                 "$c_kib KiB of marks are being paid for twice"
+        fi
+
+        # ... and that it stays there as the drawing grows. The excess
+        # used to be the record, which follows the drawing, so doubling
+        # the drawing doubled it. What is asked here is that doubling the
+        # drawing moves the peak by nothing: the marks are bounded now,
+        # and a bound that grew with the drawing would not be one.
+        if weigh pgm:band "$work/cost-band2" $(( GRID * 2 )) 1 \
+            && c_band2=$peakkib; then
+            c_grow=$(( c_band2 - c_band ))
+            [ "$c_grow" -lt 0 ] && c_grow=$(( -c_grow ))
+            echo "COST doubled: $(said "$work/cost-band2" COST) bytes of" \
+                 "marks, peak resident banded $c_band2 KiB against" \
+                 "$c_band KiB for half the drawing"
+            if [ "$c_grow" -le "$SLACK" ]; then
+                ok "cost: doubling the drawing moves the banded peak by" \
+                   "$c_grow KiB, inside the $SLACK KiB the meter may be" \
+                   "out by"
+            else
+                note "doubling the drawing moved the banded peak by" \
+                     "$c_grow KiB, past the $SLACK KiB the meter may be" \
+                     "out by; what a banded page costs is following the" \
+                     "drawing again"
+            fi
+        else
+            note "the cost page could not be weighed at twice the drawing"
         fi
     else
         note "the cost page could not be weighed on both routes"
@@ -362,7 +392,7 @@ sab "a saving so small that every record is past it" always \
 
 # The count of what was asked, so that a run which asked nothing fails
 # rather than reporting a clean tree. Three devices at eight checks
-# apiece, and three more where the meter can be read.
+# apiece, and four more where the meter can be read.
 if [ "$checks" -lt 26 ]; then
     note "the wrapper made $checks checks; a run this size makes" \
          "twenty-six or more, so it was not asking what it says it asks"

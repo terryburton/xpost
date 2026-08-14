@@ -3905,12 +3905,35 @@ test('band-select',
 # exists to keep is the measurement. It ends by breaking the statement of
 # what banding saves in both directions and requiring the boundary to go the
 # wrong way each time.
+# Where a retained page's marks are held. A page too large for the band
+# budget is held as the marks that made it, and where those marks go is
+# settled three ways: weighed against the raster banding the page saves
+# (the default), never in a file, or in one from the first mark. This
+# draws one page at two sizes and requires the rule to send the light one
+# to memory and the heavy one to a file; requires each state to do what
+# it says whatever the drawing and to report both what was asked for and
+# what became of it; requires a word that is none of the three to be
+# refused naming what was given; watches the scratch directory, where the
+# platform lets it be watched, to hold a page under the rule to creating
+# no scratch file and "never" to naming one in no call at all; shows a
+# run a directory it cannot write in and requires the state that demanded
+# a file to be refused there and the state that would have weighed one to
+# warn and go on; and holds every state to putting out the same bytes as
+# the route that records nothing, since where a page's marks were kept is
+# not something a page shows.
+test('record-spill',
+  find_program('tests/run-record-spill-test.sh'),
+  args: [ xpost_exe, files('tests/record_spill_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_veryslow,
+  timeout: 900)
+
 test('record-excess',
   find_program('tests/run-record-excess-test.sh'),
   args: [ xpost_exe, files('tests/record_excess_test.ps') ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_veryslow,
-  timeout: 900)
+  timeout: 1800)
 
 # The same question of a job whose marks are glyphs. Text does not reach the
 # page the way a path does: a glyph's pixels go straight to the device, or
@@ -4555,6 +4578,26 @@ if host_machine.system() == 'linux'
     install: false)
   test('record-cost', record_cost_exe, suite: cost_fast + ['memacct'])
 endif
+
+# Where a record puts what it need not hold, and what happens when the
+# place it put it stops working. Two halves: a record answers exactly the
+# same things spilled as it does in memory -- every mark, every run of
+# rows, every mask, cell and sample run -- and the failure paths each end
+# in a named error rather than in a page that stops where the trouble
+# started. The three failures a process can arrange for itself are
+# arranged here: a limit on how large a file it may write, its own file
+# shortened under it, and the scratch directory made unwritable after the
+# file was opened. A C test because two of the three need the process's
+# own signal handling and resource limits, which no page description
+# reaches.
+spill_exe = executable('spill_test',
+  'tests/spill_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('record-spill-unit', spill_exe, suite: cost_fast)
 
 dev_rect_exe = executable('dev_rect_test',
   'tests/dev_rect_test.c',

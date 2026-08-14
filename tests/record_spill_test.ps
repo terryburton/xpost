@@ -1,0 +1,60 @@
+% Where a retained page's marks were held, said by the run that held them.
+%
+% A page too large for the band budget is held as the marks that made it.
+% Where those marks go is a decision about the machine rather than about
+% the page -- in memory while they come to less than the raster banding
+% saves, in a scratch file past that, or wherever the invocation said --
+% and this is the page that says which happened.
+%
+% M says how much is drawn, and is the whole of the difference between
+% the two shapes this is run in. A light drawing keeps the marks well
+% under the raster banding saves and a heavy one carries them far past
+% it, so the same page asked at two sizes asks both sides of the rule.
+%
+% Nothing here decides anything. What is printed is a measurement, and
+% the page itself is written out so that a wrapper can hold every state
+% to putting out the same bytes: where a page's marks were kept is not
+% something a page shows.
+
+/num { 20 string cvs } bind def
+/ID 1183615869 internaldict def
+
+/M where { pop }{ /M 200 def } ifelse
+
+/isrec { DEVICE /.playclass known } bind def
+/saving { isrec { DEVICE ID /.recordsaving get exec }{ 0 } ifelse } bind def
+/cost { isrec { DEVICE ID /.recordcost get exec exch pop exch pop }{ 0 } ifelse } bind def
+
+/W 2550 def
+/H 3300 def
+<< /PageSize [W H] >> setpagedevice
+
+% A grid, so that every band of the page carries ink: a band holding
+% nothing but the ground is a band the loop does not paint, and a page
+% whose ink is in one band is a page held whole for every purpose here.
+/draw {
+    gsave 0 setgray
+    /g M sqrt cvi def
+    0 1 g 1 sub {
+        /i exch def
+        0 1 g 1 sub {
+            /j exch def
+            i W mul g div 2 add
+            j H mul g div 3 add
+            2 2 rectfill
+        } for
+    } for
+    grestore
+} bind def
+
+draw
+
+(BAND ) print currentsystemparams /CurBandHeight get num print (\n) print
+(SAVING ) print saving num print (\n) print
+(COST ) print cost num print (\n) print
+(SPILL ) print currentsystemparams /RecordSpill get num print (\n) print
+(WHERE ) print currentsystemparams /CurRecordSpill get num print (\n) print
+
+showpage
+(\nDONE\n) print
+flush

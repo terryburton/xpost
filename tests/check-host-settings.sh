@@ -418,12 +418,13 @@ StartDevice /null
 StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE -
+RecordSpill /auto
 OutputFileName -
 OutputBufferIn -
 OutputBufferOut -
 "
 
-probe_run "$work/out2" -d null:bgra -o "$hwork/page.out"
+probe_run "$work/out2" -d null:bgra -s never -o "$hwork/page.out"
 compare_values "a run given an output file and a device mode" \
     "$work/out2" "DATA_DIR $src/data
 .resourcepath 
@@ -433,6 +434,7 @@ StartDevice /null
 StartDeviceAsked /null
 StartPageSize  612 792
 SUBDEVICE bgra
+RecordSpill /never
 OutputFileName $hwork/page.out
 OutputBufferIn -
 OutputBufferOut -

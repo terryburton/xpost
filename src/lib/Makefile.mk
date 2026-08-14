@@ -37,6 +37,7 @@ src/lib/xpost_object.c \
 src/lib/xpost_save.c \
 src/lib/xpost_span.c \
 src/lib/xpost_record.c \
+src/lib/xpost_spill.c \
 src/lib/xpost_stack.c \
 src/lib/xpost_string.c \
 src/lib/xpost_vm_image.c \
@@ -85,6 +86,7 @@ src/lib/xpost_name.h \
 src/lib/xpost_save.h \
 src/lib/xpost_span.h \
 src/lib/xpost_record.h \
+src/lib/xpost_spill.h \
 src/lib/xpost_stack.h \
 src/lib/xpost_string.h \
 src/lib/xpost_vm_image.h \

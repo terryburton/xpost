@@ -11,6 +11,8 @@
 #include <stddef.h>
 
 #include "xpost_object.h"   /* real: what a coordinate arrives as */
+#include "xpost_private.h" /* XPOST_TEST_VISIBLE */
+#include "xpost_spill.h"    /* where a record puts what it need not hold */
 
 /**
  * @file xpost_record.h
@@ -80,6 +82,16 @@
  * the whole page paints the whole page. A record can be replayed as
  * many times as the caller likes, which is what lets a page already
  * drawn be shown again without running the program that drew it.
+ *
+ * WHERE THE MARKS ARE KEPT is a second decision and not the first one.
+ * Retaining a drawing and holding it in memory are two things, and a
+ * record does the first; xpost_record_spill moves what it holds into a
+ * scratch file with no name, and from there what it costs in memory is
+ * a write buffer, a read window and a table entry per distinct picture,
+ * glyph, screen and placed drawing -- terms that follow the page's
+ * vocabulary rather than its drawing. A record that has not been asked
+ * to spill holds everything in memory, which costs the drawing without
+ * limit and is the right answer for a small one.
  */
 
 /** The marking calls a record holds, and their operand counts after
@@ -312,9 +324,46 @@ size_t xpost_record_image_count(const Xpost_Record *rec);
  *
  * What comes back points into the record and is good until the next
  * image is written down.
+ *
+ * Its @c samples and @c mbits are NULL where the record has spilled:
+ * those two follow the picture's size rather than its description, so
+ * they are the two a spilled record does not hold. A caller wanting them
+ * asks xpost_record_image_run and xpost_record_image_mbits, which answer
+ * for a record either way round.
  */
 const Xpost_Record_Image *xpost_record_image_get(const Xpost_Record *rec,
                                                  size_t i);
+
+/**
+ * @brief One run of an image's samples: run @p run of the @p nrows the
+ *        record was handed.
+ *
+ * @return width bytes where the rows are planar and width x ncomp where
+ *         they are not, or NULL where there is no such run
+ *
+ * A picture is written into a raster a row at a time, and this is the row
+ * in hand. It is the whole of what a caller need hold of a picture at
+ * once, which is what keeps a spilled record's picture bounded: a
+ * hundred megabytes of samples costs the run being written.
+ *
+ * What comes back is good until the next run is asked for. Where the
+ * record holds its samples in memory it points at them; where the record
+ * has spilled it points at the one run the record read back, so a caller
+ * that wants two runs at once must take a copy of the first.
+ */
+const unsigned char *xpost_record_image_run(const Xpost_Record *rec,
+                                            size_t i, int run);
+
+/**
+ * @brief An image's mask bits, or NULL where it has none.
+ *
+ * height runs of mrowb bytes, a set bit leaving the pixel alone. Whole,
+ * because what reads them reads them whole; where the record has spilled
+ * they are read back into a buffer of the record's, good until the next
+ * image's are asked for.
+ */
+const unsigned char *xpost_record_image_mbits(const Xpost_Record *rec,
+                                              size_t i);
 
 /**
  * @brief Which of an image's rows reach device rows @p lo to @p hi.
@@ -671,6 +720,80 @@ size_t xpost_record_count(const Xpost_Record *rec);
  * record.
  */
 size_t xpost_record_bytes(const Xpost_Record *rec);
+
+/**
+ * @brief What a record is resident for, in bytes.
+ *
+ * The part of xpost_record_bytes that is memory. For a record holding
+ * everything in memory the two are the same number; for one that has
+ * spilled, this is what is left in memory and the difference is what is
+ * in the file. It is what a caller asking whether the bound holds wants,
+ * where xpost_record_bytes is what a caller asking what the drawing
+ * costs wants.
+ */
+size_t xpost_record_resident(const Xpost_Record *rec);
+
+/**
+ * @brief Put what a record holds into a scratch file, and keep it there.
+ *
+ * @return 1, or 0 where there is no scratch space or the write failed
+ *
+ * Everything the record holds goes: the marks and their values, the
+ * samples of every picture, the coverage of every glyph, the cells of
+ * every screen. What is left in memory is a write buffer, a read window,
+ * and one small entry per distinct picture, glyph, screen and placed
+ * drawing -- terms that follow how many kinds of thing the page names
+ * rather than how much it draws. Marks written after this go straight to
+ * the file, so a record asked once stays spilled until it is released.
+ *
+ * A record that is already spilled answers 1 and does nothing. A record
+ * short of a mark is not spilled: it describes a page it cannot
+ * reproduce, and moving that page's remains is no use to anybody.
+ *
+ * A failure here is a failure to make or write the file and leaves the
+ * record exactly as it was, holding everything in memory and able to go
+ * on. It is the caller's to decide what that means: the page is not lost
+ * by it, only unbounded.
+ *
+ * The drawings a record places are records of their own and are not
+ * spilled by this. Each is asked for itself, by whoever holds it.
+ */
+int xpost_record_spill(Xpost_Record *rec);
+
+/**
+ * @brief Whether a record's marks are in a file rather than in memory.
+ */
+int xpost_record_spilled(const Xpost_Record *rec);
+
+/**
+ * @brief Shorten the file a spilled record's marks are in, keeping the
+ *        first @p keep bytes of it.
+ *
+ * @return 1, or 0 where the record holds no file or it could not be
+ *         shortened
+ *
+ * Nothing in a run does this. It is here so that a test can see what a
+ * record does when its scratch file has been shortened under a
+ * descriptor nobody else holds -- which is a defect here or a fault
+ * below, and which must end in a refusal naming the file rather than in
+ * a page that stops where the reading did. A failure path with no test
+ * is a failure path that does not work.
+ */
+XPOST_TEST_VISIBLE int xpost_record_spill_shorten(Xpost_Record *rec,
+                                                  long long keep);
+
+/**
+ * @brief Which failure left a record short of a mark.
+ *
+ * @return 0 where it is short of none, VMerror where memory ran out,
+ *         ioerror where the scratch file did
+ *
+ * A caller told VMerror because a filesystem filled looks in the wrong
+ * place, so the two are told apart. What either comes to is the same:
+ * the record describes a page it cannot reproduce and every replay of it
+ * refuses.
+ */
+int xpost_record_error(const Xpost_Record *rec);
 
 /**
  * @brief Say that a mark the page was given never reached the record.

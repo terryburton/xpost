@@ -330,6 +330,36 @@ XPAPI void xpost_skip_graphics_set(Xpost_Context *ctx, int enable);
 XPAPI void xpost_vm_image_refuse(void);
 
 /**
+ * @brief Choose where a retained page's marks are held.
+ *
+ * @param state "auto", "never" or "always"
+ * @return 1, or 0 where the word is none of the three
+ *
+ * A page too large for the band budget is held as the marks that made it
+ * rather than as its pixels, and those marks have to be kept somewhere.
+ * By default they are weighed: while they come to less than the raster
+ * that banding the page saves they stay in memory, and past that they go
+ * into a scratch file, which is what holds what a page costs to a bound
+ * rather than to its drawing.
+ *
+ * "never" keeps them in memory whatever they come to. It is the one
+ * state in which what a page costs follows its drawing without limit,
+ * and it is here because a caller may have nowhere to write, or may
+ * prefer to spend memory than to touch a disk at all. Nothing else ever
+ * selects it: a scratch directory that refuses a file does not demote a
+ * run to it, because a caller that did not ask for unbounded memory must
+ * not be given it quietly.
+ *
+ * "always" puts them in a file from the first mark, and a run that asks
+ * for it where no scratch file can be made is refused when its device is
+ * made.
+ *
+ * Asked before xpost_create, which reads it. A word that is none of the
+ * three changes nothing.
+ */
+XPAPI int xpost_record_spill_set(const char *state);
+
+/**
  * @brief Declare that this context serves no interactive user.
  *
  * A program named to xpost_run() as XPOST_INPUT_FILENAME is a job, and a

@@ -177,6 +177,7 @@ _xpost_main_usage(const char *filename)
     printf("  --no-graphics                      lock down and run without loading graphics\n");
     printf("  --no-sandbox                       allow the program unrestricted file access\n");
     printf("  -g, --geometry=WxH{+-}X{+-}Y       geometry specification\n");
+    printf("  -s, --spill=auto|never|always      where a retained page's marks are held\n");
     printf("  -q, --quiet                        suppress interpreter messages (default)\n");
     printf("  -v, --verbose                      do not go quiet into that good night\n");
     printf("  -t, --trace                        add additional tracing messages, implies -v\n");
@@ -203,6 +204,19 @@ _xpost_main_usage(const char *filename)
     printf("\n");
     printf("  record is the class a banded page is held by, and takes no\n");
     printf("  mode: selecting it is the same as ppm:band.\n");
+    printf("\n");
+    printf("  A page held a band at a time is held as the marks that made\n");
+    printf("  it, and --spill says where those marks go:\n");
+    printf("\tauto      in memory while they come to less than the\n");
+    printf("\t          raster banding the page saves, and in a scratch\n");
+    printf("\t          file past that. The default, and the only one\n");
+    printf("\t          that bounds what a page costs without touching\n");
+    printf("\t          a disk for a page that does not need it\n");
+    printf("\tnever     in memory whatever they come to, touching no\n");
+    printf("\t          scratch file at all. What a page costs then\n");
+    printf("\t          follows its drawing with no limit\n");
+    printf("\talways    in a scratch file from the first mark; refused\n");
+    printf("\t          at start-up where no scratch file can be made\n");
 }
 
 static int
@@ -328,6 +342,7 @@ int main(int argc, char *argv[])
     const char *geometry = NULL;
     const char *output_file = NULL;
     const char *device = NULL;
+    const char *spill = NULL;
     const char *ps_file = NULL;
     const char *filename = argv[0];
     const char *define = NULL;
@@ -512,6 +527,7 @@ int main(int argc, char *argv[])
             else XPOST_MAIN_IF_OPT("-o", "--output=", output_file)
             else XPOST_MAIN_IF_OPT("-d", "--device=", device)
             else XPOST_MAIN_IF_OPT("-g", "--geometry=", geometry)
+            else XPOST_MAIN_IF_OPT("-s", "--spill=", spill)
             else
             {
                 printf("unknown option\n");
@@ -591,6 +607,20 @@ int main(int argc, char *argv[])
        context exists that it will build one. */
     if (no_graphics)
         xpost_vm_image_refuse();
+
+    /* Where a retained page's marks are held, which the context reads as
+       it is made. A word that is none of the three is refused naming
+       what was given, the way an unrecognised device mode is: nothing
+       further down reads a state it does not recognise, so one passed on
+       would be taken for the default and the run would quietly do
+       something else. */
+    if (spill && !xpost_record_spill_set(spill))
+    {
+        XPOST_LOG_ERR("there is no way \"%s\" of holding a retained page's"
+                      " marks; the ways there are: auto, never, always",
+                      spill);
+        goto quit_xpost;
+    }
 
     if (!(ctx = xpost_create(device,
                              XPOST_OUTPUT_FILENAME,
