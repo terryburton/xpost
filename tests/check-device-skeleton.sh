@@ -642,6 +642,16 @@ done
 #     the same problem one layer up and answer it the same way, by
 #     taking the declaration back out (pbmimage.ps, tiffimage.ps).
 #
+#     A file may install more than one class -- the png driver makes the
+#     plain device and the alpha one out of one body -- and then it says
+#     one thing per class rather than one per file, and the two may
+#     differ. How many classes it installs is how many class names of its
+#     own it defines in the private dictionary, and a file defining none
+#     installs one, reached through the maker it registers instead. So
+#     what is counted is statements against classes: a file with one
+#     class saying both things, or with two saying one, has left a class
+#     answering for a decision nobody made about it.
+#
 #     And a device that says yes is one a band loop will call .moveband
 #     on. That method moves the run of rows a raster stands for, which
 #     for these devices is a run within a buffer of their own and not
@@ -668,19 +678,23 @@ for f in $fleet xpost_dev_win32.c; do
     done
     [ "$inherits" -eq 1 ] || continue
 
+    # the classes this file installs: the class names it writes that are
+    # not the one it copies, and one where it writes none
+    nclass=$(grep -o '"\.xpost_[A-Za-z0-9_]*"' "$libdir/$f" | tr -d '"' \
+             | sort -u | { [ -n "$base" ] && grep -vxF "$base" || cat; } \
+             | grep -c . || true)
+    [ "$nclass" -gt 0 ] || nclass=1
+
     says=$(grep -cE 'xpost_dict_put\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)' \
            "$libdir/$f" || true)
     takes=$(grep -cE 'xpost_dict_undef\(ctx, classdic, xpost_name_cons\(ctx, "BandedPage"\)\)' \
             "$libdir/$f" || true)
-    if [ "$says" -eq 0 ] && [ "$takes" -eq 0 ]; then
-        echo "check-device-skeleton: $f copies a class that says its page may" >&2
-        echo "arrive a band at a time and says nothing itself, so it inherits" >&2
-        echo "the yes. Say it again, or take it back out with the reason." >&2
-        fail=1
-        continue
-    fi
-    if [ "$says" -gt 0 ] && [ "$takes" -gt 0 ]; then
-        echo "check-device-skeleton: $f both declares and undeclares BandedPage." >&2
+    if [ $((says + takes)) -ne "$nclass" ]; then
+        echo "check-device-skeleton: $f installs $nclass class(es) copied from one" >&2
+        echo "that says its page may arrive a band at a time, and says whether" >&2
+        echo "its own may $((says + takes)) time(s) -- $says declaring it and $takes taking" >&2
+        echo "it back out. A class left unspoken for inherits the yes. Say it" >&2
+        echo "again, or take it back out with the reason, once for each." >&2
         fail=1
         continue
     fi

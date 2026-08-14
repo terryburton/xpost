@@ -4382,11 +4382,16 @@ test('check-device-destroy',
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
 # and the .devicemakers dictionary name the same devices -- and the test
-# wrappers, which carry rosters of their own, run every one of them.
+# wrappers, which carry rosters of their own, run every one of them. The
+# devices whose page may arrive a band at a time are written down three
+# times more, and the last of those is not written down at all but
+# declared by each device's class, which is why the interpreter is handed
+# over: a class is built rather than spelled, and what a driver's source
+# says and what its class ends up holding are two questions.
 test('check-device-roster',
   find_program('tests/check-device-roster.sh'),
   suite: cost_fast,
-  args: [ meson.current_source_dir() ])
+  args: [ meson.current_source_dir(), xpost_exe ])
 
 # A test runs on the device it names, and a test that wants a window
 # opens it on a display it conjured. A run with no device named takes

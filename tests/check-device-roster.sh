@@ -23,10 +23,23 @@
 # built and red where something was.
 #
 #   $1  path to the source tree root
+#   $2  the built interpreter, for the one roster that cannot be read
+#       off the source (see the last section)
 set -u
-src=${1:?usage: check-device-roster.sh <srcroot>}
+src=${1:?usage: check-device-roster.sh <srcroot> <xpost>}
+xpost=${2:?usage: check-device-roster.sh <srcroot> <xpost>}
 . "$(dirname "$0")/guard-paths.sh"
 guard_require_srcroot "$src"
+if [ ! -x "$xpost" ]; then
+    echo "FAILURES: the interpreter is not an executable: $xpost"
+    exit 1
+fi
+# named from wherever the caller stood, and the run below stands
+# somewhere else
+case $xpost in
+    /*) ;;
+    *) xpost=$(cd "$(dirname "$xpost")" && pwd)/$(basename "$xpost") ;;
+esac
 
 guard_workdir
 trap 'rm -rf "$work"' EXIT
@@ -207,10 +220,112 @@ for pair in 'bands-c:the C table the selection is rewritten from' \
     fi
 done
 
+# ---------------------------------------------------------------------
+# And the declaration those three lists are lists of
+#
+# Three rosters agreeing says which devices are routed through the band
+# loop. It says nothing about whether those are the devices whose pages
+# can arrive that way, and that is a separate statement each device makes
+# for itself: /BandedPage on its class. The two are a pair. A device
+# declaring it and absent from .playtargets promises an arrival no budget
+# will ever give it, whatever is named to --band-bytes; one named there
+# and declaring nothing is played into a device expecting the page whole.
+#
+# It is asked of a running interpreter rather than read off the source,
+# because a class is built and not written: the compiled drivers copy a
+# class that declares it and then say their own thing about the copy, and
+# one driver body here makes two classes and says a different thing for
+# each. What a file spells and what a class ends up holding are therefore
+# two questions, and this is the one that matters.
+#
+# Each device is installed by name and its running dictionary read. A
+# device the build left out cannot be installed and is reported as such
+# rather than counted either way.
+#
+# The record is not asked. It is not something a page is routed to but
+# the thing that does the routing, and what it says about bands is
+# whatever it copied from the class it was specialised from
+# (data/recorddev.ps), so its answer is the target's answer read twice.
+asked="$work/asked.ps"
+{
+    echo "["
+    grep -vx record "$work/fleet-all" | sed 's|^|/|'
+    cat <<'EOF'
+]
+{ /D exch def
+  { << /OutputDevice D /PageSize [ 8 8 ] >> setpagedevice } stopped
+  { (BANDS ) print D 60 string cvs print ( unmade\n) print }
+  { (BANDS ) print D 60 string cvs print ( ) print
+    DEVICE /BandedPage known { (yes) }{ (no) } ifelse print (\n) print }
+  ifelse
+} forall
+EOF
+} > "$asked"
+
+# Started on the device that paints nothing, so that what a device says
+# is read after a page-device request installed it and never off whatever
+# device this build was configured with.
+said=$( cd "$work" && "$xpost" -q -d null -o roster.scratch "$asked" \
+        </dev/null 2>&1 )
+if [ $? -ne 0 ] || [ -z "$said" ]; then
+    echo "FAILURES: the interpreter could not be asked what its devices say"
+    echo "      about taking a page a band at a time:"
+    printf '%s\n' "$said" | sed 's/^/      /' | head -8
+    exit 1
+fi
+
+printf '%s\n' "$said" | awk '$1 == "BANDS" && $3 == "yes" { print $2 }' \
+    | sort -u > "$work/says-yes"
+printf '%s\n' "$said" | awk '$1 == "BANDS" && $3 == "unmade" { print $2 }' \
+    | sort -u > "$work/unmade"
+
+# A device that could not be made said nothing, so it is held to nothing
+# -- and the roster it would have been held to is narrowed to match,
+# rather than the device being counted absent from it.
+grep -vx record "$work/bands-ps" | { [ -s "$work/unmade" ] &&
+    grep -vxF -f "$work/unmade" || cat; } | sort -u > "$work/routed"
+
+if [ ! -s "$work/says-yes" ]; then
+    echo "FAILURES: no device the interpreter can make says its page may"
+    echo "      arrive a band at a time, and the roster names $(wc -l < "$work/routed" | tr -d ' ')."
+    echo "      The question is being asked wrong."
+    exit 1
+fi
+
+if ! cmp -s "$work/says-yes" "$work/routed"; then
+    unrouted=$(comm -23 "$work/says-yes" "$work/routed")
+    undeclared=$(comm -13 "$work/says-yes" "$work/routed")
+    if [ -n "$unrouted" ]; then
+        echo "FAIL: these devices declare BandedPage and are not routed through"
+        echo "      the band loop:"
+        printf '%s\n' "$unrouted" | sed 's/^/      /'
+        echo "      (their class against .playtargets, data/recorddev.ps)"
+        echo "      A page reaches such a device whole whatever --band-bytes"
+        echo "      names, so the declaration describes an arrival that cannot"
+        echo "      happen. Route it, or take the declaration back out where"
+        echo "      the class makes it and say what stands in the way."
+        fail=1
+    fi
+    if [ -n "$undeclared" ]; then
+        echo "FAIL: these devices are routed through the band loop and do not"
+        echo "      declare BandedPage:"
+        printf '%s\n' "$undeclared" | sed 's/^/      /'
+        echo "      (.playtargets, data/recorddev.ps, against their class)"
+        echo "      A device that has not said this is handed the whole page it"
+        echo "      expects everywhere else, and is being handed part of one"
+        echo "      here."
+        fail=1
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the device rosters disagree"
     exit 1
 fi
 
-echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files)"
+skipped=''
+[ -s "$work/unmade" ] &&
+    skipped=", $(wc -l < "$work/unmade" | tr -d ' ') not built into this interpreter"
+echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files;\
+ $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one$skipped)"
 exit 0

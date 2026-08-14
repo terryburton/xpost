@@ -43,9 +43,19 @@
 # of one row -- at which every row of the page is a seam.
 #
 # And what each class says about taking its page in bands is read back,
-# for the devices that say yes and for the two that say no. These classes
-# are dict copies of one that says yes, so the way the rule breaks is by
-# inheritance, silently, and the roster is checked rather than assumed.
+# for the devices that say yes and for the three that say no. These
+# classes are dict copies of one that says yes, so the way the rule
+# breaks is by inheritance, silently, and the roster is checked rather
+# than assumed.
+#
+# The alpha writer is among the noes and is still driven through the loop
+# here, which is not a contradiction: what it says no to is a page
+# arriving in bands, and a page arrives that way by being recorded and
+# played back, which loses the reset that clears its page to transparent
+# (src/lib/xpost_dev_png.c). Its writer takes a page a band at a time
+# exactly as the plain one's does, and that is what these runs drive --
+# directly, with no record in front of it. It is the half that would have
+# to keep working if a record ever learned to write the reset down.
 #
 #   $1  path to the built xpost binary
 #   $2  path to band_writer_test.ps
@@ -119,7 +129,7 @@ says() {  # $1 device; prints yes/no, or nothing where the device is absent
     printf '%s\n' "$s_out" | tr -s '-' '\n' | sed -n 's/^DECL //p' | head -1
 }
 
-for c in png:yes pngalpha:yes jpeg:yes raster:no bgr:no; do
+for c in png:yes pngalpha:no jpeg:yes raster:no bgr:no; do
     dev=${c%%:*}; want=${c#*:}
     got=$(says "$dev" || true)
     if [ -z "${got:-}" ]; then

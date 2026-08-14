@@ -1246,18 +1246,50 @@ int _loaddevicecont_common(Xpost_Context *ctx,
     if (ret)
         return ret;
 
-    /* This device's page may arrive a band at a time: the writer takes
-       one row per call and holds between calls what it needs of the row
-       before, so a row goes out the moment it is finished and nothing
-       written has to be revisited.
+    /* Whether this device's page may arrive a band at a time. Said here
+       rather than inherited: the class is a copy of the colour raster
+       class, which says yes, and a copy carries what it was copied from,
+       so a device that had never considered the question would say yes
+       by inheritance. Saying it makes the answer this device's own
+       (doc/NEWINTERNALS), and the two classes made here answer
+       differently.
 
-       Said here rather than inherited. The class is a copy of the
-       colour raster class, which says it, and a copy carries what it
-       was copied from -- so a device that had never considered the
-       question would say yes by inheritance. Saying it again is what
-       makes the answer this device's own (doc/NEWINTERNALS). */
-    ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
-                         xpost_bool_cons(1));
+       The plain device's page may. Its writer takes one row per call and
+       holds between calls what it needs of the row before, so a row goes
+       out the moment it is finished and nothing written has to be
+       revisited.
+
+       The alpha device's may not, and what stands in the way is its
+       erased page rather than its writer. A page arrives a band at a
+       time by being recorded and played into the device a band at a
+       time, and a record stands in front of the device while the page is
+       drawn. erasepage runs a device's own Erase where it has one and
+       otherwise paints the page as a rectangle in the colour it is being
+       cleared to (data/paint.ps); this is the one device with an Erase,
+       because the page it clears to is transparent and transparency is
+       not a colour a rectangle can be painted in. A record declares no
+       Erase and is held to declaring none, an instruction it took being
+       an instruction it has no entry for (rule 14,
+       tests/check-device-skeleton.sh) -- so on that route the reset is
+       written down as an ordinary full-page mark and played back as an
+       opaque fill, and every band the replay reaches comes out opaque,
+       which is the whole of what this device is for.
+
+       What would make it band is a record that wrote the reset down as a
+       reset: an entry of its own for it, and a replay that ran the
+       target's Erase. Until there is one the roster a page is routed
+       through (.playtargets, data/recorddev.ps) names the plain device
+       and not this one, and tests/check-device-roster.sh holds the
+       roster and this declaration together.
+
+       A scan-conversion window taken from an ImagingBBox is a separate
+       mechanism reaching no record and no band loop, and this device
+       takes one. */
+    if (alpha)
+        ret = xpost_dict_undef(ctx, classdic, xpost_name_cons(ctx, "BandedPage"));
+    else
+        ret = xpost_dict_put(ctx, classdic, xpost_name_cons(ctx, "BandedPage"),
+                             xpost_bool_cons(1));
     if (ret)
         return ret;
 

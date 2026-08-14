@@ -452,11 +452,27 @@ A class states whether its page may arrive a band at a time with
 it. The raster and BGR devices take it back out, the page they hold being an
 embedder's and whole by contract; so do the window devices, whose drivers
 write the page whole, and every compiled device keeping a raster of its own.
+The alpha PNG device takes it back out for a reason of its own: a page
+arrives in bands by being recorded and played back, a record writes a
+page reset down as a rectangle in the colour it clears to, and the page
+this device clears to is transparent rather than any colour -- so the
+reset that makes it what it is does not survive the round trip. Its
+writer takes a page a band at a time regardless, which is what
+tests/run-band-writer-test.sh drives with no record in front of it.
 tests/check-device-skeleton.sh holds every class to having said
-something. pbm and tiff are copies of the grayscale and colour classes
-and keep the answer they were copied with, each having earned it: the
-comments at the head of data/pbmimage.ps and data/tiffimage.ps say what
-stood in the way of a banded page in each format and why it does not.
+something, once for each class a driver installs. pbm and tiff are copies
+of the grayscale and colour classes and keep the answer they were copied
+with, each having earned it: the comments at the head of data/pbmimage.ps
+and data/tiffimage.ps say what stood in the way of a banded page in each
+format and why it does not.
+
+The declaration and the routing are a pair. .playtargets (data/recorddev.ps)
+says which devices a record may be played into, and a device declaring a
+banded page and named nowhere there promises an arrival no budget can
+give it. tests/check-device-roster.sh holds the two together, asking a
+running interpreter what each device's class declares rather than reading
+it off a driver's source: a class is built and not spelled, and one
+driver body here makes two classes and answers differently for each.
 
 A class states what one row of its raster costs the same way, as /.rowcost,
 a pair of the elements a row takes and its bytes. That one a copy must

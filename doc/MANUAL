@@ -184,7 +184,9 @@ take their page a band at a time instead -- pgm, ppm, pbm, tiff, png
 and jpeg -- and hold one run of rows rather than the whole page. What
 is held in place of it is the marks, so a big page costs what its
 drawing costs rather than what its paper costs. Every other device
-holds the whole page.
+holds the whole page, the alpha PNG device among them: what a banded
+page is held as is the marks made on it, and the transparent paper
+that device clears to is not a mark.
 
 A page small enough to fit in one band is held whole, so this costs a
 small page nothing and there is nothing to turn on. A device may be
