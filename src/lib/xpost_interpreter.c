@@ -2293,7 +2293,10 @@ static const char *const banding_modes[] =
     NULL
 };
 
-/* No mode at all, which is what the recording class takes: what a record
+/* No mode at all, which is what most devices take: a mode says how a
+   page is held or how it is read back, and a device that holds its page
+   one way and hands it back one way has nothing for a colon to choose
+   between. It is what the recording class takes too -- what a record
    plays into is the device the run selected, and a run selects that by
    naming the device and the band mode. */
 static const char *const no_modes[] =
@@ -2312,16 +2315,17 @@ static int _bands_by_default(const char *name, size_t n)
     return 0;
 }
 
-/* The modes a selection of this device may carry, or NULL where the
-   device declares none and whatever follows the colon is passed
-   through.
+/* The modes a selection of this device may carry, which is the whole of
+   what a colon after its name may spell.
 
-   Three devices declare one. A device that bands by default takes the
-   two words that say how its page is held; the recording class takes
-   none, being what one of those words is done through rather than
-   something a run says more about; and the raster device takes the
-   arrangements it can lend its page back in, which it declares itself
-   since it is the one that reads the name.
+   Two kinds of device declare one. A device that bands by default takes
+   the two words that say how its page is held; and the raster device
+   takes the arrangements it can lend its page back in, which it
+   declares itself since it is the one that reads the name. Every other
+   device takes none, which is what a device is answered to be unless it
+   says otherwise: a device added to the roster refuses a mode until
+   something here gives it one, rather than accepting every word until
+   someone notices.
 
    Held at all because the answers differ in a direction nothing would
    report. A selection carrying a mode is one whose route is not
@@ -2332,13 +2336,11 @@ static int _bands_by_default(const char *name, size_t n)
    arrangement to be read in another. */
 static const char *const *_device_modes(const char *selected, size_t n)
 {
-    if (strcmp(selected, XPOST_RECORD_DEVICE) == 0)
-        return no_modes;
     if (strcmp(selected, XPOST_RASTER_DEVICE) == 0)
         return xpost_raster_formats;
     if (_bands_by_default(selected, n))
         return banding_modes;
-    return NULL;
+    return no_modes;
 }
 
 static int _mode_taken(const char *const *modes, const char *mode)
@@ -2430,10 +2432,20 @@ int setlocalconfig(Xpost_Context *ctx,
 
         colon = strchr(device, ':');
         modes = _device_modes(selected, n);
-        if (colon && modes && !_mode_taken(modes, colon + 1))
+        if (colon && !_mode_taken(modes, colon + 1))
         {
             char takes[64];
 
+            /* What a caller is told is what it gave and what would have
+               served instead, and the four readings below are the four
+               things the word it gave can be. A device with a
+               vocabulary shows it. A device with none is asked what the
+               word was reaching for: the name of a device that bands
+               spells a recorded page the other way round, and a word
+               for holding a page is a word for something this device
+               cannot do -- except at the recording class, which is
+               where a banded page is held and so is told no more than
+               that it takes no mode. */
             _mode_roster(modes, takes, sizeof takes);
             if (takes[0])
                 XPOST_LOG_ERR("%d the %s device takes no mode \"%s\"; the"
@@ -2445,22 +2457,14 @@ int setlocalconfig(Xpost_Context *ctx,
                               " is selected as \"%s:%s\"", rangecheck,
                               selected, colon + 1, colon + 1,
                               XPOST_BAND_MODE);
+            else if (_mode_taken(banding_modes, colon + 1)
+                     && strcmp(selected, XPOST_RECORD_DEVICE) != 0)
+                XPOST_LOG_ERR("%d the %s device does not take its page a band"
+                              " at a time, so it takes no mode \"%s\"",
+                              rangecheck, selected, colon + 1);
             else
                 XPOST_LOG_ERR("%d the %s device takes no mode, and \"%s\" was"
                               " given", rangecheck, selected, colon + 1);
-            return rangecheck;
-        }
-        /* The two modes above are the two ways a page may be held, so a
-           device that holds its page one way and cannot hold it the
-           other takes neither of them. Refused here rather than passed
-           on: nothing further down reads a mode it does not recognise,
-           so a device that bands nowhere would take the word for banding
-           and paint a whole page under it. */
-        if (colon && !modes && _mode_taken(banding_modes, colon + 1))
-        {
-            XPOST_LOG_ERR("%d the %s device does not take its page a band at"
-                          " a time, so it takes no mode \"%s\"", rangecheck,
-                          selected, colon + 1);
             return rangecheck;
         }
     }

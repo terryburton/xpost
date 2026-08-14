@@ -425,14 +425,18 @@ OutputBufferIn -
 OutputBufferOut -
 "
 
-probe_run "$work/out2" -d null:bgra -s never -o "$hwork/page.out"
+# The device here is one that takes a mode: a selection carrying a word
+# outside what its device takes is refused before a run begins, so a
+# device with no mode to give would settle nothing to read. raster takes
+# the arrangement it lends its page back in, and bgra is one of them.
+probe_run "$work/out2" -d raster:bgra -s never -o "$hwork/page.out"
 compare_values "a run given an output file and a device mode" \
     "$work/out2" "DATA_DIR $src/data
 .resourcepath 
 .interactive false
 ShowpageSemantics 0
-StartDevice /null
-StartDeviceAsked /null
+StartDevice /raster
+StartDeviceAsked /raster
 StartPageSize  612 792
 SUBDEVICE bgra
 RecordSpill /never
