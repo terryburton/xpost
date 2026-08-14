@@ -88,10 +88,72 @@ hold "library source" "$tree/src/lib/Makefile.mk" src/lib "$work/lib" '\.[ch]$'
 hold "program source" "$tree/src/bin/Makefile.mk" src/bin "$work/bin" \
     '\.([ch]|rc|ico)$'
 
-# ---- the interpreter's PostScript: what meson installs ----
-sed -n "/xpost_data_src = files(\[/,/\])/p" "$tree/data/meson.build" \
-  | grep -oE "'[^']+'" | tr -d "'" | sed 's|^|data/|' > "$work/data"
+# ---- the interpreter's PostScript, and both lists that carry it ----
+#
+# Two lists name it -- what meson installs and what the tarball packs --
+# and both are held to the directory rather than to each other. Held to
+# each other, a file named in neither is in neither list's difference
+# from the other: the two agree, the check is green, and the tree holds
+# a boot file that no build installs and no release carries. That is the
+# state a file arrives in, so it is the one state the check has to see.
+( cd "$tree" && ls data/*.ps 2>/dev/null ) | LC_ALL=C sort -u > "$work/data"
 hold "interpreter data" "$tree/data/Makefile.mk" data "$work/data" '\.ps$'
+
+# Two of those lists are in the one file -- what the tarball packs and
+# what `make install` copies -- and the helper above reads the file
+# rather than either list, so a file in one of them satisfies it. They
+# are separated here and each held to the directory, because they buy
+# different things: a boot file in the tarball and not the install is
+# shipped and never put where a run looks for it.
+for pair in 'EXTRA_DIST:packed' 'psfiles_DATA:installed'; do
+    head=${pair%%:*}
+    what=${pair#*:}
+    awk -v h="$head" '
+        $0 ~ "^" h "[ \t]*[+]?=" { inlist = 1 }
+        inlist { print; if ($0 !~ /\\[ \t]*$/) inlist = 0 }
+    ' "$tree/data/Makefile.mk" \
+      | tr ' \t\\' '\n\n\n' | grep -E '^data/[^/]*\.ps$' \
+      | LC_ALL=C sort -u > "$work/data-$what"
+    if [ ! -s "$work/data-$what" ]; then
+        echo "FAILURES: data/Makefile.mk's $head names no PostScript file;"
+        echo "      the list was emptied or its shape changed and this check"
+        echo "      no longer reads it"
+        exit 1
+    fi
+    LC_ALL=C comm -23 "$work/data" "$work/data-$what" > "$work/data-miss"
+    if [ -s "$work/data-miss" ]; then
+        echo "FAIL: present in the tree, absent from data/Makefile.mk's $head"
+        echo "      (these would not be $what):"
+        sed 's/^/      /' "$work/data-miss"
+        fail=1
+    fi
+done
+
+# The install list spells a name without its directory, so it is read
+# and compared here rather than through the helper above.
+sed -n "/xpost_data_src = files(\[/,/\])/p" "$tree/data/meson.build" \
+  | grep -oE "'[^']+'" | tr -d "'" | sed 's|^|data/|' \
+  | grep '\.ps$' | LC_ALL=C sort -u > "$work/data-meson"
+grep '\.ps$' "$work/data" | LC_ALL=C sort -u > "$work/data-have"
+if [ ! -s "$work/data-meson" ]; then
+    echo "FAILURES: data/meson.build names no PostScript file; the list was"
+    echo "      emptied or its shape changed and this check no longer reads it"
+    exit 1
+fi
+LC_ALL=C comm -23 "$work/data-have" "$work/data-meson" > "$work/data-uninstalled"
+if [ -s "$work/data-uninstalled" ]; then
+    echo "FAIL: present in the tree, absent from data/meson.build"
+    echo "      (a build would install these nowhere, and a run would not"
+    echo "      find them):"
+    sed 's/^/      /' "$work/data-uninstalled"
+    fail=1
+fi
+LC_ALL=C comm -13 "$work/data-have" "$work/data-meson" > "$work/data-gone"
+if [ -s "$work/data-gone" ]; then
+    echo "FAIL: named by data/meson.build, not in the tree"
+    sed 's/^/      /' "$work/data-gone"
+    fail=1
+fi
 
 # ---- the test suite, guards and registers included ----
 #
