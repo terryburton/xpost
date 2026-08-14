@@ -147,6 +147,13 @@ device test check-buffer-family
 device test check-device-*
 device test check-page-output
 device test check-test-devices
+# A device class is found by the shape of the name it is defined under,
+# and the two passes that find them run at load and at lockdown. The
+# lockdown one runs whether or not any device class was ever loaded, so
+# a change to how a class states itself reaches the run that has no
+# graphics at all -- which these two are the only tests of.
+device test clean-startup
+device test nographics
 device test dev-*
 device test device-*
 device test devices
