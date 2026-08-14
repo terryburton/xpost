@@ -325,9 +325,12 @@ The Raster device is intended for use when xpost is a library component
 of another program. It can make use of configuration options from
 the call to xpost_create() to return the image buffer to the calling
 program, as well as controlling the behavior of the `showpage`
-operator. It can return an image buffer in several raw formats 
+operator. It can return an image buffer in several raw formats
 selected by these device strings:
-"raster:bgr", "raster:bgra", "raster:rgb", "raster argb".
+"raster:bgr", "raster:bgra", "raster:rgb", "raster:argb".
+Those four are the whole of what the selection may carry: a word
+outside them is refused as the interpreter is created, naming what
+was given and the four, and a selection naming no format gets rgb.
 
 For interactive use, showpage flushes the drawing to the window
 and reads a line from the keyboard (waits for the Enter key).

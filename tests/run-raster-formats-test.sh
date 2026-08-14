@@ -7,12 +7,12 @@
 #  * The devices that keep their pixels in a buffer of their own and hand
 #    it to whoever embedded the interpreter. The buffer's arrangement is
 #    the name after the colon in the device string -- raster:argb and the
-#    rest -- and falls back to rgb when no name is given. Only the
-#    fallback was ever exercised, so neither the selection of the others
-#    nor the buffer each one sizes had run. A name that matches none of
-#    them is asked for too: it has to be harmless, leaving the format the
-#    one taken when no name is given rather than whatever the memory
-#    happened to hold.
+#    rest -- and falls back to rgb when no name is given. Each of the
+#    four is painted and read back here, and so is the selection that
+#    names none. The four are the whole of what such a selection may
+#    carry: a word outside them is refused before the run begins, which
+#    tests/run-band-select-test.sh holds along with every other device's
+#    modes.
 #
 #  * The devices that write their raster to a file. Their format is the
 #    file's: how many bytes a pixel takes and in which order its
@@ -144,12 +144,8 @@ for sub in rgb argb bgr bgra; do
     paint "raster:$sub"
 done
 
-# a name that names no format, and no name at all
-for sub in "nosuchformat" "" "rg" "argbx"; do
-    paint "raster:$sub"
-done
-
-# and the device with no format named at all
+# and the device with no format named at all, which takes the first of
+# the four
 paint raster
 
 # the other device that keeps its pixels in a buffer of its own
