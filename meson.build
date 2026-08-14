@@ -3536,6 +3536,25 @@ test('band-report',
   suite: cost_fast,
   timeout: 300)
 
+# ... and the number all of that is divided from, which the invocation
+# settles. The budget says how deep a band is and, by the same reading,
+# which pages are held as their marks at all, so it is the one control
+# over both and the only way to band a page an ordinary sheet is cut to.
+# This holds it to reaching both from the command line: reported back as
+# it was given, dividing to the band it is reported to have bought,
+# putting out the whole page's bytes at every depth down to a single row,
+# refused where it will not buy one row of the page in hand and where it
+# is no whole number of bytes in range, and bounding a record whose page
+# saves nothing -- the page the weighing has nothing to say about. It
+# breaks its five readings at the end, and stubs the interpreter's own
+# reading of the budget, requiring itself to fail each time.
+test('band-budget',
+  find_program('tests/run-band-budget-test.sh'),
+  args: [ xpost_exe, files('tests/band_budget_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # ... and the two classes whose emission is not raw rows, each of which
 # had a reason of its own for not taking its page in bands: the bilevel
 # one screens every grey against the cell under the pixel, so a screen

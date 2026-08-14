@@ -207,6 +207,17 @@ typedef struct
        record is weighed against: a record worth more than the raster it
        is saving is one to put in a file. */
     size_t saving;
+    /* What one band of this device's page may cost, in bytes of raster,
+       taken off the device when it was made. It is the other thing the
+       record is weighed against, and the one that answers for a page
+       whose bands save nothing: such a page has no raster the record
+       could cost more than, so the saving above says nothing about it,
+       and what bounds it is the budget its device was made to. A record
+       held to it costs a budget's worth of marks whatever the drawing,
+       against a band of raster that costs the same again. Nought for a
+       device carrying no budget, which is a device weighed by the saving
+       alone. */
+    size_t budget;
     /* where this run wants its records held, and where this one is */
     int spill;
     int where;
@@ -383,16 +394,28 @@ static int _spill_now(PrivateData *private)
     return 0;
 }
 
-/* Weigh what this record costs against what banding its page saves, and
-   put the marks in a file where it costs more.
+/* Weigh what this record costs against what it is buying and against
+   what a band of its page was given to spend, and put the marks in a
+   file where it passes either.
  *
  * The comparison is safe to act on because what crossing it commits to
  * is bounded: what a page pays for crossing is a write buffer and a
  * read window, whatever the drawing.
  *
- * A record saving nothing is not weighed. It has no raster to be worth
- * more than: its page is held whole, either because the budget covers it
- * or because the run asked for a band at a page that needs none.
+ * Two bounds, because they answer for different pages. The saving is
+ * what banding this page buys, and a record worth more than the raster
+ * it is saving is one to put in a file; it is the tighter of the two for
+ * a page whose bands save little, and it says nothing at all about a
+ * page whose bands save nothing -- a page held whole, which has no
+ * raster the record could cost more than. The budget answers for that
+ * page and for every other: a record held to what a band of the page was
+ * given to spend costs no more than the raster standing beside it, so
+ * what such a page costs stops following its drawing whatever the saving
+ * turns out to be.
+ *
+ * A device carrying neither is weighed by neither, and what its record
+ * costs follows the drawing. That is what a run asking for its marks
+ * never to be put in a file has asked for outright.
  *
  * Asked every RECORD_WEIGH_EVERY marks, and at any entry large enough to
  * carry the record past the threshold on its own. What counts the marks
@@ -404,16 +427,20 @@ static int _spill_now(PrivateData *private)
  */
 static int _weigh(PrivateData *private, int now)
 {
+    size_t bytes;
+
     if (private->spill != SPILL_AUTO || private->where != SPILT_MEMORY)
         return 0;
     if (!now && xpost_record_count(private->rec) % RECORD_WEIGH_EVERY)
         return 0;
-    if (!private->saving
-        || xpost_record_bytes(private->rec) <= private->saving)
+    bytes = xpost_record_bytes(private->rec);
+    if (!(private->saving && bytes > private->saving)
+        && !(private->budget && bytes > private->budget))
         return 0;
     if (!_spill_now(private))
         XPOST_LOG_ERR("a page whose marks came to more than the raster"
-                      " banding it saves could not put them in %s, so this"
+                      " banding it saves, or more than a band of it was"
+                      " given to spend, could not put them in %s, so this"
                       " page is held in memory and what it costs follows"
                       " the drawing without limit", xpost_spill_dir());
     return 1;
@@ -3227,6 +3254,7 @@ static int _create_cont(Xpost_Context *ctx,
     Xpost_Object privatestr;
     Xpost_Object ncomp;
     Xpost_Object make;
+    Xpost_Object o;
     PrivateData private;
     int width, height;
     int ret;
@@ -3288,6 +3316,19 @@ static int _create_cont(Xpost_Context *ctx,
        record whose page is held whole is left with nothing here: it
        saves nothing, so there is nothing it could cost more than. */
     private.saving = 0;
+    /* and what this run said a band of a page may cost, which is what
+       bounds the record where the saving says nothing.
+       Read from where the run's own decisions live rather than off the
+       device in hand: what the device carries is the grid its page is cut
+       into, which whatever made it may cut as fine as it likes, and a
+       record weighed against the grid of a one-row band would put a
+       page's marks in a file at the first of them. What this bounds is
+       what the run said it would spend, which no page may raise or lower
+       for itself. The two are settled together and stand equal
+       (.settlebandbudget, data/device.ps). */
+    o = xpost_context_host_setting(ctx, "MaxBandBytes");
+    private.budget = (xpost_object_get_type(o) == integertype
+                      && o.int_.val > 0) ? (size_t)o.int_.val : 0;
     private.spill = _spill_asked(ctx);
     private.where = SPILT_MEMORY;
     private.rec = xpost_record_new(private.ncomp);
