@@ -43,20 +43,27 @@
  *
  * WHAT THE TOLERANCE IS, AND WHY IT IS THAT
  *
- * Measured over both regimes a C allocator serves such blocks from --
- * mapped directly, and carved out of the heap -- and over sizes from one
- * to twenty-six megabytes, the process came to between 1.003 and 1.111
- * times what the record said. It was never less: the record does not
- * claim more than it made resident.
+ * The report is the runs' fill, and what a run was handed is its
+ * capacity: a run doubles, so a run just past a doubling has room for
+ * almost twice what is in it. None of that room is written into, and
+ * whether the process is resident for it is the allocator's business
+ * and the machine's -- a block mapped for the run alone costs its
+ * touched pages, and one carved out of a heap the process has already
+ * grown into costs the whole of what it was carved from. Both are
+ * honest readings of the same record, and they differ by up to the
+ * whole of the slack.
  *
- * The margin above is real and is of two parts. Blocks do not begin on
- * page boundaries, so the last page of each is shared and counted whole.
- * And a record of many small blocks -- a page of text holds a mask per
- * distinct glyph -- leaves partly-used pages that cannot be given back.
- * A quarter is the bound taken here, which is a little over twice the
- * worst margin measured, and the fixed allowance beside it covers the
- * pages the machinery touches once however small the record is: those
- * came to under a quarter of a megabyte.
+ * So the bound is the growth policy's own: below twice what the record
+ * said. It is a coarse instrument and is not the sharp one -- the
+ * differences taken further down weigh each part of a record exactly,
+ * and are what would catch a part going uncounted. What this one is for
+ * is a report that has drifted from the drawing altogether, which is
+ * the failure that turns the two decisions over.
+ *
+ * The fixed allowance beside it covers the pages the machinery touches
+ * once however small the record is: those came to under a quarter of a
+ * megabyte. And nothing is allowed the other way: the record does not
+ * claim more than it made resident.
  *
  * WHAT PLAYING A RECORD BACK COSTS, WHICH IS NOT WHAT THE RECORD COSTS
  *
@@ -355,10 +362,11 @@ static Xpost_Record *_build(Kind kind, int n)
 }
 
 /* The margin allowed above what the record says, and the fixed
-   allowance beside it. Both are stated in the file's opening, from what
-   was measured. */
+   allowance beside it. Both are stated in the file's opening: the
+   margin from the runs' growth policy, the allowance from what the
+   machinery touches once. */
 #define OVER_NUM  1
-#define OVER_DEN  4
+#define OVER_DEN  1
 #define ALLOW     ((size_t)512 * 1024)
 
 /*
