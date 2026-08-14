@@ -170,6 +170,15 @@ kept_clean = [
   # under it. The half of this job clang does is -Wmissing-prototypes,
   # in strict_warnings above.
   '-Werror=missing-declarations',
+  # gcc and clang, and the one here both compilers already say something
+  # about: gcc warns by default, clang since 16 errors by default. What
+  # the promotion buys is that gcc's default warning cannot be built
+  # past. A call with no declaration in scope is a call whose argument
+  # conversions and return type are guessed, which C99 removed, and it
+  # is how a header that uses a function without including the header
+  # declaring it goes unremarked for as long as every unit that includes
+  # it happens to include the other one first.
+  '-Werror=implicit-function-declaration',
   # gcc only, and gcc only with the optimiser on: nothing is reported at
   # -O0, which is what buildtype=debug compiles at and what every build
   # that does not say otherwise gets. clang takes the flag and reports
