@@ -60,10 +60,47 @@ marking="$fleet xpost_dev_win32.c xpost_dev_generic.c"
 # what the rules about painted pixels are held over
 paints="$painting xpost_dev_win32.c xpost_dev_generic.c"
 
-# every file that defines a device class
-classes="image.ps pgmimage.ps pbmimage.ps ppmimage.ps tiffimage.ps
-         nulldev.ps bboxdev.ps pdfwrite.ps svgwrite.ps dscwrite.ps
-         recorddev.ps"
+# Every file that defines a device class, read out of the directory
+# rather than named. The object files that make a glob unsafe over
+# src/lib are not left in data/, and a class file is recognisable by
+# what it writes:
+#
+#   a class dictionary spelled out, /.xpost_NAME <<
+#   a class made by copying another, /.xpost_NAME .xpost_OTHER dup
+#     length ... dict copy
+#   the shared body the generated classes are built over, which defines
+#     no class name of its own and is recognisable instead as a
+#     dictionary storing the class-to-instance copy
+#
+# The rules below all take the same shape: they walk this list and hold
+# what they find. A list typed here is one a class written tomorrow is
+# not on, and every rule then passes over that class saying nothing --
+# which is the defect this file exists to catch, in this file.
+written=$(cd "$src/data" && grep -lE '^/\.xpost_[A-Za-z0-9_]+[[:blank:]]+<<' *.ps || true)
+copied=$(cd "$src/data" && grep -lE '^/\.xpost_[A-Za-z0-9_]+[[:blank:]]+\.xpost_[A-Za-z0-9_]+[[:blank:]]+dup length[[:blank:]].*dict copy' *.ps || true)
+shared=$(cd "$src/data" && grep -lE '^[[:blank:]]*/\.copydict[[:blank:]]' *.ps || true)
+classes=$(printf '%s\n' $written $copied $shared | grep . | sort -u)
+
+# All three shapes are in the tree today, so a pattern matching nothing
+# is a derivation that has come adrift from how the classes are spelled
+# -- a guard reading a shorter tree than the one it reports on. That is
+# the failure this whole scheme is meant to remove, so it is refused
+# outright rather than counted.
+if [ -z "$written" ]; then
+    echo "check-device-skeleton: no file in data/ spells a class dictionary out;" >&2
+    echo "the roster is derived from that spelling. Fix the derivation." >&2
+    exit 1
+fi
+if [ -z "$copied" ]; then
+    echo "check-device-skeleton: no file in data/ makes a class by copying" >&2
+    echo "another; the roster is derived from that spelling. Fix the derivation." >&2
+    exit 1
+fi
+if [ -z "$shared" ]; then
+    echo "check-device-skeleton: no file in data/ stores the class-to-instance" >&2
+    echo "copy; the roster is derived from that spelling. Fix the derivation." >&2
+    exit 1
+fi
 
 fail=0
 
