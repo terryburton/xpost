@@ -238,7 +238,7 @@ FILENAME == names { t[++nt] = $0; next }
   print $1 "\t" $2 }
 AWK
 awk -f "$work/glob.awk" -f "$work/stale-test.awk" \
-    names="$work/tests" FS='\n' "$work/tests" FS='\t' "$work/rule.test" \
+    names="$work/tests" "$work/tests" FS="$guard_tab" "$work/rule.test" \
     > "$work/stale.test"
 if [ -s "$work/stale.test" ]; then
     echo "FAIL: $(grep -c . "$work/stale.test") test rule(s) in gate-map name no test the build"
@@ -260,7 +260,7 @@ FILENAME == rules { n++; ra[n] = $1; rg[n] = globre($2); rr[n] = $2; next }
 END { for (i = 1; i <= n; i++) if (!hit[i]) print ra[i] "\t" rr[i] }
 AWK
 awk -f "$work/glob.awk" -f "$work/stale-path.awk" \
-    rules="$work/rule.path" FS='\t' "$work/rule.path" FS='\n' "$work/files" \
+    rules="$work/rule.path" FS="$guard_tab" "$work/rule.path" "$work/files" \
     > "$work/stale.path"
 if [ -s "$work/stale.path" ]; then
     echo "FAIL: $(grep -c . "$work/stale.path") path rule(s) in gate-map win no file. Either the"
@@ -278,7 +278,7 @@ FILENAME == rules { n++; rg[n] = globre($2); next }
   print }
 AWK
 awk -f "$work/glob.awk" -f "$work/unclassified.awk" \
-    rules="$work/rule.path" FS='\t' "$work/rule.path" FS='\n' "$work/files" \
+    rules="$work/rule.path" FS="$guard_tab" "$work/rule.path" "$work/files" \
     > "$work/unclassified"
 if [ -s "$work/unclassified" ]; then
     echo "FAIL: $(grep -c . "$work/unclassified") file(s) reach no rule at all, so the gate has"
@@ -306,8 +306,8 @@ FILENAME == rules { if ($1 in keep) { n++; rg[n] = globre($2) } ; next }
 AWK
 awk -f "$work/glob.awk" -f "$work/unreachable.awk" \
     picked="$work/areas.specific" rules="$work/rule.test" \
-    FS='\n' "$work/areas.specific" FS='\t' "$work/rule.test" \
-    FS='\n' "$work/tests" > "$work/unreachable"
+    "$work/areas.specific" FS="$guard_tab" "$work/rule.test" \
+    "$work/tests" > "$work/unreachable"
 if [ -s "$work/unreachable" ]; then
     echo "FAIL: $(grep -c . "$work/unreachable") of $ntests test(s) are named by no area, so no gate"
     echo "      narrower than the whole suite ever runs them. Name each in"
@@ -336,8 +336,8 @@ FILENAME == rules { if ($1 == "width") { nw++; wg[nw] = globre($2) }
 }
 AWK
 awk -f "$work/glob.awk" -f "$work/widehome.awk" \
-    rules="$work/rule.test" FS='\t' "$work/rule.test" \
-    FS='\n' "$work/tests" > "$work/widthonly"
+    rules="$work/rule.test" FS="$guard_tab" "$work/rule.test" \
+    "$work/tests" > "$work/widthonly"
 if [ -s "$work/widthonly" ]; then
     echo "FAIL: $(grep -c . "$work/widthonly") test(s) are named by the width area and by no"
     echo "      other, so the narrow build -- which is the primary one --"

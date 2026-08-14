@@ -15,6 +15,20 @@
 # Every guard that derives a path from an argument passes it through here
 # before use. tests/check-guard-paths.sh holds them to that.
 
+# A tab, as the character itself.
+#
+# A guard that reads a table of tab-separated rules tells awk so between
+# the files it hands it, and an assignment written among awk's file
+# operands is taken as a string literal by some awks and left as the two
+# characters it was spelt with by others. Where it is left, no line ever
+# splits: every rule becomes one field, $2 is empty, and a pass asking
+# which rules match reports that none of them do -- a table read as
+# entirely stale, which is the same shape as a table that is. The
+# separator is therefore passed as the character and not as an escape.
+# The trailing period holds it through the substitution, which strips
+# newlines and would otherwise be free to strip anything else.
+guard_tab=$(printf '\t.'); guard_tab=${guard_tab%.}
+
 guard_require_dir() {
     if [ ! -d "$1" ] || [ ! -r "$1" ]; then
         echo "FAILURES: $2 is not a readable directory: $1"

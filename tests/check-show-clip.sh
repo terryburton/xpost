@@ -123,7 +123,7 @@ END {
         if (depth >= 1 && cur != "") body[cur] = body[cur] " "
     }
     for (f in body) print f "\t" body[f]
-}' FS='\t' "$work/code" > "$work/bodies"
+}' FS="$guard_tab" "$work/code" > "$work/bodies"
 
 if [ ! -s "$work/bodies" ]; then
     echo "FAILURES: no function body could be read from src/lib/xpost_op_font.c"

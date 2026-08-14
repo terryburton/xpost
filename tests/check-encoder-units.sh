@@ -97,7 +97,7 @@ awk '
         next
     }
     if (code ~ /^typedef[ \t]+struct[ \t]*$/) { inb = 1; nb = 0 }
-}' FS='\t' "$work/code" | sort -u > "$work/fields"
+}' FS="$guard_tab" "$work/code" | sort -u > "$work/fields"
 
 if [ ! -s "$work/fields" ]; then
     echo "FAILURES: no encoder struct was found in src/lib/xpost_file.c;"
@@ -160,7 +160,7 @@ while read -r fld; do
             if (code ~ ("[0-9][ \t]*-[ \t]*[A-Za-z_][A-Za-z0-9_]*->" F "([^A-Za-z0-9_]|$)")) {
                 print "yes"; exit
             }
-        }' FS='\t' "$work/code" | grep -q yes; then
+        }' FS="$guard_tab" "$work/code" | grep -q yes; then
         echo "$fld" >> "$work/bearing"
     fi
 done < "$work/fieldnames"
@@ -214,7 +214,7 @@ END {
         if (depth >= 1 && cur != "") body[cur] = body[cur] " "
     }
     for (f in body) print f "\t" body[f]
-}' FS='\t' "$work/code" > "$work/bodies"
+}' FS="$guard_tab" "$work/code" > "$work/bodies"
 
 if [ ! -s "$work/bodies" ]; then
     echo "FAILURES: no function body could be read from src/lib/xpost_file.c"

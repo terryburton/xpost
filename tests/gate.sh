@@ -138,6 +138,14 @@ if [ -z "$work" ] || [ ! -d "$work" ]; then
 fi
 trap 'rm -rf "$work"' EXIT
 
+# A tab, as the character itself. The table below is tab-separated and
+# awk is told so between the files it is handed, and an assignment among
+# awk's file operands is taken as a string literal by some awks and left
+# as the two characters it was spelt with by others. Where it is left, no
+# rule line splits and every selection comes back empty. The trailing
+# period holds the character through the substitution.
+gate_tab=$(printf '\t.'); gate_tab=${gate_tab%.}
+
 # ---- the table, split by kind, paths keeping their order
 awk '
     /^[[:space:]]*#/ { next }
@@ -248,7 +256,7 @@ FILENAME == rules { n++; ra[n] = $1; rg[n] = globre($2); next }
 }
 AWK
 awk -f "$work/glob.awk" -f "$work/classify.awk" \
-    rules="$work/map.path" FS='\t' "$work/map.path" FS='\n' "$work/changed" \
+    rules="$work/map.path" FS="$gate_tab" "$work/map.path" "$work/changed" \
     > "$work/classified"
 
 cut -f1 "$work/classified" | sort -u > "$work/areas"
@@ -367,7 +375,7 @@ FILENAME == rules { if ($1 in want) { n++; rg[n] = globre($2) } ; next }
 AWK
 awk -f "$work/glob.awk" -f "$work/pick.awk" \
     picked="$work/areas" rules="$work/map.test" \
-    FS='\n' "$work/areas" FS='\t' "$work/map.test" FS='\n' "$work/tests.all" \
+    "$work/areas" FS="$gate_tab" "$work/map.test" "$work/tests.all" \
     > "$work/sel.narrow.raw"
 cat "$work/derived" >> "$work/sel.narrow.raw"
 
@@ -401,8 +409,8 @@ else
     printf 'width\n' > "$work/areas.width"
     awk -f "$work/glob.awk" -f "$work/pick.awk" \
         picked="$work/areas.width" rules="$work/map.test" \
-        FS='\n' "$work/areas.width" FS='\t' "$work/map.test" \
-        FS='\n' "$work/tests.all" | sort -u > "$work/sel.wide"
+        "$work/areas.width" FS="$gate_tab" "$work/map.test" \
+        "$work/tests.all" | sort -u > "$work/sel.wide"
 fi
 
 if [ ! -s "$work/sel.narrow" ] || [ ! -s "$work/sel.wide" ]; then
