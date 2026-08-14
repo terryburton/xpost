@@ -83,8 +83,8 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+xpost=$(path_anchor "$xpost")
+script=$(path_anchor "$script")
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
 work=$(mktemp -d)

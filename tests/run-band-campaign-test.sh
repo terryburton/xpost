@@ -66,8 +66,8 @@ script=$2
 
 # Each device renders into a directory of its own, so a page names the
 # same file whichever device wrote it, and the runs are started there.
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+xpost=$(path_anchor "$xpost")
+script=$(path_anchor "$script")
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then

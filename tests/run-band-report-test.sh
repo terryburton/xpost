@@ -40,15 +40,15 @@ xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
 
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+xpost=$(path_anchor "$xpost")
+script=$(path_anchor "$script")
 
 datadir=${XPOST_DATA_DIR:-}
 if [ -z "$datadir" ]; then
     echo "FAILURES: no XPOST_DATA_DIR; the run has no boot files to sabotage"
     exit 1
 fi
-case $datadir in /*) ;; *) datadir=$PWD/$datadir ;; esac
+datadir=$(path_anchor "$datadir")
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

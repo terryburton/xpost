@@ -1,4 +1,5 @@
-# Sourced by the run-*.sh wrappers: judge what a run answered with.
+# Sourced by the run-*.sh wrappers: reach what a run was handed, and
+# judge what it answered with.
 #
 # A run answers in one of two ways, and there is an entry point here for
 # each. A run that prints its own verdict is judged by verdict_ok. A run
@@ -43,6 +44,25 @@
 # to say, and says it at the head of a line it goes on to explain in.
 # That wrapper names the shape it is looking for; the rule around it is
 # the same one either way.
+
+# Anchor a path so that it names the same thing from anywhere.
+#
+# A wrapper that starts its runs in a directory of its own has to do this
+# to everything it was handed, because what it was handed is relative to
+# where the wrapper itself was started. What counts as already anchored
+# is not a leading slash alone: a host whose names carry the volume they
+# are on writes them as C:/dir, which is relative to nothing, and putting
+# the current directory in front of one produces a name for nowhere.
+#
+# Stated once because it is the same question in every wrapper, and one
+# wrapper answering it differently is one platform's worth of runs
+# looking for their arguments in a place that does not exist.
+path_anchor() {
+    case $1 in
+        /* | ?:[/\\]*) printf '%s\n' "$1" ;;
+        *)             printf '%s/%s\n' "$PWD" "$1" ;;
+    esac
+}
 
 # What a run prints to report a failure. Every spelling the suite uses
 # starts with one of these: FAIL, FAILURE, FAILURES, MISMATCH.

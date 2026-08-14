@@ -57,8 +57,8 @@ script=$2
 
 # The runs below are started in the directory the pages are written to,
 # so what they were handed has to name the same thing from there.
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+xpost=$(path_anchor "$xpost")
+script=$(path_anchor "$script")
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'

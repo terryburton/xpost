@@ -49,8 +49,8 @@ script=$2
 # Each run is started in a directory of its own, so a page names the same
 # file whichever device wrote it and the two are compared across the
 # directories rather than through a name carrying the device.
-case $xpost in /*) ;; *) xpost=$PWD/$xpost ;; esac
-case $script in /*) ;; *) script=$PWD/$script ;; esac
+xpost=$(path_anchor "$xpost")
+script=$(path_anchor "$script")
 
 if "$xpost" -h 2>/dev/null | grep -q -- '--no-sandbox'; then
     ns='--no-sandbox'
