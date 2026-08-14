@@ -361,10 +361,7 @@ jobs:
     # gcc reaches a null dereference, and a condition whose two branches
     # are the same, through passes -O turns on, and meson's default
     # buildtype is debug, so every other lane in every workflow compiles
-    # at -O0 and neither class is being looked for. -Winline is turned
-    # off rather than answered: it reports where the optimiser declined
-    # an inline, which is a decision and not a defect, and at -O it has
-    # some dozens to report.
+    # at -O0 and neither class is being looked for.
     #
     # Both object widths, because the width is a type's width: a
     # comparison or a shift is not necessarily reachable in both.
@@ -380,7 +377,7 @@ jobs:
         meson setup builddir \
           -Dlarge-object=${{ matrix.object == 'large' }} \
           --buildtype=${{ matrix.buildtype }} \
-          "-Dc_args=-fanalyzer -Wno-inline \
+          "-Dc_args=-fanalyzer \
                     --param analyzer-max-enodes-per-program-point=64"
     # Every class this analyser reports is at zero on the tree, so a
     # finding of any class is a regression and this job blocks. Where a

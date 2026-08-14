@@ -463,7 +463,7 @@ AC_CHECK_HEADERS([unistd.h signal.h sys/select.h])
 
 AM_PROG_CC_C_O
 
-xpost_lib_cflags="-std=c99 -pedantic-errors -Wall -Wextra -Wshadow -Wdeclaration-after-statement -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith -Wno-missing-field-initializers -Winline -Wwrite-strings"
+xpost_lib_cflags="-std=c99 -pedantic-errors -Wall -Wextra -Wshadow -Wdeclaration-after-statement -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith -Wno-missing-field-initializers -Wwrite-strings"
 
 xpost_lib_ldflags="-fdata-sections -ffunction-sections"
 
@@ -492,7 +492,7 @@ if test "x${enable_release}" = "xyes" && test "x${no_cflags}" = "xyes" ; then
 fi
 
 if test "x${no_cflags}" = "xyes" ; then
-   XPOST_CHECK_C_COMPILER_FLAGS([XPOST_BIN], [-std=c99 -pedantic-errors -Wall -Wextra -Wshadow -Wdeclaration-after-statement -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith -Wno-missing-field-initializers -Winline])
+   XPOST_CHECK_C_COMPILER_FLAGS([XPOST_BIN], [-std=c99 -pedantic-errors -Wall -Wextra -Wshadow -Wdeclaration-after-statement -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith -Wno-missing-field-initializers])
 fi
 
 XPOST_CHECK_LINKER_FLAGS([XPOST_BIN], [-fdata-sections -ffunction-sections])
