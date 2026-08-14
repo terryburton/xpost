@@ -121,12 +121,11 @@ static const Format formats[] =
     { "raster:bgr",  3, { BLUE, GREEN, RED, UNUSED } },
     { "raster:bgra", 4, { BLUE, GREEN, RED, ALPHA } },
 
-    /* The device with no arrangement named, and one naming an
-       arrangement that is not among them: both take the arrangement the
-       family falls back to, which the embedder sees as three bytes red
-       green blue. */
+    /* The device with no arrangement named, which takes the one the
+       family falls back to: three bytes red green blue as the embedder
+       sees them. An arrangement outside the four is refused rather than
+       made, so there is no device here to read. */
     { "raster",              3, { RED, GREEN, BLUE, UNUSED } },
-    { "raster:nosuchformat", 3, { RED, GREEN, BLUE, UNUSED } },
 
     /* The other device that keeps its page in a buffer of its own and
        hands it over the same way. */

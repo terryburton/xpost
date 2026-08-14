@@ -168,9 +168,12 @@ keeps the last page, every page having rewritten the one file.
 
 A colon after the device name introduces a mode. On raster it is the
 byte order a lent framebuffer is in -- `raster:rgb`, `raster:argb`,
-`raster:bgr`, `raster:bgra` -- and a word outside those four leaves the
-format at rgb rather than being refused. Everywhere else the mode is
-how much of a page is held at once, which is the next section.
+`raster:bgr`, `raster:bgra` -- and those four are the whole of it: a
+word outside them is refused before the run begins, naming what was
+given and the four, because a page lent back in an arrangement nobody
+asked for is read as though it were in the one that was. A selection
+naming no format at all gets rgb. Everywhere else the mode is how much
+of a page is held at once, which is the next section.
 
 
 == Big pages, and holding one a band at a time ==

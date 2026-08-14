@@ -44,6 +44,16 @@
 #define XPOST_DEV_RASTER_H
 
 /**
+ * @brief the pixel formats a "raster:FORMAT" selection may name
+ *
+ * A null-terminated roster, in the order a refusal lists them, and the
+ * whole of what such a selection may carry. It is here so that the
+ * check a selection is held to and the device that reads the name
+ * afterwards work from one list.
+ */
+extern const char *const xpost_raster_formats[];
+
+/**
  * @brief install operator loadrasterdevice in systemdict
  *
  * When run, creates a new operator

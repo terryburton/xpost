@@ -69,6 +69,7 @@
 #include "xpost_op_stack.h"  /* the shared index and roll rules */
 #include "xpost_oplib.h"
 #include "xpost_handle.h"  /* the release a device's block was issued to be given up by */
+#include "xpost_dev_raster.h"  /* the arrangements a lent page may be asked for in */
 
 static
 Xpost_Object namedollarerror; /* cached result of xpost_name_cons(ctx, "$error")
@@ -2267,6 +2268,12 @@ static const char *const bands_by_default[] =
    doc/MANUAL says so where it says how a run asks for banding. */
 #define XPOST_RECORD_DEVICE "record"
 
+/* The device that lends its page to whoever embedded the interpreter.
+   The mode a selection of it carries is the arrangement that buffer is
+   read back in, which is a roster the device itself keeps
+   (xpost_raster_formats, src/lib/xpost_dev_raster.c). */
+#define XPOST_RASTER_DEVICE "raster"
+
 /* The two ways a page whose device can take it a band at a time may be
    held, as a run spells them after the colon.
 
@@ -2306,23 +2313,29 @@ static int _bands_by_default(const char *name, size_t n)
 }
 
 /* The modes a selection of this device may carry, or NULL where the
-   selector means nothing here and belongs to whatever reads it.
+   device declares none and whatever follows the colon is passed
+   through.
 
-   Two devices have a mode this file decides on. A device that bands by
-   default takes the two words that say how its page is held; the
-   recording class takes none, being what one of those words is done
-   through rather than something a run says more about. Everything else a
-   colon may carry is read somewhere else -- the raster device reads it
-   for a pixel format -- and is passed through to be held there.
+   Three devices declare one. A device that bands by default takes the
+   two words that say how its page is held; the recording class takes
+   none, being what one of those words is done through rather than
+   something a run says more about; and the raster device takes the
+   arrangements it can lend its page back in, which it declares itself
+   since it is the one that reads the name.
 
    Held at all because the answers differ in a direction nothing would
-   report: a selection carrying a mode is one whose route is not weighed,
-   so a mode nobody recognised would read as a run having asked for
-   something specific and quietly turn the weighing off. */
+   report. A selection carrying a mode is one whose route is not
+   weighed, so a mode nobody recognised would read as a run having
+   asked for something specific and quietly turn the weighing off; and
+   a lent page is read back by the arrangement its selection named, so
+   an arrangement nobody recognised would hand a caller a page in one
+   arrangement to be read in another. */
 static const char *const *_device_modes(const char *selected, size_t n)
 {
     if (strcmp(selected, XPOST_RECORD_DEVICE) == 0)
         return no_modes;
+    if (strcmp(selected, XPOST_RASTER_DEVICE) == 0)
+        return xpost_raster_formats;
     if (_bands_by_default(selected, n))
         return banding_modes;
     return NULL;

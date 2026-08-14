@@ -174,8 +174,12 @@ struct _Xpost_Record
 
 /* One buffer for the page's writes, taken at the spill and never grown.
    Sixty-four kibibytes is under two per cent of the four million bytes
-   the band budget allows a raster (data/recorddev.ps), so what the spill
-   adds to the bound is inside the rounding on the term it is bounding. */
+   the band budget allows a raster where a run names no budget of its own
+   (data/recorddev.ps), so at that budget what the spill adds to the
+   bound is inside the rounding on the term it is bounding. It is the
+   page's buffer and not a band's, so it is this size at any budget: a
+   run naming a smaller one buys a shallower band and the same buffer,
+   which is then a larger share of what a page costs. */
 #define _SPILL_BUFFER  (64u * 1024u)
 
 /* and the same again for the window a read is answered from */

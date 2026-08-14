@@ -58,6 +58,36 @@
 
 enum Xpost_PixelFormat { RGB, ARGB, BGR, BGRA };
 
+/* The formats a "raster:FORMAT" selection may name, and the whole of
+   what it may name: a selection carrying any other word is refused
+   where a selection is read (setlocalconfig, src/lib/xpost_interpreter.c),
+   the way an unrecognised mode is on every other device. It is refused
+   rather than taken for one of these because the buffer this device
+   lends is read by whoever embedded the interpreter, and the
+   arrangement it is read by is the one the selection named: a page
+   handed back in another arrangement is read as though it were in the
+   one that was asked for.
+
+   In the order of the formats above, so a name's place here is the
+   format it names. */
+const char *const xpost_raster_formats[] =
+{
+    "rgb",
+    "argb",
+    "bgr",
+    "bgra",
+    NULL
+};
+
+/* Say that the roster covers the formats rather than leave it to hold
+   by luck: a format added to one and not the other would leave a name
+   standing for the wrong arrangement, or none. (A negative array size
+   rather than _Static_assert: this builds as C99 with -pedantic-errors,
+   which rejects the latter.) */
+typedef char xpost_raster_formats_name_every_format[
+    sizeof xpost_raster_formats / sizeof *xpost_raster_formats
+    == BGRA + 2 ? 1 : -1];
+
 typedef struct
 {
     unsigned char blue, green, red, alpha;
@@ -203,9 +233,16 @@ int _create_cont(Xpost_Context *ctx,
         return limitcheck;
     }
 
-    /* the mode selector of the "device:mode" this run was started with,
-       one of the settings the run made; a run that named no mode takes
-       the format the device has when nobody asked for one */
+    /* The mode selector of the "device:mode" this run was started with,
+       one of the settings the run made. It names a format only where
+       this device is the one that selection named: the same setting
+       carries the word that holds a page a band at a time, so a run
+       started on a device whose page may arrive that way, whose program
+       then asks for a raster page by name, has named no format at all
+       and takes the format a run that names none takes. A word that is
+       neither is refused where the selection is read (setlocalconfig,
+       src/lib/xpost_interpreter.c), so what reaches here is one of the
+       formats or a word addressed elsewhere. */
     subdevice = xpost_context_host_setting(ctx, "SUBDEVICE");
     if (xpost_object_get_type(subdevice) != stringtype)
     {
@@ -213,23 +250,25 @@ int _create_cont(Xpost_Context *ctx,
     }
     XPOST_LOG_INFO("</SUBDEVICE %*s>", subdevice.comp_.sz, xpost_string_get_pointer(ctx, subdevice));
     {
-        /* The name is compared against its own length: a shorter one
-           read as though it were four bytes long would take whatever
-           follows it in memory with it. A name that matches none of
-           them leaves the format the one the device takes when no name
-           is given at all, rather than leaving it unset. */
+        /* The name is compared against its own length as well as the
+           roster's: a shorter one read as though it were as long as
+           what it stands beside would take whatever follows it in
+           memory with it. The format is assigned before the walk as
+           well as by it, so it is assigned whatever the walk finds. */
         const char *sub = xpost_string_get_pointer(ctx, subdevice);
         unsigned int sublen = subdevice.comp_.sz;
+        int i;
 
         private.pixelformat = RGB;
-        if ((sublen == 4) && (memcmp(sub, "argb", 4) == 0))
-            private.pixelformat = ARGB;
-        else if ((sublen == 3) && (memcmp(sub, "rgb", 3) == 0))
-            private.pixelformat = RGB;
-        else if ((sublen == 4) && (memcmp(sub, "bgra", 4) == 0))
-            private.pixelformat = BGRA;
-        else if ((sublen == 3) && (memcmp(sub, "bgr", 3) == 0))
-            private.pixelformat = BGR;
+        for (i = 0; xpost_raster_formats[i]; i++)
+        {
+            if ((sublen == strlen(xpost_raster_formats[i]))
+                && (memcmp(sub, xpost_raster_formats[i], sublen) == 0))
+            {
+                private.pixelformat = (enum Xpost_PixelFormat)i;
+                break;
+            }
+        }
     }
 
     /* create a string to contain device data structure */

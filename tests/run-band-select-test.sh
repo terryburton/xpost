@@ -297,6 +297,20 @@ refused "record:bogus" record bogus $sabword ||
     note "-d record:bogus is not refused as a mode the recording class" \
          "does not take"
 
+# The raster device's mode is not how much of a page is held but the
+# arrangement its page is lent back in, and the four names are the whole
+# of it. A misspelling accepted would hand an embedder a page in one
+# arrangement to be read in another, which is a page of the right marks
+# in the wrong colours and nothing said about it.
+if printf '%s\n' "$have" | grep -qx "[[:space:]]*raster"; then
+    if refused raster:rbg raster rbg rgb argb bgr bgra $sabword; then
+        echo "OK   -d raster takes no mode but its four arrangements," \
+             "and says so"
+    fi
+else
+    echo "SKIP -d raster (not in this build)"
+fi
+
 # A device that cannot take its page a band at a time takes neither word:
 # passing them through would leave a run believing it had asked for a
 # banded page and given a whole one under a word that said otherwise.

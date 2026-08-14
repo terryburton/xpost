@@ -325,9 +325,12 @@ The Raster device is intended for use when xpost is a library component
 of another program. It can make use of configuration options from
 the call to xpost_create() to return the image buffer to the calling
 program, as well as controlling the behavior of the `showpage`
-operator. It can return an image buffer in several raw formats 
+operator. It can return an image buffer in several raw formats
 selected by these device strings:
-"raster:bgr", "raster:bgra", "raster:rgb", "raster argb".
+"raster:bgr", "raster:bgra", "raster:rgb", "raster:argb".
+Those four are the whole of what the selection may carry: a word
+outside them is refused as the interpreter is created, naming what
+was given and the four, and a selection naming no format gets rgb.
 
 For interactive use, showpage flushes the drawing to the window
 and reads a line from the keyboard (waits for the Enter key).
@@ -499,11 +502,16 @@ down by the next emission that has rows of its own to write.
 
 The budget
 
-.bandbytes (data/recorddev.ps) is 4,000,000 bytes. .bandheight divides it by
-the bytes of /.rowcost, and a budget buying less than one row buys one row.
-One number answers two questions: a page bands exactly when the budget buys
-fewer rows than the page has, so it bands the moment it would need a second
-band and never bands into one.
+.bandbytes (data/recorddev.ps) is 4,000,000 bytes, which is what a run that
+names no budget of its own works to. An invocation may name another with
+--band-bytes, and .settlebandbudget (data/device.ps) writes the one it named
+under that same name as the run's device is made, which is before the first
+page is weighed; so .bandbytes is the budget in force either way and every
+reading of it is a reading of what this run works to. .bandheight divides it
+by the bytes of /.rowcost, and a budget buying less than one row buys one
+row. One number answers two questions: a page bands exactly when the budget
+buys fewer rows than the page has, so it bands the moment it would need a
+second band and never bands into one.
 
 .devicefor (data/recorddev.ps) asks the first of the two before there is a
 device, and decides whether a record is made at all. It is asked wherever a
@@ -517,7 +525,8 @@ whole.
 At 4,000,000 the ordinary sheets are painted directly: letter is 612 by 792
 at three bytes a pixel, which is 1,454,112 bytes, A4 is 1,502,970 and A3 is
 3,008,466. The bound above them is untouched -- a 612 by 40000 strip costs
-73,440,000 bytes held whole and is held in 2,178 rows of that instead.
+73,440,000 bytes held whole and is held in 2,178 rows of that instead. A run
+that names a budget below those figures is what bands an ordinary sheet.
 
 The comparison is a page's raster against the budget, so what holding the
 marks instead costs is not in it: neither the record, which .recordcost
@@ -530,8 +539,13 @@ parameter with a reason for its size and no reading behind its value.
 of what banding a page buys.
 
 None of these is a page-device parameter and none may become one: PLRM
-Appendix G bars `banddevice` from a page description, so a program may
-neither choose how many times its marks are played nor tell.
+Appendix G bars `banddevice` from a page description, so a program may not
+choose how many times its marks are played. What chooses is the invocation.
+Being told is the other half, and is allowed: currentsystemparams reports the
+budget as MaxBandBytes and the rows it bought on the device now being painted
+into as CurBandHeight, which is 0 where that device holds the page whole.
+setsystemparams recognises no parameter at all, so neither can be written
+back.
 
 The rows an imaging bounding box leaves
 
@@ -561,6 +575,9 @@ A record is held in memory while it is worth less than the raster banding the
 page saves (.bandsaving), and goes into a scratch file past that. What the
 run asked for is SPILL_AUTO, SPILL_NEVER or SPILL_ALWAYS; where the page in
 hand has its marks is SPILT_MEMORY, SPILT_FILE or SPILT_REFUSED.
+currentsystemparams reports the pair as RecordSpill and CurRecordSpill, and
+they are two names because they can differ: a run that asked to be weighed,
+on a machine that will take no scratch file, reports auto and refused.
 
 Under auto the record is weighed every RECORD_WEIGH_EVERY (64) marks, and at
 any entry large enough to carry it past the threshold on its own -- a
