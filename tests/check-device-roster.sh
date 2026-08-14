@@ -330,6 +330,100 @@ if ! cmp -s "$work/says-yes" "$work/routed"; then
     fi
 fi
 
+# ---------------------------------------------------------------------
+# And which of them leave nothing at the output path
+#
+# A page is a file for all but four devices: two hand their raster to the
+# program embedding the interpreter and two paint nothing, and a run
+# naming -o leaves that name untouched. Every wrapper that compares the
+# bytes of a page has to know which four, and each of them used to know
+# separately -- the byte-identity gate, the multi-page shapes and the
+# smoke wrapper carried the same four names three times over, so a device
+# added to the roster and to none of them was rendered and never
+# compared, with nothing anywhere saying so.
+#
+# The list is DEVICE_FLEET_NOFILE and this is what holds it. It is a
+# reading rather than a declaration: a page is asked for through each
+# device and the output path is looked at afterwards, which is the same
+# question the wrappers ask and answers it the same way. Both directions
+# are held, so a device that stopped writing its page fails here as
+# surely as one that started.
+( . "$fleet"; for v in $DEVICE_FLEET_NOFILE; do echo "$v"; done ) \
+    2>/dev/null | sort -u > "$work/nofile-fleet"
+if [ ! -s "$work/nofile-fleet" ]; then
+    echo "FAIL: DEVICE_FLEET_NOFILE is empty or unset in tests/device-fleet.sh"
+    fail=1
+fi
+stray=$(comm -23 "$work/nofile-fleet" "$work/fleet-all")
+if [ -n "$stray" ]; then
+    echo "FAIL: DEVICE_FLEET_NOFILE names devices the roster does not:"
+    printf '%s\n' "$stray" | sed 's/^/      /'
+    fail=1
+fi
+
+# one page, small, through each device in turn
+printf '%s\n' 'newpath 2 2 moveto 6 6 lineto stroke showpage' \
+    > "$work/onepage.ps"
+: > "$work/wrote"
+: > "$work/left"
+: > "$work/pathasked"
+asked=0
+while read -r dev; do
+    rm -f "$work/path.$dev"
+    said=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+            "$xpost" -q -d "$dev" -o "path.$dev" onepage.ps \
+            </dev/null 2>&1 )
+    case "$said" in
+        *"wrong device"*) continue ;;
+    esac
+    asked=$((asked + 1))
+    echo "$dev" >> "$work/pathasked"
+    if [ -e "$work/path.$dev" ]; then
+        echo "$dev" >> "$work/wrote"
+    else
+        echo "$dev" >> "$work/left"
+    fi
+done < "$work/fleet-all"
+sort -u "$work/left" -o "$work/left"
+sort -u "$work/pathasked" -o "$work/pathasked"
+if [ "$asked" -lt 8 ]; then
+    echo "FAILURES: only $asked device(s) could be asked for a page, and the"
+    echo "      roster names $(wc -l < "$work/fleet-all" | tr -d ' '). The question is being asked wrong."
+    exit 1
+fi
+if [ ! -s "$work/wrote" ]; then
+    echo "FAILURES: no device left a file at the output path, so every device"
+    echo "      reads as one whose page is not a file. The question is being"
+    echo "      asked wrong."
+    exit 1
+fi
+# a device this build could not make was never asked, so the list it is
+# held to is narrowed rather than the device counted absent from it
+comm -12 "$work/nofile-fleet" "$work/pathasked" > "$work/nofile-want"
+if ! cmp -s "$work/left" "$work/nofile-want"; then
+    quiet=$(comm -23 "$work/left" "$work/nofile-want")
+    wrote=$(comm -13 "$work/left" "$work/nofile-want")
+    if [ -n "$quiet" ]; then
+        echo "FAIL: these devices left nothing at the output path and"
+        echo "      DEVICE_FLEET_NOFILE does not name them:"
+        printf '%s\n' "$quiet" | sed 's/^/      /'
+        echo "      Every wrapper that compares the bytes of a page reads that"
+        echo "      list to know which devices have none, so a device missing"
+        echo "      from it is one they will each ask for a file and find"
+        echo "      nothing. Name it there with what its page arrives as"
+        echo "      instead."
+        fail=1
+    fi
+    if [ -n "$wrote" ]; then
+        echo "FAIL: DEVICE_FLEET_NOFILE names these devices and they wrote a"
+        echo "      file:"
+        printf '%s\n' "$wrote" | sed 's/^/      /'
+        echo "      A device whose page is a file is one the byte comparisons"
+        echo "      can hold, and naming it there is what keeps them off it."
+        fail=1
+    fi
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the device rosters disagree"
     exit 1
@@ -339,5 +433,7 @@ skipped=''
 [ -s "$work/unmade" ] &&
     skipped=", $(wc -l < "$work/unmade" | tr -d ' ') not built into this interpreter"
 echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four files;\
- $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one$skipped)"
+ $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one;\
+ $(wc -l < "$work/wrote" | tr -d ' ') leaving a page at the output path and\
+ $(wc -l < "$work/left" | tr -d ' ') leaving none$skipped)"
 exit 0

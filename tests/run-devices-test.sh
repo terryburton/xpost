@@ -40,15 +40,18 @@ prog="$work/page.ps"
 printf 'newpath 10 10 moveto 90 90 lineto stroke showpage\n' > "$prog"
 
 # the devices that leave nothing at the -o path, and everything else in
-# the roster
-buf_devices='bgr raster null bbox'
+# the roster. Which are which is DEVICE_FLEET_NOFILE's answer, held by
+# check-device-roster.sh against what each device actually leaves there,
+# so a device added to the roster is one this wrapper requires bytes of
+# unless the roster says its page is not a file.
 file_devices=
 for dev in $DEVICE_FLEET_ALL; do
-    case " $buf_devices " in
+    case " $DEVICE_FLEET_NOFILE " in
         *" $dev "*) continue ;;
     esac
     file_devices="$file_devices $dev"
 done
+buf_devices=$DEVICE_FLEET_NOFILE
 
 fail=0
 ran=0

@@ -95,6 +95,25 @@ DEVICE_FLEET_MARKING='pgm ppm pbm null bbox raster bgr png pngalpha jpeg
 # naming the same devices.
 DEVICE_FLEET_BANDS='pgm ppm pbm tiff png jpeg'
 
+# The devices whose page never arrives at the output path: the two that
+# hand their raster to the program embedding the interpreter, and the two
+# that paint nothing at all. A run naming -o leaves that name untouched,
+# with a %d in it or without.
+#
+# It is what every wrapper comparing the bytes of a page has to know, and
+# each of them used to know it separately: the byte-identity gate, the
+# multi-page shapes and the smoke wrapper each carried the same four
+# names, so a device added to the roster and to none of them was rendered
+# and never compared. Naming them once makes the other direction the
+# default -- a device the roster gains and this list does not is a device
+# whose page is a file, and every wrapper here compares it.
+#
+# tests/check-device-roster.sh holds this list by running each device and
+# looking at the output path, both ways round: a device that left nothing
+# and is not named here fails, and a device named here that wrote a file
+# fails too.
+DEVICE_FLEET_NOFILE='null bbox raster bgr'
+
 # fleet_whole DEVICE
 #
 # The selection that holds DEVICE's page whole: the device itself where
