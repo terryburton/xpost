@@ -455,11 +455,17 @@ suite test check-test-quality
 suite test check-test-timeouts
 suite width witness
 
-# ---- doc: prose, and nothing a program reads
+# ---- doc: prose, and the one page of it a program reads
 #
-# No test reads any of these files. What a doc change can still break is
-# the distribution lists, which name every file the tarball carries, so
-# a page added to doc/ and left out of them yields a tarball missing it.
+# What a doc change can break is the distribution lists, which name every
+# file the tarball carries, so a page added to doc/ and left out of them
+# yields a tarball missing it.
+#
+# And doc/MANUAL is read: it carries the table of devices and the two
+# sentences naming which of them hold a run's pages in one file and which
+# can take a page a band at a time, which check-device-roster.sh holds to
+# the rosters the interpreter is built from. Prose that has come adrift
+# from the tree reads exactly like prose that has not.
 doc path doc/*.md
 doc path doc/COMPAT
 doc path doc/INTERNALS
@@ -476,6 +482,7 @@ doc path NEWS
 doc path README
 doc path data/DICTIONARIES.md
 doc test check-dist-lists
+doc test check-device-roster
 doc width witness
 
 # ---- width: what reads the object width directly
