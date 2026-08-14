@@ -346,6 +346,10 @@ static int _spill_asked(Xpost_Context *ctx)
 static int _spill_probed;
 static int _spill_probe_ok;
 static char _spill_probe_why[160];
+/* and whether the run has already been told it cannot have one: the
+   answer is about the machine and does not change, so a job of many
+   pages is told once rather than once per device it makes */
+static int _spill_probe_said;
 
 static int _spill_probe(void)
 {
@@ -3318,11 +3322,13 @@ static int _create_cont(Xpost_Context *ctx,
             xpost_record_free(private.rec);
             return ioerror;
         }
-        XPOST_LOG_ERR("no page's marks can be put in %s (%s); a page drawing"
-                      " more than the raster banding it saves will be held in"
-                      " memory instead, and what it costs will follow the"
-                      " drawing without limit", xpost_spill_dir(),
-                      _spill_probe_why);
+        if (!_spill_probe_said)
+            XPOST_LOG_ERR("no page's marks can be put in %s (%s); a page"
+                          " drawing more than the raster banding it saves"
+                          " will be held in memory instead, and what it costs"
+                          " will follow the drawing without limit",
+                          xpost_spill_dir(), _spill_probe_why);
+        _spill_probe_said = 1;
         private.where = SPILT_REFUSED;
     }
     /* and the state that puts them there from the first mark does it
