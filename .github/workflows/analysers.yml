@@ -196,7 +196,12 @@ jobs:
     # report, which is the shape a leak gate fails silently in.
     #
     # The count and the allocation sites are both printed, so a red run
-    # says how much leaked and where without opening the log.
+    # says how much leaked and where without opening the log. The sites
+    # are read out of the whole tree the run built rather than the
+    # library alone, and from both kinds of leak the sanitizer reports:
+    # a pattern narrower than the tree prints a count with nothing under
+    # it, which reads as a leak nobody can place rather than as a report
+    # that did not look where the leak was.
     - name: test and check
       env:
         # log_path names a directory that must already exist; the run
@@ -215,8 +220,8 @@ jobs:
           | wc -l)
         echo "$leaks"
         echo '--- allocation sites ---'
-        cat leak-logs/* 2>/dev/null | grep -A4 'Direct leak' \
-          | grep -oE 'src/lib/[a-z_0-9]+\.c:[0-9]+' \
+        cat leak-logs/* 2>/dev/null | grep -A6 -E '(Direct|Indirect) leak' \
+          | grep -oE 'src/(lib|bin)/[a-z_0-9]+\.c:[0-9]+' \
           | sort | uniq -c | sort -rn || true
         [ "$leaks" -eq 0 ]
     - uses: actions/upload-artifact@v4
