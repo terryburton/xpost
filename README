@@ -1,1 +1,7 @@
-See README.md
+The README is README.md, beside this file.
+
+This one keeps the conventional spelling reachable: it is the name a
+reader looks for first, and automake's GNU strictness asks a project for
+a README (it accepts either spelling, so README.md alone would do). It
+carries no content of its own and should never be given any -- two
+READMEs that both say things are two that can come to disagree.
