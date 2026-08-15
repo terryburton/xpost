@@ -102,6 +102,27 @@
 % what this reads.
 /gvm { globalvmstatus pop exch pop } bind def
 
+% Automatic collection is turned off for the whole of this file, because
+% what it reads is memory NOT being given back.
+%
+% Every assertion below is of the form "the job did not grow", so a
+% collection falling inside the measured stretch does not make this file
+% fail -- it makes it PASS. The raster a page left behind is exactly
+% what a collection reclaims, and reclaiming it is what this is written
+% to notice the absence of. A run that collects between the readings
+% reports every route flat and holds nothing to anything, which is the
+% shape a leak gate fails silently in.
+%
+% The meter below is the other half of the same care: it takes a known
+% quantity and requires the reading to see it, so that a reading which
+% cannot see memory at all is told apart from a route that takes none.
+% Together they say the instrument works and that nothing is quietly
+% undoing what it measures.
+%
+% PLRM C.3.5 provides for this: automatic collection may be disabled,
+% and -2 is the operand for both banks (PLRM 8.2 vmreclaim).
+-2 vmreclaim
+
 % A device row as a user-space y.
 /dy { H exch sub } bind def
 

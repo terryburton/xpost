@@ -70,11 +70,28 @@
 } bind def
 /num { 20 string cvs } bind def
 
+% Automatic collection is turned off for the whole of this file, and the
+% measurement below depends on it being off.
+%
+% What is read is a difference: virtual memory before a page and after
+% it. That subtraction only says anything while nothing gives memory
+% back in the middle of it -- a collection falling between the two
+% readings returns the previous page's raster, and the difference then
+% describes the collection rather than the page.
+%
+% PLRM C.3.5 names this use: automatic collection may be disabled, and
+% it is "sometimes useful to disable garbage collection temporarily --
+% to obtain repeatable timing measurements, for instance". The same
+% holds for repeatable measurements of memory. -2 is the operand for
+% both banks (PLRM 8.2 vmreclaim).
+-2 vmreclaim
+
 % -  gvm  int
-% What the global half of virtual memory has taken. It only grows -- an
-% allocation given up goes on a free list and the count stays -- so the
-% difference across a page is the high-water mark of what that page
-% took, which is the quantity a bound is a bound on.
+% What the global half of virtual memory has taken. With automatic
+% collection off it only grows -- an allocation given up goes on a free
+% list and the count stays -- so the difference across a page is the
+% high-water mark of what that page took, which is the quantity a bound
+% is a bound on.
 /gvm {
     currentglobal true setglobal
     vmstatus pop exch pop

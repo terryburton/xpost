@@ -73,11 +73,35 @@
 /rowbytes 2 dict begin /width W def
     DEVICE /.rowcost get exec end exch pop def
 
+% Automatic collection is turned off for the whole of this file, and
+% every measurement below depends on it being off.
+%
+% What is read is a difference: virtual memory before a page and after
+% it, the growth between them being what the page took. That subtraction
+% only says anything while nothing gives memory back in the middle of
+% it. A collection falling between the two readings returns the previous
+% page's raster, and the growth then comes out smaller than the page --
+% negative, where the page before was the taller one -- so the run would
+% report that a whole page costs nothing per row and conclude that
+% banding bounds something already bounded.
+%
+% PLRM C.3.5 names this use exactly: automatic collection may be
+% disabled, and it is "sometimes useful to disable garbage collection
+% temporarily -- to obtain repeatable timing measurements, for
+% instance". The same holds for repeatable measurements of memory. -2 is
+% the operand for both banks (PLRM 8.2 vmreclaim).
+%
+% This is not a way of keeping the run small: nothing here is reclaimed
+% by it that would have been reclaimed anyway within a page, and what
+% the file asserts is the SLOPE between two page heights, which is the
+% same slope whether or not the memory is given back afterwards.
+-2 vmreclaim
+
 % -  gvm  int
 % What the global half of virtual memory has taken. Raster memory is
-% taken from it (PLRM 3.7.3), and it only grows -- an allocation given up
-% goes on a free list and the count stays -- so the difference across a
-% page is what that page took.
+% taken from it (PLRM 3.7.3), and with automatic collection off it only
+% grows -- an allocation given up goes on a free list and the count
+% stays -- so the difference across a page is what that page took.
 /gvm {
     currentglobal true setglobal
     vmstatus pop exch pop
