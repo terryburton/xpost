@@ -274,14 +274,14 @@ struct _Xpost_Context {
         the parameter is save/restore-subject (PLRM 8.2 restore) */
     unsigned char vmmode_hist[256];
 
-    /** The VMThreshold user parameter (PLRM C.3.5), which this context
-        records and reports and nothing else reads: what paces a
-        collection that runs of its own accord here is a count of
-        allocations rather than a count of bytes allocated. Held per
-        context, as a user parameter is (PLRM C.1.1), and recorded at
-        each save level so restore reverts it (PLRM 8.2 restore). The
-        count is the width of the integers a program hands it, so a
-        count it can express is a count it reads back. */
+    /** The VMThreshold user parameter (PLRM C.3.5): the count of bytes
+        allocated between the collections this interpreter runs of its
+        own accord. Setting it gives the count to both banks of virtual
+        memory, which count it down as they allocate. Held per context,
+        as a user parameter is (PLRM C.1.1), and recorded at each save
+        level so restore reverts it (PLRM 8.2 restore). The count is the
+        width of the integers a program hands it, so a count it can
+        express is a count it reads back. */
     integer vmthreshold;
     integer vmthreshold_hist[256];
 

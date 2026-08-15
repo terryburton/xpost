@@ -136,7 +136,8 @@ int xpost_free_init(Xpost_Memory_File *mem)
     /* make free list available for general memory allocations */
     (void) xpost_memory_register_free_list_alloc_function(mem, xpost_free_alloc);
     mem->period = XPOST_GARBAGE_COLLECTION_PERIOD;
-    mem->threshold = _xpost_free_gc_threshold();
+    mem->threshold_bytes = _xpost_free_gc_threshold();
+    mem->threshold = mem->threshold_bytes;
 
     return 1;
 }
@@ -320,7 +321,7 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
 #ifdef XPOST_USE_THRESHOLD
         if ((mem->threshold -= sz) <= 0)
         {
-            mem->threshold = _xpost_free_gc_threshold();
+            mem->threshold = mem->threshold_bytes;
             return XPOST_FREE_WANT_COLLECTION;
         }
 #else

@@ -59,23 +59,35 @@
 
 /**
  * @enum  Xpost_Garbage_Params
- * @brief private constants
+ * @brief what paces a collection that runs of its own accord
  *
- * FIXME: PLRM describes garbage collection control to be based on
- * number of bytes allocated, not the number of allocations.
- * Also this should be a variable accessible through `setvmthreshold`
- * and `setsystemparams` operators.
- * PLRM, appendix C describes this variable, which is expected in the
- * dictionary argument of `setsystemparams`, and returned by
- * `currentsystemparams`:
- *    VMThreshold   integer   The frequency of automatic garbage collection,
- *                           which is triggered whenever this many bytes have
- *                           been allocated since the previous collection.
+ * PLRM C.3.5 gives the VMThreshold user parameter as "the frequency of
+ * automatic garbage collection, which is triggered whenever this many
+ * bytes have been allocated since the previous collection", and that is
+ * what the threshold below counts. A run may name its own through
+ * `setvmthreshold` or `setuserparams`; this is what it starts with.
+ *
+ * The number was measured rather than chosen. Over five programs -- one
+ * making and dropping forty page devices, and four from the corpus, the
+ * largest of them holding 85 MB live -- wall time is flat from about a
+ * megabyte upward, and the count this default replaced (a thousand
+ * times larger) retained between 1.8 and 4.1 times as much memory for
+ * no time saving at all. Four megabytes costs at most 1.3% of wall time
+ * on any of them, which is inside the run-to-run spread, and a run that
+ * would rather have the memory back can ask for less.
+ *
+ * PLRM 8.2 setvmthreshold allows an implementation to raise a count
+ * below what it can do, and this one has no such count: a request for a
+ * collection is recorded rather than run where it is asked for, and the
+ * interpreter takes it at its next safe point between operators. So the
+ * smallest counts mean a collection at every safe point, which is slow
+ * and finishes, and every count from zero up is achievable and answered
+ * with itself.
  */
 typedef enum
 {
-    XPOST_GARBAGE_COLLECTION_PERIOD = 20000,  /**< number of times to grow before collecting */
-    XPOST_GARBAGE_COLLECTION_THRESHOLD = 1000000000  /**< number of bytes to allocate before collecting */
+    XPOST_GARBAGE_COLLECTION_PERIOD = 20000,  /**< allocations between collections, under the pacing this interpreter does not use */
+    XPOST_GARBAGE_COLLECTION_THRESHOLD = 4000000  /**< bytes allocated between collections */
 } Xpost_Garbage_Params;
 
 #define XPOST_USE_THRESHOLD

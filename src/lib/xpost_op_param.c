@@ -40,6 +40,9 @@
 #include "xpost.h"
 #include "xpost_log.h"
 #include "xpost_memory.h"
+/* what paces a collection that runs of its own accord, which the
+   VMThreshold user parameter below names */
+#include "xpost_free.h"
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_save.h"
@@ -214,7 +217,34 @@ int vmreserve (Xpost_Context *ctx, Xpost_Object nobjects, Xpost_Object nbytes)
 
 /* The count of bytes this interpreter answers a request for the default
    with, and the count a context starts with. */
-#define XPOST_VM_THRESHOLD_DEFAULT 0
+#define XPOST_VM_THRESHOLD_DEFAULT XPOST_GARBAGE_COLLECTION_THRESHOLD
+
+/* Give the count a run asked for to the banks it paces, and start the
+   countdown again from it so that a smaller count takes effect on the
+   next allocation rather than after the one already in progress. Both
+   banks are set: a collection sweeps them together, so a count that
+   reached only one of them would name a frequency neither bank keeps.
+
+   PLRM C.3.5 makes this a user parameter, held per context; PLRM 8.2
+   setvmthreshold adds that where virtual memory is shared, a context's
+   setting applies while that context is executing, which is what
+   writing it through on the way past comes to. */
+static void
+_vmthreshold_apply(Xpost_Context *ctx, integer bytes)
+{
+    if (bytes < 0)
+        bytes = 0;
+    if (ctx->lo)
+    {
+        ctx->lo->threshold_bytes = (int)bytes;
+        ctx->lo->threshold = (int)bytes;
+    }
+    if (ctx->gl)
+    {
+        ctx->gl->threshold_bytes = (int)bytes;
+        ctx->gl->threshold = (int)bytes;
+    }
+}
 
 /* The VMReclaim user parameter (PLRM C.3.5) as the collector's own
    setting reads: 0 where a collection running of its own accord
@@ -240,13 +270,16 @@ int _vmreclaim_code(Xpost_Context *ctx)
 
    PLRM 8.2: -1 asks for the implementation's default, any other
    negative operand is a rangecheck, and a count outside what the
-   implementation can do is replaced by the nearest it can. What this
-   interpreter does with the count is record it and report it back, its
-   own automatic collection being paced by a count of allocations, so
-   every count from zero up is achievable and only the default has to be
-   supplied. The count is the VMThreshold user parameter (PLRM 8.2
-   setvmthreshold), so currentuserparams reads it back and restore
-   reverts it. */
+   implementation can do is replaced by the nearest it can. The count
+   paces the collections this interpreter runs of its own accord: it is
+   given to both banks of virtual memory, which count it down by the
+   bytes they allocate. Every count from zero up is achievable -- a
+   request for a collection is recorded and taken at the next safe
+   point, so the smallest of them mean a collection at every safe point
+   rather than a run that cannot finish -- and only the default has to
+   be supplied. The
+   count is the VMThreshold user parameter (PLRM 8.2 setvmthreshold), so
+   currentuserparams reads it back and restore reverts it. */
 static
 int setvmthreshold(Xpost_Context *ctx, Xpost_Object I)
 {
@@ -256,6 +289,7 @@ int setvmthreshold(Xpost_Context *ctx, Xpost_Object I)
         return rangecheck;
     else
         ctx->vmthreshold = I.int_.val;
+    _vmthreshold_apply(ctx, ctx->vmthreshold);
     return 0;
 }
 
@@ -391,7 +425,11 @@ int setuserparams(Xpost_Context *ctx, Xpost_Object D)
             return ret;
     }
     if (have_threshold)
-        ctx->vmthreshold = threshold < 0 ? XPOST_VM_THRESHOLD_DEFAULT : threshold;
+    {
+        ctx->vmthreshold = threshold < 0 ? XPOST_VM_THRESHOLD_DEFAULT
+                                         : threshold;
+        _vmthreshold_apply(ctx, ctx->vmthreshold);
+    }
     return 0;
 }
 

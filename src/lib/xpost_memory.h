@@ -285,8 +285,23 @@ typedef struct Xpost_Memory_File
                                   cannot present itself as a small one. */
     } path_walk;
 
+    /** Allocations still to be made before a collection is asked for,
+        under the other way of pacing one. The interpreter does not read
+        it: XPOST_USE_THRESHOLD selects the byte count below, and this
+        is kept because a bank of the virtual-memory image carries it. */
     int period;
+    /** Bytes still to be allocated before a collection is asked for.
+        Counted down by every allocation and reloaded from
+        threshold_bytes when it runs out, so what paces an automatic
+        collection is a count of bytes allocated since the last one --
+        which is what the VMThreshold user parameter names (PLRM
+        C.3.5). */
     int threshold;
+    /** What threshold is reloaded with: the count a run asks for
+        through VMThreshold, or the interpreter's default. Held here
+        rather than read from the context because the allocator that
+        reloads it is reached without one. */
+    int threshold_bytes;
     int free_list_alloc_is_installed;
     int (*free_list_alloc)(struct Xpost_Memory_File *mem,
                            unsigned sz,
