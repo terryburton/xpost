@@ -148,35 +148,7 @@ autogen.sh \
 xpost.pc.in \
 m4/xpost.m4 \
 valgrind_wrapper.sh \
-glibc.supp \
-visual_studio/vc10/xpost.sln \
-visual_studio/vc10/libxpost/libxpost.vcxproj \
-visual_studio/vc10/libxpost/libxpost.vcxproj.filters \
-visual_studio/vc10/xpost/xpost.vcxproj \
-visual_studio/vc10/xpost/xpost.vcxproj.filters \
-visual_studio/vc10/xpost_client/xpost_client.vcxproj \
-visual_studio/vc10/xpost_client/xpost_client.vcxproj.filters \
-visual_studio/vc10/xpost_suite/xpost_suite.vcxproj \
-visual_studio/vc10/xpost_suite/xpost_suite.vcxproj.filters \
-visual_studio/vc12/xpost.sln \
-visual_studio/vc12/libxpost/libxpost.vcxproj \
-visual_studio/vc12/libxpost/libxpost.vcxproj.filters \
-visual_studio/vc12/xpost/xpost.vcxproj \
-visual_studio/vc12/xpost/xpost.vcxproj.filters \
-visual_studio/vc12/xpost_client/xpost_client.vcxproj \
-visual_studio/vc12/xpost_client/xpost_client.vcxproj.filters \
-visual_studio/vc12/xpost_suite/xpost_suite.vcxproj \
-visual_studio/vc12/xpost_suite/xpost_suite.vcxproj.filters \
-visual_studio/vc14/libxpost/libxpost.vcxproj \
-visual_studio/vc14/libxpost/libxpost.vcxproj.filters \
-visual_studio/vc14/xpost.sln \
-visual_studio/vc14/xpost/xpost.vcxproj \
-visual_studio/vc14/xpost/xpost.vcxproj.filters \
-visual_studio/vc14/xpost_client/xpost_client.vcxproj \
-visual_studio/vc14/xpost_client/xpost_client.vcxproj.filters \
-visual_studio/vc14/xpost_suite/xpost_suite.vcxproj \
-visual_studio/vc14/xpost_suite/xpost_suite.vcxproj.filters
-
+glibc.supp
 
 clean-local:
 	find . -type f -name '*.gcno' -delete
