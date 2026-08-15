@@ -72,14 +72,7 @@ typedef struct
     Xpost_Bgr_Pixel data[1];
 } Xpost_Bgr_Buffer;
 
-/* Say that the block's address is immediately before the raster rather
-   than leave it to hold by luck: the release entry point reaches it by
-   stepping one pointer back from the address the client holds. (A
-   negative array size rather than _Static_assert: this builds as C99
-   with -pedantic-errors, which rejects the latter.) */
-typedef char xpost_bgr_block_precedes_the_raster[
-    offsetof(Xpost_Bgr_Buffer, data)
-    == offsetof(Xpost_Bgr_Buffer, block) + sizeof(void *) ? 1 : -1];
+XPOST_DEV_ASSERT_BLOCK_PRECEDES_RASTER(bgr, Xpost_Bgr_Buffer, block, data);
 
 typedef struct
 {

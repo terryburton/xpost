@@ -223,7 +223,7 @@ fi
 
 # ---- the block in front of the page ----
 for f in $(cat "$work/handers"); do
-    if ! grep -q 'block_precedes_the_raster' "$libdir/$f"; then
+    if ! grep -q 'XPOST_DEV_ASSERT_BLOCK_PRECEDES_RASTER' "$libdir/$f"; then
         echo "FAILURES: $f hands a page to an embedder and does not assert"
         echo "      that the block it sits in is named immediately in front"
         echo "      of it. xpost_output_buffer_release() reads the block from"

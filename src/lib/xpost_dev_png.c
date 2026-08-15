@@ -75,14 +75,7 @@ typedef struct
     Xpost_Png_Pixel data[1];
 } Xpost_Png_Buffer;
 
-/* Say that the block's address is immediately before the raster rather
-   than leave it to hold by luck: the release entry point reaches it by
-   stepping one pointer back from the address the client holds. (A
-   negative array size rather than _Static_assert: this builds as C99
-   with -pedantic-errors, which rejects the latter.) */
-typedef char xpost_png_block_precedes_the_raster[
-    offsetof(Xpost_Png_Buffer, data)
-    == offsetof(Xpost_Png_Buffer, block) + sizeof(void *) ? 1 : -1];
+XPOST_DEV_ASSERT_BLOCK_PRECEDES_RASTER(png, Xpost_Png_Buffer, block, data);
 
 /* A PNG stream holds exactly one image, so the file and the writer that
    fills it belong to the page and not to the device: both are made as a

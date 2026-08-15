@@ -1075,6 +1075,21 @@ xpost_dev_output_buffer_handoff(Xpost_Context *ctx,
     return 0;
 }
 
+/* Say that the block a lent raster sits in is named immediately in front
+   of the raster, rather than leave it to hold by luck:
+   xpost_dev_output_buffer_block() above reaches the block by stepping one
+   pointer back from the address the client was handed, so a buffer struct
+   that put anything between the two would have that read as its block.
+   Every device lending a raster states this of its own buffer, naming the
+   struct and which member each of the two is.
+
+   (A negative array size rather than _Static_assert: this builds as C99
+   with -pedantic-errors, which rejects the latter.) */
+#define XPOST_DEV_ASSERT_BLOCK_PRECEDES_RASTER(tag, type, blockmem, rastermem) \
+    typedef char xpost_##tag##_block_precedes_the_raster[ \
+        offsetof(type, rastermem) \
+        == offsetof(type, blockmem) + sizeof(void *) ? 1 : -1]
+
 /* One channel of a coverage-weighted blend: the ground moved toward the
    ink by the fraction c/255, rounded to the nearest whole level. Rounding
    is about a distance and has no sign, so the half step is taken away
