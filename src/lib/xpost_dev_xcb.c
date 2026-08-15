@@ -1011,8 +1011,11 @@ int loadxcbdevicecont(Xpost_Context *ctx,
 
        The blend also reaches every pixel an edge partly covers, around
        two and a half times the pixels the aliased path lays for a page
-       of text, and a pixel of either path is a colour negotiated with
-       the display server before its point goes down.
+       of text, and that is what it costs: ten lines of thirty-point
+       text take about twice as long blended as aliased. It used to cost
+       more, a colour being negotiated with the display server for every
+       pixel of either path; the colour is kept now (_ink above) and the
+       negotiation is gone, so what remains is the pixels themselves.
 
        Declaring one bit of text alpha takes the aliased path, which
        paints through PutPix above. */
