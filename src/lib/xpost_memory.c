@@ -195,8 +195,9 @@ xpost_memory_file_init(Xpost_Memory_File *mem,
                 if (fd != -1)
                 {
                     if (ftruncate(fd, sz) == -1)
-                        XPOST_LOG_ERR("ftruncate(%d, %d) returned -1 (error: %s)",
-                                      fd, sz, strerror(errno));
+                        XPOST_LOG_ERR("ftruncate(%d, %llu) returned -1 (error: %s)",
+                                      fd, (unsigned long long)sz,
+                                      strerror(errno));
                 }
 #endif
             }
@@ -471,9 +472,9 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
         sz = (size_t)want;
     }
 
-    XPOST_LOG_INFO("grow memory file%s%s (old: %d  new: %d)",
+    XPOST_LOG_INFO("grow memory file%s%s (old: %u  new: %llu)",
                    mem->fname[0] ? " for " : "", mem->fname[0] ? mem->fname : "",
-                   mem->max, sz);
+                   mem->max, (unsigned long long)sz);
 
 #ifdef _WIN32
     if (mem->fd != -1)
@@ -524,8 +525,8 @@ xpost_memory_file_grow(Xpost_Memory_File *mem,
     if (mem->fd != -1)
     {
         if (ftruncate(mem->fd, sz) == -1)
-            XPOST_LOG_ERR("ftruncate(%d, %d) returned -1 (error: %s)",
-                          mem->fd, sz, strerror(errno));
+            XPOST_LOG_ERR("ftruncate(%d, %llu) returned -1 (error: %s)",
+                          mem->fd, (unsigned long long)sz, strerror(errno));
     }
     /* Extending the mapping in place is what makes this backing worth
        having: the storage that is added is never written by the grow, so

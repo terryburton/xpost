@@ -34,6 +34,13 @@
 
 #include <stdarg.h>
 
+/* XPOST_PRINTF: the mark that has the compiler read a formatted call's
+   arguments against its format string. The two functions below take one
+   and are reached through the XPOST_LOG_* macros from every part of the
+   tree, so without it the whole of the interpreter's diagnostics is the
+   one body of formatted calls nobody checks. */
+#include "xpost_private.h"
+
 /**
  * @file xpost_log.h
  * @brief Logging facilities functions
@@ -185,10 +192,10 @@ XPAPI void xpost_log_print(Xpost_Log_Level level,
                            const char *file,
                            const char *fct,
                            int line,
-                           const char *fmt, ...);
+                           const char *fmt, ...) XPOST_PRINTF(5, 6);
 
 XPAPI void xpost_log_print_dump(Xpost_Log_Level level,
                                 const char *fct,
-                                const char *fmt, ...);
+                                const char *fmt, ...) XPOST_PRINTF(3, 4);
 
 #endif

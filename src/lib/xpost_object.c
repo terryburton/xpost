@@ -49,10 +49,17 @@
  * @cond LOCAL
  */
 
+/* The conversions the object's own integer types are printed through.
+   At the wide width they are `long long` and `unsigned long long` (see
+   the typedefs in xpost_object.h), so the conversion is the one for a
+   long long. `l` would name a `long`, which is the same width as a long
+   long only where a long is 64 bits: on a platform where it is 32 --
+   which this tree is built for and tested on -- the wide object's value
+   would be read back through half of itself. */
 #ifdef WANT_LARGE_OBJECT
 # define XPOST_FMT_WORD(_)    "u"
-# define XPOST_FMT_DWORD(_)   "lu"
-# define XPOST_FMT_INTEGER(_) "ld"
+# define XPOST_FMT_DWORD(_)   "llu"
+# define XPOST_FMT_INTEGER(_) "lld"
 # define XPOST_FMT_REAL       "f"
 #else
 # define XPOST_FMT_WORD(_)    "u"

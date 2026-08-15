@@ -2536,7 +2536,7 @@ XPOST_TEST_VISIBLE void xpost_interpreter_data_dir(char *datadir,
             return; \
         } \
         else \
-            XPOST_LOG_DBG("init.ps not present in", path_init_ps); \
+            XPOST_LOG_DBG("init.ps not present in %s", path_init_ps); \
     } while (0)
 
     /* environment variable XPOST_DATA_DIR */
