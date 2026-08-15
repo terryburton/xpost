@@ -69,6 +69,15 @@
 %              has one more of its own, for the meter it reads rather
 %              than this one.
 
+% This file reads global virtual memory before a stretch of work and
+% after it, and takes the difference to be what the work cost. A
+% collection falling between the two readings hands back what an
+% earlier page held, and the difference then describes the collection
+% rather than the work. Automatic collection is turned off for that
+% reason (PLRM C.3.5 provides for it; -2 is both banks, PLRM 8.2
+% vmreclaim).
+-2 vmreclaim
+
 /W where { pop }{ /W 128 def } ifelse
 /PAGE where { pop }{ /PAGE 1 def } ifelse
 /MEMH where { pop }{ /MEMH 0 def } ifelse

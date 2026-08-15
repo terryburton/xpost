@@ -9,6 +9,13 @@
 % allocation costs anything. Nothing means the first was recovered and handed
 % back; full price means it was not.
 
+% COLLECTION: this reads REUSE rather than a difference -- the header
+% below says why -- so a collection cannot make a reading mean
+% something else. It is NOT insensitive to collection frequency: below
+% the shipped count the freed block is not reused at any request size,
+% and the cause is not settled. It passes at the shipped count and
+% above. Turning collection off was tried and did not change it.
+
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /used { vmstatus pop exch pop } bind def

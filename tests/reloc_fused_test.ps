@@ -36,6 +36,11 @@
 % known answer, so a procedure read through a stale pointer is a wrong
 % answer here and not only a crash somewhere.
 
+% COLLECTION: measured insensitive to collection frequency -- the same
+% result with no collection at all and with one every two thousand
+% bytes. The slack it reads is a headroom figure, not a difference
+% across work.
+
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
     /failcount failcount 1 add store } ifelse } def

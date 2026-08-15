@@ -36,6 +36,10 @@
 % vmstatus reports is a signed integer that a raster filling the address
 % space wraps right past.
 
+% COLLECTION: measured insensitive to collection frequency -- the same
+% result with no collection at all and with one every two thousand
+% bytes. What it reads memory for is a refusal, not a quantity.
+
 /failures 0 def
 /note { (FAIL: ) print print (\n) print /failures failures 1 add store } bind def
 /assert { % bool (what went wrong)  .  -

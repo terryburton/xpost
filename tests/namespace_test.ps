@@ -8,6 +8,10 @@
 
 % Do every definition inside a scratch dict so the test's own bookkeeping
 % never lands in userdict -- which is one of the things it is checking.
+% COLLECTION: measured insensitive to collection frequency -- the same
+% result with no collection at all and with one every two thousand
+% bytes. What it reads memory for is a bound, not a difference.
+
 256 dict begin
 /fail 0 def
 /bad { (FAIL: ) print print ( ) print == /fail fail 1 add def } bind def

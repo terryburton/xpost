@@ -14,6 +14,10 @@
 % closes files opened since the save, performs a grestoreall, and leaves
 % global memory untouched.
 
+% COLLECTION: measured insensitive to collection frequency -- the same
+% result with no collection at all and with one every two thousand
+% bytes.
+
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print
     /failcount failcount 1 add store } ifelse } def

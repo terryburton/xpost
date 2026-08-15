@@ -22,6 +22,13 @@
 % same fixture must simply pass. The build is probed and each
 % personality held to its own contract.
 
+% COLLECTION: this reads one figure against a limit rather than taking
+% a difference, so a collection cannot make its reading mean something
+% else. It is NOT insensitive to collection frequency, though: at a
+% threshold of 2000 the run ends with status 1. That is unexplained and
+% recorded rather than papered over -- it passes at the shipped default
+% and above.
+
 /failcount 0 def
 /checks 0 def
 /assert { % bool (name)  .  -

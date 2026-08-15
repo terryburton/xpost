@@ -566,6 +566,7 @@ always test check-test-timeouts
 always test check-exported-symbols
 always test check-dist-lists
 always test check-awk-portability
+always test check-memory-declarations
 always width witness
 
 # ---- everything: what a path falls through to

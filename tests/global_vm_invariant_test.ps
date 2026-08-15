@@ -21,6 +21,11 @@
 % An exercise that fails to run is reported as such rather than as clean: an
 % operation that errors allocates nothing and would otherwise read as a pass.
 
+% COLLECTION: measured insensitive to collection frequency -- the run
+% reports the same result with no collection at all and with one every
+% two thousand bytes, so what it asserts does not depend on when memory
+% is handed back.
+
 /warm 6 def
 /runs 30 def
 /bound 512 def          % bytes per iteration; generous against counters and

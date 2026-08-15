@@ -2756,6 +2756,20 @@ test('check-awk-portability',
   args: [ meson.current_source_dir() ],
   timeout: 60)
 
+# A test that reads virtual memory says what it assumes about the
+# collector. The two kinds want opposite things of it -- one reads a
+# difference and needs nothing handed back in the middle, the other reads
+# collection itself and must not have it turned off -- so what is required
+# is the declaration rather than either mechanism. Three files read memory
+# by difference while no collection could happen, and the one asserting NO
+# growth went on passing when collections began: a collection satisfies
+# "did not grow".
+test('check-memory-declarations',
+  find_program('tests/check-memory-declarations.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ],
+  timeout: 60)
+
 # The binary form of the error report, which has to be checked on the
 # bytes rather than from inside the interpreter.
 test('error-binary',

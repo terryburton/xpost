@@ -4,6 +4,9 @@
 % 1 vmreclaim (local): allocating and discarding the same way under each, the
 % growth under 2 is no worse than under 1. This catches 2 being a no-op.
 
+% COLLECTION: this file's subject IS collection. Turning it off would
+% be turning off what is under test, so it must not be disabled here.
+
 /failcount 0 def
 /assert { exch { pop } { (FAIL: ) print print (\n) print /failcount failcount 1 add store } ifelse } def
 /vmused { vmstatus pop exch pop } def
