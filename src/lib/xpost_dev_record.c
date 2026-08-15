@@ -3246,14 +3246,8 @@ static int _create_cont(Xpost_Context *ctx,
        the extent settles here is what the marking methods are held
        against and what the device the page is played into is built at,
        which is a page extent either way. */
-    if (!xpost_dev_buffer_extent(w.int_.val, &width)
-     || !xpost_dev_buffer_extent(h.int_.val, &height))
-    {
-        XPOST_LOG_ERR("%d a page of %ldx%ld names an extent no raster"
-                      " carries", limitcheck,
-                      (long)w.int_.val, (long)h.int_.val);
+    if (!xpost_dev_page_extent(w.int_.val, h.int_.val, &width, &height))
         return limitcheck;
-    }
 
     /* The components a mark of this record carries, taken from the
        instance rather than from where the entry points were installed:

@@ -358,6 +358,23 @@ xpost_dev_buffer_extent(integer v, int *extent)
     return 1;
 }
 
+/* Both page extents at once, refused as one. Every device that holds a
+   page in a buffer asks the same question of the width and the height
+   together and answers limitcheck for either, so the refusal is
+   reported here rather than in each of them -- and reported the same
+   way, naming the page the program asked for. Answers 1 where both
+   carry and 0, having said so, where either does not. */
+static inline int
+xpost_dev_page_extent(integer w, integer h, int *width, int *height)
+{
+    if (xpost_dev_buffer_extent(w, width)
+     && xpost_dev_buffer_extent(h, height))
+        return 1;
+    XPOST_LOG_ERR("%d a page of %ldx%ld names an extent no raster carries",
+                  limitcheck, (long)w, (long)h);
+    return 0;
+}
+
 /* The pixel at column @p x of row @p y of a buffer @p stride pixels
    wide, as a count of pixels from the buffer's first. The coordinates
    are the buffer's own, and the caller has already held them inside it

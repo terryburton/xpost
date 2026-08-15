@@ -196,14 +196,8 @@ int _create_cont(Xpost_Context *ctx,
        does not carry is refused before anything is built for it. How
        many of the page's rows the buffer holds is settled below and is
        a separate question. */
-    if (!xpost_dev_buffer_extent(w.int_.val, &width)
-     || !xpost_dev_buffer_extent(h.int_.val, &height))
-    {
-        XPOST_LOG_ERR("%d a page of %ldx%ld names an extent no raster"
-                      " carries", limitcheck,
-                      (long)w.int_.val, (long)h.int_.val);
+    if (!xpost_dev_page_extent(w.int_.val, h.int_.val, &width, &height))
         return limitcheck;
-    }
 
     /* The block this device's instance state lives in, and, named with
        it rather than after it, what gives up whatever that state names.

@@ -200,14 +200,8 @@ int _create_cont(Xpost_Context *ctx,
        so the two carry the same numbers; a page naming an extent no
        buffer's row arithmetic carries is refused before anything is
        built for it. */
-    if (!xpost_dev_buffer_extent(w.int_.val, &width)
-     || !xpost_dev_buffer_extent(h.int_.val, &height))
-    {
-        XPOST_LOG_ERR("%d a page of %ldx%ld names an extent no raster"
-                      " carries", limitcheck,
-                      (long)w.int_.val, (long)h.int_.val);
+    if (!xpost_dev_page_extent(w.int_.val, h.int_.val, &width, &height))
         return limitcheck;
-    }
 
     /* The mode selector of the "device:mode" this run was started with,
        one of the settings the run made. It names a format only where
