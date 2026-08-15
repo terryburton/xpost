@@ -476,13 +476,6 @@ int dicgrow(Xpost_Context *ctx,
 
         xpost_ent_swap(mem, dent, nent);
 
-#if 0
-        if (xpost_free_memory_ent(mem, nent) < 0)
-        {
-            XPOST_LOG_ERR("cannot free old dict");
-            return VMerror;
-        }
-#endif
     }
     return 0;
 }
@@ -981,52 +974,3 @@ int xpost_dict_undef(Xpost_Context *ctx,
 }
 
 
-#ifdef TESTMODULE_DI
-#include <stdio.h>
-
-/*Xpost_Context ctx; */
-Xpost_Context *ctx;
-
-void init()
-{
-    /*xpost_context_init(&ctx); */
-    itpdata=malloc(sizeof*itpdata);
-    xpost_interpreter_init(itpdata);
-    ctx = &itpdata->ctab[0];
-}
-
-int main(void)
-{
-    if (!xpost_init())
-    {
-        fprintf(stderr, "Fail to initialize xpost dict test\n");
-        return -1;
-    }
-
-    printf("\n^test di.c\n");
-    init();
-
-    Xpost_Object d = { 0 };
-    d = xpost_dict_cons (ctx, 12);
-    printf("1 2 def\n");
-    xpost_dict_put(ctx, d, xpost_int_cons(1), xpost_int_cons(2));
-    printf("3 4 def\n");
-    xpost_dict_put(ctx, d, xpost_int_cons(3), xpost_int_cons(4));
-
-    printf("1 load =\n");
-    xpost_object_dump(xpost_dict_get(ctx, d, xpost_int_cons(1)));
-    /* xpost_object_dump(xpost_dict_get(ctx, d, xpost_int_cons(2)));  */
-    printf("\n3 load =\n");
-    xpost_object_dump(xpost_dict_get(ctx, d, xpost_int_cons(3)));
-
-
-    /*xpost_memory_file_dump(ctx->gl); */
-    /*dumpmtab(ctx->gl, 0); */
-    puts("");
-
-    xpost_quit();
-
-    return 0;
-}
-
-#endif

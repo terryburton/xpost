@@ -306,22 +306,6 @@ int _array_swap(Xpost_Context *ctx,
     return 0;
 }
 
-#if 0
-static
-int traceon (Xpost_Context *ctx)
-{
-    (void)ctx;
-    _xpost_interpreter_is_tracing = 1;
-    return 0;
-}
-static
-int traceoff(Xpost_Context *ctx)
-{
-    (void)ctx;
-    _xpost_interpreter_is_tracing = 0;
-    return 0;
-}
-#endif
 
 static
 int debugloadon(Xpost_Context *ctx)
@@ -542,12 +526,6 @@ int xpost_oper_init_misc_ops(Xpost_Context *ctx,
                              arraytype, integertype, integertype);
     INSTALL;
 
-#if 0
-    op = xpost_operator_cons(ctx, "traceon", (Xpost_Op_Func)traceon, 0);
-    INSTALL;
-    op = xpost_operator_cons(ctx, "traceoff", (Xpost_Op_Func)traceoff, 0);
-    INSTALL;
-#endif
     op = xpost_operator_cons(ctx, "debugloadon", (Xpost_Op_Func)debugloadon, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "debugloadoff", (Xpost_Op_Func)debugloadoff, 0);

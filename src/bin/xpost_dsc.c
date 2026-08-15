@@ -169,22 +169,6 @@ int main(int argc, char *argv[])
             printf("  label: %s\n", dsc.pages[i].label);
             printf("  ordinal: %d\n", dsc.pages[i].ordinal);
 
-#if 0
-            /* Usage */
-            {
-                int j;
-                const unsigned char *iter;
-
-                iter = xpost_dsc_file_base_get(&h) + dsc.pages[i].start;
-                printf("-----\n");
-                for (iter; iter < xpost_dsc_file_base_get(&h) + dsc.pages[i].end; iter++)
-                {
-                    printf("%c", *iter);
-                }
-                printf("\n");
-                printf("-----\n");
-            }
-#endif
         }
     }
 

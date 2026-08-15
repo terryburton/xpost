@@ -354,12 +354,6 @@ int xpost_op_dict_any_known(Xpost_Context *ctx,
     /* the dictionary is searched, so it needs read access */
     if (!xpost_object_is_readable(ctx, D))
         return invalidaccess;
-#if 0
-    printf("\nknown: ");
-    xpost_object_dump(D);
-    xpost_dict_dump_memory (xpost_context_select_memory(ctx, D), D); puts("");
-    xpost_object_dump(K);
-#endif
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(xpost_dict_known_key(ctx, xpost_context_select_memory(ctx, D), D, K)));
     return 0;
 }

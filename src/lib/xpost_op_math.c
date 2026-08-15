@@ -254,12 +254,6 @@ int Rround(Xpost_Context *ctx,
            Xpost_Object x)
 {
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons((real)floor(x.real_.val + 0.5)));
-#if 0
-    if (x.real_.val > 0)
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(round(x.real_.val)));
-    else
-        xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(rint(x.real_.val)));
-#endif
     return 0;
 }
 

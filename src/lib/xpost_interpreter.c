@@ -3286,16 +3286,6 @@ XPAPI Xpost_Context *xpost_create(const char *device,
             break;
     }
 
-#if 0
-    test_memory();
-    if (!test_garbage_collect(xpost_interpreter_cid_init,
-                              xpost_interpreter_cid_get_context,
-                              xpost_interpreter_get_initializing,
-                              xpost_interpreter_set_initializing,
-                              xpost_interpreter_alloc_local_memory,
-                              xpost_interpreter_alloc_global_memory))
-        return NULL;
-#endif
 
     nextid = 0; /*reset process counter */
     _contexts_created++;
@@ -3427,13 +3417,6 @@ XPAPI Xpost_Context *xpost_create(const char *device,
            image is already sealed, and does not pass here. */
         xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     }
-#if 0
-    if (!xpost_stack_bottomup_replace(xpost_ctx->lo, xpost_ctx->ds, 0, xpost_object_set_access(xpost_ctx, sd, XPOST_OBJECT_TAG_ACCESS_READ_ONLY)))
-    {
-        XPOST_LOG_ERR("cannot replace systemdict in dict stack");
-        return NULL;
-    }
-#endif
 
     xpost_interpreter_set_initializing(0);
 

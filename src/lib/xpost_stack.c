@@ -180,12 +180,6 @@ Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
                                        unsigned int stackadr,
                                        int idx)
 {
-#if 0
-    int i = idx;
-    int cnt = xpost_stack_count(mem, stackadr);
-    if (idx >= cnt) return invalid;
-    return xpost_stack_bottomup_fetch(mem, stackadr, cnt - 1 - i);
-#else
     int i = idx;
     Xpost_Stack *s = xpost_stack_at(mem, stackadr);
 
@@ -202,7 +196,6 @@ Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
         s = xpost_stack_at(mem, s->prevseg);
     }
     return s->data[s->top - 1 - i];
-#endif
 }
 
 int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
@@ -210,12 +203,6 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
                                 int idx,
                                 Xpost_Object obj)
 {
-#if 0
-    int i = idx;
-    int cnt = xpost_stack_count(mem, stackadr);
-    if (idx >= cnt) return 0;
-    return xpost_stack_bottomup_replace(mem, stackadr, cnt - 1 - i, obj);
-#else
     int i = idx;
     Xpost_Stack *s = xpost_stack_at(mem, stackadr);
     if (s->prevseg) s = xpost_stack_at(mem, s->prevseg); /* find top seg */
@@ -232,7 +219,6 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
     }
     s->data[s->top - 1 - i] = obj;
     return 1;
-#endif
 }
 
 int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,

@@ -339,21 +339,6 @@ int Agcheck(Xpost_Context *ctx,
     return 0;
 }
 
-#if 0
-/* -  vmstatus  level used max
-   return size information for (local) vm */
-static
-int Zvmstatus(Xpost_Context *ctx)
-{
-    unsigned int vs;
-
-    vs = xpost_memory_save_stack_adr(ctx->lo);
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(xpost_stack_count(ctx->lo, vs)));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->used));
-    xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(ctx->lo->max));
-    return 0;
-}
-#endif
 
 int xpost_oper_init_save_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
@@ -373,10 +358,6 @@ int xpost_oper_init_save_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "gcheck", (Xpost_Op_Func)Agcheck, 1, anytype);
     INSTALL;
-#if 0
-    op = xpost_operator_cons(ctx, "vmstatus", (Xpost_Op_Func)Zvmstatus, 0);
-    INSTALL;
-#endif
 
     /* xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark); */

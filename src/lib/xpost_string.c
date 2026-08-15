@@ -262,29 +262,3 @@ char *xpost_string_allocate_cstring(Xpost_Context *ctx,
     return p;
 }
 
-#ifdef TESTMODULE_ST
-#include <stdio.h>
-
-#define CNT_STR(s) sizeof(s), s
-
-Xpost_Memory_File mem;
-
-int main (void)
-{
-    Xpost_Object s;
-    int i;
-
-    printf("\n^ st.c\n");
-    xpost_memory_file_init(&mem, "x.mem");
-    (void)xpost_memory_table_init(&mem);
-
-    s = xpost_string_cons_memory(&mem, CNT_STR("This is a string"));
-    for (i=0; i < s.comp_.sz; i++)
-    {
-        putchar(xpost_string_get_memory(&mem, s, i));
-    }
-    putchar('\n');
-    return 0;
-}
-
-#endif

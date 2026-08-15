@@ -326,14 +326,6 @@ int _create_cont(Xpost_Context *ctx,
                             sizeof("Xpost") - 1,
                             "Xpost");
     }
-#if 0
-    {
-        xcb_wm_hints_t hints;
-        hints.flags = XCB_WM_HINT_INPUT;
-        hints.input = 0;
-        xcb_set_wm_hints(private.c, private.win, &hints);
-    }
-#endif
     xcb_map_window(private.c, private.win);
     xcb_flush(private.c);
 

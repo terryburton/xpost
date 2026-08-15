@@ -413,17 +413,6 @@ int xpost_op_exit (Xpost_Context *ctx)
     Xpost_Object opfilenameforall = XPOST_OP(ctx, filenameforall);
     Xpost_Object x;
 
-#if 0
-    printf("\nexit\n");
-    xpost_object_dump(opfor);
-    xpost_object_dump(oprepeat);
-    xpost_object_dump(oploop);
-    xpost_object_dump(opforall);
-
-    xpost_stack_dump(ctx->lo, ctx->os);
-    xpost_stack_dump(ctx->lo, ctx->es);
-    printf("\n");
-#endif
 
     /* Look for the sentinel before disturbing anything: exit with no
        enclosing looping context is invalidexit (PLRM 8.2), and the
@@ -492,10 +481,6 @@ int xpost_op_exit (Xpost_Context *ctx)
         }
     }
 
-#if 0
-    printf("result:");
-    xpost_stack_dump(ctx->lo, ctx->es);
-#endif
     return 0;
 }
 
