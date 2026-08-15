@@ -60,12 +60,26 @@ BIG=2000000000x2000000000+0+0
 # of this page and not of every page.
 SMALL=200x200+0+0
 
+# Which kind each device is, taken from the fleet rather than listed
+# here. The three kinds below and the raster classes written in
+# PostScript, which fall through to the ordinary case, are the whole
+# fleet between them, so a device it gains is one of them on the day it
+# arrives instead of being passed over by every case here.
+
 # The devices whose raster is one block of pixels outside the PostScript
 # virtual machine, which is where the position of a pixel is the bound.
-INDEXED=' raster bgr png pngalpha jpeg '
+INDEXED=" $DEVICE_FLEET_BUFFER "
 # The devices that keep no raster at all and so have no page they cannot
-# provide.
-UNBOUNDED=' null bbox pdfwrite svgwrite dscwrite '
+# provide: what is left once the devices that hold pixels -- in a block
+# of their own or in the rows of a class -- and the one that holds marks
+# are taken out.
+UNBOUNDED=' '
+for s_dev in $DEVICE_FLEET_ALL; do
+    case " $DEVICE_FLEET_BUFFER $DEVICE_FLEET_BANDS record " in
+        *" $s_dev "*) continue ;;
+    esac
+    UNBOUNDED="$UNBOUNDED$s_dev "
+done
 # The device that holds a page as the marks that made it. It starts on
 # any page, because what it builds at start-up is a record and a record
 # is priced by the marks; the limit arrives when the page is put out,

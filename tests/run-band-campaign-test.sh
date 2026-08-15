@@ -63,6 +63,7 @@ esac
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 # Each device renders into a directory of its own, so a page names the
 # same file whichever device wrote it, and the runs are started there.
@@ -177,8 +178,21 @@ askdev() {  # $1 selection
 # roster joins this campaign the day it is added and one taken off it
 # leaves; what is listed here is only what must be true of the answer.
 # ---------------------------------------------------------------------
-BANDERS='pgm ppm pbm tiff png jpeg'
-KEEPERS='raster bgr pdfwrite dscwrite svgwrite'
+BANDERS=$DEVICE_FLEET_BANDS
+# Every device that is not one of those: a mode asking for a page in
+# bands has to be refused by each of them rather than answered with a
+# page held whole under a word that said otherwise. Taking the roster
+# less the banders, instead of naming a few of them, is what makes the
+# refusal a rule about the fleet -- the four that used to be left out of
+# this, the two that paint nothing, the alpha writer and the recorder,
+# are asked now like the rest.
+KEEPERS=
+for c_dev in $DEVICE_FLEET_ALL; do
+    case " $BANDERS " in
+        *" $c_dev "*) continue ;;
+    esac
+    KEEPERS="$KEEPERS $c_dev"
+done
 
 # The selection that reaches one of these devices without the record
 # that selecting it by name now puts in front of it. What this campaign
@@ -369,16 +383,39 @@ if [ "$sab" -eq 0 ]; then
         echo same
     }
 
+    # Every device the mode is refused for, less the recorder. The
+    # refusal above is a rule about all of them; this is a narrower
+    # question -- whether a device notices state a band loop leaves
+    # about -- and the recorder is the one device it cannot be asked of,
+    # because holding a page as bands is what a recorder is for and it
+    # says so.
     for d in $KEEPERS; do
+        # The recorder is out because holding a page as bands is what a
+        # recorder is for, and it says so.
+        [ "$d" = record ] && continue
+        # And so is any device that assembles a page of its own pixels in
+        # compiled code and leaves it at the output path: that assembly
+        # reads the band state directly, so setting the state about --
+        # which is what this does, rather than asking for the mode, which
+        # is refused above -- reaches it whether or not the device was
+        # ever routed for a band. What is left is the devices with no
+        # such assembly to reach, which is the question this asks.
+        c_skip=no
+        for c_w in $DEVICE_FLEET_BUFFER; do
+            case " $DEVICE_FLEET_NOFILE " in *" $c_w "*) continue ;; esac
+            [ "$d" = "$c_w" ] && c_skip=yes
+        done
+        [ "$c_skip" = yes ] && continue
         if [ -z "$(asks "$d" DECL || true)" ]; then
             echo "SKIP the $d device is not in this build"
             continue
         fi
         if [ "$(asks "$d" DECL || true)" != no ]; then
-            note "$d says its page may arrive a band at a time. raster and" \
-                 "bgr hand their buffer to whoever embedded the interpreter" \
-                 "and the vector writers hold no raster at all, so none of" \
-                 "the five has anything a band could bound"
+            note "$d says its page may arrive a band at a time, and the" \
+                 "mode that asks for one is refused for it; a device that" \
+                 "holds no raster a band could bound, or hands the one it" \
+                 "holds to whoever embedded the interpreter, has nothing to" \
+                 "declare there"
         fi
         got=$(nbcheck "$d" || true)
         case ${got:-} in
