@@ -2026,6 +2026,21 @@ test('font-face-cycle', font_face_cycle_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# Virtual memory is one block addressed by offsets from its start, and
+# growing it may move that start: what was written before a growth has to
+# read back through the same offset after it. And a memory file with no
+# block hands out no offset, rather than one into nothing.
+memory_grow_exe = executable('memory_grow_test',
+  'tests/memory_grow_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('memory-grow', memory_grow_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The glyph cache is keyed by the serial a font dictionary carries, and
 # that dictionary is the program's to write: a serial that is not an
 # integer, or one whose pair with the character code leaves the integer

@@ -100,8 +100,6 @@ XPOST_PDF_TEST = \
 
 if XPOST_ENABLE_TESTS
 
-include src/tests/Makefile.mk
-
 if HAVE_VALGRIND
 XPOST_VALGRIND = $(top_srcdir)/valgrind_wrapper.sh
 endif
@@ -119,7 +117,6 @@ check-local:
 	$(XPOST_PS_CONFORMANCE)
 	$(XPOST_BBOX_TEST)
 	$(XPOST_PDF_TEST)
-	$(XPOST_VALGRIND) $(top_builddir)/src/tests/xpost_suite$(EXEEXT)
 
 else
 

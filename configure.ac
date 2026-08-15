@@ -305,17 +305,10 @@ if test "x${have_win32}" = "xyes" ; then
    xpost_requirements_lib_libs="-lopengl32 -lgdi32 ${xpost_requirements_lib_libs}"
 fi
 
-# check
-have_tests="no"
-if test "x${want_tests}" = "xyes" ; then
-   PKG_CHECK_MODULES([CHECK],
-      [check >= 0.9.5],
-      [
-       have_tests="yes"
-       AC_DEFINE([HAVE_CHECK], [1], [Define to 1 if check unit testing library is available])
-      ],
-      [have_tests="no"])
-fi
+# tests. What they are is programs run against the built interpreter --
+# PostScript programs and C programs of their own -- so there is nothing
+# to look for on the host beyond what the build already needs.
+have_tests="${want_tests}"
 
 AC_MSG_CHECKING([whether tests are built])
 AC_MSG_RESULT([${have_tests}])
