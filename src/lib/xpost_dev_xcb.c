@@ -78,6 +78,14 @@ typedef struct
     xcb_pixmap_t img;
     xcb_gcontext_t gc;
     xcb_colormap_t cmap;
+    /* the last ink the colormap was asked for, and what it answered.
+       Allocating one is a round trip to the display server, and a mark
+       is laid a pixel at a time in one colour -- a glyph is thousands of
+       pixels of the same ink -- so the answer is kept and the question
+       asked again only when the colour changes. */
+    int have_ink;
+    int ink_r, ink_g, ink_b;
+    unsigned int ink_pixel;
 } PrivateData;
 
 /* Give up the display connection the instance names, and the window and
@@ -346,17 +354,23 @@ int _create_cont(Xpost_Context *ctx,
     return 0;
 }
 
-/* Lay one pixel of the drawable in a 16-bit rgb colour, through the
-   colormap the device allocates its inks from. */
+/* What the display server calls this 16-bit rgb ink, and the graphics
+   context set to lay it. Asking costs a round trip -- the reply has to
+   arrive before anything can be drawn with it -- so the last answer is
+   kept and the question asked again only when the colour changes. A
+   mark is laid in one colour, and a glyph is thousands of pixels of it. */
 static
-int _point(PrivateData *private, int r, int g, int b, int ix, int iy)
+int _ink(PrivateData *private, int r, int g, int b)
 {
     xcb_alloc_color_reply_t *rep;
-    unsigned int value;
-    xcb_point_t p;
 
-    p.x = ix;
-    p.y = iy;
+    if (private->have_ink
+        && private->ink_r == r && private->ink_g == g && private->ink_b == b)
+    {
+        xcb_change_gc(private->c, private->gc, XCB_GC_FOREGROUND,
+                      &private->ink_pixel);
+        return 0;
+    }
 
     rep = xcb_alloc_color_reply(private->c,
                                 xcb_alloc_color(private->c, private->cmap,
@@ -365,9 +379,29 @@ int _point(PrivateData *private, int r, int g, int b, int ix, int iy)
     if (!rep)
         return unregistered;
 
-    value = rep->pixel;
+    private->ink_pixel = rep->pixel;
     free(rep);
-    xcb_change_gc(private->c, private->gc, XCB_GC_FOREGROUND, &value);
+    private->ink_r = r; private->ink_g = g; private->ink_b = b;
+    private->have_ink = 1;
+
+    xcb_change_gc(private->c, private->gc, XCB_GC_FOREGROUND,
+                  &private->ink_pixel);
+    return 0;
+}
+
+/* Lay one pixel of the drawable in a 16-bit rgb colour, through the
+   colormap the device allocates its inks from. */
+static
+int _point(PrivateData *private, int r, int g, int b, int ix, int iy)
+{
+    xcb_point_t p;
+    int ret;
+
+    p.x = ix;
+    p.y = iy;
+
+    if ((ret = _ink(private, r, g, b)))
+        return ret;
 
     xcb_poly_point(private->c, XCB_COORD_MODE_ORIGIN,
                    private->img, private->gc, 1, &p);
@@ -621,6 +655,7 @@ int _fillrect(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int ret;
     int i,j;
     int r, g, b;
     int x0, y0, x1, y1;
@@ -647,21 +682,10 @@ int _fillrect(Xpost_Context *ctx,
                              private.width, private.height))
         return 0;
 
+    if ((ret = _ink(&private, r, g, b)))
+        return ret;
+
     {
-        xcb_alloc_color_reply_t *rep;
-        unsigned int value;
-
-        rep = xcb_alloc_color_reply(private.c,
-                                    xcb_alloc_color(private.c, private.cmap,
-                                                    r, g, b),
-                                    0);
-        if (!rep)
-            return unregistered;
-
-        value = rep->pixel;
-        free(rep);
-        xcb_change_gc(private.c, private.gc, XCB_GC_FOREGROUND, &value);
-
         for (i = y0; i <= y1; i++)
         {
             for (j = x0; j <= x1; j++)
