@@ -645,163 +645,55 @@
         } ifelse
     } //.xpostsys /.indict get exec }
 
-    % A showpage emits the page. Without a %d in the output name the pages
-    % accumulate into the one file opened at Create (.emitpage), finalised at
-    % Destroy; with a %d each page is written whole to its own numbered file
-    % (.emitwhole).
+    % A showpage emits the page, and one writer writes it either way.
+    %
+    % Without a %d in the output name the pages accumulate into the one file
+    % opened at Create, and Destroy finishes the document off. With a %d every
+    % page is its own document: the file is this page's own, opened here, and
+    % the same writer fills it and finishes it before the next page begins.
+    % What differs between the two is where a document starts and ends, not
+    % how a page is written into one, so that is all that is written twice.
     /Emit { % IMAGE  .  -
         % .setupoutput and the writer each run with the device current, so each
         % needs its own copy (get consumes one, the body the other)
         dup dup /.setupoutput get exec
-        //.xpostsys /.vecout get /single get
-        { dup /.emitpage get exec }{ dup /.emitwhole get exec } ifelse
+        //.xpostsys /.vecout get /single get {
+            dup /.emitpage get exec
+        }{
+            dup dup /.begindoc get exec
+            dup dup /.emitpage get exec
+            dup /.endfile get exec
+        } ifelse
     } bind
 
-    /.emitwhole { % IMAGE  .  -
+    % Begin a document on the file this page was named for. The name is
+    % settled per page rather than per device (.transmitpage, data/device.ps)
+    % and left on the device as /.outputfile, so a %d has already become this
+    % page's number by the time this runs.
+    %
+    % The record is wound back to what a document starts from. The maps it
+    % carries -- the object offsets, the page list, the separation objects --
+    % are not emptied, because each is keyed by one of the counters reset
+    % here and a document reads back only entries it wrote itself; what an
+    % earlier document left above the count is never consulted.
+    /.begindoc { % IMAGE  .  -
     {
-        /Chunks currentdict //.internaldict /.pdfchunks get exec def
-        % deflate the content stream (falls back to uncompressed without zlib)
-        Chunks //.internaldict /.flatecompress get exec /flated exch def /Chunks exch def
-        % the name settled for this page, which a %d in the output name
-        % makes its own, so each page lands in its own file
-        /F .outputfile (w) file def
-        /BytePos 0 def
-
-        /hs height .pdfnumstr def
-        /ws width .pdfnumstr def
-        /clen 0 def
-        Chunks { length /clen exch clen add def } forall
-
-        % write a string to F and advance the byte counter
-        /.w { dup F exch writestring length /BytePos BytePos 3 -1 roll add def } def
-        % write a 10-digit zero-padded offset
-        /.woff { 20 string cvs /n exch def
-                 //.xpostsys /.zeros get 0 10 n length sub getinterval .w  n .w } def
-
-        % objects 1-4 are fixed; the separations' function objects
-        % follow the content as 5..4+n, and Info comes last
-        /nseps currentdict //.internaldict /.pdfsepcount get exec def
-        /nimg .pdfimages length def
-        /haveinfo .docinfo length 0 gt def
-        /nobj 4 nseps add nimg add haveinfo { 1 add } if def
-
-        (%PDF-1.4\n) .w
-        /off1 BytePos def
-        (1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n) .w
-        /off2 BytePos def
-        (2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n) .w
-        /off3 BytePos def
-        (3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ) .w ws .w ( ) .w hs .w
-        (] /Contents 4 0 R /Resources <<) .w
-        nseps 0 gt {
-            ( /ColorSpace <<) .w
-            0 1 nseps 1 sub {
-                /.sepi exch def
-                ( /CS) .w .sepi 20 string cvs .w ( [) .w
-                .sepi currentdict //.internaldict /.pdfsepget get exec pop .w
-                ( ) .w .sepi 5 add 20 string cvs .w ( 0 R]) .w
-            } for
-            ( >>) .w
-        } if
-        nimg 0 gt {
-            ( /XObject <<) .w
-            0 1 nimg 1 sub {
-                /.imi exch def
-                ( /Im) .w .imi 20 string cvs .w
-                ( ) .w .imi 5 add nseps add 20 string cvs .w ( 0 R) .w
-            } for
-            ( >>) .w
-        } if
-        ( >> >>\nendobj\n) .w
-        /off4 BytePos def
-        (4 0 obj\n<< /Length ) .w clen 20 string cvs .w
-        flated { ( /Filter /FlateDecode) .w } if
-        ( >>\nstream\n) .w
-        Chunks { .w } forall
-        (\nendstream\nendobj\n) .w
-        /offfuncs nseps array def
-        0 1 nseps 1 sub {
-            /.sepi exch def
-            offfuncs .sepi BytePos put
-            .sepi 5 add 20 string cvs .w ( 0 obj\n) .w
-            .sepi currentdict //.internaldict /.pdfsepget get exec exch pop .w
-            (\nendobj\n) .w
-        } for
-        /offimgs nimg array def
-        0 1 nimg 1 sub {
-            /.imi exch def
-            /.ime .pdfimages .imi get def
-            offimgs .imi BytePos put
-            .ime /rows get //.internaldict /.flatecompress get exec /.imf exch def /.imc exch def
-            /.imlen 0 def
-            .imc { length .imlen add /.imlen exch def } forall
-            .imi 5 add nseps add 20 string cvs .w ( 0 obj\n) .w
-            (<< /Type /XObject /Subtype /Image /Width ) .w
-            .ime /w get 20 string cvs .w
-            ( /Height ) .w .ime /h get 20 string cvs .w
-            ( /BitsPerComponent 8 /ColorSpace ) .w
-            .ime /nc get dup 1 eq { pop (/DeviceGray) }{
-                4 eq { (/DeviceCMYK) }{ (/DeviceRGB) } ifelse } ifelse .w
-            % identity ranges go without saying
-            /.imid true def
-            0 2 .ime /dec get length 2 sub {
-                /.imk exch def
-                .ime /dec get .imk get 0 ne
-                .ime /dec get .imk 1 add get 1 ne or { /.imid false def } if
-            } for
-            .imid not {
-                ( /Decode [) .w
-                .ime /dec get { .pdfnumstr .w ( ) .w } forall
-                (]) .w
-            } if
-            .ime /int get { ( /Interpolate true) .w } if
-            ( /Length ) .w .imlen 20 string cvs .w
-            .imf { ( /Filter /FlateDecode) .w } if
-            ( >>\nstream\n) .w
-            .imc { .w } forall
-            (\nendstream\nendobj\n) .w
-        } for
-        haveinfo {
-            /offinfo BytePos def
-            nobj 20 string cvs .w ( 0 obj\n<<) .w
-            .docinfo {
-                exch ( /) .w 127 string cvs .w ( ) .w
-                dup type /stringtype eq {
-                    (\() .w
-                    { % escape the string delimiters and the escape itself
-                        dup 40 eq 1 index 41 eq or 1 index 92 eq or { (\\) .w } if
-                        1 string dup 0 4 -1 roll put .w
-                    } forall
-                    (\)) .w
-                }{
-                    127 string cvs .w
-                } ifelse
-            } forall
-            ( >>\nendobj\n) .w
-        } if
-        /xoff BytePos def
-        (xref\n0 ) .w nobj 1 add 20 string cvs .w (\n0000000000 65535 f \n) .w
-        off1 .woff ( 00000 n \n) .w
-        off2 .woff ( 00000 n \n) .w
-        off3 .woff ( 00000 n \n) .w
-        off4 .woff ( 00000 n \n) .w
-        offfuncs { .woff ( 00000 n \n) .w } forall
-        offimgs { .woff ( 00000 n \n) .w } forall
-        haveinfo { offinfo .woff ( 00000 n \n) .w } if
-        (trailer\n<< /Size ) .w nobj 1 add 20 string cvs .w
-        ( /Root 1 0 R) .w
-        haveinfo { ( /Info ) .w nobj 20 string cvs .w ( 0 R) .w } if
-        ( >>\nstartxref\n) .w xoff 20 string cvs .w (\n%%EOF\n) .w
-
-        F (%stdout) (w) file ne { F closefile } if
-
-        % start the next page fresh: showpage's page clear and later
-        % marks must not stack on the emitted content (a later Emit
-        % rewrites the output with the then-current page)
-        currentdict //.internaldict /.pdfreset get exec
-        /.pdfimages 0 array def
-        (1 0 0 -1 0 ) .put height .pdfnumstr .put ( cm\n) .put
-    } //.xpostsys /.indict get exec }
+        % the file is allocated global because the record that holds it is,
+        % and a global dictionary may not hold a local object
+        currentglobal true setglobal
+        .outputfile (w) file
+        % but a file lives in local memory whatever dictionary names it, and
+        % a global dictionary is no root for local memory (PLRM 3.7.2), so it
+        % is named from the local dictionary the collector roots as well
+        dup .privatedict exch /.vecoutfile exch put
+        //.xpostsys /.vecout get dup /F 4 -1 roll put
+        dup /bytepos 0 put
+        dup /nextobj 3 put
+        dup /sepsdone 0 put
+        dup /headered false put
+        /np 0 put
+        setglobal
+    } //.xpostsys /.indict get exec } bind
 
     % Append one page to the accumulating file: the content stream, any
     % separation function objects registered since the previous page, this

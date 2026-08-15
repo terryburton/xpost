@@ -56,81 +56,14 @@
 % ordinary methods rather than reference objects Emit never writes
 .xpost_DSCWRITE /PaintImage undef
 
-% A showpage emits the page. Without a %d in the output name the pages
-% accumulate into the one DSC program opened at Create (.emitpage), closed at
-% Destroy; with a %d each page is written whole to its own numbered file
-% (.emitwhole). Create, the Emit dispatcher, Destroy and the shared record are
-% inherited from the PDF device; only the three writers differ.
-
-.xpost_DSCWRITE /.emitwhole { % IMAGE  .  -
-{
-    % the name settled for this page, which a %d in the output name makes
-    % its own, so each page lands in its own file
-    /F .outputfile (w) file def
-    /.w { F exch writestring } def
-    /.wnum { % num  .  -   (two decimals at most, never exponential)
-        //.xpostsys /.num2str get exec .w
-    } def
-
-    % page size in points from the resolution fixup
-    currentdict //.xpostsys /.devres-to-points get exec
-    /sy exch def /sx exch def
-
-    (%!PS-Adobe-3.0\n) .w
-    (%%Creator: Xpost\n) .w
-    (%%BoundingBox: 0 0 ) .w
-    width sx div ceiling cvi 20 string cvs .w ( ) .w
-    height sy div ceiling cvi 20 string cvs .w (\n) .w
-    (%%Pages: 1\n) .w
-    (%%DocumentData: Clean7Bit\n) .w
-    (%%LanguageLevel: 1\n) .w
-    (%%EndComments\n) .w
-    (%%BeginProlog\n) .w
-    (/m { moveto } bind def\n) .w
-    (/l { lineto } bind def\n) .w
-    (/c { curveto } bind def\n) .w
-    (/h { closepath } bind def\n) .w
-    (/re { 4 2 roll moveto 1 index 0 rlineto\n) .w
-    (     0 exch rlineto neg 0 rlineto closepath } bind def\n) .w
-    (/f { fill } bind def\n) .w
-    (/f* { eofill } bind def\n) .w
-    (/q { gsave } bind def\n) .w
-    (/Q { grestore } bind def\n) .w
-    (/W { clip } bind def\n) .w
-    (/W* { eoclip } bind def\n) .w
-    (/n { newpath } bind def\n) .w
-    (/S { stroke } bind def\n) .w
-    (/w { setlinewidth } bind def\n) .w
-    (/J { setlinecap } bind def\n) .w
-    (/j { setlinejoin } bind def\n) .w
-    (/M { setmiterlimit } bind def\n) .w
-    (/g { setgray } bind def\n) .w
-    (/rg { setrgbcolor } bind def\n) .w
-    (/k { setcmykcolor } bind def\n) .w
-    (/G /g load def /RG /rg load def /K /k load def\n) .w
-    (/cm { 6 array astore concat } bind def\n) .w
-    (%%EndProlog\n) .w
-    (%%Page: 1 1\n) .w
-    % the marks position themselves: the accumulator opens with the
-    % matrix taking its y-down device units to the page. A device
-    % resolution above one-to-one unscales first, so the output page
-    % stays in points
-    sx 1 ne sy 1 ne or {
-        1 sx div .wnum ( ) .w 1 sy div .wnum ( scale\n) .w
-    } if
-
-    currentdict .pdfchunks { .w } forall
-
-    (showpage\n) .w
-    (%%Trailer\n) .w
-    (%%EOF\n) .w
-    F (%stdout) (w) file ne { F closefile } if
-
-    % start the next page fresh: showpage's page clear and later
-    % marks must not stack on the emitted content (a later Emit
-    % rewrites the output with the then-current page)
-    currentdict .pdfreset
-} //.xpostsys /.indict get exec } put
+% A showpage emits the page, and one writer writes it either way: without a
+% %d in the output name the pages accumulate into the one DSC program opened
+% at Create and Destroy closes it, and with a %d every page is a program of
+% its own, on a file opened for it and closed before the next page begins.
+% Create, the Emit dispatcher, the beginning of a document, Destroy and the
+% shared record are inherited from the PDF device; only the writer that puts
+% a page into an open program, and the one that closes a program off, are
+% this format's own.
 
 % write a number to the accumulating file in two decimals at most
 .xpost_DSCWRITE /.vwnum { % num  .  -

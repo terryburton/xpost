@@ -369,6 +369,7 @@ open AlphaChannel pngalpha
 # The calls a device takes.
 method .bandsink bgr jpeg pbm pgm png pngalpha ppm raster tiff
 method .bandwrite bgr jpeg pbm pgm png pngalpha ppm raster tiff
+method .begindoc dscwrite pdfwrite
 method BlendPix bgr jpeg pbm pgm png pngalpha ppm raster tiff record
 method .claimdoc dscwrite pdfwrite
 method ClipPath dscwrite pdfwrite svgwrite
@@ -380,7 +381,6 @@ method DrawRect bbox bgr dscwrite jpeg null pbm pdfwrite pgm png pngalpha ppm ra
 method Emit every
 method .emitband bgr jpeg pbm pgm png pngalpha ppm raster tiff
 method .emitpage dscwrite pdfwrite
-method .emitwhole dscwrite pdfwrite
 method .endfile dscwrite pdfwrite
 method Erase bbox pngalpha
     How this device clears its page, where clearing it is not painting
