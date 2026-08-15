@@ -160,11 +160,21 @@ done
 # held to its length, and an exemption naming something the directory
 # does not hold is a failure too -- so the list cannot outlive what it
 # excuses, and cannot grow without the number moving with it.
-verdict_exempt='verdict.sh guard-paths.sh device-fleet.sh run-profile.sh gate.sh'
-verdict_exempt_n=5
-#   verdict.sh       the rule itself
-#   guard-paths.sh   the path helper the guards source
-#   device-fleet.sh  the device roster the wrappers source
+#
+# A file that is sourced rather than run is outside it too, and that is
+# read rather than listed: such a file carries no interpreter line,
+# because nothing executes it directly. It starts no run, so it has no
+# run to judge, and a helper written next year is outside without anyone
+# remembering -- which is the same argument that puts a wrapper written
+# next year inside. Naming them instead was a list that had to be
+# extended every time the suite grew a helper, and the extending was
+# what got forgotten.
+#
+# What is left named is the files that ARE run and still judge no run of
+# the interpreter, which no rule distinguishes and which therefore have
+# to say so themselves.
+verdict_exempt='run-profile.sh gate.sh'
+verdict_exempt_n=2
 #   run-profile.sh   drives meson over a selection of the suite rather
 #                    than running the interpreter; the runs it starts
 #                    report to meson, which is what it reads back
@@ -209,6 +219,9 @@ for f in "$dir"/*.sh; do
     base=$(basename "$f")
     case $base in check-*.sh) continue ;; esac
     case " $verdict_exempt " in *" $base "*) continue ;; esac
+    # sourced, not run: no interpreter line, so nothing starts it and it
+    # has no run of its own to answer for
+    head -1 "$f" | grep -q '^#!' || continue
     faults=$(wrapper_faults "$f")
     [ -n "$faults" ] || continue
     echo "FAIL: $base does not hold its run to the rule in tests/verdict.sh --"

@@ -66,6 +66,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src=$(CDPATH= cd -- "$here/.." && pwd)
 map="$here/gate-map"
+. "$here/meson-tests.sh"
 # The reading of a listing line, shared with the other readers of one.
 listing="$here/listing.awk"
 
@@ -172,23 +173,11 @@ fi
 
 # ---- what the build carries
 #
-# Out of the record meson writes at configure time. A test object states
-# its name between the command it runs and the directory it runs in,
-# which is the one place in the file that shape occurs.
-#
-# How that record is laid out is not fixed -- some meson versions write
-# it as one line and others indent it over thousands, and a host whose
-# text files end their lines in CRLF leaves a return on each -- so the
-# whole file is flattened to one line of single-spaced text first and the
-# shape above is looked for in that.
-tr '\r\n\t' '   ' < "$narrow/meson-info/intro-tests.json" | tr -s ' ' |
-    sed 's/, "name": "/\
-@@/g' | sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u \
-    > "$work/tests.all"
-if [ "$(grep -c . "$work/tests.all")" -lt 2 ]; then
-    echo "FAILURES: read no tests out of $narrow/meson-info/intro-tests.json"
-    exit 1
-fi
+# Out of the record meson writes at configure time, read through the one
+# reader that knows its shape (tests/meson-tests.sh), which refuses a
+# short answer rather than handing back an empty selection.
+meson_test_names "$narrow/meson-info/intro-tests.json" "$work/tests.all" \
+    || exit 1
 
 # ---- what changed
 : > "$work/changed"

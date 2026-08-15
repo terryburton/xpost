@@ -36,6 +36,7 @@ set -u
 src=${1:?usage: check-gate-map.sh <srcroot> <buildroot>}
 build=${2:?usage: check-gate-map.sh <srcroot> <buildroot>}
 . "$(dirname "$0")/guard-paths.sh"
+. "$(dirname "$0")/meson-tests.sh"
 guard_require_srcroot "$src"
 guard_require_file "$src/tests/gate-map" "the gate map"
 guard_require_file "$src/tests/gate.sh" "the gate"
@@ -65,16 +66,8 @@ fail=0
 # is therefore flattened to one line of single-spaced text before the
 # shape above is looked for, so that the same rule reads every layout
 # rather than one of them reading as a build defining no tests.
-tr '\r\n\t' '   ' < "$build/meson-info/intro-tests.json" | tr -s ' ' |
-    sed 's/, "name": "/\
-@@/g' | sed -n 's/^@@\([^"]*\)", "workdir".*/\1/p' | sort -u > "$work/tests"
+meson_test_names "$build/meson-info/intro-tests.json" "$work/tests" || exit 1
 ntests=$(grep -c . "$work/tests" || true)
-if [ "$ntests" -lt 2 ]; then
-    echo "FAILURES: read $ntests test name(s) out of"
-    echo "      $build/meson-info/intro-tests.json, which cannot be right."
-    echo "      Every rule below would then be checked against nothing."
-    exit 1
-fi
 
 # ---- what the tree holds
 #

@@ -227,6 +227,7 @@ tests/interrupt_test.ps \
 tests/isolation_test.ps \
 tests/large_object_test.ps \
 tests/listing.awk \
+tests/meson-tests.sh \
 tests/lockdown_test.c \
 tests/loop_exit_test.ps \
 tests/lsan.supp \
