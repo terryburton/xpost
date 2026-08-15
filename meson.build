@@ -2031,6 +2031,21 @@ test('font-face-cycle', font_face_cycle_exe,
 # growing it may move that start: what was written before a growth has to
 # read back through the same offset after it. And a memory file with no
 # block hands out no offset, rather than one into nothing.
+# A band window keeps exactly the spans the whole page would have kept
+# there. The comparison needs no golden file and no previous build: the
+# unwindowed conversion is the answer, filtered. Anything that changes
+# how the walk reaches the window is held by it, bit for bit.
+span_window_exe = executable('span_window_test',
+  'tests/span_window_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('span-window', span_window_exe,
+  suite: cost_fast,
+  timeout: 120)
+
 memory_grow_exe = executable('memory_grow_test',
   'tests/memory_grow_test.c',
   c_args: '-DHAVE_CONFIG_H',

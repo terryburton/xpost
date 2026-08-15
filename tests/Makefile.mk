@@ -70,6 +70,7 @@ tests/check-test-timeouts.sh \
 tests/check-vecbase.sh \
 tests/check-vm-address.sh \
 tests/check-vm-host-state.sh \
+tests/span_window_test.c \
 tests/vm_host_state.register \
 tests/check-wrapped-bind.sh \
 tests/cid_show_test.ps \

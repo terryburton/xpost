@@ -112,6 +112,7 @@ record path src/lib/xpost_record.*
 record path src/lib/xpost_spill.*
 record path src/lib/xpost_dev_record.*
 record path src/lib/xpost_span.*
+record test span-window
 record path data/recorddev.ps
 record test band-*
 record test record

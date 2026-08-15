@@ -219,10 +219,66 @@ int xpost_span_scanconvert(Xpost_Span_Vertex *points,
                 ib = eb;
             }
 
+            /* The bands before the window keep nothing, and stepping
+               through them exists only to arrive at the first one that
+               does. Where this edge reaches the window at all, go
+               straight to the boundary it enters by.
+
+               It arrives at the same numbers. Each step of the walk
+               below leaves the next band's open extent at the crossing
+               it just cut, and every crossing is interpolated from its
+               own y alone -- not from the crossing before it -- so the
+               extent this lands on is the extent the steps would have
+               left. What the skipped steps would have deposited is what
+               a band outside the window keeps, which is nothing. */
+            if (rows)
+            {
+                int entry = ib;
+                real ey = 0;
+
+                if (d > 0 && ib < rows->lo)
+                {
+                    entry = rows->lo;
+                    ey = (real)rows->lo;
+                }
+                else if (d < 0 && ib > rows->hi)
+                {
+                    entry = rows->hi;
+                    ey = (real)(rows->hi + 1);
+                }
+                /* only where the edge actually crosses that boundary: one
+                   that stops short of the window never enters it, and the
+                   walk below has to end in the band it really stops in */
+                if (entry != ib && (d > 0 ? Q.y > ey : Q.y < ey))
+                {
+                    lo = hi = P.x + (Q.x - P.x) * ((ey - P.y) / (Q.y - P.y));
+                    ib = entry;
+                }
+            }
+
             /* walk the edge band to band, cutting at each boundary */
             while (code == 0)
             {
-                real yb = (real)(d > 0 ? ib + 1 : ib);
+                real yb;
+
+                /* Past the window, and travelling away from it: every
+                   band left keeps nothing, so finish the edge here
+                   rather than cutting it at each boundary on the way to
+                   its end.
+
+                   What the walk would have left behind is a band number
+                   outside the window and the extent within it. Neither
+                   is read: the next edge overwrites the band with its
+                   own starting one, and the only use of this one in
+                   between is a deposit the window rejects. */
+                if (rows && (d > 0 ? ib > rows->hi : ib < rows->lo))
+                {
+                    if (Q.x < lo) lo = Q.x;
+                    if (Q.x > hi) hi = Q.x;
+                    break;
+                }
+
+                yb = (real)(d > 0 ? ib + 1 : ib);
 
                 if (d > 0 ? Q.y > yb : Q.y < yb)
                 {
