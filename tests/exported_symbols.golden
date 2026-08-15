@@ -259,6 +259,7 @@ xpost_log_print_cb_stderr
 xpost_log_print_cb_stdout
 xpost_log_print_dump
 xpost_log_quit
+xpost_mask_cache_clear
 xpost_mask_cache_insert
 xpost_mask_cache_lookup
 xpost_matrix_identity

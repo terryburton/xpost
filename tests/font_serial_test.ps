@@ -1,0 +1,48 @@
+% A font's serial is never handed out twice.
+%
+% definefont gives each font a serial, and that serial keys the coverage
+% masks its glyphs are cached as. The masks are not virtual memory --
+% they are held in the interpreter's own storage, outside what save and
+% restore reach -- so a serial has to be as durable as they are. A
+% counter kept in virtual memory would not be: a restore past the
+% definefont that raised it winds it back, the next font is given the
+% number the first one had, and its glyphs are served the first one's
+% masks. Nothing about that is visible except the wrong shape on a page.
+%
+% So the counter is the interpreter's, not the program's, and only ever
+% moves forward. This drives the case that would catch a counter that
+% did not: a font defined inside a save, the save restored, and another
+% font defined after it.
+%
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+
+/failures 0 def
+/check { exch { pop }{ (FAIL: ) print == /failures failures 1 add def } ifelse } bind def
+
+% /key fontdict . serial
+/serialof { dup length dict copy definefont /.fontid get } bind def
+
+% the serials are kept in global memory: a restore takes back what was
+% defined inside the save, and the number defined in there is exactly
+% what has to be compared with the one issued afterwards
+currentglobal true setglobal
+/seen 4 dict def
+setglobal
+
+seen /s0 /K0 /Times-Roman findfont serialof put
+/sv save def
+seen /s1 /K1 /Times-Roman findfont serialof put
+sv restore
+seen /s2 /K2 /Courier findfont serialof put
+
+seen /s0 get seen /s1 get ne (a second font takes a serial of its own) check
+seen /s1 get seen /s2 get ne
+    (a font defined past a restore does not reuse the one before it) check
+seen /s0 get seen /s2 get ne (nor the one before that) check
+seen /s2 get seen /s1 get gt (the counter only moves forward) check
+
+failures 0 eq
+    { (three fonts, three serials, none reissued: SUCCESS) = }
+    { failures =print ( failures\n) print } ifelse
+flush
+quit

@@ -961,6 +961,35 @@ static int face_cache_n = 0;
    teardown, so the cache stops naming a face before the face goes. */
 static void _clip_memo_drop(void);
 
+/* -  .newfontserial  int
+   The serial a font's cached glyph masks are keyed by. The counter only
+   ever moves forward, so no two fonts of a run are named alike and a
+   mask cached against a serial cannot be taken for a later font that
+   happened to be given the same number.
+
+   A counter kept in the graphics dictionary could not promise that. It
+   is virtual memory, so a restore past the definefont that raised it
+   winds it back and the number is handed out a second time -- while the
+   masks it keys are not virtual memory and are not wound back with it.
+   The two would then disagree about which font a mask belongs to, and
+   the disagreement is only visible as the wrong shape on the page. */
+static int _fontserial_next = 1;
+
+static int _newfontserial(Xpost_Context *ctx)
+{
+    if (_fontserial_next <= 0)
+    {
+        /* the counter has run its range: nothing held can be told apart
+           from what the reissued numbers will name, so nothing is held */
+        xpost_mask_cache_clear();
+        _fontserial_next = 1;
+    }
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(_fontserial_next)))
+        return stackoverflow;
+    _fontserial_next++;
+    return 0;
+}
+
 static void xpost_op_font_quit(void)
 {
     int i;
@@ -5128,6 +5157,7 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".maskcachehit", (Xpost_Op_Func)_maskcachehit, 5,
         floattype, floattype, arraytype, integertype, arraytype);
     INSTALL;
+    op = xpost_operator_cons(ctx, ".newfontserial", (Xpost_Op_Func)_newfontserial, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".maskcacheput", (Xpost_Op_Func)_maskcacheput, 1, dicttype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".setcachelimit", (Xpost_Op_Func)_setcachelimit, 1, integertype);

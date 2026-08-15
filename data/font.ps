@@ -137,15 +137,13 @@ setglobal
         dup /FontName 3 index put
     } if
     % a serial keys the glyph cache: derived dictionaries keep their
-    % parent's, the transform distinguishing their entries. The
-    % counter lives in graphicsdict, addressed outright: definefont
-    % may run under any dictionary a driver prolog has begun
+    % parent's, the transform distinguishing their entries. The counter
+    % is not in virtual memory, so a restore past a definefont cannot
+    % wind it back and hand the number out again -- the masks it keys
+    % are not in virtual memory either, and a serial reissued to a
+    % different font would find the first font's masks
     dup /.fontid known not {
-        graphicsdict /.fontserial known not {
-            graphicsdict /.fontserial 1 put
-        } if
-        dup /.fontid graphicsdict /.fontserial get put
-        graphicsdict /.fontserial graphicsdict /.fontserial get 1 add put
+        dup /.fontid //.internaldict /.newfontserial get exec put
     } if
     % FontDirectory denotes the global directory while the allocation mode
     % is global, so a font built there is filed there and outlives the

@@ -2071,6 +2071,17 @@ endif
 # range, is no key at all. A glyph whose font has no key builds direct --
 # drawn, and drawn from its own outline rather than from the mask a
 # serial reduced into range would have found.
+# A font's serial keys the coverage masks its glyphs are cached as, and
+# those masks are not virtual memory: a counter kept where save and
+# restore reach would be wound back past a definefont and hand the number
+# to a different font, whose glyphs would then be served the first one's
+# masks. The counter is the interpreter's and only moves forward.
+test('font-serial',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_serial_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 test('font-glyphkey',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_glyphkey_test.ps') ],

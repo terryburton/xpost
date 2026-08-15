@@ -374,6 +374,12 @@ gcache_clear(void)
     gcache_serving = NULL;
 }
 
+void
+xpost_mask_cache_clear(void)
+{
+    gcache_clear();
+}
+
 #ifdef HAVE_FREETYPE2
 /* A face built over a font program in memory reads the program where it
    lies, keeping the pointer it was given rather than a copy of the bytes,

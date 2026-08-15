@@ -302,6 +302,11 @@ int xpost_mask_cache_insert(const void *k1, unsigned long long k2,
                                  int width, int pitch, int left, int top,
                                  long advance_x, long advance_y);
 
+/* Empty it. For a caller whose way of naming a mask has run its range
+   and started over: nothing held can be told apart from what the
+   reissued names will mean, so nothing is held. */
+void xpost_mask_cache_clear(void);
+
 void xpost_font_face_glyph_buffer_get(void *face, unsigned char **buffer, int *rows, int *width, int *pitch, char *pixel_mode, int *left, int *top, long *advance_x, long *advance_y);
 
 
