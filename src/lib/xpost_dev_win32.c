@@ -922,9 +922,13 @@ int _destroy(Xpost_Context *ctx,
     if (!private.window)
         return 0;
 
-    /* the handler names a device by the window it reads, and this
-       device is giving that window up */
-    xpost_context_install_event_handler(ctx, null, null);
+    /* The handler names one device, and by now that may be a
+       device made after this one: replacing a page device installs
+       the new device before it retires the old, so clearing the
+       handler unasked would leave the live window hearing nothing.
+       A device gives up only what it was given. */
+    if (xpost_dict_compare_objects(ctx, ctx->window_device, devdic) == 0)
+        xpost_context_install_event_handler(ctx, null, null);
 
     /* the same release the collector runs, so what this device owns is
        stated once */
