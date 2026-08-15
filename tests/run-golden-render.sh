@@ -31,19 +31,29 @@
 # from the manifest fails below -- so a device added to the roster
 # arrives here on the day it is added and says so.
 #
+# TWO ROUTES, not one. Each device is rendered twice: the single page to a
+# fixed output name, and a three-page job to a name carrying a %d, which
+# asks for a file per page. In a paginated device those are two different
+# writers -- one accumulates into a document opened once for the run, the
+# other opens and finalises a document per page -- and only the first had
+# bytes held anywhere, so a change to the second was invisible here. The
+# per-page route's entries are named <device>%d in the manifest.
+#
 # Regenerate after an INTENDED rendering change (declare it in the same
 # commit) with:
-#     tests/run-golden-render.sh <xpost> <page.ps> <goldendir> --regen
+#     tests/run-golden-render.sh <xpost> <page.ps> <pages.ps> <goldendir> --regen
 #
 #   $1  path to the built xpost binary
 #   $2  path to golden_page.ps
-#   $3  path to the tests/golden directory (the manifest's home)
-#   $4  optionally --regen
+#   $3  path to golden_pages.ps, the multi-page job
+#   $4  path to the tests/golden directory (the manifest's home)
+#   $5  optionally --regen
 set -u
 xpost=$1
 page=$2
-golden=$3
-regen=${4:-}
+pages=$3
+golden=$4
+regen=${5:-}
 . "$(dirname "$0")/verdict.sh"
 . "$(dirname "$0")/device-fleet.sh"
 
@@ -122,6 +132,40 @@ for dev in $devices; do
     printf '%s  %s\n' "$(sum "$out")" "$dev" >> "$out_manifest"
 done
 
+# ---- the same devices through the per-page route ----
+#
+# The pages are joined in order and hashed as one, so a device answers
+# for its whole run in one line and a page that went missing, arrived
+# twice, or came out in the wrong order changes the hash rather than
+# being averaged away. The count is reported beside a failure, because
+# "the bytes differ" and "there are two files where there were three"
+# are different faults and the hash alone cannot tell them apart.
+mkdir -p "$work/pp"
+for dev in $devices; do
+    mkdir -p "$work/pp/$dev"
+    err=$("$xpost" -q $ns -d "$dev" -o "$work/pp/$dev/p%d" "$pages" </dev/null 2>&1)
+    status=$?
+    verdict_run "$status" "$err" "$dev%d" || exit 1
+    if printf '%s' "$err" | grep -q '%%\[ Error'; then
+        echo "FAIL $dev%d: $(printf '%s' "$err" | grep '%%\[ Error' | head -1)"
+        fail=1
+        continue
+    fi
+    order=$(ls "$work/pp/$dev" 2>/dev/null | sed 's/^p//' | sort -n)
+    npages=$(printf '%s\n' "$order" | grep -c '[0-9]')
+    if [ "$npages" -lt 2 ]; then
+        echo "FAIL $dev%d: a %d output name asks for a file per page and a"
+        echo "     three-page job left $npages of them, so this route is not"
+        echo "     being exercised at all"
+        fail=1
+        continue
+    fi
+    joined="$work/golden.$dev%d"
+    : > "$joined"
+    for p in $order; do cat "$work/pp/$dev/p$p" >> "$joined"; done
+    printf '%s  %s\n' "$(sum "$joined")" "$dev%d" >> "$out_manifest"
+done
+
 if [ "$fail" -ne 0 ]; then
     rm -rf "$work"
     echo "FAILURES: a device did not render the golden page"
@@ -151,6 +195,11 @@ fi
 for dev in $devices; do
     if ! grep -q " $dev\$" "$manifest"; then
         echo "FAIL: $dev is rendered but absent from the manifest"
+        fail=1
+    fi
+    if ! grep -q " $dev%d\$" "$manifest"; then
+        echo "FAIL: $dev is rendered through the per-page route and absent"
+        echo "      from the manifest, so that route holds no bytes"
         fail=1
     fi
 done
@@ -187,7 +236,7 @@ fi
 # compare per device so a mismatch names its device
 while read -r want dev; do
     case $dev in
-        pdfwrite|svgwrite|dscwrite)
+        pdfwrite|svgwrite|dscwrite|pdfwrite%d|svgwrite%d|dscwrite%d)
             if [ "$byte_exact_only_raster" = 1 ]; then
                 echo "NOTE $dev: not held to the byte on $platform;"
                 echo "     the manifest was made on $reference, and what this"

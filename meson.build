@@ -3880,7 +3880,7 @@ test('band-replay-cost',
 # (tests/run-golden-render.sh ... --regen).
 test('golden-render',
   find_program('tests/run-golden-render.sh'),
-  args: [ xpost_exe, files('tests/golden_page.ps'),
+  args: [ xpost_exe, files('tests/golden_page.ps'), files('tests/golden_pages.ps'),
           meson.current_source_dir() / 'tests' / 'golden' ],
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   suite: cost_fast,

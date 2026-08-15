@@ -186,6 +186,7 @@ tests/global_vm_invariant_test.ps \
 tests/golden/manifest-large.sha256 \
 tests/golden/manifest.sha256 \
 tests/golden_page.ps \
+tests/golden_pages.ps \
 tests/band_loop_test.ps \
 tests/band_sparse_test.ps \
 tests/band_report_test.ps \

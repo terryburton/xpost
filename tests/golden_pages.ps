@@ -1,0 +1,165 @@
+% The golden render page for a job of more than one page.
+%
+% tests/golden_page.ps holds one page through every device. What it
+% cannot hold is what a device does BETWEEN pages, and that is where a
+% paginated writer keeps its state: a page counter, an output file, the
+% object numbers already issued, the header written once. So this is
+% three pages rather than one, and they differ from each other, so that a
+% device carrying one page's state into the next writes bytes that say
+% so rather than bytes that happen to match.
+%
+% Each page is wrapped in save...showpage...restore -- the separation
+% plate idiom -- which rewinds local virtual memory between pages. State
+% a device keeps per page must not be rewound with it. A device that held
+% its output file in local memory would have it closed here by the first
+% page's restore, and the second page would find no file; a device that
+% held its page counter there would number every page the first.
+%
+% Nothing host-dependent: no system fonts, no dates, no randomness. Text
+% is an inline Type 3 font, as it is in the single-page golden.
+%
+% Rendered by run-golden-render.sh twice: to a fixed output name, where a
+% paginated device accumulates all three pages into one document, and to
+% a name carrying a %d, where every device writes a file per page. The
+% two are different writers in a paginated device and both are held to
+% their bytes.
+
+/PageType3 7 dict begin
+  /FontType 3 def
+  /FontMatrix [ 0.001 0 0 0.001 0 0 ] def
+  /FontBBox [ 0 0 750 750 ] def
+  /Encoding 256 array def
+  0 1 255 { Encoding exch /.notdef put } for
+  Encoding 49 /one put
+  Encoding 50 /two put
+  Encoding 51 /three put
+  /CharProcs << /.notdef {}
+    /one   { 80 setlinewidth 375 60 moveto 375 690 lineto stroke }
+    /two   { 80 setlinewidth 100 600 moveto 650 600 lineto
+             650 375 lineto 100 375 lineto 100 100 lineto
+             650 100 lineto stroke }
+    /three { 80 setlinewidth 100 650 moveto 650 650 lineto
+             375 375 lineto 650 100 lineto 100 100 lineto stroke }
+  >> def
+  /BuildChar { % font code
+      exch begin
+      Encoding exch get CharProcs exch get
+      750 0 setcharwidth exec
+      end } def
+  currentdict
+end definefont pop
+
+% n  .  -   one page, told apart from the others by n
+/goldpage {
+    /n exch def
+
+    % fills: both winding rules, and the geometry turns with the page
+    gsave
+      36 620 translate
+      n 12 mul rotate
+      newpath 0 0 moveto 80 0 lineto 8 50 lineto 40 -14 lineto
+              72 50 lineto closepath
+      0.2 setgray fill
+      110 0 translate
+      newpath 0 0 moveto 80 0 lineto 8 50 lineto 40 -14 lineto
+              72 50 lineto closepath
+      0.2 setgray eofill
+    grestore
+
+    % strokes: caps, joins and a dash phase that moves with the page
+    gsave
+      36 540 translate
+      0 setgray
+      n 3 mul setlinewidth
+      0 1 2 { /c exch def
+        c setlinecap
+        newpath c 40 mul 10 add 0 moveto 0 40 rlineto stroke
+      } for
+      150 0 translate
+      0 1 2 { /j exch def
+        j setlinejoin
+        newpath j 60 mul 0 moveto 20 40 rlineto 20 -40 rlineto stroke
+      } for
+      1 setlinewidth 0 setlinecap
+      [ 6 3 1 3 ] n setdash
+      newpath -110 -20 moveto 330 0 rlineto stroke
+      [] 0 setdash
+    grestore
+
+    % colour: a different space per page, so a device holding a colour
+    % across pages says so
+    gsave
+      36 460 translate
+      1 n 3 div sub 0.2 0.1 setrgbcolor    0 0 40 40 rectfill
+      0 1 0.5 n 4 div setcmykcolor        50 0 40 40 rectfill
+      n 3 div 1 1 sethsbcolor            100 0 40 40 rectfill
+      % a Separation, so that a space whose components reach the device
+      % through a tint transform of the program's own is painted here
+      % too, and painted with a different tint on each page
+      [ /Separation (Spot) /DeviceRGB
+        { dup dup 1 exch sub 3 1 roll pop pop 0.9 exch 0.1 } ] setcolorspace
+      n 4 div setcolor                   150 0 40 40 rectfill
+    grestore
+
+    % clipping, with the clip shrinking as the pages go on
+    gsave
+      36 360 translate
+      newpath 0 0 moveto 90 0 lineto 90 70 lineto 0 70 lineto closepath clip
+      newpath 45 35 70 n 8 mul sub 0 360 arc 0.4 setgray fill
+    grestore
+
+    % a sampled image and a stencil mask
+    gsave
+      36 260 translate
+      60 60 scale
+      8 8 8 [ 8 0 0 -8 0 8 ]
+      { <001133557799bbdd 113355 7799bbddff 33557799 bbddff00 557799bb
+         ddff0011 7799bbdd ff001133 99bbddff 00113355 bbddff00 11335577
+         ddff0011 33557799> }
+      image
+    grestore
+    gsave
+      116 260 translate
+      60 60 scale
+      0.8 0.2 0.1 setrgbcolor
+      8 8 true [ 8 0 0 -8 0 8 ]
+      { <c3a5997e7e99a5c3> }
+      imagemask
+    grestore
+
+    % an axial shading whose end colour moves with the page
+    gsave
+      36 170 translate
+      << /ShadingType 2 /ColorSpace /DeviceRGB
+         /Coords [ 0 0 120 0 ]
+         /Function << /FunctionType 2 /Domain [0 1] /N 1
+                      /C0 [1 0.9 0] /C1 [ n 3 div 0 0.8 ] >>
+      >> shfill
+      0 0 120 50 rectclip
+    grestore
+
+    % a tiled pattern
+    gsave
+      36 90 translate
+      << /PatternType 1 /PaintType 1 /TilingType 1
+         /BBox [0 0 12 12] /XStep 12 /YStep 12
+         /PaintProc { pop 0.1 0.4 0.2 setrgbcolor 0 0 7 7 rectfill
+                      0.9 0.6 0.1 setrgbcolor 6 6 12 12 rectfill }
+      >> matrix makepattern setpattern
+      0 0 130 60 rectfill
+    grestore
+
+    % and the page's own number, drawn, so the pages cannot be confused
+    gsave
+      220 90 translate
+      /PageType3 findfont 48 scalefont setfont
+      0 setgray 0 0 moveto n 3 string cvs show
+    grestore
+} bind def
+
+1 1 3 {
+    save exch
+    goldpage
+    showpage
+    restore
+} for
