@@ -880,7 +880,14 @@ currentglobal true setglobal
 % spec  .makerasterclass  class
 % build a raster device class: the shared suite copied from
 % .rasterproto, overlaid with the parameter dictionary, then completed
-% with the colour take/push helpers the component count dictates.
+% with the colour take/push helpers its component count calls for.
+%
+% There are helpers for one component and for three, which is what the
+% fleet declares -- the grey and bilevel classes take one, the colour
+% and TIFF classes three, and the compiled devices copy one of those.
+% Any other count is refused rather than approximated; see below for
+% why that is the only honest answer available here.
+%
 % Load-time only.
 .xpostsys /.makerasterclass { % spec  .  class
     //.xpostsys /.rasterproto get
@@ -891,8 +898,22 @@ currentglobal true setglobal
         dup /.takecolor { /c1 exch def } put
         dup /.pushcolor { c1 } put
     }{
-        dup /.takecolor { /c3 exch def /c2 exch def /c1 exch def } put
-        dup /.pushcolor { c1 c2 c3 } put
+        dup /.ncomp get 3 eq {
+            dup /.takecolor { /c3 exch def /c2 exch def /c1 exch def } put
+            dup /.pushcolor { c1 c2 c3 } put
+        }{
+            % There are helpers for one component and for three, and
+            % those are the two counts the fleet declares. A class
+            % asking for another is refused rather than handed the
+            % three, which would be the worst of the answers available:
+            % a paint of four components would have one of its values
+            % taken in the place of another and three pushed where it
+            % wanted four, so the page would come out wrong rather than
+            % not come out. The count is a property of the class being
+            % built and known
+            % here, so it is refused where it is read.
+            /.makerasterclass cvx /rangecheck signalerror
+        } ifelse
     } ifelse
 } bind put
 
