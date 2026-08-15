@@ -1230,6 +1230,11 @@ setglobal
 % a drawing the cache stops naming would stay held for the life of the
 % run. The cache gives each one up before it stops naming it.
 %
+% An entry naming no drawing is one that says a form cannot be held --
+% it paints outside the box it declared, so what a drawing carried would
+% differ from what painting it afresh does. There is nothing to give
+% back for such an entry, and it is passed over.
+%
 % Called where the cache stops standing for anything: at the end of a
 % job, and where the page device is replaced, since a drawing is the
 % marks a form made for one device and carries that device's colour
@@ -1238,7 +1243,8 @@ setglobal
 currentglobal true setglobal
 .xpostsys /.formcachedrop {
     graphicsdict /.formcache 2 copy known {
-        get { exch pop /drawing get dup /Destroy get exec } forall
+        get { exch pop dup /drawing known
+                { /drawing get dup /Destroy get exec }{ pop } ifelse } forall
         graphicsdict /.formcache undef
     }{ pop pop } ifelse
 } bind put

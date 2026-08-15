@@ -37,6 +37,24 @@
   gsave F execform grestore } stopped not
     (a cacheable form runs through execform without error) assert
 
+% A form whose paint escapes the box it declared cannot be held: what a
+% drawing carried would differ from what painting it afresh does. The
+% cache records that with an entry naming no drawing, so the description
+% is not run a second time for the same answer. Giving the cache up has
+% to pass over such an entry rather than reach for a drawing that was
+% never put there -- and the cache is given up where the page device is
+% replaced, which is an ordinary thing for a program to do.
+/G <<
+    /FormType 1
+    /BBox [0 0 20 20]
+    /Matrix [1 0 0 1 0 0]
+    /PaintProc { pop 0 0 200 200 rectfill }
+>> def
+
+{ gsave 100 100 translate G execform grestore
+  << /PageSize [612 792] >> setpagedevice } stopped not
+    (the page device is replaced after a form that could not be held) assert
+
 faildict /n get 0 eq { (SUCCESS\n) print } { faildict /n get =print ( failures\n) print } ifelse
 flush
 quit
