@@ -592,11 +592,7 @@ static void _reclaim(void *block)
         xpost_device_page_close(p->file);
         p->file = NULL;
     }
-    /* a raster handed to the client is the client's to give back */
-    if (p->bufowned)
-        free(p->buf);
-    p->buf = NULL;
-    p->bufowned = 0;
+    XPOST_DEV_BUFFER_RECLAIM(p->buf, p->bufowned);
 }
 
 /* Start the stream this page is written through: the file the page

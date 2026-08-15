@@ -93,6 +93,27 @@ golden="$mirror/$(basename "$golden")"
 
 fail=0
 
+# ---- the grounds for trusting a clearing macro ----
+#
+# A member handed to XPOST_DEV_BUFFER_RECLAIM counts as cleared below,
+# which would be a name taken on trust if the macro were not read. It is
+# read here, and held to assigning its raster parameter null and its
+# ownership parameter zero. A macro that stopped doing either would
+# otherwise let every device calling it pass by saying its name.
+macro=$(sed -n '/^#define XPOST_DEV_BUFFER_RECLAIM/,/while (0)/p' \
+        "$tree/src/lib/xpost_dev_driver.h" | tr -d ' \t\\')
+case $macro in
+    *"(raster)=NULL"*"(owned)=0"*) ;;
+    *)
+        echo "FAILURES: XPOST_DEV_BUFFER_RECLAIM is trusted by this check to"
+        echo "      clear both of the members handed to it, and what it"
+        echo "      expands to does not clear them. Either restore that, or"
+        echo "      take it out of the clearing macros this check knows, so"
+        echo "      that every device calling it is held to clearing its own."
+        fail=1
+        ;;
+esac
+
 # ---- the C, as code, and the raw line beside it ----
 #
 # Paths are relative to the mirrored root so that what this reports and
@@ -321,6 +342,11 @@ analyse() {         # <file> <function> [ptr]
     BEGIN {
         KW["if"] = 1; KW["for"] = 1; KW["while"] = 1; KW["switch"] = 1
         KW["return"] = 1; KW["sizeof"] = 1; KW["do"] = 1; KW["else"] = 1
+        # A macro that clears what it is handed. A member passed to one is
+        # cleared as surely as one assigned null here, but only because the
+        # macro says so, which is why what each of these expands to is read
+        # and held to clearing its arguments before this trusts the name.
+        CLEARERS["XPOST_DEV_BUFFER_RECLAIM"] = 1
     }
     $1 == F {
         code = substr($0, length($1) + length($2) + 3)
@@ -369,6 +395,8 @@ analyse() {         # <file> <function> [ptr]
             }
             nc++; CN[nc] = nm; CS[nc] = p + 1; CE[nc] = r - 1; CP[nc] = q + 1
             for (k = p + 1; k <= r - 1; k++) inarg[k] = 1
+            if (nm in CLEARERS)
+                for (k = p + 1; k <= r - 1; k++) clearedat[k] = r
         }
 
         # every identifier used as the base of a member reference
@@ -470,6 +498,10 @@ analyse() {         # <file> <function> [ptr]
             while (a >= bs && substr(S, a, 1) ~ /[ \t]/) a--
             if (substr(S, a, 1) == "&" && substr(S, a - 1, 1) != "&")
                 byaddr[mem] = 1
+            else if (clearedat[p]) {
+                cleared[mem] = 1
+                if (clearedat[p] > lastclear) lastclear = clearedat[p]
+            }
             else if (inarg[p] && !(mem in handed))
                 handed[mem] = LN[p]
 

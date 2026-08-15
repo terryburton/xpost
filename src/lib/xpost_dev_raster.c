@@ -142,10 +142,7 @@ static void _reclaim(void *block)
 {
     PrivateData *p = block;
 
-    if (p->bufowned)
-        free(p->buf);
-    p->buf = NULL;
-    p->bufowned = 0;
+    XPOST_DEV_BUFFER_RECLAIM(p->buf, p->bufowned);
 }
 
 

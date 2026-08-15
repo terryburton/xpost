@@ -12,6 +12,7 @@
 #include <math.h> /* the device-space geometry below rounds by floor */
 #include <stddef.h> /* a buffer position is counted in the platform's size */
 #include <stdio.h> /* FILE: the page a device writes goes to one */
+#include <stdlib.h> /* free: a device gives back the raster it allocated */
 
 /*
  * The output-device driver contract.
@@ -1074,6 +1075,27 @@ xpost_dev_output_buffer_handoff(Xpost_Context *ctx,
     }
     return 0;
 }
+
+/* Give back the raster a device allocated for itself. Whether it is
+   freed is not a question about the device but about who owns it: a
+   raster handed over by xpost_dev_output_buffer_handoff() above belongs
+   to the client, which gives the block back through
+   xpost_output_buffer_release(), and freeing it here would be the second
+   free of one block. Either way the device stops naming it and stops
+   claiming it, which is what makes a repeated Destroy a no-op rather
+   than that second free.
+
+   A macro rather than a function because the three steps are one rule
+   and belong together: a device may keep its ownership flag as a
+   one-bit field packed with its other flags, and a bit-field has no
+   address to pass. */
+#define XPOST_DEV_BUFFER_RECLAIM(raster, owned) \
+    do { \
+        if (owned) \
+            free(raster); \
+        (raster) = NULL; \
+        (owned) = 0; \
+    } while (0)
 
 /* Say that the block a lent raster sits in is named immediately in front
    of the raster, rather than leave it to hold by luck:
