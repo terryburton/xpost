@@ -114,6 +114,30 @@ DEVICE_FLEET_BANDS='pgm ppm pbm tiff png jpeg'
 # fails too.
 DEVICE_FLEET_NOFILE='null bbox raster bgr'
 
+# The devices that keep their page as one block of pixels outside virtual
+# memory and assemble it in compiled code rather than in PostScript. Two
+# questions asked of a running device tell them apart from the rest of
+# the fleet, and between them the two partition it: whether the class's
+# Emit is an operator, which says the page is put together in C, and
+# whether the class carries a band sink, which says it holds pixels at
+# all. The four kinds that makes are these, the raster classes written in
+# PostScript (Emit a procedure, a band sink), the recorder (Emit an
+# operator, no band sink, because it holds marks and not pixels) and the
+# devices that keep no raster of their own.
+#
+# It is worth naming because several wrappers had reached for it
+# separately and spelled it out by hand each time: the writers whose
+# bands are compared with their whole pages, the page a device will
+# refuse at start-up because a pixel's position is the bound, and the
+# devices whose band declaration is read from the class. A device added
+# to the fleet and to none of those was asked none of their questions.
+#
+# tests/check-device-roster.sh holds this list by asking each device both
+# questions and comparing, both ways round: a device that answers like
+# one of these and is not named here fails, and a device named here that
+# stops answering that way fails too.
+DEVICE_FLEET_BUFFER='raster bgr png pngalpha jpeg'
+
 # fleet_whole DEVICE
 #
 # The selection that holds DEVICE's page whole: the device itself where

@@ -433,6 +433,87 @@ if ! cmp -s "$work/left" "$work/nofile-want"; then
 fi
 
 # ---------------------------------------------------------------------
+# The devices that hold their pixels outside virtual memory
+#
+# The list is DEVICE_FLEET_BUFFER and this is what holds it. Like the one
+# above it is a reading and not a declaration: each device is made and
+# asked the two questions that tell its kind -- whether its class's Emit
+# is an operator, so the page is assembled in compiled code, and whether
+# it carries a band sink, so it holds pixels at all -- and the answers
+# are compared with the list both ways round.
+#
+# Asking the running device rather than reading the source is what makes
+# this worth having: a class that gains its compiled Emit through a copy
+# of another class says so here without anyone noticing it was copied.
+( . "$fleet"; for v in $DEVICE_FLEET_BUFFER; do echo "$v"; done ) \
+    2>/dev/null | sort -u > "$work/buffer-fleet"
+if [ ! -s "$work/buffer-fleet" ]; then
+    echo "FAIL: DEVICE_FLEET_BUFFER is empty or unset in tests/device-fleet.sh"
+    fail=1
+fi
+stray=$(comm -23 "$work/buffer-fleet" "$work/fleet-all")
+if [ -n "$stray" ]; then
+    echo "FAIL: DEVICE_FLEET_BUFFER names devices the roster does not:"
+    printf '%s\n' "$stray" | sed 's/^/      /'
+    fail=1
+fi
+
+cat > "$work/kind.ps" <<'EOF'
+/getdevice { .privatedict /.graphicsdict get /currgstate get /device get } def
+/d getdevice def
+(KIND ) print
+d /Emit get type /operatortype eq { (compiled) }{ (interpreted) } ifelse print
+( ) print
+d /.bandsink known { (pixels) }{ (nopixels) } ifelse print
+(\n) print flush quit
+EOF
+: > "$work/buffer-saw"
+: > "$work/kindasked"
+while read -r dev; do
+    said=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+            "$xpost" -q -d "$dev" -o /dev/null kind.ps </dev/null 2>&1 )
+    case "$said" in
+        *"wrong device"*) continue ;;
+    esac
+    kind=$(printf '%s\n' "$said" | sed -n 's/^KIND //p' | head -1)
+    [ -n "${kind:-}" ] || continue
+    echo "$dev" >> "$work/kindasked"
+    [ "$kind" = "compiled pixels" ] && echo "$dev" >> "$work/buffer-saw"
+done < "$work/fleet-all"
+sort -u -o "$work/buffer-saw" "$work/buffer-saw"
+sort -u -o "$work/kindasked" "$work/kindasked"
+if [ ! -s "$work/kindasked" ]; then
+    echo "FAIL: no device answered what kind it is, so this comparison was"
+    echo "      never made and the list it holds stands unchecked."
+    exit 1
+fi
+comm -12 "$work/buffer-fleet" "$work/kindasked" > "$work/buffer-want"
+if ! cmp -s "$work/buffer-saw" "$work/buffer-want"; then
+    unlisted=$(comm -23 "$work/buffer-saw" "$work/buffer-want")
+    listed=$(comm -13 "$work/buffer-saw" "$work/buffer-want")
+    if [ -n "$unlisted" ]; then
+        echo "FAIL: these devices assemble their page in compiled code and hold"
+        echo "      pixels of their own, and DEVICE_FLEET_BUFFER does not name"
+        echo "      them:"
+        printf '%s\n' "$unlisted" | sed 's/^/      /'
+        echo "      The wrappers that compare a band against a whole page, and"
+        echo "      the one that asks which page a device refuses at start-up,"
+        echo "      read that list to know which devices to ask. A device"
+        echo "      missing from it is asked by none of them."
+        fail=1
+    fi
+    if [ -n "$listed" ]; then
+        echo "FAIL: DEVICE_FLEET_BUFFER names these devices and they no longer"
+        echo "      answer that way:"
+        printf '%s\n' "$listed" | sed 's/^/      /'
+        echo "      Either the class stopped assembling its page in compiled"
+        echo "      code or it stopped holding pixels; whichever it is, the"
+        echo "      questions those wrappers ask of it no longer fit."
+        fail=1
+    fi
+fi
+
+# ---------------------------------------------------------------------
 # And the copies of all of it written in prose
 #
 # doc/MANUAL is where a reader learns which devices there are, which of
@@ -599,5 +680,7 @@ echo "SUCCESS ($(wc -l < "$work/maker" | tr -d ' ') devices, one roster in four 
  $(wc -l < "$work/says-yes" | tr -d ' ') declaring a banded page and routed for one;\
  $(wc -l < "$work/paginated" | tr -d ' ') holding a run's pages in one file;\
  $(wc -l < "$work/wrote" | tr -d ' ') leaving a page at the output path and\
- $(wc -l < "$work/left" | tr -d ' ') leaving none$skipped)"
+ $(wc -l < "$work/left" | tr -d ' ') leaving none;\
+ $(wc -l < "$work/buffer-saw" | tr -d ' ') assembling a page of their own pixels\
+ in compiled code$skipped)"
 exit 0

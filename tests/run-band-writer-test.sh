@@ -65,6 +65,21 @@ script=$2
 . "$(dirname "$0")/verdict.sh"
 . "$(dirname "$0")/device-fleet.sh"
 
+# The devices whose bands this compares against their whole pages: the
+# ones that assemble a page of their own pixels in compiled code, less
+# those that hand the page back to the embedding program instead of
+# leaving it at the output path, since a page that arrives nowhere has no
+# bytes to compare. Both halves are stated in tests/device-fleet.sh and
+# held there by asking each device, so a device that joins the fleet is
+# asked here on the day it joins rather than when someone remembers.
+WRITERS=
+for w_dev in $DEVICE_FLEET_BUFFER; do
+    case " $DEVICE_FLEET_NOFILE " in
+        *" $w_dev "*) continue ;;
+    esac
+    WRITERS="$WRITERS $w_dev"
+done
+
 # The runs below are started in the directory the pages are written to,
 # so what they were handed has to name the same thing from there.
 xpost=$(path_anchor "$xpost")
@@ -129,8 +144,15 @@ says() {  # $1 device; prints yes/no, or nothing where the device is absent
     printf '%s\n' "$s_out" | tr -s '-' '\n' | sed -n 's/^DECL //p' | head -1
 }
 
-for c in png:yes pngalpha:no jpeg:yes raster:no bgr:no; do
-    dev=${c%%:*}; want=${c#*:}
+for dev in $DEVICE_FLEET_BUFFER; do
+    # what this device should say is not asked of the device -- that would
+    # be the same question twice -- but read from the roster of devices a
+    # page is routed through a band at a time, which is held elsewhere
+    # against the C table and the recording class
+    case " $DEVICE_FLEET_BANDS " in
+        *" $dev "*) want=yes ;;
+        *)          want=no  ;;
+    esac
     got=$(says "$dev" || true)
     if [ -z "${got:-}" ]; then
         echo "SKIP the $dev device is not in this build"
@@ -153,7 +175,7 @@ done
 # over part of the page with no clearing of it -- which is the one that
 # can see a run of rows coming up carrying what the run before painted,
 # every other page here covering itself before it draws.
-for dev in png pngalpha jpeg; do
+for dev in $WRITERS; do
     if [ -z "$(says "$dev" || true)" ]; then
         continue
     fi
@@ -318,7 +340,7 @@ if peak_rss_reads "$xpost"; then
         esac
         return 0
     }
-    for dev in png pngalpha jpeg; do
+    for dev in $WRITERS; do
         [ -n "$(says "$dev" || true)" ] || continue
         rm -f "$work"/*.out "$work"/*.out2
         kept=no
