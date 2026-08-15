@@ -551,6 +551,51 @@ int _blendpix(Xpost_Context *ctx,
    back as the ground is a statement about the drawable, not about the
    colour: a page cleared to a light grey reads light. BlendPix above
    composites a partly covered pixel over the same value. */
+
+/* A colour as this device holds it: allocated through the colormap and
+   asked back, which is the round trip a stored pixel has already been
+   through. The server keeps fewer bits than the sixteen a component is
+   named in -- eight, on the usual visual -- so a colour named exactly
+   and a colour read back off the page differ by the rounding unless
+   both have been through here. The ground reported for a pixel outside
+   the page is the ground as the page would hold it, so that the two
+   answers can be compared. */
+static
+int _as_stored(PrivateData *private, int *r, int *g, int *b)
+{
+    xcb_query_colors_reply_t *cols;
+    xcb_rgb_t *rgb;
+    int ret;
+
+    if ((ret = _ink(private, *r, *g, *b)))
+        return ret;
+
+    cols = xcb_query_colors_reply(private->c,
+                                  xcb_query_colors(private->c, private->cmap,
+                                                   1, &private->ink_pixel),
+                                  NULL);
+    if (!cols)
+        return unregistered;
+    rgb = xcb_query_colors_colors(cols);
+    if (xcb_query_colors_colors_length(cols) > 0)
+    {
+        *r = rgb->red; *g = rgb->green; *b = rgb->blue;
+    }
+    free(cols);
+    return 0;
+}
+
+/* What the drawable holds at one pixel, as the 16-bit rgb the device
+   lays ink in. The pixel the server keeps is a number in the visual's
+   own encoding, and the colormap is what turns it back into components
+   -- the same colormap the ink was allocated from, so the answer is in
+   the terms the question was asked in.
+
+   A pixel outside the drawable, and a device whose connection has been
+   given back, are the ground: there is no mark there to report. So is a
+   request the server does not answer, which is the reading failing
+   rather than the pixel being unmarked -- it is logged, and the ground
+   is what a caller can do something with. */
 static
 int _getpix(Xpost_Context *ctx,
             Xpost_Object x,
@@ -559,16 +604,72 @@ int _getpix(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int ix, iy;
     int r, g, b;
 
-    (void)x;
-    (void)y;
+    ix = xpost_dev_pixel(xpost_object_number(x));
+    iy = xpost_dev_pixel(xpost_object_number(y));
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
     xpost_device_ground_scaled(ctx, devdic, XCB_CHANNEL_SCALE, &r, &g, &b);
+    /* the ground as this device would hold it, so that a pixel off the
+       page and a pixel on it answer in the same terms */
+    if (private.c)
+        (void)_as_stored(&private, &r, &g, &b);
+
+    if (private.c
+        && ix >= 0 && ix < private.width && iy >= 0 && iy < private.height)
+    {
+        xcb_get_image_reply_t *img;
+
+        img = xcb_get_image_reply(private.c,
+                                  xcb_get_image(private.c,
+                                                XCB_IMAGE_FORMAT_Z_PIXMAP,
+                                                private.img, ix, iy, 1, 1,
+                                                (uint32_t)~0UL),
+                                  NULL);
+        if (!img)
+            XPOST_LOG_ERR("the display server did not answer for the pixel"
+                          " at %d,%d", (int)ix, (int)iy);
+        else
+        {
+            /* one pixel was asked for, so what came back is exactly the
+               bytes of one, however many the visual spends on it */
+            const unsigned char *d = xcb_get_image_data(img);
+            int n = xcb_get_image_data_length(img);
+            uint32_t pixel = 0;
+            int i;
+            xcb_query_colors_reply_t *cols;
+
+            for (i = 0; i < n && i < (int)sizeof(pixel); i++)
+                pixel |= (uint32_t)d[i] << (8 * i);
+            free(img);
+
+            cols = xcb_query_colors_reply(private.c,
+                                          xcb_query_colors(private.c,
+                                                           private.cmap,
+                                                           1, &pixel),
+                                          NULL);
+            if (!cols)
+                XPOST_LOG_ERR("the colormap did not answer for the pixel"
+                              " at %d,%d", (int)ix, (int)iy);
+            else
+            {
+                xcb_rgb_t *rgb = xcb_query_colors_colors(cols);
+
+                if (xcb_query_colors_colors_length(cols) > 0)
+                {
+                    r = rgb->red;
+                    g = rgb->green;
+                    b = rgb->blue;
+                }
+                free(cols);
+            }
+        }
+    }
 
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(r));
     xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(g));

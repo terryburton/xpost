@@ -1,0 +1,52 @@
+% A window device answers for the pixel it was asked about.
+%
+% GetPix is a device contract method: it reports what the page holds at
+% one pixel. A device that ignored the coordinates and answered the
+% ground everywhere would tell anything reading the page back -- the
+% imaging machinery among them -- that the page was blank wherever it
+% looked. Asking a window device this needs a display of the suite's
+% own, which is why it is asked here and not with the raster devices.
+%
+% Three inks are laid side by side and each is read back. The colours
+% are far apart on purpose: the question is whether the pixel asked
+% about is the pixel answered for, so an answer that is merely the wrong
+% one of the three fails as surely as the ground does.
+%
+% The scale is the device's: this one lays ink in 16-bit components, so
+% full is 65535. What is asserted is the shape of the answer -- which
+% component is full and which are empty -- and not the number, so a
+% device laying ink in some other width would still be held to reporting
+% the ink it laid.
+%
+% Runs under xvfb-run against the xcb device (see meson.build).
+
+/failures 0 def
+/check { exch { pop }{ (FAIL: ) print == /failures failures 1 add def } ifelse } bind def
+
+1 0 0 setrgbcolor   0 0 20 30 rectfill
+0 1 0 setrgbcolor  20 0 20 30 rectfill
+0 0 1 setrgbcolor  40 0 20 30 rectfill
+
+% x . [r g b]
+/pix { 15 DEVICE DEVICE /GetPix get exec 3 array astore } bind def
+/full { 0 get } bind def
+
+/red   10 pix def
+/green 30 pix def
+/blue  50 pix def
+
+red 0 get 0 gt   (the red fill reports ink in its first component) check
+red 1 get 0 eq   (and none in its second) check
+red 2 get 0 eq   (and none in its third) check
+
+green 1 get 0 gt (the green fill reports ink in its second component) check
+green 0 get 0 eq (and none in its first) check
+
+blue 2 get 0 gt  (the blue fill reports ink in its third component) check
+blue 0 get 0 eq  (and none in its first) check
+
+failures 0 eq
+    { (three inks laid and three read back: SUCCESS) = }
+    { failures =print ( failures\n) print } ifelse
+flush
+quit

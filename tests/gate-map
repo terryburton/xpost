@@ -179,6 +179,7 @@ device test svg-*
 device test vecbase
 device test vecout-gc
 device test window-device
+device test window-getpix
 device width witness
 
 # ---- font: glyphs, the cache they live in, and the files they come from

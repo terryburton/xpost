@@ -2057,6 +2057,17 @@ test('memory-grow', memory_grow_exe,
 # device and replaces the page device under it; it does not check which
 # device the context names for events, which no operator reads.
 if xcb_dep.found() and xvfb_run.found()
+  # GetPix reports what the page holds at one pixel, and this device used
+  # to ignore the coordinates and report the ground for all of them --
+  # unnoticed because no test could run a window device. Three inks laid
+  # side by side and each read back.
+  test('window-getpix', xvfb_run,
+    args: [ '-a', xpost_exe, '-q', '--no-sandbox', '-d', 'xcb',
+            '-g', '60x30+0+0', files('tests/window_getpix_test.ps') ],
+    suite: cost_fast,
+    env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+    timeout: 120)
+
   test('window-device', xvfb_run,
     args: [ '-a', xpost_exe, '-q', '--no-sandbox', '-d', 'xcb',
             '-g', '100x100+0+0', files('tests/window_device_test.ps') ],
