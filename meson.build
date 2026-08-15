@@ -2222,6 +2222,17 @@ test('op-userparams',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What VMThreshold does rather than what it reports. Two interpreters, one
+# under a count small enough to collect often and one under a count large
+# enough not to, because the bytes-in-use figure stops rising once a
+# collection has left a free list behind: measured twice in one process the
+# answer would follow the order the passes ran in.
+test('vm-threshold',
+  find_program('tests/run-vm-threshold-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # bytesavailable (PLRM 8.2): remaining bytes for a seekable file, -1 for a filter.
 test('op-bytesavailable',
   find_program('tests/run-ps-test.sh'),

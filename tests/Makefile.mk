@@ -383,6 +383,7 @@ tests/run-strict-ps-test.sh \
 tests/run-svg-test.sh \
 tests/run-vecout-gc-test.sh \
 tests/run-vm-image-test.sh \
+tests/run-vm-threshold-test.sh \
 tests/run-vm-image-load-test.sh \
 tests/run-vendor-bwipp.sh \
 tests/run_input_close_test.c \
@@ -431,6 +432,7 @@ tests/verdict.sh \
 tests/vm_image_test.c \
 tests/vm_image_load_test.c \
 tests/vm_test.ps \
+tests/vm_threshold_test.ps \
 tests/wrapped_bind.golden \
 tests/wrapped_bind_test.ps \
 tests/wrapped_save_test.ps \

@@ -326,6 +326,7 @@ vm test strbuf
 vm test string-bounds
 vm test subinterval-retention
 vm test vm
+vm test vm-threshold
 vm test vm-image*
 vm test wrapped-save
 vm test wrapsave-*

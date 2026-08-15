@@ -1,0 +1,90 @@
+%!
+% What VMThreshold does, not merely what it reports. Run through
+% `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints SUCCESS iff
+% every assertion holds.
+%
+% PLRM C.3.5 gives VMThreshold as "the frequency of automatic garbage
+% collection, which is triggered whenever this many bytes have been
+% allocated since the previous collection". So a run that names a small
+% count collects more often than one that names a large one, and what
+% tells them apart is how much virtual memory each is left holding after
+% making the same garbage.
+%
+% The counts here are far apart on purpose. What is asserted is the
+% ordering -- less retained under the smaller count -- rather than any
+% particular number of bytes, because how much a collection gives back
+% depends on what else the run happens to be holding, and a test that
+% named a figure would be re-measuring the interpreter rather than
+% holding it to the parameter's meaning.
+
+/faildict 1 dict def
+faildict /n 0 put
+/assert { % bool (label) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+/probe { { exec } stopped } bind def
+
+/used { vmstatus pop exch pop } bind def   % - . bytes-in-use
+
+% Make garbage: strings nothing keeps, so every one of them is
+% reclaimable the moment the next is made.
+/churn { % count . -
+    { 512 string pop } repeat
+} bind def
+
+% ---- what the parameter reports ---------------------------------------
+
+/thrdefault currentuserparams /VMThreshold get def
+thrdefault 0 gt (the interpreter starts with a count of its own) assert
+
+1000000 setvmthreshold
+currentuserparams /VMThreshold get 1000000 eq
+    (setvmthreshold names the count currentuserparams reads back) assert
+
+-1 setvmthreshold
+currentuserparams /VMThreshold get thrdefault eq
+    (a request for the default gives back the count the run started with) assert
+
+{ -5 setvmthreshold } probe $error /errorname get /rangecheck eq and
+    (a negative count other than -1 is refused) assert
+clear
+
+% Every count from zero up is achievable here, so what is asked for is
+% what is answered: a request for a collection is recorded and taken at
+% the next safe point, which makes the smallest counts slow rather than
+% impossible.
+0 setvmthreshold
+currentuserparams /VMThreshold get 0 eq
+    (a count of zero is achievable and is answered with itself) assert
+
+% ---- what the parameter does ------------------------------------------
+%
+% Measured by run-vm-threshold-test.sh rather than here, because it
+% cannot be measured twice in one interpreter. The count of bytes in use
+% rises while the memory file is growing and stops rising once a
+% collection has left a free list behind it: a second run of the same
+% work then satisfies itself out of that list without the figure moving
+% at all. Asked for both counts in one process, the second answers 32
+% bytes whichever count it was given, which says nothing about the
+% parameter and everything about what was already free.
+%
+% So the work below is done once, under whatever count the caller named,
+% and the wrapper runs this program twice in two fresh interpreters and
+% compares what they report.
+
+/n 4000 def
+/churnbytes THRESHOLD def
+
+churnbytes setvmthreshold
+currentuserparams /VMThreshold get churnbytes eq
+    (the count the caller named is the count in force) assert
+
+/before used def
+n churn
+(GREW ) print used before sub 20 string cvs print (\n) print
+
+faildict /n get 0 eq { (SUCCESS) = }
+                     { (FAILURES: ) print faildict /n get = } ifelse

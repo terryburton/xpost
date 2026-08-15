@@ -192,6 +192,14 @@ clear false setglobal
 /uthr { currentuserparams /VMThreshold get } bind def
 /urec { currentuserparams /VMReclaim get } bind def
 
+% The count this interpreter starts with, read before anything below
+% changes it. What the assertions further down are about is that -1 and
+% a value that cannot be achieved both come back to the default, which
+% is a question about where the parameter lands rather than about which
+% number the default is -- so the number is asked for rather than
+% written here, and re-measuring it does not make this test wrong.
+/thrdefault uthr def
+
 << /VMThreshold 4242 >> setuserparams
 save
     << /VMThreshold 999999 >> setuserparams
@@ -253,7 +261,7 @@ save
 restore
 uthr 1234 eq (restore reverts a threshold set through setvmthreshold) assert
 -1 setvmthreshold
-uthr 0 eq (setvmthreshold -1 asks for the default threshold) assert
+uthr thrdefault eq (setvmthreshold -1 asks for the default threshold) assert
 { -5 setvmthreshold } probe $error /errorname get /rangecheck eq and
     (a negative threshold other than -1 is a rangecheck) assert
 clear
@@ -263,7 +271,7 @@ clear
 << /VMThreshold 4242 >> setuserparams
 { << /VMThreshold -5 >> setuserparams } probe not
     (setuserparams does not raise for a threshold it cannot achieve) assert
-uthr 0 eq (an unachievable threshold is replaced by the nearest achievable) assert
+uthr thrdefault eq (an unachievable threshold is replaced by the nearest achievable) assert
 
 << /VMReclaim -1 >> setuserparams
 { << /VMReclaim 2 >> setuserparams } probe not
