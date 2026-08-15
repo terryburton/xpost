@@ -183,9 +183,10 @@ BANDERS=$DEVICE_FLEET_BANDS
 # bands has to be refused by each of them rather than answered with a
 # page held whole under a word that said otherwise. Taking the roster
 # less the banders, instead of naming a few of them, is what makes the
-# refusal a rule about the fleet -- the four that used to be left out of
-# this, the two that paint nothing, the alpha writer and the recorder,
-# are asked now like the rest.
+# refusal a rule about the fleet: a device added to the roster is asked
+# without anyone remembering to add it here, and the ones easiest to
+# leave out of a hand-written list -- the two that paint nothing, the
+# alpha writer, the recorder -- are asked like the rest.
 KEEPERS=
 for c_dev in $DEVICE_FLEET_ALL; do
     case " $BANDERS " in
@@ -878,6 +879,81 @@ for d in $matrixdevs; do
         fi
     fi
 done
+
+# ---------------------------------------------------------------------
+# One record, played the same into every device it is played into
+#
+# Everything above holds a device to its own accounting: that its page
+# came out in more than one band, that an image was painted for the
+# bands it reaches and no more. None of it compares one device with
+# another, and there is a statement across them that no single device's
+# numbers can make.
+#
+# The record is the same record and the band loop is the same loop
+# whichever device it plays into, so the marks it plays and the bands it
+# plays them over have to come out the same for all of them. What
+# differs between these devices is what they do with a band once they
+# have it -- rows through the class for one, a compiled assembly for
+# another -- and that is downstream of the count.
+#
+# It is worth asking because a compiled assembly is where a difference
+# could hide: the row accounting the class devices carry cannot reach
+# one (it writes its own rows and never calls the class's writer), so a
+# compiled writer running its loop at another granularity, or playing a
+# band twice, passes every check it faces on its own. This is the check
+# it does not.
+key_of() { printf '%s/%s/%s' "$1" "$2" "$3"; }
+: > "$work/agree"
+for d in $matrixdevs; do
+    [ -f "$work/$d-rec.log" ] || continue
+    field "$d-rec" BAND | while read -r bp bh bb bfile nb sum mx mn \
+                                       calls rows outside plays; do
+        [ -n "${plays:-}" ] || continue
+        printf '%s %s %s %s %s %s\n' "$(key_of "$bp" "$bh" "$bb")" \
+               "$nb" "$sum" "$mx" "$mn" "$d"
+    done >> "$work/agree"
+done
+if [ ! -s "$work/agree" ]; then
+    note "no device reported what a record played it, so the accounting" \
+         "was compared across nothing"
+else
+    # one line per route, with the devices that took it and what each said
+    sort "$work/agree" | awk '
+        { k = $1; c = $2 " " $3 " " $4 " " $5
+          if (!(k in seen)) { seen[k] = c; who[k] = $6; n[k] = 1; next }
+          n[k]++
+          if (seen[k] != c) { bad[k] = bad[k] " " $6 "(" c ")" }
+          who[k] = who[k] " " $6 }
+        END {
+          for (k in seen) {
+            if (n[k] < 2) continue
+            routes++
+            if (k in bad)
+              printf "MISMATCH %s first %s (%s) then%s\n", k, seen[k], who[k], bad[k]
+          }
+          printf "ROUTES %d\n", routes
+        }' > "$work/agree.out"
+    shared=$(sed -n 's/^ROUTES //p' "$work/agree.out")
+    if [ "${shared:-0}" -lt 1 ]; then
+        note "no route was taken by two devices, so the accounting was" \
+             "compared with nothing on the other side of it"
+    else
+        if grep -q '^MISMATCH' "$work/agree.out"; then
+            grep '^MISMATCH' "$work/agree.out" | while read -r _ k rest; do
+                echo "FAILURES: the same record played into different devices"
+                echo "      was played differently on page/rows/band $k: $rest"
+                echo "      The record and the band loop are the same for"
+                echo "      each of them, so the marks and the bands are the"
+                echo "      record's answer and not the device's."
+            done
+            fail=1
+        else
+            cells=$((cells + shared))
+            echo "OK   $shared route(s) played the same record the same way" \
+                 "into every device that took them"
+        fi
+    fi
+fi
 
 # ---------------------------------------------------------------------
 # The bound
