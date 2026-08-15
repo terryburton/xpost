@@ -1075,4 +1075,24 @@ xpost_dev_output_buffer_handoff(Xpost_Context *ctx,
     return 0;
 }
 
+/* One channel of a coverage-weighted blend: the ground moved toward the
+   ink by the fraction c/255, rounded to the nearest whole level. Rounding
+   is about a distance and has no sign, so the half step is taken away
+   from zero at both ends -- C division truncates toward zero, and a
+   half added regardless of direction rounds a darkening step the short
+   way, leaving full ink over the opposite ground a level short of it.
+
+   Every device that keeps a buffer of its own blends by this rule, and
+   what it blends differs -- three channels or four, in whatever order
+   its raster stores them -- while the arithmetic on one channel does
+   not. It is inline because it is reached once per channel per covered
+   pixel, which is the busiest path a device has. */
+static inline int
+xpost_dev_blend_channel(int dst, int src, int c)
+{
+    int d = (src - dst) * c;
+
+    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
+}
+
 #endif

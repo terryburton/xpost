@@ -1646,19 +1646,6 @@ static int _coverage(Xpost_Object cov)
     return c;
 }
 
-/* One channel of a coverage-weighted blend: the ground moved toward the
-   ink by the fraction c/255, rounded to the nearest whole level. Rounding
-   is about a distance and has no sign, so the half step is taken away
-   from zero at both ends -- C division truncates toward zero, and a
-   half added regardless of direction rounds a darkening step the short
-   way, leaving full ink over the opposite ground a level short of it. */
-static int _blendchannel(int dst, int src, int c)
-{
-    int d = (src - dst) * c;
-
-    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
-}
-
 /* Blend a coverage-weighted pixel for grayscale array-of-strings devices:
    dst += (val - dst) * cov / 255. The text operators use this for glyph
    edge pixels when the device renders anti-aliased text. */
@@ -1698,7 +1685,7 @@ int _blendpixgray(Xpost_Context *ctx,
     }
     src = (int)_channel(val, 255.0);
     dst = p[ix];
-    p[ix] = (unsigned char)_blendchannel(dst, src, c);
+    p[ix] = (unsigned char)xpost_dev_blend_channel(dst, src, c);
     return 0;
 }
 
@@ -1743,7 +1730,7 @@ int _blendpixrgb(Xpost_Context *ctx,
     src[1] = (int)_channel(g, 255.0);
     src[2] = (int)_channel(b, 255.0);
     for (k = 0; k < 3; k++)
-        pl[k][ix] = (unsigned char)_blendchannel(pl[k][ix], src[k], c);
+        pl[k][ix] = (unsigned char)xpost_dev_blend_channel(pl[k][ix], src[k], c);
     return 0;
 }
 

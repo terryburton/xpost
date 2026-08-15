@@ -453,20 +453,6 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
-/* One channel of a coverage-weighted blend: the level already there
-   moved toward the ink by the fraction c/255, rounded to the nearest
-   whole level. Rounding is about a distance and has no sign, so the
-   half step is taken away from zero at both ends -- C division
-   truncates toward zero, and a half added regardless of direction
-   rounds a darkening step the short way, leaving full ink over the
-   opposite ground a level short of it. */
-static int _blendchannel(int dst, int src, int c)
-{
-    int d = (src - dst) * c;
-
-    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
-}
-
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255 from the level the pixel already holds. What this device
    reads a pixel back as is the ground (GetPix below), its raster being
@@ -521,9 +507,9 @@ int _blendpix(Xpost_Context *ctx,
 
     xpost_device_ground_scaled(ctx, devdic, XCB_CHANNEL_SCALE, &dr, &dg, &db);
 
-    r = _blendchannel(dr, r, c);
-    g = _blendchannel(dg, g, c);
-    b = _blendchannel(db, b, c);
+    r = xpost_dev_blend_channel(dr, r, c);
+    g = xpost_dev_blend_channel(dg, g, c);
+    b = xpost_dev_blend_channel(db, b, c);
 
     ret = _point(&private, r, g, b, ix, iy);
     if (ret)

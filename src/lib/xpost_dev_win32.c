@@ -539,20 +539,6 @@ int _putpix(Xpost_Context *ctx,
     return 0;
 }
 
-/* One channel of a coverage-weighted blend: the level already there
-   moved toward the ink by the fraction c/255, rounded to the nearest
-   whole level. Rounding is about a distance and has no sign, so the
-   half step is taken away from zero at both ends -- C division
-   truncates toward zero, and a half added regardless of direction
-   rounds a darkening step the short way, leaving full ink over the
-   opposite ground a level short of it. */
-static int _blendchannel(int dst, int src, int c)
-{
-    int d = (src - dst) * c;
-
-    return dst + (d < 0 ? (d - 127) / 255 : (d + 127) / 255);
-}
-
 /* Blend a coverage-weighted pixel: each channel moves toward the colour
    by cov/255 from the level the pixel already holds. The buffered
    backend reads that level out of its own buffer and writes the result
@@ -625,9 +611,9 @@ int _blendpix(Xpost_Context *ctx,
 
             rd->backend.gdi.buf
                 [xpost_dev_raster_offset(ix, iy, private.width)] =
-                _blendchannel(dr, r, c) << 16 |
-                _blendchannel(dg, g, c) << 8 |
-                _blendchannel(db, b, c);
+                xpost_dev_blend_channel(dr, r, c) << 16 |
+                xpost_dev_blend_channel(dg, g, c) << 8 |
+                xpost_dev_blend_channel(db, b, c);
 
             cdc = CreateCompatibleDC(rd->dc);
             SelectObject(cdc, rd->backend.gdi.bitmap);
@@ -637,9 +623,9 @@ int _blendpix(Xpost_Context *ctx,
         }
         case RENDER_BACKEND_GL:
             glBegin(GL_POINTS);
-            glColor4f(_blendchannel(dr, r, c) / 255.0f,
-                      _blendchannel(dg, g, c) / 255.0f,
-                      _blendchannel(db, b, c) / 255.0f, 1.0f);
+            glColor4f(xpost_dev_blend_channel(dr, r, c) / 255.0f,
+                      xpost_dev_blend_channel(dg, g, c) / 255.0f,
+                      xpost_dev_blend_channel(db, b, c) / 255.0f, 1.0f);
             glVertex2f((GLfloat)ix, (GLfloat)iy);
             glEnd();
             rd->backend.gl.changed = 1;
