@@ -2539,9 +2539,32 @@ XPOST_TEST_VISIBLE void xpost_interpreter_data_dir(char *datadir,
             XPOST_LOG_DBG("init.ps not present in %s", path_init_ps); \
     } while (0)
 
-    /* environment variable XPOST_DATA_DIR */
+    /* environment variable XPOST_DATA_DIR.
+
+       The candidates below are places the interpreter looks of its own
+       accord, and one of them not holding the boot files is ordinary --
+       that is what having several is for. This one is different: it was
+       named by whoever started the run, so a run that does not find the
+       files there was told where to look and looked somewhere else in
+       the end. Said out loud for that reason, and only for this
+       candidate: an embedder that mis-sets it otherwise gets a working
+       interpreter reading somebody else's boot files, with nothing
+       anywhere saying which. The search still goes on, because the
+       variable names the first place to try rather than the only one. */
     if ((path = getenv("XPOST_DATA_DIR")))
+    {
         XPOST_PATH_INIT;
+        /* Reported at the level a run shows by default, and not at the
+           one below it, because a message nobody sees leaves this
+           exactly as it was. The run is not stopped: what was wrong is
+           the caller's belief about where the files are, and the
+           interpreter can still start. Complaining and carrying on is
+           what the program does with a -D definition it cannot store,
+           for the same reason. */
+        XPOST_LOG_ERR("XPOST_DATA_DIR names %s, which holds no init.ps;"
+                      " looking in the places this build knows of instead",
+                      path);
+    }
 
     /* directory of the shared library (absent for an uninstalled build) */
     path = (char *)xpost_data_dir_get();
