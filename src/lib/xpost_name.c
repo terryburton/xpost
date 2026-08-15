@@ -68,7 +68,6 @@ int xpost_name_init(Xpost_Context *ctx)
     {
         return 0;
     }
-    //assert(ent == XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK);
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)
         XPOST_LOG_ERR("Warning: name stack is not in special position");
     ret = xpost_memory_table_alloc(ctx->gl, 0, 0, &ent); //gl:NAMET
@@ -76,7 +75,6 @@ int xpost_name_init(Xpost_Context *ctx)
     {
         return 0;
     }
-    //assert(ent == XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE);
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
         XPOST_LOG_ERR("Warning: name tree is not in special position");
 
@@ -98,7 +96,6 @@ int xpost_name_init(Xpost_Context *ctx)
     {
         return 0;
     }
-    //assert(ent == XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK);
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_STACK)
         XPOST_LOG_ERR("Warning: name stack is not in special position");
     ret = xpost_memory_table_alloc(ctx->lo, 0, 0, &ent); //lo:NAMET
@@ -106,7 +103,6 @@ int xpost_name_init(Xpost_Context *ctx)
     {
         return 0;
     }
-    //assert(ent == XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE);
     if (ent != XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE)
         XPOST_LOG_ERR("Warning: name tree is not in special position");
 
@@ -120,7 +116,6 @@ int xpost_name_init(Xpost_Context *ctx)
     tab->tab[XPOST_MEMORY_TABLE_SPECIAL_NAME_TREE].adr = 0;
     nstk = xpost_memory_name_stack_adr(ctx->lo);
     xpost_stack_push(ctx->lo, nstk, xpost_string_cons(ctx, CNT_STR("_not_a_name_")));
-    //assert (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) == XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME);
     if (xpost_object_get_ent(xpost_stack_topdown_fetch(ctx->lo, nstk, 0)) != XPOST_MEMORY_TABLE_SPECIAL_BOGUS_NAME)
         XPOST_LOG_ERR("Warning: bogus name not in special position");
 
@@ -209,7 +204,6 @@ int tstinsert(Xpost_Memory_File *mem,
         p = xpost_vm_ptr(mem, tadr); //recalc pointer
         p->hi = t;
     }
-    //return tadr;
     *retval = tadr;
     return 0;
 }
@@ -228,10 +222,6 @@ unsigned int addname(Xpost_Context *ctx,
     names = xpost_memory_name_stack_adr(mem);
     u = xpost_stack_count(mem, names);
 
-    //xpost_memory_file_dump(ctx->gl);
-    //dumpmtab(ctx->gl, 0);
-    //unsigned int vmmode = ctx->vmmode;
-    //ctx->vmmode = GLOBAL;
     str = xpost_string_cons(ctx, n, s);
     if (xpost_object_get_type(str) == nulltype)
     {
@@ -239,7 +229,6 @@ unsigned int addname(Xpost_Context *ctx,
         return 0;
     }
     xpost_stack_push(mem, names, str);
-    //ctx->vmmode = vmmode;
     return u;
 }
 
@@ -370,7 +359,6 @@ Xpost_Object xpost_name_get_string(Xpost_Context *ctx,
     Xpost_Object str;
     names = xpost_memory_name_stack_adr(mem);
     str = xpost_stack_bottomup_fetch(mem, names, n.mark_.padw);
-    //str.tag |= XPOST_OBJECT_TAG_DATA_FLAG_BANK;
     return str;
 }
 

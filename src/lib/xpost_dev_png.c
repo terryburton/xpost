@@ -189,7 +189,6 @@ int _create_cont(Xpost_Context *ctx,
     Xpost_Object interlaced_o;
     int width, height;
     int ret;
-    //printf("create_cont\n");
 
     /* The page the program asked for, as the extent the buffer's row
        arithmetic is done in; a page naming an extent that arithmetic

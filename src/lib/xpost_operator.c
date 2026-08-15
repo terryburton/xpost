@@ -361,7 +361,6 @@ int xpost_operator_init_optab(Xpost_Context *ctx)
     assert(ent == XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
     tab->tab[ent].sz = 0; // so gc will ignore it
     _xpost_noops = 0;
-    //printf("ent: %d\nOPTAB: %d\n", ent, (int)XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE);
 
     return 1;
 }
@@ -434,7 +433,6 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
     Xpost_Operator *optab;
     Xpost_Operator  op;
 
-    //fprintf(stderr, "name: %s\n", name);
     assert(ctx->gl->base);
 
     optab = xpost_operator_table(ctx->gl);
@@ -445,7 +443,6 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
         fprintf(stderr, "!(in < XPOST_STACK_SEGMENT_SIZE) in xpost_operator_cons(%s, %d)\n", name, in);
         exit(EXIT_FAILURE);
     }
-    //assert(in < XPOST_STACK_SEGMENT_SIZE); // or else xpost_operator_exec can't call it using HOLD
 
     vmmode=ctx->vmmode;
     ctx->vmmode = GLOBAL;
@@ -563,7 +560,6 @@ Xpost_Object xpost_operator_cons(Xpost_Context *ctx,
                     }
                 }
             }
-            //sp[si].checkstack = NULL;
         }
     }
     else if (opcode == _xpost_noops)

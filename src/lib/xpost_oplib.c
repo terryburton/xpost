@@ -145,7 +145,6 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
         return 0;
 
 //#ifdef DEBUGOP
-    //printf("\nops:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 //#endif
 
     op = xpost_operator_cons(ctx, "breakhere", (Xpost_Op_Func)xpost_op_breakhere, 0);
@@ -154,57 +153,46 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
     if (xpost_oper_init_string_ops(ctx, sd))
 
         return 0;
-    //printf("\nopst:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_array_ops(ctx, sd))
 
         return 0;
-    //printf("\nopar:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_dict_ops(ctx, sd))
 
         return 0;
-    //printf("\nopdi:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_bool_ops(ctx, sd))
 
         return 0;
-    //printf("\nopb:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_control_ops(ctx, sd))
 
         return 0;
-    //printf("\nopc:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_type_ops(ctx, sd))
 
         return 0;
-    //printf("\nopt:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_token_ops(ctx, sd))
 
         return 0;
-    //printf("\noptok:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_math_ops(ctx, sd))
 
         return 0;
-    //printf("\nopm:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_file_ops(ctx, sd))
 
         return 0;
-    //printf("\nopf:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_save_ops(ctx, sd))
 
         return 0;
-    //printf("\nopv:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_misc_ops(ctx, sd))
 
         return 0;
-    //printf("\nopx:\n"); xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
 
     if (xpost_oper_init_packedarray_ops(ctx, sd))
 
@@ -226,7 +214,6 @@ int xpost_oplib_init_ops(Xpost_Context *ctx)
 #ifdef HAVE_XCB
     if (xpost_oper_init_xcb_device_ops(ctx, sd))
         return 0;
-    //printf("xcb:\n");
 #endif
     if (xpost_oper_init_bgr_device_ops(ctx, sd))
         return 0;

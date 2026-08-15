@@ -321,7 +321,6 @@ Xpost_Object xpost_dict_cons_memory (Xpost_Memory_File *mem,
         XPOST_LOG_ERR("cannot allocate dictionary");
         return null;
     }
-    //d.comp_.ent = ent;
     d = xpost_object_set_ent(d, ent);
 
     xpost_save_stamp_birth(mem, ent);

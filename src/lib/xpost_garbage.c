@@ -1083,7 +1083,6 @@ int xpost_garbage_collect(Xpost_Memory_File *mem, int dosweep, int markall)
     }
 
     {
-        //printf("collect!\n");
         /* the name-lookup cache holds objects outside the root set;
            entities recycled by this collection must not be served from
            it afterwards */

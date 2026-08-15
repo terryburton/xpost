@@ -717,7 +717,6 @@ xpost_memory_file_alloc(Xpost_Memory_File *mem,
 
     mem->used = (unsigned int)end;
     *retaddr = (unsigned int)adr;
-    //XPOST_LOG_INFO("allocated %u bytes at %u in %s", sz, *retaddr, mem->fname);
     return 1;
 }
 
@@ -997,7 +996,6 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
        "every number is announced where it is issued" and not a rule
        with a case in it */
     _ent_issued(mem, *entity);
-    //XPOST_LOG_INFO("allocated %u(%u) bytes with tag %u as ent %u at %u in %s", sz, mem->table.tab[*entity].sz, tag, *entity, mem->table.tab[*entity].adr, mem->fname);
     mem->table.tab[*entity].used = sz;
     return ret;
 }

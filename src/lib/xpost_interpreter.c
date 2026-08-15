@@ -1411,14 +1411,7 @@ int eval(Xpost_Context *ctx)
 
     if (_xpost_interpreter_is_tracing)
     {
-        //XPOST_LOG_DUMP("eval(): Executing: ");
         xpost_object_dump(t);
-        //XPOST_LOG_DUMP("Stack: ");
-        //xpost_stack_dump(ctx->lo, ctx->os);
-        //XPOST_LOG_DUMP("Dict Stack: ");
-        //xpost_stack_dump(ctx->lo, ctx->ds);
-        //XPOST_LOG_DUMP("Exec Stack: ");
-        //xpost_stack_dump(ctx->lo, ctx->es);
     }
 
     if (xpost_object_get_type(ctx->event_handler) == operatortype)

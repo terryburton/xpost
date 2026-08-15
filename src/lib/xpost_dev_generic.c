@@ -687,11 +687,8 @@ int _fillpoly_points(Xpost_Context *ctx,
     struct rspan *rsp;
     int nrsp;
     int i;
-    //int width;
 
-    //printf("_fillpoly\n");
 
-    //width = xpost_dict_get(ctx, devdic, namewidth).int_.val;
     colorspace = xpost_dict_get(ctx, devdic, namenativecolorspace);
     if (xpost_dict_compare_objects(ctx, colorspace, nameDeviceGray) == 0)
         ncomp = 1;
@@ -875,15 +872,12 @@ int _fillpoly_points(Xpost_Context *ctx,
 
     /*Then construct the loop-body procedure array. Just showing you the line here.
       Read the whole story-line of comments for why we're not just executing it here. */
-       //xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "]")));
 
     /*Then, after the loop-body array is constructed, we need to call cvx on it. */
-       //xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "cvx")));
     /*"after" means this line, which pushes on the stack, goes *before* the xpost_name_cons("]") line.
      I'll summarize this part again. */
 
     /*After this, we call `repeat` and we're done. */
-        //xpost_stack_push(ctx->lo, ctx->es, xpost_object_cvx(xpost_name_cons(ctx, "repeat")));
 
     /*Again since these are scheduled on a stack, we need to push them in reverse order
       from the order in which we desire them to execute.

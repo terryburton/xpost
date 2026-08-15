@@ -327,7 +327,6 @@ int _create_cont(Xpost_Context *ctx,
                       values);
     }
 
-    //private.cmap = private.scr->default_colormap;
     /* create colormap */
     private.cmap = xcb_generate_id(private.c);
     xcb_create_colormap(private.c, XCB_COLORMAP_ALLOC_NONE, private.cmap,
@@ -795,9 +794,7 @@ int loadxcbdevice(Xpost_Context *ctx)
     if (!xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(_loadxcbdevicecont_opcode)))
         return execstackoverflow;
     if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_dict_get(ctx, classdic,
-                                         //xpost_name_cons(ctx, ".copydict")
-                                         namedotcopydict)))
+                          xpost_dict_get(ctx, classdic, namedotcopydict)))
         return execstackoverflow;
 
     return 0;
@@ -830,11 +827,7 @@ int loadxcbdevicecont(Xpost_Context *ctx,
     Xpost_Object op;
     int ret;
 
-    ret = xpost_dict_put(ctx, classdic,
-                         //xpost_name_cons(ctx, "nativecolorspace"),
-                         namenativecolorspace,
-                         //xpost_name_cons(ctx, "DeviceRGB")
-                         nameDeviceRGB);
+    ret = xpost_dict_put(ctx, classdic, namenativecolorspace, nameDeviceRGB);
     if (ret)
         return ret;
 
@@ -950,7 +943,6 @@ int xpost_oper_init_xcb_device_ops (Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, "loadxcbdevice", (Xpost_Op_Func)loadxcbdevice, 0); INSTALL;
     op = xpost_operator_cons(ctx, "loadxcbdevicecont", (Xpost_Op_Func)loadxcbdevicecont, 1, dicttype);
     _loadxcbdevicecont_opcode = op.mark_.padw;
-    //printf("initxcbops\n");
 
     return 0;
 }

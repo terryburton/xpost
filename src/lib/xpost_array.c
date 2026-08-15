@@ -108,7 +108,6 @@ Xpost_Object xpost_array_cons_memory(Xpost_Memory_File *mem,
         | (XPOST_OBJECT_TAG_ACCESS_UNLIMITED
                 << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
     o.comp_.sz = (word)sz;
-    //o.comp_.ent = (word)ent;
     o.comp_.off = 0;
     o = xpost_object_set_ent(o, ent);
     return o;

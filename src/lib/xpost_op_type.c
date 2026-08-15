@@ -222,7 +222,6 @@ int Archeck(Xpost_Context *ctx,
 {
     if (!_carries_access(o))
         return typecheck;
-    //xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK) >> XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET >= XPOST_OBJECT_TAG_ACCESS_READ_ONLY ));
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(xpost_object_get_access(ctx, o) >= XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
     return 0;
 }
@@ -235,7 +234,6 @@ int Awcheck(Xpost_Context *ctx,
 {
     if (!_carries_access(o))
         return typecheck;
-    //xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( (o.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK) >> XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET == XPOST_OBJECT_TAG_ACCESS_UNLIMITED ));
     xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_UNLIMITED));
     return 0;
 }
@@ -666,8 +664,6 @@ int xpost_oper_init_type_ops(Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
-    //xpost_memory_table_get_addr(ctx->gl, XPOST_MEMORY_TABLE_SPECIAL_OPERATOR_TABLE, &optadr);
-    //optab = xpost_vm_ptr(ctx->gl, optadr);
 
     op = xpost_operator_cons(ctx, "type", (Xpost_Op_Func)Atype, 1, anytype);
     INSTALL;

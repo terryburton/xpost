@@ -453,7 +453,6 @@ int xpost_op_exit (Xpost_Context *ctx)
         x = xpost_stack_pop(ctx->lo, ctx->es);
         if (xpost_object_get_type(x) == invalidtype)
             return execstackunderflow;
-        //xpost_object_dump(x);
         if (xpost_object_get_type(x) == globtype)
         {
             /* filenameforall state unwinding with its frame: the matched
@@ -895,7 +894,6 @@ int xpost_oper_init_control_ops (Xpost_Context *ctx,
     /*
     op = xpost_operator_cons(ctx, "eq", (Xpost_Op_Func)Aeq, 1, 2, anytype, anytype);
     INSTALL;
-    //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     */
 
     return 0;

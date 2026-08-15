@@ -136,7 +136,6 @@ int Iindex(Xpost_Context *ctx,
                                    xpost_stack_count(ctx->lo, ctx->os));
     if (ret)
         return ret;
-    //printf("index %d\n", n.int_.val);
     if (!xpost_stack_push(ctx->lo, ctx->os,
                           xpost_stack_topdown_fetch(ctx->lo, ctx->os, n.int_.val)))
         return stackoverflow;
@@ -270,7 +269,6 @@ int xpost_oper_init_stack_ops(Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "index", (Xpost_Op_Func)Iindex, 1, integertype);
     INSTALL;
-    //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     op = xpost_operator_cons(ctx, "roll", (Xpost_Op_Func)IIroll, 2, integertype, integertype);
     INSTALL;
     op = xpost_operator_cons(ctx, "clear", (Xpost_Op_Func)Zclear, 0);

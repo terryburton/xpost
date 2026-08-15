@@ -113,7 +113,6 @@ int xpost_op_fork (Xpost_Context *ctx, Xpost_Object proc)
 
     xpost_stack_push(newctx->lo, newctx->es, xpost_operator_cons(newctx, "_i_am_zombie_", NULL,0));
     xpost_stack_push(newctx->lo, newctx->es, proc);
-    //xpost_op_currentcontext(newctx);
     newctx->state = C_RUN;
     {
         Xpost_Object ctxobj = { 0 };
@@ -150,7 +149,6 @@ static unsigned int _join_wait_spins;
 static
 int xpost_op_join (Xpost_Context *ctx, Xpost_Object context)
 {
-    //(void)context;
     Xpost_Context *child = ctx->gl->interpreter_cid_get_context(context.mark_.padw);
     if (child->state == C_ZOMB) {
         int i,n;
@@ -252,7 +250,6 @@ int xpost_oper_init_context_ops (Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
-    //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     op = xpost_operator_cons(ctx, "currentcontext", (Xpost_Op_Func)xpost_op_currentcontext, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, "fork", (Xpost_Op_Func)xpost_op_fork, 1, proctype);
@@ -267,7 +264,5 @@ int xpost_oper_init_context_ops (Xpost_Context *ctx,
     INSTALL;
     op = xpost_operator_cons(ctx, "detach", (Xpost_Op_Func)xpost_op_detach, 1, contexttype);
     INSTALL;
-    //xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark);
-    //op = xpost_operator_cons(ctx, "counttomark", (Xpost_Op_Func)xpost_op_counttomark, 1, 0); INSTALL;
     return 0;
 }

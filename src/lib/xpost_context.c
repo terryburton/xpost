@@ -150,8 +150,6 @@ int initglobal(Xpost_Context *ctx,
     ctx->vmmode = GLOBAL;
 
     /* allocate and initialize global vm */
-    //ctx->gl = malloc(sizeof(Xpost_Memory_File));
-    //ctx->gl = &itpdata->gtab[0];
     ctx->gl = xpost_interpreter_alloc_global_memory();
     if (ctx->gl == NULL)
     {
@@ -229,8 +227,6 @@ int initlocal(Xpost_Context *ctx,
     ctx->vmmode = LOCAL;
 
     /* allocate and initialize local vm */
-    //ctx->lo = malloc(sizeof(Xpost_Memory_File));
-    //ctx->lo = &itpdata->ltab[0];
     ctx->lo = xpost_interpreter_alloc_local_memory();
     if (ctx->lo == NULL)
     {
@@ -286,7 +282,6 @@ int initlocal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->lo);
         return 0;
     }
-    //ctx->lo->roots[0] = XPOST_MEMORY_TABLE_SPECIAL_SAVE_STACK;
 
     ctx->os = makestack(ctx->lo);
     ctx->es = makestack(ctx->lo);
@@ -298,9 +293,6 @@ int initlocal(Xpost_Context *ctx,
         xpost_memory_file_exit(ctx->lo);
         return 0;
     }
-    //ctx->lo->roots[1] = DS;
-    //ctx->lo->start = HOLD + 1; /* so HOLD is not collected and not scanned. */
-    //ctx->lo->start = XPOST_MEMORY_TABLE_SPECIAL_CONTEXT_LIST + 1;
     ctx->lo->start = XPOST_MEMORY_COLLECT_START_LOCAL;
 
     return 1;

@@ -748,7 +748,6 @@ f_tmpfile(void)
     memset(buf, 0, l1 + l2 + 1);
     memcpy(buf, tmpdir, l1);
     memcpy(buf + l1, name, l2);
-    //buf[l1 + l2] = '\0';
 
 #ifdef DEBUG_FILE
     printf("fopen\n");
@@ -785,7 +784,6 @@ disk_readch(Xpost_File *file)
         fd_set reads, writes, excepts;
         int ret;
         struct timeval tv_timeout;
-        //fp = xpost_file_get_file_pointer(ctx->lo, f);
         fp = df->file;
         FD_ZERO(&reads);
         FD_ZERO(&writes);
@@ -799,9 +797,6 @@ disk_readch(Xpost_File *file)
         if (ret <= 0 || !FD_ISSET(fileno(fp), &reads))
         {
             /* byte not available, push retry, and request eval() to block this thread */
-            //xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons(ctx, "read", NULL,0,0));
-            //xpost_stack_push(ctx->lo, ctx->os, f);
-            //return ioblock;
             errno=EINTR;
             return EOF;
         }
@@ -5397,7 +5392,6 @@ int lineedit(FILE *in, FILE **out)
         c = fgetc(in);
     }
     fseek(fp, 0, SEEK_SET);
-    //return fp;
     *out = fp;
 
     return 0;
@@ -5515,7 +5509,6 @@ next:
     } while(c != EOF);
 done:
     fseek(fp, 0, SEEK_SET);
-    //return fp;
     *out = fp;
     return 0;
 
@@ -5699,7 +5692,6 @@ int xpost_file_open(Xpost_Memory_File *mem,
     }
 
     f.tag |= XPOST_OBJECT_TAG_DATA_FLAG_LIT;
-    //return f;
     *retval = f;
 
     return 0;

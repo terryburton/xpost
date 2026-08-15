@@ -412,7 +412,6 @@ xpost_module_path_get(int (*fp)(void), char *buf, unsigned int size)
 
     if (sizeof addr != sizeof fp)
     {
-        //XPOST_LOG_ERR("sizeof uintptr_t != sizeof (int (*)())");
 
         return 0;
     }

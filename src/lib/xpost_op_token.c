@@ -301,7 +301,6 @@ int grok(Xpost_Context *ctx,
          Xpost_Object *retval)
 {
     Xpost_Object obj;
-    //printf("grok: %s\n", s);
 
     if (ns == NBUF)
     {
@@ -383,7 +382,6 @@ int grok(Xpost_Context *ctx,
             XPOST_LOG_ERR("real out of range");
             return limitcheck;
         }
-        //return xpost_real_cons(num);
         *retval = xpost_real_cons((real)num);
         return 0;
     }
@@ -480,7 +478,6 @@ int grok(Xpost_Context *ctx,
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
                     return VMerror;
-                //return xpost_object_cvlit(obj);
                 *retval = xpost_object_cvlit(obj);
                 return 0;
             }
@@ -494,7 +491,6 @@ int grok(Xpost_Context *ctx,
                 c = next(ctx, src);
                 if (c == '<')
                 {
-                    //return xpost_object_cvx(xpost_name_cons(ctx, "<<"));
                     *retval = xpost_object_cvx(xpost_name_cons(ctx, "<<"));
                     return 0;
                 }
@@ -634,7 +630,6 @@ int grok(Xpost_Context *ctx,
                 obj = xpost_string_cons(ctx, sp - s, s);
                 if (xpost_object_get_type(obj) == nulltype)
                     return VMerror;
-                //return xpost_object_cvlit(obj);
                 *retval = xpost_object_cvlit(obj);
                 return 0;
             }
@@ -644,7 +639,6 @@ int grok(Xpost_Context *ctx,
                 int c;
                 if ((c = next(ctx, src)) == '>')
                 {
-                    //return xpost_object_cvx(xpost_name_cons(ctx, ">>"));
                     *retval = xpost_object_cvx(xpost_name_cons(ctx, ">>"));
                     return 0;
                 }
@@ -721,7 +715,6 @@ int grok(Xpost_Context *ctx,
             case '/':
             {
                 *s = next(ctx, src);
-                //ns = puff(ctx, s, NBUF, src, next, back);
                 if (ns && *s == '/')
                 {
                     Xpost_Object ret;
@@ -732,8 +725,6 @@ int grok(Xpost_Context *ctx,
                         return limitcheck;
                     }
                     s[ns] = '\0';
-                    //xpost_stack_push(ctx->lo, ctx->os, xpost_object_cvx(xpost_name_cons(ctx, s)));
-                    //xpost_operator_exec(ctx, xpost_operator_cons(ctx, "load", NULL,0,0).mark_.padw);
                     if (DEBUGLOAD)
                         printf("\ntoken: loading immediate name %s\n", s);
                     /* PLRM 3.12.2: the scanner substitutes the value the
@@ -753,7 +744,6 @@ int grok(Xpost_Context *ctx,
                     ret = xpost_stack_pop(ctx->lo, ctx->os);
                     if (DEBUGLOAD)
                         xpost_object_dump(ret);
-                    //return ret;
                     *retval = ret;
                     return 0;
                 }
@@ -778,15 +768,12 @@ int grok(Xpost_Context *ctx,
                     XPOST_LOG_ERR("name exceeds buf");
                     return limitcheck;
                 }
-                //printf("grok:/%s\n", s);
                 s[ns] = '\0';
-                //return xpost_object_cvlit(xpost_name_cons(ctx, s));
                 *retval = xpost_object_cvlit(xpost_name_cons(ctx, s));
                 return 0;
             }
             default:
             {
-                //return xpost_object_cvx(xpost_name_cons(ctx, s));
                 *retval = xpost_object_cvx(xpost_name_cons(ctx, s));
                 return 0;
             }

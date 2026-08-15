@@ -142,7 +142,6 @@ int _create_cont(Xpost_Context *ctx,
     PrivateData private;
     int width, height;
     int ret;
-    //printf("create_cont\n");
 
     /* The page the program asked for, as the extent of the buffer that
        will hold it. Every device here holds a whole page in one block,

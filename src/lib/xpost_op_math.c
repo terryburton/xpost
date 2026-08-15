@@ -40,7 +40,6 @@
 #include <stdlib.h> /* NULL */
 
 //#define PI (4.0 * atan(1.0))
-//double RAD_PER_DEG /* = PI / 180.0 */;
 /* the full-precision conversion: a truncated literal (0.0174533) skewed atan,
    sin and cos off the PLRM examples (1 0 atan gave 89.99996, not 90.0) */
 #define RAD_PER_DEG (M_PI / 180.0)
@@ -422,7 +421,6 @@ int xpost_oper_init_math_ops (Xpost_Context *ctx,
     Xpost_Object n,op;
 
     assert(ctx->gl->base);
-    //RAD_PER_DEG = PI / 180.0;
 
     op = xpost_operator_cons(ctx, "add", (Xpost_Op_Func)Iadd, 2, integertype, integertype);
     INSTALL;
@@ -489,7 +487,6 @@ int xpost_oper_init_math_ops (Xpost_Context *ctx,
 
     /* op = xpost_operator_cons(ctx, "eq", (Xpost_Op_Func)Aeq, 1, 2, anytype, anytype);
        INSTALL;
-    //xpost_dict_dump_memory (ctx->gl, sd); fflush(NULL);
     xpost_dict_put(ctx, sd, xpost_name_cons(ctx, "mark"), mark); */
     return 0;
 }

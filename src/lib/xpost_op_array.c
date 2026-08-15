@@ -270,7 +270,6 @@ int xpost_op_anyn_array_astore (Xpost_Context *ctx,
     {
         t = xpost_stack_pop(ctx->lo, ctx->os);
         //if (xpost_object_get_type(t) == invalidtype)
-            //return stackunderflow;
         ret = xpost_array_put(ctx, A, i, t);
         if (ret)
             return ret;
