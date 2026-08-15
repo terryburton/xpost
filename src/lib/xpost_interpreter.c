@@ -2005,7 +2005,15 @@ static unsigned int _nested_error(Xpost_Context *ctx)
     Xpost_Object sd, ed, en;
     char *nm;
     unsigned int i;
-    unsigned int ret = ioerror;
+    /* What a name this side cannot match comes back as. Some errors are
+       raised only in PostScript -- undefinedresource is one, and a
+       program may signal a name of its own -- so the walk below can fail
+       to find a match on a run where nothing went wrong with the error
+       machinery itself. unknownerror is what this interpreter says when
+       it cannot be more specific (xpost_error.h), and errordict carries
+       a handler for it; ioerror would be a claim about a device that was
+       never touched. */
+    unsigned int ret = unknownerror;
 
     sd = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 0);
     ed = xpost_dict_get(ctx, sd, xpost_name_cons(ctx, "$error"));
