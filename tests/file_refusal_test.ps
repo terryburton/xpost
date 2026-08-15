@@ -1,0 +1,54 @@
+%!
+% What a refused file operation is called. Run by
+% run-file-refusal-test.sh, which hands it a directory it may search and
+% not write: prints SUCCESS iff every assertion holds.
+%
+% PLRM 8.2 says of deletefile and of renamefile alike: "If the device
+% does not allow this operation, an invalidfileaccess error occurs."
+% Three operators work this out from errno, and only `file` consulted
+% the mapping that knows one refusal from another. deletefile and
+% renamefile each carried their own two-way test -- a missing name, or
+% else ioerror -- so a permission refusal was reported as a device
+% fault, and so was running out of descriptors.
+%
+% The directory is the case that separates them: the file inside it is
+% readable, so this is not a missing name and not an unopenable file.
+% It is the operation being refused.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+
+/errof { % proc . errorname
+    /ef.d count 1 sub def
+    stopped
+    { count ef.d sub { pop } repeat $error /errorname get }
+    { count ef.d sub { pop } repeat /noerror } ifelse
+} bind def
+
+% RODIR names the directory; the paths inside it are built with the
+% operators the language has, since concatstrings is not one of them.
+/under { % (leaf) . (dir/leaf)
+    /un.leaf exch def
+    RODIR length 1 add un.leaf length add string
+    dup 0 RODIR putinterval
+    dup RODIR length (/) putinterval
+    dup RODIR length 1 add un.leaf putinterval
+} bind def
+/f (f) under def
+/g (g) under def
+
+% the file is readable: what follows is about the operation, not the file
+{ f (r) file dup closefile } errof /noerror eq
+    (the file inside the read-only directory opens for reading) assert
+
+{ f deletefile } errof /invalidfileaccess eq
+    (deletefile names a refused removal invalidfileaccess) assert
+{ f g renamefile } errof /invalidfileaccess eq
+    (renamefile names a refused rename invalidfileaccess) assert
+
+% and a name that is not there is still told apart from a refusal
+{ (nope) under deletefile } errof /undefinedfilename eq
+    (deletefile still names a missing file undefinedfilename) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

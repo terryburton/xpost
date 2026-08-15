@@ -136,6 +136,7 @@ tests/execform_cache_test.ps \
 tests/exported_symbols.golden \
 tests/file_handle_test.c \
 tests/file_lifetime_test.ps \
+tests/file_refusal_test.ps \
 tests/filenameforall_large_test.ps \
 tests/fill_span_test.ps \
 tests/filter_abandon_test.ps \
@@ -384,6 +385,7 @@ tests/run-strict-ps-test.sh \
 tests/run-svg-test.sh \
 tests/run-vecout-gc-test.sh \
 tests/run-vm-image-test.sh \
+tests/run-file-refusal-test.sh \
 tests/run-vm-threshold-test.sh \
 tests/run-vm-image-load-test.sh \
 tests/run-vendor-bwipp.sh \

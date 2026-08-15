@@ -2227,6 +2227,16 @@ test('op-userparams',
 # enough not to, because the bytes-in-use figure stops rising once a
 # collection has left a free list behind: measured twice in one process the
 # answer would follow the order the passes ran in.
+# What a refused file operation is called. In a wrapper because the case
+# that separates a refusal from a missing name -- a directory the run may
+# search and not write -- cannot be built from PostScript, and because a
+# run that may write anywhere regardless has to skip rather than pass.
+test('file-refusal',
+  find_program('tests/run-file-refusal-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 60)
+
 test('vm-threshold',
   find_program('tests/run-vm-threshold-test.sh'),
   args: [ xpost_exe, meson.current_source_dir() ],

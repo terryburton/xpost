@@ -79,4 +79,27 @@
 
 nm deletefile
 
+% --- what a refused file operation is called -----------------------------
+% PLRM 8.2 says of both deletefile and renamefile: "If the device does
+% not allow this operation, an invalidfileaccess error occurs", and of a
+% name that is not there, undefinedfilename. Three operators decide this
+% from errno and only one of them consulted the mapping that knows the
+% difference; the other two answered ioerror for every failure that was
+% not a missing name, so a permission refusal was reported as a device
+% fault.
+/errof { % proc . errorname
+    /ef.d count 1 sub def
+    stopped
+    { count ef.d sub { pop } repeat $error /errorname get }
+    { count ef.d sub { pop } repeat /noerror } ifelse
+} bind def
+
+{ (/nonexistent-directory-xpost/f) deletefile } errof /undefinedfilename eq
+    (deletefile names a missing file undefinedfilename) assert
+{ (/nonexistent-directory-xpost/a) (/nonexistent-directory-xpost/b) renamefile } errof
+    /undefinedfilename eq
+    (renamefile names a missing file undefinedfilename) assert
+
+% The refusal case -- a directory the run may search but not write -- is
+% held by run-file-refusal-test.sh, which can make one; this file cannot.
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

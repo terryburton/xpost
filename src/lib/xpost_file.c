@@ -484,7 +484,7 @@ xpost_diskfile_remove(const char *path, int *err)
         {
             if (ret != 0)
             {
-                *err = errno == ENOENT ? undefinedfilename : ioerror;
+                *err = xpost_fopen_errno(errno);
                 return -1;
             }
             *err = 0;
@@ -494,7 +494,7 @@ xpost_diskfile_remove(const char *path, int *err)
     }
     if (remove(path) != 0)
     {
-        *err = errno == ENOENT ? undefinedfilename : ioerror;
+        *err = xpost_fopen_errno(errno);
         return -1;
     }
     *err = 0;
@@ -539,7 +539,7 @@ xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err)
         {
             if (ret != 0)
             {
-                *err = errno == ENOENT ? undefinedfilename : ioerror;
+                *err = xpost_fopen_errno(errno);
                 return -1;
             }
             *err = 0;
@@ -549,7 +549,7 @@ xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err)
     }
     if (rename(oldpath, newpath) != 0)
     {
-        *err = errno == ENOENT ? undefinedfilename : ioerror;
+        *err = xpost_fopen_errno(errno);
         return -1;
     }
     *err = 0;
