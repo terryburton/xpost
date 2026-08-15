@@ -1,0 +1,135 @@
+% An operator closes what it opens, on the way out it did not plan for.
+%
+% Most of this interpreter's operators are written in PostScript, and
+% one that needs working room opens a dictionary for it: names it reads
+% and defines while it runs are read and defined in there, and it takes
+% the dictionary off again on the way out. An error part way through is
+% a way out like returning is, and the close is owed on that path too.
+% A body that reaches its end reaches the close; a body an error leaves
+% never does, and the dictionary stays current for whatever runs next --
+% the error handler, and the program that caught the error, both of
+% which then read names they were never meant to read and define names
+% where nobody will look for them. data/graphics.ps carries the bracket
+% that makes the close owed either way, and this holds the operators to
+% going through it.
+%
+% What is driven here is the operators whose operands include something
+% the program wrote: a procedure of its own, or a dictionary it built.
+% Those are the ones that can fail deep inside a body rather than at its
+% door -- a spot function that raises, a paint procedure that raises, an
+% image data source that raises. An operand of the wrong type is refused
+% by the dispatcher before any body runs, so it would measure nothing
+% and is not what is asked here.
+%
+% The measurement is the whole test: the errors are provoked on purpose
+% and nothing is asserted about which one arrives, only that the
+% dictionary stack the operator was handed is the one it gives back.
+%
+% Two ways this could pass while checking nothing, and what holds each:
+%
+%   A trial that provokes no error measures an operator that returned
+%   normally, which tells us nothing about the path this is about. Every
+%   trial has to raise, or the run fails and says which did not.
+%
+%   A trial naming an operator this build does not have would raise
+%   undefined and count as a pass. Every operator named is checked to
+%   exist before anything is driven.
+%
+% Run through `xpost -q --no-sandbox -d null` by run-ps-test.sh: prints
+% SUCCESS iff every trial raised and every one gave the stack back.
+
+/failures 0 def
+/raised 0 def
+/quiet 0 def
+
+/fail { % (why) . -
+    (FAIL: ) print == /failures failures 1 add def
+} bind def
+
+% {trial} (name) . -   run the trial, measure the dictionary stack
+/probe {
+    /nm exch def /tr exch def
+    countdictstack /d0 exch def
+    /tr load stopped
+    {
+        /raised raised 1 add def
+        countdictstack d0 sub dup 0 ne
+            { (  ) print nm print ( left ) print =print
+              ( dictionary(s) current) = /failures failures 1 add def }
+            { pop } ifelse
+    }{
+        /quiet quiet 1 add def
+        (  ) print nm print ( provoked no error, so measured nothing) =
+        /failures failures 1 add def
+    } ifelse
+    clear
+} bind def
+
+% every operator a trial names has to be here to be driven
+[ /shfill /makepattern /setpattern /setscreen /settransfer /setblackgeneration
+  /setundercolorremoval /sethalftone /setcolorspace /setcolor /image /imagemask
+  /colorimage /setpagedevice /kshow /cshow /execform /rectfill ]
+{ dup where { pop pop }{ ( is named by a trial and this build has no such operator) =print
+    fail } ifelse } forall
+
+/boom { 1 0 div } bind def
+
+% a shading whose function cannot be sampled
+{ << /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 1]
+     /Function << /FunctionType 4 /Domain [0 1] /Range [0 1] >> >> shfill }
+    (shfill with an unusable function) probe
+
+% a pattern whose paint procedure raises, painted
+{ << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 1 1]
+     /XStep 1 /YStep 1 /PaintProc //boom >> matrix makepattern setpattern
+  0 0 10 10 rectfill }
+    (makepattern with a raising paint procedure) probe
+
+% a halftone whose spot function raises, and the screen operators beside it
+{ //boom 0 setscreen } (setscreen with a frequency that is a procedure) probe
+{ 60 0 //boom setscreen 0 0 10 10 rectfill }
+    (setscreen with a raising spot function) probe
+{ << /HalftoneType 1 /Frequency 60 /Angle 0 /SpotFunction //boom >> sethalftone
+  0 0 10 10 rectfill }
+    (sethalftone with a raising spot function) probe
+
+% the transfer procedures, which run as ink is laid
+{ //boom settransfer 0 0 10 10 rectfill }
+    (settransfer with a raising procedure) probe
+{ //boom setblackgeneration } (setblackgeneration with a raising procedure) probe
+{ //boom setundercolorremoval } (setundercolorremoval with a raising procedure) probe
+
+% colour spaces carrying a procedure of the program's
+{ [ /Separation /All /DeviceGray //boom ] setcolorspace 0.5 setcolor
+  0 0 10 10 rectfill }
+    (a Separation whose tint transform raises) probe
+{ [ /Indexed /DeviceRGB 1 //boom ] setcolorspace }
+    (an Indexed space whose lookup is a raising procedure) probe
+
+% the image operators, whose data source is the program's procedure
+{ 4 4 8 [1 0 0 1 0 0] //boom image } (image with a raising data source) probe
+{ 4 4 true [1 0 0 1 0 0] //boom imagemask }
+    (imagemask with a raising data source) probe
+{ 4 4 8 [1 0 0 1 0 0] //boom false 3 colorimage }
+    (colorimage with a raising data source) probe
+
+% a page device whose BeginPage raises
+{ << /PageSize [100 100] /BeginPage //boom >> setpagedevice showpage }
+    (setpagedevice with a raising BeginPage) probe
+
+% the show operators that call a procedure between characters
+{ (x) //boom kshow } (kshow with a raising procedure) probe
+{ (x) //boom cshow } (cshow with a raising procedure) probe
+
+% a form whose paint procedure raises: the form machinery opens a
+% dictionary of its own to build in, and the paint runs inside it
+{ << /FormType 1 /BBox [0 0 1 1] /Matrix [1 0 0 1 0 0] /PaintProc //boom >>
+  execform }
+    (execform with a raising paint procedure) probe
+
+raised 0 eq { (no trial raised at all; nothing was measured) fail } if
+failures 0 eq
+    { raised =print ( operators gave the dictionary stack back: SUCCESS) = }
+    { failures =print ( failures\n) print } ifelse
+flush
+quit

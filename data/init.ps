@@ -1312,7 +1312,10 @@ setglobal
     not {
         //.xpostsys /.execformdirect get exec
     }{
-        20 dict begin
+        % the form's paint procedure is the program's, and runs inside
+        % this dictionary: an error out of it is a way out of the body
+        % like returning is, so the dictionary comes off either way
+        20 dict {
         /fd exch def
         fd /.formid known not {
             graphicsdict /.formserial 2 copy known { get }{ pop pop 1 } ifelse
@@ -1468,7 +1471,7 @@ setglobal
         }{
             fd //.xpostsys /.execformdirect get exec
         } ifelse
-        end
+        } //.xpostsys /.indict get exec
     } ifelse
 } //.xpostsys /.defop get exec
 

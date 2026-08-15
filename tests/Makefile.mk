@@ -116,6 +116,7 @@ tests/device_destroy.golden \
 tests/library_statics.golden \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \
+tests/operator_dictstack_test.ps \
 tests/device_private_test.ps \
 tests/device_features_test.ps \
 tests/device_getpix_destroyed_test.ps \

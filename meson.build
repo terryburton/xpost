@@ -3884,6 +3884,19 @@ test('device-dictstack',
   suite: cost_fast,
   timeout: 120)
 
+# The same rule for the operators themselves. Most of them are written in
+# PostScript and open a dictionary to work in; an error part way through
+# is a way out the close is owed on too. Driven through the operands that
+# can fail deep inside a body rather than at its door -- a procedure of
+# the program's, a dictionary it built -- since an operand of the wrong
+# type is refused before any body runs and would measure nothing.
+test('operator-dictstack',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/operator_dictstack_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 120)
+
 # One page, one erase, one ground: every device has to read the same
 # colour where it holds no pixel. Each device is asked what it reads
 # there for three differently cleared pages and the answers are held

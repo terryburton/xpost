@@ -261,6 +261,7 @@ graphics test op-initgraphics
 graphics test op-path
 graphics test op-rect
 graphics test op-showstate
+graphics test operator-dictstack
 graphics test path-*
 graphics test pattern-phase
 graphics test render-differ
