@@ -86,11 +86,9 @@
  */
 typedef enum
 {
-    XPOST_GARBAGE_COLLECTION_PERIOD = 20000,  /**< allocations between collections, under the pacing this interpreter does not use */
     XPOST_GARBAGE_COLLECTION_THRESHOLD = 4000000  /**< bytes allocated between collections */
 } Xpost_Garbage_Params;
 
-#define XPOST_USE_THRESHOLD
 
 /**
  * Maximum size to accept from an allocation relative to the size requested

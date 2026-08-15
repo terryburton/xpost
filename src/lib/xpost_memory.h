@@ -285,11 +285,6 @@ typedef struct Xpost_Memory_File
                                   cannot present itself as a small one. */
     } path_walk;
 
-    /** Allocations still to be made before a collection is asked for,
-        under the other way of pacing one. The interpreter does not read
-        it: XPOST_USE_THRESHOLD selects the byte count below, and this
-        is kept because a bank of the virtual-memory image carries it. */
-    int period;
     /** Bytes still to be allocated before a collection is asked for.
         Counted down by every allocation and reloaded from
         threshold_bytes when it runs out, so what paces an automatic

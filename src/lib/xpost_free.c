@@ -135,7 +135,6 @@ int xpost_free_init(Xpost_Memory_File *mem)
 
     /* make free list available for general memory allocations */
     (void) xpost_memory_register_free_list_alloc_function(mem, xpost_free_alloc);
-    mem->period = XPOST_GARBAGE_COLLECTION_PERIOD;
     mem->threshold_bytes = _xpost_free_gc_threshold();
     mem->threshold = mem->threshold_bytes;
 
@@ -299,12 +298,14 @@ void xpost_free_dump(Xpost_Memory_File *mem)
     }
 }
 
-/* scan the free list for a suitably-sized bit of memory,
+/* Scan the free list for a suitably-sized bit of memory.
 
-   if the allocator falls back to fresh memory XPOST_GARBAGE_COLLECTION_PERIOD times,
-        it triggers a collection.
-    Returns 1 on success, 0 on failure, 2 to request garbage collection and re-call.
- */
+   A collection is asked for when the bytes allocated since the last one
+   reach the count the run named through VMThreshold (PLRM C.3.5), which
+   is what mem->threshold counts down.
+
+   Returns 1 on success, 0 on failure, 2 to request garbage collection
+   and re-call. */
 int xpost_free_alloc(Xpost_Memory_File *mem,
                      unsigned int sz,
                      unsigned int tag,
@@ -312,28 +313,15 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
 {
     unsigned int z;
     unsigned int e;                     /* working pointer */
-    //static int period = XPOST_GARBAGE_COLLECTION_PERIOD;
-    //static int threshold = XPOST_GARBAGE_COLLECTION_THRESHOLD;
     int ret;
 
     if (!mem->interpreter_get_initializing())
     {
-#ifdef XPOST_USE_THRESHOLD
         if ((mem->threshold -= sz) <= 0)
         {
             mem->threshold = mem->threshold_bytes;
             return XPOST_FREE_WANT_COLLECTION;
         }
-#else
-        //(void)threshold;
-        if (--mem->period == 0) /* check garbage-collection control */
-        {
-            mem->period = XPOST_GARBAGE_COLLECTION_PERIOD;
-            return XPOST_FREE_WANT_COLLECTION; /* not found; try again after collecting */
-            /* collect(mem, 1, 0); */
-            /* goto try_again; */
-        }
-#endif
     }
 
     z = xpost_memory_free_lists_adr(mem); /* free pointer */

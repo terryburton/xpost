@@ -132,6 +132,7 @@ typedef enum
     XPOST_VM_IMAGE_STAMP_TYPENAMES,     /**< how many type names follow */
     XPOST_VM_IMAGE_STAMP_HOST_STATE,    /**< the operator functions are written */
     XPOST_VM_IMAGE_STAMP_OPERATORS,     /**< how many operator rows follow */
+    XPOST_VM_IMAGE_STAMP_BANK_FIELDS,   /**< how many values each bank carries */
     XPOST_VM_IMAGE_STAMPS
 } Xpost_Vm_Image_Stamp;
 
@@ -159,7 +160,6 @@ typedef enum
     XPOST_VM_IMAGE_BANK_NEXTENT,
     XPOST_VM_IMAGE_BANK_FREE_SUBSTACK,
     XPOST_VM_IMAGE_BANK_FREE_SCAN,
-    XPOST_VM_IMAGE_BANK_PERIOD,
     XPOST_VM_IMAGE_BANK_THRESHOLD,
     XPOST_VM_IMAGE_BANK_GC_ENT_BUDGET,
     XPOST_VM_IMAGE_BANK_FILE_BIRTH_MAX,
@@ -240,7 +240,7 @@ typedef enum
  * @def XPOST_VM_IMAGE_VERSION
  * @brief The layout below, which a reader must know in full.
  */
-#define XPOST_VM_IMAGE_VERSION 3u
+#define XPOST_VM_IMAGE_VERSION 4u
 
 /**
  * @def XPOST_VM_IMAGE_DIGEST_SEED

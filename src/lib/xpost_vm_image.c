@@ -73,7 +73,8 @@ static const char *const _stamp_names[] =
     "context objects",
     "type names",
     "host state",
-    "operators"
+    "operators",
+    "bank fields"
 };
 
 static const char *const _bank_field_names[] =
@@ -290,6 +291,12 @@ static void _stamps(unsigned int *stamp, int host_state)
     stamp[XPOST_VM_IMAGE_STAMP_TYPENAMES] = _TYPENAME_COUNT;
     stamp[XPOST_VM_IMAGE_STAMP_HOST_STATE] = host_state ? 1u : 0u;
     stamp[XPOST_VM_IMAGE_STAMP_OPERATORS] = 0; /* the caller's to fill in */
+    /* How many values each bank carries. Every other count an image
+       depends on is stamped -- banks, context fields, roots, type
+       names, operators -- and this one was not, so a field added to or
+       taken out of a bank changed the layout with nothing but the
+       version to notice, by hand. */
+    stamp[XPOST_VM_IMAGE_STAMP_BANK_FIELDS] = XPOST_VM_IMAGE_BANK_FIELDS;
 }
 
 /*
@@ -539,7 +546,6 @@ static int _put_bank_fields(_Writer *w, Xpost_Memory_File *mem)
     field[XPOST_VM_IMAGE_BANK_NEXTENT] = mem->table.nextent;
     field[XPOST_VM_IMAGE_BANK_FREE_SUBSTACK] = mem->free_substack;
     field[XPOST_VM_IMAGE_BANK_FREE_SCAN] = mem->free_scan;
-    field[XPOST_VM_IMAGE_BANK_PERIOD] = (unsigned int)mem->period;
     field[XPOST_VM_IMAGE_BANK_THRESHOLD] = (unsigned int)mem->threshold;
     field[XPOST_VM_IMAGE_BANK_GC_ENT_BUDGET] = mem->gc_ent_budget;
     field[XPOST_VM_IMAGE_BANK_FILE_BIRTH_MAX] = mem->file_birth_max;
@@ -1042,7 +1048,6 @@ static void _install_bank(Xpost_Memory_File *mem, const _Bank *b)
     mem->start = b->field[XPOST_VM_IMAGE_BANK_START];
     mem->free_substack = b->field[XPOST_VM_IMAGE_BANK_FREE_SUBSTACK];
     mem->free_scan = b->field[XPOST_VM_IMAGE_BANK_FREE_SCAN];
-    mem->period = (int)b->field[XPOST_VM_IMAGE_BANK_PERIOD];
     mem->threshold = (int)b->field[XPOST_VM_IMAGE_BANK_THRESHOLD];
     mem->gc_ent_budget = b->field[XPOST_VM_IMAGE_BANK_GC_ENT_BUDGET];
     mem->file_birth_max = b->field[XPOST_VM_IMAGE_BANK_FILE_BIRTH_MAX];

@@ -90,13 +90,12 @@ static unsigned int first_occupied_bucket(Xpost_Memory_File *mem)
 }
 
 /* The pacing the allocator does before it looks at the list at all: a
-   run of allocations asks for a collection every so often whatever the
-   list holds. Left where it is, that would answer for the request below
-   without the corrupt list being reached, so it is put out of reach of
-   this one request. */
+   collection is asked for once the bytes allocated since the last one
+   reach the count in force. Left where it is, that would answer for the
+   request below without the corrupt list being reached, so the count is
+   put out of reach of this one request. */
 static void defer_the_pacing(Xpost_Memory_File *mem)
 {
-    mem->period = XPOST_GARBAGE_COLLECTION_PERIOD;
     mem->threshold = XPOST_GARBAGE_COLLECTION_THRESHOLD;
 }
 
