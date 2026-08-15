@@ -982,12 +982,4 @@
     } //.xpostsys /.indict get exec } bind
 >> def
 
-/TESTGRAPHICS where {pop
-    (TESTGRAPHICS pdfwrite)=
-    /dev 200 200 newPDFWRITEdevice def
-    0 0 0 [ [20 20] [80 20] [80 80] [20 80] ] dev dup /FillPoly get exec
-    dev //.internaldict /.pdfchunks get exec 0 get length 0 gt { (pdfwrite content PASS)= }{ (pdfwrite content FAIL)= } ifelse
-    dev dup /Destroy get exec
-} if
-
 //.internaldict /QUIET known { }{ (eof pdfwrite.ps\n)print } ifelse

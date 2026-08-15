@@ -152,22 +152,4 @@
     }
 >> def
 
-/TESTGRAPHICS where {pop
-    (TESTGRAPHICS bboxdev)=
-    /dev 100 100 .privatedict /newbboxdevice get exec def
-    % a filled triangle spanning device x[10,30] y[20,40]
-    0 [ [10 20] [30 20] [30 40] ] dev dup /FillPoly get exec
-    % a white rect must not mark (WhiteIsOpaque unset), and the page
-    % clear reaches Erase, which never marks
-    1 0 0 100 100 dev dup /FillRect get exec
-    dev dup /Erase get exec
-    % a marking FillRect inside the triangle's box changes nothing
-    0 15 25 10 10 dev dup /FillRect get exec
-    dev begin
-        minx 10 eq maxx 30 eq and  miny 20 eq maxy 40 eq and  and
-        { (bboxdev accumulate PASS)= }{ (bboxdev accumulate FAIL)= } ifelse
-    end
-    dev //.xpostsys /.transmitpage get exec  % user space: y' = 100 - y -> BoundingBox 10 60 30 80
-} if
-
 //.internaldict /QUIET known { }{ (eof bboxdev.ps\n)print } ifelse

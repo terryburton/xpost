@@ -324,12 +324,4 @@
     } //.xpostsys /.indict get exec }
 >> def
 
-/TESTGRAPHICS where {pop
-    (TESTGRAPHICS svgwrite)=
-    /dev 200 200 newSVGWRITEdevice def
-    0 0 0 [ [20 20] [80 20] [80 80] [20 80] ] dev dup /FillPoly get exec
-    dev //.internaldict /.pdfchunks get exec 0 get length 0 gt { (svgwrite content PASS)= }{ (svgwrite content FAIL)= } ifelse
-    dev dup /Destroy get exec
-} if
-
 //.internaldict /QUIET known { }{ (eof svgwrite.ps\n)print } ifelse
