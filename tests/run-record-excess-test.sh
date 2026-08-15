@@ -46,6 +46,7 @@ set -u
 xpost=$1
 script=$2
 . "$(dirname "$0")/verdict.sh"
+. "$(dirname "$0")/device-fleet.sh"
 
 xpost=$(path_anchor "$xpost")
 script=$(path_anchor "$script")
@@ -146,7 +147,18 @@ pageh() {
 }
 
 # ---- the boundary, at each colour count a record is made in ----
-for dev in pgm pbm ppm; do
+# The raster classes written in PostScript that take a page a band at a
+# time -- the fleet's banders less the ones that assemble a page in
+# compiled code. Each writes a different arrangement of pixels, which is
+# what makes them worth walking here: the boundary this measures is where
+# a record stops being cheaper than the page, and that turns on what a
+# page costs per pixel.
+RECDEVS=
+for e_dev in $DEVICE_FLEET_BANDS; do
+    case " $DEVICE_FLEET_BUFFER " in *" $e_dev "*) continue ;; esac
+    RECDEVS="$RECDEVS $e_dev"
+done
+for dev in $RECDEVS; do
     lite=$work/$dev-lite
     heav=$work/$dev-heavy
     dirl=$work/$dev-dirlite

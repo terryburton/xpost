@@ -79,10 +79,27 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/.." && pwd)
 . "$here/verdict.sh"
+. "$here/device-fleet.sh"
 
 LIMIT=${RENDER_TIMEOUT:-240}
 JOBS=${RENDER_JOBS:-$(nproc 2>/dev/null || echo 4)}
-DEVICES=${RENDER_DEVICES:-"pgm ppm pbm tiff pdfwrite svgwrite dscwrite"}
+
+# The devices this renders through unless told otherwise: every one whose
+# page arrives at the output path, less those whose bytes are a library's
+# rather than this interpreter's, and less the recorder, whose page is a
+# record of marks rather than a rendering to compare. That is the same
+# reading the byte-identity gate makes, and taking it from the fleet
+# rather than repeating its answer is what keeps the two from drifting --
+# this had kept a copy of the gate's list from before the fleet was named,
+# and a device added since would have been rendered by neither.
+differ_devices=
+for r_dev in $DEVICE_FLEET_ALL; do
+    case " $DEVICE_FLEET_NOFILE $DEVICE_FLEET_OPTIONAL record " in
+        *" $r_dev "*) continue ;;
+    esac
+    differ_devices="$differ_devices $r_dev"
+done
+DEVICES=${RENDER_DEVICES:-$differ_devices}
 
 if command -v sha256sum >/dev/null 2>&1; then
     sum() { sha256sum "$1" | cut -d' ' -f1; }
