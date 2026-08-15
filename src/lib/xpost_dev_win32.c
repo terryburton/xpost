@@ -174,27 +174,8 @@ int _create(Xpost_Context *ctx,
             Xpost_Object height,
             Xpost_Object classdic)
 {
-    int ret;
-
-    xpost_stack_push(ctx->lo, ctx->os, width);
-    xpost_stack_push(ctx->lo, ctx->os, height);
-    xpost_stack_push(ctx->lo, ctx->os, classdic);
-    ret = xpost_dict_put(ctx, classdic, namewidth, width);
-    if (ret)
-        return ret;
-    ret = xpost_dict_put(ctx, classdic, nameheight, height);
-    if (ret)
-        return ret;
-
-     /* call device class's ps-level .copydict procedure,
-        then call _create_cont, by continuation. */
-    if (!xpost_stack_push(ctx->lo, ctx->es, xpost_operator_cons_opcode(_create_cont_opcode)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_dict_get(ctx, classdic, namedotcopydict)))
-        return execstackoverflow;
-
-    return 0;
+    return xpost_dev_create_begin(ctx, width, height, classdic,
+                                  _create_cont_opcode);
 }
 
 /* initialize the C-level data

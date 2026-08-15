@@ -75,6 +75,8 @@
 static Xpost_Context *localctx;
 
 static Xpost_Object namewidth;
+static Xpost_Object nameheight;
+static Xpost_Object namedotcopydict;
 static Xpost_Object namenativecolorspace;
 static Xpost_Object nameDeviceGray;
 static Xpost_Object nameDeviceRGB;
@@ -2410,6 +2412,41 @@ double xpost_dev_dict_number(Xpost_Context *ctx, Xpost_Object dict,
     return dflt;
 }
 
+int xpost_dev_create_begin(Xpost_Context *ctx,
+                           Xpost_Object width,
+                           Xpost_Object height,
+                           Xpost_Object classdic,
+                           unsigned int cont_opcode)
+{
+    int ret;
+
+    /* the three the continuation will be called with: it is an operator
+       like this one and takes its operands the same way, so they go back
+       where they came from rather than being carried in C */
+    xpost_stack_push(ctx->lo, ctx->os, width);
+    xpost_stack_push(ctx->lo, ctx->os, height);
+    xpost_stack_push(ctx->lo, ctx->os, classdic);
+
+    ret = xpost_dict_put(ctx, classdic, namewidth, width);
+    if (ret)
+        return ret;
+    ret = xpost_dict_put(ctx, classdic, nameheight, height);
+    if (ret)
+        return ret;
+
+    /* the class procedure first, then the device's continuation: pushed
+       in the reverse of the order they run in, the execution stack
+       being read from the top */
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_operator_cons_opcode(cont_opcode)))
+        return execstackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->es,
+                          xpost_dict_get(ctx, classdic, namedotcopydict)))
+        return execstackoverflow;
+
+    return 0;
+}
+
 int xpost_dev_blit_row(Xpost_Context *ctx,
                        Xpost_Object dict)
 {
@@ -3832,6 +3869,10 @@ int xpost_oper_init_generic_device_ops(Xpost_Context *ctx,
     if (xpost_object_get_type((namedotbandrows = xpost_name_cons(ctx, ".bandrows"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namewidth = xpost_name_cons(ctx, "width"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((nameheight = xpost_name_cons(ctx, "height"))) == invalidtype)
+        return VMerror;
+    if (xpost_object_get_type((namedotcopydict = xpost_name_cons(ctx, ".copydict"))) == invalidtype)
         return VMerror;
     if (xpost_object_get_type((namenativecolorspace = xpost_name_cons(ctx, "nativecolorspace"))) == invalidtype)
         return VMerror;

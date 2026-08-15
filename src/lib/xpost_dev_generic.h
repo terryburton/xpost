@@ -166,6 +166,34 @@ void xpost_device_ground_channels(Xpost_Context *ctx, Xpost_Object devdic,
  * second set of rounding decisions, and a replay is held to the bytes
  * the direct painting produced.
  */
+/**
+ * @brief Begin a device's Create: the part every device does alike.
+ *
+ * A Create is asked for a page and a class, and answers an instance --
+ * but the instance is made by a procedure in the class, so the C half
+ * cannot finish the job in one call. It records the page on the class,
+ * then arranges for the class procedure to run and for the device's own
+ * continuation to run after it, handing the three operands on through
+ * the operand stack because that is how the continuation is reached.
+ *
+ * Every device does exactly that, differing only in which continuation
+ * is theirs, so it is written here once. What a device does before this
+ * -- refusing a page it could not hold, say -- is its own and stays with
+ * it.
+ *
+ * @param[in] ctx The context.
+ * @param[in] width The page width the program asked for.
+ * @param[in] height The page height.
+ * @param[in] classdic The device class.
+ * @param[in] cont_opcode The device's own continuation.
+ * @return 0, or the error the class refused the page with.
+ */
+int xpost_dev_create_begin(Xpost_Context *ctx,
+                           Xpost_Object width,
+                           Xpost_Object height,
+                           Xpost_Object classdic,
+                           unsigned int cont_opcode);
+
 int xpost_dev_blit_row(Xpost_Context *ctx, Xpost_Object dict);
 
 /**

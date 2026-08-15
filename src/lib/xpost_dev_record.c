@@ -3216,8 +3216,6 @@ static int _create(Xpost_Context *ctx,
                    Xpost_Object height,
                    Xpost_Object classdic)
 {
-    int ret;
-
     if (!_extent_ok(width, height))
     {
         XPOST_LOG_ERR("%d a page of %ldx%ld is larger than the rows a"
@@ -3226,23 +3224,8 @@ static int _create(Xpost_Context *ctx,
         return limitcheck;
     }
 
-    xpost_stack_push(ctx->lo, ctx->os, width);
-    xpost_stack_push(ctx->lo, ctx->os, height);
-    xpost_stack_push(ctx->lo, ctx->os, classdic);
-    ret = xpost_dict_put(ctx, classdic, namewidth, width);
-    if (ret)
-        return ret;
-    ret = xpost_dict_put(ctx, classdic, nameheight, height);
-    if (ret)
-        return ret;
-
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_operator_cons_opcode(_create_cont_opcode)))
-        return execstackoverflow;
-    if (!xpost_stack_push(ctx->lo, ctx->es,
-                          xpost_dict_get(ctx, classdic, namedotcopydict)))
-        return execstackoverflow;
-    return 0;
+    return xpost_dev_create_begin(ctx, width, height, classdic,
+                                  _create_cont_opcode);
 }
 
 /* make the record and name it from the instance */
