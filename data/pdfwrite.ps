@@ -55,11 +55,7 @@
     { {/height /width}{exch def}forall
     % the page dimensions are points and need not be integral; adopt the
     % exact values when the page device machinery published them
-    graphicsdict /.exactpagedims 2 copy known {
-        get
-        dup 0 get /width exch def
-        1 get /height exch def
-    }{ pop pop } ifelse
+    //.xpostsys /.adoptexactpage get exec
     currentdict } //.xpostsys /.indict get exec
     dup /.copydict get exec
     {
@@ -348,13 +344,10 @@
         } ifelse
     } bind
 
-    % concatenate two strings into a new one (registration-time only)
-    /.strcat { % a b  .  ab
-        /.cb exch def /.ca exch def
-        .ca length .cb length add string
-        dup 0 .ca putinterval
-        dup .ca length .cb putinterval
-    } bind
+    % concatenate two strings into a new one: the interpreter's own,
+    % under the name this file calls it by. Writing a second one here
+    % cost two names in whatever dictionary was current at each call.
+    /.strcat //.xpostsys /.strcat get
 
     % escape a separation name into PDF name syntax: regular characters
     % pass, delimiters and characters outside 33..126 become #xx

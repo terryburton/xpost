@@ -291,6 +291,28 @@ currentglobal true setglobal
 } bind put
 setglobal
 
+% -  .adoptexactpage  -
+% Take the page as the page device machinery measured it, where it has
+% been measured. A page is points and need not come to whole numbers of
+% them; a device whose marks carry a fraction says so by asking for the
+% exact extent here, and one whose page is rows of pixels has no use for
+% it and does not. Where nothing published an extent -- a device made
+% before any page device was installed -- the whole numbers the device
+% was created with are what it keeps.
+%
+% /width and /height are written into the dictionary the caller is in,
+% which is the device being built: a procedure does not stand a
+% dictionary of its own between the two.
+currentglobal true setglobal
+.xpostsys /.adoptexactpage {
+    graphicsdict /.exactpagedims 2 copy known {
+        get
+        dup 0 get /width exch def
+        1 get /height exch def
+    }{ pop pop } ifelse
+} bind put
+setglobal
+
 % .loadmodule -- pull in one of the interpreter's own .ps files by name,
 % factoring the "(/x.ps) //.xpostsys /.loadmodule get exec" idiom that appears throughout
 % the machinery. In .xpostsys like every other helper, and global with it.

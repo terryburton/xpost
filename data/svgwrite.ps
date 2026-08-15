@@ -32,11 +32,7 @@
     { {/height /width}{exch def}forall
     % the page dimensions are points and need not be integral; adopt the
     % exact values when the page device machinery published them
-    graphicsdict /.exactpagedims 2 copy known {
-        get
-        dup 0 get /width exch def
-        1 get /height exch def
-    }{ pop pop } ifelse
+    //.xpostsys /.adoptexactpage get exec
     currentdict } //.xpostsys /.indict get exec
     dup /.copydict get exec
     {
