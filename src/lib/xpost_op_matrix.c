@@ -66,14 +66,10 @@
 static
 Xpost_Object _get_ctm(Xpost_Context *ctx)
 {
-    Xpost_Object userdict;
     Xpost_Object gd;
     Xpost_Object gs;
     Xpost_Object psctm;
 
-    userdict = xpost_stack_bottomup_fetch(ctx->lo, ctx->ds, 2);
-    if (xpost_object_get_type(userdict) != dicttype)
-        return invalid;
     gd = xpost_dict_get(ctx, ctx->privatedict, xpost_name_cons(ctx, ".graphicsdict"));
     gs = xpost_dict_get(ctx, gd, xpost_name_cons(ctx, "currgstate"));
     psctm = xpost_dict_get(ctx, gs, xpost_name_cons(ctx, "currmatrix"));
