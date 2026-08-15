@@ -1098,19 +1098,12 @@ int _destroy(Xpost_Context *ctx,
         if (!_write_rows(&private, last))
             (void)_stream_finish(&private);
     }
-    _stream_drop(&private);
-    if (private.file)
-    {
-        xpost_device_page_close(private.file);
-        private.file = NULL;
-    }
-
-    /* the raster is the rest of what the instance holds. A raster handed
-       to the client is the client's to give back */
-    if (private.bufowned)
-        free(private.buf);
-    private.buf = NULL;
-    private.bufowned = 0;
+    /* what is left is the release the collector runs: the stream, the
+       file and the raster. Written once, above, so that a change to what
+       this device owns cannot reach one path and not the other. The
+       finish above is the difference between the two and stays here --
+       the collector cannot write rows, and says so. */
+    _reclaim(&private);
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;

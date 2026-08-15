@@ -20,6 +20,16 @@
 #   pointer it was given counts. A member handed over and not cleared is a
 #   handle the next Destroy follows into freed memory.
 #
+#   A Destroy may hand the whole struct to a function to release instead of
+#   releasing member by member, which is what a device does whose Destroy
+#   and whose collector-side release are one body. That function is then
+#   the one holding the handles, so it is read under the same rule -- the
+#   last call other than the accessor pair that takes the struct by
+#   address, the release being the last thing a Destroy does with its
+#   struct before storing it back. Reading it is what keeps the two paths
+#   from drifting: a member the release frees and does not clear fails
+#   here whichever path calls it.
+#
 #   The struct is stored back through the accessor it was loaded with. A
 #   Destroy that clears its local copy and does not store it releases the
 #   memory and leaves the instance holding the pointers it released.
@@ -304,8 +314,10 @@ npop=$(grep -c . "$work/population" || true)
 # that a call spanning lines reads as one, and walked once for the calls it
 # makes, the members of the private struct it names, and where each is
 # handed over or cleared.
-analyse() {         # <file> <function>
-    awk -F'\t' -v F="$1" -v FN="$2" '
+analyse() {         # <file> <function> [ptr]
+    # ptr: the function reaches the struct through a pointer parameter, as
+    # a release called from the collector does, rather than holding a copy
+    awk -F'\t' -v F="$1" -v FN="$2" -v PTR="${3:-}" '
     BEGIN {
         KW["if"] = 1; KW["for"] = 1; KW["while"] = 1; KW["switch"] = 1
         KW["return"] = 1; KW["sizeof"] = 1; KW["do"] = 1; KW["else"] = 1
@@ -370,10 +382,30 @@ analyse() {         # <file> <function>
             p = q - 1
         }
 
+        # every identifier a call other than the accessor pair is handed
+        # the address of: a struct handed over whole is reached through
+        # the callee, so it names the private struct as surely as a member
+        # reference does
+        for (c = 1; c <= nc; c++) {
+            if (CN[c] ~ /_get$/ || CN[c] ~ /_put$/) continue
+            args = substr(S, CS[c], CE[c] - CS[c] + 1) " "
+            for (p = 1; p <= length(args) - 1; p++) {
+                if (substr(args, p, 1) != "&") continue
+                q = p + 1
+                while (substr(args, q, 1) ~ /[ \t]/) q++
+                r = q
+                while (substr(args, r, 1) ~ /[A-Za-z0-9_]/) r++
+                # the whole struct, not a member of it: the address of a
+                # member says nothing about who holds the rest
+                if (r > q && substr(args, r, 1) !~ /[.>-]/)
+                    addrof[substr(args, q, r - q)] = 1
+            }
+        }
+
         # the private struct: the last address-of argument of the accessor
         # the body loads it with, chosen as the one that names a struct the
-        # body then reaches members of
-        for (c = 1; c <= nc; c++) {
+        # body then reaches members of, or hands over whole
+        for (c = 1; c <= nc && !PTR; c++) {
             if (CN[c] !~ /_get$/) continue
             args = substr(S, CS[c], CE[c] - CS[c] + 1) " "
             cand = ""
@@ -385,9 +417,36 @@ analyse() {         # <file> <function>
                 while (substr(args, r, 1) ~ /[A-Za-z0-9_]/) r++
                 if (r > q) cand = substr(args, q, r - q)
             }
-            if (cand != "" && (cand in base)) { V = cand; break }
+            if (cand != "" && ((cand in base) || (cand in addrof))) { V = cand; break }
+        }
+
+        # under ptr the struct is not loaded at all: it is the local the
+        # pointer parameter is assigned to, which is the one declaration
+        # of its kind in a release body
+        for (p = bs; p <= be - 1 && PTR && V == ""; p++) {
+            if (substr(S, p, 1) != "=") continue
+            if (substr(S, p + 1, 1) == "=") continue
+            if (substr(S, p - 1, 1) ~ /[!<>=+*\/%&|^-]/) continue
+            q = p - 1
+            while (q >= bs && substr(S, q, 1) ~ /[ \t]/) q--
+            e = q
+            while (q >= bs && substr(S, q, 1) ~ /[A-Za-z0-9_]/) q--
+            if (e == q) continue
+            r = q
+            while (r >= bs && substr(S, r, 1) ~ /[ \t]/) r--
+            if (substr(S, r, 1) != "*") continue
+            V = substr(S, q + 1, e - q)
         }
         if (V == "") { print "NOSTRUCT"; exit }
+
+        # the release the struct is handed to whole, if there is one
+        for (c = 1; c <= nc && !PTR; c++) {
+            if (CN[c] ~ /_get$/ || CN[c] ~ /_put$/) continue
+            args = substr(S, CS[c], CE[c] - CS[c] + 1) " "
+            if (args ~ ("&[ \t]*" V "[^A-Za-z0-9_.>-]")) {
+                delegate = CN[c]; delegpos = CP[c]
+            }
+        }
 
         # every member of it: handed to a call by value, handed by address,
         # or cleared
@@ -398,10 +457,13 @@ analyse() {         # <file> <function>
             q = p
             while (q <= be && substr(S, q, 1) ~ /[A-Za-z0-9_]/) q++
             id = substr(S, p, q - p)
-            if (id != V || substr(S, q, 1) != ".") { p = q - 1; continue }
-            r = q + 1
+            sepl = PTR ? 2 : 1
+            if (id != V || substr(S, q, sepl) != (PTR ? "->" : ".")) {
+                p = q - 1; continue
+            }
+            r = q + sepl
             while (r <= be && substr(S, r, 1) ~ /[A-Za-z0-9_]/) r++
-            mem = substr(S, q + 1, r - q - 1)
+            mem = substr(S, q + sepl, r - q - sepl)
             if (mem == "") { p = q - 1; continue }
 
             a = p - 1
@@ -426,8 +488,12 @@ analyse() {         # <file> <function>
             p = r - 1
         }
 
+        # a release handed the struct clears through it, so the store must
+        # come after that call just as it must come after an assignment
+        if (delegpos > lastclear) lastclear = delegpos
+
         # the store back
-        for (c = 1; c <= nc; c++) {
+        for (c = 1; c <= nc && !PTR; c++) {
             if (CN[c] !~ /_put$/) continue
             args = substr(S, CS[c], CE[c] - CS[c] + 1) " "
             if (args ~ ("&[ \t]*" V "[^A-Za-z0-9_]")) { putpos = CP[c]; putline = LN[CP[c]]; break }
@@ -441,10 +507,13 @@ analyse() {         # <file> <function>
         }
         ncl = 0
         for (m in cleared) ncl++
-        if (nh == 0 && ncl == 0) { print "INERT"; exit }
-        if (putpos == 0) { print "NOSTORE\t" V }
-        else if (lastclear > putpos) print "LATESTORE\t" V "\t" putline
-        print "SEEN\t" V "\t" nh "\t" ncl
+        if (nh == 0 && ncl == 0 && delegate == "") { print "INERT"; exit }
+        if (delegate != "") print "DELEGATE\t" V "\t" delegate
+        if (!PTR) {
+            if (putpos == 0) { print "NOSTORE\t" V }
+            else if (lastclear > putpos) print "LATESTORE\t" V "\t" putline
+        }
+        print (PTR ? "RSEEN\t" : "SEEN\t") V "\t" nh "\t" ncl
     }' "$work/code"
 }
 
@@ -459,6 +528,20 @@ while read -r route cfile cfn; do
     fi
     printf '%s\n' "$out" \
       | awk -v f="$cfile" -v n="$cfn" '{ print f "\t" n "\t" $0 }' >> "$work/verdicts"
+
+    # the release it hands its struct to, held to the same rule. Read from
+    # the same file: a Destroy hands its struct to something its own device
+    # defines, and a name this cannot find is a reading this cannot make.
+    deleg=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "DELEGATE" { print $3 }')
+    [ -n "$deleg" ] || continue
+    rout=$(analyse "$cfile" "$deleg" 1)
+    if [ -z "$rout" ]; then
+        echo "FAILURES: $cfn() in $cfile releases through $deleg(), which this"
+        echo "      check cannot read; the handles it clears cannot be held"
+        exit 1
+    fi
+    printf '%s\n' "$rout" \
+      | awk -v f="$cfile" -v n="$deleg" '{ print f "\t" n "\t" $0 }' >> "$work/verdicts"
 done < "$work/population"
 
 for kind in NOBODY NOSTRUCT INERT; do

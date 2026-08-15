@@ -3562,16 +3562,11 @@ static int _destroy(Xpost_Context *ctx,
     if (!held)
         return undefined;
 
-    xpost_record_free(private.rec);
-    private.rec = NULL;
-    /* and the levels a replay of it descended through, which are the
-       device's for as long as it has a record to walk */
-    if (private.walk)
-    {
-        free(private.walk->poly);
-        free(private.walk);
-        private.walk = NULL;
-    }
+    /* the record and the levels a replay of it descended through: the
+       same release the collector runs, written once above. Retiring the
+       device this record paints through is the difference, and it stays
+       here -- it runs an operator, which the collector cannot do. */
+    _reclaim(&private);
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;

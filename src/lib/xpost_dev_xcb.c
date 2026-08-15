@@ -754,14 +754,17 @@ int _destroy(Xpost_Context *ctx,
 
     if (private.c)
     {
+        /* the handler names a device by the connection it reads, and
+           this device is giving that connection up */
         xpost_context_install_event_handler(ctx, null, null);
 
-        xcb_disconnect(private.c);
-        private.c = NULL;
+        /* the same release the collector runs, so what this device owns
+           is stated once */
+        _reclaim(&private);
         /* store the cleared connection back so a repeated destroy is a
            no-op instead of disconnecting freed state */
         if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-        return VMerror;
+            return VMerror;
     }
 
     return 0;

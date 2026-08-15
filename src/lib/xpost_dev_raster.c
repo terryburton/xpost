@@ -769,10 +769,9 @@ int _destroy(Xpost_Context *ctx,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    if (private.buf && private.bufowned)
-        free(private.buf);
-    private.buf = NULL;
-    private.bufowned = 0;
+    /* the same release the collector runs, so there is one statement of
+       what this device owns rather than two that must be kept in step */
+    _reclaim(&private);
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;

@@ -936,7 +936,6 @@ int _destroy(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
-    Render_Data *rd;
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -948,40 +947,13 @@ int _destroy(Xpost_Context *ctx,
     if (!private.window)
         return 0;
 
+    /* the handler names a device by the window it reads, and this
+       device is giving that window up */
     xpost_context_install_event_handler(ctx, null, null);
 
-    rd = (Render_Data *)GetWindowLongPtr(private.window, GWLP_USERDATA);
-    if (rd)
-    {
-        /* the window stops naming the render data before the render
-           data goes, so the window procedure cannot reach it while the
-           window is being torn down */
-        SetWindowLongPtr(private.window, GWLP_USERDATA, (LONG_PTR)0);
-
-        switch (rd->backend_type)
-        {
-            case RENDER_BACKEND_GDI:
-                /* the framebuffer belongs to the bitmap the device
-                   created, and goes with it */
-                DeleteObject(rd->backend.gdi.bitmap);
-                free(rd->backend.gdi.bitmap_info);
-                break;
-            case RENDER_BACKEND_GL:
-                wglMakeCurrent(NULL, NULL);
-                wglDeleteContext(rd->backend.gl.glrc);
-                break;
-        }
-
-        ReleaseDC(private.window, rd->dc);
-        free(rd);
-    }
-
-    DestroyWindow(private.window);
-    private.window = NULL;
-
-    if (!UnregisterClass(TEXT("XPOST_DEV_WIN32"), private.instance))
-        XPOST_LOG_INFO("UnregisterClass() failed");
-    private.instance = NULL;
+    /* the same release the collector runs, so what this device owns is
+       stated once */
+    _reclaim(&private);
 
     /* store the cleared handles back, so the second and third Destroy
        the interpreter makes find nothing left to release */
