@@ -178,6 +178,7 @@ device test stencil-mask-size
 device test svg-*
 device test vecbase
 device test vecout-gc
+device test window-device
 device width witness
 
 # ---- font: glyphs, the cache they live in, and the files they come from

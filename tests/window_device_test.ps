@@ -1,0 +1,39 @@
+% A window device is driven, and a page device replaced under it.
+%
+% The window devices are the one part of the device fleet the suite could
+% not run: they need a display, and a test that opened a window would put
+% it on the display of whoever ran the suite. This one goes through
+% xvfb-run, which conjures a display of its own, so the fleet is reachable
+% here at all -- which is what the deferred window-device work needs
+% before any of it can be measured rather than reasoned about.
+%
+% What is driven is the sequence a window device is retired by: paint on
+% one, replace the page device so a second is made and the first retired,
+% and paint on the second. Nothing about the outcome is subtle; the point
+% is that it runs, on a real window, with a real display behind it.
+%
+% What this does NOT check: which device the context names for events.
+% That pair is the context's own and no operator reads it, so a window
+% retiring and clearing the wrong device's handler would not fail here.
+% It is checked by reading the source and by the ordering in
+% data/init.ps; making it observable wants an accessor this does not add.
+%
+% Prints SUCCESS iff both pages painted and the replacement completed.
+
+/failures 0 def
+% bool (name) . -    the name is only wanted when the bool is false
+/check {
+    exch { pop }{ (FAIL: ) print == /failures failures 1 add def } ifelse
+} bind def
+
+{ 0 0 40 40 rectfill } stopped not (a window device takes a fill) check
+{ << /PageSize [90 90] >> setpagedevice } stopped not
+    (the page device is replaced under a window device) check
+{ 0 0 30 30 rectfill } stopped not
+    (the device that replaced it takes a fill) check
+{ showpage } stopped not (the page is shown) check
+
+failures 0 eq { (a window device was driven and replaced: SUCCESS) = }
+             { failures =print ( failures\n) print } ifelse
+flush
+quit

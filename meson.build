@@ -386,6 +386,7 @@ if zlib_dep.found()
 endif
 
 xcb_dep = dependency('xcb-image xcb-icccm xcb xcb-aux', required: false)
+xvfb_run = find_program('xvfb-run', required: false)
 if xcb_dep.found()
   config_h.set('HAVE_XCB', 1)
 endif
@@ -2040,6 +2041,29 @@ memory_grow_exe = executable('memory_grow_test',
 test('memory-grow', memory_grow_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
+# The context names one device as the one window events reach, and a page
+# device replaced makes the new device before it retires the old: an
+# outgoing window that cleared the pair whatever it held would leave the
+# incoming one hearing nothing. Not observable from PostScript -- the pair
+# is the context's -- so it is driven from a program and read from C.
+# Makes a window, so it runs under xvfb-run and never lands on the display
+# of whoever is running the suite.
+# The window devices need a display, and a test that opened a window would
+# put it on the display of whoever ran the suite. This one goes through
+# xvfb-run, which conjures one of its own, so the window fleet is reachable
+# by a test at all -- what the deferred window-device work needs before any
+# of it can be measured rather than reasoned about. It drives a window
+# device and replaces the page device under it; it does not check which
+# device the context names for events, which no operator reads.
+if xcb_dep.found() and xvfb_run.found()
+  test('window-device', xvfb_run,
+    args: [ '-a', xpost_exe, '-q', '--no-sandbox', '-d', 'xcb',
+            '-g', '100x100+0+0', files('tests/window_device_test.ps') ],
+    suite: cost_fast,
+    env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+    timeout: 120)
+endif
 
 # The glyph cache is keyed by the serial a font dictionary carries, and
 # that dictionary is the program's to write: a serial that is not an
