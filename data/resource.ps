@@ -254,13 +254,21 @@ setglobal
 
 % key category  undefineresource  -
 /undefineresource [ /anytype /nametype ] {
+    % Each arm reaches the same shape before it acts: the key and the
+    % category, in that order, so that the instance dictionary the
+    % category names is what the key is removed from. The three arms
+    % arrive here holding different amounts, which is the whole of what
+    % the pops below are for.
     2 copy .gscratch /.lresources get exch 2 copy known {
         get 1 index known {
-            //.xpostsys /.linstof get exec exch undef pop
+            % key category key -- a local instance of this key
+            pop //.xpostsys /.linstof get exec exch undef
         }{
-            pop pop //.xpostsys /.instof get exec exch undef
+            % key category key -- the category is local, this key is not
+            pop //.xpostsys /.instof get exec exch undef
         } ifelse
     }{
+        % key category key .lresources category -- no local category
         pop pop pop //.xpostsys /.instof get exec exch undef
     } ifelse
 } //.xpostsys /.defop get exec

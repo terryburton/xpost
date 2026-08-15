@@ -487,6 +487,37 @@ count /st.d0 exch def
 (a missing category reports undefinedresource) assert
 setglobal
 
+% undefineresource has three arms, chosen by whether the category and
+% then the key are local. Above exercises only the arm reached when
+% neither is -- the block runs under `true setglobal`, so a local
+% category never exists. The other two ran with the wrong operand: one
+% removed the category name from a dictionary it had just created and
+% reported success, and the other raised undefinedresource naming
+% findresource. Both left the instance in place.
+currentglobal false setglobal
+/st.loc (v) /Generic defineresource pop
+count /st.d1 exch def
+{ /st.loc /Generic undefineresource } stopped
+{ count st.d1 sub { pop } repeat false }
+{ count st.d1 sub { pop } repeat true } ifelse
+    (undefineresource removes a local instance without raising) assert
+/st.loc /Generic resourcestatus { pop pop false }{ true } ifelse
+    (and the local instance is gone) assert
+
+% the other arm: a global instance while some local instance has put the
+% category in the local table
+/st.keep (v) /Generic defineresource pop
+currentglobal true setglobal /st.glob (g) /Generic defineresource pop setglobal
+count /st.d2 exch def
+{ /st.glob /Generic undefineresource } stopped
+{ count st.d2 sub { pop } repeat false }
+{ count st.d2 sub { pop } repeat true } ifelse
+    (undefineresource removes a global instance beside a local one) assert
+/st.glob /Generic resourcestatus { pop pop false }{ true } ifelse
+    (and the global instance is gone) assert
+/st.keep /Generic undefineresource
+setglobal
+
 % --- instances defined in local VM shadow global ones and go away
 %     with restore ---
 currentglobal false setglobal
