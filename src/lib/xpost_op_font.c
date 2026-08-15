@@ -944,6 +944,34 @@ Xpost_Object _face_get(Xpost_Context *ctx, const char *facename,
     return xpost_dict_get(ctx, ent, _face_key(ctx, what));
 }
 
+/* Faces held against the names they were asked for. A face maps the
+   font file and holds library state, so one per findfont grows the
+   process by a mapping a lookup; the entry is what keeps that from
+   being repeated, and holds the only reference to the face. */
+static struct { char *name; void *face; char *file; int csreal; }
+    face_cache[32];
+static int face_cache_n = 0;
+
+/* Give the held faces back. The library the faces belong to goes down
+   with the module (xpost_font_quit), and a cache still naming them
+   afterwards would hand a later run of the same process a face that had
+   been freed -- which is what an embedder doing a second init and asking
+   for a font it had asked for before would get. Called from the same
+   teardown, so the cache stops naming a face before the face goes. */
+void xpost_op_font_quit(void)
+{
+    int i;
+
+    for (i = 0; i < face_cache_n; i++)
+    {
+        xpost_font_face_free(face_cache[i].face);
+        free(face_cache[i].name);
+        free(face_cache[i].file);
+    }
+    memset(face_cache, 0, sizeof(face_cache));
+    face_cache_n = 0;
+}
+
 static
 int _findfont(Xpost_Context *ctx,
               Xpost_Object fontname)
@@ -994,9 +1022,6 @@ int _findfont(Xpost_Context *ctx,
        would. The entry, where there is one, is what keeps that work
        from being repeated -- not what decides its outcome. */
     {
-        static struct { char *name; void *face; char *file; int csreal; }
-            face_cache[32];
-        static int face_cache_n = 0;
         Xpost_Object cs_cached;
         int fi, slot = -1;
         for (fi = 0; fi < face_cache_n; fi++)

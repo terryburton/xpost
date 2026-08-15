@@ -2011,6 +2011,21 @@ test('font-face-error', font_face_error_exe,
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The faces findfont holds against the names asked for belong to the font
+# library, which goes down with the module: a cache outliving the teardown
+# hands the next library cycle a face that has been freed. Two whole
+# cycles, each asking for the same font.
+font_face_cycle_exe = executable('font_face_cycle_test',
+  'tests/font_face_cycle_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: [ libxpost_dep, m_dep ],
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('font-face-cycle', font_face_cycle_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # The glyph cache is keyed by the serial a font dictionary carries, and
 # that dictionary is the program's to write: a serial that is not an
 # integer, or one whose pair with the character code leaves the integer

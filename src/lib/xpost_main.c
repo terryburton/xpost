@@ -53,6 +53,7 @@
 #include "xpost_object.h"
 #include "xpost_memory.h"
 #include "xpost_font.h"
+#include "xpost_op_font.h" /* the faces held against the names asked for */
 #include "xpost_main.h"
 #include "xpost_private.h"
 
@@ -129,6 +130,9 @@ xpost_quit(void)
     if (--_xpost_init_count != 0)
         return _xpost_init_count;
 
+    /* the faces the findfont cache holds are given back before the
+       library that owns them goes */
+    xpost_op_font_quit();
     xpost_font_quit();
     xpost_log_quit();
     free(_xpost_data_dir);
