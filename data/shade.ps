@@ -644,7 +644,27 @@ setglobal
 % paint the shading over the current clip region; the current path
 % survives untouched
 .xpostsys begin
+% Which procedure paints each shading type (PLRM 4.9.3). Written as a
+% table rather than a chain of tests: the chain asked five questions of
+% one number and each arm had to leave the stack as the next one found
+% it, which two of them did not.
+/.shadingtypes <<
+    1 //.fnsh      2 //.axialsh   3 //.radialsh
+    4 //.meshsh    5 //.meshsh
+    6 //.patchsh   7 //.patchsh
+>> def
+
 systemdict /shfill [ /dicttype ] {
+    % The type is settled before the gsave, because an error unwinds the
+    % operand, dictionary and execution stacks and not the graphics
+    % stack. Raising after the gsave would leave it unmatched, and a
+    % program that caught the rangecheck would go on painting in whatever
+    % colour and clip the shading was given.
+    dup /ShadingType get
+    //.shadingtypes 1 index known not
+        { pop pop /shfill cvx /rangecheck signalerror } if
+    //.shadingtypes exch get exch          % proc shdict
+
     gsave
     dup /ColorSpace get setcolorspace
     dup /BBox 2 copy known {
@@ -656,14 +676,7 @@ systemdict /shfill [ /dicttype ] {
         dup 0 get 1 index 3 get lineto
         pop closepath clip newpath
     }{ pop pop } ifelse
-    dup /ShadingType get
-    dup 1 eq { pop //.fnsh exec }{
-    dup 2 eq { pop //.axialsh exec }{
-    dup 3 eq { pop //.radialsh exec }{
-    dup 4 eq 1 index 5 eq or { pop //.meshsh exec }{
-    dup 6 eq exch 7 eq or { //.patchsh exec }{
-        pop /shfill cvx /rangecheck signalerror
-    } ifelse } ifelse } ifelse } ifelse } ifelse
+    exch exec
     grestore
 } //.xpostsys /.defopin get exec
 end
