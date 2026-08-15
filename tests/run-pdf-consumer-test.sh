@@ -278,6 +278,33 @@ if [ "$have_poppler" = yes ]; then
         fail=1
     fi
 
+    # -- the same page, written by the per-page writer -------------------
+    #
+    # A %d in the name makes every page a document of its own, and that
+    # document is not the same bytes as the accumulating one: one begins
+    # and ends around a single page, the other around a run of them. What
+    # they paint has to be the same regardless, and the page here is the
+    # same page, so the reference is what the interpreter itself rendered
+    # above. Holding the per-page document to the accumulating one's bytes
+    # would prove nothing, because they are meant to differ; holding it to
+    # nothing at all is what left this route unwatched before.
+    if consume "$work/per1.pdf" 100 100 "$work/per1.consumed.pgm"; then
+        d=$(pixdiff "$work/fill.pgm" "$work/per1.consumed.pgm" 100 100) || fail=1
+        echo "per-page fill: $d of 10000 pixels differ"
+        [ "${d:-99999}" -le 10 ] || {
+            echo "FAIL: the per-page document paints a page the interpreter did not"
+            fail=1; }
+        pa=$(inkbox "$work/fill.pgm" 100 100)
+        pb=$(inkbox "$work/per1.consumed.pgm" 100 100)
+        echo "per-page ink box: interpreter [$pa] consumer [$pb]"
+        [ "$pa" != blank ] || { echo "FAIL: the per-page fill left no ink"; fail=1; }
+        [ "$pa" = "$pb" ] || {
+            echo "FAIL: the per-page document's box does not match the interpreter's"
+            fail=1; }
+    else
+        fail=1
+    fi
+
     # -- the page tree, as a reader walks it ----------------------------
     pages=$(pdfinfo "$work/two.pdf" 2>/dev/null | sed -n 's/^Pages: *//p')
     echo "two-page document: the reader finds ${pages:-no} pages"
