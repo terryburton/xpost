@@ -1,0 +1,17 @@
+%!
+% Can this machine match a font at all? Run by
+% run-font-name-steer-test.sh before the test proper, so that a host
+% with no usable fonts is skipped rather than passed: every assertion
+% in that test is about what a matched font publishes, and with nothing
+% matched there is nothing to look at and every one of them holds
+% vacuously.
+%
+% Prints FONTOK, and nothing else, when a font dictionary comes back
+% carrying the program it was built from.
+
+{ /Helvetica findfont
+  dup /FontType known
+  exch dup /sfnts known exch /CharStrings known or
+  and { (FONTOK) = } if
+} stopped pop
+flush

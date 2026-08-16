@@ -1,0 +1,127 @@
+%!
+% A font name does not name a file. Run by run-font-name-steer-test.sh,
+% which stages the file this tries to reach: prints SUCCESS iff every
+% assertion holds.
+%
+% WHAT THIS IS ABOUT. Three reads in the font machinery open a file
+% without consulting the file-access sandbox, because a system font
+% lives outside every permitted tree and reading it is the point. What
+% they read is published INTO the running program: /sfnts is the font
+% program itself, chunked into strings, and /CharStrings holds the glyph
+% programs. So if a program could choose which file those reads open, it
+% could have any file it liked handed back to it, sandbox or no sandbox.
+%
+% It cannot, and the reason is not xpost's. The path comes from the
+% font-matching library, which answers with the file of the font it
+% matched and not with a file named in the request -- so a request
+% carrying the matcher's own pattern syntax, of which "a colon and a
+% property assignment" is the dangerous shape, still gets the matched
+% font. That has been measured. It is an implementation detail of a
+% library this tree does not own, and a version change or a switch to
+% calling the match and the prepare separately could quietly make the
+% requested file win. This test is here to notice if that happens.
+%
+% WHAT CAN ACTUALLY LEAK, which is narrower than it first looks.
+% Measured: /CharStrings values are executeonly -- rcheck false, xcheck
+% true -- so a program cannot read them at all and `search` on one
+% raises invalidaccess. /sfnts strings are rcheck true and readable in
+% full. So the disclosure surface is the sfnts route, and the access
+% attributes are what close the other. Both are checked below: the
+% marker must not appear in anything readable, and the charstrings must
+% still be unreadable.
+%
+% STAGED names a file that is not a font and is in no font directory.
+% Its first bytes are a marker.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+
+/errof { % proc . errorname
+    /ef.d count 2 sub def
+    stopped
+    { count ef.d sub { pop } repeat $error /errorname get }
+    { count ef.d sub { pop } repeat /noerror } ifelse
+} bind def
+
+% `search` (PLRM 8.2) is the substring primitive: on a hit it leaves the
+% three pieces, on a miss the string it was given.
+/holds { % (haystack) . bool
+    MARKER search { pop pop pop true }{ pop false } ifelse
+} bind def
+
+/sawsfnts false def
+/sawcs false def
+
+% Everything a font dictionary publishes that a program could read.
+/carries { % fontdict . bool
+    /cr.f exch def
+    /cr.bad false def
+    cr.f /sfnts known {
+        /sawsfnts true store
+        cr.f /sfnts get {
+            dup rcheck { holds { /cr.bad true store } if } { pop } ifelse
+        } forall
+    } if
+    cr.f /CharStrings known {
+        /sawcs true store
+        cr.f /CharStrings get {
+            exch pop
+            dup type /stringtype eq {
+                % a readable charstring would be a disclosure surface too;
+                % measured, they are not readable, and the assertion below
+                % holds that
+                dup rcheck { holds { /cr.bad true store } if } { pop } ifelse
+            }{ pop } ifelse
+        } forall
+    } if
+    cr.bad
+} bind def
+
+% CONTROLS FIRST. Without these, `holds` answering false everywhere --
+% because the search is broken, or because nothing was published -- would
+% read exactly like a pass.
+/ctl MARKER length 4 add string def
+ctl 0 (xx) putinterval
+ctl 2 MARKER putinterval
+ctl holds
+    (the search finds the marker when it is there) assert
+(no marker here at all) holds not
+    (the search does not find it when it is absent) assert
+
+% The question. Each of these asks the matcher for a file by name; none
+% may hand back the staged file's bytes.
+/try { % (name) (what) .
+    /tr.what exch def
+    /tr.name exch def
+    { tr.name findfont } errof /noerror eq {
+        tr.name findfont carries not tr.what assert
+    }{
+        (  ) print tr.what print ( : no font matched, nothing published\n) print
+    } ifelse
+} bind def
+
+STAGED  (a name that is a bare path publishes no file bytes) try
+PATTERN (a name carrying a file property publishes no file bytes) try
+FAMPAT  (a matched family with a file property publishes no file bytes) try
+
+% The run must have looked at something. A host whose matcher publishes
+% neither sfnts nor charstrings has told us nothing, and should say so
+% rather than pass.
+sawsfnts sawcs or
+    (the matched font published something to examine) assert
+
+% And the other half of why this is safe: charstrings are not readable.
+sawcs {
+    /anyread false def
+    /Helvetica findfont /CharStrings known {
+        /Helvetica findfont /CharStrings get {
+            exch pop dup type /stringtype eq
+                { rcheck { /anyread true store } if }{ pop } ifelse
+        } forall
+    } if
+    anyread not
+        (a published charstring is not readable by the program) assert
+} if
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

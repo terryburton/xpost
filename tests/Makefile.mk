@@ -398,12 +398,15 @@ tests/run-vecout-gc-test.sh \
 tests/run-vm-image-test.sh \
 tests/run-file-refusal-test.sh \
 tests/run-cli-sandbox-test.sh \
+tests/run-font-name-steer-test.sh \
 tests/run-vm-threshold-test.sh \
 tests/run-vm-image-load-test.sh \
 tests/run-vendor-bwipp.sh \
 tests/run_input_close_test.c \
 tests/run_status_test.c \
 tests/cli_sandbox_test.ps \
+tests/font_name_steer_test.ps \
+tests/font_name_steer_probe.ps \
 tests/sandbox_contexts_test.c \
 tests/sandbox_root_test.c \
 tests/sandbox_test.c \

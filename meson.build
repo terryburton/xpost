@@ -2328,6 +2328,15 @@ test('file-refusal',
   suite: cost_fast,
   timeout: 60)
 
+# A font name does not name a file. The font machinery opens files
+# without consulting the sandbox, by design, and publishes what it reads
+# into the program; this holds that a program cannot choose which file.
+test('font-name-steer',
+  find_program('tests/run-font-name-steer-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # The confinement an ordinary command line arranges, run without
 # --no-sandbox: every other PostScript test passes that option, so the
 # shipped default was reached by nothing that speaks the language.
