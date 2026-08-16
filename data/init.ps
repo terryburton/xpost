@@ -1411,7 +1411,6 @@ setglobal
                 % -- a clip the description set for itself, and a form
                 % inside it painted afresh under its own box, are the
                 % two ways that happens.
-                /cuts //.internaldict /.clipcuts get exec def
                 graphicsdict /currgstate get /device cap put
                 % The clip the capture paints under: the form's box, out
                 % to whole pixels and one further, in the device's own
@@ -1423,6 +1422,18 @@ setglobal
                 matrix setmatrix
                 newpath fbx 1 sub fby 1 sub fw 2 add fh 2 add rectclip
                 cm2 setmatrix
+                % Counted from here, once that box is in force, so that
+                % what is measured is what the description painted and not
+                % the box itself. The box reaches one pixel beyond the
+                % form on every side, so for a form placed against the low
+                % edge of the page it starts at a negative coordinate and
+                % the page cuts it -- a cut belonging to the margin, not
+                % to any mark, and one that would otherwise be read as the
+                % description painting outside its box. That reading costs
+                % more than holding nothing: the capture is made, judged
+                % unusable, and the description is run again for every
+                % placement, so the form pays for a capture it never uses.
+                /cuts //.internaldict /.clipcuts get exec def
                 fd //.xpostsys /.execformcapture get exec
                 grestore
                 % Whether what it painted stays inside the box it

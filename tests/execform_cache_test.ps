@@ -36,6 +36,37 @@
 { gsave F execform grestore
   gsave F execform grestore } stopped not
     (a cacheable form runs through execform without error) assert
+% --- what a cache is for, which nothing above asks ---
+% Holding that a form raises no error says nothing about the cache: one
+% that is never consulted raises none either, so no such case can tell a
+% description run once from one run at every placement -- which is the
+% only difference a cache makes. So count the runs.
+%
+% The placements walk the page's edges as well as its middle. The capture
+% paints under a box reaching one pixel beyond the form on every side, so
+% a form against the low edge starts that box at a negative coordinate
+% where the page cuts it; a cut counted against the description rather
+% than against the box reads as a form painting outside itself, and such
+% a form is captured and then painted afresh at every placement -- which
+% costs more than holding nothing at all.
+/PLACEMENTS 5 def
+/runsat { % x y (label) . -
+    /RL exch def /RY exch def /RX exch def
+    /runs 0 def
+    /RF << /FormType 1 /BBox [0 0 20 20] /Matrix matrix
+           /PaintProc { pop /runs runs 1 add store 0 0 20 20 rectfill } >> def
+    0 1 PLACEMENTS 1 sub
+        { pop gsave RX RY translate RF execform grestore } for
+    runs PLACEMENTS lt RL assert
+    runs 0 gt RL assert
+} bind def
+
+50.5  200.5 (a form placed in the middle of the page is held) runsat
+0.5   200.5 (a form placed against the left edge is held) runsat
+200.5 0.5   (a form placed against the bottom edge is held) runsat
+0.5   0.5   (a form placed in the low corner is held) runsat
+560.5 700.5 (a form placed against the far edges is held) runsat
+
 
 % A form whose paint escapes the box it declared cannot be held: what a
 % drawing carried would differ from what painting it afresh does. The
