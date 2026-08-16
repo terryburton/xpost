@@ -1638,8 +1638,9 @@ int _fillrectgray(Xpost_Context *ctx,
    round to transparent. The png device folds a coverage the same way. */
 static int _coverage(Xpost_Object cov)
 {
-    int c = xpost_object_get_type(cov) == realtype ? (int)cov.real_.val
-                                                   : cov.int_.val;
+    int c = xpost_object_get_type(cov) == realtype
+                ? xpost_dev_int_of((double)cov.real_.val)
+                : cov.int_.val;
 
     if (c < 0) return 0;
     if (c > 255) return 255;

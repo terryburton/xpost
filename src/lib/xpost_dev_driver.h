@@ -165,12 +165,32 @@
 #include "xpost_op_dict.h" /* the width a row is priced at is read off
                               the dictionary stack */
 
+/* A number as an int, truncating toward zero, saturating at the ends of
+   the int's range.
+
+   The number is a device coordinate, an extent or a coverage, and each
+   of those is arithmetic the program controls: what arrives can be any
+   magnitude a real holds, an infinity, or a value that is not a number
+   at all. The int has no such values to be, and the machine's own
+   conversion is not defined for them either, so each folds to the end of
+   the range it lies past -- and one that is not a number folds to the
+   bottom, which is a place off every raster there is. Every caller then
+   holds an ordinary int to its own extents, which is what the range ends
+   are: outside all of them. */
+static inline int
+xpost_dev_int_of(double v)
+{
+    if (!(v > (double)INT_MIN)) return INT_MIN;
+    if (!(v < (double)INT_MAX)) return INT_MAX;
+    return (int)v;
+}
+
 /* fold a numeric operand (integertype or realtype) to an int,
    truncating toward zero */
 static inline int
 xpost_dev_num_to_int(Xpost_Object obj)
 {
-    return (int)xpost_object_number(obj);
+    return xpost_dev_int_of(xpost_object_number(obj));
 }
 
 /* A colour component as a number in [0,1]. The component is clamped
@@ -268,7 +288,7 @@ xpost_dev_private_put(Xpost_Context *ctx,
 static inline int
 xpost_dev_pixel(double v)
 {
-    return (int)floor(v);
+    return xpost_dev_int_of(floor(v));
 }
 
 /* The rectangle FillRect paints, as an inclusive pixel span: a negative
@@ -291,10 +311,15 @@ xpost_dev_rect_normalize(double x, double y, double w, double h,
 }
 
 /* Clip an inclusive span to [0, extent-1]. Returns 1 when something
-   survives, 0 when the span lies wholly outside. */
+   survives, 0 when the span lies wholly outside. An extent counts the
+   pixels the device holds along the axis, so one that counts none holds
+   no span to survive into and is answered before the last pixel is
+   worked out -- the pixel below the count, which the bottom of the int's
+   range has nothing below. */
 static inline int
 xpost_dev_span_clip(int *lo, int *hi, int extent)
 {
+    if (extent <= 0) return 0;
     if (*lo < 0) *lo = 0;
     if (*hi > extent - 1) *hi = extent - 1;
     return *lo <= *hi;

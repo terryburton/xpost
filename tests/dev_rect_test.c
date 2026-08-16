@@ -13,7 +13,10 @@
 # include "config.h"
 #endif
 
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "xpost.h"
@@ -312,6 +315,72 @@ int main(void)
           "a colour above the range clamps on a 16-bit channel");
     check(xpost_dev_num_to_component(xpost_real_cons((real)0.25)) == 0.25,
           "a colour inside the range passes through");
+
+    /* A coordinate and an extent are arithmetic the program controls, so
+       what reaches the fold is whatever a real can hold -- a magnitude
+       past the whole range of the int, an infinity, a value that is not
+       a number at all. Each of those folds to an end of the int's range
+       rather than to whatever the machine's own conversion would leave
+       behind, so that every caller downstream is comparing an ordinary
+       int against its own extents. Both ends are off every raster there
+       is, which is where a mark aimed at one of these belongs. */
+    check(xpost_dev_num_to_int(xpost_real_cons((real)1e30)) == INT_MAX,
+          "a coordinate past the top of the range folds to the top");
+    check(xpost_dev_num_to_int(xpost_real_cons((real)-1e30)) == INT_MIN,
+          "a coordinate past the bottom of the range folds to the bottom");
+    check(xpost_dev_pixel(1e300) == INT_MAX,
+          "a pixel past the top of the range folds to the top");
+    check(xpost_dev_pixel(-1e300) == INT_MIN,
+          "a pixel past the bottom of the range folds to the bottom");
+    check(xpost_dev_pixel(HUGE_VAL) == INT_MAX,
+          "an infinite pixel folds to the top");
+    check(xpost_dev_pixel(-HUGE_VAL) == INT_MIN,
+          "a negatively infinite pixel folds to the bottom");
+    {
+        /* read rather than computed, so that producing one costs no
+           arithmetic on values the compiler may fold; a library that
+           hands back something else fails here rather than skipping */
+        double nan_ = strtod("NAN", NULL);
+
+        check(nan_ != nan_, "the library states a value that is not a number");
+        check(xpost_dev_pixel(nan_) == INT_MIN,
+              "a pixel that is not a number folds to the bottom");
+        check(xpost_dev_num_to_int(xpost_real_cons((real)nan_)) == INT_MIN,
+              "a coordinate that is not a number folds to the bottom");
+    }
+    /* the ends themselves are ordinary values and keep passing through */
+    check(xpost_dev_pixel(2147483646.5) == 2147483646,
+          "the largest pixel below the top passes through");
+    check(xpost_dev_pixel(-2147483647.5) == INT_MIN,
+          "a pixel just above the bottom floors within the range");
+
+    /* An extent is the count of pixels a device holds along one axis, so
+       one that counts nothing holds no span -- and the clip works from
+       the last pixel, one below the count, which is a place the bottom
+       of the int's range has nothing below. */
+    {
+        int lo, hi;
+
+        lo = 0; hi = 5;
+        check(xpost_dev_span_clip(&lo, &hi, 0) == 0,
+              "a span survives nothing of an extent of no pixels");
+        lo = 0; hi = 5;
+        check(xpost_dev_span_clip(&lo, &hi, -7) == 0,
+              "a span survives nothing of a negative extent");
+        lo = 0; hi = 5;
+        check(xpost_dev_span_clip(&lo, &hi, INT_MIN) == 0,
+              "a span survives nothing of the bottom of the range");
+        lo = 0; hi = 5;
+        check(xpost_dev_span_clip(&lo, &hi, INT_MAX) == 1 && lo == 0 && hi == 5,
+              "a span inside the top of the range survives whole");
+        {
+            int x0 = 0, y0 = 0, x1 = 5, y1 = 5;
+
+            check(xpost_dev_rect_clip(&x0, &y0, &x1, &y1,
+                                      INT_MIN, INT_MIN) == 0,
+                  "a rectangle survives nothing of a device of no pixels");
+        }
+    }
 
     return verdict();
 }
