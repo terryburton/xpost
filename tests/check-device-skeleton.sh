@@ -441,22 +441,14 @@ if [ ! -s "$work/hdr" ] || [ ! -s "$work/cls" ]; then
     echo "FAILURES: the raster-slot lists could not be read; fix the guard" >&2
     exit 1
 fi
-if ! cmp -s "$work/hdr" "$work/cls"; then
-    echo "check-device-skeleton: XPOST_DEV_RASTER_SLOTS and the class methods" >&2
-    echo "that read the row array disagree:" >&2
-    missing=$(comm -13 "$work/hdr" "$work/cls")
-    stale=$(comm -23 "$work/hdr" "$work/cls")
-    [ -n "$missing" ] && {
-        echo "  a class method reads the row array and the contract does not name it:" >&2
-        printf '%s\n' "$missing" | sed 's/^/      /' >&2
-        echo "  a device with its own buffer would inherit it and answer undefined." >&2
-    }
-    [ -n "$stale" ] && {
-        echo "  the contract names a slot no class method reads:" >&2
-        printf '%s\n' "$stale" | sed 's/^/      /' >&2
-    }
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/hdr" "$work/cls" \
+    "named by XPOST_DEV_RASTER_SLOTS as reading the row array, and read
+      by no class method:" \
+    "read from the row array by a class method and not named by
+      XPOST_DEV_RASTER_SLOTS. A device with its own buffer would inherit
+      the method and answer undefined:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # 11. A device that keeps its raster in a buffer of its own names every
 #     one of those slots in its own method table.
@@ -634,15 +626,13 @@ for f in $recording; do
         exit 1
     fi
     printf '%s\n' $recslots | sort -u > "$work/recwant"
-    if ! cmp -s "$work/rectable" "$work/recwant"; then
-        echo "check-device-skeleton: $f does not declare exactly the methods a" >&2
-        echo "record holds:" >&2
-        comm -13 "$work/recwant" "$work/rectable" | sed 's/^/      brought: /' >&2
-        comm -23 "$work/recwant" "$work/rectable" | sed 's/^/      missing: /' >&2
-        echo "A method it brings is a call the record has no entry for; a" >&2
-        echo "method it declines is resolved above it into the five it holds." >&2
-        fail=1
-    fi
+    guard_held=0
+    guard_hold "$work/recwant" "$work/rectable" \
+        "held by a record and not declared by $f. A method it declines
+      is resolved above it into the five the record holds:" \
+        "declared by $f and not held by a record. A method it brings is
+      a call the record has no entry for:"
+    [ "$guard_held" -eq 0 ] || fail=1
 done
 #     The class dictionary the table specialises is read the same way,
 #     as code: a slot it declares is a slot the instance carries whether

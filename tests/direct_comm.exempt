@@ -23,5 +23,3 @@
 check-device-roster.sh    thorn: thirteen comparisons, several over records rather than names; the largest single conversion left and the one most worth doing carefully
 check-dist-lists.sh       thorn: six comparisons over three different registers; conversion wants the exemption-aware form and has not been checked against it
 check-callout-bracket.sh  thorn: five comparisons; two are over sets built inside a loop, so the conversion is not purely textual
-check-device-skeleton.sh  thorn: four comparisons whose failure text is the guard's main output, and rephrasing it is the bulk of the work
-check-vm-host-state.sh    thorn: three comparisons across two registers, one of them platform-conditional

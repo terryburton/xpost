@@ -558,25 +558,17 @@ if [ -s "$work/badkind" ]; then
     fail=1
 fi
 
-comm -23 "$work/found" "$work/allowed" > "$work/unlisted"
-if [ -s "$work/unlisted" ]; then
-    echo "FAIL: virtual memory names this process where the register does not" >&2
-    echo "      admit it:" >&2
-    sed 's/^/      /' "$work/unlisted" >&2
-    echo "Say in tests/vm_host_state.register what each names and what a" >&2
-    echo "reader of a memory file written elsewhere must do with it --" >&2
-    echo "rebuilt or handle -- or store a number virtual memory can carry." >&2
-    fail=1
-fi
-
-# The register may not outlive what it describes: an entry for something
-# that has gone reads as cover for something that has not.
-comm -13 "$work/found" "$work/allowed" > "$work/stale"
-if [ -s "$work/stale" ]; then
-    echo "FAIL: the register admits what is not there:" >&2
-    sed 's/^/      /' "$work/stale" >&2
-    fail=1
-fi
+# The register may not outlive what it describes either: an entry for
+# something that has gone reads as cover for something that has not.
+guard_held=0
+guard_hold "$work/found" "$work/allowed" \
+    "named by virtual memory in this process and not admitted by the
+      register. Say in tests/vm_host_state.register what each names and
+      what a reader of a memory file written elsewhere must do with it
+      -- rebuilt or handle -- or store a number virtual memory can
+      carry:" \
+    "admitted by the register and not there:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ------------------------------------------------- the handle's own width
 #
