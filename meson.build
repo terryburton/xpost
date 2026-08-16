@@ -4811,6 +4811,20 @@ test('shared-helpers',
   suite: cost_fast,
   timeout: 120)
 
+# A colour space belongs to a family, and three tables in data/color.ps
+# each say something about those families. A family in one and missing
+# from another is one the machinery half knows: that is how the count of
+# a colour's components came to be written twice with the second copy
+# knowing the indexed and tint families and not the CIE ones, so an
+# uncoloured pattern over a CIE base asked the device table for a name
+# that is not in it. The kinds table is the roster, and this holds the
+# other two to it in both directions.
+test('check-colour-spaces',
+  find_program('tests/check-colour-spaces.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # The guards read data/ and tests/ under a source root they are given, and
 # the interpreter finds the working tree by other routes when that root is
 # wrong -- so a misdirected guard reports a true result about a tree nobody

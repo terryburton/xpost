@@ -518,6 +518,51 @@ setglobal
 % sweep from finishing the job -- and the name would stay dynamic for the
 % rest of the run, inside every operator reaching this helper.
 currentglobal true setglobal
+% The colour space families, and what kind of thing each one is.
+%
+% Every other statement about a space follows from its kind: a device
+% space states its own component count, a CIE family states one and
+% reduces to device RGB, an indexed space carries one index and reduces
+% through its base, a tint space carries its tints and reduces through
+% its alternative, and a pattern space carries a pattern. The kind is
+% what the machinery is really asking whenever it tests a family name,
+% and the tables below answer the rest.
+%
+% Written down as a table because a family that is only ever a name in
+% an equality test cannot be enumerated. Four of these -- the indexed,
+% the two tints and the pattern -- existed nowhere but in such tests,
+% which is why nothing could ask whether they had all been considered,
+% and why an uncoloured pattern over three of them was found broken one
+% at a time. tests/check-colour-spaces.sh holds this table and the two
+% below to each other, so a family cannot be in one and missing from
+% another.
+.xpostsys /.spacekinds <<
+    /DeviceGray   /device
+    /DeviceRGB    /device
+    /DeviceCMYK   /device
+    /CIEBasedA    /cie
+    /CIEBasedABC  /cie
+    /CIEBasedDEF  /cie
+    /CIEBasedDEFG /cie
+    /Indexed      /indexed
+    /Separation   /tint
+    /DeviceN      /tint
+    /Pattern      /pattern
+>> put
+
+% space  .spacekind  /device|/cie|/indexed|/tint|/pattern|null
+% The kind of a colour space, given as a bare family name or as an array
+% carrying the family and its parameters. A space naming no known family
+% answers null, which is what the validator refuses on.
+.xpostsys /.spacekind {
+    dup type /arraytype eq { 0 get } if
+    dup type /nametype eq {
+        //.xpostsys /.spacekinds get 1 index known {
+            //.xpostsys /.spacekinds get exch get
+        }{ pop null } ifelse
+    }{ pop null } ifelse
+} put
+
 .xpostsys /.spacecomps <<
     /DeviceGray 1
     /DeviceRGB 3
