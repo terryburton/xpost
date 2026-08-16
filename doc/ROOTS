@@ -174,6 +174,110 @@ png, jpeg, raster and BGR -- are outside virtual memory for the same
 reason and are likewise uncounted; the raster classes' `ImgData` rows,
 above, are the ones `vmstatus` sees.
 
+Keys that outlive a restore
+---------------------------
+
+The section above asks whether the collector can still find a thing. This
+one asks whether a key still names what it named. They are different
+questions: naming an object to the collector keeps it from being swept
+and says nothing about `restore`, which winds local virtual memory back
+whether or not the walk could reach it.
+
+Several things here are held against a number that names them. The rule
+those arrangements keep is:
+
+    No part of a key may live in storage more durable than the counter
+    that mints it.
+
+Three places matter, and they are easy to conflate because two of them
+are usually the same:
+
+  the mint    where the number comes from.
+  the stamp   where it is written so the thing can be recognised again.
+              This is often the program's own dictionary -- a font
+              dictionary, a form dictionary -- and the bank of that
+              dictionary is the program's choice, not this code's.
+  the store   where whatever is filed under the number lives.
+
+Durability runs in three steps. A value in local virtual memory is wound
+back by `restore`. A value in global virtual memory is not (PLRM 3.7.3).
+A value in a C variable, or bytes already written to a file, is not
+reached by any winding back at all.
+
+Break the rule and the counter goes back below a number that is still
+being carried somewhere more durable. The next thing minted is issued
+that number, two things are filed under one key, and whichever arrived
+first answers for both. Nothing raises. A glyph is drawn from another
+font's mask, a form paints another form's marks, a fill is cut by another
+clip's shape. It is only ever visible as the wrong thing on a page, which
+is why each of these is driven by a test that counts rather than one that
+asks whether an error was raised: a cache that is never consulted raises
+none either.
+
+Two arrangements satisfy the rule, and a third sidesteps it:
+
+  1. Mint outside virtual memory. The counter only moves forward, so no
+     number is issued twice and the stamp and the store may then live
+     anywhere. This is what the glyph masks, the form drawings and the
+     resolved regions do.
+  2. Mint, stamp and store all in one bank, so a restore takes all three
+     back together and a reissued number finds nothing filed under it.
+     Sound, but only while all three stay there -- and the stamp is the
+     one that tends to escape, because it is written into a dictionary
+     the program supplied.
+  3. Mint nothing. A key derived from the content, checked against a
+     stored copy of that content, cannot be reissued because it was never
+     issued.
+
+What is held, and where each part lives:
+
+  glyph masks           mint `.newfontserial` (C); stamp `.fontid` in the
+                        font dictionary, either bank; store in C, outside
+                        virtual memory. The selector half of the key is a
+                        name's stack index together with the bank bit,
+                        since a name is that pair and nothing narrower
+                        tells two of them apart.
+                        tests/font_serial_test.ps
+
+  form drawings         mint `.newformserial` (C); stamp `.formid` in the
+                        form dictionary, either bank; store `.formcache`
+                        in `graphicsdict`, local. The store is wound back
+                        by a restore, which costs a re-capture and never
+                        a wrong drawing, because the serial an entry was
+                        filed under is not issued again.
+                        tests/form_serial_restore_test.ps
+
+  resolved regions      mint `.newregionserial` (C); stamp `serial` in the
+  read-back clip bands  clip cache dictionary, local; store in C. The
+                        entity the clip array occupied is compared as
+                        well, so a restarted counter cannot match an entry
+                        built from something else.
+
+  clipPath identities   mint a counter in global virtual memory, one per
+                        device; no stamp; store is the document, whose
+                        written bytes cannot be taken back.
+                        tests/run-svg-clipid-test.sh
+
+  faces                 no mint: the key is the face name. The host half
+                        is in C and the object half is in a dictionary
+                        under the global private namespace, so both halves
+                        are equally durable.
+
+  stencil runs          no mint: the key is a content hash, and a match is
+                        confirmed against a stored copy of the mask, so a
+                        collision answers no differently than a miss.
+
+A counter that runs its range restarts below numbers it has already
+handed out, at which point what is held can no longer be told apart from
+what the reissued numbers will name, and it has to be given up.
+`.newfontserial` clears the mask cache and `.newregionserial` flushes the
+region memo, both of which they can reach. `.newformserial` cannot reach
+its cache, which is in virtual memory, so it restarts and the caller
+notices the number is no longer greater than the last one it saw and
+drops the cache itself; the number last seen is kept beside the cache so
+that a restore takes both back together and the test stays true to what
+the cache actually holds.
+
 Which bank a collection may sweep
 ---------------------------------
 
