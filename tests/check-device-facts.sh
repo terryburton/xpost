@@ -246,6 +246,9 @@ awk '
         print $2 line > (out "/reg.carry")
         key = $2; last = "kind:" $2; next
     }
+    $1 == "disposition" {
+        print key, $2 > (out "/reg.disp"); last = "disp:" key ":" $2; next
+    }
     $1 == "family" { print key, $2 > (out "/reg.family"); last = "family:" key; next }
     $1 == "answer" {
         print key, $2, $3, ($4 == "" ? "-" : $4) > (out "/reg.answer")
@@ -258,7 +261,7 @@ awk '
         exit bad ? 1 : 0
     }
 ' out="$work" "$work/reg" || fail=1
-for f in reg.kind reg.carry reg.family reg.answer reg.prose; do
+for f in reg.kind reg.carry reg.family reg.answer reg.prose reg.disp; do
     [ -f "$work/$f" ] || : > "$work/$f"
 done
 if [ ! -s "$work/reg.kind" ]; then
@@ -344,6 +347,67 @@ awk '$3 == "elsewhere" || $3 == "open" { print $2, $3 }' "$work/reg.kind" \
         fail=1
     fi
 done
+
+# ---- what a difference is, and where it is going
+#
+# A reason says why a difference exists. It does not say whether anyone
+# means to keep it, and those are separate questions: a family can be
+# told exactly why two of its members differ and still not know whether
+# that is the design or a debt. So every entry that is a difference
+# rather than a value carries one of three words.
+#
+#   settled   meant, or forced by something outside this tree, and not
+#             going away. Nothing further is owed.
+#   thorn     lived with for now. Owes what would remove it and what
+#             removing it costs, because a debt nobody priced is a debt
+#             nobody pays.
+#   heading   the direction of travel. Owes the state being moved to and
+#             what closes the gap, so the entry can be read as a
+#             description of where this is going rather than of where it
+#             has stopped.
+#
+# state is exempt: two devices holding different values there are not
+# differing about anything. method is not asked yet, and the entry for
+# that is below.
+awk '$3 == "question" || $3 == "elsewhere" || $3 == "open" || $3 == "part" {
+         print $2 }' "$work/reg.kind" | sort > "$work/needdisp"
+while read -r k; do
+    n=$(awk -v k="$k" '$1 == k { c++ } END { print c + 0 }' "$work/reg.disp")
+    if [ "$n" -ne 1 ]; then
+        echo "FAIL: $k states $n dispositions and must state exactly one."
+        echo "      Say settled, thorn or heading: whether this difference is"
+        echo "      meant, tolerated, or being removed. A reason says why it is"
+        echo "      so; a disposition says whether anyone means it to stay."
+        fail=1
+        continue
+    fi
+    d=$(awk -v k="$k" '$1 == k { print $2 }' "$work/reg.disp")
+    case "$d" in
+        settled) ;;
+        thorn|heading)
+            if ! awk -v k="disp:$k:$d" '$1 == k && $2 >= 1 { f = 1 }
+                                        END { exit f ? 0 : 1 }' \
+                 "$work/reg.prose"; then
+                echo "FAIL: $k is a $d and says nothing under it. A $d owes what"
+                echo "      would close it and what closing it costs; without"
+                echo "      that it is a settled difference wearing another word."
+                fail=1
+            fi ;;
+        *)  echo "FAIL: $k has disposition '$d', which is not one of settled,"
+            echo "      thorn or heading."
+            fail=1 ;;
+    esac
+done < "$work/needdisp"
+
+# The thorns are reported whether or not anything failed. A debt that is
+# only visible when a guard is red is a debt that accumulates quietly.
+if [ -s "$work/reg.disp" ]; then
+    awk '$2 == "thorn" { print "      " $1 }' "$work/reg.disp" | sort > "$work/thorns"
+    if [ -s "$work/thorns" ]; then
+        echo "NOTE: the device register carries $(wc -l < "$work/thorns" | tr -d ' ') thorn(s):"
+        cat "$work/thorns"
+    fi
+fi
 
 awk '$3 == "question" { print $2 }' "$work/reg.kind" | sort > "$work/questions"
 while read -r k; do

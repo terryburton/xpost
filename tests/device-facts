@@ -102,6 +102,7 @@ answer dscwrite set:DeviceCMYK,DeviceRGB,Process data/dscwrite.ps
     This stops being true if the prolog stops defining one of them,
     which would leave the claim standing over an operator no reader is
     given.
+disposition settled
 
 question .groundvaries bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     Whether the row this device shows over a row of the page it holds no
@@ -140,6 +141,7 @@ answer pbm true data/pbmimage.ps
     This stops being true if the device stops screening -- it is the
     tiling that makes the row depend on which row it is, and a device
     storing the grey it is handed would show the same row everywhere.
+disposition settled
 
 question TextAlphaBits bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     How many bits of a glyph's edge coverage this device is sent. Above
@@ -188,6 +190,7 @@ answer pbm 1 data/pbmimage.ps
     This stops being true if the device grows a pixel that can hold an
     intermediate value, which is the same change that would let it show
     a grey without screening for one.
+disposition settled
 
 question ScreenPaint pbm
     Whether a grey reaches this device as a pattern of pixels rather
@@ -222,6 +225,7 @@ answer pbm true data/pbmimage.ps
     This stops being true if the device grows a pixel that can store a
     grey directly, at which point the screen would be a choice about
     rendering rather than the only way it can show one.
+disposition settled
 
 # ---------------------------------------------------------------------
 # Facts another guard holds
@@ -234,6 +238,18 @@ elsewhere BandedPage jpeg pbm pgm png ppm tiff record
     tests/check-device-skeleton.sh holds each compiled class to saying
     it again or taking it back out rather than inheriting the answer.
     What is held here is only which devices carry it.
+disposition thorn
+    What is written down is which devices band, and by what route. Why
+    the others do not is not written down anywhere, and for two of them
+    it is not obvious: raster and bgr keep a raster of their own and
+    decline, while four of the six that band -- pgm, ppm, pbm and tiff
+    -- are PostScript classes with no compiled help. So banding is not
+    something the compiled devices are better placed to do, and the two
+    that hold a buffer and refuse are unexplained rather than excused.
+    Removing this costs a reason from each of raster and bgr, and a
+    measurement behind either reason that claims a cost; where no reason
+    survives being written, it costs the band route on that device
+    instead.
 
 elsewhere .rowcost bgr jpeg pbm pgm png pngalpha ppm tiff record
     What one row of this device's raster costs, as the elements and the
@@ -241,6 +257,7 @@ elsewhere .rowcost bgr jpeg pbm pgm png pngalpha ppm tiff record
     derived from one that prices a row to pricing its own or taking the
     price back out with the reason, in C and in PostScript alike.
     What is held here is only which devices carry it.
+disposition settled
 
 # ---------------------------------------------------------------------
 # Facts no guard holds and this does not yet ask
@@ -278,6 +295,7 @@ open nativecolorspace every
     drivers store the space as an executable name, which is why
     data/device.ps fetches it with get and holds it literal rather than
     naming it again.
+disposition settled
 
 open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     How many components a paint carries to this device's marking
@@ -308,6 +326,7 @@ open .ncomp bgr jpeg pbm pgm png pngalpha ppm raster tiff record
     plane beside its colour, say -- at which point the count would stop
     being derivable and each device would have to say what it takes and
     why.
+disposition settled
 
 open NoOutput bbox dscwrite null pdfwrite svgwrite record
     That this device puts no pixels down, so data/device.ps leaves it
@@ -326,6 +345,7 @@ open NoOutput bbox dscwrite null pdfwrite svgwrite record
     what it is, and the answer would then be worth asking each device
     for. There is none, and the two lists this follows from -- who
     carries a raster, who carries this -- name the same devices.
+disposition settled
 
 open VectorGlyphs dscwrite pdfwrite svgwrite
     That text reaches this device as glyph outlines rather than as a
@@ -337,6 +357,7 @@ open VectorGlyphs dscwrite pdfwrite svgwrite
     NoOutput follows from. What would make it one is a device that
     writes a document and wants bitmapped glyphs anyway, and there is
     none.
+disposition settled
 
 open VectorSyntax svgwrite
     Which vector syntax this device's content is spelled in. Only the
@@ -347,6 +368,7 @@ open VectorSyntax svgwrite
     It is not a question here because one device carrying an entry is
     not yet a family answering anything. It becomes one the moment a
     third syntax arrives, and the line above is what will notice.
+disposition settled
 
 open AlphaChannel pngalpha
     That this device's page carries transparency, so a page reset clears
@@ -362,6 +384,7 @@ open AlphaChannel pngalpha
     question and could answer it differently -- what a page reset clears
     to, and what a read of an untouched pixel may report, are separate
     consequences and a device could take one without the other.
+disposition settled
 
 # ---------------------------------------------------------------------
 # The rest of the census
@@ -497,7 +520,12 @@ state y dscwrite pdfwrite svgwrite
 
 # The class's own constants and tables.
 part .playloaders record
+disposition settled
 part .playtargets record
+disposition settled
 part .pnmmagic bgr jpeg pbm pgm png pngalpha ppm raster
+disposition settled
 part .pnmmaxval bgr jpeg pbm pgm png pngalpha ppm raster
+disposition settled
 part .t4ops dscwrite pdfwrite
+disposition settled
