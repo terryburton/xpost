@@ -275,6 +275,41 @@ fe.odd fe.exists
     (a name holding a newline and a high byte is a file) assert
 fe.odd deletefile
 
+% --- a name longer than the file system will hold (PLRM 8.2) ---
+% The length a file system will take a name in is one of its limits, and
+% PLRM 8.2 has limitcheck be "an implementation limit has been exceeded".
+% Two openers in this interpreter meet the condition and they name it the
+% same, so a program is told the same thing about the same name whichever
+% one it reached.
+%
+% Which limit a name passed still decides which refusal it draws, since
+% the sandbox has a length of its own past which it cannot work out what
+% a name refers to, and cannot then say the name is permitted. That
+% refusal comes first because it is the stronger statement.
+
+/fe.name {                              % n  .  (zzz...)  a name n bytes long
+    /fe.n exch def
+    /fe.s fe.n string def
+    0 1 fe.n 1 sub { fe.s exch 122 put } for
+    fe.s
+} def
+
+% a name the file system will hold, with no file by it: the ordinary
+% refusal, which is what shows the one below is about the length
+{ 200 fe.name (r) file } /undefinedfilename
+    (a long name the file system holds still names no file) erris
+{ 1023 fe.name (r) file } /limitcheck
+    (a name past the file system's limit is limitcheck) erris
+{ 1023 fe.name (w) file } /limitcheck
+    (creating a name past the limit reaches the same limit) erris
+1023 fe.name fe.exists not
+    (status of a name past the limit is false) assert
+% deletefile reaches the same mapping; PLRM 8.2 names invalidfileaccess,
+% ioerror and undefinedfilename for it and not limitcheck, so what is
+% asked here is the refusal and not which
+{ 1023 fe.name deletefile }
+    (deletefile refuses a name past the limit) errors
+
 % --- the special files (PLRM 3.8.3) ---
 % %stdin allows only r access, %stdout and %stderr only w. The line and
 % statement editors read from the standard input, which the test harness

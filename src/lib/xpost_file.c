@@ -321,6 +321,16 @@ xpost_fopen_errno(int e)
                occurs" (PLRM 8.2, file) */
             return limitcheck;
 #endif
+#ifdef ENAMETOOLONG
+        case ENAMETOOLONG:
+            /* the length a file system will take a name in is one of its
+               limits, and limitcheck is "an implementation limit has
+               been exceeded" (PLRM 8.2). It is what the confined opener
+               beside this answers for the same condition, so a program
+               is told the same thing about the same name whichever one
+               it reached. */
+            return limitcheck;
+#endif
         default:
             /* "If an environment-dependent error is detected, an ioerror
                occurs" (PLRM 8.2, file) */
