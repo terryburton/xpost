@@ -321,10 +321,28 @@ fe.cut fe.exists { fe.cut deletefile } if
 % refusal, which is what shows the one below is about the length
 { 200 fe.name (r) file } /undefinedfilename
     (a long name the file system holds still names no file) erris
-{ 1023 fe.name (r) file } /limitcheck
-    (a name past the file system's limit is limitcheck) erris
-{ 1023 fe.name (w) file } /limitcheck
-    (creating a name past the limit reaches the same limit) erris
+% Which refusal a name past that length draws is the file system's to
+% decide. One that reports the length reaches limitcheck, since PLRM 8.2
+% has that be "an implementation limit has been exceeded"; one that
+% answers only that nothing of the name is there reaches
+% undefinedfilename. What this interpreter owes is that its two openers
+% meet the condition alike, so a program is told the same thing about the
+% same name whichever one it reached -- and that neither of them takes
+% the name.
+/fe.err {                               % { proc }  .  /errorname | /ok
+    mark exch
+    stopped { cleartomark $error /errorname get }
+            { cleartomark /ok } ifelse
+} def
+/fe.long 1023 fe.name def
+{ fe.long (r) file } fe.err
+{ fe.long (w) file } fe.err
+2 copy eq
+    (both openers name a name past the limit alike) assert
+pop
+dup /ok ne
+    (a name past the file system's limit is refused) assert
+pop
 1023 fe.name fe.exists not
     (status of a name past the limit is false) assert
 % deletefile reaches the same mapping; PLRM 8.2 names invalidfileaccess,
