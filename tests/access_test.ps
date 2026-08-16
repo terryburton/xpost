@@ -146,6 +146,25 @@ faildict /n 0 put
                                          /invalidaccess (cvrs into a readonly string) chk
 { 255 16 8 string cvrs pop }             /ok            (cvrs into a writeable string) chk
 
+% The conversions that read a string read its characters, so the source
+% needs read access just as the destination needs write access. cvi and cvr
+% scan the numeral out of the string; cvs copies a string source into the
+% destination it was handed, and is the one case of cvs that reads a value
+% at all, the other types being rendered from the object itself.
+{ (123) noaccess cvi pop }               /invalidaccess (cvi of a noaccess string) chk
+{ (123) executeonly cvi pop }            /invalidaccess (cvi of an executeonly string) chk
+{ (123) readonly cvi pop }               /ok            (cvi of a readonly string) chk
+{ (123) cvi pop }                        /ok            (cvi of a readable string) chk
+{ (1.5) noaccess cvr pop }               /invalidaccess (cvr of a noaccess string) chk
+{ (1.5) executeonly cvr pop }            /invalidaccess (cvr of an executeonly string) chk
+{ (1.5) readonly cvr pop }               /ok            (cvr of a readonly string) chk
+{ (1.5) cvr pop }                        /ok            (cvr of a readable string) chk
+{ (src) noaccess 10 string cvs pop }     /invalidaccess (cvs from a noaccess string) chk
+{ (src) executeonly 10 string cvs pop }  /invalidaccess (cvs from an executeonly string) chk
+{ (src) readonly 10 string cvs pop }     /ok            (cvs from a readonly string) chk
+{ (src) 10 string cvs pop }              /ok            (cvs from a readable string) chk
+{ 123 10 string cvs pop }                /ok            (cvs of an integer reads no value) chk
+
 % --- executing a procedure reads it, whichever operator does the
 %     executing. exec refuses a noaccess procedure; if and ifelse
 %     execute the same object through the same rule. ---
@@ -184,6 +203,35 @@ faildict /n 0 put
 { [2 0 0 2 10 20] rm2 invertmatrix pop } outcome pop
 { rm2 0 get 1 eq { }{ (FAIL: a refused invertmatrix modified the matrix\n) print
     faildict /n 2 copy get 1 add put } ifelse } exec
+
+% --- and every operator that reads a caller's matrix needs read access to
+%     it. The six numbers are taken from the array in one go rather than
+%     element by element, so the read does not pass the check an ordinary
+%     get would make and the matrix reader is where the check belongs. A
+%     read-only matrix is still readable; it is execute-only and no-access
+%     that withhold the value (PLRM 3.3.2). ---
+/namat [1 0 0 1 0 0] noaccess def
+/eomat [1 0 0 1 0 0] executeonly def
+/romat2 [1 0 0 1 0 0] readonly def
+{ 1 2 namat transform pop pop }          /invalidaccess (transform by a noaccess matrix) chk
+{ 1 2 eomat transform pop pop }          /invalidaccess (transform by an executeonly matrix) chk
+{ 1 2 romat2 transform pop pop }         /ok            (transform by a readonly matrix) chk
+{ 1 2 [1 0 0 1 0 0] transform pop pop }  /ok            (transform by a readable matrix) chk
+{ 1 2 namat dtransform pop pop }         /invalidaccess (dtransform by a noaccess matrix) chk
+{ 1 2 [1 0 0 1 0 0] dtransform pop pop } /ok            (dtransform by a readable matrix) chk
+{ 1 2 namat itransform pop pop }         /invalidaccess (itransform by a noaccess matrix) chk
+{ 1 2 [2 0 0 2 0 0] itransform pop pop } /ok            (itransform by a readable matrix) chk
+{ 1 2 namat idtransform pop pop }        /invalidaccess (idtransform by a noaccess matrix) chk
+{ 1 2 [2 0 0 2 0 0] idtransform pop pop } /ok           (idtransform by a readable matrix) chk
+{ namat [1 0 0 1 0 0] matrix concatmatrix pop }
+                                         /invalidaccess (concatmatrix from a noaccess first matrix) chk
+{ [1 0 0 1 0 0] namat matrix concatmatrix pop }
+                                         /invalidaccess (concatmatrix from a noaccess second matrix) chk
+{ [2 0 0 2 0 0] noaccess matrix invertmatrix pop }
+                                         /invalidaccess (invertmatrix from a noaccess matrix) chk
+{ [2 0 0 2 0 0] matrix invertmatrix pop } /ok           (invertmatrix from a readable matrix) chk
+{ namat concat }                         /invalidaccess (concat of a noaccess matrix) chk
+{ [1 0 0 1 0 0] concat }                 /ok            (concat of a readable identity matrix) chk
 
 % --- a write an operator makes into a composite the program handed it is
 %     subject to that composite's access, and a refused write is an error.

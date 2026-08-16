@@ -383,8 +383,14 @@ int Scvi(Xpost_Context *ctx,
     integer ival;
     int isint;
     int ret;
-    char *t = xpost_string_allocate_cstring(ctx, s);
+    char *t;
 
+    /* the numeral is scanned out of the string's characters, so the string
+       needs read access */
+    if (!xpost_object_is_readable(ctx, s))
+        return invalidaccess;
+
+    t = xpost_string_allocate_cstring(ctx, s);
     ret = _string_to_number(t, &dbl, &ival, &isint);
     free(t);
     if (ret)
@@ -451,8 +457,13 @@ int Scvr(Xpost_Context *ctx,
     integer ival;
     int isint;
     int ret;
-    char *s = xpost_string_allocate_cstring(ctx, str);
+    char *s;
 
+    /* as cvi above: the numeral is read out of the string */
+    if (!xpost_object_is_readable(ctx, str))
+        return invalidaccess;
+
+    s = xpost_string_allocate_cstring(ctx, str);
     ret = _string_to_number(s, &num, &ival, &isint);
     free(s);
     if (ret)
@@ -598,6 +609,13 @@ int AScvs (Xpost_Context *ctx,
     int n;
 
     if (!xpost_object_is_writeable(ctx, str))
+        return invalidaccess;
+    /* a string source is copied out below, so it needs read access. The
+       other types are rendered from the object itself and read no value:
+       a composite that has none of its own representation here answers
+       --nostringval-- whatever its access. */
+    if (xpost_object_get_type(any) == stringtype &&
+        !xpost_object_is_readable(ctx, any))
         return invalidaccess;
     switch(xpost_object_get_type(any))
     {

@@ -88,6 +88,12 @@ int _psmat2xmat(Xpost_Context *ctx,
        the bulk read below run off the end of its storage (PLRM: rangecheck) */
     if (xpost_object_get_type(psm) != arraytype || psm.comp_.sz != 6)
         return rangecheck;
+    /* every operator that reads a caller's matrix reads it through here,
+       and the read bypasses xpost_array_get's own check: the six objects
+       come out in one xpost_memory_get. A value an access withholds is not
+       one an operator may take (PLRM 3.3.2); read-only still reads. */
+    if (!xpost_object_is_readable(ctx, psm))
+        return invalidaccess;
     if (!xpost_memory_get(xpost_context_select_memory(ctx, psm),
                           xpost_object_get_ent(psm), 0, sizeof arr, arr))
         return rangecheck;
@@ -405,11 +411,11 @@ int _concat(Xpost_Context *ctx,
     Xpost_Matrix ctm;
     Xpost_Matrix result;
 
-    if (_psmat2xmat(ctx, psmat, &mat)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat, &mat); if (ret) return ret; }
     //fetch CTM from graphics state
     psctm = _get_ctm(ctx);
     //xpost_matrix_mult
-    if (_psmat2xmat(ctx, psctm, &ctm)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psctm, &ctm); if (ret) return ret; }
     xpost_matrix_mult(&ctm, &mat, &result);
     //replace CTM
     { int ret = _xmat2psmat(ctx, &result, psctm); if (ret) return ret; }
@@ -425,8 +431,8 @@ int _concat_matrix(Xpost_Context *ctx,
                    Xpost_Object psmat3)
 {
     Xpost_Matrix mat1, mat2, mat3;
-    if (_psmat2xmat(ctx, psmat1, &mat1)) return rangecheck;
-    if (_psmat2xmat(ctx, psmat2, &mat2)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat1, &mat1); if (ret) return ret; }
+    { int ret = _psmat2xmat(ctx, psmat2, &mat2); if (ret) return ret; }
     xpost_matrix_mult(&mat2, &mat1, &mat3);
     { int ret = _xmat2psmat(ctx, &mat3, psmat3); if (ret) return ret; }
     xpost_stack_push(ctx->lo, ctx->os, psmat3);
@@ -443,7 +449,7 @@ int _mat_transform(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     real xres, yres;
-    if (_psmat2xmat(ctx, psmat, &mat)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat, &mat); if (ret) return ret; }
     xres = mat.xx * x.real_.val + mat.xy * y.real_.val + mat.xz;
     yres = mat.yx * x.real_.val + mat.yy * y.real_.val + mat.yz;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(xres));
@@ -473,7 +479,7 @@ int _mat_dtransform(Xpost_Context *ctx,
 {
     Xpost_Matrix mat;
     real xres, yres;
-    if (_psmat2xmat(ctx, psmat, &mat)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat, &mat); if (ret) return ret; }
     xres = mat.xx * x.real_.val + mat.xy * y.real_.val;
     yres = mat.yx * x.real_.val + mat.yy * y.real_.val;
     xpost_stack_push(ctx->lo, ctx->os, xpost_real_cons(xres));
@@ -505,7 +511,7 @@ int _mat_itransform(Xpost_Context *ctx,
     real xres, yres;
     real disc;
     real invdet;
-    if (_psmat2xmat(ctx, psmat, &mat)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat, &mat); if (ret) return ret; }
     disc = mat.xx * mat.yy - mat.yx * mat.xy;
     if (disc == 0)
         return undefinedresult;
@@ -544,7 +550,7 @@ int _mat_idtransform(Xpost_Context *ctx,
     real xres, yres;
     real disc;
     real invdet;
-    if (_psmat2xmat(ctx, psmat, &mat)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat, &mat); if (ret) return ret; }
     disc = mat.xx * mat.yy - mat.yx * mat.xy;
     if (disc == 0)
         return undefinedresult;
@@ -579,7 +585,7 @@ int _invert_matrix(Xpost_Context *ctx,
     Xpost_Matrix mat1, mat2;
     real disc;
     real invdet;
-    if (_psmat2xmat(ctx, psmat1, &mat1)) return rangecheck;
+    { int ret = _psmat2xmat(ctx, psmat1, &mat1); if (ret) return ret; }
     disc = mat1.xx * mat1.yy - mat1.yx * mat1.xy;
     if (disc == 0)
         return undefinedresult;
