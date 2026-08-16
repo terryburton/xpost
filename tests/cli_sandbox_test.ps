@@ -1,0 +1,68 @@
+%!
+% What the command line confines a program to, run by
+% run-cli-sandbox-test.sh with no --no-sandbox: prints SUCCESS iff every
+% assertion holds.
+%
+% Every other PostScript test in this suite is run with --no-sandbox,
+% which is right for them and leaves the shipped configuration -- the one
+% every ordinary run has -- checked by nothing from the language side.
+% This is that check. It is deliberately about what the command line
+% arranges rather than about the mechanism underneath, which the C-level
+% sandbox tests hold: which directories a run may reach, and whether the
+% operators that decide that are still there to be named.
+%
+% OUTSIDE names a file the run was not given, in a directory that is
+% neither the current one nor the temporary one nor the program's own.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+
+% What a procedure raised, with whatever it left behind taken off the
+% stack. The depth remembered is the one below the procedure: the count
+% at this point includes both the procedure and the name just pushed for
+% it, and `stopped` consumes the procedure, so a case that leaves nothing
+% would otherwise be asked to pop a negative number of operands.
+/errof { % proc . errorname
+    /ef.d count 2 sub def
+    stopped
+    { count ef.d sub { pop } repeat $error /errorname get }
+    { count ef.d sub { pop } repeat /noerror } ifelse
+} bind def
+
+% The operators that configure the confinement are gone by the time a
+% program runs. Enforcement does not rest on their absence -- the checks
+% below hold either way -- so this is the second line, and it is here
+% because it is the half that goes missing without a sound.
+systemdict /.permitfileread known not
+    (.permitfileread is not in systemdict) assert
+systemdict /.permitfilewrite known not
+    (.permitfilewrite is not in systemdict) assert
+systemdict /.lockdown known not
+    (.lockdown is not in systemdict) assert
+systemdict /.resourcefileopen known not
+    (.resourcefileopen is not in systemdict) assert
+
+% and naming one is undefined rather than reaching something else
+{ (/) .permitfileread } errof /undefined eq
+    (naming .permitfileread is undefined) assert
+
+% the working directory is the program's to read and to write
+{ (cli_sandbox_probe.txt) (w) file dup (data) writestring closefile } errof
+    /noerror eq (a file in the current directory is written) assert
+{ (cli_sandbox_probe.txt) (r) file dup closefile } errof
+    /noerror eq (a file in the current directory is read) assert
+{ (cli_sandbox_probe.txt) deletefile } errof
+    /noerror eq (a file in the current directory is deleted) assert
+
+% and what it was not given is refused, whichever way it is asked for
+{ OUTSIDE (r) file } errof /invalidfileaccess eq
+    (a file outside is not read) assert
+{ OUTSIDE (w) file } errof /invalidfileaccess eq
+    (a file outside is not written) assert
+{ OUTSIDE deletefile } errof /invalidfileaccess eq
+    (a file outside is not deleted) assert
+OUTSIDE status not
+    (a file outside does not answer status) assert
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

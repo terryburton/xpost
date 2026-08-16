@@ -378,6 +378,7 @@ language test privatedict-install
 language test private-refs
 language test resource-*
 language test roll
+language test cli-sandbox
 language test sandbox*
 language test semantics
 language test stack-*

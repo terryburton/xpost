@@ -532,6 +532,25 @@ XPAPI int xpost_path_permit_write(const char *dir);
 XPAPI void xpost_path_control_engage(void);
 
 /**
+ * @brief Engage the sandbox and retire the operators that configure it.
+ *
+ * What a host should call once it has permitted what the job needs and is
+ * about to run input it does not trust. It engages the latch as
+ * xpost_path_control_engage() does, and additionally removes
+ * .permitfileread, .permitfilewrite, .lockdown and .resourcefileopen from
+ * @p ctx's systemdict, so the program cannot name the operators that
+ * configure its own confinement. Enforcement does not rest on their
+ * absence -- the permit check is in C and applies whether or not a name
+ * reaches it -- so this is the second line and not the first.
+ *
+ * The latch is the process's and the names are the context's, so a
+ * context created afterwards finds the latch engaged and finds the names
+ * still in its own systemdict; call this for each context that is to run
+ * untrusted input.
+ */
+XPAPI void xpost_lockdown(Xpost_Context *ctx);
+
+/**
  * @brief Append a directory to the resource search path.
  *
  * findresource searches these directories, in the order added, when a

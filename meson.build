@@ -2328,6 +2328,15 @@ test('file-refusal',
   suite: cost_fast,
   timeout: 60)
 
+# The confinement an ordinary command line arranges, run without
+# --no-sandbox: every other PostScript test passes that option, so the
+# shipped default was reached by nothing that speaks the language.
+test('cli-sandbox',
+  find_program('tests/run-cli-sandbox-test.sh'),
+  args: [ xpost_exe, meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 60)
+
 test('vm-threshold',
   find_program('tests/run-vm-threshold-test.sh'),
   args: [ xpost_exe, meson.current_source_dir() ],

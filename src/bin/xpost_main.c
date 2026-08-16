@@ -819,7 +819,7 @@ int main(int argc, char *argv[])
         _xpost_permit_file_dir(ps_file, 0);
         if (output_file)
             _xpost_permit_file_dir(output_file, 1);
-        xpost_path_control_engage();
+        xpost_lockdown(ctx);
     }
 
     {

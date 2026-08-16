@@ -1707,6 +1707,19 @@ _undef_sandbox_ops (Xpost_Context *ctx)
         (void)xpost_dict_undef(ctx, sd, xpost_name_cons(ctx, names[i]));
 }
 
+/* Engage the file-access sandbox and retire, from this context, the
+   operators that configure it. Both halves belong together, and a caller
+   that engages the latch alone leaves the control operators nameable: the
+   enforcement is the C-level permit check either way, so what is lost is
+   the second line rather than the first, but it is lost silently and the
+   only sign of it is a program finding an operator that the design says
+   is gone by then. */
+void xpost_lockdown (Xpost_Context *ctx)
+{
+    xpost_path_control_engage();
+    _undef_sandbox_ops(ctx);
+}
+
 /* -  .lockdown  -
    engage the file-access sandbox: subsequent program-driven opens are
    confined to the permitted directories. One-way -- a trusted prolog
@@ -1714,8 +1727,7 @@ _undef_sandbox_ops (Xpost_Context *ctx)
 static
 int xpost_op_lockdown (Xpost_Context *ctx)
 {
-    xpost_path_control_engage();
-    _undef_sandbox_ops(ctx);
+    xpost_lockdown(ctx);
     return 0;
 }
 

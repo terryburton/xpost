@@ -254,6 +254,7 @@ xpost_interrupt
 xpost_isatty
 xpost_job_snapshots_set
 xpost_lib_dir_get
+xpost_lockdown
 xpost_log_init
 xpost_log_print
 xpost_log_print_cb_set
