@@ -1,0 +1,172 @@
+%!
+% Every filter that can round-trip, asked the same question about where
+% it stops.
+%
+% A decoding filter reads until its end-of-data and no further. What it
+% must not do is read further and throw the excess away, because the
+% bytes after the end-of-data belong to whoever holds the underlying
+% file, and a program that puts a filter over part of a stream and then
+% reads the rest itself is the ordinary case -- it is how a font program
+% is read out of the middle of a document.
+%
+% That is not hypothetical here. The last defect in these filters was a
+% lazy end-of-data desynchronisation, and it was in ALL FIVE stream
+% decoders at once, because each was written by copying the one before
+% it. A question asked of one member and not the others is exactly how a
+% family comes to share a defect.
+%
+% So it is asked of every member that can be asked. A round trip needs
+% both halves, so the members here are the six with an encoder and a
+% decoder both; SubFileDecode and ReusableStreamDecode have no encoder
+% to build their input with, and DCT is lossy and would not round-trip a
+% string. Those three are covered by tests/check-filter-facts.sh, which
+% asks the whole family of seventeen what each one is.
+%
+% The shape of each case is the same:
+%
+%   encode a known string into a file, and read that file back as bytes
+%   write those bytes to a second file, followed by a sentinel
+%   decode the second file: the decoding must give the known string
+%   then read the underlying file: what is left must be the sentinel
+%
+% The last line is the one that matters. A decoder that consumed the
+% sentinel passed the first three and would have passed a test that
+% stopped there.
+
+/failcount 0 def
+/assert {                               % bool (name) (what)  .  -
+    3 -1 roll { pop pop }{
+        (FAIL: ) print exch print ( ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+} bind def
+
+/PLAIN (HELLO FILTER WORLD) def
+/SENTINEL (ZZ) def
+/TMPA (zzfilter-a.tmp) def
+/TMPB (zzfilter-b.tmp) def
+
+% { proc }  outcome  /ok | /errorname
+/outcome {
+    mark exch stopped
+    { cleartomark $error /errorname get }{ cleartomark /ok } ifelse
+} bind def
+
+% (path)  slurp  (contents)
+% reads a whole file, in pieces, so no case depends on a buffer size
+/slurp {                                % (path)  .  (contents)
+    (r) file
+    /acc () def
+    { dup 512 string readstring
+      exch /chunk exch def
+      /acc acc chunk concatstrings def
+      not { exit } if
+    } loop
+    closefile
+    acc
+} bind def
+
+/concatstrings {                        % (a) (b)  .  (ab)
+    /csb exch def
+    /csa exch def
+    csa length csb length add string
+    dup 0 csa putinterval
+    dup csa length csb putinterval
+} bind def
+
+% /Name  encoded  (bytes the encoder wrote for PLAIN)
+/encoded {                              % /Name  .  (bytes)
+    /enm exch def
+    TMPA (w) file
+    dup enm filter
+    dup PLAIN writestring
+    closefile                           % the filter: writes its EOD
+    closefile                           % the file underneath it
+    TMPA slurp
+} bind def
+
+% A member is a name and the sample it is asked to carry. Most take any
+% bytes at all. CCITTFax does not: it encodes bilevel scanlines of a
+% declared width, and with the default 1728 columns one row is 216
+% bytes, so it is given exactly that rather than left out of the
+% question every other member answers. The pattern is varied, so a
+% decoder returning a constant would not pass.
+/ROW 216 string def
+0 1 215 { /i exch def ROW i i 7 mul 31 add 255 and put } for
+
+% The third entry is what the member is held to on the last question.
+% /strict is the answer every member should give. /deviates is a member
+% that does not give it today, and it is held to the wrong answer on
+% purpose: CCITTFaxDecode does not recognise its end-of-block marker and
+% only stops by running out of input, so anything written after the
+% marker is decoded as a further row, reported as damaged and consumed.
+% Task #330 has the measurement. Holding it to the wrong answer is what
+% stops this note outliving the defect -- the day the decoder stops
+% eating the sentinel, this line fails and asks to be made strict.
+/members [
+    (ASCIIHex)  PLAIN /strict
+    (ASCII85)   PLAIN /strict
+    (RunLength) PLAIN /strict
+    (LZW)       PLAIN /strict
+    (Flate)     PLAIN /strict
+    (CCITTFax)  ROW   /deviates
+] def
+
+0 3 members length 3 sub {
+    /mi exch def
+    /base    members mi get def
+    /PLAIN   members mi 1 add get def
+    /holdas  members mi 2 add get def
+    /encname base (Encode) concatstrings cvn def
+    /decname base (Decode) concatstrings cvn def
+
+    % ---- can this build encode at all? A filter absent from the build
+    %      answers undefined, and a case that cannot run must say so
+    %      rather than pass.
+    /enc null def
+    { /enc encname encoded def } outcome /ok eq
+    dup not {
+        base (is in this build) assert
+    }{ pop
+        % ---- lay the encoded bytes down followed by the sentinel
+        TMPB (w) file
+        dup enc writestring
+        dup SENTINEL writestring
+        closefile
+
+        % ---- decode, and read the rest of the file afterwards
+        /got null def
+        /rest null def
+        { TMPB (r) file
+          /basefile exch def
+          basefile decname filter
+          /df exch def
+          /acc () def
+          { df 512 string readstring
+            exch /chunk exch def
+            /acc acc chunk concatstrings def
+            not { exit } if
+          } loop
+          /got acc def
+          basefile 64 string readstring pop
+          /rest exch def
+          basefile closefile
+        } outcome /ok eq
+        dup not {
+            base (round trips without raising) assert
+        }{ pop
+            got PLAIN eq
+            base (decodes to what was encoded) assert
+
+            holdas /strict eq {
+                rest SENTINEL eq
+                base (leaves the bytes after its end-of-data for the next reader) assert
+            }{
+                rest SENTINEL ne
+                base (still eats the bytes after its end-of-data -- if this line failed, the defect in task 330 is fixed and the member is now /strict) assert
+            } ifelse
+        } ifelse
+    } ifelse
+} for
+
+failcount 0 eq { (SUCCESS\n) print }{
+    (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse

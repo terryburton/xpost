@@ -1770,6 +1770,17 @@ test('colour-space-family',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# The same shape for the filters: every member that has both halves is
+# asked to encode a known string, decode it back, and leave alone the
+# bytes written after its end-of-data. The last is the question the
+# family got wrong once already, in all five stream decoders at once.
+test('filter-family',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/filter_family_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # An outline font's glyphs are its character outlines stroked with
 # StrokeWidth, not the filled coverage the glyph raster route plots, so
 # text in one leaves that route for its outlines and the ordinary
