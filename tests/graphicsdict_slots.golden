@@ -33,7 +33,7 @@ bracketed /.ctop
 bracketed /.csrec
 
 lifetime /.formcache
-lifetime /.formserial
+lifetime /.formlast
 lifetime /.exactpagedims
 lifetime /.rasterband
 lifetime /.outputdevice

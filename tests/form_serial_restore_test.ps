@@ -1,0 +1,165 @@
+% A form is never served a drawing another form was filed under.
+%
+% execform holds a form's drawing against a serial stamped on the form
+% dictionary. The counter is the interpreter's own (.newformserial) and
+% only ever moves forward, so no number is handed out twice.
+%
+% It cannot be a value in a dictionary. The number is stamped into the
+% form dictionary, which is the program's and may be in either bank,
+% while a counter would be in one of them: a restore past the execform
+% that raised it winds the counter back, a dictionary the restore does
+% not reach carries the old number forward, and the next form is issued
+% the number that dictionary is still holding. The two then name one
+% entry and whichever was captured first is painted for both. Nothing
+% raises; the page carries the wrong shape. tests/font_serial_test.ps
+% drives the same arrangement for the glyph masks.
+%
+% The cache itself stays in graphicsdict and is wound back by a restore.
+% That costs a re-capture and never a wrong drawing, because the serial
+% an entry was filed under is not issued again.
+%
+% Counting is the whole of it. A form raising no error says nothing about
+% a cache: one that is never consulted raises none either. So every case
+% counts how many times a description was run, and reads that count both
+% ways -- a form that is held runs fewer times than it is placed, and one
+% that is not held runs every time.
+%
+% Run through the ppm device by run-ppm-test.sh, which is a device a
+% drawing can be held for. On a device that paints nothing every case
+% takes the uncached path and none of this is reached.
+
+/failures 0 def
+/check { exch { pop }{ (FAIL: ) print print (\n) print
+                       /failures failures 1 add def } ifelse } bind def
+
+/PLACEMENTS 4 def
+
+% Serials and run counts have to outlive the restores that are the point
+% of this file, so they are kept in global memory: a restore takes back
+% what was defined inside the save, and a number defined in there is
+% exactly what has to be compared with the one issued afterwards.
+currentglobal true setglobal
+/seen 8 dict def
+setglobal
+
+% Place a freshly built form PLACEMENTS times and answer how many times
+% its description was run. Each case builds its own form dictionary and
+% its own counter, so no case can be answered by what an earlier one
+% left behind. The gsave bracket is inside the loop, so a placement that
+% raises still leaves the graphics stack as it was found.
+/placed {  % (greylevel) . runs
+    /pl.g exch def
+    /pl.runs 0 def
+    /pl.f << /FormType 1 /BBox [0 0 20 20] /Matrix matrix
+             /PaintProc { pop /pl.runs pl.runs 1 add store
+                          pl.g setgray 0 0 20 20 rectfill } >> def
+    0 1 PLACEMENTS 1 sub {
+        pop gsave 50.5 200.5 translate pl.f execform grestore
+    } for
+    seen /lastid pl.f /.formid get put
+    pl.runs
+} bind def
+
+% --- the negative control ---
+% Before anything is asked about a restore, this file has to show that a
+% form is held here at all. A run where nothing is ever cached would
+% answer every case below with a description run at every placement,
+% which is also what the defect looks like from the other side.
+0 placed /r0 exch def
+r0 PLACEMENTS lt (a form placed repeatedly is held) check
+r0 0 gt (and its description is run at least once) check
+
+% --- the counter is not wound back ---
+% A form cached inside a save, the save restored, and another form after
+% it. The premise is that the second form is issued a number the first
+% one never had: the counter is the interpreter's, so the restore does
+% not reach it.
+/sv save def
+0 placed pop
+seen /idin seen /lastid get put
+sv restore
+
+1 placed /r2 exch def
+seen /idafter seen /lastid get put
+
+seen /idafter get seen /idin get gt
+    (a form past a restore takes a serial the restore did not wind back) check
+
+% Having been issued a number of its own, this form is run for itself
+% rather than served what the earlier one was filed under.
+r2 0 gt
+    (a form past a restore is not served the earlier drawing) check
+r2 PLACEMENTS lt
+    (and is itself held once it has been run) check
+
+% --- a form dictionary the restore does not reach ---
+% The stamp goes into the program's own dictionary, which is the one part
+% of the arrangement whose bank the program chooses. A form dictionary in
+% global virtual memory keeps its number across a restore; what stops it
+% naming a later form's drawing is that no later form is issued that
+% number. Such a dictionary is held like any other -- the bank it lives
+% in does not decide whether it can be.
+currentglobal true setglobal
+/gtally 4 dict def
+gtally /runs 0 put
+/GF << /FormType 1 /BBox [0 0 20 20] /Matrix matrix
+       /PaintProc { pop gtally /runs gtally /runs get 1 add put
+                    0 0 20 20 rectfill } >> def
+setglobal
+
+GF gcheck (the form dictionary this case needs is in global memory) check
+
+% Placed repeatedly it is held, exactly as a local one is.
+0 1 PLACEMENTS 1 sub {
+    pop gsave 300.5 200.5 translate GF execform grestore
+} for
+gtally /runs get PLACEMENTS lt
+    (a form dictionary in global memory is held) check
+gtally /runs get 0 gt
+    (and its description is run at least once) check
+GF /.formid known
+    (and it takes a serial like any other) check
+
+% And now the case the arrangement exists for, on a dictionary of its
+% own so that nothing this file has already done can answer it. The form
+% is placed for the first time inside a save, so the entry it is filed
+% under is one the restore takes back -- while the dictionary carrying
+% the number is not, because it is global.
+%
+% What must then be true is that no form issued afterwards is given that
+% number. Both halves are read: the serial the next form takes, and
+% whether the global form runs again for itself. A form served another
+% form's drawing runs no second time and raises nothing, so the count
+% alone would not tell the two apart -- which is why the serials are
+% compared as well.
+currentglobal true setglobal
+/htally 4 dict def
+htally /runs 0 put
+/GH << /FormType 1 /BBox [0 0 20 20] /Matrix matrix
+       /PaintProc { pop htally /runs htally /runs get 1 add put
+                    0 0 20 20 rectfill } >> def
+setglobal
+
+/sv2 save def
+gsave 450.5 200.5 translate GH execform grestore
+sv2 restore
+
+htally /runs get 1 eq (a global form placed inside a save paints there) check
+/gid GH /.formid get def
+
+% a form issued a serial after the restore
+0 placed pop
+seen /lastid get gid ne
+    (no form past the restore is issued the serial the global one carries) check
+
+% and the global form, whose entry the restore took back, paints again
+% for itself rather than being served what that form was filed under
+gsave 450.5 200.5 translate GH execform grestore
+htally /runs get 2 eq
+    (a global form re-captures rather than taking another form's drawing) check
+
+failures 0 eq
+    { (SUCCESS\n) print }
+    { failures =print ( failures\n) print } ifelse
+flush
+quit

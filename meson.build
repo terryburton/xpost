@@ -1852,6 +1852,19 @@ test('execform-cache',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The other half of the form cache: the counter that names a form and the
+# cache it keys are both in graphicsdict, so a restore winds the two back
+# together and a serial handed out a second time finds nothing filed under
+# it. Parts them and the second form is served the first one's drawing --
+# no error, a wrong shape on a page. Drives a form cached inside a save,
+# the save restored, and another form after it, and holds the run to
+# actually reissuing the serial so the case cannot pass vacuously.
+test('form-serial-restore',
+  find_program('tests/run-ppm-test.sh'),
+  args: [ xpost_exe, files('tests/form_serial_restore_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # Forms inside forms, on both routes, against the same page painted with
 # nothing held. A form's description is kept and substituted for a later
 # execution (PLRM 4.7), and the claim is that the substitution changes

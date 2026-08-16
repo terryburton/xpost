@@ -2168,6 +2168,50 @@ int _flattenpath (Xpost_Context *ctx)
 }
 
 
+/* -  .newformserial  int
+   The serial a form's held drawing is keyed by. The counter only ever
+   moves forward, so no two forms of a run are named alike and a drawing
+   cached against a serial cannot be taken for a later form that happened
+   to be given the same number.
+
+   A counter kept in virtual memory could not promise that. The number is
+   stamped into the form dictionary, which is the program's and may be in
+   either bank, while the counter would be in one of them: a restore past
+   the execform that raised it winds the counter back, a dictionary the
+   restore does not reach carries the old number forward, and the next
+   form is issued the number that dictionary is still holding. The two
+   then name one entry and whichever was captured first is painted for
+   both. Nothing reports that; it is a wrong shape on a page. The counter
+   is therefore the interpreter's own, as the glyph masks' is
+   (.newfontserial), and the bank the form dictionary lives in stops
+   mattering.
+
+   It lives here because the cache it keys lives in graphicsdict, which
+   is the dictionary this file reaches. The cache itself stays in virtual
+   memory and is wound back by a restore; that costs a re-capture and
+   never a wrong drawing, because the serial it was filed under is not
+   issued again. */
+static int _form_serial_next = 1;
+
+static int _newformserial(Xpost_Context *ctx)
+{
+    if (_form_serial_next <= 0)
+    {
+        /* the counter has run its range. What is held cannot be told
+           apart from what the reissued numbers will name, so the cache
+           has to be given up -- which is done by the caller, in the
+           dictionary the cache lives in, since nothing here can reach
+           it. Restarting at a number below the one last handed out is
+           what tells the caller that. */
+        _form_serial_next = 1;
+    }
+    if (!xpost_stack_push(ctx->lo, ctx->os, xpost_int_cons(_form_serial_next)))
+        return stackoverflow;
+    _form_serial_next++;
+    return 0;
+}
+
+
 int xpost_oper_init_path_ops(Xpost_Context *ctx,
                              Xpost_Object sd)
 {
@@ -2247,6 +2291,8 @@ int xpost_oper_init_path_ops(Xpost_Context *ctx,
     INSTALL;
 
     op = xpost_operator_cons(ctx, ".newpathstr", (Xpost_Op_Func)_newpathstr, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".newformserial", (Xpost_Op_Func)_newformserial, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".pathempty", (Xpost_Op_Func)_pathempty, 0);
     INSTALL;

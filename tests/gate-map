@@ -322,6 +322,7 @@ vm test dict-capacity*
 vm test entity-limit
 vm test filenameforall-large
 vm test forall-large
+vm test form-serial-restore
 vm test free-*
 vm test gc-*
 vm test global-vm-invariant

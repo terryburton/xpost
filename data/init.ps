@@ -1322,24 +1322,38 @@ setglobal
         % there may be a serial this never issued: a program may write
         % its own, and a copy of a form carries the original's.
         %
-        % The counter and the cache it keys are both in graphicsdict,
-        % which is local virtual memory, and they have to stay together
-        % there. That is what makes a reissued serial harmless: a restore
-        % past the execform that raised the counter winds the counter
-        % back, and winds back the entries it named in the same act, so
-        % the number handed out a second time finds nothing filed under
-        % it. Move either one alone -- the counter to storage a restore
-        % does not reach, or the drawings to a store outside virtual
-        % memory that is keyed from here -- and the two disagree about
-        % which form a drawing belongs to. Nothing reports that
-        % disagreement; it is a wrong shape on a page. The glyph cache
-        % keeps the other arrangement, where the masks are not virtual
-        % memory and the serial is therefore the interpreter's own
-        % counter and not a value in a dictionary (.newfontserial).
+        % The counter is the interpreter's own (.newformserial) and only
+        % ever moves forward, so no number is ever handed out twice and no
+        % form can be served a drawing another form was filed under. It
+        % cannot be a value in a dictionary. The number is stamped into
+        % the form dictionary, which is the program's and may be in either
+        % bank, while a counter would be in one of them: a restore past
+        % the execform that raised it winds the counter back, a dictionary
+        % the restore does not reach carries the old number forward, and
+        % the next form is issued the number that dictionary is still
+        % holding. The two then name one entry and whichever was captured
+        % first is painted for both. Nothing reports that; it is a wrong
+        % shape on a page. The glyph masks are keyed the same way and for
+        % the same reason (.newfontserial).
+        %
+        % The cache stays in graphicsdict and is wound back by a restore,
+        % which costs a re-capture and never a wrong drawing, since the
+        % serial an entry was filed under is not issued again.
+        %
+        % The last number seen is kept beside the cache so that the two
+        % are wound back together. A counter that has run its range starts
+        % again below what it has already handed out, and what is held is
+        % then no longer distinguishable from what the reissued numbers
+        % will name, so the cache is given up. Keeping the two in one
+        % dictionary is what makes that test agree with what the cache
+        % actually holds: a restore that takes the entries back takes the
+        % remembered number with them.
         fd /.formid known not {
-            graphicsdict /.formserial 2 copy known { get }{ pop pop 1 } ifelse
-            fd /.formid 2 index put
-            graphicsdict /.formserial 3 -1 roll 1 add put
+            //.internaldict /.newformserial get exec
+            graphicsdict /.formlast 2 copy known { get }{ pop pop 0 } ifelse
+            1 index le not { //.xpostsys /.formcachedrop get exec } if
+            graphicsdict /.formlast 2 index put
+            fd /.formid 3 -1 roll put
         } if
         % The key: the form and the linear part of the transformation,
         % written out in full rather than rounded, so two executions
