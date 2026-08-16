@@ -218,22 +218,17 @@ setglobal
     /yadvance 3 2 roll put
 } //.xpostsys /.defop get exec
 
-% -  .patternink  bool
-% Whether the colour in force is a pattern: a procedure tiled over the
-% page rather than a colour a pixel can be set to.
+% Whether the colour in force is a pattern is asked here through
+% .patternactive (pattern.ps), which is the one place that question is
+% answered for anything that paints.
 %
-% A glyph reaches the page as coverage -- a raster the face rendered, or
-% a mask captured from a Type 3 build -- and coverage carries no colour,
-% so whatever plots it can only plot it in one. Text in a pattern
-% therefore leaves that route for one where the pattern's own paint
-% runs. Which route each kind of text leaves for is its own business;
-% that the colour sends it there is said once, here, so the answer
-% cannot differ between them.
-currentglobal true setglobal
-.xpostsys /.patternink {
-    graphicsdict /currgstate get /colorspace get /Pattern eq
-} put
-setglobal
+% It matters to text because a glyph reaches the page as coverage -- a
+% raster the face rendered, or a mask captured from a Type 3 build --
+% and coverage carries no colour, so whatever plots it can only plot it
+% in one. Text in a pattern therefore leaves that route for one where
+% the pattern's own paint runs. Which route each kind of text leaves for
+% is its own business; that the colour sends it there is not a thing
+% text decides, which is why it is not answered here.
 
 % -  .glyphkey  [serial name] true
 %                                false
@@ -409,7 +404,7 @@ currentglobal true setglobal
     % cannot come through it. The build runs direct instead, where its
     % own marks go through the ordinary fill and the pattern's paint
     % is tiled over them.
-    /maskok clipok keyok and //.xpostsys /.patternink get exec not and def
+    /maskok clipok keyok and //.xpostsys /.patternactive get exec not and def
     maskok
     { devx devy devmat gkey cliparr .maskcachehit }
     { false } ifelse
@@ -735,13 +730,13 @@ currentglobal true setglobal
 % The font's PaintType is asked first, because the answer to it is what
 % the outline route needs anyway, and the colour only when the font has
 % not already settled the route. What makes a colour one the raster
-% cannot carry is .patternink's to say, and Type 3 text -- which has no
+% cannot carry is .patternactive's to say, and Type 3 text -- which has no
 % outlines to leave for, and leaves the mask capture instead -- asks the
 % same question of the same place.
 .xpostsys /.showroute {
     graphicsdict /currgstate get /currfont get
     /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse
-    dup { true }{ //.xpostsys /.patternink get exec } ifelse
+    dup { true }{ //.xpostsys /.patternactive get exec } ifelse
     { exch pop //.xpostsys /.showoutline get exec }
     { pop exch pop exec } ifelse
 } put
