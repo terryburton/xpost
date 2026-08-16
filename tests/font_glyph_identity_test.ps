@@ -1,0 +1,183 @@
+% What identifies a glyph in the font cache, run through
+% `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% PLRM 5.5 states the identification outright:
+%
+%   "Each glyph saved in the font cache is identified by the combination
+%    of: The original base font or CIDFont dictionary from which the
+%    glyph description was obtained. The character selector, which is a
+%    character name in a base font or a CID in a CIDFont. The current
+%    transformation matrix (CTM) at the time the glyph is shown."
+%
+% and then rules the character code out by name, with the reason:
+%
+%   "Note that a character code is not part of the glyph identification
+%    in the font cache, since a given glyph may be selected in more than
+%    one way."
+%
+% Two consequences are asserted here, and both are about appearance
+% rather than about how the store is arranged. PLRM 5.5 also states the
+% obligation the identification exists to meet: "a given combination of
+% font and character selector must always produce the same appearance
+% when rendered." The contrapositive is what a test can see -- where the
+% font or the selector differs, the appearance is free to differ, and an
+% identification that cannot tell the two apart paints one glyph for the
+% other.
+%
+%   The selector is the character NAME. Re-encoding a font so that a
+%   different name sits at a code changes which glyph that code selects,
+%   and the page must show the glyph now named there.
+%
+%   A code selecting the same name twice is the same glyph. PLRM 5.6
+%   makes this concrete for the commonest case: a copy of a font whose
+%   only modified entry is Encoding may keep the original unique ID,
+%   "because those changes do not affect the glyphs' appearance or
+%   metrics" -- which holds only where the encoding is not part of what
+%   names a cached glyph.
+%
+% The re-encoding idiom this drives is the ordinary one: copy a font
+% dictionary, put a different Encoding into the copy, and define it.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- a raster to draw into and read back ---
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/snap { % - . [rows]
+    [ 0 1 63 { DEV /ImgData get exch get dup length string copy } for ]
+} bind def
+/same { % [rows] [rows] . bool
+    /gi.b exch def /gi.a exch def
+    true 0 1 63 {
+        /gi.i exch def
+        gi.a gi.i get gi.b gi.i get eq and
+    } for
+} bind def
+/ink { % [rows] . n
+    0 exch { { 128 lt { 1 add } if } forall } forall
+} bind def
+% what the cache is holding: the entry count cachestatus reports
+/csize { cachestatus 7 array astore 4 get } bind def
+
+% --- a Type 3 font carrying two glyphs of different size, so which one
+%     was painted can be read off the page ---
+/mkfont { % /nameat65 . font
+    /gi.at exch def
+    10 dict dup begin
+        /FontType 3 def
+        /FontMatrix [0.001 0 0 0.001 0 0] def
+        /FontBBox [0 0 1000 1000] def
+        /Encoding 256 array def
+        0 1 255 { Encoding exch /.notdef put } for
+        Encoding 65 gi.at put
+        /CharProcs 3 dict def
+        CharProcs /big {
+            750 0  0 0 700 700 setcachedevice
+            0 0 700 700 rectfill
+        } put
+        CharProcs /small {
+            750 0  0 0 300 300 setcachedevice
+            0 0 300 300 rectfill
+        } put
+        CharProcs /.notdef { 0 0 setcharwidth } put
+        /BuildChar { exch begin
+            Encoding exch get CharProcs exch get exec
+        end } def
+    end
+} bind def
+
+/draw { % font . [rows]
+    1 setgray 0 0 64 64 rectfill 0 setgray
+    30 scalefont setfont
+    2 4 moveto (A) show
+    snap
+} bind def
+/drawB { % font . [rows]   -- the same glyph selected through code 66
+    1 setgray 0 0 64 64 rectfill 0 setgray
+    30 scalefont setfont
+    2 4 moveto (B) show
+    snap
+} bind def
+
+% --- the two appearances, each from a font of its own ---
+/rbig   /big   mkfont /GIbig   exch definefont draw def
+/rsmall /small mkfont /GIsmall exch definefont draw def
+
+% Nothing below says anything unless the two can be told apart.
+rbig   ink 0 gt (the big glyph leaves ink) assert
+rsmall ink 0 gt (the small glyph leaves ink) assert
+rbig rsmall same not (the two glyphs are told apart) assert
+
+% --- 1. the re-encoding idiom: a copy whose only change is Encoding ---
+% The copy carries whatever identifies the original, which is what PLRM
+% 5.6 permits for an Encoding-only change. What it must not carry is the
+% first font's glyphs: /small is what the copy names at the code, so
+% /small is what the code selects.
+/GIsrc /big mkfont def
+/GIone GIsrc definefont pop
+/rone GIsrc draw def
+rone rbig same (the source font paints its own glyph) assert
+
+/GIcopy GIsrc dup length dict copy def
+GIcopy /Encoding 256 array put
+0 1 255 { GIcopy /Encoding get exch /.notdef put } for
+GIcopy /Encoding get 65 /small put
+/GItwo GIcopy definefont pop
+/rtwo GIcopy draw def
+
+rtwo rsmall same
+    (a re-encoded copy paints the glyph its own encoding names) assert
+rtwo rbig same not
+    (and not the glyph the font it was copied from named there) assert
+
+% --- 2. the same font, re-encoded in place ---
+% Nothing is copied here: one dictionary, one code, and the name at that
+% code replaced. The selector has changed, so the appearance must.
+/GIinplace /big mkfont def
+/GIthree GIinplace definefont pop
+/rbefore GIinplace draw def
+rbefore rbig same (the font paints the glyph it names at the code) assert
+
+GIinplace /Encoding get 65 /small put
+/rafter GIinplace draw def
+rafter rsmall same
+    (re-encoding a code in place paints the glyph now named there) assert
+rafter rbefore same not
+    (the page does not go on showing the glyph named there before) assert
+
+% --- 3. one glyph selected in more than one way ---
+% The reason PLRM gives for keeping the code out of the identification.
+% Two codes naming one glyph are one glyph: showing the second after the
+% first is the same appearance, and asks the store for nothing new.
+/GImulti /big mkfont def
+GImulti /Encoding get 66 /big put
+/GIfour GImulti definefont pop
+/rvia65 GImulti draw def
+/atone csize def
+/rvia66 GImulti drawB def
+
+rvia66 rvia65 same
+    (a glyph selected through a second code is the same glyph) assert
+csize atone eq
+    (and selecting it that way asks the store for nothing new) assert
+
+faildict /n get 0 eq { (SUCCESS) = } { (FAILURES: ) print faildict /n get = } ifelse

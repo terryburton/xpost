@@ -2162,6 +2162,21 @@ test('font-glyphkey',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What identifies a cached glyph (PLRM 5.5): the font, the character
+# selector -- which is the character's NAME -- and the transform. The
+# code is explicitly not part of it, "since a given glyph may be
+# selected in more than one way", so re-encoding a font must show the
+# glyph now named at the code and not the one named there before. This
+# drives the ordinary re-encoding idiom, a copy of a font dictionary
+# with a different Encoding put into it, which PLRM 5.6 says may keep
+# the original's identity because such a change does not affect the
+# glyphs' appearance.
+test('font-glyph-identity',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_glyph_identity_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A screening device's threshold cell is addressed by two dimensions
 # carried beside it in the device dictionary, so a pair of dimensions
 # the cell does not hold leaves the fill unscreened rather than reading

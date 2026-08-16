@@ -205,28 +205,62 @@ currentglobal true setglobal
 } put
 setglobal
 
-% -  .glyphkey  int true
-%                   false
-% What the mask cache is asked to remember a glyph by: the font's serial,
-% stamped by definefont, with the character code beside it. Any other
-% caller names its masks its own way; the cache does not interpret this.
+% -  .glyphkey  [serial name] true
+%                                false
+% What the mask cache is asked to remember a glyph by. PLRM 5.5 says
+% what identifies a cached glyph: the font dictionary the description
+% came from, the character selector -- "a character name in a base
+% font" -- and the transform in force. The transform is carried
+% separately, so what is made here is the first two: the font's serial
+% beside the character's name.
 %
-% The serial is whatever the font dictionary carries under .fontid, and a
-% font dictionary is the program's to write: definefont stamps a serial
-% only where there is none, and nothing stops a program putting its own
-% there or taking it away. So a serial that is not an integer, or one far
-% enough out that the pair leaves the integer range and arrives as a real,
-% is a serial this key cannot be made from, and that is answered rather
-% than carried into the cache. The pair is injective over every integer
-% serial, so two fonts never share a key; there is no reduction into range
-% here, because a key collision is a glyph drawn from another font's mask.
+% The character CODE is not it, and PLRM 5.5 rules it out by name:
+% "Note that a character code is not part of the glyph identification
+% in the font cache, since a given glyph may be selected in more than
+% one way." A code is a position in an encoding, and an encoding is a
+% mapping a program rewrites; the glyph is what the name at that
+% position denotes. Keying by the code files a mask under a position,
+% so the next font to put a different name at that position -- which is
+% the whole of what re-encoding is -- is served the mask of the glyph
+% that used to be there.
+%
+% The serial is whatever the font dictionary carries under .fontid, and
+% a font dictionary is the program's to write: definefont stamps a
+% serial only where there is none, and nothing stops a program putting
+% its own there or taking it away. So a serial that is not an integer,
+% or one outside the range the key gives it, is a serial this key
+% cannot be made from, and that is answered rather than carried into
+% the cache. The same goes for the selector: a font whose encoding
+% holds something other than a name at the code names no glyph the
+% cache can be asked for, and builds direct.
+%
+% What is guaranteed, and no more than this: two glyphs whose fonts
+% carry different serials never share a key, and neither do two glyphs
+% of one font under different names. Two font dictionaries that carry
+% the SAME serial do share keys, and are meant to -- that is the case
+% PLRM 5.6 sanctions, where a copy of a font differs from its original
+% only in FontName, FontInfo, FontMatrix or Encoding and may keep the
+% original's identity "because those changes do not affect the glyphs'
+% appearance or metrics". Since the selector is the name and not the
+% code, a re-encoded copy asks for the glyph it names, and the shared
+% serial costs it nothing but a shared entry for a shared glyph. What
+% is NOT guaranteed is a copy that keeps the serial while changing the
+% descriptions the names resolve to; PLRM 5.6 tells a program not to
+% carry an identity across that kind of change, and a program that does
+% has said two different glyphs are the same glyph.
 .xpostsys /.glyphkey {
     font /.fontid known {
         font /.fontid get
         dup type /integertype eq {
-            256 mul dup type /integertype eq {
-                code 255 and add
-                dup type /integertype eq { true }{ pop false } ifelse
+            font /Encoding known {
+                font /Encoding get
+                dup type /arraytype eq {
+                    dup length code gt code 0 ge and {
+                        code get
+                        dup type /nametype eq
+                        { 2 array astore true }{ pop pop false } ifelse
+                    }{ pop pop false } ifelse
+                }{ pop pop false } ifelse
             }{ pop false } ifelse
         }{ pop false } ifelse
     }{ false } ifelse

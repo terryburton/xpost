@@ -87,11 +87,17 @@ initgraphics
     snap
 } bind def
 
-% The serial that overflows is the one just past the width the build has:
-% the pair is the serial times 256 with the code beside it, so the first
-% serial that cannot be paired is the integer range shifted down 8 bits.
+% The serial the key has no room for. The key carries the character's
+% name -- a stack index and the bank bit saying which name stack it
+% indexes -- and gives the serial the bits left over, so a serial
+% outside that range is one no key can be made from. Below the range is
+% outside it at every width; above it is only reachable where the
+% language's integer is wider than the range itself, so the case that
+% stands everywhere is the negative one and the other is taken where it
+% can be.
 /wideint 2147483648 type /integertype eq def
-/bigid wideint { 36028797018963968 }{ 8388608 } ifelse def
+/bigid -1 def
+/overid wideint { 2147483648 }{ null } ifelse def
 
 /base0 csize def
 /rbig 700 null mkfont /GKbig exch definefont draw def
@@ -106,14 +112,24 @@ rsmall ink 0 gt (the second shape leaves ink too) assert
 rbig rsmall same not (the two shapes are told apart) assert
 basecached base0 gt (a font the cache can key fills the cache) assert
 
-% --- a serial the pair cannot be made from ---
+% --- a serial the key cannot be made from ---
 /rhostile 300 bigid mkfont /GKhostile exch definefont draw def
 rhostile rsmall same
-    (a glyph whose serial overflows the key is drawn from its own outline) assert
+    (a glyph whose serial is outside the key's range is drawn from its own outline) assert
 rhostile rbig same not
     (it is not drawn from the mask a reduced serial would have found) assert
 csize basecached eq
     (a glyph with no key files nothing in the cache) assert
+
+% and the other end of the range, where the language carries an integer
+% that far out at all
+overid null ne {
+    /rover 300 overid mkfont /GKover exch definefont draw def
+    rover rsmall same
+        (a serial past the top of the key's range is drawn from its own outline) assert
+    csize basecached eq
+        (nor does that one file anything in the cache) assert
+} if
 
 % --- the other shapes .fontid can take ---
 /rreal 300 1.5 mkfont /GKreal exch definefont draw def
@@ -126,6 +142,21 @@ rname rsmall same (a serial that is a name is not a key) assert
 GKgone /.fontid undef
 /rgone GKgone draw def
 rgone rsmall same (a font with no serial at all is not a key) assert
+
+% --- an encoding the selector cannot be read out of ---
+% The other half of the key is the character's name, which is what the
+% font's encoding holds at the code. An encoding a program has replaced
+% with something that is not an array holds no name the cache can be
+% asked for, so the glyph builds direct as one with no serial does. The
+% font still draws: what a glyph description reads its encoding as is
+% its own business, and only the key is refused.
+/GKnoenc 300 null mkfont /GKnoenc exch definefont def
+GKnoenc /Encoding 1 dict put
+GKnoenc /Encoding get 65 /A put
+/rnoenc GKnoenc draw def
+rnoenc rsmall same
+    (a font whose encoding is not an array of names is not a key) assert
+
 csize basecached eq
     (none of them files anything in the cache) assert
 

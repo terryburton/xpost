@@ -3964,30 +3964,70 @@ refuse:
    glyph cache; the raster is a coverage mask captured from the build
    procedure's marks. */
 
-/* The cache holds a caller's number for a mask beside the transform it
-   was rendered under, and answers a lookup that matches both. So the
-   field the number is carried in spans the integer object's: a field
-   narrower than that would carry two integers to one number, and the
-   entry filed under one would be answered to the other. `long` is the
-   integer's width on some platforms and half of it on others, which is
-   why it is not the field. */
-typedef char xpost_mask_key_spans_the_integer[
-    sizeof(unsigned long long) >= sizeof(dword)
-    && sizeof(dword) == sizeof(integer) ? 1 : -1];
+/* The cache holds a caller's key for a mask beside the transform it was
+   rendered under, and answers a lookup that matches both. The key is a
+   serial and a name's stack index side by side, so the field carrying
+   it spans both whole: a field narrower than the two would carry two
+   keys to one number, and the entry filed under one would be answered
+   to the other. `long` is the integer's width on some platforms and
+   half of it on others, which is why it is not the field. */
+typedef char xpost_mask_key_spans_serial_and_selector[
+    sizeof(unsigned long long) * 8 >= 64 ? 1 : -1];
+
+/* The two halves of the key, and the room each is given in the field
+   they share. The selector half takes a name's stack index, plus the
+   bank bit saying which of the two name stacks the index is into: a
+   name is that pair and nothing narrower tells two of them apart. What
+   is left over is the serial's.
+ *
+ * Both halves are held to their room rather than assumed to fit it.
+ * The index is carried in a field whose width is the build's -- half
+ * the object's, which is thirty-two bits in one build and sixty-four in
+ * the other -- and the serial is an integer object, which is the same
+ * two widths. So either could in principle arrive wider than the share
+ * it is given here, and one that did would carry into the other's bits
+ * and be answered a mask belonging to a different name or a different
+ * font. Neither is reduced into range: a key that does not fit is no
+ * key, and its glyph builds from its own description, which is the same
+ * answer this gives a font carrying no serial at all. */
+#define MASK_KEY_SELECTOR_BITS 33
+#define MASK_KEY_SERIAL_MAX \
+    ((unsigned long long)1 << (64 - MASK_KEY_SELECTOR_BITS))
+#define MASK_KEY_INDEX_MAX ((unsigned long long)1 << 32)
 
 static int
 _mask_key(Xpost_Context *ctx, Xpost_Object key,
           Xpost_Object mat, unsigned long long *k2, long m[4])
 {
+    Xpost_Object serial, selector;
+    unsigned long long sel;
     int i;
 
-    /* The caller says what the mask is of. A glyph combines its font's
-       serial with the character code; anything else combines whatever
-       distinguishes one of its masks from another. The cache neither
-       knows nor needs to know which. */
-    if (xpost_object_get_type(key) != integertype)
+    /* What the mask is of: the caller pairs a number naming the font
+       the mask was built from with the name of the thing built. For a
+       glyph that pair is the font's serial and the character name, as
+       PLRM 5.5 identifies a cached glyph -- by the font and by the
+       character selector, which in a base font is a name. A caller
+       whose masks are not glyphs pairs whatever distinguishes one of
+       its masks from another; the cache neither knows nor needs to know
+       which. */
+    if (xpost_object_get_type(key) != arraytype || key.comp_.sz != 2)
         return 0;
-    *k2 = (unsigned long long)(dword)key.int_.val;
+    serial = xpost_array_get(ctx, key, 0);
+    selector = xpost_array_get(ctx, key, 1);
+    if (xpost_object_get_type(serial) != integertype
+     || xpost_object_get_type(selector) != nametype)
+        return 0;
+    if (serial.int_.val < 0
+     || (unsigned long long)serial.int_.val >= MASK_KEY_SERIAL_MAX)
+        return 0;
+    sel = (unsigned long long)selector.mark_.padw;
+    if (sel >= MASK_KEY_INDEX_MAX)
+        return 0;
+    if (selector.tag & XPOST_OBJECT_TAG_DATA_FLAG_BANK)
+        sel |= (unsigned long long)1 << 32;
+    *k2 = ((unsigned long long)serial.int_.val << MASK_KEY_SELECTOR_BITS)
+        | sel;
     if (xpost_object_get_type(mat) != arraytype || mat.comp_.sz != 6)
         return 0;
     for (i = 0; i < 4; i++)
@@ -4121,7 +4161,7 @@ int _maskcacheput(Xpost_Context *ctx,
 #define DNUM(name, var) do {     o = xpost_dict_get(ctx, dict, xpost_name_cons(ctx, name));     if (xpost_object_get_type(o) == realtype) var = o.real_.val;     else if (xpost_object_get_type(o) == integertype) var = (double)o.int_.val;     else return typecheck; } while (0)
     DGET("buf", buf, stringtype);
     DGET("mat", mat, arraytype);
-    DGET("key", key, integertype);
+    DGET("key", key, arraytype);
     { double t; DNUM("w", t); w = (int)t; }
     { double t; DNUM("h", t); h = (int)t; }
     { double t; DNUM("bx0", t); bx0 = (int)t; }
@@ -5270,7 +5310,7 @@ int xpost_oper_init_font_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".cachestatus", (Xpost_Op_Func)_cachestatus, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".maskcachehit", (Xpost_Op_Func)_maskcachehit, 5,
-        floattype, floattype, arraytype, integertype, arraytype);
+        floattype, floattype, arraytype, arraytype, arraytype);
     INSTALL;
     op = xpost_operator_cons(ctx, ".newfontserial", (Xpost_Op_Func)_newfontserial, 0); INSTALL;
     op = xpost_operator_cons(ctx, ".maskcacheput", (Xpost_Op_Func)_maskcacheput, 1, dicttype);
