@@ -54,6 +54,39 @@
 #
 #   part       a constant or table the class reads only itself.
 #
+# ---- and whether anyone means it to stay
+#
+# A reason says why a difference exists. It does not say whether it is
+# the design or a debt, and those call for opposite things: one is to be
+# left alone, the other paid off. So every entry above that is a
+# difference rather than a value carries one word.
+#
+#   settled   meant, or forced by something outside this tree. Owes
+#             nothing further.
+#   thorn     lived with for now. Owes what would remove it and what
+#             removing it costs, because a debt nobody priced is a debt
+#             nobody pays. Thorns are printed on every run, green or
+#             red, so they are read rather than accumulated.
+#   heading   the direction of travel. Owes the state being moved to and
+#             what closes the gap.
+#
+# Two kinds are exempt, for different reasons.
+#
+#   state is not a difference at all: two devices holding different
+#   values there are not differing about anything.
+#
+#   method is a difference, and is deliberately not asked yet. The thing
+#   a disposition buys -- that an asymmetry cannot arrive unnoticed --
+#   methods already have, from the carrier lists above: a method
+#   spreading to a device not named here fails, and one leaving a device
+#   that is named fails. What a disposition would add is the judgement
+#   of whether a given method's absence is meant, and there are
+#   sixty-eight of them, most following from what the device is rather
+#   than from a choice anyone made. Classifying that many at once would
+#   produce sixty-eight judgements of even quality, which is to say
+#   none. It wants doing a family at a time, by someone changing that
+#   family for another reason.
+#
 # ---- reading a line
 #
 #   <kind> <entry> <device>...
