@@ -54,11 +54,45 @@ static int errors_with(Xpost_Context *ctx, const char *prog, const char *name)
            strcmp(xpost_error_name_get(ctx), name) == 0;
 }
 
+/* A filesystem path as a PostScript string literal.
+ *
+ * PLRM 3.2.2 gives a literal string three characters of its own: the
+ * parentheses that bound it, and the backslash that escapes. A path may
+ * contain all three, and on a platform whose canonical separator IS the
+ * backslash every path contains the third -- so a path written straight
+ * into the source names something else, quietly. C:\dir\file arrives as
+ * C:dirfile, because \d and \f are not escapes the scanner knows and it
+ * drops the backslash, and where the next letter happens to be one it
+ * does know the byte becomes a backspace instead. The test then reports
+ * that the file could not be opened, which is true and is not what it
+ * was asking.
+ *
+ * Answers 1 on success, 0 if the escaped form will not fit.
+ */
+static int ps_string(char *dst, size_t len, const char *path)
+{
+    size_t o = 0;
+
+    for (; *path; path++)
+    {
+        if (*path == '\\' || *path == '(' || *path == ')')
+        {
+            if (o + 1 >= len) return 0;
+            dst[o++] = '\\';
+        }
+        if (o + 1 >= len) return 0;
+        dst[o++] = *path;
+    }
+    dst[o] = '\0';
+    return 1;
+}
+
 int main(void)
 {
     Xpost_Context *ctx;
     char name[] = "xpost_sbr_XXXXXX";
     char prog[1400];
+    char quoted[700];
     char *target;
     FILE *w;
 
@@ -71,6 +105,13 @@ int main(void)
     fclose(w);
     target = xpost_realpath(name);
     if (!target) { report_failure("could not resolve it"); unlink(name); return verdict(); }
+    if (!ps_string(quoted, sizeof quoted, target))
+    {
+        report_failure("the path does not fit as a string literal");
+        free(target);
+        unlink(name);
+        return verdict();
+    }
 
     if (!xpost_init()) { report_failure("xpost_init"); return verdict(); }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
@@ -83,12 +124,12 @@ int main(void)
     check(xpost_path_permit_read("/") == 1, "the root is permitted for reading");
     xpost_path_control_engage();
 
-    snprintf(prog, sizeof prog, "(%s) (r) file closefile", target);
+    snprintf(prog, sizeof prog, "(%s) (r) file closefile", quoted);
     check(completes(ctx, prog), "a file under the permitted root reads");
 
     /* nothing was permitted for writing, so nothing may be written --
        including under the root that may be read */
-    snprintf(prog, sizeof prog, "(%s) (w) file", target);
+    snprintf(prog, sizeof prog, "(%s) (w) file", quoted);
     check(errors_with(ctx, prog, "invalidfileaccess"),
           "a write is refused under a read-only root");
 
