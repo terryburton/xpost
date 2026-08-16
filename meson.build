@@ -333,10 +333,12 @@ if fontconfig_dep.found()
   config_h.set('HAVE_FONTCONFIG', 1)
 endif
 
-freetype_dep = dependency('freetype2', required: false)
-if freetype_dep.found()
-  config_h.set('HAVE_FREETYPE2', 1)
-endif
+# Required, not optional. The interpreter renders every glyph through
+# this: a build without it loaded no font and drew no glyph, which is a
+# PostScript interpreter that cannot show text. That configuration was
+# never finished -- it did not compile -- and nothing built it, so
+# offering it as a choice described something that did not exist.
+freetype_dep = dependency('freetype2', required: true)
 
 # Virtual memory is one host allocation the interpreter suballocates, so a
 # read of storage it has reclaimed is, to a memory checker, an ordinary read
@@ -5215,7 +5217,6 @@ pkgmod.generate(
 summary({'OS': host_os,
          'memory backing': have_mmap.to_string('mapped (mmap/mremap)', 'allocator'),
          'fontconfig': fontconfig_dep.found().to_string('yes', 'no'),
-         'freetype': freetype_dep.found().to_string('yes', 'no'),
          'jpeg device': jpeg_dep.found().to_string('yes', 'no'),
          'png device': libpng_dep.found().to_string('yes', 'no'),
          'documentation': (get_option('doc') and doxygen.found()).to_string('yes', 'no'),

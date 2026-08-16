@@ -1009,7 +1009,6 @@ static
 int _findfont(Xpost_Context *ctx,
               Xpost_Object fontname)
 {
-#ifdef HAVE_FREETYPE2
     Xpost_Object fontstr;
     Xpost_Object fontdict;
     struct fontdata data;
@@ -1465,11 +1464,6 @@ fail:
         xpost_font_face_free(data.face);
     free(fname);
     return ret;
-#else
-    (void)ctx;
-    (void)fontname;
-    return invalidfont;
-#endif
 }
 
 /* Load a Type 42 font program: reassemble the /sfnts strings into one
@@ -1481,7 +1475,6 @@ static
 int _loadfont42(Xpost_Context *ctx,
                 Xpost_Object fontdict)
 {
-#ifdef HAVE_FREETYPE2
     Xpost_Object sfnts;
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
@@ -1548,11 +1541,6 @@ int _loadfont42(Xpost_Context *ctx,
 fail:
     xpost_font_face_free(data.face);
     return ret;
-#else
-    (void)ctx;
-    (void)fontdict;
-    return invalidfont;
-#endif
 }
 
 /* scalefont and makefont are implemented in font.ps: each returns a
@@ -2085,7 +2073,6 @@ int _page_mark(Xpost_Context *ctx)
                           xpost_bool_cons(1));
 }
 
-#ifdef HAVE_FREETYPE2
 /* Prepare the shared face for use under the current graphics state.
    The font dictionary's FontMatrix carries the size (and any rotation,
    shear or anisotropy concatenated by makefont); the CTM carries the
@@ -2768,7 +2755,6 @@ int _show_char_outline(Xpost_Context *ctx,
     return 1;
 }
 
-#endif
 
 static
 int _show_glyph(Xpost_Context *ctx,
@@ -2787,7 +2773,6 @@ int _show_glyph(Xpost_Context *ctx,
                 Xpost_Object comp4,
                 int *inked)
 {
-#ifdef HAVE_FREETYPE2
     unsigned char *buffer;
     int rows;
     int width;
@@ -2884,23 +2869,6 @@ int _show_glyph(Xpost_Context *ctx,
        (truncating each glyph's advance drifts the line's length) */
     *xpos += (real)(advance_x / 65536.0);
     *ypos -= (real)(advance_y / 65536.0);
-#else
-    (void)ctx;
-    (void)devdic;
-    (void)putpix;
-    (void)data;
-    (void)ts;
-    (void)xpos;
-    (void)ypos;
-    (void)glyph_index;
-    (void)glyphname;
-    (void)ncomp;
-    (void)comp1;
-    (void)comp2;
-    (void)comp3;
-    (void)comp4;
-    (void)inked;
-#endif
     return 1;
 }
 
@@ -3341,7 +3309,6 @@ static
 int _loadcidfont0(Xpost_Context *ctx,
                   Xpost_Object fontdict)
 {
-#ifdef HAVE_FREETYPE2
     Xpost_Object gdata, fdarray, fontbbox;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
@@ -3512,11 +3479,6 @@ fail:
 fail2:
     xpost_strbuf_free(&buf);
     return invalidfont;
-#else
-    (void)ctx;
-    (void)fontdict;
-    return invalidfont;
-#endif
 }
 
 
@@ -3558,7 +3520,6 @@ int _loadfont1(Xpost_Context *ctx,
                Xpost_Object fontdict,
                Xpost_Object csflat)
 {
-#ifdef HAVE_FREETYPE2
     Xpost_Object priv, fontbbox, subrs;
     Xpost_Object fontbboxarray[4];
     struct fontdata data;
@@ -3757,10 +3718,6 @@ fails:
 failh:
     xpost_strbuf_free(&hdr);
     return invalidfont;
-#else
-    (void)ctx; (void)fontdict; (void)csflat;
-    return invalidfont;
-#endif
 }
 
 
@@ -4212,7 +4169,6 @@ int _loadcidfont2(Xpost_Context *ctx,
                   Xpost_Object fontdict,
                   Xpost_Object glyphs)
 {
-#ifdef HAVE_FREETYPE2
     Xpost_Object sfnts;
     Xpost_Object fontbbox;
     Xpost_Object fontbboxarray[4];
@@ -4454,12 +4410,6 @@ facefail:
     xpost_font_face_free(data.face);
     return ret;
 
-#else
-    (void)ctx;
-    (void)fontdict;
-    (void)glyphs;
-    return invalidfont;
-#endif
 }
 
 static
@@ -4832,7 +4782,6 @@ int _stringwidth(Xpost_Context *ctx,
        renders as a fallback */
     for (ch = cstr; *ch; ch++)
     {
-#ifdef HAVE_FREETYPE2
         unsigned int glyph_index;
         long bx0, by0, bx1, by1;
         long advance_x;
@@ -4863,7 +4812,6 @@ int _stringwidth(Xpost_Context *ctx,
                          &advance_x, &advance_y);
         xpos += (real)(advance_x / 65536.0);
         ypos += (real)(advance_y / 65536.0);
-#endif
 
     }
 
@@ -5048,7 +4996,6 @@ int _stringoutline(Xpost_Context *ctx,
 
     for (ch = cstr; *ch; ch++)
     {
-#ifdef HAVE_FREETYPE2
         unsigned int glyph_index;
         long advance_x, advance_y;
         Xpost_Font_Outline_Sink sink;
@@ -5075,7 +5022,6 @@ int _stringoutline(Xpost_Context *ctx,
         }
         oc.px += advance_x / 65536.0;
         oc.py += advance_y / 65536.0;
-#endif
     }
     free(cstr);
 
@@ -5131,7 +5077,6 @@ int _glyphoutline_common(Xpost_Context *ctx,
     oc.nl = xpost_object_cvlit(xpost_name_cons(ctx, "l"));
     oc.nc = xpost_object_cvlit(xpost_name_cons(ctx, "c"));
     oc.nh = xpost_object_cvlit(xpost_name_cons(ctx, "h"));
-#ifdef HAVE_FREETYPE2
     {
         Xpost_Font_Outline_Sink sink;
         unsigned int glyph_index;
@@ -5156,7 +5101,6 @@ int _glyphoutline_common(Xpost_Context *ctx,
             return oc.err;
         }
     }
-#endif
     /* a /Metrics entry for this glyph overrides the face's advance,
        as it does on the raster route */
     _metrics_advance(ctx, &ts, byname ? gname : invalid, &advance_x, &advance_y);

@@ -230,14 +230,11 @@ PKG_CHECK_EXISTS([fontconfig],
    ],
    [have_fontconfig="no"])
 
-# freetype
+# freetype, which is required: the interpreter renders every glyph
+# through it, so a build without it shows no text
 PKG_CHECK_EXISTS([freetype2],
-   [
-    have_freetype="yes"
-    xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"
-    AC_DEFINE([HAVE_FREETYPE2], [1], [Define to 1 if Freetype is detected])
-   ],
-   [have_freetype="no"])
+   [xpost_requirements_lib_pc="${xpost_requirements_lib_pc} freetype2"],
+   [AC_MSG_ERROR([freetype2 is required])])
 
 # libjpeg
 AC_CHECK_LIB([jpeg], [jpeg_CreateDecompress],
@@ -611,7 +608,6 @@ echo "  Memory backing.......: mapped (mmap/mremap)"
 else
 echo "  Memory backing.......: allocator"
 fi
-echo "  Freetype support.....: ${have_freetype}"
 echo "  Fontconfig support...: ${have_fontconfig}"
 echo "  Devices:"
 echo "    PGM image..........: always"
