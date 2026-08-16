@@ -510,6 +510,19 @@ xpost_memory_free_lists_adr(Xpost_Memory_File *mem)
 }
 
 /**
+ * @brief true iff the free lists have been built.
+ *
+ * Asked where a memory file is worked on before it has been given the
+ * rest of the machinery: a file grows whether or not the lists exist,
+ * and one made on its own has no table for them to be an entity in.
+ */
+static inline int
+xpost_memory_free_lists_ready(Xpost_Memory_File *mem)
+{
+    return xpost_ent_valid(mem, XPOST_MEMORY_TABLE_SPECIAL_FREE);
+}
+
+/**
  * @brief address of the save stack (xpost_save_init).
  */
 static inline unsigned int

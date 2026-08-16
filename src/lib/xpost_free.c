@@ -158,7 +158,14 @@ void xpost_free_repoison(Xpost_Memory_File *mem)
     unsigned int b;
     unsigned int rows;
 
-    if (!mem || !mem->base)
+    /* A memory file grows whether or not it has been given the rest of
+       the machinery, and the free lists are one of the entities in its
+       table rather than a part of the file itself. A file made on its
+       own has no table for them to be in, and one still being built has
+       a table that has not reached them yet; either way nothing has been
+       chained, so there is nothing to close again and no address to read
+       the chains from. */
+    if (!mem || !mem->base || !xpost_memory_free_lists_ready(mem))
         return;
     headz = xpost_memory_free_lists_adr(mem);
     /* no chain can hold more entities than the table has rows, which is
