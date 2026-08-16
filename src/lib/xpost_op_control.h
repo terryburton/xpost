@@ -41,13 +41,22 @@
  * the dictionary stack, so it is exempt. A file is read a token at a
  * time as it runs rather than scheduled whole, so its own rule is asked
  * where that reading happens, in the interpreter's evalfile.
+ *
+ * The two types the rule applies to carry their access in the tag of
+ * the object in hand, so the field is read there. That is what the
+ * general accessor returns for them; going through it instead would
+ * put a call on the path every procedure call takes, to reach the
+ * indirection only a dictionary or a file needs.
  */
 static inline int xpost_op_exec_access_ok(Xpost_Context *ctx, Xpost_Object O)
 {
     Xpost_Object_Type type = xpost_object_get_type(O);
 
+    (void)ctx;
     return !((type == arraytype || type == stringtype)
-             && xpost_object_get_access(ctx, O) == XPOST_OBJECT_TAG_ACCESS_NONE);
+             && (O.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK)
+                == (XPOST_OBJECT_TAG_ACCESS_NONE
+                    << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET));
 }
 
 /* terminate the innermost stopped context; with none, report and quit */

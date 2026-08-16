@@ -390,6 +390,87 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 { [1 2 3] cvx noaccess readonly noaccess exec }
     /invalidaccess (a detour through read-only does not restore a no-access array) chk
 
+% --- every way of reaching a procedure asks the same question ---
+% "The value of a no-access object cannot be executed" (PLRM 8.2,
+% noaccess), and exec is only one of the ways a procedure is reached. An
+% operator that takes a procedure schedules it and returns; a name reached
+% while a procedure runs is resolved and its value stepped through; a
+% filter calls the procedure that supplies its bytes. Each of those arrives
+% at the interpreter's array stepping rather than at exec, so a rule kept
+% only in exec would leave a no-access procedure running by every route but
+% the one that was checked.
+%
+% Each case asserts the refusal AND that the body never ran, because the
+% two are separable: a procedure that runs and then fails for its own
+% reasons raises an error too, and a check reading only the error would
+% accept it. The body records having run in a dictionary, which survives
+% the error and the unwinding that follows it.
+/ranlog 1 dict def
+/arm { ranlog /ran false put } bind def
+/ran { ranlog /ran get } bind def
+/nap { ranlog /ran true put } bind cvx noaccess def
+% a filter's source procedure has to hand back the bytes; this one ends
+% the substream on its first call, so a run that does not refuse it stops
+% rather than being asked again forever
+/naps { ranlog /ran true put (AB~) } bind cvx noaccess def
+% and the same procedures one rung up, which must keep running: execute-only
+% is the rung that withholds reading and still executes, and a check that
+% refused it would have taken the point of that rung away
+/xop { ranlog /ran true put } bind cvx executeonly def
+
+arm { (nap) cvx exec }
+    /invalidaccess (a no-access procedure named to the interpreter is refused) chk
+ran not (the procedure named to the interpreter did not run) bchk
+arm { (xop) cvx exec }
+    /ok            (an execute-only procedure named to the interpreter runs) chk
+ran (the execute-only procedure named to the interpreter ran) bchk
+
+arm { 1 1 1 /nap load for }
+    /invalidaccess (a no-access procedure given to for is refused) chk
+ran not (the procedure given to for did not run) bchk
+arm { 1 1 1 /xop load for }
+    /ok            (an execute-only procedure given to for runs) chk
+ran (the execute-only procedure given to for ran) bchk
+
+arm { 1 /nap load repeat }
+    /invalidaccess (a no-access procedure given to repeat is refused) chk
+ran not (the procedure given to repeat did not run) bchk
+arm { 1 /xop load repeat }
+    /ok            (an execute-only procedure given to repeat runs) chk
+ran (the execute-only procedure given to repeat ran) bchk
+
+% stopped catches the refusal rather than letting it out, so the refusal is
+% read from what stopped returns and not from an error reaching the harness
+arm /nap load stopped
+    (a no-access procedure given to stopped is refused) bchk
+ran not (the procedure given to stopped did not run) bchk
+arm /xop load stopped not
+    (an execute-only procedure given to stopped runs) bchk
+ran (the execute-only procedure given to stopped ran) bchk
+
+arm { [1] /nap load forall }
+    /invalidaccess (a no-access procedure given to forall is refused) chk
+ran not (the procedure given to forall did not run) bchk
+arm { [1] /xop load forall }
+    /ok            (an execute-only procedure given to forall runs) chk
+ran (the execute-only procedure given to forall ran) bchk
+
+arm { /naps load 0 (~) /SubFileDecode filter 4 string readstring pop pop }
+    /invalidaccess (a no-access procedure supplying a filter is refused) chk
+ran not (the procedure supplying a filter did not run) bchk
+
+% a name reached from inside another procedure never returns to the
+% interpreter's loop: the value is resolved and stepped through where it
+% was found, so the rule has to be asked there as well
+/callnap { nap } bind def
+/callxop { xop } bind def
+arm { callnap }
+    /invalidaccess (a no-access procedure named from inside another is refused) chk
+ran not (the procedure named from inside another did not run) bchk
+arm { callxop }
+    /ok            (an execute-only procedure named from inside another runs) chk
+ran (the execute-only procedure named from inside another ran) bchk
+
 % A string carries its access the same way and answers the same.
 { (abc) noaccess readonly pop }
     /invalidaccess (read-only asked of a no-access string is refused) chk

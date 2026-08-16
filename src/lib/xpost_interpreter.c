@@ -689,6 +689,14 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
         slot_off = off; \
     } while (0)
 
+    /* running a procedure reads its elements, which no access forbids
+       (see xpost_op_control.h). Every way of reaching a procedure that
+       does not schedule it through one of the operators arrives here,
+       so the rule is asked once, where the reading begins, rather than
+       at each of the many places one is scheduled. */
+    if (!xpost_op_exec_access_ok(ctx, a))
+        return invalidaccess;
+
     if (remaining == 0)
         return 0;
 
@@ -1091,9 +1099,18 @@ int evalarray(Xpost_Context *ctx, Xpost_Object a)
                            leaving the current interval behind on es.
                            Recursion deepens the stacks through this
                            site without ever surfacing to the
-                           interpreter loop, so the ceilings are kept
-                           here */
-                        int over = _stack_ceilings(ctx);
+                           interpreter loop, so the ceilings, and the
+                           access the reading of a procedure needs, are
+                           kept here */
+                        int over;
+
+                        if (!xpost_op_exec_access_ok(ctx, x))
+                        {
+                            ctx->currentobject = b;
+                            EVALARRAY_SYNC_SLOT();
+                            return invalidaccess;
+                        }
+                        over = _stack_ceilings(ctx);
                         if (over)
                         {
                             ctx->currentobject = b;
