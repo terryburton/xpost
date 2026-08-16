@@ -4690,10 +4690,17 @@ test('check-device-roster',
 # recorder is made over each target in turn, since what it copies off
 # that target is settled at the moment it is specialised and no file
 # shows it.
+# What this costs is set by how dearly the host starts a process, since
+# it asks a fresh interpreter about each device in turn: fourteen seconds
+# where these are cheap and fifty-seven where they are not. The limit is
+# its own rather than the default, which multiplies out to sixty and
+# would leave the slower host a margin thinner than the stretch a loaded
+# machine puts on any test here.
 test('check-device-facts',
   find_program('tests/check-device-facts.sh'),
   suite: cost_fast,
-  args: [ meson.current_source_dir(), xpost_exe ])
+  args: [ meson.current_source_dir(), xpost_exe ],
+  timeout: 240)
 
 # A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
 # states, whether or not the TrueType file behind it names its glyphs,
@@ -4759,11 +4766,17 @@ test('shared-helpers',
 # the interpreter finds the working tree by other routes when that root is
 # wrong -- so a misdirected guard reports a true result about a tree nobody
 # asked about. Each one must refuse a path that is not a source root.
+# This runs every guard twice over -- once on the tree to show the guard
+# works there, then again on a path that is not a source root to show it
+# refuses -- so it carries the whole guard set's cost, and most of that
+# set starts interpreters. Eighty seconds where processes are cheap and
+# five hundred and eighty-five where they are not; the limit leaves room
+# above the second for the stretch a loaded machine adds.
 test('guard-paths',
   find_program('tests/check-guard-paths.sh'),
   args: [ meson.current_source_dir(), xpost_exe, libxpost_lib.full_path() ],
   suite: cost_slow,
-  timeout: 300)
+  timeout: 1200)
 
 # An operator's operand statement is recorded where the operator is
 # defined, through the one mechanism that files it. Four operators once
