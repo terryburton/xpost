@@ -137,34 +137,51 @@ done < "$work/source"
 # ---- and what the interpreter answers when asked
 #
 # Each name is offered a file of the direction it wants and nothing
-# else, and what comes back is ok or the error. An encoding filter is
-# given a writable file, since one over a readable file is refused
-# before the name is even looked at, and its output goes to a scratch
-# file rather than to standard output, which this reads.
+# else. An encoding filter is given a writable file, since one over a
+# readable file is refused before the name is even looked at, and its
+# output goes to a scratch file rather than to standard output, which
+# this reads.
+#
+# The scratch files are named RELATIVELY and the interpreter is run from
+# the directory holding them. A path written into a PostScript string
+# literal is one that nothing on the way can rewrite: on a host whose
+# shell and interpreter disagree about what a path looks like, an
+# absolute name reaches the interpreter unconverted and opens nothing.
+# Spelled that way, all seventeen answered undefinedfilename and this
+# guard reported a language fault where there was only a portability
+# one. A relative name is resolved by the interpreter against its own
+# directory, which is the same place either way -- the same route
+# tests/filter_family_test.ps takes for its scratch files. Only the
+# program and the data directory travel as arguments, and both are made
+# absolute first, a drive letter counting as absolute alongside a slash.
 printf 'x' > "$work/in.tmp"
-{
-    printf '/inpath (%s/in.tmp) def\n' "$work"
-    printf '/outpath (%s/out.tmp) def\n' "$work"
-    cat <<'PSEOF'
+cat > "$work/probe.ps" <<'PSEOF'
 /isenc { 80 string cvs dup length 6 sub 6 getinterval (Encode) eq } def
 /ask {                                  % /Name  .  -
     /nm exch def
     nm 40 string cvs print ( ) print
     nm isenc {
-        { outpath (w) file nm filter } stopped
+        { (out.tmp) (w) file nm filter } stopped
     }{
-        { inpath (r) file nm filter } stopped
+        { (in.tmp) (r) file nm filter } stopped
     } ifelse
     { $error /errorname get 40 string cvs }{ pop (ok) } ifelse
     print (\n) print
     clear
 } def
 PSEOF
-    awk '{ printf "/%s ask\n", $1 }' "$work/reg-names"
-} > "$work/probe.ps"
+awk '{ printf "/%s ask\n", $1 }' "$work/reg-names" >> "$work/probe.ps"
 
-XPOST_DATA_DIR="$src/data" "$xpost" -q --no-sandbox -d null -o /dev/null \
-    "$work/probe.ps" </dev/null 2>/dev/null \
+case $xpost in
+    /*|[A-Za-z]:*) absxpost=$xpost ;;
+    *)             absxpost=$(pwd)/$xpost ;;
+esac
+case $src in
+    /*|[A-Za-z]:*) abssrc=$src ;;
+    *)             abssrc=$(pwd)/$src ;;
+esac
+( cd "$work" && XPOST_DATA_DIR="$abssrc/data" "$absxpost" \
+    -q --no-sandbox -d null -o /dev/null probe.ps </dev/null 2>/dev/null ) \
     | tr -d "$cr" | awk 'NF == 2 { print }' | LC_ALL=C sort > "$work/answers"
 
 nasked=$(grep -c . "$work/answers" || true)
