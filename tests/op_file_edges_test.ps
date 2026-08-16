@@ -194,6 +194,87 @@ currentfile xcheck not (currentfile returns a literal file object) assert
 { (fedge_absent.scratch) (fedge_other.scratch) renamefile } /undefinedfilename
     (renaming a file that does not exist is undefinedfilename) erris
 
+% --- a name holding a NUL is not a name (PLRM 3.8.2) ---
+% A PostScript string is a counted byte sequence and may hold a NUL,
+% while the file layer takes a path as a NUL-terminated C string. Were it
+% shortened there, what reached the file system would be the part of the
+% name before the NUL -- a name the program did not write, in the
+% directory it did -- and the operator would report on that file as
+% though it were the one asked for. PLRM 3.8.2 has a file name unable to
+% hold a null character, so a string holding one names nothing and the
+% operators say so instead of naming something else.
+%
+% Whether the shortened name exists is asked after every refusal, since
+% the failure being guarded against is a file quietly made or removed
+% under it rather than an answer that looks wrong.
+
+% whether a name is a file, leaving nothing else behind either way
+/fe.exists { status { 4 { pop } repeat true }{ false } ifelse } def
+
+/fe.pre (fedge_nul.scratch) def
+/fe.nul fe.pre length 5 add string def
+fe.nul 0 fe.pre putinterval
+fe.nul fe.pre length 0 put
+fe.nul fe.pre length 1 add (tail) putinterval
+
+% the shortened name is an ordinary name: what the shortening would have
+% made is a file these operators do make when it is what they are given
+fe.pre (w) file closefile
+fe.pre fe.exists (the shortened name is a file when it is the name given) assert
+fe.pre deletefile
+
+% with nothing under the shortened name, the refusal is what stops one
+% being made there
+{ fe.nul (w) file } /undefinedfilename
+    (opening a name holding a NUL for writing is refused) erris
+fe.pre fe.exists not
+    (the refused open made no file under the shortened name) assert
+
+/fe.src (fedge_ren.scratch) def
+fe.src (w) file closefile
+{ fe.src fe.nul renamefile } /undefinedfilename
+    (renamefile refuses a destination holding a NUL) erris
+fe.src fe.exists (the refused rename left the file where it was) assert
+fe.pre fe.exists not
+    (the refused rename made no file under the shortened name) assert
+% swept up rather than deleted outright, so that a run where one of these
+% refusals did not hold reports the rest of them instead of stopping on
+% the file it can no longer find
+fe.src fe.exists { fe.src deletefile } if
+fe.pre fe.exists { fe.pre deletefile } if
+
+% and with a file under the shortened name, the refusal is what stops
+% that file being the one answered for, opened, moved or removed
+fe.pre (w) file closefile
+{ fe.nul (r) file } /undefinedfilename
+    (opening a name holding a NUL for reading is refused) erris
+fe.nul fe.exists not
+    (status of a name holding a NUL is false though the shortened name is a file) assert
+{ fe.nul (fedge_nulmoved.scratch) renamefile } /undefinedfilename
+    (renamefile refuses a source holding a NUL) erris
+(fedge_nulmoved.scratch) fe.exists not
+    (the refused rename moved nothing to the destination it named) assert
+{ fe.nul deletefile } /undefinedfilename
+    (deletefile refuses a name holding a NUL) erris
+fe.pre fe.exists
+    (the refused operations all left the shortened name's file alone) assert
+fe.pre fe.exists { fe.pre deletefile } if
+(fedge_nulmoved.scratch) fe.exists { (fedge_nulmoved.scratch) deletefile } if
+
+% and no other byte is narrowed out of a name by that refusal: a file
+% system that keeps a name as bytes keeps a newline and a high byte in
+% one, so the name a program writes is the name it gets
+/fe.odd 5 string def
+fe.odd 0 102 put                        % f
+fe.odd 1 10  put                        % newline
+fe.odd 2 233 put                        % a byte above the ASCII range
+fe.odd 3 46  put                        % .
+fe.odd 4 115 put                        % s
+fe.odd (w) file closefile
+fe.odd fe.exists
+    (a name holding a newline and a high byte is a file) assert
+fe.odd deletefile
+
 % --- the special files (PLRM 3.8.3) ---
 % %stdin allows only r access, %stdout and %stderr only w. The line and
 % statement editors read from the standard input, which the test harness

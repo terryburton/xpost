@@ -72,6 +72,38 @@
 #include "xpost_operator.h"
 #include "xpost_op_file.h"
 
+/* The C form of a file name operand.
+
+   A PostScript string is a counted byte sequence and may hold a NUL,
+   while the file layer takes a path as a NUL-terminated C string. Were
+   the name shortened there, what reached the file system would be the
+   part of it before the NUL -- a name the program did not write, in the
+   directory it did -- and the operator would report on that file as
+   though it were the one asked for; the name the sandbox weighed would
+   not be the name the program meant either. PLRM 3.8.2 has a file name
+   unable to hold a null character, so a string holding one names nothing
+   and is refused rather than shortened. Every other byte is a byte of
+   the name: a file system that keeps a name as bytes keeps a newline or
+   a byte above the ASCII range in one, and the name a program writes is
+   the name it gets.
+
+   Returns 0 and the allocated name, or an error code and nothing. */
+static int
+xpost_op_file_name(Xpost_Context *ctx, Xpost_Object s, char **out)
+{
+    char *p = xpost_string_allocate_cstring(ctx, s);
+
+    if (!p)
+        return VMerror;
+    if (strlen(p) != (size_t)s.comp_.sz)
+    {
+        free(p);
+        return undefinedfilename;
+    }
+    *out = p;
+    return 0;
+}
+
 /* filename mode  file  file
    create file object for filename with access mode */
 static
@@ -83,7 +115,9 @@ int xpost_op_string_mode_file (Xpost_Context *ctx,
     char *cfn, *cmode;
     int ret;
 
-    cfn = xpost_string_allocate_cstring(ctx, fn);
+    ret = xpost_op_file_name(ctx, fn, &cfn);
+    if (ret)
+        return ret;
     cmode = xpost_string_allocate_cstring(ctx, mode);
 
     ret = xpost_file_open(ctx->lo, cfn, cmode, &f);
@@ -1034,10 +1068,18 @@ int xpost_op_string_status (Xpost_Context *ctx,
     long long pages, bytes, referred, created;
     integer ipages, ibytes, ireferred, icreated;
     int exists;
+    int ret;
 
-    sbuf = xpost_string_allocate_cstring(ctx, S);
-    if (!sbuf)
+    ret = xpost_op_file_name(ctx, S, &sbuf);
+    if (ret == VMerror)
         return VMerror;
+    if (ret)
+    {
+        /* PLRM 8.2 has status answer whether there is a file by the name
+           given, and a name no file can hold is a name no file has */
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     exists = xpost_diskfile_stat(sbuf, &pages, &bytes, &referred, &created);
     free(sbuf);
     if (exists)
@@ -1087,7 +1129,9 @@ int xpost_op_string_deletefile (Xpost_Context *ctx,
     char *sbuf;
     int ret;
 
-    sbuf = xpost_string_allocate_cstring(ctx, S);
+    ret = xpost_op_file_name(ctx, S, &sbuf);
+    if (ret)
+        return ret;
     if (xpost_diskfile_remove(sbuf, &ret) != 0)
     {
         free(sbuf);
@@ -1107,9 +1151,17 @@ int xpost_op_string_renamefile (Xpost_Context *ctx,
     char *oldbuf, *newbuf;
     int ret;
 
-    oldbuf = xpost_string_allocate_cstring(ctx, Old);
-
-    newbuf = xpost_string_allocate_cstring(ctx, New);
+    /* both names are read before either is acted on, so a rename one of
+       them refuses moves nothing */
+    ret = xpost_op_file_name(ctx, Old, &oldbuf);
+    if (ret)
+        return ret;
+    ret = xpost_op_file_name(ctx, New, &newbuf);
+    if (ret)
+    {
+        free(oldbuf);
+        return ret;
+    }
 
     if (xpost_diskfile_rename(oldbuf, newbuf, &ret) != 0)
     {
@@ -1225,7 +1277,14 @@ int xpost_op_filenameforall (Xpost_Context *ctx,
     unsigned int id;
     int ret;
 
-    tmpbuf = xpost_string_allocate_cstring(ctx, Tmp);
+    ret = xpost_op_file_name(ctx, Tmp, &tmpbuf);
+    if (ret == VMerror)
+        return VMerror;
+    if (ret)
+        /* no file name holds a NUL, so a template holding one matches
+           none of them: an empty enumeration, as for any other template
+           nothing matches */
+        return 0;
     globbuf = malloc(sizeof *globbuf);
     if (!globbuf){
         free(tmpbuf);
@@ -1679,11 +1738,16 @@ static
 int xpost_op_string_permitfileread (Xpost_Context *ctx,
                                     Xpost_Object dir)
 {
-    char *d = xpost_string_allocate_cstring(ctx, dir);
+    char *d;
     int permitted;
+    int ret = xpost_op_file_name(ctx, dir, &d);
 
-    if (!d)
+    if (ret == VMerror)
         return VMerror;
+    if (ret)
+        /* a directory a name cannot express is one the permitted set
+           cannot be extended to hold */
+        return invalidfileaccess;
     permitted = xpost_path_permit_read(d);
     free(d);
     return permitted ? 0 : invalidfileaccess;
@@ -1695,11 +1759,14 @@ static
 int xpost_op_string_permitfilewrite (Xpost_Context *ctx,
                                      Xpost_Object dir)
 {
-    char *d = xpost_string_allocate_cstring(ctx, dir);
+    char *d;
     int permitted;
+    int ret = xpost_op_file_name(ctx, dir, &d);
 
-    if (!d)
+    if (ret == VMerror)
         return VMerror;
+    if (ret)
+        return invalidfileaccess;
     permitted = xpost_path_permit_write(d);
     free(d);
     return permitted ? 0 : invalidfileaccess;
@@ -1907,6 +1974,7 @@ int xpost_op_resourcefileopen (Xpost_Context *ctx,
     FILE *fp;
     int err;
     int n;
+    int ret;
 
     /* validate against the raw bytes and length (rejects embedded NUL)
        before composing any path */
@@ -1917,10 +1985,20 @@ int xpost_op_resourcefileopen (Xpost_Context *ctx,
         return 0;
     }
 
-    cdir = xpost_string_allocate_cstring(ctx, dir);
+    /* the directory is validated as a name in its own right: the two
+       components above cannot express a path, and neither may the
+       directory they are composed beneath express a shorter one */
+    ret = xpost_op_file_name(ctx, dir, &cdir);
+    if (ret == VMerror)
+        return VMerror;
+    if (ret)
+    {
+        xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
+        return 0;
+    }
     ccat = xpost_string_allocate_cstring(ctx, cat);
     cnam = xpost_string_allocate_cstring(ctx, nam);
-    if (!cdir || !ccat || !cnam)
+    if (!ccat || !cnam)
     {
         free(cdir);
         free(ccat);
