@@ -23,9 +23,42 @@
 # define test_mkdir(p) mkdir((p), 0700)
 #endif
 
+#ifdef _WIN32
+# include <windows.h>
+#endif
+
 #include "xpost.h"
+#include "xpost_compat.h" /* xpost_realpath: realpath is not portable */
 
 #include "xpost_test.h"
+
+/* Make a symbolic link, or answer 0 where this platform or this account
+   will not.
+ *
+ * The symlink cases below are the sharpest the sandbox has, and they are
+ * sharpest of all on the platform that has no atomic beneath-root open,
+ * because there the file layer reaches its decision itself. Compiling
+ * them out there left the case that matters least tested where it
+ * matters most.
+ *
+ * Windows can make one, but only for an account that has been given the
+ * privilege or a machine in developer mode, so a refusal here is a
+ * reason to skip the case and not to fail it -- which is what every
+ * caller already does with the empty name this leaves behind. */
+static int test_symlink(const char *target, const char *linkpath)
+{
+#ifdef _WIN32
+# ifndef SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+#  define SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE 0x2
+# endif
+    return CreateSymbolicLinkA(linkpath, target,
+                               SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0
+        || CreateSymbolicLinkA(linkpath, target, 0) != 0;
+#else
+    return symlink(target, linkpath) == 0;
+#endif
+}
+
 
 /* swallow the interpreter's error report for the runs meant to fail */
 static size_t discard(void *user, const char *buf, size_t len)
@@ -58,13 +91,11 @@ int main(void)
     char evilres[600];  /* a resource tree outside the permitted set */
     char prog[1400];
     FILE *w;
-#ifndef _WIN32
     char escape[600];   /* a symlink inside the tree that points out of it */
     char wescape[600];  /* the same, inside the writable subdirectory */
     char aliasdir[600]; /* a symlink that reaches the tree from outside it */
     char wdangle[600];  /* the same again, with nothing at the end of it */
     char dangled[600];  /* what that one points at, which must stay absent */
-#endif
 
     if (!mkdtemp(root)) { report_failure("mkdtemp"); return verdict(); }
     snprintf(readable, sizeof readable, "%s/readable", root);
@@ -90,27 +121,26 @@ int main(void)
         if (w) { fputs("SENTINEL", w); fclose(w); }
     }
 
-#ifndef _WIN32
     /* symlinks (absolute targets, so they resolve from any directory):
        two that escape the permitted tree, and one that reaches it */
     {
-        char *root_abs = realpath(root, NULL);
-        char *outside_abs = realpath(outside, NULL);
+        char *root_abs = xpost_realpath(root);
+        char *outside_abs = xpost_realpath(outside);
 
         if (root_abs && outside_abs)
         {
             snprintf(escape, sizeof escape, "%s/escape", root);
-            if (symlink(outside_abs, escape) != 0) escape[0] = '\0';
+            if (!test_symlink(outside_abs, escape)) escape[0] = '\0';
             snprintf(wescape, sizeof wescape, "%s/wescape", wdir);
-            if (symlink(outside_abs, wescape) != 0) wescape[0] = '\0';
+            if (!test_symlink(outside_abs, wescape)) wescape[0] = '\0';
             snprintf(aliasdir, sizeof aliasdir, "%s.alias", root);
-            if (symlink(root_abs, aliasdir) != 0) aliasdir[0] = '\0';
+            if (!test_symlink(root_abs, aliasdir)) aliasdir[0] = '\0';
             /* an escaping link with nothing at the end of it: the target
                cannot be canonicalised, so what the name check sees is the
                link's own place, which is inside the permitted tree */
             snprintf(dangled, sizeof dangled, "%s.dangled", root_abs);
             snprintf(wdangle, sizeof wdangle, "%s/wdangle", wdir);
-            if (symlink(dangled, wdangle) != 0) wdangle[0] = '\0';
+            if (!test_symlink(dangled, wdangle)) wdangle[0] = '\0';
         }
         else
         {
@@ -120,7 +150,16 @@ int main(void)
         free(root_abs);
         free(outside_abs);
     }
-#endif
+
+    /* Say so when the links could not be made. Every case below is
+       guarded on its name being non-empty, so without this a host that
+       cannot make a symbolic link -- an account without the privilege on
+       Windows, say -- would report the same silent pass as a host that
+       drove every one of them. A test that cannot reach its subject and
+       does not say so is worth less than no test. */
+    if (!escape[0] || !wescape[0] || !aliasdir[0] || !wdangle[0])
+        printf("sandbox: SKIPPED the symbolic-link cases,"
+               " no link could be made here\n");
 
     if (!xpost_init()) { report_failure("xpost_init"); return verdict(); }
     ctx = xpost_create("null", XPOST_OUTPUT_DEFAULT, NULL,
@@ -185,7 +224,6 @@ int main(void)
     check(completes(ctx, prog),
         ".resourcefileopen beneath an unpermitted root refused");
 
-#ifndef _WIN32
     /* a symlink inside the tree that resolves outside it is refused: name
        resolution is confined to the permitted directory, so a symlink cannot
        be used to reach a file the sandbox would not open directly */
@@ -242,7 +280,6 @@ int main(void)
                  aliasdir);
         check(completes(ctx, prog), "write through a symlinked access path");
     }
-#endif
 
     /* the latch is one-way: the permit set is frozen after engaging */
     check(xpost_path_permit_read("/") == 0, "permit refused after engage");
@@ -253,7 +290,6 @@ int main(void)
     /* cleanup (best effort) */
     snprintf(prog, sizeof prog, "%s/out.txt", wdir);
     unlink(prog);
-#ifndef _WIN32
     snprintf(prog, sizeof prog, "%s/via_alias.txt", wdir);
     unlink(prog);
     if (escape[0]) unlink(escape);
@@ -261,7 +297,6 @@ int main(void)
     if (aliasdir[0]) unlink(aliasdir);
     if (wdangle[0]) unlink(wdangle);
     if (dangled[0]) unlink(dangled);
-#endif
     unlink(readable);
     unlink(outside);
     snprintf(prog, sizeof prog, "%s/Cat/inst", evilres);
