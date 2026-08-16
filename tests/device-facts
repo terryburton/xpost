@@ -282,18 +282,23 @@ elsewhere BandedPage jpeg pbm pgm png ppm tiff record
     tests/check-device-skeleton.sh holds each compiled class to saying
     it again or taking it back out rather than inheriting the answer.
     What is held here is only which devices carry it.
-disposition thorn
-    What is written down is which devices band, and by what route. Why
-    the others do not is not written down anywhere, and for two of them
-    it is not obvious: raster and bgr keep a raster of their own and
-    decline, while four of the six that band -- pgm, ppm, pbm and tiff
-    -- are PostScript classes with no compiled help. So banding is not
-    something the compiled devices are better placed to do, and the two
-    that hold a buffer and refuse are unexplained rather than excused.
-    Removing this costs a reason from each of raster and bgr, and a
-    measurement behind either reason that claims a cost; where no reason
-    survives being written, it costs the band route on that device
-    instead.
+disposition settled
+    Which devices band is held here, and why each of the others does not
+    is stated where it declines. Three reasons cover the nine. A device
+    that puts no pixels down, or writes a document rather than a raster,
+    has no page to take in pieces. The two that hand their raster to
+    whoever embedded the interpreter keep it whole because that is the
+    contract it was asked for: the embedder wants a page and holds one,
+    so holding less at a time would bound nothing and would hand back
+    less than a page (xpost_dev_raster.c, xpost_dev_bgr.c). The
+    transparent page declines for a reason of its own about what a page
+    reset means where there is no ground to reset to
+    (xpost_dev_png.c).
+    Those two are worth reading together with the compiled trait above,
+    because the pair could look like compiled devices declining what the
+    PostScript ones manage. They are not: they decline on what they owe
+    their caller, which is a contract, and four devices with no compiled
+    code at all band happily. Nothing here is being tolerated.
 
 elsewhere .rowcost bgr jpeg pbm pgm png pngalpha ppm tiff record
     What one row of this device's raster costs, as the elements and the
