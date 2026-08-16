@@ -428,19 +428,7 @@ setglobal
         put
         end
     }{
-    {
-        dup type /arraytype ne { exit } if
-        dup 0 get /Indexed eq { 1 get }{
-        dup 0 get dup /Separation eq exch /DeviceN eq or {
-            2 get
-        }{
-        //.xpostsys /.ciefams get 1 index 0 get known {
-            % a CIE-based colour reduces to device RGB at setcolor
-            pop /DeviceRGB
-        }{
-            exit
-        } ifelse } ifelse } ifelse
-    } loop
+    //.xpostsys /.spacereduce get exec
     graphicsdict /currgstate get exch /colorspace exch put
     } ifelse
     graphicsdict /currgstate get /colorcomp1 0.0 put
@@ -559,6 +547,33 @@ currentglobal true setglobal
     } ifelse
 } put
 
+% space  .spacereduce  space
+% Walk a colour space down to the one a colour in it is finally recorded
+% in: an Indexed space through its base, a Separation or DeviceN through
+% its alternative, a CIE-based family to device RGB. A space that reduces
+% to nothing is handed back as it stands, and so is anything that is not
+% an array.
+%
+% One walk rather than one per caller. setcolorspace reduces to decide
+% what the graphics state records a colour in, and the validator reduces
+% to decide what it is validating; the two asking differently would be a
+% space accepted as one thing and recorded as another, which no program
+% could see until it used that space.
+.xpostsys /.spacereduce {
+    {
+        dup type /arraytype ne { exit } if
+        dup 0 get /Indexed eq { 1 get }{
+        dup 0 get dup /Separation eq exch /DeviceN eq or {
+            2 get
+        }{
+        //.xpostsys /.ciefams get 1 index 0 get known {
+            pop /DeviceRGB
+        }{
+            exit
+        } ifelse } ifelse } ifelse
+    } loop
+} put
+
 % space  .csvalidate  -
 % walk a colour space down to the device space a colour in it is finally
 % recorded in, without touching the graphics state: an Indexed space
@@ -575,14 +590,7 @@ currentglobal true setglobal
             sp length 1 gt { sp 1 get //.xpostsys /.csvalidate get exec } if
         } if
     }{
-        {
-            sp type /arraytype ne { exit } if
-            sp 0 get /Indexed eq { /sp sp 1 get def }{
-            sp 0 get dup /Separation eq exch /DeviceN eq or
-                { /sp sp 2 get def }{
-            //.xpostsys /.ciefams get sp 0 get known
-                { /sp /DeviceRGB def }{ exit } ifelse } ifelse } ifelse
-        } loop
+        /sp sp //.xpostsys /.spacereduce get exec def
         % an array still standing here names a family nothing reduced
         sp type /arraytype eq { /sp sp 0 get def } if
         sp type /nametype ne
