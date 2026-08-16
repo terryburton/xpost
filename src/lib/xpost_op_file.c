@@ -717,6 +717,11 @@ int xpost_op_file_readhexstring (Xpost_Context *ctx,
     }
     if (!xpost_object_is_readable(ctx,F))
         return invalidaccess;
+    /* the decoded bytes are stored into string, so the string must permit
+       a write: a read-only or no-access destination is refused rather
+       than overwritten (PLRM 8.2) */
+    if (!xpost_object_is_writeable(ctx, S))
+        return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);
 
@@ -798,6 +803,11 @@ int xpost_op_file_readstring (Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
         return 0;
     }
+    /* the transfer stores into string, so the string must permit a write:
+       a read-only or no-access destination is refused rather than
+       overwritten (PLRM 8.2) */
+    if (!xpost_object_is_writeable(ctx, S))
+        return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);
     n = xpost_file_read(s, 1, S.comp_.sz, f);
@@ -865,6 +875,11 @@ int xpost_op_file_readline (Xpost_Context *ctx,
         return 0;
     }
     if (!xpost_object_is_readable(ctx,F))
+        return invalidaccess;
+    /* the line is stored into string, so the string must permit a write:
+       a read-only or no-access destination is refused rather than
+       overwritten (PLRM 8.2) */
+    if (!xpost_object_is_writeable(ctx, S))
         return invalidaccess;
     f = xpost_file_get_file_pointer(ctx->lo, F);
     s = xpost_string_get_pointer(ctx, S);

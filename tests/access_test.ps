@@ -253,6 +253,45 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 { systemdict noaccess pop }             /invalidaccess (noaccess systemdict) chk
 { 1183615869 internaldict noaccess pop } /invalidaccess (noaccess internaldict) chk
 
+% --- the read-into-string operators store into their string operand, so the
+%     destination needs write access. readstring, readline and readhexstring
+%     each fill the string a program hands them, and a read-only or no-access
+%     destination is refused rather than overwritten (PLRM 8.2 lists
+%     invalidaccess for all three). Each case asserts the error AND that the
+%     string still holds its original bytes, since a silent omission differs
+%     from a refusal only in the error. A synthetic readable file
+%     (SubFileDecode over a procedure source) supplies the bytes, so the test
+%     needs no host file and runs under the file-access sandbox. ---
+
+/rsrc { { (ABCDEFGH) } 0 (~) /SubFileDecode filter } bind def    % 8 readable bytes
+/lsrc { { (ABC\n) } 0 (~) /SubFileDecode filter } bind def       % a short line, fits the string
+/hsrc { { (41 42 43 44) } 0 (~) /SubFileDecode filter } bind def % hex for "ABCD"
+/mkstr { 8 string dup 0 (........) putinterval } bind def       % one filled scratch string
+
+/held { % string (label) . -   complains unless the string still reads "........"
+    /L exch def
+    (........) eq { }{ (FAIL: ) print L print (: a refused read modified the target\n) print
+        faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
+/rot1 mkstr readonly def
+{ rsrc rot1 readstring pop pop }    /invalidaccess (readstring into a readonly string) chk
+rot1 (readstring into a readonly string) held
+/rot2 mkstr readonly def
+{ lsrc rot2 readline pop pop }      /invalidaccess (readline into a readonly string) chk
+rot2 (readline into a readonly string) held
+/rot3 mkstr readonly def
+{ hsrc rot3 readhexstring pop pop } /invalidaccess (readhexstring into a readonly string) chk
+rot3 (readhexstring into a readonly string) held
+/rot4w mkstr def /rot4 rot4w noaccess def
+{ rsrc rot4 readstring pop pop }    /invalidaccess (readstring into a noaccess string) chk
+rot4w (readstring into a noaccess string) held
+
+% the same operators still fill a writeable string handed the same source
+{ rsrc 8 string readstring pop pop }    /ok (readstring into a writeable string) chk
+{ lsrc 8 string readline pop pop }      /ok (readline into a writeable string) chk
+{ hsrc 8 string readhexstring pop pop } /ok (readhexstring into a writeable string) chk
+
 % --- access across a save bracket ---
 % A dictionary's access attribute is a property of its value, while every
 % other composite carries it on the object (PLRM 3.3.2 "Access"). restore
