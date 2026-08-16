@@ -673,7 +673,7 @@ setglobal
 % space.
 /setcolor [ [ /numbertype ] [ /dicttype ] ] {
     currentcolorspace
-    dup type /arraytype eq { dup 0 get /Indexed eq } { false } ifelse {
+    dup //.xpostsys /.spacekind get exec /indexed eq {
         % [/Indexed base hival lookup] index setcolor: the index names a
         % palette entry, resolved and set in the base space. A real index
         % is the nearest whole number to it and an index outside 0 to
@@ -687,7 +687,7 @@ setglobal
         1 array astore
         //.xpostsys /.idxconv get //.xpostsys /.withspace get exec
     }{
-    dup type /arraytype eq { dup 0 get dup /Separation eq exch /DeviceN eq or } { false } ifelse
+    dup //.xpostsys /.spacekind get exec /tint eq
     {
         % [/Separation name alt tint] or [/DeviceN names alt tint]: the
         % tints convert through the transform into the alternative space
@@ -697,7 +697,7 @@ setglobal
         currentcolorspace exch
         //.xpostsys /.sepconv get //.xpostsys /.withspace get exec
     } {
-    dup type /arraytype eq { //.xpostsys /.ciefams get 1 index 0 get known }{ false } ifelse
+    dup //.xpostsys /.spacekind get exec /cie eq
     {
         % a CIE-based colour: the family pipeline runs it down to device
         % RGB, which is a different component count in every family but ABC
