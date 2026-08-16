@@ -93,20 +93,13 @@ hold() {            # <label> <listfile> <dir> <have-file> <kinds>
         echo "      its shape changed and this check no longer reads it"
         exit 1
     fi
-    LC_ALL=C comm -23 "$work/have" "$work/listed" > "$work/unlisted"
-    LC_ALL=C comm -13 "$work/have" "$work/listed" > "$work/stale"
-    if [ -s "$work/unlisted" ]; then
-        echo "FAIL: present in the tree, absent from $shown"
-        echo "      (make dist would omit these):"
-        sed 's/^/      /' "$work/unlisted"
-        fail=1
-    fi
-    if [ -s "$work/stale" ]; then
-        echo "FAIL: named by $shown, not in the tree"
-        echo "      (make dist would fail on these):"
-        sed 's/^/      /' "$work/stale"
-        fail=1
-    fi
+    guard_held=0
+    guard_hold "$work/have" "$work/listed" \
+        "present in the tree and absent from $shown, so make dist would
+      omit them:" \
+        "named by $shown and not in the tree, so make dist would fail on
+      them:"
+    [ "$guard_held" -eq 0 ] || fail=1
 }
 
 # ---- the library: every source and header it is built from ----
@@ -209,20 +202,12 @@ if [ ! -s "$work/data-meson" ]; then
     echo "      emptied or its shape changed and this check no longer reads it"
     exit 1
 fi
-LC_ALL=C comm -23 "$work/data-have" "$work/data-meson" > "$work/data-uninstalled"
-if [ -s "$work/data-uninstalled" ]; then
-    echo "FAIL: present in the tree, absent from data/meson.build"
-    echo "      (a build would install these nowhere, and a run would not"
-    echo "      find them):"
-    sed 's/^/      /' "$work/data-uninstalled"
-    fail=1
-fi
-LC_ALL=C comm -13 "$work/data-have" "$work/data-meson" > "$work/data-gone"
-if [ -s "$work/data-gone" ]; then
-    echo "FAIL: named by data/meson.build, not in the tree"
-    sed 's/^/      /' "$work/data-gone"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/data-have" "$work/data-meson" \
+    "present in the tree and absent from data/meson.build, so a build
+      would install them nowhere and a run would not find them:" \
+    "named by data/meson.build and not in the tree:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- the test suite, guards and registers included ----
 #

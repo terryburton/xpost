@@ -84,33 +84,20 @@ if [ ! -s "$work/reached" ] || [ ! -s "$work/keyed" ]; then
 fi
 
 fail=0
-report() { # file heading advice
-    [ -s "$1" ] || return 0
-    echo "FAIL: $2"
-    sed 's|^|      |' "$1"
-    echo "      $3"
-    fail=1
-}
 
-comm -23 "$work/reached" "$work/reg.all" > "$work/unregistered"
-report "$work/unregistered" \
-    "reached through graphicsdict but not registered:" \
-    "add it to tests/graphicsdict_slots.golden as bracketed or lifetime"
-
-comm -13 "$work/reached" "$work/reg.all" > "$work/stale"
-report "$work/stale" \
-    "registered but no longer reached through graphicsdict:" \
-    "drop it from tests/graphicsdict_slots.golden"
-
-comm -23 "$work/reg.bracketed" "$work/keyed" > "$work/unbracketed"
-report "$work/unbracketed" \
-    "registered bracketed but named in no bracket key array:" \
-    "name it in the key array of the bracket that parks it, or register it lifetime"
-
-comm -13 "$work/reg.bracketed" "$work/keyed" > "$work/unregkeyed"
-report "$work/unregkeyed" \
-    "named in a bracket key array but not registered bracketed:" \
-    "register it in tests/graphicsdict_slots.golden"
+guard_held=0
+guard_hold "$work/reached" "$work/reg.all" \
+    "reached through graphicsdict but not registered: add it to
+      tests/graphicsdict_slots.golden as bracketed or lifetime:" \
+    "registered but no longer reached through graphicsdict: drop it
+      from tests/graphicsdict_slots.golden:"
+guard_hold "$work/reg.bracketed" "$work/keyed" \
+    "registered bracketed but named in no bracket key array: name it in
+      the key array of the bracket that parks it, or register it
+      lifetime:" \
+    "named in a bracket key array but not registered bracketed:
+      register it in tests/graphicsdict_slots.golden:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- one spelling for the dictionary-scope escape -----------------
 # path.ps hands each path element to one of pathforall's four
