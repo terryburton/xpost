@@ -162,32 +162,57 @@ typedef enum
         01 << XPOST_OBJECT_TAG_DATA_FLAG_OPARGSINHOLD_OFFSET,
             /**< for _onerror to reset stack */
     XPOST_OBJECT_TAG_DATA_FLAG_PACKED =
-        01 << XPOST_OBJECT_TAG_DATA_FLAG_PACKED_OFFSET
+        01 << XPOST_OBJECT_TAG_DATA_FLAG_PACKED_OFFSET,
             /**< the array was produced by the packing machinery
                  (setpacking true, or the packedarray operator). It is
                  read-only like any packed array, but -- unlike a plain
                  read-only array -- bind descends into and rewrites it,
                  and the type operator reports packedarraytype. */
+
+    XPOST_OBJECT_TAG_DATA_FLAG_FILE_EXEC =
+        01 << XPOST_OBJECT_TAG_DATA_EXTRA_BITS
+            /**< filetype objects only: the file may be executed although
+                 it may not be read, which is where executeonly leaves it.
+                 A file that may be read may be executed, so the flag says
+                 nothing until read access has gone and is only ever set
+                 by the file access hooks in xpost_file.c.
+
+                 It sits in the tag bits above the named flags, which the
+                 tag lends to a composite object's entity number on a
+                 narrow-word build. A file is not a composite -- it holds
+                 its entity in .mark_.padw, and set_ent and get_ent refuse
+                 an object that is not a string, array or dictionary -- so
+                 nothing else ever writes these bits of a file's tag. */
 } Xpost_Object_Tag_Data;
 
 /**
  * @enum Xpost_Object_Tag_Access
  * @brief valid values for the ACCESS bitfield in the object's tag.
  *
- * Most objects use 4 levels of access, except files which use 2 flags.
- * Files can therefore be READ, WRITE, or READ|WRITE.
+ * An array, a string and a dictionary sit on a ladder of four accesses in
+ * increasing order of restriction -- none, execute-only, read-only,
+ * unlimited (PLRM 3.3.2 "Access") -- and each value below names a rung.
+ *
+ * A file does not sit on that ladder. Its read and its write capability
+ * are settled independently by the access string it was opened with
+ * (PLRM 3.8.1), so a file opened for writing can be written and not read,
+ * which is no rung of the ladder at all. A file's access is therefore a
+ * set of the three FILE_ capabilities below, and it is read and written
+ * through xpost_object_get_access and xpost_object_set_access like any
+ * other, by way of the hooks a file installs for them.
  */
 typedef enum
 {
     XPOST_OBJECT_TAG_ACCESS_NONE,         /**< WRITE= no,  READ= no,  EXEC= no   */
     XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY, /**< WRITE= no,  READ= no,  EXEC= yes  */
-    XPOST_OBJECT_TAG_ACCESS_READ_ONLY,    /**< WRITE= no,  READ= yes, EXEC= yes, files: READ  */
-    XPOST_OBJECT_TAG_ACCESS_UNLIMITED,    /**< WRITE= yes, READ= yes, EXEC= yes, files: WRITE */
+    XPOST_OBJECT_TAG_ACCESS_READ_ONLY,    /**< WRITE= no,  READ= yes, EXEC= yes */
+    XPOST_OBJECT_TAG_ACCESS_UNLIMITED,    /**< WRITE= yes, READ= yes, EXEC= yes */
 
-    /* these 2 are for filetype objects only: */
+    /* these 3 are for filetype objects only, and combine: */
 
     XPOST_OBJECT_TAG_ACCESS_FILE_WRITE = 1 << 0, /**< file is writeable */
-    XPOST_OBJECT_TAG_ACCESS_FILE_READ  = 1 << 1 /**< file is readable */
+    XPOST_OBJECT_TAG_ACCESS_FILE_READ  = 1 << 1, /**< file is readable */
+    XPOST_OBJECT_TAG_ACCESS_FILE_EXEC  = 1 << 2  /**< file is executable */
 } Xpost_Object_Tag_Access;
 
 

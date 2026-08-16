@@ -1248,16 +1248,21 @@ static
 int evalfile(Xpost_Context *ctx, Xpost_Object f)
 {
     Xpost_Object b,t;
+    Xpost_Object_Tag_Access access;
     int ret;
 
     /* Executing a file reads it, a token at a time, so the access
-       attribute the file object carries governs execution as it governs
-       read: a file the attribute will not let be read is not executed
-       either (PLRM 3.8.2). The attribute belongs to the object rather
-       than to the stream, so it is asked before the stream's state is,
-       and every route by which a file reaches the execution stack --
-       exec, run, a file object stored in a procedure -- arrives here. */
-    if (!xpost_object_is_readable(ctx, f))
+       attribute the file object carries governs execution (PLRM 3.8.2).
+       A file that may be read may be executed, and execute-only leaves a
+       file that may be executed and not read, which is the access whose
+       whole purpose is to let a program run something it may not look at
+       (PLRM 3.3.2). The attribute belongs to the object rather than to
+       the stream, so it is asked before the stream's state is, and every
+       route by which a file reaches the execution stack -- exec, run, a
+       file object stored in a procedure -- arrives here. It is asked once:
+       this runs for every token of every file the interpreter executes. */
+    access = xpost_object_get_access(ctx, f);
+    if (!(access & XPOST_OBJECT_TAG_ACCESS_FILE_EXEC))
         return invalidaccess;
 
     /* a program may close the file it is executing from -- the
@@ -1266,7 +1271,19 @@ int evalfile(Xpost_Context *ctx, Xpost_Object f)
     if (!xpost_file_get_status(ctx->lo, f))
         return 0;
 
-    if (!xpost_stack_push(ctx->lo, ctx->os, f))
+    /* The token comes out through the token operator, which asks the file
+       for read access as it would for a program calling it. Where that
+       read is the interpreter's rather than the program's -- a file left
+       executable and not readable, which is what execute-only is for --
+       the operator is given a reader over the same stream instead. The
+       file object the program can reach, the one going back on the
+       execution stack below and the one currentfile answers with, keeps
+       the access it was reduced to, so the program still cannot read what
+       it is running. */
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          (access & XPOST_OBJECT_TAG_ACCESS_FILE_READ) ? f
+                          : xpost_object_set_access(ctx, f, access
+                                | XPOST_OBJECT_TAG_ACCESS_FILE_READ)))
         return stackoverflow;
     assert(ctx->gl->base);
     ret = xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
@@ -2184,6 +2201,8 @@ int initalldata(const char *device)
     initevaltype();
     xpost_object_install_dict_get_access(xpost_dict_get_access);
     xpost_object_install_dict_set_access(xpost_dict_set_access);
+    xpost_object_install_file_get_access(xpost_file_get_access);
+    xpost_object_install_file_set_access(xpost_file_set_access);
 
     /* allocate the top-level itpdata data structure. */
     null = xpost_object_cvlit(null);

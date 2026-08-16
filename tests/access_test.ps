@@ -318,10 +318,8 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 % then be made to do, since an access that reads back right while the
 % operators go on obliging is no restriction at all.
 %
-% Files are knowingly NOT covered here. A file's access is a pair of
-% independent read and write flags rather than a rung on this ladder, so
-% neither the ordering these cases rest on nor the answers they expect
-% describe a file, and nothing below applies one.
+% A file does not sit on this ladder. It is held to its own rule further
+% down, under "a file's access is a set of capabilities".
 
 % Reducing works, and each rung withholds what it says it does. These are
 % the controls: they must keep passing, or a check that merely refuses
@@ -520,6 +518,128 @@ sealme rcheck
 sealme wcheck not
     (a dictionary reduced to read-only is not writable) bchk
 
+% --- a file's access is a set of capabilities, not a rung of the ladder ---
+% A file's read and its write are settled independently, by the access
+% string it was opened with (PLRM 3.8.1), so a file opened for writing may
+% be written and not read. No rung says that: the ladder's ordering puts
+% write above read and cannot hold one without the other. rcheck and
+% wcheck therefore report the two capabilities separately, and each of the
+% three operators names a set for a file rather than a rung -- read-only
+% is read and execute, execute-only is execute, no-access is nothing.
+%
+% Access still only ever reduces (PLRM 3.6.6), which for a set means the
+% set asked for must be one the file already grants throughout. Asking a
+% file opened for writing to be read-only asks for a read it never had, so
+% it is refused rather than granted; that refusal is the whole point of
+% separating the two, since granting it would report a write-only stream
+% as readable.
+
+/afscratch (access-file-scratch.dat) def
+/afmake { afscratch (w) file dup (/af.ran true def\n) writestring
+          closefile } bind def
+/AFW  { afscratch (w) file } bind def   % write-only
+/AFR  { afscratch (r) file } bind def   % read-only
+/AFRW { afscratch (r+) file } bind def  % both
+afmake
+
+% As opened, each capability is reported on its own.
+AFW dup wcheck exch closefile
+    (a file opened for writing is writable) bchk
+AFW dup rcheck not exch closefile
+    (a file opened for writing is not readable) bchk
+afmake
+AFR dup rcheck exch closefile
+    (a file opened for reading is readable) bchk
+AFR dup wcheck not exch closefile
+    (a file opened for reading is not writable) bchk
+AFRW dup rcheck exch closefile
+    (a file opened for both is readable) bchk
+AFRW dup wcheck exch closefile
+    (a file opened for both is writable) bchk
+(%stdout) (w) file dup wcheck exch pop
+    (the standard output file is writable) bchk
+(%stdout) (w) file dup rcheck not exch pop
+    (the standard output file is not readable) bchk
+
+% The reductions that a file grants. These are the controls: a rule that
+% refused every reduction, or one that granted every one, would fail here
+% while the refusals below went on passing.
+{ AFR readonly closefile }
+    /ok            (read-only asked of a file opened for reading) chk
+AFR readonly dup rcheck exch closefile
+    (a file reduced to read-only is still readable) bchk
+{ AFR readonly dup 4 string readstring pop pop closefile }
+    /ok            (readstring from a read-only file) chk
+{ AFRW readonly closefile }
+    /ok            (read-only asked of a file opened for both) chk
+AFRW readonly dup rcheck exch closefile
+    (read-only leaves a file opened for both readable) bchk
+AFRW readonly dup wcheck not exch closefile
+    (read-only takes the write off a file opened for both) bchk
+{ AFRW readonly dup (X) writestring closefile }
+    /invalidaccess (writestring to a file reduced to read-only) chk
+{ AFR executeonly closefile }
+    /ok            (execute-only asked of a file opened for reading) chk
+AFR executeonly dup rcheck not exch closefile
+    (execute-only takes the read off a file) bchk
+AFR executeonly dup wcheck not exch closefile
+    (a file reduced to execute-only is not writable) bchk
+{ AFR executeonly dup 4 string readstring pop pop closefile }
+    /invalidaccess (readstring from an execute-only file) chk
+{ AFR noaccess closefile }
+    /ok            (no-access asked of a file opened for reading) chk
+{ AFR noaccess dup 4 string readstring pop pop closefile }
+    /invalidaccess (readstring from a no-access file) chk
+{ AFW noaccess closefile }
+    /ok            (no-access asked of a file opened for writing) chk
+AFW noaccess dup rcheck not exch closefile
+    (a file reduced to no-access is not readable) bchk
+AFW noaccess dup wcheck not exch closefile
+    (a file reduced to no-access is not writable) bchk
+{ AFW noaccess dup (X) writestring closefile }
+    /invalidaccess (writestring to a file reduced to no-access) chk
+{ AFW noaccess dup status pop closefile }
+    /ok            (status of a file reduced to no-access) chk
+afmake
+
+% Execute-only is the access that lets a file be run and not read, which
+% is the one thing it is for. No-access takes the running away too.
+{ AFR executeonly cvx exec }
+    /ok            (an execute-only file still runs) chk
+/af.ran where { pop af.ran }{ false } ifelse
+    (running an execute-only file ran what was in it) bchk
+{ AFR noaccess cvx exec }
+    /invalidaccess (a no-access file does not run) chk
+
+% Asking a file for a capability it does not grant is a widening, and is
+% refused. A file opened for writing was never readable and was never
+% executable, so both of the operators that ask for one are refused it.
+{ AFW readonly closefile }
+    /invalidaccess (read-only asked of a file opened for writing) chk
+{ AFW executeonly closefile }
+    /invalidaccess (execute-only asked of a file opened for writing) chk
+{ (%stdout) (w) file readonly pop }
+    /invalidaccess (read-only asked of the standard output file) chk
+{ AFW noaccess readonly closefile }
+    /invalidaccess (read-only asked of a file taken to no-access) chk
+{ AFR executeonly readonly closefile }
+    /invalidaccess (read-only asked of a file taken to execute-only) chk
+{ AFR noaccess readonly closefile }
+    /invalidaccess (read-only asked of a read file taken to no-access) chk
+{ AFR noaccess executeonly closefile }
+    /invalidaccess (execute-only asked of a file taken to no-access) chk
+
+% A file carries its access on the object, not on the stream (PLRM 3.3.2),
+% so reducing one object leaves every other object over the same stream
+% alone -- unlike a dictionary, whose access every reference shares.
+AFRW dup dup readonly pop wcheck exch closefile
+    (reducing a copy leaves the original file writable) bchk
+AFRW dup readonly wcheck exch closefile not
+    (reducing a copy does reduce that copy) bchk
+{ AFRW dup dup readonly pop (X) writestring closefile }
+    /ok            (the original file can still be written) chk
+afmake
+
 % --- the read-into-string operators store into their string operand, so the
 %     destination needs write access. readstring, readline and readhexstring
 %     each fill the string a program hands them, and a read-only or no-access
@@ -616,6 +736,8 @@ true setglobal
 false setglobal
 save svg1 readonly pop restore
 svg1 wcheck not (a global dict sealed inside a bracket is still sealed after the restore) bchk
+
+mark { afscratch deletefile } stopped pop cleartomark
 
 count 0 eq { (operand stack balanced) }{ (FAIL: operand stack unbalanced\n) print
     faildict /n 2 copy get 1 add put (unbalanced) } ifelse pop

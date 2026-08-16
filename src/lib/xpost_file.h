@@ -451,6 +451,26 @@ Xpost_File *xpost_file_get_file_pointer(Xpost_Memory_File *mem, Xpost_Object f);
 int xpost_file_get_status(Xpost_Memory_File *mem, Xpost_Object f);
 
 /**
+ * @brief Yield the capabilities a file object's access grants.
+ *
+ * Installed as the filetype hook for xpost_object_get_access. A file's
+ * access is a set of the FILE_ capabilities rather than a rung of the
+ * ladder the other types sit on, since its read and its write are
+ * settled independently by the access string (PLRM 3.8.1).
+ */
+Xpost_Object_Tag_Access xpost_file_get_access(Xpost_Context *ctx, Xpost_Object f);
+
+/**
+ * @brief Give a file object the capabilities named.
+ *
+ * Installed as the filetype hook for xpost_object_set_access. The
+ * capabilities belong to the object (PLRM 3.3.2), so they go in its tag
+ * and another object over the same stream keeps its own.
+ */
+Xpost_Object xpost_file_set_access(Xpost_Context *ctx, Xpost_Object f,
+                                   Xpost_Object_Tag_Access access);
+
+/**
  * @brief Return number of bytes available to read.
  */
 int xpost_file_get_bytes_available(Xpost_Memory_File *mem, Xpost_Object f, int *retval);

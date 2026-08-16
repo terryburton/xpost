@@ -5885,6 +5885,52 @@ int xpost_file_get_status(Xpost_Memory_File *mem,
     return xpost_file_get_file_pointer(mem, f) != NULL;
 }
 
+/* A file's access is a set of capabilities, not a rung on the ladder an
+   array or a dictionary sits on: the access string it was opened with
+   settles reading and writing independently (PLRM 3.8.1), so a file
+   opened for writing may be written and not read, which no rung says.
+   The set belongs to the object rather than to the stream (PLRM 3.3.2),
+   so it is kept in the object's tag and a copy taken before a reduction
+   keeps the capabilities it was copied with.
+
+   Reading and writing live in the tag's access field, which is where
+   every file constructor puts them. Executing has nowhere to go in a
+   two-bit field, and it is only ever worth a bit of its own once read
+   access has gone -- a file that may be read may be executed, since
+   running a file is reading it a token at a time -- so it is carried
+   above the field, in a tag bit a file has no other use for, and only
+   for the one access that needs it. */
+Xpost_Object_Tag_Access xpost_file_get_access(Xpost_Context *ctx,
+                                              Xpost_Object f)
+{
+    Xpost_Object_Tag_Access access;
+
+    (void)ctx;
+    access = (Xpost_Object_Tag_Access)
+        ((f.tag & XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK)
+         >> XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    if ((access & XPOST_OBJECT_TAG_ACCESS_FILE_READ)
+        || (f.tag & XPOST_OBJECT_TAG_DATA_FLAG_FILE_EXEC))
+        access |= XPOST_OBJECT_TAG_ACCESS_FILE_EXEC;
+    return access;
+}
+
+Xpost_Object xpost_file_set_access(Xpost_Context *ctx,
+                                   Xpost_Object f,
+                                   Xpost_Object_Tag_Access access)
+{
+    (void)ctx;
+    f.tag &= ~(word)(XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_MASK
+                     | XPOST_OBJECT_TAG_DATA_FLAG_FILE_EXEC);
+    f.tag |= (word)((access & (XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                               | XPOST_OBJECT_TAG_ACCESS_FILE_WRITE))
+                    << XPOST_OBJECT_TAG_DATA_FLAG_ACCESS_OFFSET);
+    if ((access & XPOST_OBJECT_TAG_ACCESS_FILE_EXEC)
+        && !(access & XPOST_OBJECT_TAG_ACCESS_FILE_READ))
+        f.tag |= (word)XPOST_OBJECT_TAG_DATA_FLAG_FILE_EXEC;
+    return f;
+}
+
 //FIXME assumes DiskFile subtype
 /* call fstat. */
 int xpost_file_get_bytes_available(Xpost_Memory_File *mem,

@@ -175,6 +175,7 @@ xpost_file_cons_filter_subfile
 xpost_file_cons_procsource
 xpost_file_cons_proctarget
 xpost_file_cons_readstring
+xpost_file_get_access
 xpost_file_get_bytes_available
 xpost_file_get_file_pointer
 xpost_file_get_status
@@ -187,6 +188,7 @@ xpost_file_open
 xpost_file_read
 xpost_file_read_byte
 xpost_file_release_entity
+xpost_file_set_access
 xpost_file_stdio_stream_get
 xpost_file_underlying_entity
 xpost_file_write

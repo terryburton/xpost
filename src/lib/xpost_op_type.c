@@ -168,9 +168,12 @@ Xpost_Object _reduce_access(Xpost_Context *ctx,
 }
 
 /* Whether the rung asked for is above the one the object sits on, for an
-   object whose access the operators refuse to widen. Files and
-   dictionaries are excluded for the reasons above. noaccess never asks
-   this: no-access is the foot of the ladder, so nothing sits below it. */
+   object whose access the operators refuse to widen. A dictionary is
+   excluded for the reason above. A file is excluded because it sits on no
+   rung of this ladder at all: it is refused a widening too, but by the
+   rule below, which the operators reach before this one. noaccess never
+   asks this: no-access is the foot of the ladder, so nothing sits below
+   it. */
 static
 int _widens_access(Xpost_Context *ctx,
                    Xpost_Object o,
@@ -183,6 +186,50 @@ int _widens_access(Xpost_Context *ctx,
     return xpost_object_get_access(ctx, o) < access;
 }
 
+/* A file's access is not a rung of that ladder but a set of independent
+   capabilities, settled when the file is opened by the access string it
+   was opened with: a file opened for writing may be written and not read
+   (PLRM 3.8.1), which no rung says. So the three operators name a set for
+   a file rather than a rung, and each names the same set whatever it is
+   applied to -- read-only is read and execute, execute-only is execute,
+   no-access is nothing.
+
+   Access still only ever reduces (PLRM 3.6.6), and for a set that means
+   the set asked for must be one the file already grants throughout: a
+   capability the file does not have is not one an operator may hand it.
+   A request for one is a widening and is refused, so readonly and
+   executeonly both refuse a file opened only for writing -- neither
+   reading nor executing is a thing that file was ever able to do -- while
+   noaccess asks for nothing and is always a reduction. */
+static
+Xpost_Object_Tag_Access _file_access_asked(Xpost_Object_Tag_Access rung)
+{
+    switch (rung)
+    {
+        case XPOST_OBJECT_TAG_ACCESS_READ_ONLY:
+            return XPOST_OBJECT_TAG_ACCESS_FILE_READ
+                 | XPOST_OBJECT_TAG_ACCESS_FILE_EXEC;
+        case XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY:
+            return XPOST_OBJECT_TAG_ACCESS_FILE_EXEC;
+        default:
+            return XPOST_OBJECT_TAG_ACCESS_NONE;
+    }
+}
+
+static
+int _reduce_file_access(Xpost_Context *ctx,
+                        Xpost_Object *o,
+                        Xpost_Object_Tag_Access rung)
+{
+    Xpost_Object_Tag_Access has = xpost_object_get_access(ctx, *o);
+    Xpost_Object_Tag_Access asked = _file_access_asked(rung);
+
+    if (asked & ~has)
+        return invalidaccess;
+    *o = xpost_object_set_access(ctx, *o, asked);
+    return 0;
+}
+
 /* obj  executeonly  obj
    reduce access attribute for obj to execute-only */
 static
@@ -193,9 +240,18 @@ int Aexecuteonly(Xpost_Context *ctx,
     /* executeonly applies to arrays, strings and files, not dictionaries */
     if (type != arraytype && type != stringtype && type != filetype)
         return typecheck;
-    if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY))
-        return invalidaccess;
-    o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
+    if (type == filetype)
+    {
+        int ret = _reduce_file_access(ctx, &o,
+                                      XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
+        if (ret) return ret;
+    }
+    else
+    {
+        if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY))
+            return invalidaccess;
+        o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
+    }
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
 }
@@ -222,7 +278,13 @@ int Anoaccess(Xpost_Context *ctx,
     if (xpost_object_get_type(o) == dicttype &&
         xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_READ_ONLY)
         return invalidaccess;
-    o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
+    if (xpost_object_get_type(o) == filetype)
+    {
+        int ret = _reduce_file_access(ctx, &o, XPOST_OBJECT_TAG_ACCESS_NONE);
+        if (ret) return ret;
+    }
+    else
+        o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_NONE);
     /* a dictionary's access is part of its value, so reducing it writes
        virtual memory and can be declined room for the backup a standing
        save level needs */
@@ -241,9 +303,18 @@ int Areadonly(Xpost_Context *ctx,
     /* readonly applies to composite objects and files */
     if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
         return typecheck;
-    if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY))
-        return invalidaccess;
-    o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    if (xpost_object_get_type(o) == filetype)
+    {
+        int ret = _reduce_file_access(ctx, &o,
+                                      XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+        if (ret) return ret;
+    }
+    else
+    {
+        if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY))
+            return invalidaccess;
+        o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+    }
     /* as noaccess above: a dictionary's seal is a write to its value */
     if (xpost_object_get_type(o) == invalidtype)
         return VMerror;
@@ -271,14 +342,22 @@ int _carries_access(Xpost_Object o)
 }
 
 /* obj  rcheck  bool
-   test obj for read-access */
+   test obj for read-access
+
+   Each answers with the same reading of the access that decides whether
+   an operator reading or writing the object is allowed to proceed, so
+   the verdict a program is given is the one it will meet. A file is why
+   that matters: its access is a set of capabilities rather than a rung,
+   and a file opened for writing grants write and not read, which the
+   ladder's ordering cannot express in either direction. */
 static
 int Archeck(Xpost_Context *ctx,
             Xpost_Object o)
 {
     if (!_carries_access(o))
         return typecheck;
-    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(xpost_object_get_access(ctx, o) >= XPOST_OBJECT_TAG_ACCESS_READ_ONLY));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_bool_cons(xpost_object_is_readable(ctx, o)));
     return 0;
 }
 
@@ -290,7 +369,8 @@ int Awcheck(Xpost_Context *ctx,
 {
     if (!_carries_access(o))
         return typecheck;
-    xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons( xpost_object_get_access(ctx, o) == XPOST_OBJECT_TAG_ACCESS_UNLIMITED));
+    xpost_stack_push(ctx->lo, ctx->os,
+                     xpost_bool_cons(xpost_object_is_writeable(ctx, o)));
     return 0;
 }
 
