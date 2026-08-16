@@ -63,6 +63,7 @@ tests/check-page-output.sh \
 tests/check-private-refs.sh \
 tests/check-raster-classes.sh \
 tests/check-shadowed-operators.sh \
+tests/check-shared-helpers.sh \
 tests/check-show-clip.sh \
 tests/check-test-cost.sh \
 tests/check-test-devices.sh \
@@ -116,6 +117,7 @@ tests/device_completion_test.ps \
 tests/device_contract_test.ps \
 tests/device_destroy.golden \
 tests/library_statics.golden \
+tests/shared_helpers.exempt \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \
 tests/operator_dictstack_test.ps \

@@ -415,6 +415,8 @@ host width witness
 guards path doc/GATING.md
 guards path tests/guard-paths.sh
 guards path tests/check-guard-paths.sh
+guards path tests/check-shared-helpers.sh
+guards path tests/shared_helpers.exempt
 guards path tests/gate-map
 guards path tests/gate.sh
 guards path tests/check-gate-map.sh
@@ -422,6 +424,7 @@ guards path tests/run-profile.sh
 guards path tests/listing.awk
 guards test check-*
 guards test guard-paths
+guards test shared-helpers
 guards test c-held-objects
 guards test must-check
 guards test name-registers

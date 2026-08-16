@@ -1,0 +1,11 @@
+# Scripts excused from their family's shared helper, and why.
+#
+# Read by tests/check-shared-helpers.sh. One entry per line: the file's
+# name in tests/, then the reason on the rest of the line. The reason is
+# not decoration -- it is the whole difference between a considered
+# exemption and a file a sweep happened to miss, and the check refuses an
+# entry that has none. An entry naming a file that is no longer there is
+# also refused, so an exemption cannot outlive what it excused and go on
+# covering a later file that takes the same name.
+
+run-profile.sh  not a test but a run_target: it drives meson test for the quick, full, corpus, vendor and everything profiles and reads the summary, so it has no test program's output for verdict_ok to judge. It is named like the wrappers without being one, which is what makes it easy to miss.

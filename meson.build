@@ -4706,6 +4706,21 @@ test('dict-homes',
   suite: cost_fast,
   timeout: 120)
 
+# A shared helper is only shared if everything that should use it does. Two
+# families here each have one file holding what the family has in common:
+# verdict.sh for the wrappers that judge what a test printed, and
+# guard-paths.sh for the guards that read the tree. Both were adopted by
+# sweeping the family once, and a sweep says nothing about the next file --
+# each was found one short, and one of those had already been the single file
+# missed by an earlier fix for the same reason. The population is taken from
+# the directory rather than from a list, so a file that is new to both is
+# still in it.
+test('shared-helpers',
+  find_program('tests/check-shared-helpers.sh'),
+  args: [ meson.current_source_dir() ],
+  suite: cost_fast,
+  timeout: 120)
+
 # The guards read data/ and tests/ under a source root they are given, and
 # the interpreter finds the working tree by other routes when that root is
 # wrong -- so a misdirected guard reports a true result about a tree nobody

@@ -63,6 +63,7 @@
 set -u
 lib=${1:?usage: check-exported-symbols.sh <library> <golden>}
 golden=${2:?usage: check-exported-symbols.sh <library> <golden>}
+. "$(dirname "$0")/guard-paths.sh"
 
 LC_ALL=C
 export LC_ALL
@@ -73,21 +74,12 @@ if ! command -v nm >/dev/null 2>&1; then
 fi
 # A library that is not there is a wrong path, not a platform without
 # shared libraries: answering that with a skip made every misdirection of
-# this check permanently silent.
-if [ ! -f "$lib" ]; then
-    echo "FAILURES: no library to read at $lib"
-    exit 1
-fi
-if [ ! -s "$golden" ] || [ ! -r "$golden" ]; then
-    echo "FAILURES: no usable register at $golden"
-    exit 1
-fi
+# this check permanently silent. The shared requirement refuses in the
+# same direction, which is why it can stand here.
+guard_require_file "$lib" "the library to read"
+guard_require_file "$golden" "the register of exported symbols"
 
-work=$(mktemp -d 2>/dev/null) || work=
-if [ -z "$work" ] || [ ! -d "$work" ] || [ ! -w "$work" ]; then
-    echo "FAILURES: could not make a scratch directory (is TMPDIR writable?)"
-    exit 1
-fi
+guard_workdir
 trap 'rm -rf "$work"' EXIT
 
 # every defined dynamic symbol, whatever section or linkage it has
