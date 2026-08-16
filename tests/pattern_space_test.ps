@@ -128,6 +128,35 @@
     BASENAMES bi get (fill) (plain colour) label assert
 } for
 
+% --- what makepattern requires, which PLRM 4.9.2 states as a table ---
+% A PatternType 1 dictionary must carry PaintType, TilingType, BBox,
+% XStep, YStep and PaintProc. A requirement enforced for four of them and
+% not the fifth is a rule nobody can rely on, and the one likeliest to be
+% left out is the one nothing goes on to read.
+/REQ [ /PaintType /TilingType /BBox /XStep /YStep /PaintProc ] def
+/REQNAMES [ (PaintType) (TilingType) (BBox) (XStep) (YStep) (PaintProc) ] def
+
+/basepat << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10]
+            /XStep 10 /YStep 10
+            /PaintProc { pop 0 0 5 5 rectfill } >> def
+/lacking { % /key . dict without that key
+    /lk exch def
+    basepat length dict
+    basepat { 2 index 3 1 roll 1 index lk eq { pop pop pop }{ put } ifelse } forall
+} bind def
+
+0 1 REQNAMES length 1 sub {
+    /ri exch def
+    { REQ ri get lacking matrix makepattern pop } outcome /rangecheck eq
+    REQNAMES ri get (makepattern) (a pattern lacking) label assert
+} for
+
+% and a value outside the two the specification names, refused by the
+% same rule that refuses a missing one
+{ basepat length dict basepat { 2 index 3 1 roll put } forall
+  dup /TilingType 47 put matrix makepattern pop } outcome /rangecheck eq
+    (TilingType 47) (makepattern) (a pattern with) label assert
+
 showpage
 
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

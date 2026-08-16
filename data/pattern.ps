@@ -17,7 +17,18 @@
     }{
         dup /PaintProc known 1 index /BBox known and
         1 index /XStep known and 1 index /YStep known and
-        1 index /PaintType known and not {
+        1 index /PaintType known and 1 index /TilingType known and not {
+            /makepattern cvx /rangecheck signalerror
+        } if
+        % TilingType names one of three spacings (PLRM 4.9.2). Nothing
+        % here goes on to read it, which is the reason to ask for it
+        % rather than a reason to let it pass: a program that leaves it
+        % out, or names a spacing that does not exist, has written a
+        % pattern this interpreter cannot be told how to tile, and the
+        % other five entries are already held to being there.
+        dup /TilingType get
+        dup type /integertype ne { pop true }
+                                 { dup 1 lt exch 3 gt or } ifelse {
             /makepattern cvx /rangecheck signalerror
         } if
     } ifelse
