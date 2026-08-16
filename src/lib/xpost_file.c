@@ -97,7 +97,14 @@ static int xpost_path_control_engaged = 0;
 /* Index of the permitted entry that contains the canonical path `full`, or
    -1 if none does. A permitted directory contains `full` when it is a prefix
    ending at a path separator (or the whole of `full`).
- */
+
+   A root that is itself a separator -- the filesystem root, or a drive's --
+   already ends at one, and the byte after the prefix is the first of the
+   name within it rather than the separator between them. Comparing the
+   short prefix instead is what lets such a root contain anything: matched
+   whole, "/" is a prefix of every absolute path and the byte after it is
+   never a separator, so a root left as it stands would contain nothing at
+   all and permit nothing. */
 static int
 xpost_path_within_idx(const char *full, char *const *tab, int cnt)
 {
@@ -106,6 +113,19 @@ xpost_path_within_idx(const char *full, char *const *tab, int cnt)
     for (i = 0; i < cnt; i++)
     {
         size_t rl = strlen(tab[i]);
+
+        while (rl > 1 && (tab[i][rl - 1] == '/'
+#ifdef _WIN32
+                          || tab[i][rl - 1] == '\\'
+#endif
+                         ))
+            rl--;
+        if (rl == 1 && (tab[i][0] == '/'
+#ifdef _WIN32
+                        || tab[i][0] == '\\'
+#endif
+                       ))
+            rl = 0;
 
 #ifdef _WIN32
         /* Windows paths are case-insensitive and GetFullPathName yields

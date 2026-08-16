@@ -403,6 +403,7 @@ tests/run-vendor-bwipp.sh \
 tests/run_input_close_test.c \
 tests/run_status_test.c \
 tests/sandbox_contexts_test.c \
+tests/sandbox_root_test.c \
 tests/sandbox_test.c \
 tests/save_backup_extent_test.c \
 tests/save_restore_ctm_test.ps \

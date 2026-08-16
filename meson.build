@@ -4797,6 +4797,19 @@ test('sandbox-portable',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
          'XPOST_NO_ATOMIC_BENEATH': '1' })
 
+# A permitted directory that is a path separator: the filesystem root
+# contains what is under it, which the containment rule has to say specially.
+sandbox_root_exe = executable('sandbox_root_test',
+  'tests/sandbox_root_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('sandbox-root',
+  sandbox_root_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # From-PostScript lockdown: .permitfileread/.permitfilewrite/.lockdown raise
 # the sandbox from within a program and freeze the permit set.
 lockdown_exe = executable('lockdown_test',
