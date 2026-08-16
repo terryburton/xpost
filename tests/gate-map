@@ -214,6 +214,7 @@ filter path src/lib/xpost_op_file.*
 filter path src/lib/xpost_op_token.*
 filter path data/readstring.ps
 filter test binary-tokens
+filter test check-filter-facts
 filter test dct-truncated
 filter test edit-stream-close
 filter test encoder-units

@@ -1,0 +1,56 @@
+# What each filter is, as the family answers it.
+#
+# A filter is a member of a family of seventeen, and the family is asked
+# the same questions of every member: can it be constructed from a name
+# alone, or does it need a parameter dictionary first, and is it in
+# every build or only one made with a particular library. Both are
+# differences a program sees -- a name that answers undefined here is a
+# name a program cannot use -- and neither was written down anywhere
+# before this file.
+#
+# The reason to hold a whole family rather than each member where it is
+# used: the last defect here was a lazy end-of-data desynchronisation,
+# and it was in ALL FIVE stream decoders at once, because each was
+# written by copying the one before. A question asked of one member and
+# not the rest is how that happens.
+#
+# Membership is DERIVED, from the names the filter operator compares
+# against in src/lib/xpost_op_file.c, and held to this file in both
+# directions. A filter added to the interpreter and not classified here
+# fails, and a line here naming a filter the interpreter does not know
+# fails; the second is what stops a line outliving what it described.
+#
+# Each line is
+#
+#   <name>  <plain|needsdict>  <always|HAVE_SYMBOL>  <reason>
+#
+# plain      constructible as `file /Name filter`
+# needsdict  refuses that and wants `file dict /Name filter`; the reason
+#            says which parameters it cannot be built without
+# always     present in every build
+# HAVE_x     present only where the build found that library, and the
+#            source guards it with exactly that symbol, which is checked
+#
+# The reason is required on every line, including the plain ones, and
+# says what the filter is for. A line nobody could explain is a member
+# nobody examined.
+
+ASCIIHexEncode        plain      always        writes each byte as two hexadecimal digits, PLRM 3.13.3
+ASCIIHexDecode        plain      always        reads hexadecimal digit pairs back to bytes, PLRM 3.13.3
+ASCII85Encode         plain      always        writes four bytes as five printable characters, PLRM 3.13.3
+ASCII85Decode         plain      always        reads that encoding back, PLRM 3.13.3
+NullEncode            plain      always        passes bytes through unchanged; the family's identity, and PLRM gives it no decoding counterpart
+RunLengthEncode       plain      always        writes runs as a count and a byte, PLRM 3.13.3
+RunLengthDecode       plain      always        reads those runs back, PLRM 3.13.3
+LZWEncode             plain      always        writes the LZW encoding, PLRM 3.13.3
+LZWDecode             plain      always        reads it back, PLRM 3.13.3
+CCITTFaxEncode        plain      always        writes the CCITT Group 3 and 4 facsimile encodings, PLRM 3.13.3
+CCITTFaxDecode        plain      always        reads them back, PLRM 3.13.3
+FlateEncode           plain      HAVE_ZLIB     writes the deflate encoding, PLRM 3.13.3, and the deflater is the library's
+FlateDecode           plain      HAVE_ZLIB     reads it back, from the same library
+DCTEncode             needsdict  HAVE_LIBJPEG  cannot be built from a name: the encoder is told the image geometry it is compressing, and Columns, Rows and Colors have no default a filter could pick
+DCTDecode             plain      HAVE_LIBJPEG  needs no such dictionary, because the geometry it decompresses is carried in the stream it reads
+SubFileDecode         needsdict  always        cannot be built from a name: what ends the subfile is EODCount and EODString, and a filter with neither has no end
+ReusableStreamDecode  plain      always        holds what it read so the stream can be read again, PLRM 3.13.2
+
+entries 17

@@ -33,6 +33,8 @@ tests/check-library-lifetime.sh \
 tests/check-device-roster.sh \
 tests/check-device-facts.sh \
 tests/device-facts \
+tests/check-filter-facts.sh \
+tests/filter-facts \
 tests/check-c-held-objects.sh \
 tests/c_held_objects.register \
 tests/check-awk-portability.sh \

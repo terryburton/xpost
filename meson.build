@@ -4746,6 +4746,15 @@ test('check-device-facts',
   args: [ meson.current_source_dir(), xpost_exe ],
   timeout: 240)
 
+# The same question asked of the other family the file machinery has: a
+# filter is one of seventeen names, two of which refuse to be built from
+# a name alone and four of which are in a build only if it found a
+# library, and nothing said which were which.
+test('check-filter-facts',
+  find_program('tests/check-filter-facts.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir(), xpost_exe ])
+
 # A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
 # states, whether or not the TrueType file behind it names its glyphs,
 # and what it publishes has to be what the face can be asked to paint.
