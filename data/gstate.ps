@@ -947,20 +947,43 @@ setglobal
 % dictionary, where a screening device's cell can find it, or
 % drained when it exceeds a string
 .xpostsys /.htreadthresholds {
-    4 dict begin
+    10 dict begin
     /ht exch def
     ht /Thresholds 2 copy known {
         get dup type /filetype eq {
             /htw ht /Width 2 copy known { get }{ pop pop 0 } ifelse def
             /hth ht /Height 2 copy known { get }{ pop pop 0 } ifelse def
-            htw hth mul dup 0 gt 1 index 65535 le and {
-                string
+            % a type 16 spends two bytes on each threshold; every other
+            % type spends one
+            /wide ht /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse
+                  16 eq def
+            /nsamp htw hth mul def
+            /nbytes nsamp wide { 2 mul } if def
+            nsamp 0 gt nbytes 65535 le and {
+                nbytes string
                 1 index exch readstring pop
+                % the cell holds one byte a sample, in C and in the
+                % PostScript screens alike, so a 16-bit threshold is kept
+                % to the precision the cell carries: its high byte. The
+                % reduction is stated rather than silent -- a type 16 and
+                % a type 6 built from the same values screen alike here
+                wide {
+                    /raw exch def
+                    nsamp string
+                    0 1 nsamp 1 sub {
+                        /i exch def
+                        dup i raw i 2 mul get put
+                    } for
+                } if
                 ht wcheck {
                     ht /Thresholds 3 -1 roll put
                 }{ pop } ifelse
-            }{ pop } ifelse
-            { dup 4096 string readstring not { exit } if pop } loop
+            } if
+            % drain whatever the array did not need: sethalftone consumes
+            % the file. readstring leaves the piece it read whether or not
+            % it filled the string, so the last piece is dropped on the way
+            % out as well as on the way round
+            { dup 4096 string readstring not { pop exit } if pop } loop
             pop
         }{ pop } ifelse
     }{ pop pop } ifelse
@@ -1022,6 +1045,20 @@ setglobal
             { /sethalftone cvx /typecheck signalerror } if
         ht /Thresholds get type /filetype ne
             { /sethalftone cvx /typecheck signalerror } if
+    }{ dup 16 eq {
+        pop
+        % the same file-borne threshold array as a type 6, at two bytes
+        % a sample rather than one (PLRM Table 7.8). The optional second
+        % rectangle travels as a pair: Width2 without Height2 describes a
+        % rectangle with no extent
+        ht [ /Width /Height /Thresholds ] //.xpostsys /.htrequire get exec
+        ht /Width get type /integertype eq
+        ht /Height get type /integertype eq and not
+            { /sethalftone cvx /typecheck signalerror } if
+        ht /Thresholds get type /filetype ne
+            { /sethalftone cvx /typecheck signalerror } if
+        ht /Width2 known ht /Height2 known ne
+            { /sethalftone cvx /undefined signalerror } if
     }{ 5 eq {
         % a composite dictionary: one halftone per colorant, and the
         % Default the components that have no entry of their own fall
@@ -1038,7 +1075,7 @@ setglobal
         } forall
     }{
         /sethalftone cvx /rangecheck signalerror
-    } ifelse } ifelse } ifelse } ifelse
+    } ifelse } ifelse } ifelse } ifelse } ifelse
     end
 } put
 

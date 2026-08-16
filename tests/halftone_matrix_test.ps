@@ -64,6 +64,51 @@
      /Thresholds (0180C8FF) /ASCIIHexDecode filter >>
   sethalftone } (a complete type 6) works
 
+% A type 16 is a type 6 with 16-bit samples (PLRM Table 7.8), so a 2 by 2
+% cell is eight bytes rather than four. The screen keeps the high byte of
+% each sample, which is the precision the cell carries.
+{ << /HalftoneType 16 /Width 2 /Height 2
+     /Thresholds (0100804000C800FF) /ASCIIHexDecode filter >>
+  sethalftone } (a complete type 16) works
+
+% The 16-bit samples reduce to the byte the cell carries, and the
+% reduction is the high byte: a type 16 whose samples are 0x01xx 0x80xx
+% 0x00xx 0xFFxx must leave the same thresholds behind as the type 6
+% spelling 01 80 00 FF.
+{ << /HalftoneType 16 /Width 2 /Height 2
+     /Thresholds (0140807F0022FF13) /ASCIIHexDecode filter >> sethalftone
+  currenthalftone /Thresholds get
+  << /HalftoneType 6 /Width 2 /Height 2
+     /Thresholds (018000FF) /ASCIIHexDecode filter >> sethalftone
+  currenthalftone /Thresholds get
+  ne { (a type 16 does not reduce to the type 6 it matches)
+       (16-bit thresholds) note } if }
+  (a type 16 reduced to the cell's precision) works
+
+% sethalftone consumes its argument and leaves nothing behind, whatever
+% the thresholds arrived as. A file-borne array is the case that got
+% this wrong: the loop draining the unread remainder exited still
+% holding the last piece it had read, so the pop that was meant for the
+% file took that instead and the file stayed on the stack.
+{ count /htdepth exch def
+  << /HalftoneType 3 /Width 2 /Height 2
+     /Thresholds (0180C8FF) /ASCIIHexDecode filter >> sethalftone
+  count htdepth ne
+    { (leaves something on the operand stack) (a type 3 from a file) note } if }
+  (sethalftone consuming a file-borne type 3) works
+{ count /htdepth exch def
+  << /HalftoneType 6 /Width 2 /Height 2
+     /Thresholds (0180C8FF) /ASCIIHexDecode filter >> sethalftone
+  count htdepth ne
+    { (leaves something on the operand stack) (a type 6) note } if }
+  (sethalftone consuming a type 6) works
+{ count /htdepth exch def
+  << /HalftoneType 16 /Width 2 /Height 2
+     /Thresholds (0100804000C800FF) /ASCIIHexDecode filter >> sethalftone
+  count htdepth ne
+    { (leaves something on the operand stack) (a type 16) note } if }
+  (sethalftone consuming a type 16) works
+
 % and comes back as the type it was set to
 { << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone
   currenthalftone /HalftoneType get 3 ne
@@ -79,7 +124,7 @@
 { << /HalftoneType (three) /Width 2 /Height 2 /Thresholds <0180C8FF> >>
   sethalftone } /typecheck (a HalftoneType that is not an integer) raises
 
-[ -1 0 2 4 9 10 16 99 ] {
+[ -1 0 2 4 9 10 99 ] {
     /t exch def
     { << /HalftoneType t /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
       sethalftone }
@@ -115,6 +160,19 @@
   /undefined (a type 6 with no Thresholds) raises
 { << /HalftoneType 6 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone }
   /typecheck (a type 6 whose Thresholds is a string, not a file) raises
+
+% A type 16 demands the same three, and PLRM Table 7.8 pairs Width2 with
+% Height2: one without the other describes a rectangle with no extent.
+{ << /HalftoneType 16 /Height 2
+     /Thresholds (0100804000C800FF) /ASCIIHexDecode filter >>
+  sethalftone } /undefined (a type 16 with no Width) raises
+{ << /HalftoneType 16 /Width 2 /Height 2 >> sethalftone }
+  /undefined (a type 16 with no Thresholds) raises
+{ << /HalftoneType 16 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone }
+  /typecheck (a type 16 whose Thresholds is a string, not a file) raises
+{ << /HalftoneType 16 /Width 2 /Height 2 /Width2 2
+     /Thresholds (0100804000C800FF) /ASCIIHexDecode filter >>
+  sethalftone } /undefined (a type 16 with Width2 and no Height2) raises
 
 { << /HalftoneType 5
      /Gray << /HalftoneType 1 /Frequency 60 /Angle 45
