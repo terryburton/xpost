@@ -65,4 +65,19 @@ systemdict /.resourcefileopen known not
 OUTSIDE status not
     (a file outside does not answer status) assert
 
+% The temporary directory is one of the places that is not given. It
+% reads like part of a working area and was granted here once; it is
+% shared with every account on the machine, and the interpreter's own
+% scratch does not reach it through the permitted set, so a run has no
+% reason to hand it to a program it does not trust. SCRATCH names a file
+% in it that the harness made, so a pass here is the refusal and not the
+% file being absent -- which is why the read is checked as well as the
+% write.
+{ SCRATCH (r) file } errof /invalidfileaccess eq
+    (a file in the temporary directory is not read) assert
+{ SCRATCH (w) file } errof /invalidfileaccess eq
+    (a file in the temporary directory is not written) assert
+{ TMPNEW (w) file } errof /invalidfileaccess eq
+    (a new file in the temporary directory is not created) assert
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

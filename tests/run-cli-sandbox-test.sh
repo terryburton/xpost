@@ -45,13 +45,14 @@ trap 'rm -rf "$work"' EXIT
 mkdir "$work/run" || { echo "FAILURES: could not make the working directory"; exit 1; }
 cp "$prog" "$work/run/prog.ps" || { echo "FAILURES: could not place the program"; exit 1; }
 mkdir "$work/elsewhere" || { echo "FAILURES: could not make the other directory"; exit 1; }
-# The temporary directory is one of the permitted trees, and this scratch
-# is inside the system one -- so the file to be refused would sit in a
-# tree the run may reach, and the refusals below would all be failures of
-# the test rather than of the sandbox. Give the run a temporary directory
-# of its own instead, which is also what says out loud that the default
-# permits one.
+# A temporary directory of the run's own, with a file already in it. The
+# default does not permit the temporary directory, and the program checks
+# that; naming one here rather than letting the run inherit the system's
+# means the file it is refused is one this test made, so a refusal cannot
+# be a file that was never there.
 mkdir "$work/tmp" || { echo "FAILURES: could not make the temporary directory"; exit 1; }
+echo scratch > "$work/tmp/f" ||
+    { echo "FAILURES: could not write the file in the temporary directory"; exit 1; }
 echo secret > "$work/elsewhere/f" ||
     { echo "FAILURES: could not write the file to be refused"; exit 1; }
 
@@ -64,7 +65,9 @@ echo secret > "$work/elsewhere/f" ||
 # the working directory rather than /dev/null, whose directory would
 # otherwise be write-permitted.
 out=$(cd "$work/run" && TMPDIR="$work/tmp" XPOST_DATA_DIR="$src/data" "$xpost" \
-      -q -d null -o out.txt "-DOUTSIDE=($work/elsewhere/f)" prog.ps </dev/null 2>&1)
+      -q -d null -o out.txt "-DOUTSIDE=($work/elsewhere/f)" \
+      "-DSCRATCH=($work/tmp/f)" "-DTMPNEW=($work/tmp/made.txt)" \
+      prog.ps </dev/null 2>&1)
 st=$?
 verdict_ok "$out" "the command-line sandbox test" ||
     { printf '%s\n' "$out" | sed 's/^/      /'; exit 1; }
@@ -76,6 +79,14 @@ fi
 # What the program was told and what the filesystem did are two claims.
 if [ ! -s "$work/elsewhere/f" ]; then
     echo "FAILURES: the file outside the permitted set was emptied"
+    exit 1
+fi
+if [ ! -s "$work/tmp/f" ]; then
+    echo "FAILURES: the file in the temporary directory was emptied"
+    exit 1
+fi
+if [ -e "$work/tmp/made.txt" ]; then
+    echo "FAILURES: a file was made in the temporary directory"
     exit 1
 fi
 

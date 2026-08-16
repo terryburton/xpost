@@ -282,7 +282,14 @@ _xpost_main_usage(FILE *out, const char *filename)
     fprintf(out, "\t          scratch file at all. What a page costs then\n");
     fprintf(out, "\t          follows its drawing with no limit\n");
     fprintf(out, "\talways    in a scratch file from the first mark; refused\n");
-    fprintf(out, "\t          at start-up where no scratch file can be made\n");
+    fprintf(out, "\t          at start-up where no scratch file can be made\n");    fprintf(out, "\n");
+    fprintf(out, "  A run confines the program's file access to the current\n");
+    fprintf(out, "  directory, the directory the program was read from, the\n");
+    fprintf(out, "  directory the output is written to, and any -I directory,\n");
+    fprintf(out, "  and refuses every other disk open with invalidfileaccess.\n");
+    fprintf(out, "  The temporary directory is not among them, being shared\n");
+    fprintf(out, "  with everyone rather than belonging to the run.\n");
+    fprintf(out, "  --no-sandbox lifts the whole of it.\n");
 }
 
 static int
@@ -801,21 +808,35 @@ int main(int argc, char *argv[])
         num_incs = 0;
     }
 
-    /* confine the program to its working area unless --no-sandbox: the
-       current and temporary directories, the input file's directory
-       (read) and the output file's directory (write). The interpreter
-       permits its own data directory (init.ps, graphics.ps) during
-       start-up; -I resource directories were read-permitted above. */
+    /* Confine the program to its working area unless --no-sandbox: the
+       current directory, the input file's directory (read) and the
+       output file's directory (write). The interpreter permits its own
+       data directory (init.ps, graphics.ps) during start-up; -I resource
+       directories were read-permitted above.
+
+       NOT the temporary directory, though it reads like part of a
+       working area and was granted here for a while. It is not the
+       program's working area, it is everyone's: a directory shared with
+       every account on the machine, world-writable on the systems that
+       have one, holding whatever other jobs have left in it. Granting it
+       read and write to input that is not trusted is the widest thing a
+       default can do, and nothing needed it. The interpreter's own
+       scratch -- the spill, the tracing dump, the temporary file a
+       filter may want -- is opened internally and never consults the
+       permitted set at all, so the grant only ever served the program;
+       and a program with somewhere to write already has the current
+       directory. It is also what made the escape closed in the file
+       layer reachable, since that wanted a write-permitted directory an
+       attacker could leave a symbolic link in, and this was the only one
+       in the set that a stranger could reach.
+
+       A program that genuinely wants the temporary directory can be run
+       from it, be given it with -o, or be run with --no-sandbox, which
+       is the switch for input whose file access is not in question. */
     if (!no_sandbox)
     {
-        const char *tmp = getenv("TMPDIR");
-
-        if (!tmp || !*tmp)
-            tmp = "/tmp";
         xpost_path_permit_read(".");
         xpost_path_permit_write(".");
-        xpost_path_permit_read(tmp);
-        xpost_path_permit_write(tmp);
         _xpost_permit_file_dir(ps_file, 0);
         if (output_file)
             _xpost_permit_file_dir(output_file, 1);
