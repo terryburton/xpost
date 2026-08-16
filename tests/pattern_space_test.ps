@@ -1,0 +1,133 @@
+%!
+% A Pattern colour space over every base it can be built on, against every
+% operator that paints with one.
+%
+% PLRM 4.9 gives a Pattern space an optional underlying space: a coloured
+% pattern (PaintType 1) carries its own colour and takes none, while an
+% uncoloured one (PaintType 2) is painted in a colour supplied in that
+% underlying space, which may be any space that is not itself a Pattern.
+% So the pattern machinery meets the whole colour machinery, and the two
+% multiply.
+%
+% WHY THIS FILE IS A CROSS PRODUCT AND NOT A SAMPLE. Both of the other
+% pattern tests here paint over DeviceGray and nothing else. One base out
+% of six, and the five that were never asked included the three whose
+% colour is reached by running a program -- a Separation and a DeviceN
+% call a tint transform, an Indexed space looks a value up -- which are
+% exactly the ones that can disturb what a pattern's own machinery leaves
+% behind. A sample cannot find that; only the product can, and the
+% product is small enough to write out.
+%
+% The bases are listed once and every operator is asked over that one
+% list, so a base added here is added to every case at once.
+
+/failcount 0 def
+/assert { exch { pop } { (FAIL: ) print print (\n) print
+    /failcount failcount 1 add store } ifelse } bind def
+
+% What a procedure raised, with everything it disturbed put back.
+%
+% Two stacks need that, not one. A case that raises leaves the failed
+% operator's operands behind, and those differ per base, so the depth is
+% not predictable and a mark is what recovers it. It also leaves the
+% graphics state it entered, because a raise never reaches the matching
+% grestore -- so the bracket belongs here, outside the procedure, and not
+% inside each case where only a case that succeeds would close it. A
+% colour space left in force by a case that failed is inherited by every
+% case after it, which turns one failure into a column of them and points
+% every one of them at the wrong thing.
+/outcome { % proc . /ok | /errorname
+    /P exch def
+    gsave
+    mark
+    { P exec } stopped { $error /errorname get }{ /ok } ifelse
+    /R exch def
+    cleartomark
+    grestore
+    R
+} bind def
+
+% The bases. Each entry is a procedure that BUILDS the space, and a
+% procedure leaving the components a colour in that space takes.
+%
+% Built rather than held, because a case must not inherit what another
+% case did to its fixture. A space that one case leaves altered is a
+% space every later case is asking a different question about, so a
+% single failure becomes a column of them and only the first is about
+% what its label says. Building afresh is what makes each cell of the
+% product independent, which is the whole value of writing the product
+% out.
+/BASES [
+    { [ /DeviceGray ] }                                        { 0.5 }
+    { [ /DeviceRGB ] }                                         { 0.2 0.4 0.6 }
+    { [ /DeviceCMYK ] }                                        { 0.1 0.2 0.3 0.0 }
+    { [ /Separation /Spot /DeviceGray { 1 exch sub } ] }       { 0.5 }
+    { [ /DeviceN [ /A /B /C ] /DeviceRGB { 3 1 roll pop pop dup dup } ] }
+                                                               { 0.2 0.4 0.6 }
+    { [ /Indexed /DeviceRGB 1 <000000ffffff> ] }               { 1 }
+] def
+/BASENAMES [ (DeviceGray) (DeviceRGB) (DeviceCMYK)
+             (Separation) (DeviceN) (Indexed) ] def
+
+% The operators that paint with the colour in force.
+/PAINTS [ { fill } { eofill } { stroke } ] def
+/PAINTNAMES [ (fill) (eofill) (stroke) ] def
+
+/P1 << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10]
+       /XStep 10 /YStep 10
+       /PaintProc { pop 0 0 0.5 setrgbcolor 0 0 5 5 rectfill } >>
+     matrix makepattern def
+/P2 << /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10]
+       /XStep 10 /YStep 10
+       /PaintProc { pop 0 0 5 5 rectfill } >>
+     matrix makepattern def
+
+/box { newpath 20 20 moveto 60 0 rlineto 0 60 rlineto closepath } bind def
+
+/label { % (base) (paint) (what) . (string)
+    /L3 exch def /L2 exch def /L1 exch def
+    L1 length L2 length add L3 length add 8 add string
+    dup 0 L3 putinterval
+    dup L3 length ( over ) putinterval
+    dup L3 length 6 add L1 putinterval
+    dup L3 length 6 add L1 length add (, ) putinterval
+    dup L3 length 8 add L1 length add L2 putinterval
+} bind def
+
+% --- uncoloured: the base is used, so every base must reach the page ---
+0 1 BASENAMES length 1 sub {
+    /bi exch def
+    /mkspace BASES bi 2 mul get def
+    /comps BASES bi 2 mul 1 add get def
+    0 1 PAINTNAMES length 1 sub {
+        /pi exch def
+        { [ /Pattern mkspace exec ] setcolorspace
+          comps exec P2 setpattern
+          box PAINTS pi get exec } outcome /ok eq
+        BASENAMES bi get PAINTNAMES pi get (uncoloured pattern) label assert
+    } for
+} for
+
+% --- coloured: no base is involved, so this is the control that says a
+%     failure above is about the base and not about patterns at large ---
+0 1 PAINTNAMES length 1 sub {
+    /pi exch def
+    { [ /Pattern ] setcolorspace
+      P1 setpattern
+      box PAINTS pi get exec } outcome /ok eq
+    (none) PAINTNAMES pi get (coloured pattern) label assert
+} for
+
+% --- and the spaces themselves still work without a pattern over them,
+%     so a failure above cannot be blamed on the base being unsupported ---
+0 1 BASENAMES length 1 sub {
+    /bi exch def
+    { BASES bi 2 mul get exec setcolorspace
+      BASES bi 2 mul 1 add get exec setcolor
+      box fill } outcome /ok eq
+    BASENAMES bi get (fill) (plain colour) label assert
+} for
+
+showpage
+
+failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

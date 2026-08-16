@@ -308,6 +308,7 @@ tests/path_confine_test.c \
 tests/path_recycle_test.ps \
 tests/path_walk_cost_test.ps \
 tests/pattern_phase_test.ps \
+tests/pattern_space_test.ps \
 tests/pdf_append_fail_test.ps \
 tests/pdf_bigfill_test.ps \
 tests/pdf_global_vm_test.ps \

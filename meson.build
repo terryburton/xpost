@@ -1739,6 +1739,19 @@ test('show-pattern',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# A Pattern colour space over every base it can be built on, against every
+# operator that paints with one. An uncoloured pattern takes its colour from
+# that base, so the pattern machinery meets the whole colour machinery and
+# the two multiply; the other pattern tests here paint over one base only,
+# which cannot reach the bases whose colour is arrived at by running a
+# program.
+test('pattern-space',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/pattern_space_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # An outline font's glyphs are its character outlines stroked with
 # StrokeWidth, not the filled coverage the glyph raster route plots, so
 # text in one leaves that route for its outlines and the ordinary
