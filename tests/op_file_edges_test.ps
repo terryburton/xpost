@@ -261,19 +261,42 @@ fe.pre fe.exists
 fe.pre fe.exists { fe.pre deletefile } if
 (fedge_nulmoved.scratch) fe.exists { (fedge_nulmoved.scratch) deletefile } if
 
-% and no other byte is narrowed out of a name by that refusal: a file
-% system that keeps a name as bytes keeps a newline and a high byte in
-% one, so the name a program writes is the name it gets
+% and no other byte is narrowed out of a name by that refusal. What the
+% interpreter owes here is that it hands the name on as the bytes it was
+% given; whether those bytes can be a file name is the file system's to
+% say, and file systems differ -- one that keeps a name as bytes takes a
+% newline and a byte above the ASCII range, while one that requires a
+% name to be text refuses the second because it is not valid on its own.
+%
+% So the case is asked in two halves and both are about the interpreter.
+% Where the name is taken, the file that appears must be under that whole
+% name. Where it is refused, the refusal must be a refusal: nothing may
+% appear under the name cut short at the awkward byte, which is what a
+% narrowing would leave behind and is the same property the NUL case
+% above asks for.
 /fe.odd 5 string def
 fe.odd 0 102 put                        % f
 fe.odd 1 10  put                        % newline
 fe.odd 2 233 put                        % a byte above the ASCII range
 fe.odd 3 46  put                        % .
 fe.odd 4 115 put                        % s
-fe.odd (w) file closefile
-fe.odd fe.exists
-    (a name holding a newline and a high byte is a file) assert
-fe.odd deletefile
+/fe.cut 1 string def fe.cut 0 102 put   % the name narrowed at the newline
+
+{ fe.odd (w) file closefile } stopped {
+    % the file system would not take the name
+    clear
+    fe.odd fe.exists not
+        (a name the file system refuses leaves no file under it) assert
+    fe.cut fe.exists not
+        (a name the file system refuses leaves no file under it cut short) assert
+}{
+    fe.odd fe.exists
+        (a name holding a newline and a high byte is a file) assert
+    fe.cut fe.exists not
+        (that name did not become the name cut short at the newline) assert
+    fe.odd deletefile
+} ifelse
+fe.cut fe.exists { fe.cut deletefile } if
 
 % --- a name longer than the file system will hold (PLRM 8.2) ---
 % The length a file system will take a name in is one of its limits, and
