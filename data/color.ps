@@ -738,8 +738,8 @@ setglobal
 % program's dictionaries and defines into them.
 .xpostsys /.csinitcolor {
     currentcolorspace
-    dup 0 get
-    dup /Pattern eq {
+    dup //.xpostsys /.spacekind get exec
+    dup /pattern eq {
         pop pop
         graphicsdict /currgstate get /patdict null put
         graphicsdict /currgstate get /patcomps null put
@@ -747,27 +747,32 @@ setglobal
         % answers with until a pattern is set
         graphicsdict /currgstate get /tintcomps 1 array put
     }{
-    dup /Indexed eq {
+    dup /indexed eq {
         pop pop 0 //setcolor exec
     }{
-    dup /Separation eq {
-        pop pop 1.0 //setcolor exec
+    dup /tint eq {
+        % a Separation enters at full tint, a DeviceN at full in each of
+        % its names, so the count comes from the space rather than the
+        % kind
+        pop dup 0 get /Separation eq
+            { pop 1.0 }{ 1 get length { 1.0 } repeat } ifelse
+        //setcolor exec
     }{
-    dup /DeviceN eq {
-        pop 1 get length { 1.0 } repeat //setcolor exec
-    }{
-    //.xpostsys /.ciecomps get 1 index known {
+    dup /cie eq {
+        % the space itself is kept: clamping a CIE colour needs the
+        % range its space declares
         pop
         [ //.xpostsys /.ncomponents get exec { 0.0 } repeat ]
         //.xpostsys /.cieclampcomps get exec
         aload pop //setcolor exec
     }{
-        exch pop
+        pop
+        dup type /arraytype eq { 0 get } if
         dup /DeviceCMYK eq { pop 0.0 0.0 0.0 1.0 }{
         /DeviceRGB eq { 0.0 0.0 0.0 }{
         0.0 } ifelse } ifelse
         //setcolor exec
-    } ifelse } ifelse } ifelse } ifelse } ifelse
+    } ifelse } ifelse } ifelse } ifelse
 } put
 
 .xpostsys /currentcolordict <<
