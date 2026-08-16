@@ -930,13 +930,45 @@ setglobal
 % ht  .ht5component  ht'
 % a type 5 dictionary carries one halftone per colorant: grey
 % rendering takes its grey component, or the required Default
+% ht  .htgraytriple  ht'
+% A type 2 or type 4 carries four screens, one per primary, spelled as
+% entries prefixed Red, Green, Blue and Gray. This interpreter screens
+% grey, so the grey screen is the one that reaches a device, and it is
+% handed on as the single-screen type it corresponds to -- a type 2
+% becomes a type 1 and a type 4 a type 3. Nothing downstream then knows
+% there were four.
+.xpostsys /.htgraytriple {
+    4 dict begin
+    /src exch def
+    src /HalftoneType get 2 eq {
+        /want 1 def
+        /pairs [ [ /Frequency /GrayFrequency ] [ /Angle /GrayAngle ]
+                 [ /SpotFunction /GraySpotFunction ] ] def
+    }{
+        /want 3 def
+        /pairs [ [ /Width /GrayWidth ] [ /Height /GrayHeight ]
+                 [ /Thresholds /GrayThresholds ] ] def
+    } ifelse
+    /out pairs length 1 add dict def
+    out /HalftoneType want put
+    pairs { aload pop src exch get out 3 1 roll put } forall
+    out
+    end
+} put
+
 .xpostsys /.ht5component {
     dup type /dicttype eq {
-        dup /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse 5 eq {
+        dup /HalftoneType 2 copy known { get }{ pop pop 0 } ifelse
+        dup 5 eq {
+            pop
             dup /Gray 2 copy known { get exch pop }{ pop pop
                 dup /Default 2 copy known { get exch pop }{ pop pop } ifelse
             } ifelse
-        } if
+        }{
+            dup 2 eq exch 4 eq or {
+                //.xpostsys /.htgraytriple get exec
+            } if
+        } ifelse
     } if
 } put
 
@@ -1045,6 +1077,25 @@ setglobal
             { /sethalftone cvx /typecheck signalerror } if
         ht /Thresholds get type /filetype ne
             { /sethalftone cvx /typecheck signalerror } if
+    }{ dup 2 eq 1 index 4 eq or {
+        % four screens, one per primary, each spelled with its colour in
+        % front of the entries a type 1 or a type 3 spells plainly. All
+        % four are required whichever one a device ends up screening
+        % with, so a dictionary short of one is short of a screen
+        4 eq { [ /RedWidth     /RedHeight     /RedThresholds
+                 /GreenWidth   /GreenHeight   /GreenThresholds
+                 /BlueWidth    /BlueHeight    /BlueThresholds
+                 /GrayWidth    /GrayHeight    /GrayThresholds ] }
+             { [ /RedFrequency   /RedAngle   /RedSpotFunction
+                 /GreenFrequency /GreenAngle /GreenSpotFunction
+                 /BlueFrequency  /BlueAngle  /BlueSpotFunction
+                 /GrayFrequency  /GrayAngle  /GraySpotFunction ] } ifelse
+        ht exch //.xpostsys /.htrequire get exec
+        ht /GrayFrequency 2 copy known {
+            get //.xpostsys /.htnum get exec
+            ht /GrayAngle get //.xpostsys /.htnum get exec and not
+                { /sethalftone cvx /typecheck signalerror } if
+        }{ pop pop } ifelse
     }{ dup 16 eq {
         pop
         % the same file-borne threshold array as a type 6, at two bytes
@@ -1075,7 +1126,7 @@ setglobal
         } forall
     }{
         /sethalftone cvx /rangecheck signalerror
-    } ifelse } ifelse } ifelse } ifelse } ifelse
+    } ifelse } ifelse } ifelse } ifelse } ifelse } ifelse
     end
 } put
 
