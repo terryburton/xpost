@@ -200,26 +200,17 @@ if [ ! -s "$work/roster" ]; then
     exit 1
 fi
 
-missing=$(comm -13 "$work/roster" "$work/derived")
-extra=$(comm -23 "$work/roster" "$work/derived")
-if [ -n "$missing" ]; then
-    echo "FAILURES: these devices hand their page to an embedder and the"
-    echo "      family test does not ask them:"
-    printf '%s\n' "$missing" | sed 's/^/      /'
-    echo "      Add each to the members table in"
-    echo "      tests/output_buffer_release_test.c, with the pixel its"
-    echo "      unmarked page holds."
-    fail=1
-fi
-if [ -n "$extra" ]; then
-    echo "FAILURES: the family test asks these devices and no driver hands"
-    echo "      their page to an embedder:"
-    printf '%s\n' "$extra" | sed 's/^/      /'
-    echo "      Either the device stopped handing a page over, in which case"
-    echo "      take it off the table, or its maker is no longer readable"
-    echo "      from data/init.ps."
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/derived" "$work/roster" \
+    "these devices hand their page to an embedder and the family test does
+      not ask them. Add each to the members table in
+      tests/output_buffer_release_test.c, with the pixel its unmarked page
+      holds:" \
+    "the family test asks these devices and no driver hands their page to
+      an embedder. Either the device stopped handing a page over, in which
+      case take it off the table, or its maker is no longer readable from
+      data/init.ps:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- the block in front of the page ----
 for f in $(cat "$work/handers"); do

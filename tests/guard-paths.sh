@@ -256,3 +256,39 @@ guard_c_source() {
             print FILENAME "\t" FNR "\t" out
         }' "$@"
 }
+
+# Hold two derived sets to each other, in both directions.
+#
+# Nineteen of the guards here do this and each wrote the pair of comm
+# invocations out by hand. The mechanics are the same every time and the
+# messages never are: what makes a guard worth reading is the sentence
+# saying why THIS asymmetry matters, so the caller keeps that and this
+# keeps the parts that are always identical -- comparing sorted sets,
+# indenting the names, and remembering that a difference was found.
+#
+# Both directions, always. A guard that checks one is blind to whatever
+# is absent from the list it started from, which is precisely the state
+# a newly added member is in -- the failure this whole family of guards
+# exists to prevent.
+#
+#   $1  file of wanted names, sorted
+#   $2  file of found names, sorted
+#   $3  headline when something wanted is not found
+#   $4  headline when something found was not wanted
+#
+# Sets guard_held to 1 when either direction has anything, and leaves it
+# alone otherwise, so a caller may run several and test once.
+guard_hold() {
+    _gh_missing=$(comm -23 "$1" "$2")
+    if [ -n "$_gh_missing" ]; then
+        echo "FAIL: $3"
+        printf '%s\n' "$_gh_missing" | sed 's/^/      /'
+        guard_held=1
+    fi
+    _gh_extra=$(comm -13 "$1" "$2")
+    if [ -n "$_gh_extra" ]; then
+        echo "FAIL: $4"
+        printf '%s\n' "$_gh_extra" | sed 's/^/      /'
+        guard_held=1
+    fi
+}

@@ -95,27 +95,18 @@ awk '$2 == "cie"    { print $1 }' "$work/kinds" | sort > "$work/want.cie"
 awk '{ print $1 }' "$work/comps" | sort > "$work/have.comps"
 awk '{ print $1 }' "$work/cie"   | sort > "$work/have.cie"
 
-hold() {                                # $1 want $2 have $3 kind $4 table
-    miss=$(comm -23 "$work/$1" "$work/$2")
-    if [ -n "$miss" ]; then
-        echo "FAIL: of kind $3 and priced by no $4 entry:"
-        printf '%s\n' "$miss" | sed 's/^/      /'
-        echo "      Every such family states its own component count, and"
-        echo "      one that does not is asked for a count that is not there."
-        fail=1
-    fi
-    extra=$(comm -13 "$work/$1" "$work/$2")
-    if [ -n "$extra" ]; then
-        echo "FAIL: priced by $4 and not of kind $3 in the roster:"
-        printf '%s\n' "$extra" | sed 's/^/      /'
-        echo "      A price for a family the roster does not place is a"
-        echo "      price nothing will ask for, or a family whose kind was"
-        echo "      changed without its price following."
-        fail=1
-    fi
-}
-hold want.comps have.comps device .spacecomps
-hold want.cie    have.cie    cie    .ciecomps
+guard_held=0
+guard_hold "$work/want.comps" "$work/have.comps" \
+    "of kind device and priced by no .spacecomps entry. Every such family
+      states its own component count, and one that does not is asked for
+      a count that is not there:" \
+    "priced by .spacecomps and not of kind device in the roster. A price
+      for a family the roster does not place is a price nothing will ask
+      for, or a family whose kind changed without its price following:"
+guard_hold "$work/want.cie" "$work/have.cie" \
+    "of kind cie and priced by no .ciecomps entry:" \
+    "priced by .ciecomps and not of kind cie in the roster:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- and the kinds whose count comes from their own parameters are
 #      priced by neither, since a price there would be read instead
