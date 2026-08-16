@@ -415,7 +415,7 @@ setglobal
     % Indexed colour through its base and a Separation or DeviceN tint
     % through its alternative, so reduce through any such chain
     graphicsdict /currgstate get 1 index /setspace exch put
-    dup type /arraytype eq { dup 0 get /Pattern eq }{ dup /Pattern eq } ifelse {
+    dup //.xpostsys /.spaceispattern get exec {
         % a pattern space: setcolor stores the pattern for the
         % painting machinery; a second element names the underlying
         % space an uncoloured pattern's cells paint with
@@ -502,7 +502,7 @@ setglobal
         % the underlying space is the current one -- or, when that is
         % already a pattern space, its own underlying space
         currentcolorspace
-        dup type /arraytype eq { dup 0 get /Pattern eq }{ dup /Pattern eq } ifelse {
+        dup //.xpostsys /.spaceispattern get exec {
             dup type /arraytype eq { dup length 1 gt }{ false } ifelse
                 { 1 get }{ pop /DeviceGray } ifelse
         } if
@@ -547,6 +547,17 @@ currentglobal true setglobal
     } ifelse
 } put
 
+% space  .spaceispattern  bool
+% Whether a colour space is a pattern space, asked of the space as the
+% program gave it: a family name on its own, or an array carrying the
+% family and its parameters. Both forms reach setcolorspace, so both
+% have to be understood wherever the question is asked, and asking it
+% two ways is how one site comes to understand a form another does not.
+.xpostsys /.spaceispattern {
+    dup type /arraytype eq { 0 get } if
+    /Pattern eq
+} put
+
 % space  .spacereduce  space
 % Walk a colour space down to the one a colour in it is finally recorded
 % in: an Indexed space through its base, a Separation or DeviceN through
@@ -583,7 +594,7 @@ currentglobal true setglobal
 .xpostsys /.csvalidate {
     1 dict begin
     /sp exch def
-    sp type /arraytype eq { sp 0 get }{ sp } ifelse /Pattern eq {
+    sp //.xpostsys /.spaceispattern get exec {
         % a pattern space carries the space its uncoloured cells paint
         % with as a second element, when it carries one at all
         sp type /arraytype eq {
