@@ -1752,6 +1752,22 @@ test('pattern-space',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
   timeout: 120)
 
+# A colour space is a family of eleven, and the machinery that cares
+# tests each by name at the site that cares rather than asking a table,
+# so a member is reached by whichever sites its author thought of. This
+# asks every member the same questions -- that it is accepted, that what
+# it reports can be handed back, and that it is entered holding a colour
+# -- so that a member cannot answer differently from the rest merely
+# because no site was written for it. Each member is built by a
+# constructor rather than shared, so a case that spoils its space cannot
+# reach the next one.
+test('colour-space-family',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/colour_space_family_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  timeout: 120)
+
 # An outline font's glyphs are its character outlines stroked with
 # StrokeWidth, not the filled coverage the glyph raster route plots, so
 # text in one leaves that route for its outlines and the ordinary

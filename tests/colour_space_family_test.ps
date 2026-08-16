@@ -1,0 +1,100 @@
+%!
+% Every colour space, asked the same questions.
+%
+% A colour space is a family of eleven members, and the machinery that
+% cares tests each by name at the site that cares -- fifty-four such
+% tests across six files. Nothing enumerates the family, so a member is
+% reached by whichever sites its author thought of, and a member no site
+% thought of is reached by none.
+%
+% That is not hypothetical. An uncoloured pattern over a Separation,
+% DeviceN or Indexed base raised dictstackunderflow, and those are three
+% of the four members that exist nowhere as data: they are only inline
+% name tests. A member with no data representation is one nobody can
+% enumerate, so nobody crossed them with the pattern machinery.
+%
+% This asks every member the questions the family is asked, so that a
+% member cannot answer differently from the rest merely because no site
+% was written for it. The answers here are what the interpreter gives
+% today; where one is wrong it is to be corrected here and in the
+% machinery together.
+
+/failcount 0 def
+/assert {                               % bool (name) (what)  .  -
+    3 -1 roll { pop pop }{
+        (FAIL: ) print exch print ( ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+} bind def
+
+% { proc }  outcome  /ok | /errorname
+% brackets the graphics state and every stack the case touched: a case
+% that raises never reaches its own cleanup, and the next case would
+% otherwise inherit it
+/outcome {                              % { proc }  .  /ok | /errorname
+    gsave
+    mark exch
+    stopped { cleartomark $error /errorname get }
+            { cleartomark /ok } ifelse
+    grestore
+} bind def
+
+% A CONSTRUCTOR per member, not a shared value: a case that mutates or
+% poisons its space cannot reach the next one.
+/members [
+    (DeviceGray)   { /DeviceGray }
+    (DeviceRGB)    { /DeviceRGB }
+    (DeviceCMYK)   { /DeviceCMYK }
+    (CIEBasedA)    { [ /CIEBasedA <<
+                       /WhitePoint [0.9505 1.0 1.089] >> ] }
+    (CIEBasedABC)  { [ /CIEBasedABC <<
+                       /WhitePoint [0.9505 1.0 1.089] >> ] }
+    (Indexed)      { [ /Indexed /DeviceRGB 1 <FF000000FF00> ] }
+    (Separation)   { [ /Separation /Spot /DeviceGray { } ] }
+    (DeviceN)      { [ /DeviceN [ /A /B ] /DeviceRGB
+                       { pop pop 0.0 0.0 0.0 } ] }
+    (Pattern)      { [ /Pattern ] }
+] def
+
+/eachmember {                           % { name proc }  .  -
+    /body exch def
+    0 2 members length 2 sub {
+        /i exch def
+        members i get members i 1 add get body
+    } for
+} bind def
+
+% ---- every member is accepted by setcolorspace
+{                                       % (name) { space }  .  -
+    /sp exch def /nm exch def
+    { sp setcolorspace } outcome /ok eq
+    nm (is accepted by setcolorspace) assert
+} eachmember
+
+% ---- and what it reports can be handed straight back to it
+{
+    /sp exch def /nm exch def
+    { sp setcolorspace currentcolorspace setcolorspace } outcome /ok eq
+    nm (survives a currentcolorspace round trip) assert
+} eachmember
+
+% ---- and it is entered holding a colour, whatever that colour is.
+%      A pattern space holds the null pattern until one is set, so one
+%      element is the floor every member clears.
+{
+    /sp exch def /nm exch def
+    /n 0 def
+    gsave
+        { sp setcolorspace } stopped { clear }{
+            count /before exch def
+            { currentcolor } stopped { clear }{
+                /n count before sub def
+            } ifelse
+            clear
+        } ifelse
+    grestore
+    n 0 gt
+    nm (enters its space holding a colour) assert
+} eachmember
+
+failcount 0 eq { (SUCCESS\n) print }{
+    (FAILURES: ) print failcount 8 string cvs print (\n) print } ifelse
