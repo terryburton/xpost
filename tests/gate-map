@@ -21,6 +21,14 @@
 #
 #   <area> path  <glob>   a part of the tree this area answers for
 #   <area> test  <glob>   a test that answers for this area
+#   <area> testif <glob>  the same, for a test a configuration may not
+#                         define at all -- a window device needs a
+#                         display server, so a build without one defines
+#                         no test that drives it. Selects exactly as test
+#                         does; the difference is that a test rule is
+#                         held to naming a test that exists, so that a
+#                         renamed test cannot leave its rule behind, and
+#                         a testif rule cannot be held to that.
 #   <area> width <policy> what the wide-object build runs for it
 #   <area> scope all      a change here is gated on the whole suite
 #
@@ -179,8 +187,8 @@ device test stencil-mask-size
 device test svg-*
 device test vecbase
 device test vecout-gc
-device test window-device
-device test window-getpix
+device testif window-device
+device testif window-getpix
 device width witness
 
 # ---- font: glyphs, the cache they live in, and the files they come from

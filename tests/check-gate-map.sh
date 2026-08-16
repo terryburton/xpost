@@ -109,25 +109,27 @@ fi
 awk '
     /^[[:space:]]*#/ { next }
     /^[[:space:]]*$/ { next }
-    { if (NF != 3 || ($2 != "path" && $2 != "test" && $2 != "width" &&
-                     $2 != "scope")) {
+    { if (NF != 3 || ($2 != "path" && $2 != "test" && $2 != "testif" &&
+                     $2 != "width" && $2 != "scope")) {
           print FNR "\t" $0; bad++ }
     }
     END { exit 0 }
 ' "$map" > "$work/malformed"
 if [ -s "$work/malformed" ]; then
-    echo "FAIL: gate-map holds line(s) that are not <area> <path|test|width|scope> <value>:"
+    echo "FAIL: gate-map holds line(s) that are not <area> <path|test|testif|width|scope> <value>:"
     sed 's/^/      line /' "$work/malformed"
     fail=1
 fi
 
 awk '/^[[:space:]]*#/ || NF != 3 { next }
      $2 == "path"  { print $1 "\t" $3 > (o "/rule.path") }
-     $2 == "test"  { print $1 "\t" $3 > (o "/rule.test") }
+     $2 == "test"  { print $1 "\t" $3 > (o "/rule.test")
+                     print $1 "\t" $3 > (o "/rule.test.strict") }
+     $2 == "testif" { print $1 "\t" $3 > (o "/rule.test") }
      $2 == "width" { print $1 "\t" $3 > (o "/rule.width") }
      $2 == "scope" { print $1 "\t" $3 > (o "/rule.scope") }
 ' o="$work" "$map"
-for k in path test width scope; do [ -f "$work/rule.$k" ] || : > "$work/rule.$k"; done
+for k in path test test.strict width scope; do [ -f "$work/rule.$k" ] || : > "$work/rule.$k"; done
 
 cut -f1 "$work/rule.path" "$work/rule.test" "$work/rule.width" \
        "$work/rule.scope" | sort -u > "$work/areas"
@@ -231,12 +233,14 @@ FILENAME == names { t[++nt] = $0; next }
   print $1 "\t" $2 }
 AWK
 awk -f "$work/glob.awk" -f "$work/stale-test.awk" \
-    names="$work/tests" "$work/tests" FS="$guard_tab" "$work/rule.test" \
+    names="$work/tests" "$work/tests" FS="$guard_tab" "$work/rule.test.strict" \
     > "$work/stale.test"
 if [ -s "$work/stale.test" ]; then
     echo "FAIL: $(grep -c . "$work/stale.test") test rule(s) in gate-map name no test the build"
     echo "      defines. A renamed test leaves its rule behind, and the rule"
-    echo "      then selects nothing while reading as though it did:"
+    echo "      then selects nothing while reading as though it did. A test"
+    echo "      a configuration may legitimately not define is written"
+    echo "      testif rather than test:"
     sed 's/^/      /' "$work/stale.test"
     fail=1
 fi

@@ -158,6 +158,10 @@ awk '
     /^[[:space:]]*#/ { next }
     NF < 3 { next }
     { area = $1; kind = $2; rest = $3
+      # testif selects exactly as test does; the two differ only to the
+      # checker, which holds a test rule to naming a test that exists and
+      # cannot hold a testif rule to it
+      if (kind == "testif") kind = "test"
       if (kind == "path" || kind == "test" || kind == "width" ||
           kind == "scope")
           print area "\t" rest > (out "/map." kind)
