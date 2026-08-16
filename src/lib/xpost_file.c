@@ -88,9 +88,25 @@
 
 #define XPOST_PATH_PERMIT_MAX 64
 
+/* Where a program may reach, and where a permit names one file rather
+   than a tree, that file's leaf beside it.
+
+   The leaf is what lets an output file be permitted without permitting
+   everything beside it: a run given -o /dev/null would otherwise have
+   been handed the whole of /dev, because a directory was the only thing
+   this table could say.
+
+   Two arrays rather than an array of pairs, and deliberately: a static
+   that can be made to name something says so with a star in its own
+   declaration, which is what tests/check-library-lifetime.sh derives
+   its population from and what tells a reader where the storage is
+   owned. A pointer hidden one level down inside a struct type is
+   invisible to both. */
 static char *xpost_permit_read_dir[XPOST_PATH_PERMIT_MAX];
+static char *xpost_permit_read_leaf[XPOST_PATH_PERMIT_MAX];
 static int xpost_permit_read_cnt = 0;
 static char *xpost_permit_write_dir[XPOST_PATH_PERMIT_MAX];
+static char *xpost_permit_write_leaf[XPOST_PATH_PERMIT_MAX];
 static int xpost_permit_write_cnt = 0;
 static int xpost_path_control_engaged = 0;
 
@@ -105,24 +121,27 @@ static int xpost_path_control_engaged = 0;
    whole, "/" is a prefix of every absolute path and the byte after it is
    never a separator, so a root left as it stands would contain nothing at
    all and permit nothing. */
+static const char *xpost_path_after_root(const char *full, const char *root);
+
 static int
-xpost_path_within_idx(const char *full, char *const *tab, int cnt)
+xpost_path_within_idx(const char *full, char *const *dirs,
+                      char *const *leaves, int cnt)
 {
     int i;
 
     for (i = 0; i < cnt; i++)
     {
-        size_t rl = strlen(tab[i]);
+        size_t rl = strlen(dirs[i]);
 
-        while (rl > 1 && (tab[i][rl - 1] == '/'
+        while (rl > 1 && (dirs[i][rl - 1] == '/'
 #ifdef _WIN32
-                          || tab[i][rl - 1] == '\\'
+                          || dirs[i][rl - 1] == '\\'
 #endif
                          ))
             rl--;
-        if (rl == 1 && (tab[i][0] == '/'
+        if (rl == 1 && (dirs[i][0] == '/'
 #ifdef _WIN32
-                        || tab[i][0] == '\\'
+                        || dirs[i][0] == '\\'
 #endif
                        ))
             rl = 0;
@@ -130,14 +149,22 @@ xpost_path_within_idx(const char *full, char *const *tab, int cnt)
 #ifdef _WIN32
         /* Windows paths are case-insensitive and GetFullPathName yields
            backslash separators (mirrors the beneath-root check) */
-        if (_strnicmp(full, tab[i], rl) == 0 &&
-            (full[rl] == '\\' || full[rl] == '/' || full[rl] == '\0'))
-            return i;
+        if (_strnicmp(full, dirs[i], rl) != 0 ||
+            (full[rl] != '\\' && full[rl] != '/' && full[rl] != '\0'))
+            continue;
 #else
-        if (strncmp(full, tab[i], rl) == 0 &&
-            (full[rl] == '/' || full[rl] == '\0'))
-            return i;
+        if (strncmp(full, dirs[i], rl) != 0 ||
+            (full[rl] != '/' && full[rl] != '\0'))
+            continue;
 #endif
+        /* An entry naming one file admits that file and nothing else
+           beside it. Keep scanning rather than refusing here: a broader
+           entry later in the table may cover this path legitimately, and
+           which entry was written first is not a policy. */
+        if (leaves[i] &&
+            strcmp(xpost_path_after_root(full, dirs[i]), leaves[i]) != 0)
+            continue;
+        return i;
     }
     return -1;
 }
@@ -156,24 +183,44 @@ xpost_path_within_idx(const char *full, char *const *tab, int cnt)
    a caller that believes it has configured a sandbox and has not is
    worse off than one that is told. */
 static int
-xpost_path_permit_add(char **tab, int *cnt, const char *dir)
+xpost_path_permit_add(char **dirs, char **leaves, int *cnt,
+                      const char *dir, const char *leaf)
 {
     char *rp = xpost_realpath(dir);
+    char *lf = NULL;
 
     if (!rp)
     {
         XPOST_LOG_ERR("cannot resolve the directory to permit: %s", dir);
         return 0;
     }
-    if (xpost_path_within_idx(rp, tab, *cnt) >= 0)
+    /* Already covered, and the question is asked of the thing being
+       permitted rather than of its directory: a file permit is covered
+       by a tree that holds it, and a tree is not covered by a permit for
+       one file inside it. */
+    {
+        char probe[XPOST_PATH_MAX];
+        const char *ask = rp;
+
+        if (leaf && snprintf(probe, sizeof probe, "%s/%s", rp, leaf)
+                    < (int)sizeof probe)
+            ask = probe;
+        if (xpost_path_within_idx(ask, dirs, leaves, *cnt) >= 0)
+        {
+            free(rp);
+            return 1;
+        }
+    }
+    if (leaf && !(lf = strdup(leaf)))
     {
         free(rp);
-        return 1;
+        return 0;
     }
     if (xpost_path_control_engaged) /* the permit set is frozen once engaged */
     {
         XPOST_LOG_ERR("file access is engaged: %s cannot be permitted now", rp);
         free(rp);
+        free(lf);
         return 0;
     }
     if (*cnt >= XPOST_PATH_PERMIT_MAX)
@@ -181,9 +228,11 @@ xpost_path_permit_add(char **tab, int *cnt, const char *dir)
         XPOST_LOG_ERR("no room beside the %d permitted directories for %s",
                       XPOST_PATH_PERMIT_MAX, rp);
         free(rp);
+        free(lf);
         return 0;
     }
-    tab[*cnt] = rp;
+    dirs[*cnt] = rp;
+    leaves[*cnt] = lf;
     ++*cnt;
     return 1;
 }
@@ -192,14 +241,57 @@ int
 xpost_path_permit_read(const char *dir)
 {
     return xpost_path_permit_add(xpost_permit_read_dir,
-                                 &xpost_permit_read_cnt, dir);
+                                 xpost_permit_read_leaf,
+                                 &xpost_permit_read_cnt, dir, NULL);
 }
 
 int
 xpost_path_permit_write(const char *dir)
 {
     return xpost_path_permit_add(xpost_permit_write_dir,
-                                 &xpost_permit_write_cnt, dir);
+                                 xpost_permit_write_leaf,
+                                 &xpost_permit_write_cnt, dir, NULL);
+}
+
+/* Permit exactly one file for writing: the directory it sits in, with
+   that file named, so nothing else beside it is granted.
+
+   A path with no separator is a file in the current directory. A path
+   whose leaf cannot be told from its directory is refused rather than
+   widened, since answering the wider question is the mistake this
+   exists to avoid. */
+int
+xpost_path_permit_write_file(const char *path)
+{
+    char buf[XPOST_PATH_MAX];
+    char *sep;
+
+    if (!path || !*path || strlen(path) >= sizeof buf)
+        return 0;
+    strcpy(buf, path);
+    sep = strrchr(buf, '/');
+#ifdef _WIN32
+    {
+        char *bs = strrchr(buf, '\\');
+
+        if (bs && (!sep || bs > sep))
+            sep = bs;
+    }
+#endif
+    if (sep)
+    {
+        *sep = '\0';
+        if (!buf[0])
+            strcpy(buf, "/");
+        if (!sep[1])
+            return 0; /* names a directory, not a file in one */
+        return xpost_path_permit_add(xpost_permit_write_dir,
+                                     xpost_permit_write_leaf,
+                                     &xpost_permit_write_cnt, buf, sep + 1);
+    }
+    return xpost_path_permit_add(xpost_permit_write_dir,
+                                 xpost_permit_write_leaf,
+                                 &xpost_permit_write_cnt, ".", buf);
 }
 
 void
@@ -284,6 +376,7 @@ xpost_path_permitted(const char *path, int write)
         return 0;
     return xpost_path_within_idx(full,
                write ? xpost_permit_write_dir : xpost_permit_read_dir,
+               write ? xpost_permit_write_leaf : xpost_permit_read_leaf,
                write ? xpost_permit_write_cnt : xpost_permit_read_cnt) >= 0;
 }
 
@@ -413,7 +506,8 @@ static FILE *
 xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
 {
     char full[XPOST_PATH_MAX];
-    char *const *tab = write ? xpost_permit_write_dir : xpost_permit_read_dir;
+    char *const *dirs = write ? xpost_permit_write_dir : xpost_permit_read_dir;
+    char *const *leaves = write ? xpost_permit_write_leaf : xpost_permit_read_leaf;
     int cnt = write ? xpost_permit_write_cnt : xpost_permit_read_cnt;
     int idx;
     int access;
@@ -422,7 +516,7 @@ xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
     FILE *fp;
 
     if (!xpost_path_canonical_target(path, write, full, sizeof full) ||
-        (idx = xpost_path_within_idx(full, tab, cnt)) < 0)
+        (idx = xpost_path_within_idx(full, dirs, leaves, cnt)) < 0)
     {
         *err = invalidfileaccess;
         return NULL;
@@ -430,7 +524,7 @@ xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
 
     /* the portion of the canonical target beyond the permitted root is what
        is resolved beneath that root */
-    rel = xpost_path_after_root(full, tab[idx]);
+    rel = xpost_path_after_root(full, dirs[idx]);
     if (!*rel) /* the permitted directory itself, not a file within it */
     {
         *err = invalidfileaccess;
@@ -443,7 +537,7 @@ xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
     if (strchr(mode, 'w')) access |= XPOST_OPEN_CREATE | XPOST_OPEN_TRUNC;
     if (strchr(mode, 'a')) access |= XPOST_OPEN_CREATE | XPOST_OPEN_APPEND;
 
-    fp = xpost_openat2_beneath(tab[idx], rel, mode, access, &supported);
+    fp = xpost_openat2_beneath(dirs[idx], rel, mode, access, &supported);
     if (supported)
     {
         if (!fp)
@@ -467,7 +561,7 @@ xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
         int located = xpost_fd_realpath(fileno(fp), idbuf, sizeof idbuf);
 
         if (located == 0 ||
-            (located > 0 && xpost_path_within_idx(idbuf, tab, cnt) < 0))
+            (located > 0 && xpost_path_within_idx(idbuf, dirs, leaves, cnt) < 0))
         {
             fclose(fp);
             *err = invalidfileaccess;
@@ -513,6 +607,7 @@ xpost_diskfile_remove(const char *path, int *err)
 
         if (!xpost_path_canonical_target(path, 1, full, sizeof full) ||
             (idx = xpost_path_within_idx(full, xpost_permit_write_dir,
+                                         xpost_permit_write_leaf,
                                          xpost_permit_write_cnt)) < 0)
         {
             *err = invalidfileaccess;
@@ -565,9 +660,11 @@ xpost_diskfile_rename(const char *oldpath, const char *newpath, int *err)
 
         if (!xpost_path_canonical_target(oldpath, 1, oldfull, sizeof oldfull) ||
             (oidx = xpost_path_within_idx(oldfull, xpost_permit_write_dir,
+                                          xpost_permit_write_leaf,
                                           xpost_permit_write_cnt)) < 0 ||
             !xpost_path_canonical_target(newpath, 1, newfull, sizeof newfull) ||
             (nidx = xpost_path_within_idx(newfull, xpost_permit_write_dir,
+                                          xpost_permit_write_leaf,
                                           xpost_permit_write_cnt)) < 0)
         {
             *err = invalidfileaccess;

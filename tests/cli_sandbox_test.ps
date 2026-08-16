@@ -80,4 +80,19 @@ OUTSIDE status not
 { TMPNEW (w) file } errof /invalidfileaccess eq
     (a new file in the temporary directory is not created) assert
 
+% Naming an output file grants that file, not the directory holding it.
+% The two are told apart by putting the output somewhere other than where
+% the run stands: were they the same place the working-directory permit
+% would cover everything and this would prove nothing. A name carrying a
+% %d is the exception and still takes the directory, because which pages
+% there will be is not known until the program has run.
+{ OUTSIB (r) file } errof /invalidfileaccess eq
+    (a file beside the output is not read) assert
+{ OUTSIB (w) file } errof /invalidfileaccess eq
+    (a file beside the output is not written) assert
+{ OUTNEW (w) file } errof /invalidfileaccess eq
+    (a new file beside the output is not created) assert
+
+0 0 moveto 10 10 lineto stroke showpage
+
 failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse

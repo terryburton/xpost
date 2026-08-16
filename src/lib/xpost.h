@@ -529,6 +529,8 @@ XPAPI void xpost_job_snapshots_set(Xpost_Context *ctx, int enable);
  */
 XPAPI int xpost_path_permit_read(const char *dir);
 XPAPI int xpost_path_permit_write(const char *dir);
+XPAPI int xpost_path_permit_write_file(const char *path);
+
 XPAPI void xpost_path_control_engage(void);
 
 /**

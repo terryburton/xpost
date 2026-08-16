@@ -839,7 +839,19 @@ int main(int argc, char *argv[])
         xpost_path_permit_write(".");
         _xpost_permit_file_dir(ps_file, 0);
         if (output_file)
-            _xpost_permit_file_dir(output_file, 1);
+        {
+            /* One file where the name settles on one, its directory
+               where it does not. A name carrying %d is a name per page,
+               and which pages there will be is not known until the
+               program has run, so nothing narrower can be granted for
+               it. Everything else -- which is most invocations, and
+               includes the -o /dev/null that would otherwise hand over
+               the whole of /dev -- names the single file it means. */
+            if (strstr(output_file, "%d"))
+                _xpost_permit_file_dir(output_file, 1);
+            else
+                xpost_path_permit_write_file(output_file);
+        }
         xpost_lockdown(ctx);
     }
 

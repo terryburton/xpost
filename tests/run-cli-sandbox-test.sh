@@ -45,6 +45,13 @@ trap 'rm -rf "$work"' EXIT
 mkdir "$work/run" || { echo "FAILURES: could not make the working directory"; exit 1; }
 cp "$prog" "$work/run/prog.ps" || { echo "FAILURES: could not place the program"; exit 1; }
 mkdir "$work/elsewhere" || { echo "FAILURES: could not make the other directory"; exit 1; }
+# Where the output goes, kept apart from where the run stands. In most
+# invocations they are the same place, and then the working-directory
+# permit covers everything the output permit would have -- so a test that
+# let them coincide could not tell the two apart.
+mkdir "$work/dest" || { echo "FAILURES: could not make the output directory"; exit 1; }
+echo beside > "$work/dest/beside.txt" ||
+    { echo "FAILURES: could not write the file beside the output"; exit 1; }
 # A temporary directory of the run's own, with a file already in it. The
 # default does not permit the temporary directory, and the program checks
 # that; naming one here rather than letting the run inherit the system's
@@ -62,10 +69,11 @@ echo secret > "$work/elsewhere/f" ||
     { echo "FAILURES: the file to be refused is not readable outside the run"; exit 1; }
 
 # No --no-sandbox: this is the shipped configuration. The output goes to
-# the working directory rather than /dev/null, whose directory would
-# otherwise be write-permitted.
+# a directory of its own, so that what naming an output file grants can
+# be told apart from what standing in a directory grants.
 out=$(cd "$work/run" && TMPDIR="$work/tmp" XPOST_DATA_DIR="$src/data" "$xpost" \
-      -q -d null -o out.txt "-DOUTSIDE=($work/elsewhere/f)" \
+      -q -d ppm -o "$work/dest/out.ppm" "-DOUTSIDE=($work/elsewhere/f)"\
+      "-DOUTSIB=($work/dest/beside.txt)" "-DOUTNEW=($work/dest/made.txt)" \
       "-DSCRATCH=($work/tmp/f)" "-DTMPNEW=($work/tmp/made.txt)" \
       prog.ps </dev/null 2>&1)
 st=$?
@@ -87,6 +95,18 @@ if [ ! -s "$work/tmp/f" ]; then
 fi
 if [ -e "$work/tmp/made.txt" ]; then
     echo "FAILURES: a file was made in the temporary directory"
+    exit 1
+fi
+if [ ! -s "$work/dest/beside.txt" ]; then
+    echo "FAILURES: a file beside the output was emptied"
+    exit 1
+fi
+if [ -e "$work/dest/made.txt" ]; then
+    echo "FAILURES: a file was made beside the output"
+    exit 1
+fi
+if [ ! -s "$work/dest/out.ppm" ]; then
+    echo "FAILURES: the output itself was not written"
     exit 1
 fi
 

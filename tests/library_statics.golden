@@ -50,7 +50,9 @@ src/lib/xpost_font.c            _xpost_font_last_file      outlives owned-here-r
 # one-way: a later lifetime finding what was permitted before it is the
 # stated contract, and clearing these would break it.
 src/lib/xpost_file.c            xpost_permit_read_dir      outlives process-wide-latch-by-contract
+src/lib/xpost_file.c            xpost_permit_read_leaf     outlives process-wide-latch-by-contract
 src/lib/xpost_file.c            xpost_permit_write_dir     outlives process-wide-latch-by-contract
+src/lib/xpost_file.c            xpost_permit_write_leaf    outlives process-wide-latch-by-contract
 # The handle table. Its entries are released per memory file when a
 # context is destroyed (xpost_context.c), so nothing in it survives the
 # context that made it; the array itself is a high-water allocation
