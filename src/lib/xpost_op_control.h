@@ -47,6 +47,19 @@
  * general accessor returns for them; going through it instead would
  * put a call on the path every procedure call takes, to reach the
  * indirection only a dictionary or a file needs.
+ *
+ * The test on the type is therefore load-bearing for the answer and not
+ * only for the cost, which is worth saying because the shape invites
+ * widening it for a new type or for symmetry. Files do arrive here --
+ * exec takes anytype, and running one is how a program executes a file
+ * -- and they are turned away by the left of the conjunction before the
+ * tag is ever read. That order is what keeps the answer right: an
+ * execute-only file and a no-access file hold the SAME access field,
+ * and are told apart only by a flag outside the mask read here, so the
+ * field alone calls an execute-only file no-access -- the one state that
+ * must still run. A file's rule lives in evalfile because a file's
+ * access is a set of capabilities rather than a rung, and only the
+ * accessor's own indirection folds that flag in.
  */
 static inline int xpost_op_exec_access_ok(Xpost_Context *ctx, Xpost_Object O)
 {
