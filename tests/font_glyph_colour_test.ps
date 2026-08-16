@@ -1,0 +1,172 @@
+% What a cached glyph does with a colour its own description set, run
+% through `xpost -d null` by run-ps-test.sh: prints SUCCESS iff every
+% assertion holds.
+%
+% READ THIS BEFORE CHANGING ANY NUMBER BELOW. The two routes disagree on
+% purpose, and the disagreement is pinned here so that it is not later
+% read as a defect and "fixed" toward one side or the other.
+%
+% PLRM 5.5: the font cache "does not retain color information; it
+% remembers only which pixels were painted and which pixels were left
+% unchanged within the glyph's bounding box. For this reason, there are a
+% few restrictions on the set of graphical operators that may be executed
+% as part of glyph descriptions that are to be cached... Execution of
+% operators that specify colors or other color-related parameters in the
+% graphics state is also not permitted."
+%
+% So a glyph description that sets a colour has ALREADY LEFT what the
+% restriction covers, before anything here happens. The restriction is
+% placed on the program, not on the interpreter: PLRM does not ask the
+% interpreter to detect the operator or to refuse it, and refusing it
+% would turn programs that work today into errors. What is left is the
+% documented consequence of remembering coverage rather than colour --
+% through the cache the glyph takes the colour in force at each showing,
+% and built afresh it paints the colour it set for itself.
+%
+% Neither number is more correct than the other. The cached one is what
+% "remembers only which pixels were painted" means when the remembered
+% pixels are replayed; the direct one is what running the description
+% does. A change that made them agree would have to pick one, and either
+% pick is a choice this test exists to make someone argue for rather than
+% make by accident.
+%
+% The control at the end is the whole reason the numbers mean anything: a
+% description that sets NO colour paints identically both ways, so the
+% disagreement above is attributable to the colour operator and not to
+% the two routes differing in general.
+
+/.fillpoly     1183615869 internaldict /.fillpoly get def
+/.fillrectgray 1183615869 internaldict /.fillrectgray get def
+
+/faildict 2 dict def
+faildict /n 0 put
+/assert { % bool (name) . -
+    exch { pop } {
+        (FAIL: ) print print (\n) print
+        faildict /n 2 copy get 1 add put
+    } ifelse
+} bind def
+
+% --- a raster to draw into and read back ---
+/DEV 64 64 .privatedict /newPGMIMAGEdevice get exec def
+DEV begin
+    /defaultmatrix [ 1 0 0 -1 0 64 ] def
+    /FillPoly /.fillpoly load def
+    /FillRect /.fillrectgray load def
+end
+.privatedict /.gstatetemplate get exec /device DEV put
+graphicsdict /currgstate get /device DEV put
+initgraphics
+
+/snap { [ 0 1 63 { DEV /ImgData get exch get dup length string copy } for ] } bind def
+% how many pixels the page holds at a given value
+/count { % [rows] v . n
+  /gcv exch def /gcn 0 def
+  { { gcv eq { /gcn gcn 1 add def } if } forall } forall gcn
+} bind def
+
+% --- the two fonts: one the cache can key, one it cannot ---
+% Both carry the same description. The second has its serial taken away
+% after it is defined, which is how a glyph is made to build from its own
+% description rather than from a stored mask.
+/mkcolourfont {
+  10 dict dup begin
+    /FontType 3 def
+    /FontMatrix [0.001 0 0 0.001 0 0] def
+    /FontBBox [0 0 1000 1000] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /A put
+    /CharProcs 2 dict def
+    CharProcs /A {
+        750 0  0 0 700 700 setcachedevice
+        0.5 setgray                % PLRM 5.5: not permitted in a cached
+        0 0 700 700 rectfill       % description; see the head of this file
+    } put
+    CharProcs /.notdef { 0 0 setcharwidth } put
+    /BuildChar { exch begin Encoding exch get CharProcs exch get exec end } def
+  end
+} bind def
+
+/mkplainfont {
+  10 dict dup begin
+    /FontType 3 def
+    /FontMatrix [0.001 0 0 0.001 0 0] def
+    /FontBBox [0 0 1000 1000] def
+    /Encoding 256 array def
+    0 1 255 { Encoding exch /.notdef put } for
+    Encoding 65 /A put
+    /CharProcs 2 dict def
+    CharProcs /A {
+        750 0  0 0 700 700 setcachedevice
+        0 0 700 700 rectfill       % sets no colour: within the restriction
+    } put
+    CharProcs /.notdef { 0 0 setcharwidth } put
+    /BuildChar { exch begin Encoding exch get CharProcs exch get exec end } def
+  end
+} bind def
+
+/draw { % font gray . [rows]
+  /gg exch def
+  1 setgray 0 0 64 64 rectfill gg setgray
+  30 scalefont setfont 2 4 moveto (A) show snap
+} bind def
+
+/CKEY mkcolourfont /FCkeyed  exch definefont def
+/CDIR mkcolourfont /FCdirect exch definefont def
+CDIR /.fontid undef
+
+% The glyph covers 21 by 21 pixels at this size; every assertion below
+% counts that many, which is also what says the glyph was painted at all
+% rather than the page being read as uniformly anything.
+/AREA 441 def
+
+% --- through the cache: the glyph takes the colour in force ---
+/kblack CKEY 0   draw def
+/kgrey  CKEY 0.8 draw def
+kblack 128 count AREA eq
+    (a cached colour-setting glyph shown in black paints 128) assert
+kgrey  230 count AREA eq
+    (and shown in grey 0.8 paints 230, following the colour in force) assert
+
+% --- built afresh: the glyph paints the colour it set for itself ---
+/dblack CDIR 0   draw def
+/dgrey  CDIR 0.8 draw def
+dblack 127 count AREA eq
+    (a directly built colour-setting glyph shown in black paints 127) assert
+dgrey  127 count AREA eq
+    (and shown in grey 0.8 paints 127, ignoring the colour in force) assert
+
+% --- the disagreement itself, stated outright ---
+kgrey 230 count dgrey 230 count eq not
+    (the two routes disagree for a description that sets a colour) assert
+
+% --- the control: no colour operator, no disagreement ---
+% Without this the numbers above would say nothing: two routes that
+% differ for every glyph would produce them just as well.
+/PKEY mkplainfont /FPkeyed  exch definefont def
+/PDIR mkplainfont /FPdirect exch definefont def
+PDIR /.fontid undef
+
+/pk PKEY 0.8 draw def
+/pd PDIR 0.8 draw def
+pk 204 count AREA eq
+    (a glyph setting no colour paints the colour in force through the cache) assert
+pd 204 count AREA eq
+    (and paints that same colour built afresh) assert
+
+% and again in black, so the agreement is not an artefact of one value
+/pkb PKEY 0 draw def
+/pdb PDIR 0 draw def
+pkb 0 count AREA eq
+    (the same holds in black through the cache) assert
+pdb 0 count AREA eq
+    (and in black built afresh) assert
+
+% The control's point, stated as the comparison the colour case failed.
+% A description within PLRM 5.5 reaches the same page either way, at both
+% values asked, so the disagreement above belongs to the colour operator.
+pk 204 count pd 204 count eq
+    (so the two routes agree wherever the description stays within PLRM 5.5) assert
+
+faildict /n get 0 eq { (SUCCESS) = } { (FAILURES: ) print faildict /n get = } ifelse

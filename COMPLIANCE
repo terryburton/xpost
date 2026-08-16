@@ -458,6 +458,17 @@ Known behavioural deviations
      took values from beneath the call, none of that shows through; some
      interpreters put the depth back and leave the procedure's leavings, and
      the slots it emptied, on show underneath.
+ [X] font cache  a Type 3 glyph description that sets a colour of its own
+     reaches the page in one colour through the cache and another built
+     afresh: the cache remembers coverage, so a cached glyph takes the colour
+     in force at each showing, where the description run again paints the
+     colour it set for itself. PLRM 5.5 has the cache remember "only which
+     pixels were painted and which pixels were left unchanged" and, for that
+     reason, does not permit colour-setting operators in a description that is
+     to be cached -- so a description that sets one has already left what the
+     restriction covers. The operator is not refused: PLRM places the
+     restriction on the program rather than on the interpreter, and refusing
+     it would make an error of programs that run today.
 
  Reals are IEEE single precision (PLRM 3.3.2 permits single or double): results
  carry about seven significant figures and large values print in exponent form

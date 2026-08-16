@@ -2177,6 +2177,19 @@ test('font-glyph-identity',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A Type 3 description that sets a colour of its own is outside what PLRM
+# 5.5 permits in a cached description, and the two routes it can take
+# then disagree: the cache remembers coverage and replays it in the
+# colour in force, while the description run afresh paints the colour it
+# set. Neither number is the right one, so both are pinned here against
+# being reconciled by someone reading the difference as a defect. The
+# control is a description that sets no colour, which agrees both ways.
+test('font-glyph-colour',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/font_glyph_colour_test.ps') ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # A screening device's threshold cell is addressed by two dimensions
 # carried beside it in the device dictionary, so a pair of dimensions
 # the cell does not hold leaves the fill unscreened rather than reading
