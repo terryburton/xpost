@@ -62,6 +62,8 @@ int main(void)
     char escape[600];   /* a symlink inside the tree that points out of it */
     char wescape[600];  /* the same, inside the writable subdirectory */
     char aliasdir[600]; /* a symlink that reaches the tree from outside it */
+    char wdangle[600];  /* the same again, with nothing at the end of it */
+    char dangled[600];  /* what that one points at, which must stay absent */
 #endif
 
     if (!mkdtemp(root)) { report_failure("mkdtemp"); return verdict(); }
@@ -103,10 +105,17 @@ int main(void)
             if (symlink(outside_abs, wescape) != 0) wescape[0] = '\0';
             snprintf(aliasdir, sizeof aliasdir, "%s.alias", root);
             if (symlink(root_abs, aliasdir) != 0) aliasdir[0] = '\0';
+            /* an escaping link with nothing at the end of it: the target
+               cannot be canonicalised, so what the name check sees is the
+               link's own place, which is inside the permitted tree */
+            snprintf(dangled, sizeof dangled, "%s.dangled", root_abs);
+            snprintf(wdangle, sizeof wdangle, "%s/wdangle", wdir);
+            if (symlink(dangled, wdangle) != 0) wdangle[0] = '\0';
         }
         else
         {
-            escape[0] = wescape[0] = aliasdir[0] = '\0';
+            escape[0] = wescape[0] = aliasdir[0] = wdangle[0] = '\0';
+            dangled[0] = '\0';
         }
         free(root_abs);
         free(outside_abs);
@@ -196,6 +205,30 @@ int main(void)
               "delete through an escaping symlink refused");
     }
 
+    /* An escaping symlink with nothing at the end of it, opened for
+       writing. This is the case the two above do not reach: they point at
+       something, so the target canonicalises outside the permitted tree
+       and the name check refuses it before anything is opened. This one
+       canonicalises to the link's own place, which is inside -- and the
+       open would create the file it points at, which is not. So the
+       refusal cannot come from the name, and refusing after opening is
+       too late: the file outside is already there.
+
+       Both halves are checked, because a refusal the program is told
+       about says nothing about what the filesystem did. */
+    if (wdangle[0])
+    {
+        FILE *t;
+
+        snprintf(prog, sizeof prog,
+                 "(%s) (w) file dup (x) writestring closefile", wdangle);
+        check(errors_with(ctx, prog, "invalidfileaccess"),
+              "write through a dangling escaping symlink refused");
+        t = fopen(dangled, "rb");
+        check(t == NULL, "the dangling target was not created outside");
+        if (t) fclose(t);
+    }
+
     /* reaching the tree through a symlinked access path still works: the
        target canonicalises back inside the permitted directory (the case of
        a platform where the permitted directory is itself under a symlink,
@@ -226,6 +259,8 @@ int main(void)
     if (escape[0]) unlink(escape);
     if (wescape[0]) unlink(wescape);
     if (aliasdir[0]) unlink(aliasdir);
+    if (wdangle[0]) unlink(wdangle);
+    if (dangled[0]) unlink(dangled);
 #endif
     unlink(readable);
     unlink(outside);

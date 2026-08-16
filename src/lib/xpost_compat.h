@@ -217,10 +217,24 @@ FILE *xpost_openat2_beneath(const char *root, const char *rel,
 /*
  * Write the canonical path of the object behind descriptor @p fd into @p buf.
  * Resolves the file actually open rather than a name, so the result is stable
- * against a concurrent rename or symlink swap. Returns 1 on success, 0 where
- * the identity cannot be established on this platform.
+ * against a concurrent rename or symlink swap.
+ *
+ * Three answers, and a caller deciding access needs all three apart.
+ * Returns 1 with @p buf filled. Returns 0 where this platform can locate a
+ * descriptor but could not locate this one, which is a reason to be careful
+ * rather than a reason to proceed. Returns -1 where the platform cannot
+ * locate a descriptor at all, so there is nothing to be learned by asking
+ * and a caller has only the checks it made before opening.
  */
 int xpost_fd_realpath(int fd, char *buf, size_t buflen);
+
+/*
+ * Is @p path itself a symbolic link (or, on Windows, a reparse point)?
+ * Answers about the last component without following it, so a link is
+ * distinguished from what it points at. Returns 1 for a link, 0 for
+ * anything else including a path that is not there.
+ */
+int xpost_path_is_symlink(const char *path);
 
 /*
  * Delete (unlink) @p rel beneath @p root, resolving the parent directory

@@ -4785,6 +4785,18 @@ test('sandbox',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# The same checks against the portable route. There are two ways the file
+# layer confines an open -- the kernel resolving beneath a root, and a
+# canonical name plus a check on what was opened -- and only one of them is
+# reachable on the platform these tests usually run on, which is how the two
+# came to disagree about a symlink with nothing at the end of it. Asking for
+# the portable route drives the same tree through the other one.
+test('sandbox-portable',
+  sandbox_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data',
+         'XPOST_NO_ATOMIC_BENEATH': '1' })
+
 # From-PostScript lockdown: .permitfileread/.permitfilewrite/.lockdown raise
 # the sandbox from within a program and freeze the permit set.
 lockdown_exe = executable('lockdown_test',

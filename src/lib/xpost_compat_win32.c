@@ -488,6 +488,19 @@ xpost_fd_realpath(int fd, char *buf, size_t buflen)
 }
 
 int
+xpost_path_is_symlink(const char *path)
+{
+    DWORD attr;
+
+    if (!path || !*path)
+        return 0;
+    attr = GetFileAttributes(path);
+    if (attr == INVALID_FILE_ATTRIBUTES)
+        return 0;
+    return (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
+int
 xpost_unlinkat_beneath(const char *root, const char *rel, int *supported)
 {
     (void)root; (void)rel;

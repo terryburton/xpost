@@ -364,6 +364,7 @@ xpost_output_buffer_release
 xpost_path_control_engage
 xpost_path_control_is_engaged
 xpost_path_fill_points
+xpost_path_is_symlink
 xpost_path_permit_read
 xpost_path_permit_write
 xpost_path_safe_leaf

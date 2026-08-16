@@ -63,6 +63,7 @@
 # include <mach/mach_time.h> /* mach_absolute_time, mach_timebase_info */
 #endif
 
+#include <sys/stat.h> /* lstat, S_ISLNK */
 #include <sys/time.h> /* getrusage */
 #include <sys/resource.h> /* getrusage, RUSAGE_SELF */
 
@@ -305,6 +306,31 @@ xpost_realpath(const char *path)
 #endif
 }
 
+/* Whether to ask the kernel to resolve beneath a root at all.
+ *
+ * The atomic primitive exists on one platform. Everywhere else the file
+ * layer reaches the same decision by canonicalising the name, refusing a
+ * target whose last component is a link, and checking the opened
+ * descriptor -- and that route is the one no test on this platform would
+ * otherwise run, which is how it came to differ from this one. Setting
+ * XPOST_NO_ATOMIC_BENEATH says to take it here too, so both routes are
+ * driven by the same tests against the same tree.
+ *
+ * It is read from the environment, which is the process's own and not the
+ * running program's: the same environment already says which data
+ * directory boots the interpreter and where its scratch is written, so
+ * whoever sets this could steer far more than this.
+ */
+static int
+_atomic_beneath_off(void)
+{
+    static int off = -1;
+
+    if (off < 0)
+        off = getenv("XPOST_NO_ATOMIC_BENEATH") != NULL;
+    return off;
+}
+
 /* struct open_how / RESOLVE_* may predate the installed kernel headers */
 #ifndef XPOST_RESOLVE_NO_SYMLINKS
 # define XPOST_RESOLVE_NO_SYMLINKS 0x04
@@ -340,7 +366,13 @@ xpost_open_beneath(const char *root, const char *rel)
             how.flags = (uint64_t)(O_RDONLY | O_CLOEXEC);
             how.mode = 0;
             how.resolve = XPOST_RESOLVE_BENEATH | XPOST_RESOLVE_NO_SYMLINKS;
-            fd = (int)syscall(SYS_openat2, rootfd, rel, &how, sizeof how);
+            if (_atomic_beneath_off())
+            {
+                fd = -1;
+                errno = ENOSYS;
+            }
+            else
+                fd = (int)syscall(SYS_openat2, rootfd, rel, &how, sizeof how);
             close(rootfd);
             /* ENOSYS: kernel older than the syscall; use the portable check */
             if (!(fd < 0 && errno == ENOSYS))
@@ -423,6 +455,11 @@ xpost_openat2_raw(int rootfd, const char *rel, int oflags, unsigned int cmode)
 {
     struct { uint64_t flags; uint64_t mode; uint64_t resolve; } how;
 
+    if (_atomic_beneath_off())
+    {
+        errno = ENOSYS;
+        return -1;
+    }
     how.flags = (uint64_t)(oflags | O_CLOEXEC);
     how.mode = (oflags & O_CREAT) ? (uint64_t)cmode : 0;
     how.resolve = XPOST_RESOLVE_BENEATH | XPOST_RESOLVE_NO_SYMLINKS;
@@ -500,8 +537,18 @@ xpost_fd_realpath(int fd, char *buf, size_t buflen)
     return 1;
 #else
     (void)fd; (void)buf; (void)buflen;
-    return 0;
+    return -1;
 #endif
+}
+
+int
+xpost_path_is_symlink(const char *path)
+{
+    struct stat st;
+
+    if (!path || !*path)
+        return 0;
+    return lstat(path, &st) == 0 && S_ISLNK(st.st_mode);
 }
 
 #if defined(__linux__) && defined(SYS_openat2)
@@ -561,7 +608,13 @@ xpost_open_parent_beneath(const char *root, const char *rel,
     how.flags = (uint64_t)(O_PATH | O_DIRECTORY | O_CLOEXEC);
     how.mode = 0;
     how.resolve = XPOST_RESOLVE_BENEATH | XPOST_RESOLVE_NO_SYMLINKS;
-    dirfd = (int)syscall(SYS_openat2, rootfd, subdir, &how, sizeof how);
+    if (_atomic_beneath_off())
+    {
+        dirfd = -1;
+        errno = ENOSYS;
+    }
+    else
+        dirfd = (int)syscall(SYS_openat2, rootfd, subdir, &how, sizeof how);
     close(rootfd);
     if (dirfd < 0 && errno == ENOSYS)
         return -1; /* supported stays 0 */

@@ -96,7 +96,8 @@ static int xpost_path_control_engaged = 0;
 
 /* Index of the permitted entry that contains the canonical path `full`, or
    -1 if none does. A permitted directory contains `full` when it is a prefix
-   ending at a path separator (or the whole of `full`). */
+   ending at a path separator (or the whole of `full`).
+ */
 static int
 xpost_path_within_idx(const char *full, char *const *tab, int cnt)
 {
@@ -361,10 +362,23 @@ xpost_path_after_root(const char *full, const char *root)
 /* Open a program-driven path under the engaged sandbox without a
    check-then-open race. The target's permitted root is identified, then the
    open is anchored there and resolved atomically beneath it by the kernel
-   (openat2), so a path repointed after the check cannot escape. Where that
-   primitive is unavailable the earlier name check stands and the opened
-   descriptor's real location is re-verified, keeping the decision on the
-   object actually opened rather than on a re-resolved name. */
+   (openat2), so a path repointed after the check cannot escape.
+
+   Where that primitive is unavailable the same decision is reached without
+   the kernel's help, and the order the three steps are taken in is what
+   makes it sound. What is opened is the canonical target the check
+   approved, never the name the program supplied, so no name is resolved
+   twice. A canonical target whose last component is itself a symbolic link
+   is refused before anything is opened: that is the one target
+   canonicalisation cannot resolve -- a link with nothing at the end of it
+   canonicalises to the link's own place, which is inside the permitted
+   tree, while opening it for writing would create the file it points at,
+   which need not be. It is also exactly what the kernel refuses on the
+   atomic path, so both routes accept the same targets. Then the opened
+   descriptor's real location is checked, which catches a swap made between
+   the check and the open; a platform that can report a descriptor's
+   location but did not report this one refuses, since the reason it could
+   not is the reason to be careful. */
 static FILE *
 xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
 {
@@ -409,17 +423,21 @@ xpost_confined_fopen(const char *path, const char *mode, int write, int *err)
         return fp;
     }
 
-    /* portable fallback: the name check above already passed. Open, then --
-       where the platform can report it -- re-verify the descriptor's true
-       location, so a swap between check and open is still caught. */
-    fp = xpost_raw_fopen(path, mode, err);
+    /* portable fallback */
+    if (xpost_path_is_symlink(full))
+    {
+        *err = invalidfileaccess;
+        return NULL;
+    }
+    fp = xpost_raw_fopen(full, mode, err);
     if (!fp)
         return NULL;
     {
         char idbuf[XPOST_PATH_MAX];
+        int located = xpost_fd_realpath(fileno(fp), idbuf, sizeof idbuf);
 
-        if (xpost_fd_realpath(fileno(fp), idbuf, sizeof idbuf) &&
-            xpost_path_within_idx(idbuf, tab, cnt) < 0)
+        if (located == 0 ||
+            (located > 0 && xpost_path_within_idx(idbuf, tab, cnt) < 0))
         {
             fclose(fp);
             *err = invalidfileaccess;
