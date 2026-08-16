@@ -104,7 +104,7 @@ void xpost_stack_dump(Xpost_Memory_File *mem,
             break;
         if (s->nextseg == 0)
             break;
-        s = xpost_stack_at(mem, s->nextseg);
+        s = xpost_stack_step(mem, s->nextseg);
     }
 }
 
@@ -119,7 +119,7 @@ int xpost_stack_count(Xpost_Memory_File *mem,
         ct += XPOST_STACK_SEGMENT_SIZE;
         if (s->nextseg == 0)
             return ct; /* a full segment with no successor is a legal topmost state */
-        s = xpost_stack_at(mem, s->nextseg);
+        s = xpost_stack_step(mem, s->nextseg);
     }
     return ct + s->top;
 }
@@ -167,7 +167,7 @@ XPOST_TEST_VISIBLE int xpost_stack_push(Xpost_Memory_File *mem,
             (xpost_stack_at(mem, newst))->prevseg = stadr;
         }
         root->prevseg = s->nextseg;
-        s = xpost_stack_at(mem, s->nextseg);
+        s = xpost_stack_step(mem, s->nextseg);
         s->top = 0;
     }
 
@@ -193,7 +193,7 @@ Xpost_Object xpost_stack_topdown_fetch(Xpost_Memory_File *mem,
                     xpost_stack_count(mem, stackadr));
             return invalid;
         }
-        s = xpost_stack_at(mem, s->prevseg);
+        s = xpost_stack_step(mem, s->prevseg);
     }
     return s->data[s->top - 1 - i];
 }
@@ -215,7 +215,7 @@ int xpost_stack_topdown_replace(Xpost_Memory_File *mem,
                     xpost_stack_count(mem, stackadr));
             return 0;
         }
-        s = xpost_stack_at(mem, s->prevseg);
+        s = xpost_stack_step(mem, s->prevseg);
     }
     s->data[s->top - 1 - i] = obj;
     return 1;
@@ -249,7 +249,7 @@ int xpost_stack_topdown_find_type(Xpost_Memory_File *mem,
         }
         if (seg == root)
             break;
-        seg = (Xpost_Stack *)(base + seg->prevseg);
+        seg = xpost_stack_step(mem, seg->prevseg);
     }
     return -1;
 }
@@ -276,7 +276,7 @@ int xpost_stack_peek_top(Xpost_Memory_File *mem,
             out[got + m] = seg->data[t - 1 - m];
         got += take;
         if (got < n)
-            seg = (Xpost_Stack *)(base + seg->prevseg);
+            seg = xpost_stack_step(mem, seg->prevseg);
     }
     return got;
 }
@@ -300,7 +300,7 @@ Xpost_Object xpost_stack_bottomup_fetch(Xpost_Memory_File *mem,
                     xpost_stack_count(mem, stackadr));
             return invalid;
         }
-        s = xpost_stack_at(mem, s->nextseg);
+        s = xpost_stack_step(mem, s->nextseg);
     }
     if (i >= (signed)s->top){
         return invalid;
@@ -328,7 +328,7 @@ int xpost_stack_bottomup_replace(Xpost_Memory_File *mem,
                           xpost_stack_count(mem, stackadr));
             return 0;
         }
-        s = xpost_stack_at(mem, s->nextseg);
+        s = xpost_stack_step(mem, s->nextseg);
     }
     if (i >= (signed)s->top){
         return 0;
@@ -349,7 +349,7 @@ XPOST_TEST_VISIBLE Xpost_Object xpost_stack_pop(Xpost_Memory_File *mem,
         if (s != root)
         {
             unsigned int soff = s->prevseg;
-            s = xpost_stack_at(mem, soff);
+            s = xpost_stack_step(mem, soff);
             root->prevseg = soff; // update root->top
             if (s->top == 0)
                 return invalid;

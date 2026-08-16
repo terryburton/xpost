@@ -245,6 +245,23 @@ typedef struct Xpost_Memory_File
                                   a large number cannot present itself as
                                   a small one. */
 
+    unsigned int stack_walk; /**< stack segments stepped over in this
+                                   memory file, over its life. A stack is
+                                   a chain of segments, so reaching a
+                                   position in one costs the segments
+                                   between it and the end the walk starts
+                                   from. A scan of a whole stack that
+                                   walks the chain once costs the chain's
+                                   length; a scan that asks for each
+                                   index in turn costs that length once
+                                   per element, which is the stack's
+                                   length squared. This is the number
+                                   that tells the two apart, and nothing
+                                   about a scan's answer does. The count
+                                   saturates rather than wrapping, so a
+                                   large number cannot present itself as
+                                   a small one. */
+
     /** The packed path in this file whose element chain has been walked
         and found well formed, and how far that walk reached.
 

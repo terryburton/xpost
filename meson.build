@@ -1204,6 +1204,22 @@ test('path-walk-cost',
   suite: cost_fast,
   timeout: 300)
 
+# What restore costs when it has to look for a file on the stacks. A
+# file opened above the level being rewound to is closed unless a stack
+# still names it, so the sweep reads every stack; a read that asks for
+# each index in turn walks the segment chain again per element and costs
+# the stack's depth squared. Both ways close the same files, so nothing
+# about the outcome shows it and a shallow stack does not either. The
+# interpreter counts the segments a walk steps over, and the assertion
+# is that count, held both to the depth and to twice the depth costing
+# no more than twice.
+test('save-restore-sweep-cost',
+  find_program('tests/run-ps-test.sh'),
+  args: [ xpost_exe, files('tests/save_restore_sweep_cost_test.ps') ],
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' },
+  suite: cost_fast,
+  timeout: 300)
+
 # The capacity a dictionary reports, against the header field that
 # carries it. A capacity asked for above that field's width is a request
 # only the library makes -- `dict` refuses one before any dictionary is

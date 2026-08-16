@@ -163,6 +163,26 @@ int vmfreescan (Xpost_Context *ctx)
     return 0;
 }
 
+/* -  .vmstackwalk  local global
+   The number of stack segments stepped over in each memory file,
+   saturating rather than wrapping. A stack is a chain of segments, so
+   what reaching a position in one costs is the segments between it and
+   the end the walk starts from. This is the measure of whether a scan of
+   a whole stack walks the chain once or walks it again for every element
+   it looks at: the first costs the stack's length, the second that
+   length squared, and the two return the same answer. */
+static
+int vmstackwalk (Xpost_Context *ctx)
+{
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->lo->stack_walk)))
+        return stackoverflow;
+    if (!xpost_stack_push(ctx->lo, ctx->os,
+                          xpost_int_cons((int)ctx->gl->stack_walk)))
+        return stackoverflow;
+    return 0;
+}
+
 /* nobjects nbytes  .vmreserve  bool
    Whether the virtual memory now being allocated from can take nobjects
    more composite elements and nbytes more bytes of string storage,
@@ -474,6 +494,8 @@ int xpost_oper_init_param_ops(Xpost_Context *ctx,
     op = xpost_operator_cons(ctx, ".vmentcount", (Xpost_Op_Func)vmentcount, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmfreescan", (Xpost_Op_Func)vmfreescan, 0);
+    INSTALL;
+    op = xpost_operator_cons(ctx, ".vmstackwalk", (Xpost_Op_Func)vmstackwalk, 0);
     INSTALL;
     op = xpost_operator_cons(ctx, ".vmreserve", (Xpost_Op_Func)vmreserve, 2, floattype, floattype);
     INSTALL;

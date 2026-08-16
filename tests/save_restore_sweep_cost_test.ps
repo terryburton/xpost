@@ -1,0 +1,103 @@
+% What restore costs when a file was opened above the level it rewinds
+% to, run through `xpost -q --no-sandbox -d null` by run-ps-test.sh.
+%
+% restore closes a file created since the corresponding save (PLRM
+% 3.8.2), and a file still named from a stack is left open instead. So
+% the sweep that does it has to look for each such file on the stacks,
+% and how it looks is the whole subject here: a stack is a chain of
+% thousand-object segments, and an index into one is reached by walking
+% that chain from its root. Asking the stack for index 0, then index 1,
+% and so on to the top walks the chain again for every element, which
+% costs the stack's length once per element -- the length squared. One
+% pass over the segments costs the length.
+%
+% Both ways look at every element and both reach the same answer, so
+% nothing about which files are closed can tell them apart, and no short
+% run can either: the two are the same on a stack of one segment and
+% they differ by the depth on a deep one. What can tell them apart is
+% how much of the chain was walked, so the interpreter counts the
+% segments it steps over and the assertion is that count.
+%
+% A count and not a clock, for the reason the rest of the cost tests in
+% this directory give: a bound stated in segments survives a loaded
+% machine and a bound stated in seconds does not. It is also exact --
+% the same program answers the same number every time -- which a ratio
+% between two depths needs, because a ratio divides two readings and
+% doubles whatever noise either of them carries.
+
+/failcount 0 def
+/checks 0 def
+/assert { % bool (name)  .  -
+    exch { pop }{ (FAIL: ) print print (\n) print
+        /failcount failcount 1 add store } ifelse
+    /checks checks 1 add store
+} def
+
+/.vmstackwalk 1183615869 internaldict /.vmstackwalk get def
+
+/SMALL 8000 def
+/LARGE 16000 def
+
+% Rewind past an open file with n objects under it, and answer the
+% segments the sweep stepped over doing it.
+%
+% The file is left on the operand stack, which is the arm that makes the
+% sweep read the whole of it: a file found there is one restore leaves
+% open, and it is found last because it was pushed last. A file the
+% sweep does not find is one it closes, and it reaches that verdict
+% having walked every stack to the end -- which is what this arm walks
+% too, the deep one being walked to the end to find the file at its top.
+% The two arms differ by the shallow stacks alone, and this measures the
+% one whose outcome is easier to state.
+%
+% The file is closed and its entity reclaimed before the next call, so
+% that each depth is measured against the same number of files and the
+% ratio below is a ratio of depths and nothing else. Without that the
+% second arm would sweep for the first arm's file as well as its own.
+/measure { % int  .  int
+    /n exch def
+    0 1 n 1 sub { pop 42 } for
+    /sv save def
+    (abcdefgh) 0 () /SubFileDecode filter
+    .vmstackwalk pop
+    sv restore
+    .vmstackwalk pop
+    exch sub /steps exch def
+    closefile
+    clear
+    2 vmreclaim
+    steps
+} def
+
+% The name comes after the call: `measure` empties the operand stack on
+% its way out, and a literal pushed before it would go with the rest.
+SMALL measure /small exch def
+LARGE measure /large exch def
+
+% A hook stuck at one number would satisfy every bound below by saying
+% nothing, so require first that it moved.
+small 0 gt
+    (the interpreter reports the stack segments it stepped over) assert
+
+% The ceiling: a scan that walks each chain once steps over the segments
+% the stacks hold, and a stack holds one segment per segment's worth of
+% elements -- so the depth is a bound it cannot approach, let alone
+% exceed. The point of stating the structural bound rather than the
+% observed figure is that a scan walking the chain per index lands above
+% this by the depth divided by the segment size, which is a factor that
+% grows with the stack rather than a constant to be tuned.
+small SMALL le
+    (sweeping a deep stack stays within the bound) assert
+
+large LARGE le
+    (and stays within it over twice the depth) assert
+
+% The property itself: twice the depth, and no more than twice the walk
+% between them. Two and a half is the headroom, and a scan that re-walks
+% the chain misses it by four rather than by a fraction.
+large small 5 mul 2 idiv le
+    (the cost of sweeping the stacks does not follow their depth squared) assert
+
+checks 4 eq (every check was reached) assert
+
+failcount 0 eq { (SUCCESS) = }{ (FAILURES: ) print failcount = } ifelse

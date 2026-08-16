@@ -39,6 +39,8 @@
 # error MUST #include "xpost_memory.h" before this file
 #endif
 
+#include <limits.h> /* INT_MAX */
+
 /**
  * @file xpost_stack.h
  * @brief stack functions
@@ -96,6 +98,28 @@ xpost_stack_at(Xpost_Memory_File *mem, unsigned int stackadr)
 }
 
 /**
+ * @brief the segment at @p stackadr, counted as one step of a chain walk.
+ *
+ * The one spelling of a move to a segment's immediate neighbour, which
+ * is what a walk of the chain is made of. Reaching a position in a stack
+ * costs the steps taken to get there, and how many were taken is the
+ * only thing separating a scan of a whole stack that walks the chain
+ * once from one that walks it again for every element -- the two answer
+ * the same thing. So every step is counted here, into
+ * Xpost_Memory_File::stack_walk, which xpost_op_param.c reports.
+ *
+ * The root's handle on the top segment is not a step: it names the top
+ * outright, however many segments lie between them.
+ */
+static inline Xpost_Stack *
+xpost_stack_step(Xpost_Memory_File *mem, unsigned int stackadr)
+{
+    if (mem->stack_walk < (unsigned int)INT_MAX)
+        ++mem->stack_walk;
+    return xpost_stack_at(mem, stackadr);
+}
+
+/**
  * @brief the next segment of a full walk, or NULL when the walk is done.
  *
  * The termination rule for walking a segmented stack, in one place: a
@@ -111,7 +135,7 @@ static inline Xpost_Stack *
 xpost_stack_next_segment(Xpost_Memory_File *mem, Xpost_Stack *s)
 {
     if (s->top == XPOST_STACK_SEGMENT_SIZE && s->nextseg)
-        return xpost_stack_at(mem, s->nextseg);
+        return xpost_stack_step(mem, s->nextseg);
     return NULL;
 }
 

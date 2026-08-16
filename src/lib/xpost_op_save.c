@@ -203,12 +203,20 @@ int Vrestore(Xpost_Context *ctx,
        Which entities nothing reaches is the collector's question, and
        the collector descends into composites to answer it. A file
        closed here is left for that sweep to reclaim: its stream is
-       gone, so what remains is one pointer's worth of table row. */
+       gone, so what remains is one pointer's worth of table row.
+
+       Each stack is read a segment at a time, in one pass from its
+       root. A stack is a chain of segments and an index into one is
+       reached by walking that chain, so asking for index 0, then index
+       1, and so on to the top would walk the chain again for every
+       element and cost the stack's depth once per element. Nothing
+       allocates inside the walk, so the segment pointer stays good
+       across it. */
     if (ctx->lo->file_birth_max > (unsigned int)V.save_.lev + 1)
     {
-        unsigned int ent, i, stamp;
+        unsigned int ent, stamp;
         unsigned int stacks[4];
-        int k, n;
+        int k;
 
         stacks[0] = ctx->os; stacks[1] = ctx->es;
         stacks[2] = ctx->ds; stacks[3] = ctx->hold;
@@ -223,14 +231,21 @@ int Vrestore(Xpost_Context *ctx,
                 continue;
             for (k = 0; k < 4; k++)
             {
-                n = xpost_stack_count(ctx->lo, stacks[k]);
-                for (i = 0; i < (unsigned int)n; i++)
+                Xpost_Stack *s;
+
+                for (s = xpost_stack_at(ctx->lo, stacks[k]); s;
+                     s = xpost_stack_next_segment(ctx->lo, s))
                 {
-                    Xpost_Object o =
-                        xpost_stack_bottomup_fetch(ctx->lo, stacks[k], i);
-                    if (xpost_object_get_type(o) == filetype
-                     && (unsigned int)o.mark_.padw == ent)
-                        goto keep;
+                    unsigned int i;
+
+                    for (i = 0; i < s->top; i++)
+                    {
+                        Xpost_Object o = s->data[i];
+
+                        if (xpost_object_get_type(o) == filetype
+                         && (unsigned int)o.mark_.padw == ent)
+                            goto keep;
+                    }
                 }
             }
             {
