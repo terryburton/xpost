@@ -11,6 +11,7 @@
 #include <limits.h> /* INT_MAX: what a buffer's row width and count are */
 #include <math.h> /* the device-space geometry below rounds by floor */
 #include <stddef.h> /* a buffer position is counted in the platform's size */
+#include <stdio.h> /* FILE: the page a device writes goes to one */
 
 /*
  * The output-device driver contract.
@@ -430,6 +431,105 @@ typedef struct
     unsigned int open : 1;   /* a stream has been started for this page */
     unsigned int done : 1;   /* the page has been finished */
 } Xpost_Dev_Band;
+
+/**
+ * @brief What a device does with a page besides encode it.
+ *
+ * Two devices that write a page to a file differ in how they encode it
+ * and in nothing else: the same questions are asked in the same order
+ * about whether a page is arriving in bands, when the file is opened,
+ * which rows this call may give it, and when the page is finished and
+ * the raster handed on. Those questions are asked once, in
+ * xpost_dev_page_emit below, and a device answers this for the parts
+ * that are its own.
+ *
+ * Every call is handed the device's own instance state, which the
+ * device knows the shape of and this does not.
+ */
+typedef struct
+{
+    /** Begin a page: what the device resets when a page is its own. */
+    void (*page_begin)(void *priv);
+    /** Give up a stream left open by a page that stopped arriving. */
+    void (*stream_drop)(void *priv);
+    /** Open the encoder over the file just opened for this page. */
+    int (*stream_open)(Xpost_Context *ctx, Xpost_Object devdic, void *priv);
+    /** Give the encoder the page's rows as far as @p last. */
+    int (*write_rows)(void *priv, int last);
+    /** Finish the page: the encoder writes what it was holding. */
+    int (*stream_finish)(void *priv);
+    /**
+     * Whether this call must hold its rows rather than write them.
+     * An image written in several passes over the page cannot give a
+     * row up before the last band has been painted. NULL where the
+     * device never holds rows back, which is the usual case.
+     */
+    int (*defers_rows)(const void *priv);
+    /** Give up what the instance holds: the stream, the file, the raster. */
+    void (*reclaim)(void *priv);
+} Xpost_Dev_Page_Codec;
+
+/**
+ * @brief Write as much of a page as this call can, and say what became
+ *        of the raster.
+ *
+ * The page arrives whole or a band at a time, and which it is, is what
+ * /.bandpage on the device says (data/image.ps): a device carrying none
+ * takes each call as a page of its own, so one cannot be handed part of
+ * a page by accident, and a job's second page is a second file. A page
+ * arriving in bands is finished once; a further call for the same page
+ * has nothing left to give.
+ *
+ * The file is opened when the first of a page's rows is ready for it,
+ * because the name is settled per page, and goes back when the page is
+ * finished or refused -- a page still being written keeps it for the
+ * call that brings the next band.
+ *
+ * @param[in] ctx The context.
+ * @param[in] devdic The device instance.
+ * @param[in] priv The device's own instance state, handed to the codec.
+ * @param[in,out] band The band state this page is being written across.
+ * @param[in,out] file The file the page is written to.
+ * @param[in] height The page's height in rows.
+ * @param[in] raster The page's rows, for the handoff, or NULL for a
+ *                   device whose raster is not the client's to take.
+ * @param[in] codec What the device does that this does not.
+ * @param[out] handed_off Set where the raster became the client's, which
+ *                        the caller answers for -- it holds the flag.
+ * @return 0, or what the writing came to.
+ */
+/**
+ * @brief Retire an instance: finish the page it was writing, then give
+ *        up what it holds.
+ *
+ * A page still being written is finished rather than left truncated. The
+ * rows it was never given are the ones the device is not holding, which
+ * the ground stands for, and they are what the call at the end of a band
+ * loop would have written -- so a device retired part way through a page,
+ * by an error or by a restore past the setpagedevice that installed it,
+ * leaves an image a reader can open.
+ *
+ * What follows is the release the collector runs, which is why it is the
+ * codec's and stated once: a change to what a device owns cannot reach
+ * one path and not the other. Finishing the page is the difference
+ * between the two, and it is here because the collector cannot write
+ * rows.
+ *
+ * @param[in] priv The device's own instance state.
+ * @param[in,out] band The band state the page was being written across.
+ * @param[in] has_raster Whether there are rows to finish the page from.
+ * @param[in] height The page's height in rows.
+ * @param[in] codec What the device does that this does not.
+ */
+void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
+                           int height, const Xpost_Dev_Page_Codec *codec);
+
+int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
+                        void *priv, Xpost_Dev_Band *band, FILE **file,
+                        int height, unsigned char *raster,
+                        const Xpost_Dev_Page_Codec *codec,
+                        int *handed_off);
+
 
 /*
  * State on the device dictionary the run of the page's rows this device

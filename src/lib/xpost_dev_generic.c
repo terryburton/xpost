@@ -2406,6 +2406,107 @@ double xpost_dev_dict_number(Xpost_Context *ctx, Xpost_Object dict,
     return dflt;
 }
 
+void xpost_dev_page_retire(void *priv, Xpost_Dev_Band *band, int has_raster,
+                           int height, const Xpost_Dev_Page_Codec *codec)
+{
+    if (band->open && has_raster)
+    {
+        if (!codec->write_rows(priv, height - 1))
+            (void)codec->stream_finish(priv);
+    }
+    codec->reclaim(priv);
+}
+
+int xpost_dev_page_emit(Xpost_Context *ctx, Xpost_Object devdic,
+                        void *priv, Xpost_Dev_Band *band, FILE **file,
+                        int height, unsigned char *raster,
+                        const Xpost_Dev_Page_Codec *codec,
+                        int *handed_off)
+{
+    int banded, last, ret;
+
+    *handed_off = 0;
+
+    banded = xpost_object_get_type(
+                 xpost_dict_get(ctx, devdic,
+                                xpost_name_cons(ctx, ".bandpage")))
+             != invalidtype;
+
+    if (!banded)
+    {
+        /* Each call is a page of its own. A stream still open here
+           belonged to a page that was arriving in bands and stopped
+           doing so, and it is given up rather than left behind: what
+           follows opens another. */
+        if (band->open)
+        {
+            codec->stream_drop(priv);
+            if (*file)
+            {
+                xpost_device_page_close(*file);
+                *file = NULL;
+            }
+        }
+        codec->page_begin(priv);
+    }
+    else if (band->done)
+        return 0;
+
+    /* a device that writes the page in several passes over it cannot
+       give a row up before the last band has been painted */
+    if (banded && codec->defers_rows && codec->defers_rows(priv)
+        && band->rows != 0)
+        return 0;
+
+    /* the last of the page's rows this call can give the file */
+    last = (!banded || band->rows == 0)
+         ? height - 1
+         : band->top + band->rows - 1;
+
+    ret = 0;
+    if (!band->open)
+    {
+        /* The file this page goes to, opened here because its name was
+           settled for this page: the page machinery puts the settled
+           name on the device and this is the method that writes the
+           page (tests/check-page-output.sh). */
+        *file = xpost_device_page_open(ctx, devdic);
+        if (!*file)
+        {
+            XPOST_LOG_ERR("cannot open the file this page is written to");
+            ret = ioerror;
+        }
+        else
+            ret = codec->stream_open(ctx, devdic, priv);
+    }
+    if (!ret)
+        ret = codec->write_rows(priv, last);
+    if (!ret && band->next >= height)
+        ret = codec->stream_finish(priv);
+    /* The file goes back with the page that was being written through
+       it, finished or refused; a page still being written keeps it for
+       the call that brings the next band. */
+    if (band->done && *file)
+    {
+        xpost_device_page_close(*file);
+        *file = NULL;
+    }
+    if (ret)
+        return ret;
+
+    /* pass data back to client application; the raster then belongs to
+       the client, which gives the block it sits in back through the
+       release entry point, so Destroy must leave it alone from here on.
+       Only a finished page is handed over, and only a device holding
+       every row of it has one -- which is what Create gives a device an
+       embedder asked a raster of. */
+    if (band->done && raster
+        && xpost_dev_output_buffer_handoff(ctx, raster))
+        *handed_off = 1;
+
+    return 0;
+}
+
 int xpost_dev_create_begin(Xpost_Context *ctx,
                            Xpost_Object width,
                            Xpost_Object height,

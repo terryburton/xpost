@@ -577,8 +577,10 @@ int _getpix(Xpost_Context *ctx,
    retires the device, or the reclaim of a device the run never retired
    (tests/check-page-output.sh). What says it is to be given back is the
    page ending, which is what this records. */
-static void _stream_drop(PrivateData *p)
+static void _stream_drop(void *state)
 {
+    PrivateData *p = state;
+
     p->band.open = 0;
     p->band.done = 1;
     if (p->out)
@@ -640,8 +642,10 @@ static void _reclaim(void *block)
    The file is opened by the caller and is already this device's; what
    is made here is everything that writes through it. */
 static int _stream_open(Xpost_Context *ctx, Xpost_Object devdic,
-                        PrivateData *p)
+                        void *state)
 {
+    PrivateData *p = state;
+
     Xpost_Object ud;
     Xpost_Object quality_o;
     size_t bytes;
@@ -765,8 +769,10 @@ static void _prime(Xpost_Context *ctx, Xpost_Object devdic, PrivateData *p)
 /* Begin a page: nothing of it written and no stream open for it. What
    the raster holds is not touched -- the marks of the page about to be
    written are already on it by the time anything here runs. */
-static void _page_begin(PrivateData *p)
+static void _page_begin(void *state)
 {
+    PrivateData *p = state;
+
     p->band.next = 0;
     p->band.primed = 0;
     p->band.open = 0;
@@ -798,8 +804,10 @@ static JSAMPROW _page_row(PrivateData *p, int y)
    and the file is the file a page handed over whole produces. Choosing
    a band height to suit the unit would be the other answer and it is
    not needed here. */
-static int _write_rows(PrivateData *p, int to)
+static int _write_rows(void *state, int to)
 {
+    PrivateData *p = state;
+
     if (setjmp(p->out->jerr.setjmp_buffer))
     {
         _stream_drop(p);
@@ -820,8 +828,10 @@ static int _write_rows(PrivateData *p, int to)
 /* Finish the image and close the file behind it. A page finished stays
    finished: what says so is recorded before this returns, so a further
    call writes nothing rather than a second page into the same file. */
-static int _stream_finish(PrivateData *p)
+static int _stream_finish(void *state)
 {
+    PrivateData *p = state;
+
     if (setjmp(p->out->jerr.setjmp_buffer))
     {
         _stream_drop(p);
@@ -832,34 +842,28 @@ static int _stream_finish(PrivateData *p)
     return 0;
 }
 
-/* Write the page, or as much of it as this device is holding.
+/* Write the page, or as much of it as this device is holding: the
+   whole of what a page arriving in bands means is written once, in
+   xpost_dev_page_emit (xpost_dev_generic.c), and this says what
+   this device does inside it. */
+/* what this device does that the shared page writer does not */
+static const Xpost_Dev_Page_Codec _codec = {
+    _page_begin,
+    _stream_drop,
+    _stream_open,
+    _write_rows,
+    _stream_finish,
+    NULL,  /* every row this device is given, it can compress at once */
+    _reclaim
+};
 
-   A page not arriving in bands is compressed by the one call that puts
-   it out: every row goes to the compressor and the image is finished. A
-   page arriving in bands reaches here once per band, holding the rows
-   of that band, and once more at the end holding nothing, which is what
-   says the page is finished -- so a call writes what it can, from where
-   the file has reached to the last row it is holding, and keeps the
-   compressor open for what the next call brings. The rows between,
-   which are the bands nothing painted into, go out as the page's
-   ground.
-
-   What says a page is arriving that way is /.bandpage, which the band
-   loop leaves on the device (data/image.ps); a device carrying none
-   takes the whole page as it always did, so one cannot be handed part
-   of a page by accident -- and each call is then a page of its own,
-   which is how a job's second page comes to be a second file. A page
-   arriving in bands is finished once: a further call for the same page
-   writes nothing rather than a second page into the same file, and what
-   begins the page after it is the move onto that page's first run of
-   rows. */
 static
 int _emit(Xpost_Context *ctx,
           Xpost_Object devdic)
 {
     Xpost_Object privatestr;
     PrivateData private;
-    int banded, last, ret;
+    int ret, handed;
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
@@ -869,87 +873,20 @@ int _emit(Xpost_Context *ctx,
     if (!private.buf)
         return 0;
 
-    banded = xpost_object_get_type(
-                 xpost_dict_get(ctx, devdic, namedotbandpage)) != invalidtype;
-
-    if (!banded)
-    {
-        /* Each call is a page of its own. A stream still open here
-           belonged to a page that was arriving in bands and stopped
-           doing so, and it is given up rather than left behind: what
-           follows opens another. */
-        if (private.band.open)
-        {
-            _stream_drop(&private);
-            if (private.file)
-            {
-                xpost_device_page_close(private.file);
-                private.file = NULL;
-            }
-        }
-        _page_begin(&private);
-    }
-    else if (private.band.done)
-        return 0;
-
-    /* the last of the page's rows this call can give the file */
-    last = (!banded || private.band.rows == 0)
-         ? private.height - 1
-         : private.band.top + private.band.rows - 1;
-
-    ret = 0;
-    if (!private.band.open)
-    {
-        /* The file this page goes to, opened here because its name was
-           settled for this page: the page machinery puts the settled
-           name on the device and this is the method that writes the
-           page (tests/check-page-output.sh). */
-        private.file = xpost_device_page_open(ctx, devdic);
-        if (!private.file)
-        {
-            XPOST_LOG_ERR("cannot open the file this page is compressed to");
-            ret = ioerror;
-        }
-        else
-            ret = _stream_open(ctx, devdic, &private);
-    }
-    if (!ret)
-        ret = _write_rows(&private, last);
-    if (!ret && private.band.next >= private.height)
-        ret = _stream_finish(&private);
-    /* The file goes back with the page that was being written through
-       it, finished or refused; a page still being written keeps it for
-       the call that brings the next band. */
-    if (private.band.done && private.file)
-    {
-        xpost_device_page_close(private.file);
-        private.file = NULL;
-    }
-    if (ret)
-    {
-        /* what the stream came to is recorded whether it was written or
-           refused: a page that could not be written is one this device
-           must not go on writing */
-        if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
-            return VMerror;
-        return ret;
-    }
-
-    /* pass data back to client application; the raster then belongs to
-       the client, which gives the block it sits in back through the
-       release entry point, so Destroy must leave it alone from here on.
-       Only a finished page is handed over, and only a device holding
-       every row of it has one -- which is what Create gives a device an
-       embedder asked a raster of. */
-    if (private.band.done
-        && xpost_dev_output_buffer_handoff(ctx,
-                                           (unsigned char *)private.buf->data))
+    ret = xpost_dev_page_emit(ctx, devdic, &private, &private.band,
+                              &private.file, private.height,
+                              (unsigned char *)private.buf->data,
+                              &_codec, &handed);
+    if (handed)
         private.bufowned = 0;
 
+    /* what the writing came to is recorded whether the page was written
+       or refused: a page that could not be written is one this device
+       must not go on writing */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;
 
-    return 0;
+    return ret;
 }
 
 /* Move the raster onto another run of the page's rows.
@@ -1021,31 +958,19 @@ int _destroy(Xpost_Context *ctx,
 {
     Xpost_Object privatestr;
     PrivateData private;
+    int has_rows, height;
 
     if (!xpost_dev_private_get(ctx, devdic, namePrivate,
                                &privatestr, &private, sizeof(private)))
         return undefined;
 
-    /* A page still being compressed is finished here rather than left
-       truncated: the rows it has not been given are the ones this device
-       is not holding, which the ground stands for, and that is what the
-       call at the end of a band loop would have written. A device
-       retired part way through a page -- by an error, or by a restore
-       past the setpagedevice that installed it -- then leaves an image
-       a reader can open. */
-    if (private.band.open && private.buf)
-    {
-        int last = private.height - 1;
+    /* whether there are rows to finish the page from, settled before the
+       retirement is asked for: what it is handed is the answer, not the
+       raster */
+    has_rows = private.buf != NULL;
+    height = private.height;
+    xpost_dev_page_retire(&private, &private.band, has_rows, height, &_codec);
 
-        if (!_write_rows(&private, last))
-            (void)_stream_finish(&private);
-    }
-    /* what is left is the release the collector runs: the stream, the
-       file and the raster. Written once, above, so that a change to what
-       this device owns cannot reach one path and not the other. The
-       finish above is the difference between the two and stays here --
-       the collector cannot write rows, and says so. */
-    _reclaim(&private);
     /* store the cleared pointer back so a repeated destroy is a no-op */
     if (!xpost_dev_private_put(ctx, privatestr, &private, sizeof(private)))
         return VMerror;

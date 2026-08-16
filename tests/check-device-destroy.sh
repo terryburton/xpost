@@ -529,10 +529,14 @@ while read -r route cfile cfn; do
     printf '%s\n' "$out" \
       | awk -v f="$cfile" -v n="$cfn" '{ print f "\t" n "\t" $0 }' >> "$work/verdicts"
 
-    # the release it hands its struct to, held to the same rule. Read from
-    # the same file: a Destroy hands its struct to something its own device
-    # defines, and a name this cannot find is a reading this cannot make.
+    # The release it hands its struct to, held to the same rule. A Destroy
+    # that hands its struct to the shared page retirement is releasing
+    # through the codec that retirement was given, and the codec's release
+    # is the one the collector runs -- which this device defines, and which
+    # is what the members have to be cleared by. So the shared name is
+    # followed to that, and everything else is read where it is written.
     deleg=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "DELEGATE" { print $3 }')
+    [ "$deleg" = xpost_dev_page_retire ] && deleg=_reclaim
     [ -n "$deleg" ] || continue
     rout=$(analyse "$cfile" "$deleg" 1)
     if [ -z "$rout" ]; then

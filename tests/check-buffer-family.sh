@@ -129,10 +129,26 @@ if [ ! -s "$work/registered" ]; then
     exit 1
 fi
 
-# the drivers that hand a page to an embedder
+# A driver may hand the page over itself, or write its page through the
+# shared page writer, which hands it over on the driver's behalf. The
+# second is checked and not taken on trust: the writer has to be reached
+# from the driver AND to make the call, so a writer that stopped handing
+# pages over fails here rather than taking its drivers quietly with it.
+via=xpost_dev_page_emit
+via_src=xpost_dev_generic.c
+guard_require_file "$libdir/$via_src" "the shared page writer"
+if ! grep -q "$handoff *(" "$libdir/$via_src"; then
+    echo "FAILURES: $via_src no longer calls $handoff(), so a driver"
+    echo "      writing its page through $via() hands nothing to an"
+    echo "      embedder and this guard would say otherwise"
+    exit 1
+fi
+
+# the drivers that hand a page to an embedder, themselves or through it
 : > "$work/handers"
 for f in $drivers; do
-    grep -q "$handoff *(" "$libdir/$f" && echo "$f" >> "$work/handers"
+    { grep -q "$handoff *(" "$libdir/$f" || grep -q "$via *(" "$libdir/$f"; } \
+        && echo "$f" >> "$work/handers"
 done
 if [ ! -s "$work/handers" ]; then
     echo "FAILURES: no driver calls $handoff();"
