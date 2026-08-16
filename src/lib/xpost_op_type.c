@@ -154,34 +154,29 @@ int Axcheck(Xpost_Context *ctx,
    which a standing save level must back up first and can be refused room
    for.
 
-   A file's access is a pair of independent read and write flags rather
-   than a rung on this ladder, so it is set as asked. */
+   A file reaches none of this. It sits on no rung, and each of the three
+   operators sends one to its own rule before consulting the ladder. */
 static
 Xpost_Object _reduce_access(Xpost_Context *ctx,
                             Xpost_Object o,
                             Xpost_Object_Tag_Access access)
 {
-    if (xpost_object_get_type(o) != filetype &&
-        xpost_object_get_access(ctx, o) <= access)
+    if (xpost_object_get_access(ctx, o) <= access)
         return o;
     return xpost_object_set_access(ctx, o, access);
 }
 
 /* Whether the rung asked for is above the one the object sits on, for an
    object whose access the operators refuse to widen. A dictionary is
-   excluded for the reason above. A file is excluded because it sits on no
-   rung of this ladder at all: it is refused a widening too, but by the
-   rule below, which the operators reach before this one. noaccess never
-   asks this: no-access is the foot of the ladder, so nothing sits below
-   it. */
+   excluded for the reason above; a file, as above, never arrives. noaccess
+   never asks this: no-access is the foot of the ladder, so nothing sits
+   below it. */
 static
 int _widens_access(Xpost_Context *ctx,
                    Xpost_Object o,
                    Xpost_Object_Tag_Access access)
 {
-    word type = xpost_object_get_type(o);
-
-    if (type == filetype || type == dicttype)
+    if (xpost_object_get_type(o) == dicttype)
         return 0;
     return xpost_object_get_access(ctx, o) < access;
 }
