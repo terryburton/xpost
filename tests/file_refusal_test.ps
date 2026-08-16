@@ -19,12 +19,39 @@
 /assert { exch { pop } { (FAIL: ) print print (\n) print
     /failcount failcount 1 add store } ifelse } bind def
 
+% What a procedure raised, with whatever it left behind taken off the
+% stack. The depth remembered is the one below the procedure: the count
+% at this point includes both the procedure and the name just pushed for
+% it, and `stopped` consumes the procedure, so a case that leaves nothing
+% would otherwise be asked to pop a negative number of operands.
 /errof { % proc . errorname
-    /ef.d count 1 sub def
+    /ef.d count 2 sub def
     stopped
     { count ef.d sub { pop } repeat $error /errorname get }
     { count ef.d sub { pop } repeat /noerror } ifelse
 } bind def
+
+% and the control for it, because getting that depth wrong does not give
+% a wrong answer -- it kills the run somewhere unrelated, or quietly
+% leaves an operand behind on every call. Every case below this point
+% leaves exactly one operand, and a helper counting one too many passes
+% all of those while failing a case that leaves none and a case that
+% leaves several. Those two are the ones asked here. The depth is taken before the name to hold it is pushed,
+% rather than counted and adjusted, so that this control cannot be wrong
+% in the same way as the thing it controls.
+count /ef.d0 exch def
+{ } errof /noerror eq
+    (a procedure that leaves nothing behind returns) assert
+count ef.d0 eq
+    (errof pops nothing after a procedure that left nothing) assert
+{ 1 2 3 } errof /noerror eq
+    (a procedure that leaves three operands returns) assert
+count ef.d0 eq
+    (errof pops all three) assert
+{ (/nonexistent-directory-xpost/f) deletefile } errof /undefinedfilename eq
+    (a procedure that raises leaving one operand reports the error) assert
+count ef.d0 eq
+    (errof pops the one operand a raising procedure left) assert
 
 % RODIR names the directory; the paths inside it are built with the
 % operators the language has, since concatstrings is not one of them.
