@@ -93,39 +93,18 @@ LC_ALL=C sort -u -o "$work/psexempt" "$work/psexempt"
 
 fail=0
 
-# every error the C side can return has a handler
-LC_ALL=C comm -23 "$work/c" "$work/ps" > "$work/unhandled"
-LC_ALL=C comm -23 "$work/unhandled" "$work/cexempt" > "$work/new"
-if [ -s "$work/new" ]; then
-    echo "FAIL: named in ERRORS, but errordict has no handler:"
-    sed 's/^/      /' "$work/new"
-    echo "      add the name to the handler list in data/err.ps"
-    fail=1
-fi
-
-# and every handler answers to something the C side can return
-LC_ALL=C comm -13 "$work/c" "$work/ps" > "$work/unreturned"
-LC_ALL=C comm -23 "$work/unreturned" "$work/psexempt" > "$work/orphan"
-if [ -s "$work/orphan" ]; then
-    echo "FAIL: errordict handles a name ERRORS does not carry:"
-    sed 's/^/      /' "$work/orphan"
-    echo "      add it to ERRORS in src/lib/xpost_error.h, or drop the handler"
-    fail=1
-fi
-
-# an exemption that no longer describes anything is stale
-LC_ALL=C comm -12 "$work/cexempt" "$work/ps" > "$work/stalec"
-if [ -s "$work/stalec" ]; then
-    echo "FAIL: exempted as uncatchable, but errordict handles them now:"
-    sed 's/^/      /' "$work/stalec"
-    fail=1
-fi
-LC_ALL=C comm -12 "$work/psexempt" "$work/c" > "$work/staleps"
-if [ -s "$work/staleps" ]; then
-    echo "FAIL: exempted as raised only in PostScript, but ERRORS carries them now:"
-    sed 's/^/      /' "$work/staleps"
-    fail=1
-fi
+# Every error the C side can return has a handler, and every handler
+# answers to something the C side can return -- each direction less the
+# names excused from it, and each exemption list held to the sets in
+# turn, so an excuse that describes nothing is reported rather than left
+# to cover the next name that lands where it points.
+guard_held=0
+guard_hold_except "$work/c" "$work/ps" "$work/cexempt" "$work/psexempt" \
+    "named in ERRORS, but errordict has no handler: add the name to the
+      handler list in data/err.ps:" \
+    "handled by errordict and not carried by ERRORS: add it to ERRORS in
+      src/lib/xpost_error.h, or drop the handler:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 [ "$fail" = 0 ] || exit 1
 LC_ALL=C comm -12 "$work/c" "$work/ps" > "$work/both"

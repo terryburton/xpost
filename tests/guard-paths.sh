@@ -314,6 +314,42 @@ guard_hold() {
     [ -z "$_gh_have" ] || rm -f "$_gh_have"
 }
 
+# The same, where each direction has a list of members excused from it.
+#
+# An exemption list is a second register and rots the same way: an entry
+# excusing something that no longer needs excusing reads as cover, and
+# the next member to land in that state is excused by a line written for
+# something else. So each list is also held to the sets -- an exemption
+# for a member that is now on both sides is reported, in the direction
+# whose difference it was written to suppress.
+#
+#   $1  file of wanted names          $3  excused from the first direction
+#   $2  file of found names           $4  excused from the second
+#   $5  headline when something wanted is not found and not excused
+#   $6  headline when something found was not wanted and not excused
+guard_hold_except() {
+    _ghe_w=$(mktemp) || { echo "FAIL: no temporary file for a comparison"; exit 1; }
+    _ghe_h=$(mktemp) || { echo "FAIL: no temporary file for a comparison"; exit 1; }
+    _ghe_m=$(mktemp) || { echo "FAIL: no temporary file for a comparison"; exit 1; }
+    LC_ALL=C sort -u "$1" > "$_ghe_w"
+    LC_ALL=C sort -u "$2" > "$_ghe_h"
+
+    LC_ALL=C comm -23 "$_ghe_w" "$_ghe_h" > "$_ghe_m"
+    guard_hold "$_ghe_m" "$3" "$5" \
+        "excused from the difference just checked, and not in that state
+      any more. An exemption nothing needs excuses whatever lands
+      there next:"
+
+    LC_ALL=C comm -13 "$_ghe_w" "$_ghe_h" > "$_ghe_m"
+    guard_hold "$_ghe_m" "$4" "$6" \
+        "excused by $(basename "$4") and not in that state any more.
+      An exemption nothing needs excuses whatever lands there next:"
+
+    [ -z "$_ghe_w" ] || rm -f "$_ghe_w"
+    [ -z "$_ghe_h" ] || rm -f "$_ghe_h"
+    [ -z "$_ghe_m" ] || rm -f "$_ghe_m"
+}
+
 # The caller's guard_format if it has defined one, indentation if not.
 # Compared against the bare name so that a function is told apart from a
 # program of the same name somewhere on the path.

@@ -68,21 +68,13 @@ fi
 
 fail=0
 
-LC_ALL=C comm -23 "$work/both" "$work/declared" > "$work/new"
-if [ -s "$work/new" ]; then
-    echo "FAIL: implemented in both C and PostScript, but not declared:"
-    sed 's/^/      /' "$work/new"
-    echo "      say which one wins in $(basename "$golden")"
-    fail=1
-fi
-
-LC_ALL=C comm -13 "$work/both" "$work/declared" > "$work/gone"
-if [ -s "$work/gone" ]; then
-    echo "FAIL: declared as implemented twice, but no longer are:"
-    sed 's/^/      /' "$work/gone"
-    echo "      remove them from $(basename "$golden")"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/both" "$work/declared" \
+    "implemented in both C and PostScript, but not declared: say which
+      one wins in $(basename "$golden"):" \
+    "declared as implemented twice, but no longer are: remove them from
+      $(basename "$golden"):"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # every declaration names one of the two implementations
 grep -v '^[[:space:]]*#' "$golden" | grep -v '^[[:space:]]*$' \

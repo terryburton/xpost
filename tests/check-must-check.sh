@@ -106,23 +106,14 @@ if [ ! -s "$tmp/current" ]; then
     exit 1
 fi
 
-comm -23 "$tmp/recorded" "$tmp/current" > "$tmp/missing"
-comm -13 "$tmp/recorded" "$tmp/current" > "$tmp/added"
-
-if [ -s "$tmp/missing" ]; then
-    echo "check-must-check: these no longer refuse in a way a caller must answer:" >&2
-    sed 's/^/  /' "$tmp/missing" >&2
-    echo "The set may grow and may not shrink: restore XPOST_MUST_CHECK, or say" >&2
-    echo "in the commit why the function can no longer refuse." >&2
-    fail=1
-fi
-
-if [ -s "$tmp/added" ]; then
-    echo "check-must-check: newly decorated, and not yet recorded:" >&2
-    sed 's/^/  /' "$tmp/added" >&2
-    echo "Add them to tests/must_check.golden in the same commit." >&2
-    fail=1
-fi
+guard_held=0
+guard_hold "$tmp/recorded" "$tmp/current" \
+    "no longer refusing in a way a caller must answer. The set may grow
+      and may not shrink: restore XPOST_MUST_CHECK, or say in the commit
+      why the function can no longer refuse:" \
+    "newly decorated, and not yet recorded. Add them to
+      tests/must_check.golden in the same commit:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # The mark has to reach the callers. A registered name a header declares
 # must carry it there; carrying it only on the definition protects the
