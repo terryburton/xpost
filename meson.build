@@ -1135,6 +1135,25 @@ test('free-list-admission',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# What size an entry has to be for a request to take it. Any entry
+# holding the request serves it however much larger it is, which is what
+# lets a job that changes the size of the buffers it asks for go on
+# using the memory it has already released. A rule that scaled the
+# comparison would answer every other test here the same way, so the
+# ratios are asked of the free list directly: the object layer rounds a
+# request up and would put the sizes under test out of reach.
+free_list_size_rule_exe = executable('free_list_size_rule_test',
+  'tests/free_list_size_rule_test.c',
+  c_args: '-DHAVE_CONFIG_H',
+  dependencies: libxpost_dep,
+  link_args: internals_link_args,
+  include_directories: [ config_dir, include_directories('src/lib') ],
+  install: false)
+test('free-list-size-rule',
+  free_list_size_rule_exe,
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # What that refusal is worth. Emptying the buckets throws away every
 # entity the list held, so the answer the allocator gives has to reach a
 # collection: an allocator that emptied them and reported a plain

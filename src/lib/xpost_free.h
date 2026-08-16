@@ -91,12 +91,6 @@ typedef enum
 
 
 /**
- * Maximum size to accept from an allocation relative to the size requested
- */
-#define XPOST_FREE_ACCEPT_OVERSIZE 3
-#define XPOST_FREE_ACCEPT_DENOM 2
-
-/**
  * The free list is bucketed by allocation size: ent 0's data area holds
  * XPOST_FREE_NBUCKETS list-head words, and a freed ent's first word
  * links to the next ent in its bucket. The allocator and the collector's
