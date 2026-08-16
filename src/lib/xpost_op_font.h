@@ -33,9 +33,5 @@
 
 int xpost_oper_init_font_ops(Xpost_Context *ctx, Xpost_Object sd);
 
-/* Give up the faces held against the names they were asked for, which
-   are the process's rather than any one context's. Called from the
-   library teardown, beside the font module's own. */
-void xpost_op_font_quit(void);
 
 #endif

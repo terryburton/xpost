@@ -54,6 +54,7 @@
 #include "xpost_log.h"
 #include "xpost_object.h"
 #include "xpost_font.h"
+#include "xpost_main.h" /* to be called when the library goes down */
 
 #ifdef HAVE_FONTCONFIG
 static FcConfig *_xpost_font_fc_config = NULL;
@@ -365,6 +366,12 @@ gcache_clear(void)
 {
     while (gcache_tail)
         gcache_drop(gcache_tail);
+    /* the transforms recorded per face go with the entries they key: a
+       face is an address, and an address given back can be handed out
+       again for a different face */
+    memset(gcache_state, 0, sizeof(gcache_state));
+    gcache_nstate = 0;
+    gcache_serving = NULL;
 }
 
 #ifdef HAVE_FREETYPE2
@@ -437,6 +444,10 @@ program_clear(void)
 }
 #endif
 
+#ifdef HAVE_FREETYPE2
+static void strike_clear(void);
+#endif
+
 int
 xpost_font_init(void)
 {
@@ -461,11 +472,19 @@ xpost_font_init(void)
             XPOST_LOG_ERR("cannot load Fc config and fonts");
 # endif
 
+        /* coming up is what asks to be taken down, so a module that
+           starts holding something cannot be left out of a list */
+        (void)xpost_at_quit(xpost_font_quit);
+
         return 1;
     }
 
     return 0;
 #endif
+
+    /* coming up is what asks to be taken down, so a module that
+       starts holding something cannot be left out of a list */
+    (void)xpost_at_quit(xpost_font_quit);
 
 return 1;
 }
@@ -480,6 +499,7 @@ xpost_font_quit(void)
 
 #ifdef HAVE_FREETYPE2
     gcache_clear();
+    strike_clear();
     FT_Done_FreeType(_xpost_font_ft_library);
     /* the library takes the faces still open with it; their programs are
        this module's to give up, and nothing reads them once it has gone */
@@ -1483,6 +1503,16 @@ static struct
     int left, top;
     int valid;
 } _strike_scaled;
+
+/* Give the resampled strike back. It is one raster, replaced as each
+   glyph needs one, so what is held at any moment is the last glyph
+   scaled -- and at the teardown that is a raster this module allocated
+   and nothing else will free. */
+static void strike_clear(void)
+{
+    free(_strike_scaled.bits);
+    memset(&_strike_scaled, 0, sizeof(_strike_scaled));
+}
 
 /* scale the loaded strike bitmap by the face transform's column norms
    (a rotation is not applied: a strike raster has no orientation to

@@ -48,6 +48,7 @@
 #include "xpost_object.h"
 #include "xpost_stack.h"
 #include "xpost_font.h"
+#include "xpost_main.h" /* to be called when the library goes down */
 #include "xpost_strbuf.h"
 #include "xpost_file.h"
 #include "xpost_save.h"
@@ -958,7 +959,9 @@ static int face_cache_n = 0;
    been freed -- which is what an embedder doing a second init and asking
    for a font it had asked for before would get. Called from the same
    teardown, so the cache stops naming a face before the face goes. */
-void xpost_op_font_quit(void)
+static void _clip_memo_drop(void);
+
+static void xpost_op_font_quit(void)
 {
     int i;
 
@@ -970,6 +973,7 @@ void xpost_op_font_quit(void)
     }
     memset(face_cache, 0, sizeof(face_cache));
     face_cache_n = 0;
+    _clip_memo_drop();
 }
 
 static
@@ -1043,6 +1047,10 @@ int _findfont(Xpost_Context *ctx,
             ffile = xpost_font_face_last_file();
             if (data.face != NULL && face_cache_n < 32)
             {
+                /* the cache is about to hold a face, which belongs to a
+                   library that goes down at the teardown: asking to be
+                   called is part of taking it */
+                (void)xpost_at_quit(xpost_op_font_quit);
                 face_cache[face_cache_n].file = ffile ? strdup(ffile) : NULL;
                 face_cache[face_cache_n].name = strdup(fname);
                 face_cache[face_cache_n].face = data.face;
@@ -1459,6 +1467,16 @@ static struct
     int n;
 } _clip_memo;
 
+/* Give the read-back bands up. They are one array, replaced as each
+   clip is read, so what is held at any moment is the last clip read --
+   and it is keyed by a serial and an entity, both of which a later
+   lifetime issues again from the start. */
+static void _clip_memo_drop(void)
+{
+    free(_clip_memo.band);
+    memset(&_clip_memo, 0, sizeof(_clip_memo));
+}
+
 static int _band_comp(const void *a, const void *b)
 {
     const clipband *p = a, *q = b;
@@ -1576,6 +1594,7 @@ int _clip_bands_get(Xpost_Context *ctx, Xpost_Object spans, int serial)
     }
     if (at > 1)
         qsort(b, (size_t)at, sizeof *b, _band_comp);
+    (void)xpost_at_quit(xpost_op_font_quit);
     free(_clip_memo.band);
     _clip_memo.serial = serial;
     _clip_memo.ent = xpost_object_get_ent(spans);

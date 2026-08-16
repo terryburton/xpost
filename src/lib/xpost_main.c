@@ -53,7 +53,6 @@
 #include "xpost_object.h"
 #include "xpost_memory.h"
 #include "xpost_font.h"
-#include "xpost_op_font.h" /* the faces held against the names asked for */
 #include "xpost_main.h"
 #include "xpost_private.h"
 
@@ -74,6 +73,20 @@ static char *_xpost_data_dir = NULL;
  *                                   API                                      *
  *============================================================================*/
 
+static void _xpost_run_at_quit(void);
+static void _data_dir_drop(void);
+
+/* An init that gives up partway takes down what it had already brought
+   up. Its caller is told the library is not up, and rightly does not
+   call the teardown -- so what came up before the refusal would be left
+   up, and the next init would bring those modules up a second time over
+   what the first left. */
+static int _init_gave_up(void)
+{
+    _xpost_run_at_quit();
+    return --_xpost_init_count;
+}
+
 XPAPI int
 xpost_init(void)
 {
@@ -84,13 +97,20 @@ xpost_init(void)
         return _xpost_init_count;
 
     if (!xpost_compat_init())
-        return --_xpost_init_count;
+        return _init_gave_up();
+    /* Compat and the log are shared with libxpost_dsc, which has no
+       lifetime of its own to be registered against, so they cannot ask
+       for themselves the way a module of this library does. Where they
+       are brought up is then the one place that knows they are, and it
+       asks on their behalf. */
+    (void)xpost_at_quit(xpost_compat_quit);
 
     if (!xpost_log_init())
-        return --_xpost_init_count;
+        return _init_gave_up();
+    (void)xpost_at_quit(xpost_log_quit);
 
     if (!xpost_module_path_get(xpost_init, _xpost_lib_dir, XPOST_PATH_MAX))
-        return --_xpost_init_count;
+        return _init_gave_up();
 
     l = strlen(_xpost_lib_dir);
     memcpy(tmp1, _xpost_lib_dir, l);
@@ -108,14 +128,60 @@ xpost_init(void)
         memcpy(tmp1 + l, "/../../../data", sizeof("/../../../data"));
         _xpost_data_dir = xpost_realpath(tmp1);
     }
+    /* coming up is what asks to be taken down */
+    (void)xpost_at_quit(_data_dir_drop);
 
     if (!xpost_memory_init())
-        return --_xpost_init_count;
+        return _init_gave_up();
 
     if (!xpost_font_init())
-        return --_xpost_init_count;
+        return _init_gave_up();
 
     return _xpost_init_count;
+}
+
+static void _data_dir_drop(void)
+{
+    free(_xpost_data_dir);
+    _xpost_data_dir = NULL;
+}
+
+/* What has asked to be called when the library goes down. Sixteen is
+   more than the modules that hold anything for a lifetime, and the
+   refusal is reported rather than silent, so a seventeenth arrives as a
+   message and not as a module that quietly stopped being torn down. */
+#define XPOST_AT_QUIT_MAX 16
+static void (*_xpost_at_quit[XPOST_AT_QUIT_MAX])(void);
+static int _xpost_at_quit_n = 0;
+
+int
+xpost_at_quit(void (*fn)(void))
+{
+    int i;
+
+    if (!fn)
+        return 1;
+    for (i = 0; i < _xpost_at_quit_n; i++)
+        if (_xpost_at_quit[i] == fn)
+            return 1;
+    if (_xpost_at_quit_n == XPOST_AT_QUIT_MAX)
+    {
+        XPOST_LOG_ERR("no room to be called at the library teardown:"
+                      " %d are registered", _xpost_at_quit_n);
+        return 0;
+    }
+    _xpost_at_quit[_xpost_at_quit_n++] = fn;
+    return 1;
+}
+
+/* Call what asked to be called, in the reverse of the order it asked in,
+   so each module reaches what it was built on before that goes. The list
+   is emptied as it runs: a later lifetime registers afresh, and a second
+   pass finds nothing to call. */
+static void _xpost_run_at_quit(void)
+{
+    while (_xpost_at_quit_n > 0)
+        _xpost_at_quit[--_xpost_at_quit_n]();
 }
 
 XPAPI int
@@ -130,13 +196,7 @@ xpost_quit(void)
     if (--_xpost_init_count != 0)
         return _xpost_init_count;
 
-    /* the faces the findfont cache holds are given back before the
-       library that owns them goes */
-    xpost_op_font_quit();
-    xpost_font_quit();
-    xpost_log_quit();
-    free(_xpost_data_dir);
-    xpost_compat_quit();
+    _xpost_run_at_quit();
 
     return _xpost_init_count;
 }

@@ -1,0 +1,86 @@
+# The register of library-lifetime statics, held by
+# tests/check-library-lifetime.sh.
+#
+# xpost_init and xpost_quit are counted, and the balancing quit takes the
+# library down. A file-scope variable lasts the process, which is longer,
+# so each one that can be made to name something says here what becomes
+# of it when the library goes -- and a new one cannot arrive in silence,
+# because the population is derived from the source and every member of
+# it must be answered for.
+#
+#   <file>  <name>  outlives <reason>
+#   <file>  <name>  cleared  <function reached from xpost_quit>
+#   <file>  <name>  reset    <function reached from a lifetime starting>
+#
+# The reason on an "outlives" line is the whole of the argument for it,
+# so write the one that would have to be false for it to be wrong.
+
+# --- given up at the teardown ---
+#
+# Faces belong to the font library, which the teardown gives back: a
+# second lifetime handed one of these follows it into freed memory.
+src/lib/xpost_font.c            gcache_hash                cleared gcache_clear
+src/lib/xpost_font.c            gcache_head                cleared gcache_clear
+src/lib/xpost_font.c            gcache_tail                cleared gcache_clear
+src/lib/xpost_font.c            gcache_serving             cleared gcache_clear
+src/lib/xpost_font.c            gcache_state               cleared gcache_clear
+src/lib/xpost_font.c            program_head               cleared program_clear
+src/lib/xpost_font.c            _strike_scaled             cleared strike_clear
+src/lib/xpost_op_font.c         face_cache                 cleared xpost_op_font_quit
+src/lib/xpost_op_font.c         _clip_memo                 cleared _clip_memo_drop
+src/lib/xpost_main.c            _xpost_data_dir            cleared _data_dir_drop
+
+# --- given up as the next lifetime starts ---
+#
+# Resolved regions, memoised against a serial and an entity that a later
+# lifetime issues again from the start. What is held between the last
+# context and the next is a residue, not a value anything reads.
+src/lib/xpost_dev_generic.c     _region_memo               reset _region_memo_flush
+
+# --- outliving the library, and why ---
+#
+# The fontconfig configuration is torn down by name in the same teardown
+# and the pointer is not read again until a later init replaces it.
+src/lib/xpost_font.c            _xpost_font_fc_config      outlives replaced-at-init
+# The file a face was last opened from: a string this module owns and
+# rewrites at each open, read only between an open and the load that
+# follows it.
+src/lib/xpost_font.c            _xpost_font_last_file      outlives owned-here-rewritten-at-each-open
+# The sandbox is documented (xpost.h) as belonging to the process and as
+# one-way: a later lifetime finding what was permitted before it is the
+# stated contract, and clearing these would break it.
+src/lib/xpost_file.c            xpost_permit_read_dir      outlives process-wide-latch-by-contract
+src/lib/xpost_file.c            xpost_permit_write_dir     outlives process-wide-latch-by-contract
+# The handle table. Its entries are released per memory file when a
+# context is destroyed (xpost_context.c), so nothing in it survives the
+# context that made it; the array itself is a high-water allocation
+# holding no live entry.
+src/lib/xpost_handle.c          _slots                     outlives entries-released-per-context
+# The context the comparison a sort runs reaches its operands through,
+# which a comparison function has no argument to be given. Set on the
+# line above the sort and cleared on the line below it, so it names
+# nothing at any moment a lifetime could end at.
+src/lib/xpost_dev_generic.c     localctx                   outlives set-and-cleared-around-one-sort
+# The collector diagnostic's seen-maps, allocated and freed within the
+# verification pass that uses them.
+src/lib/xpost_garbage_diag.c    _vseen_lo                  outlives freed-within-the-pass
+src/lib/xpost_garbage_diag.c    _vseen_gl                  outlives freed-within-the-pass
+# Its walk queue, which is kept rather than freed so that a later pass
+# reuses it. It holds entity numbers and bank flags, never a pointer, and
+# each pass refills it from empty, so what a later lifetime finds there
+# is a buffer and not a value.
+src/lib/xpost_garbage_diag.c    _vq                        outlives numbers-only-refilled-from-empty
+# The log's sink and dump file are the host's, given to the library and
+# taken back by the host; the library neither opened nor owns them.
+src/lib/xpost_log.c             _xpost_log_print_cb_data   outlives the-hosts-not-the-librarys
+src/lib/xpost_log.c             _xpost_log_dump_file       outlives the-hosts-not-the-librarys
+# Names, spellings and defaults: each of these holds a string literal,
+# which is program image and no teardown can invalidate.
+src/lib/xpost_log.c             _xpost_log_level_names     outlives string-literals
+src/lib/xpost_interpreter.c     _record_spill              outlives string-literals
+src/lib/xpost_op_font.c         _cid_private_keys          outlives string-literals
+src/lib/xpost_op_param.c        _userparam_vmreclaim       outlives string-literals
+src/lib/xpost_op_param.c        _userparam_vmthreshold     outlives string-literals
+src/lib/xpost_op_param.c        _userparam_maxopstack      outlives string-literals
+src/lib/xpost_op_param.c        _userparam_maxdictstack    outlives string-literals
+src/lib/xpost_op_param.c        _userparam_maxexecstack    outlives string-literals

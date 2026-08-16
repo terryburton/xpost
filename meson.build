@@ -4477,6 +4477,16 @@ test('check-device-destroy',
   suite: cost_fast,
   args: [ meson.current_source_dir() ])
 
+# The library's lifetime is counted but nothing stands for it, so state
+# that wants to last one lives in a file-scope static -- which lasts the
+# process, and hands the next lifetime whatever the teardown freed. Every
+# such variable is held to saying what becomes of it, over a population
+# derived from the source rather than listed.
+test('check-library-lifetime',
+  find_program('tests/check-library-lifetime.sh'),
+  suite: cost_fast,
+  args: [ meson.current_source_dir() ])
+
 # One device roster. -d and setpagedevice are two spellings of one
 # selection, so the option parser's list, the interpreter's maker table
 # and the .devicemakers dictionary name the same devices -- and the test

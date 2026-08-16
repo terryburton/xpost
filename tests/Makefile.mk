@@ -29,6 +29,7 @@ tests/check-buffer-family.sh \
 tests/check-callout-bracket.sh \
 tests/check-clip-writer.sh \
 tests/check-device-destroy.sh \
+tests/check-library-lifetime.sh \
 tests/check-device-roster.sh \
 tests/check-device-facts.sh \
 tests/device-facts \
@@ -112,6 +113,7 @@ tests/device-fleet.sh \
 tests/device_completion_test.ps \
 tests/device_contract_test.ps \
 tests/device_destroy.golden \
+tests/library_statics.golden \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \
 tests/device_private_test.ps \
@@ -155,6 +157,7 @@ tests/font_cache_bound_test.ps \
 tests/font_directory_test.ps \
 tests/font_glyphkey_test.ps \
 tests/font_face_error_test.c \
+tests/font_face_cycle_test.c \
 tests/font_face_release_test.ps \
 tests/font_leak_test.ps \
 tests/font_private_test.ps \
