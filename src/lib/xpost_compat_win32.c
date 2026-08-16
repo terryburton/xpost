@@ -200,10 +200,32 @@ xpost_get_usertime_ms(void)
     return now - _xpost_cpu_start;
 }
 
+const char *
+xpost_temp_dir(void)
+{
+    static char composed[XPOST_PATH_MAX];
+    const char *d;
+
+    if ((d = getenv("TEMP")) && *d) return d;
+    if ((d = getenv("TMP")) && *d) return d;
+    /* LOCALAPPDATA is where a user's data lives, not where scratch does;
+       the temporary directory is beneath it. Composed into storage of
+       the module's own, since there is no variable holding the joined
+       form to answer with. */
+    if ((d = getenv("LOCALAPPDATA")) && *d)
+    {
+        if (snprintf(composed, sizeof composed, "%s\\Temp", d)
+            < (int)sizeof composed)
+            return composed;
+    }
+    if ((d = getenv("USERPROFILE")) && *d) return d;
+    return ".";
+}
+
 int
 xpost_mkstemp(char *template, int *fd)
 {
-    char *tmpdir;
+    const char *tmpdir;
     char *filename = NULL;
     char *iter;
     size_t len;
@@ -216,50 +238,18 @@ xpost_mkstemp(char *template, int *fd)
 
     len = strlen(template);
 
-    if ((tmpdir = getenv("TEMP")) || (tmpdir = getenv("TMP")))
+    /* path is $(tmpdir)\xpost_$(template) */
+    tmpdir = xpost_temp_dir();
+    len_tmp = strlen(tmpdir);
+    filename = (char *)malloc(len_tmp + 7 /* \xpost_ */ + len + 1);
+    if (filename)
     {
-        len_tmp = strlen(tmpdir);
-        /* path is $(tmpdir)\xpost_$(template) */
-        filename = (char *)malloc(len_tmp + 7 /* \xpost_ */ + len + 1);
-        if (filename)
-        {
-            iter = filename;
-            memcpy(iter, tmpdir, len_tmp);
-            iter += len_tmp;
-            memcpy(iter, "\\xpost_", 7);
-            iter += 7;
-            memcpy(iter, template, len + 1);
-        }
-    }
-    else if ((tmpdir = getenv("LOCALAPPDATA")))
-    {
-        len_tmp = strlen(tmpdir);
-        /* path is $(tmpdir)\Temp\xpost_$(template) */
-        filename = (char *)malloc(len_tmp + 12 /* \Temp\xpost_ */ + len + 1);
-        if (filename)
-        {
-            iter = filename;
-            memcpy(iter, tmpdir, len_tmp);
-            iter += len_tmp;
-            memcpy(iter, "\\Temp\\xpost_", 12);
-            iter += 12;
-            memcpy(iter, template, len + 1);
-        }
-    }
-    else if ((tmpdir = getenv("USERPROFILE")))
-    {
-        len_tmp = strlen(tmpdir);
-        /* path is $(tmpdir)\xpost_$(template) */
-        filename = (char *)malloc(len_tmp + 7 /* \xpost_ */ + len + 1);
-        if (filename)
-        {
-            iter = filename;
-            memcpy(iter, tmpdir, len_tmp);
-            iter += len_tmp;
-            memcpy(iter, "\\xpost_", 7);
-            iter += 7;
-            memcpy(iter, template, len + 1);
-        }
+        iter = filename;
+        memcpy(iter, tmpdir, len_tmp);
+        iter += len_tmp;
+        memcpy(iter, "\\xpost_", 7);
+        iter += 7;
+        memcpy(iter, template, len + 1);
     }
 
     if (!filename)

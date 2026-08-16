@@ -236,10 +236,22 @@ xpost_get_usertime_ms(void)
     return (long long)(now - _xpost_cpu_start);
 }
 
+const char *
+xpost_temp_dir(void)
+{
+    const char *d;
+
+    if ((d = getenv("TMPDIR")) && *d) return d;
+    if ((d = getenv("TMP")) && *d) return d;
+    if ((d = getenv("TEMPDIR")) && *d) return d;
+    if ((d = getenv("TEMP")) && *d) return d;
+    return "/tmp";
+}
+
 int
 xpost_mkstemp(char *template, int *fd)
 {
-    const char *tmpdir = NULL;
+    const char *tmpdir;
     char *filename;
     char *iter;
     size_t len_tmp;
@@ -249,13 +261,7 @@ xpost_mkstemp(char *template, int *fd)
         return 0;
 
     len = strlen(template);
-
-    tmpdir = getenv("TMPDIR");
-    if (!tmpdir || !*tmpdir) tmpdir = getenv("TMP");
-    if (!tmpdir || !*tmpdir) tmpdir = getenv("TEMPDIR");
-    if (!tmpdir || !*tmpdir) tmpdir = getenv("TEMP");
-    if (!tmpdir || !*tmpdir) tmpdir = "/tmp";
-
+    tmpdir = xpost_temp_dir();
     len_tmp = strlen(tmpdir);
     filename = (char *)malloc(len_tmp + 1 + len + 1);
     if (!filename)

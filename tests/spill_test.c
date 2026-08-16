@@ -56,6 +56,7 @@
 #include "xpost_error.h"
 #include "xpost_object.h"
 #include "xpost_record.h"
+#include "xpost_compat.h"
 #include "xpost_spill.h"
 
 #include "xpost_test.h"
@@ -259,7 +260,7 @@ int main(void)
     if (!xpost_spill_probe(why, sizeof why))
     {
         printf("SKIP no scratch file can be made in %s (%s), so a record"
-               " has nowhere to spill to\n", xpost_spill_dir(), why);
+               " has nowhere to spill to\n", xpost_temp_dir(), why);
         return verdict();
     }
 

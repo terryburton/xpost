@@ -88,6 +88,7 @@
 #include "xpost_dev_driver.h"  /* device contract and shared helpers */
 #include "xpost_op_path.h"     /* XPOST_PATH_BREAK: a subpath separator */
 #include "xpost_record.h"
+#include "xpost_compat.h"  /* xpost_temp_dir: a refusal names the place */
 #include "xpost_spill.h"
 #include "xpost_dev_record.h"
 
@@ -442,7 +443,7 @@ static int _weigh(PrivateData *private, int now)
                       " banding it saves, or more than a band of it was"
                       " given to spend, could not put them in %s, so this"
                       " page is held in memory and what it costs follows"
-                      " the drawing without limit", xpost_spill_dir());
+                      " the drawing without limit", xpost_temp_dir());
     return 1;
 }
 
@@ -3337,7 +3338,7 @@ static int _create_cont(Xpost_Context *ctx,
         {
             XPOST_LOG_ERR("%d no page's marks can be put in %s (%s), and this"
                           " run asked for every page's to be", ioerror,
-                          xpost_spill_dir(), _spill_probe_why);
+                          xpost_temp_dir(), _spill_probe_why);
             xpost_record_free(private.rec);
             return ioerror;
         }
@@ -3346,7 +3347,7 @@ static int _create_cont(Xpost_Context *ctx,
                           " drawing more than the raster banding it saves"
                           " will be held in memory instead, and what it costs"
                           " will follow the drawing without limit",
-                          xpost_spill_dir(), _spill_probe_why);
+                          xpost_temp_dir(), _spill_probe_why);
         _spill_probe_said = 1;
         private.where = SPILT_REFUSED;
     }
@@ -3356,7 +3357,7 @@ static int _create_cont(Xpost_Context *ctx,
     {
         XPOST_LOG_ERR("%d this run asked for every page's marks to be put in"
                       " %s and the first page's could not be", ioerror,
-                      xpost_spill_dir());
+                      xpost_temp_dir());
         xpost_record_free(private.rec);
         return ioerror;
     }

@@ -25,6 +25,7 @@
 
 #include <errno.h>
 
+#include "xpost_compat.h" /* xpost_temp_dir: where scratch goes */
 #include "xpost_spill.h"
 
 struct _Xpost_Spill
@@ -33,33 +34,10 @@ struct _Xpost_Spill
     Xpost_Spill_Off high;   /* the furthest anything has been written to */
 };
 
-/* The directory scratch goes in. The order is the one
-   xpost_compat_posix.c and xpost_compat_win32.c already ask in, because
-   there is no reason for a run to have two ideas about where its scratch
-   lives. */
-const char *xpost_spill_dir(void)
-{
-    const char *d;
-
-#ifdef _WIN32
-    if ((d = getenv("TEMP")) && *d) return d;
-    if ((d = getenv("TMP")) && *d) return d;
-    if ((d = getenv("LOCALAPPDATA")) && *d) return d;
-    if ((d = getenv("USERPROFILE")) && *d) return d;
-    return ".";
-#else
-    if ((d = getenv("TMPDIR")) && *d) return d;
-    if ((d = getenv("TMP")) && *d) return d;
-    if ((d = getenv("TEMPDIR")) && *d) return d;
-    if ((d = getenv("TEMP")) && *d) return d;
-    return "/tmp";
-#endif
-}
-
 /* Build "<dir><sep>xpost-spill-XXXXXX" in a buffer the caller owns. */
 static char *_scratch_path(void)
 {
-    const char *dir = xpost_spill_dir();
+    const char *dir = xpost_temp_dir();
     size_t n = strlen(dir);
     char *p;
 

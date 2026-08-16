@@ -144,6 +144,21 @@ int xpost_isatty(int fd);
  */
 int xpost_mkstemp(char *template, int *fd);
 
+/*
+ * The directory scratch goes in, chosen from the environment the way the
+ * host platform names it. Never NULL: where nothing in the environment
+ * says, a platform default stands.
+ *
+ * There is one of these because a run must not have two ideas about
+ * where its scratch lives. It had three -- the spill asked one way, the
+ * temporary-file maker another, and each answered differently on a host
+ * that sets some of the variables and not others.
+ *
+ * The answer is the process's and holds for its lifetime; the pointer is
+ * to storage the caller does not own and must not free.
+ */
+const char *xpost_temp_dir(void);
+
 #ifdef _WIN32
 
 /* the counts carry the widths POSIX gives them, so a caller reads one

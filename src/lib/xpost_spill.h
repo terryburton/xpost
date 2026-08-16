@@ -43,14 +43,6 @@ typedef long long Xpost_Spill_Off;
 typedef struct _Xpost_Spill Xpost_Spill;
 
 /**
- * @brief The directory a spill file would be made in.
- *
- * Answered whether or not one could be made there, so that a refusal can
- * name the place it was refused.
- */
-const char *xpost_spill_dir(void);
-
-/**
  * @brief Whether a spill file can be made and written, by making one and
  *        writing to it.
  *

@@ -428,7 +428,6 @@ xpost_scanner_rep_number
 xpost_skip_graphics_set
 xpost_span_scanconvert
 xpost_spill_close
-xpost_spill_dir
 xpost_spill_open
 xpost_spill_probe
 xpost_spill_read
@@ -458,6 +457,7 @@ xpost_string_get_memory
 xpost_string_get_pointer
 xpost_string_put
 xpost_string_put_memory
+xpost_temp_dir
 xpost_unlinkat_beneath
 xpost_version_get
 xpost_vm_image_bank_field_name
