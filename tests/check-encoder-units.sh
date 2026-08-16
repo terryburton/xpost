@@ -508,24 +508,14 @@ if [ ! -s "$work/recorded" ]; then
     exit 1
 fi
 
-comm -13 "$work/recorded" "$work/bearing_s" > "$work/newly"
-comm -23 "$work/recorded" "$work/bearing_s" > "$work/lost"
-
-if [ -s "$work/newly" ]; then
-    echo "FAILURES: these counters are now read as a width and are not in"
-    echo "      the register:"
-    sed 's/^/      /' "$work/newly"
-    echo "      Add them to tests/encoder_units.golden in the same commit."
-    fail=1
-fi
-if [ -s "$work/lost" ]; then
-    echo "FAILURES: these are in the register and nothing reads them as a"
-    echo "      width any more:"
-    sed 's/^/      /' "$work/lost"
-    echo "      Retire the line and the count above it together, so that a"
-    echo "      population which shrank says so."
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/recorded" "$work/bearing_s" \
+    "in the register, with nothing reading them as a width any more.
+      Retire the line and the count above it together, so that a
+      population which shrank says so:" \
+    "read as a width now and not in the register. Add them to
+      tests/encoder_units.golden in the same commit:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 entries=$(awk '/^entries /{ print $2; found = 1 } END { if (!found) print "" }' "$golden")
 have=$(grep -c . "$work/recorded")

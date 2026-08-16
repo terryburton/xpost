@@ -640,29 +640,20 @@ if [ ! -s "$work/recorded" ]; then
     exit 1
 fi
 
-report() {          # <label> <file of offenders> <advice>
-    if [ -s "$2" ]; then
-        echo "FAILURES: $1"
-        sed 's/^/      /' "$2"
-        echo "      $3"
-        fail=1
-    fi
-}
-comm -13 "$work/recorded" "$work/population" > "$work/newpop"
-comm -23 "$work/recorded" "$work/population" > "$work/lostpop"
-report "these Destroys are in the tree and not in the register:" "$work/newpop" \
-    "Add them to tests/device_destroy.golden in the same commit."
-report "these are in the register and no longer reachable as a Destroy:" \
-    "$work/lostpop" \
-    "Retire the line and the count above it together, so a population that shrank says so."
-comm -13 "$work/recorded-exempt" "$work/exempt" > "$work/newex"
-comm -23 "$work/recorded-exempt" "$work/exempt" > "$work/lostex"
-report "these classes take the no-op Destroy and are not recorded as exempt:" \
-    "$work/newex" \
-    "A class releases nothing only because its raster is objects the collector owns; say so in tests/device_destroy.golden."
-report "these are recorded as exempt and no longer take the no-op Destroy:" \
-    "$work/lostex" \
-    "Retire the line and the count above it together."
+guard_held=0
+guard_hold "$work/recorded" "$work/population" \
+    "in the register and no longer reachable as a Destroy. Retire the
+      line and the count above it together, so a population that shrank
+      says so:" \
+    "Destroys in the tree and not in the register. Add them to
+      tests/device_destroy.golden in the same commit:"
+guard_hold "$work/recorded-exempt" "$work/exempt" \
+    "recorded as exempt and no longer taking the no-op Destroy. Retire
+      the line and the count above it together:" \
+    "classes taking the no-op Destroy and not recorded as exempt. A
+      class releases nothing only because its raster is objects the
+      collector owns; say so in tests/device_destroy.golden:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 count() {           # <keyword> <have>
     n=$(awk -v K="$1" '$1 == K && !found { print $2; found = 1 } END { if (!found) print "" }' "$golden")

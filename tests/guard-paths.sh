@@ -271,24 +271,56 @@ guard_c_source() {
 # a newly added member is in -- the failure this whole family of guards
 # exists to prevent.
 #
-#   $1  file of wanted names, sorted
-#   $2  file of found names, sorted
+# The two sets are sorted here, in the C collation, rather than taken as
+# sorted. comm does not check its input and answers nonsense on a file
+# ordered another way, so a caller that sorted in the ambient locale --
+# or did not sort at all -- would get a difference that is neither
+# direction's answer. Sorting both the same way is the only thing that
+# makes the comparison mean what it says.
+#
+#   $1  file of wanted names
+#   $2  file of found names
 #   $3  headline when something wanted is not found
 #   $4  headline when something found was not wanted
 #
 # Sets guard_held to 1 when either direction has anything, and leaves it
 # alone otherwise, so a caller may run several and test once.
+#
+# A guard whose sets carry more than a name -- a file and a line, a
+# function and the width it reaches -- defines a guard_format function
+# taking those records on standard input and writing the lines to show.
+# Without one the records are indented and printed as they stand, which
+# is what a set of plain names wants.
 guard_hold() {
-    _gh_missing=$(comm -23 "$1" "$2")
+    _gh_want=$(mktemp) || { echo "FAIL: no temporary file for a comparison"; exit 1; }
+    _gh_have=$(mktemp) || { echo "FAIL: no temporary file for a comparison"; exit 1; }
+    LC_ALL=C sort -u "$1" > "$_gh_want"
+    LC_ALL=C sort -u "$2" > "$_gh_have"
+
+    _gh_missing=$(LC_ALL=C comm -23 "$_gh_want" "$_gh_have")
     if [ -n "$_gh_missing" ]; then
         echo "FAIL: $3"
-        printf '%s\n' "$_gh_missing" | sed 's/^/      /'
+        printf '%s\n' "$_gh_missing" | _gh_show
         guard_held=1
     fi
-    _gh_extra=$(comm -13 "$1" "$2")
+    _gh_extra=$(LC_ALL=C comm -13 "$_gh_want" "$_gh_have")
     if [ -n "$_gh_extra" ]; then
         echo "FAIL: $4"
-        printf '%s\n' "$_gh_extra" | sed 's/^/      /'
+        printf '%s\n' "$_gh_extra" | _gh_show
         guard_held=1
+    fi
+
+    [ -z "$_gh_want" ] || rm -f "$_gh_want"
+    [ -z "$_gh_have" ] || rm -f "$_gh_have"
+}
+
+# The caller's guard_format if it has defined one, indentation if not.
+# Compared against the bare name so that a function is told apart from a
+# program of the same name somewhere on the path.
+_gh_show() {
+    if [ "$(command -v guard_format 2>/dev/null)" = "guard_format" ]; then
+        guard_format
+    else
+        sed 's/^/      /'
     fi
 }

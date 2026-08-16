@@ -393,25 +393,22 @@ fi
 
 awk -F'\t' '{ print $1 "\t" $2 "\t" $3 "\t" $4 }' "$work/cursors" | sort -u > "$work/found"
 
-comm -13 "$work/recorded" "$work/found" > "$work/added"
-comm -23 "$work/recorded" "$work/found" > "$work/gone"
+# A record here is a tab-separated file, line, function and width, so
+# show it the way the register writes it rather than as the form the
+# two sets are compared in.
+guard_format() {
+    awk -F'\t' '{ print "      " $2 "  " $3 "()  " $4 "  (" $1 ")" }'
+}
 
-if [ -s "$work/added" ]; then
-    echo "FAILURES: these advance a word-wide slot and are not in the register:"
-    awk -F'\t' '{ print "      " $2 "  " $3 "()  " $4 "  (" $1 ")" }' "$work/added"
-    echo "      Add them to tests/narrow_cursors.golden in the same commit,"
-    echo "      with the class this check derives and the reason the bound"
-    echo "      is one the slot can reach."
-    fail=1
-fi
-
-if [ -s "$work/gone" ]; then
-    echo "FAILURES: these are in the register and no longer in the source,"
-    echo "      or their class changed:"
-    awk -F'\t' '{ print "      " $2 "  " $3 "()  " $4 "  (" $1 ")" }' "$work/gone"
-    echo "      Retire the line and the count above it together."
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/recorded" "$work/found" \
+    "in the register and no longer in the source, or of a class that
+      changed. Retire the line and the count above it together:" \
+    "advancing a word-wide slot and not in the register. Add them to
+      tests/narrow_cursors.golden in the same commit, with the class
+      this check derives and the reason the bound is one the slot can
+      reach:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # The size of the set, so that retiring a line is two edits and the
 # count going down is what says so.

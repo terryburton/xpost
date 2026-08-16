@@ -483,23 +483,15 @@ if [ ! -s "$work/recorded" ]; then
     exit 1
 fi
 
-comm -13 "$work/recorded" "$work/found" > "$work/added"
-comm -23 "$work/recorded" "$work/found" > "$work/gone"
-
-if [ -s "$work/added" ]; then
-    echo "FAILURES: these routes to the glyph raster are not in the register:"
-    sed 's/^/      /' "$work/added"
-    echo "      Add them to tests/show_clip_routes.golden in the same commit,"
-    echo "      with the reason the route meets the clipping region."
-    fail=1
-fi
-if [ -s "$work/gone" ]; then
-    echo "FAILURES: these are in the register and no longer in the tree:"
-    sed 's/^/      /' "$work/gone"
-    echo "      Retire the line and the count above it together, so that a"
-    echo "      population which shrank says so."
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/recorded" "$work/found" \
+    "in the register and no longer in the tree. Retire the line and the
+      count above it together, so that a population which shrank says
+      so:" \
+    "routes to the glyph raster that are not in the register. Add them
+      to tests/show_clip_routes.golden in the same commit, with the
+      reason the route meets the clipping region:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 entries=$(awk '/^entries /{ print $2; found = 1 } END { if (!found) print "" }' "$golden")
 have=$(grep -c . "$work/recorded")

@@ -122,21 +122,13 @@ grep -v '^[[:space:]]*#' "$golden" | grep -v '^[[:space:]]*$' | tr -d "$cr" \
 
 fail=0
 
-LC_ALL=C comm -23 "$work/have" "$work/want" > "$work/new"
-if [ -s "$work/new" ]; then
-    echo "FAIL: a standard operator reaches another by name, and is not listed:"
-    sed 's/^/      /' "$work/new"
-    echo "      the body must be bound after the whole set is promoted"
-    fail=1
-fi
-
-LC_ALL=C comm -13 "$work/have" "$work/want" > "$work/gone"
-if [ -s "$work/gone" ]; then
-    echo "FAIL: listed as reached by name, but frozen now:"
-    sed 's/^/      /' "$work/gone"
-    echo "      remove them from $(basename "$golden")"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/have" "$work/want" \
+    "reaching a standard operator by name and not listed: the body must
+      be bound after the whole set is promoted:" \
+    "listed as reached by name, but frozen now: remove them from
+      $(basename "$golden"):"
+[ "$guard_held" -eq 0 ] || fail=1
 
 [ "$fail" = 0 ] || exit 1
 echo "SUCCESS ($n promoted and $m unpromoted operator bodies, $(wc -l < "$work/have" | tr -d ' ') declared dynamic references)"

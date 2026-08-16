@@ -102,23 +102,15 @@ fi
 # names nothing the sweep could take.
 grep -vE ':name[A-Za-z_]*$' "$work/found" | sort -u > "$work/held"
 
-comm -23 "$work/held" "$work/allowed" > "$work/unlisted"
-if [ -s "$work/unlisted" ]; then
-    echo "check-c-held-objects: objects held in C and not named to the collector:" >&2
-    sed 's/^/      /' "$work/unlisted" >&2
-    echo "Say in tests/c_held_objects.register how each is named -- context," >&2
-    echo "entity or reached -- or stop holding it in C." >&2
-    fail=1
-fi
-
-# The register may not outlive what it describes: an entry for a holder
-# that is gone reads as cover for one that is not.
-comm -13 "$work/held" "$work/allowed" > "$work/stale"
-if [ -s "$work/stale" ]; then
-    echo "check-c-held-objects: the register names holders that are not there:" >&2
-    sed 's/^/      /' "$work/stale" >&2
-    fail=1
-fi
+# The register may not outlive what it describes either: an entry for a
+# holder that is gone reads as cover for one that is not.
+guard_held=0
+guard_hold "$work/held" "$work/allowed" \
+    "held in C and not named to the collector. Say in
+      tests/c_held_objects.register how each is named -- context,
+      entity or reached -- or stop holding it in C:" \
+    "named by the register as held in C, and not there:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 [ "$fail" -eq 0 ] || exit 1
 echo "SUCCESS ($nsrc sources read, $ndecl object declaration(s) seen," \
