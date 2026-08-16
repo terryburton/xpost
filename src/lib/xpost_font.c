@@ -461,9 +461,11 @@ xpost_font_init(void)
     FT_Error err_ft;
 
     err_ft = FT_Init_FreeType(&_xpost_font_ft_library);
-    if (!err_ft)
-    {
+    if (err_ft)
+        return 0;
+
 # ifdef HAVE_FONTCONFIG
+    {
         FcBool err_fc;
 
         err_fc = FcInit();
@@ -476,23 +478,18 @@ xpost_font_init(void)
         _xpost_font_fc_config = FcInitLoadConfigAndFonts();
         if (_xpost_font_fc_config == NULL)
             XPOST_LOG_ERR("cannot load Fc config and fonts");
-# endif
-
-        /* coming up is what asks to be taken down, so a module that
-           starts holding something cannot be left out of a list */
-        (void)xpost_at_quit(xpost_font_quit);
-
-        return 1;
     }
-
-    return 0;
+# endif
 #endif
 
-    /* coming up is what asks to be taken down, so a module that
-       starts holding something cannot be left out of a list */
+    /* coming up is what asks to be taken down, so a module that starts
+       holding something cannot be left out of a list. The configurations
+       reach it by one path rather than each carrying a copy: a copy per
+       branch is one the next configuration is written without, and where
+       both are compiled one of them is code that cannot run. */
     (void)xpost_at_quit(xpost_font_quit);
 
-return 1;
+    return 1;
 }
 
 void
