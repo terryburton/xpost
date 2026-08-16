@@ -104,6 +104,69 @@ while read -r name rest; do
     fi
 done < "$work/exempt"
 
+# ---- the pair, written by hand
+#
+# Sourcing the helper file is not the same as using what is in it. The
+# thing these guards have most in common is holding a derived set
+# against a register in both directions, and guard_hold is that; a guard
+# that instead writes comm -23 and comm -13 over the same two operands
+# has written the helper again, and the copy is where the drift starts.
+# One direction later gets edited and the other does not, and a guard
+# checking one direction is blind to whatever is absent from the list it
+# started from -- the state a newly added member is in, and the failure
+# the whole family exists to prevent.
+#
+# Only the PAIR is refused. A single comm that subtracts one set from
+# another to build a third is an ordinary set operation, not a check
+# written twice, and several guards need it.
+pairreg="$src/tests/direct_comm.exempt"
+guard_require_file "$pairreg" "the register of guards excused from guard_hold"
+tr -d '\r' < "$pairreg" | sed 's/#.*//' | awk 'NF { print }' > "$work/pairex"
+
+for f in "$src"/tests/check-*.sh; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f")
+    hand=$(sed -n 's/.*comm -\(23\|13\)  *\("[^"]*"\)  *\("[^"]*"\).*/\1 \2 \3/p' "$f" \
+        | awk '{ k = $2 " " $3; d[k] = d[k] $1 " " }
+               END { for (k in d) if (d[k] ~ /23/ && d[k] ~ /13/) print k }')
+    excuse=$(awk -v n="$b" '$1 == n { $1 = ""; sub(/^ /, ""); print; exit }' "$work/pairex")
+
+    if [ -z "$hand" ]; then
+        # and an excuse for a guard that has since adopted the helper
+        # would go on excusing whatever is written there next
+        if [ -n "$excuse" ]; then
+            echo "FAILURES: $b writes no comm pair and is still excused from"
+            echo "      guard_hold; take it out of tests/direct_comm.exempt"
+            fails=$((fails + 1))
+        fi
+        continue
+    fi
+    if [ -n "$excuse" ]; then
+        exempted=$((exempted + 1))
+        continue
+    fi
+    echo "FAILURES: $b holds two sets to each other by hand rather than"
+    echo "      through guard_hold, over:"
+    printf '%s\n' "$hand" | sed 's/^/          /'
+    echo "      Call guard_hold, or write the reason it cannot in"
+    echo "      tests/direct_comm.exempt."
+    fails=$((fails + 1))
+done
+
+# and an excuse for a guard that is not there at all
+while read -r name rest; do
+    [ -n "$name" ] || continue
+    if [ ! -e "$src/tests/$name" ]; then
+        echo "FAILURES: tests/direct_comm.exempt excuses $name, which is not"
+        echo "      in tests/ -- the exemption has outlived its file"
+        fails=$((fails + 1))
+    fi
+    if [ -z "$rest" ]; then
+        echo "FAILURES: tests/direct_comm.exempt names $name with no reason"
+        fails=$((fails + 1))
+    fi
+done < "$work/pairex"
+
 if [ "$checked" -eq 0 ]; then
     echo "FAILURES: no scripts were examined, so this proves nothing"
     exit 1

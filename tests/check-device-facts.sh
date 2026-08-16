@@ -285,27 +285,32 @@ fi
 sort -u "$work/keys.reg" -o "$work/keys.reg"
 
 # ---- the two directions
-unlisted=$(comm -23 "$work/keys.seen" "$work/keys.reg")
-if [ -n "$unlisted" ]; then
-    echo "FAIL: the devices state entries tests/device-facts does not classify:"
-    printf '%s\n' "$unlisted" | while read -r k; do
-        printf '      %-18s carried by%s\n' "$k" \
-            "$(awk -v k="$k" '$1 == k { printf " %s", $2 }' "$work/carry")"
+#
+# An entry is shown with the devices that carry it, which is what says
+# whether an unclassified key is one device's private business or a
+# question the whole family answers. A key the register names and no
+# device states has no carrier, and is shown as the bare name.
+guard_format() {
+    while read -r k; do
+        carried=$(awk -v k="$k" '$1 == k { printf " %s", $2 }' "$work/carry")
+        if [ -n "$carried" ]; then
+            printf '      %-18s carried by%s\n' "$k" "$carried"
+        else
+            printf '      %s\n' "$k"
+        fi
     done
-    echo "      Say in tests/device-facts what each is: a question every"
-    echo "      device must answer, with its answers, or why it is not one."
-    echo "      An entry nobody classified is a mechanism the family was"
-    echo "      never asked about."
-    fail=1
-fi
-stale=$(comm -13 "$work/keys.seen" "$work/keys.reg")
-if [ -n "$stale" ]; then
-    echo "FAIL: tests/device-facts classifies entries no device states:"
-    printf '%s\n' "$stale" | sed 's/^/      /'
-    echo "      A line that has outlived its entry reads exactly like one"
-    echo "      that still holds."
-    fail=1
-fi
+}
+
+guard_held=0
+guard_hold "$work/keys.seen" "$work/keys.reg" \
+    "stated by the devices and not classified by tests/device-facts.
+      Say there what each is: a question every device must answer, with
+      its answers, or why it is not one. An entry nobody classified is a
+      mechanism the family was never asked about:" \
+    "classified by tests/device-facts and stated by no device. A line
+      that has outlived its entry reads exactly like one that still
+      holds:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- and who carries each
 while read -r k; do

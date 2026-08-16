@@ -142,39 +142,22 @@ fi
 
 fail=0
 
-added=$(comm -13 "$work/register" "$work/have")
-removed=$(comm -23 "$work/register" "$work/have")
+guard_held=0
+guard_hold "$work/register" "$work/have" \
+    "in the register and no longer exported:" \
+    "newly exported and not in the register:"
 
-if [ -n "$added" ]; then
-    echo "FAIL: newly exported symbols not in the register:"
-    printf '%s\n' "$added" | sed 's/^/      /'
-    fail=1
-fi
-if [ -n "$removed" ]; then
-    echo "FAIL: symbols in the register no longer exported:"
-    printf '%s\n' "$removed" | sed 's/^/      /'
-    fail=1
-fi
-
-# the reserved-identifier rule, on what is actually exported
+# the reserved-identifier rule, on what is actually exported. The list
+# may shrink and may not grow, so an exception for a name that is no
+# longer exported is retired rather than left standing.
 grep '^_' "$work/have" > "$work/reserved" || true
-undeclared=$(comm -23 "$work/reserved" "$work/allowed-reserved")
-if [ -n "$undeclared" ]; then
-    echo "FAIL: exported names reserved to the implementation (C99 7.1.3):"
-    printf '%s\n' "$undeclared" | sed 's/^/      /'
-    echo "      give the symbol a name of its own, or -- if it truly cannot"
-    echo "      have one -- add a reserved-exception line saying why."
-    fail=1
-fi
-# the list may shrink and may not grow, so an exception for a name that is
-# no longer exported is retired rather than left standing
-stale=$(comm -13 "$work/reserved" "$work/allowed-reserved")
-if [ -n "$stale" ]; then
-    echo "FAIL: reserved-exception recorded for a name that is not exported:"
-    printf '%s\n' "$stale" | sed 's/^/      /'
-    echo "      remove the line; the exception list only shrinks."
-    fail=1
-fi
+guard_hold "$work/reserved" "$work/allowed-reserved" \
+    "exported and reserved to the implementation (C99 7.1.3): give the
+      symbol a name of its own, or -- if it truly cannot have one --
+      add a reserved-exception line saying why:" \
+    "recorded as a reserved exception for a name that is not exported:
+      remove the line; the exception list only shrinks:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 if [ "$fail" -ne 0 ]; then
     echo "FAILURES: the exported symbol set changed"

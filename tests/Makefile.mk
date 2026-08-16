@@ -119,6 +119,7 @@ tests/device_contract_test.ps \
 tests/device_destroy.golden \
 tests/library_statics.golden \
 tests/shared_helpers.exempt \
+tests/direct_comm.exempt \
 tests/device_destroy_test.ps \
 tests/device_dictstack_test.ps \
 tests/operator_dictstack_test.ps \

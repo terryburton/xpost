@@ -126,22 +126,14 @@ grep -n 'xpost_operator_cons *(ctx, *"[^"]*", *NULL' "$lib"/*.c "$lib"/*.h \
   | sort > "$work/current"
 grep -v '^#' "$register" | grep -v '^[[:space:]]*$' | sort > "$work/recorded"
 
-added=$(comm -23 "$work/current" "$work/recorded")
-removed=$(comm -13 "$work/current" "$work/recorded")
-
-if [ -n "$added" ]; then
-    echo "FAIL: an operator is looked up by string at run time, unregistered:"
-    printf '%s\n' "$added" | sed 's/^/      /'
-    echo "      reach it through XPOST_OP(ctx, <entry>) instead"
-    fail=1
-fi
-if [ -n "$removed" ]; then
-    echo "FAIL: the register lists a lookup that is no longer there:"
-    printf '%s\n' "$removed" | sed 's/^/      /'
-    echo "      delete the line from tests/op_lookups.golden -- the register"
-    echo "      only shrinks, and a stale entry makes room for a new lookup"
-    fail=1
-fi
+guard_held=0
+guard_hold "$work/current" "$work/recorded" \
+    "looked up by string at run time and unregistered: reach it through
+      XPOST_OP(ctx, <entry>) instead:" \
+    "listed by the register as a lookup that is no longer there: delete
+      the line from tests/op_lookups.golden -- the register only
+      shrinks, and a stale entry makes room for a new lookup:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # "Only shrinks" is a promise about the future, and one nothing could hold
 # to while the register had room in it: a new lookup passed as soon as it

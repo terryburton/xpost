@@ -1,0 +1,27 @@
+# Guards that hold two sets to each other without calling guard_hold.
+#
+# guard_hold in tests/guard-paths.sh is the one way a guard compares a
+# derived set against a register: both directions, both sorted the same
+# way, the items shown through the caller's own formatter if it has one.
+# A guard that writes the pair of comm invocations itself has copied
+# that helper, and a copy drifts -- one direction gets edited and the
+# other does not, leaving a check that is blind to whatever is absent
+# from the list it started from.
+#
+# So writing the pair by hand is refused unless the guard is named here
+# with a reason. Every name below is a THORN, not a settled difference:
+# the reason is that the conversion has not been done yet, and each one
+# names what it costs to do it. The list may shrink and may not grow.
+#
+# An entry naming a guard that has since adopted the helper, or a guard
+# that is no longer in tests/, is itself a failure -- an exemption that
+# outlives what it excused goes on to excuse whatever is written there
+# next.
+#
+#   <script>   <reason>
+
+check-device-roster.sh    thorn: thirteen comparisons, several over records rather than names; the largest single conversion left and the one most worth doing carefully
+check-dist-lists.sh       thorn: six comparisons over three different registers; conversion wants the exemption-aware form and has not been checked against it
+check-callout-bracket.sh  thorn: five comparisons; two are over sets built inside a loop, so the conversion is not purely textual
+check-device-skeleton.sh  thorn: four comparisons whose failure text is the guard's main output, and rephrasing it is the bulk of the work
+check-vm-host-state.sh    thorn: three comparisons across two registers, one of them platform-conditional
