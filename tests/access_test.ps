@@ -343,15 +343,40 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 { [1 2 3] readonly executeonly 0 get pop }
     /invalidaccess (execute-only reduces a read-only array) chk
 
-% Asking for a rung above the one an array sits on leaves it where it is.
-[1 2 3] noaccess readonly rcheck not
-    (read-only does not make a no-access array readable) bchk
-[1 2 3] noaccess readonly wcheck not
-    (read-only does not make a no-access array writable) bchk
-[1 2 3] executeonly readonly rcheck not
-    (read-only does not make an execute-only array readable) bchk
-[1 2 3] noaccess executeonly rcheck not
-    (execute-only does not make a no-access array readable) bchk
+% Asking for a rung above the one an array sits on is refused.
+%
+% PLRM 3.6.6 says access "can only be reduced, never increased", and both
+% operator entries say they reduce, which on its own reads as a request
+% for a rung already passed being nothing to do. But both entries also
+% list invalidaccess among their errors, and a request that can never
+% succeed is what that error is there for. Two independent
+% implementations consulted on this both refuse, and so does xpost. A
+% dictionary answers differently and deliberately so; the reason is with
+% the dictionary cases further down.
+%
+% The refusal is asked for directly first, and then the cases that follow
+% ask what the array can be MADE TO DO afterwards. Those are worth
+% keeping even though the answer is now settled: they are the property an
+% implementation cannot get wrong without the access attribute meaning
+% nothing, and they would still hold had the other reading won.
+{ [1 2 3] noaccess readonly pop }
+    /invalidaccess (read-only asked of a no-access array is refused) chk
+{ [1 2 3] executeonly readonly pop }
+    /invalidaccess (read-only asked of an execute-only array is refused) chk
+{ [1 2 3] noaccess executeonly pop }
+    /invalidaccess (execute-only asked of a no-access array is refused) chk
+
+% and the control: the rung an array already sits on is not a widening,
+% so asking for it again is accepted and changes nothing
+{ [1 2 3] noaccess noaccess pop }
+    /ok            (no-access asked of a no-access array is accepted) chk
+{ [1 2 3] executeonly executeonly pop }
+    /ok            (execute-only asked of an execute-only array is accepted) chk
+
+{ [1 2 3] noaccess readonly 0 99 put }
+    /invalidaccess (read-only does not let a no-access array be written) chk
+{ [1 2 3] noaccess executeonly 0 get pop }
+    /invalidaccess (execute-only does not let a no-access array be read) chk
 { [1 2 3] noaccess readonly 0 get pop }
     /invalidaccess (get from a no-access array read-only could not reopen) chk
 { [1 2 3] executeonly readonly 0 get pop }
@@ -366,10 +391,10 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
     /invalidaccess (a detour through read-only does not restore a no-access array) chk
 
 % A string carries its access the same way and answers the same.
-(abc) noaccess readonly rcheck not
-    (read-only does not make a no-access string readable) bchk
-(abc) executeonly readonly rcheck not
-    (read-only does not make an execute-only string readable) bchk
+{ (abc) noaccess readonly pop }
+    /invalidaccess (read-only asked of a no-access string is refused) chk
+{ (abc) executeonly readonly pop }
+    /invalidaccess (read-only asked of an execute-only string is refused) chk
 { (abc) noaccess readonly 0 get pop }
     /invalidaccess (get from a no-access string read-only could not reopen) chk
 { (abc) noaccess readonly length pop }
@@ -382,6 +407,15 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 % not merely hand a reopened dictionary back to whoever asked: it would
 % reopen the dictionary underneath every other holder, the one that sealed
 % it included. The reduction holds through the original reference.
+%
+% This is why a dictionary is answered unchanged where an array or a string
+% is refused outright. For those the request is about the one reference the
+% asker holds, so refusing it is a complete answer; for a dictionary there
+% is nothing the operator could grant the asker that it would not also be
+% granting everyone else, so the request has nowhere to go either way. The
+% two implementations consulted split on exactly this case and agree on
+% every other; xpost takes the accepting reading, and the case below is
+% what pins it.
 /shd 3 dict def
 shd /k 1 put
 /shd2 shd def

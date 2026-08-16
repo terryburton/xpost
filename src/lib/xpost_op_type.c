@@ -132,19 +132,27 @@ int Axcheck(Xpost_Context *ctx,
 }
 
 /* The four accesses are rungs of one ladder, in increasing order of
-   restriction: none, execute-only, read-only, unlimited (PLRM 3.3.2
+   permissiveness: none, execute-only, read-only, unlimited (PLRM 3.3.2
    "Access"). readonly, executeonly and noaccess each reduce an object to
    the rung they name, and access moves only down that ladder, never up
-   (PLRM 3.6.6). An object already at or below the rung asked for is
-   therefore as restricted as the request would make it, and is answered
-   unchanged: the reduction another operator already applied stands, and
-   for a dictionary -- whose access belongs to its value, so that every
-   reference to it shares one access -- it stands for every holder.
+   (PLRM 3.6.6). Asking for the rung an object already sits on is nothing
+   to do, and it is answered unchanged.
 
-   Leaving such an object alone also keeps the request off virtual memory.
-   Setting a dictionary's access writes its value, which a standing save
-   level must back up first and can be refused room for; a request that
-   changes nothing has no reason to ask.
+   Asking for a rung it has already passed is a widening, and what that
+   should do depends on the type. An array or a string carries its access
+   on the object, so the request is about that one reference and can be
+   answered on its own terms: it is refused, which is why PLRM 8.2 lists
+   invalidaccess among the errors of these operators at all. A dictionary
+   carries its access on its value, so every reference to it shares one
+   access and no widening could be confined to the asker -- it would
+   reopen the dictionary underneath every other holder, the one that
+   sealed it included. Since the widening cannot happen either way, the
+   dictionary is answered unchanged rather than refused. That is the
+   reading the specification leaves open and another implementation
+   consulted on it takes the same way; it also keeps the request off
+   virtual memory, since setting a dictionary's access writes its value,
+   which a standing save level must back up first and can be refused room
+   for.
 
    A file's access is a pair of independent read and write flags rather
    than a rung on this ladder, so it is set as asked. */
@@ -159,6 +167,22 @@ Xpost_Object _reduce_access(Xpost_Context *ctx,
     return xpost_object_set_access(ctx, o, access);
 }
 
+/* Whether the rung asked for is above the one the object sits on, for an
+   object whose access the operators refuse to widen. Files and
+   dictionaries are excluded for the reasons above. noaccess never asks
+   this: no-access is the foot of the ladder, so nothing sits below it. */
+static
+int _widens_access(Xpost_Context *ctx,
+                   Xpost_Object o,
+                   Xpost_Object_Tag_Access access)
+{
+    word type = xpost_object_get_type(o);
+
+    if (type == filetype || type == dicttype)
+        return 0;
+    return xpost_object_get_access(ctx, o) < access;
+}
+
 /* obj  executeonly  obj
    reduce access attribute for obj to execute-only */
 static
@@ -169,6 +193,8 @@ int Aexecuteonly(Xpost_Context *ctx,
     /* executeonly applies to arrays, strings and files, not dictionaries */
     if (type != arraytype && type != stringtype && type != filetype)
         return typecheck;
+    if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY))
+        return invalidaccess;
     o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_EXECUTE_ONLY);
     xpost_stack_push(ctx->lo, ctx->os, o);
     return 0;
@@ -215,6 +241,8 @@ int Areadonly(Xpost_Context *ctx,
     /* readonly applies to composite objects and files */
     if (!xpost_object_is_composite(o) && xpost_object_get_type(o) != filetype)
         return typecheck;
+    if (_widens_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY))
+        return invalidaccess;
     o = _reduce_access(ctx, o, XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
     /* as noaccess above: a dictionary's seal is a write to its value */
     if (xpost_object_get_type(o) == invalidtype)
