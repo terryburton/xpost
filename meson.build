@@ -2241,6 +2241,19 @@ test('svg-device',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
+# A clipPath is referenced by identity, and the document it is written
+# into cannot be taken back, so the counter naming those elements has to
+# be one a restore does not reach. Sets a clip, restores past it and sets
+# more, then counts the identities the document carries against the
+# number of distinct ones -- a repeated identity resolves to whichever
+# element came first, which is a fill cut by another clip's shape with
+# nothing raised.
+test('svg-clipid',
+  find_program('tests/run-svg-clipid-test.sh'),
+  args: [ xpost_exe ],
+  suite: cost_fast,
+  env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
+
 # pngalpha device: RGBA output where the erased page is transparent and
 # marks (including explicit white) are opaque; png stays RGB.
 test('pngalpha-device',

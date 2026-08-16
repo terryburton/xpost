@@ -37,6 +37,23 @@
     dup /.copydict get exec
     {
         currentdict //.internaldict /.pdfinit get exec    % create the content accumulator (outside VM)
+        % Where the identities written into the document are counted
+        % from. A clipPath is referenced by identity, so no two of them
+        % in one document may be named alike; and what has been written
+        % cannot be taken back, since the accumulator above is not
+        % virtual memory. A counter that a restore reaches would be wound
+        % back under the elements already written and hand their numbers
+        % out again, and a reference then resolves to whichever element
+        % came first -- a fill cut by another clip's shape, with nothing
+        % raised and a well formed document. So the counter is kept in
+        % global memory, which a restore of local memory does not reach,
+        % as the vector output record is (data/pdfwrite.ps). It is held
+        % here rather than shared, so each device counts its own document
+        % and two of them open at once cannot take each other's numbers.
+        currentglobal true setglobal
+        /.svgids 1 dict def
+        setglobal
+        .svgids /clipid 0 put
     currentdict
     } //.xpostsys /.indict get exec } bind
 
@@ -247,16 +264,19 @@
     % costs one element and keeps its curves.
     /ClipPath { % path IMAGE  .  -
     {
-        /.svgclipid currentdict /.svgclipid 2 copy known { get 1 add }{ pop pop 1 } ifelse def
+        % the next identity this document has not used: the counter is
+        % the one made at Create, which a restore does not reach
+        currentdict /.svgids get /clipid 2 copy get 1 add put
+        /.svgcid currentdict /.svgids get /clipid get def
         % the path walker reads the current path, so install the clip
         % shape for the walk and put the working path back after
         graphicsdict /currgstate get /currpath get
         exch
         graphicsdict /currgstate get exch /currpath exch put
-        (<clipPath id="xc) .put .svgclipid 20 string cvs .put ("><path d=") .put
+        (<clipPath id="xc) .put .svgcid 20 string cvs .put ("><path d=") .put
         [ { /m } { /l } { /c } { /h } //.xpostsys /.devpathforall get exec ] .putelems
         ("/></clipPath>\n) .put
-        (<g clip-path="url\(#xc) .put .svgclipid 20 string cvs .put (\)">\n) .put
+        (<g clip-path="url\(#xc) .put .svgcid 20 string cvs .put (\)">\n) .put
         graphicsdict /currgstate get exch /currpath exch put
         /.svgclipopen true def
     } //.xpostsys /.indict get exec } bind
@@ -317,6 +337,11 @@
         % marks must not stack on the emitted content (a later Emit
         % rewrites the output with the then-current page)
         currentdict //.internaldict /.pdfreset get exec
+        % and with it the identities, since a document holds one page and
+        % an identity need only be unique within the document it is
+        % written into. Counting from the same place for each of them is
+        % what keeps a page's output the same wherever it falls in a job.
+        currentdict /.svgids get /clipid 0 put
     } //.xpostsys /.indict get exec }
 >> def
 

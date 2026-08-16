@@ -401,6 +401,7 @@ tests/run-render-differ-test.sh \
 tests/run-setpagedevice-failure-test.sh \
 tests/run-statementedit-test.sh \
 tests/run-strict-ps-test.sh \
+tests/run-svg-clipid-test.sh \
 tests/run-svg-test.sh \
 tests/run-vecout-gc-test.sh \
 tests/run-vm-image-test.sh \

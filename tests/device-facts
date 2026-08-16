@@ -488,6 +488,7 @@ state .playrows record
 state .playrun record
 state Private bgr dscwrite jpeg pdfwrite png pngalpha raster svgwrite record
 state r svgwrite
+state .svgids svgwrite
 state .vecticket dscwrite pdfwrite
 state w dscwrite pdfwrite svgwrite
 state width every
