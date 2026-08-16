@@ -65,9 +65,10 @@
     { [ /DeviceN [ /A /B /C ] /DeviceRGB { 3 1 roll pop pop dup dup } ] }
                                                                { 0.2 0.4 0.6 }
     { [ /Indexed /DeviceRGB 1 <000000ffffff> ] }               { 1 }
+    { [ /CIEBasedABC << /WhitePoint [0.9505 1.0 1.089] >> ] }  { 0.2 0.4 0.6 }
 ] def
 /BASENAMES [ (DeviceGray) (DeviceRGB) (DeviceCMYK)
-             (Separation) (DeviceN) (Indexed) ] def
+             (Separation) (DeviceN) (Indexed) (CIEBasedABC) ] def
 
 % The operators that paint with the colour in force.
 /PAINTS [ { fill } { eofill } { stroke } ] def

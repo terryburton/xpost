@@ -464,12 +464,7 @@ setglobal
         graphicsdict /currgstate get /patdict pat put
         pat /PaintType 2 copy known { get 2 eq }{ pop pop false } ifelse {
             /bs graphicsdict /currgstate get /patbase get def
-            /n bs type /arraytype eq {
-                bs 0 get /Indexed eq { 1 }{
-                bs 0 get /Separation eq { 1 }{
-                bs 0 get /DeviceN eq { bs 1 get length }{
-                //.xpostsys /.spacecomps get bs 0 get get } ifelse } ifelse } ifelse
-            }{ //.xpostsys /.spacecomps get bs get } ifelse def
+            /n bs //.xpostsys /.spacecomponents get exec def
             n array astore
             graphicsdict /currgstate get exch /patcomps exch put
             % what currentcolor answers with: the components beneath an
@@ -535,13 +530,29 @@ currentglobal true setglobal
     /CIEBasedDEFG 4
 >> put
 .xpostsys /.ncomponents {
-    currentcolorspace
+    currentcolorspace //.xpostsys /.spacecomponents get exec
+} put
+
+% space  .spacecomponents  n
+% How many components a colour in this space carries. An Indexed colour
+% is one index and a Separation one tint whatever they reduce to; a
+% DeviceN carries one per name; a CIE-based family and a device space
+% each state their own count. The space may be a bare family name or an
+% array carrying parameters, since both reach here.
+%
+% One count rather than one per caller. What a space costs in components
+% decides how many numbers are read off the stack, how many are stored,
+% and how many are handed to a device, so two callers counting
+% differently is a colour read at one width and written at another.
+.xpostsys /.spacecomponents {
     dup type /arraytype eq {
         dup 0 get /Indexed eq { pop 1 }{
         dup 0 get /Separation eq { pop 1 }{
         dup 0 get /DeviceN eq { 1 get length }{
-        dup 0 get //.xpostsys /.ciecomps get exch known { 0 get //.xpostsys /.ciecomps get exch get }{
-        0 get //.xpostsys /.spacecomps get exch get } ifelse } ifelse } ifelse } ifelse
+        dup 0 get //.xpostsys /.ciecomps get exch known {
+            0 get //.xpostsys /.ciecomps get exch get }{
+        0 get //.xpostsys /.spacecomps get exch get
+        } ifelse } ifelse } ifelse } ifelse
     }{
         //.xpostsys /.spacecomps get exch get
     } ifelse
