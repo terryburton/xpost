@@ -1317,6 +1317,25 @@ setglobal
         % like returning is, so the dictionary comes off either way
         20 dict {
         /fd exch def
+        % The serial naming this form, stamped only where the dictionary
+        % carries none. A form dictionary is the program's, so what is
+        % there may be a serial this never issued: a program may write
+        % its own, and a copy of a form carries the original's.
+        %
+        % The counter and the cache it keys are both in graphicsdict,
+        % which is local virtual memory, and they have to stay together
+        % there. That is what makes a reissued serial harmless: a restore
+        % past the execform that raised the counter winds the counter
+        % back, and winds back the entries it named in the same act, so
+        % the number handed out a second time finds nothing filed under
+        % it. Move either one alone -- the counter to storage a restore
+        % does not reach, or the drawings to a store outside virtual
+        % memory that is keyed from here -- and the two disagree about
+        % which form a drawing belongs to. Nothing reports that
+        % disagreement; it is a wrong shape on a page. The glyph cache
+        % keeps the other arrangement, where the masks are not virtual
+        % memory and the serial is therefore the interpreter's own
+        % counter and not a value in a dictionary (.newfontserial).
         fd /.formid known not {
             graphicsdict /.formserial 2 copy known { get }{ pop pop 1 } ifelse
             fd /.formid 2 index put
