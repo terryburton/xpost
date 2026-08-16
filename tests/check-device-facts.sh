@@ -239,7 +239,7 @@ awk '
     /^[ \t]/ { if (last != "") prose[last] = prose[last] + 1; next }
     NF == 0 { next }
     $1 == "question" || $1 == "method" || $1 == "state" || $1 == "part" ||
-    $1 == "elsewhere" || $1 == "open" {
+    $1 == "elsewhere" || $1 == "open" || $1 == "trait" {
         print "KIND", $2, $1 > (out "/reg.kind")
         line = ""
         for (i = 3; i <= NF; i++) line = line " " $i
@@ -271,7 +271,12 @@ if [ ! -s "$work/reg.kind" ]; then
     exit 1
 fi
 
-awk '{ print $2 }' "$work/reg.kind" | sort > "$work/keys.reg"
+# A trait is not a key on a class -- it is a fact about how the device is
+# built, read from the source rather than from a dictionary -- so it is
+# held out of the comparison against what the devices state and checked
+# against the tree below instead.
+awk '$3 == "trait" { print $2 }' "$work/reg.kind" | sort > "$work/keys.trait"
+awk '$3 != "trait" { print $2 }' "$work/reg.kind" | sort > "$work/keys.reg"
 if [ "$(sort "$work/keys.reg" | uniq -d | grep -c . || true)" -ne 0 ]; then
     echo "FAIL: tests/device-facts classifies an entry twice:"
     sort "$work/keys.reg" | uniq -d | sed 's/^/      /'
@@ -348,6 +353,53 @@ awk '$3 == "elsewhere" || $3 == "open" { print $2, $3 }' "$work/reg.kind" \
     fi
 done
 
+# ---- the traits, which are not on a class
+#
+# Two things about a device are decided by how it was built rather than
+# by what it says: whether there is compiled code behind it at all, and
+# whether it drives its page out through a codec. Neither is a key on a
+# class, so neither can be read from a dictionary the way everything
+# above is. They are derived from the tree here and the register is held
+# to what is found, in both directions, exactly as the class entries are.
+#
+# A device is compiled if a driver is named for it, or if a driver
+# installs a leaf class named for it -- the second is how one driver body
+# comes to make two devices. A class whose name ends IMAGE is not a leaf:
+# it is the PostScript class the compiled drivers copy, and matching it
+# would call every device that derives from it compiled, which is the
+# opposite of the truth.
+: > "$work/trait.derived"
+while read -r d; do
+    u=$(echo "$d" | tr 'a-z' 'A-Z')
+    if [ -f "$src/src/lib/xpost_dev_$d.c" ] ||
+       grep -lq "\"\.xpost_${u}DEVICE\"" "$src"/src/lib/xpost_dev_*.c 2>/dev/null
+    then
+        echo "compiled $d" >> "$work/trait.derived"
+    fi
+done < "$work/made"
+for f in "$src"/src/lib/xpost_dev_*.c; do
+    [ -f "$f" ] || continue
+    grep -q "Xpost_Dev_Page_Codec[ \t][ \t]*_codec" "$f" || continue
+    b=$(basename "$f" .c); b=${b#xpost_dev_}
+    grep -qx "$b" "$work/made" && echo "pagecodec $b" >> "$work/trait.derived"
+done
+
+while read -r t; do
+    want=$(awk -v t="$t" '$1 == t { for (i = 2; i <= NF; i++) print $i }' \
+           "$work/reg.carry" | sort -u | tr '\n' ' ')
+    got=$(awk -v t="$t" '$1 == t { print $2 }' "$work/trait.derived" \
+          | sort -u | tr '\n' ' ')
+    if [ "$want" != "$got" ]; then
+        echo "FAIL: the trait $t is carried by a different set than the"
+        echo "      register names."
+        echo "        register: ${want:-(none)}"
+        echo "        the tree: ${got:-(none)}"
+        echo "      A trait is read from how the devices are built, so the"
+        echo "      register cannot be right about it by being edited."
+        fail=1
+    fi
+done < "$work/keys.trait"
+
 # ---- what a difference is, and where it is going
 #
 # A reason says why a difference exists. It does not say whether anyone
@@ -369,8 +421,9 @@ done
 # state is exempt: two devices holding different values there are not
 # differing about anything. method is not asked yet, and the entry for
 # that is below.
-awk '$3 == "question" || $3 == "elsewhere" || $3 == "open" || $3 == "part" {
-         print $2 }' "$work/reg.kind" | sort > "$work/needdisp"
+awk '$3 == "question" || $3 == "elsewhere" || $3 == "open" ||
+     $3 == "part" || $3 == "trait" { print $2 }' \
+    "$work/reg.kind" | sort > "$work/needdisp"
 while read -r k; do
     n=$(awk -v k="$k" '$1 == k { c++ } END { print c + 0 }' "$work/reg.disp")
     if [ "$n" -ne 1 ]; then

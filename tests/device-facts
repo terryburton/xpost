@@ -70,6 +70,50 @@
 # making a record over each target in turn.
 
 # ---------------------------------------------------------------------
+# The traits
+#
+# Two things about a device are settled by how it was built rather than
+# by anything it says, so neither can be read off a class the way the
+# entries below are. They are derived from the tree and held to these
+# lines in both directions.
+
+trait compiled bgr jpeg png pngalpha raster record
+    That there is compiled code behind this device. The PostScript
+    classes are the family's ordinary shape -- a class dictionary in
+    data/ saying what it paints with -- and a compiled driver is a
+    departure from it, so what wants saying is why each of the six
+    departs.
+    Four of them hold a raster of their own in a layout no PostScript
+    string is: png and jpeg hand rows straight to a codec that wants
+    them in its own arrangement, bgr keeps a byte order a display
+    expects, and raster keeps four such arrangements chosen per
+    instance. The record keeps a mark list rather than a raster and
+    replays it, which is a data structure with no PostScript spelling
+    that would not cost a round trip per mark.
+    None of the six is compiled for speed in the abstract. Each is
+    compiled because the thing it holds is not a PostScript object, and
+    the day one of them holds only what PostScript can hold is the day
+    it stops needing a driver. Note that this is a claim about the
+    pixels, not about the page: four of the six devices that take a page
+    in bands are PostScript classes with no driver at all.
+disposition settled
+
+trait pagecodec jpeg png
+    That this device drives its page out through a stream codec, which
+    is the descriptor of four calls in xpost_dev_driver.h -- open the
+    stream, write the rows, finish it, drop it -- rather than writing
+    the bytes itself.
+    Only these two compress. A codec that wants rows fed to it in order
+    and finished before the file means anything is a shape the plain
+    writers do not have: pgm, ppm, pbm and tiff put their bytes down as
+    they are, so the machinery that would carry them through a codec
+    would be carrying them past nothing.
+    So the descriptor has exactly the clients it was written for, and
+    the four other devices that take a page in bands do not want one. It
+    is not the band route that calls for a codec; it is compression.
+disposition settled
+
+# ---------------------------------------------------------------------
 # The questions
 
 question .colormodels pdfwrite dscwrite
