@@ -1009,6 +1009,19 @@ setglobal
             { /sethalftone cvx /typecheck signalerror } if
         ht /Thresholds get type dup /stringtype ne exch /filetype ne and
             { /sethalftone cvx /typecheck signalerror } if
+    }{ dup 6 eq {
+        pop
+        % the same threshold array as a type 3, delivered through a file
+        % rather than a string. The file is the whole of the difference:
+        % .htreadthresholds already draws Width x Height bytes out of it
+        % and puts the string back where the screen looks for it, so
+        % nothing downstream distinguishes the two
+        ht [ /Width /Height /Thresholds ] //.xpostsys /.htrequire get exec
+        ht /Width get type /integertype eq
+        ht /Height get type /integertype eq and not
+            { /sethalftone cvx /typecheck signalerror } if
+        ht /Thresholds get type /filetype ne
+            { /sethalftone cvx /typecheck signalerror } if
     }{ 5 eq {
         % a composite dictionary: one halftone per colorant, and the
         % Default the components that have no entry of their own fall
@@ -1025,7 +1038,7 @@ setglobal
         } forall
     }{
         /sethalftone cvx /rangecheck signalerror
-    } ifelse } ifelse } ifelse
+    } ifelse } ifelse } ifelse } ifelse
     end
 } put
 

@@ -57,6 +57,13 @@
                  /SpotFunction { pop pop 0 } >> >>
   sethalftone } (a complete type 5) works
 
+% A type 6 is a type 3 whose thresholds arrive through a file rather
+% than a string (PLRM Table 7.6), so its Thresholds is a filter over
+% the hexadecimal the type 3 case above spells inline.
+{ << /HalftoneType 6 /Width 2 /Height 2
+     /Thresholds (0180C8FF) /ASCIIHexDecode filter >>
+  sethalftone } (a complete type 6) works
+
 % and comes back as the type it was set to
 { << /HalftoneType 3 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone
   currenthalftone /HalftoneType get 3 ne
@@ -72,7 +79,7 @@
 { << /HalftoneType (three) /Width 2 /Height 2 /Thresholds <0180C8FF> >>
   sethalftone } /typecheck (a HalftoneType that is not an integer) raises
 
-[ -1 0 2 4 6 9 10 16 99 ] {
+[ -1 0 2 4 9 10 16 99 ] {
     /t exch def
     { << /HalftoneType t /Frequency 60 /Angle 45 /SpotFunction { pop pop 0 } >>
       sethalftone }
@@ -97,6 +104,17 @@
     /undefined (a type 3 with no Height) raises
 { << /HalftoneType 3 /Width 2 /Height 2 >> sethalftone }
     /undefined (a type 3 with no Thresholds) raises
+
+% A type 6 demands the same three entries, and PLRM Table 7.6 makes its
+% Thresholds a file specifically -- a string is the type 3 spelling.
+{ << /HalftoneType 6 /Height 2 /Thresholds (0180C8FF) /ASCIIHexDecode filter >>
+  sethalftone } /undefined (a type 6 with no Width) raises
+{ << /HalftoneType 6 /Width 2 /Thresholds (0180C8FF) /ASCIIHexDecode filter >>
+  sethalftone } /undefined (a type 6 with no Height) raises
+{ << /HalftoneType 6 /Width 2 /Height 2 >> sethalftone }
+  /undefined (a type 6 with no Thresholds) raises
+{ << /HalftoneType 6 /Width 2 /Height 2 /Thresholds <0180C8FF> >> sethalftone }
+  /typecheck (a type 6 whose Thresholds is a string, not a file) raises
 
 { << /HalftoneType 5
      /Gray << /HalftoneType 1 /Frequency 60 /Angle 45
