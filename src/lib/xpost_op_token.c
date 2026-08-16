@@ -1523,15 +1523,21 @@ void Sback(Xpost_Context *ctx,
     ++S->comp_.sz;
     xpost_string_get_pointer(ctx, *S)[0] = c;
 }
-static
-int Stoken(Xpost_Context *ctx,
-           Xpost_Object S)
+/* The scan itself, with no access rule of its own.
+   Two callers reach a string this way and they arrive asking different
+   questions. The token operator is reading a string on the program's
+   behalf, so it needs read access. The interpreter stepping a string it
+   is executing needs execute access, which PLRM 3.3.2 grants an
+   execute-only object -- one that "may still be executed by the
+   PostScript interpreter" -- and withholds from a no-access one. Each
+   asks its own rule before calling this, so the scan is shared and the
+   two rules cannot come to stand in for one another. */
+int xpost_token_string_scan(Xpost_Context *ctx,
+                            Xpost_Object S)
 {
     Xpost_Object t;
     int ret;
 
-    if (!xpost_object_is_readable(ctx, S))
-        return invalidaccess;
     xpost_stack_push(ctx->lo, ctx->hold, S);
 
     ret = toke(ctx, &S, Snext, Sback, &t);
@@ -1548,6 +1554,18 @@ int Stoken(Xpost_Context *ctx,
         xpost_stack_push(ctx->lo, ctx->os, xpost_bool_cons(0));
     }
     return 0;
+}
+
+/* string  token  post any true
+                  false
+   read a token from a string, which is reading the string */
+static
+int Stoken(Xpost_Context *ctx,
+           Xpost_Object S)
+{
+    if (!xpost_object_is_readable(ctx, S))
+        return invalidaccess;
+    return xpost_token_string_scan(ctx, S);
 }
 
 int xpost_oper_init_token_ops(Xpost_Context *ctx,

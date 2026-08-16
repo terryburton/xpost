@@ -34,6 +34,19 @@
 int xpost_oper_init_token_ops(Xpost_Context *ctx, Xpost_Object sd);
 
 /**
+ * @brief scan one token from the head of the string @p S, leaving the
+ * rest of the string, the token, and true on the operand stack, or just
+ * false where nothing remains to read.
+ *
+ * Carries no access rule. The token operator reads a string for the
+ * program and asks for read access first; the interpreter executing a
+ * string asks instead whether it may execute it, which PLRM 3.3.2
+ * settles differently. Sharing the scan keeps one rule from standing in
+ * for the other.
+ */
+int xpost_token_string_scan(Xpost_Context *ctx, Xpost_Object S);
+
+/**
  * @brief decode one number of a binary token or encoded number string
  * (PLRM 3.14.4/3.14.5): @p rep selects representation (0..31 32-bit
  * fixed point scaled by rep, 32..47 16-bit fixed point scaled by

@@ -67,6 +67,7 @@
 #include "xpost_op_array.h"  /* the shared array element access */
 #include "xpost_op_boolean.h"  /* the shared relations */
 #include "xpost_op_stack.h"  /* the shared index and roll rules */
+#include "xpost_op_token.h"  /* the shared scan, whose access rule is the caller's */
 #include "xpost_oplib.h"
 #include "xpost_handle.h"  /* the release a device's block was issued to be given up by */
 #include "xpost_dev_raster.h"  /* the arrangements a lent page may be asked for in */
@@ -1210,10 +1211,18 @@ int evalstring(Xpost_Context *ctx, Xpost_Object s)
     Xpost_Object b,t;
     int ret;
 
-    if (!xpost_stack_push(ctx->lo, ctx->os, s))
-        return stackoverflow;
+    /* A string reached as code is executed, not read on the program's
+       behalf, so the access asked of it is the one for execution: PLRM
+       3.3.2 permits an execute-only object to be executed and withholds
+       that from a no-access one. Going through the token operator asked
+       for read access instead, which no-access and execute-only both
+       withhold, so an execute-only string would not run -- leaving the
+       string with three rungs where the ladder has four. The scan is
+       shared with that operator; only the rule differs. */
+    if (xpost_object_get_access(ctx, s) == XPOST_OBJECT_TAG_ACCESS_NONE)
+        return invalidaccess;
     assert(ctx->gl->base);
-    ret = xpost_operator_exec(ctx, XPOST_OP_CODE(ctx, token));
+    ret = xpost_token_string_scan(ctx, s);
     if (ret)
         return ret;
     b = xpost_stack_pop(ctx->lo, ctx->os);

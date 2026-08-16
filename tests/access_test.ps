@@ -83,12 +83,29 @@ faildict /n 0 put
 { [1 2 3] dup readonly pop 0 9 put }           /ok            (array readonly is per-object, original writable) chk
 { 2 dict dup readonly pop /x 1 put }           /invalidaccess (dict readonly is shared, sealing one ref seals all) chk
 
-% --- exec: reading an array or string as code needs read access; a dict is
-%     only pushed, so exec of a noaccess dict is permitted ---
+% --- exec: executing an array or a string needs EXECUTE access, which is
+%     what execute-only grants and no-access withholds (PLRM 3.3.2: an
+%     execute-only object "may still be executed by the PostScript
+%     interpreter"). A dictionary is only pushed onto the dictionary
+%     stack, so exec of a noaccess dict is permitted.
+%
+%     Execute-only is the whole point of the rung: it withholds READING
+%     from the program while still permitting EXECUTION. If an
+%     execute-only string will not execute then execute-only and
+%     no-access are one rung for a string, and the ladder has three rungs
+%     rather than four. The string and the array must therefore answer
+%     alike, which is what the pair of cases below holds them to. ---
 { [1 2 3] cvx executeonly exec }         /ok            (exec executeonly array) chk
+{ (42) cvx executeonly exec pop }        /ok            (exec executeonly string) chk
 { 2 dict noaccess exec }                 /ok            (exec noaccess dict) chk
 { [1 2 3] cvx noaccess exec }            /invalidaccess (exec noaccess array) chk
 { (abc) noaccess exec }                  /invalidaccess (exec noaccess string) chk
+
+% and execute-only still withholds reading, which is what makes it a
+% different rung from unlimited rather than a synonym for it
+{ (42) executeonly 0 get pop }           /invalidaccess (get from an execute-only string) chk
+{ (42) executeonly length pop }          /invalidaccess (length of an execute-only string) chk
+{ (42) executeonly token pop pop pop }   /invalidaccess (token reads, so it refuses an execute-only string) chk
 
 % --- the access operators: readonly and noaccess accept composites (and files);
 %     executeonly excludes dictionaries; none accept a simple object ---
