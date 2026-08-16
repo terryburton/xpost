@@ -1843,9 +1843,9 @@ test('raster-class',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Form cache on a raster device: caching an execform builds an image device and
-# clears it with the rect-fill C operators, run through the ppm device. Guards
-# the regression where those operators, relocated into .internaldict, could no
-# longer be fetched by name.
+# clears it with the rect-fill C operators, run through the ppm device, so the
+# route depends on those operators being fetchable by name from where they
+# live.
 test('execform-cache',
   find_program('tests/run-ppm-test.sh'),
   args: [ xpost_exe, files('tests/execform_cache_test.ps') ],
@@ -2110,20 +2110,14 @@ test('memory-grow', memory_grow_exe,
 # outgoing window that cleared the pair whatever it held would leave the
 # incoming one hearing nothing. Not observable from PostScript -- the pair
 # is the context's -- so it is driven from a program and read from C.
-# Makes a window, so it runs under xvfb-run and never lands on the display
-# of whoever is running the suite.
-# The window devices need a display, and a test that opened a window would
-# put it on the display of whoever ran the suite. This one goes through
-# xvfb-run, which conjures one of its own, so the window fleet is reachable
-# by a test at all -- what the deferred window-device work needs before any
-# of it can be measured rather than reasoned about. It drives a window
-# device and replaces the page device under it; it does not check which
-# device the context names for events, which no operator reads.
+# A window device needs a display, and a test that opened a window would put
+# it on the display of whoever ran the suite, so these go through xvfb-run,
+# which conjures one of its own. That is what makes the window fleet
+# reachable by a test at all.
 if xcb_dep.found() and xvfb_run.found()
-  # GetPix reports what the page holds at one pixel, and this device used
-  # to ignore the coordinates and report the ground for all of them --
-  # unnoticed because no test could run a window device. Three inks laid
-  # side by side and each read back.
+  # GetPix reports what the page holds at one pixel, so it must answer from
+  # the coordinates it is given: three inks laid side by side and each read
+  # back.
   test('window-getpix', xvfb_run,
     args: [ '-a', xpost_exe, '-q', '--no-sandbox', '-d', 'xcb',
             '-g', '60x30+0+0', files('tests/window_getpix_test.ps') ],
@@ -2139,17 +2133,15 @@ if xcb_dep.found() and xvfb_run.found()
     timeout: 120)
 endif
 
-# The glyph cache is keyed by the serial a font dictionary carries, and
-# that dictionary is the program's to write: a serial that is not an
-# integer, or one whose pair with the character code leaves the integer
-# range, is no key at all. A glyph whose font has no key builds direct --
-# drawn, and drawn from its own outline rather than from the mask a
-# serial reduced into range would have found.
-# A font's serial keys the coverage masks its glyphs are cached as, and
-# those masks are not virtual memory: a counter kept where save and
-# restore reach would be wound back past a definefont and hand the number
-# to a different font, whose glyphs would then be served the first one's
-# masks. The counter is the interpreter's and only moves forward.
+# The glyph cache is keyed by the serial a font dictionary carries, and that
+# dictionary is the program's to write: a serial that is not an integer, or
+# one whose pair with the character code leaves the integer range, is no key
+# at all, and a glyph whose font has no key is drawn from its own outline
+# rather than served a mask some reduction into range happened to reach.
+# The masks are not virtual memory, so the counter that mints those serials
+# is the interpreter's and only moves forward: one kept where save and
+# restore reach would wind back past a definefont and hand the same number
+# to a second font, which would then be served the first one's glyphs.
 test('font-serial',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_serial_test.ps') ],
@@ -2261,8 +2253,9 @@ test('vm',
   suite: cost_fast,
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
-# roll operator: correctness (checked against Ghostscript) plus a large-roll
-# performance guard -- an O(n^2) roll on a deep stack times the test out.
+# roll operator: the rotation PLRM 8.2 defines, in both directions and for
+# a count larger than the group, plus a large-roll performance guard -- an
+# O(n^2) roll on a deep stack times the test out.
 test('roll',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/roll_test.ps') ],
@@ -2600,10 +2593,10 @@ test('op-closed-read',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # save/restore (and gsave/grestore) must revert the CTM. scale/concat/rotate
-# write the current-matrix array in place; that write must be backed up for
-# save/restore. Guards the regression where it was not -- a transform set inside
-# a save leaked past the restore, so dvips documents (casselman) rendered text
-# at a runaway scale and overflowed the operand stack.
+# write the current-matrix array in place, so that write is backed up at the
+# save level: a transform set inside a save that outlived the restore would
+# compound on the next one, and a document that sets a transform per page
+# would scale away.
 test('save-restore-ctm',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/save_restore_ctm_test.ps') ],
@@ -4465,8 +4458,8 @@ test('multipage',
 
 # Embedded Type 1 with a no-access Private: definefont must reach the loader and
 # read Subrs out of Private in C, not raise invalidaccess at a PostScript-level
-# read. Guards the regression where access enforcement broke every embedded
-# Type 1 font (the whole casselman corpus).
+# read. A font gives its Private no access precisely so a program cannot read
+# it, and the loader is not the program.
 test('font-type1-noaccess',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_type1_noaccess_test.ps') ],
@@ -4474,10 +4467,10 @@ test('font-type1-noaccess',
   env: { 'XPOST_DATA_DIR': meson.current_source_dir() / 'data' })
 
 # Embedded Type 1 with an over-allocated /Subrs array -- more slots declared than
-# filled, leaving null entries. definefont must still load the font. Guards the
-# regression where .loadfont1 rejected the whole font on the first null Subr,
-# which is why xpost rendered 0/13 of the (dvips Computer Modern) casselman corpus
-# while Ghostscript rendered all of it -- CMR10 declares 38 Subrs and fills 15.
+# filled, leaving null entries. definefont must still load the font: declaring
+# more subroutines than are supplied is ordinary in the wild, where CMR10
+# declares 38 and fills 15, and a loader that stopped at the first empty slot
+# would take no such font at all.
 test('font-type1-sparse-subrs',
   find_program('tests/run-ps-test.sh'),
   args: [ xpost_exe, files('tests/font_type1_sparse_subrs_test.ps') ],
