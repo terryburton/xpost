@@ -218,6 +218,27 @@ unsigned int xpost_font_face_glyph_name_count(void *face);
 int xpost_font_face_glyph_name_get(void *face, unsigned int gid, char *buf, int len);
 
 /**
+ * @brief Walk the standard glyph names, answering the glyph this face
+ * reaches for each through its character map.
+ *
+ * The names are the standard-encoding ones, which is what a face
+ * carrying no glyph names of its own can still be asked for by name:
+ * the name gives a code point and the character map gives the glyph.
+ * This is the enumeration behind the glyph complement published for
+ * such a face, and it is the same resolution
+ * xpost_font_face_glyph_name_index_get() performs for one name.
+ *
+ * @param[in] face The font face.
+ * @param[in] i The position in the standard names, counted from zero.
+ * @param[out] name The name at that position, owned by the font layer.
+ * @param[out] gid The glyph the character map gives, or 0 where the
+ * face has none for that name.
+ * @return 0 once @p i has passed the last standard name, 1 otherwise.
+ */
+int xpost_font_face_std_name_at(void *face, unsigned int i,
+                                const char **name, unsigned int *gid);
+
+/**
  * @typedef Xpost_Font_Outline_Sink
  * Callbacks receiving a glyph outline decomposed into path segments.
  *

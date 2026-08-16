@@ -1,0 +1,131 @@
+%!PS
+% Report a font's published glyph complement, and paint the sample the
+% wrapper compares. FONT arrives as -DFONT=/Name.
+%
+% The report and the pages are one run so that the two cannot disagree
+% about which face was asked: a name resolves through the font machinery
+% once, and what is said about the dictionary is said about the same
+% dictionary the pages were painted from.
+%
+% Page 1 is .notdef, and pages 2 onward are the sample names in the
+% order SAMPLES gives them. The wrapper holds each page against page 1:
+% a name the dictionary publishes has to paint something else, and a
+% name it does not publish has to paint what an unknown name paints.
+%
+% The sample is glyphs that carry ink. A blank glyph -- space is the one
+% that matters -- paints what an empty notdef paints, so a rule about
+% pages could not tell a published blank from an unpublished name, and
+% asking for one would be asking the wrapper a question it cannot
+% answer from what it can see.
+
+/SAMPLES [
+  % letters and figures a text face has, whichever face it is
+  /A /B /a /z /one /question
+  % a name no face has and no table resolves
+  /Qzzyx
+] def
+
+% PAIRS asks a sharper question than SAMPLES, and asks it without
+% knowing anything about the host's faces.
+%
+% Each pair is a standard name and the same character written as its
+% code point. The second form resolves through the character map
+% whatever the dictionary holds, so it says whether the face HAS the
+% glyph -- independently of whether the face was asked to publish a name
+% for it. That turns a claim about coverage into one a run can settle by
+% itself:
+%
+%   the face has the glyph  =>  the name must be published, and must
+%                               paint what the code point paints
+%   the face has it not     =>  the name must not be published, and
+%                               must paint what .notdef paints
+%
+% So a face missing a glyph is still held to something, and no count is
+% written down anywhere to be re-baselined when the host's fonts change.
+% It also holds the code point itself: were a name paired with the wrong
+% character, the two would paint differently on every face carrying
+% both, which is the first rule above.
+/PAIRS [
+  [ /Lslash /uni0141 ]          [ /OE /uni0152 ]
+  [ /breve /uni02D8 ]           [ /bullet /uni2022 ]
+  [ /caron /uni02C7 ]           [ /circumflex /uni02C6 ]
+  [ /dagger /uni2020 ]          [ /daggerdbl /uni2021 ]
+  [ /dotaccent /uni02D9 ]       [ /dotlessi /uni0131 ]
+  [ /ellipsis /uni2026 ]        [ /emdash /uni2014 ]
+  [ /endash /uni2013 ]          [ /fi /uniFB01 ]
+  [ /fl /uniFB02 ]              [ /florin /uni0192 ]
+  [ /fraction /uni2044 ]        [ /grave /uni0060 ]
+  [ /guilsinglleft /uni2039 ]   [ /guilsinglright /uni203A ]
+  [ /hungarumlaut /uni02DD ]    [ /lslash /uni0142 ]
+  [ /oe /uni0153 ]              [ /ogonek /uni02DB ]
+  [ /perthousand /uni2030 ]     [ /quotedblbase /uni201E ]
+  [ /quotedblleft /uni201C ]    [ /quotedblright /uni201D ]
+  [ /quotesinglbase /uni201A ]  [ /quotesingle /uni0027 ]
+  [ /ring /uni02DA ]            [ /tilde /uni02DC ]
+  % the ordinary text hyphen, which is the character at the standard
+  % encoding's own position for the name rather than the invisible one
+  % a line break would leave
+  [ /hyphen /uni002D ]
+] def
+
+/font FONT findfont def
+
+(FONTTYPE ) print
+font /FontType known { font /FontType get 20 string cvs print }{ (none) print } ifelse
+(\n) print
+
+font /CharStrings known
+  {
+    /cs font /CharStrings get def
+    (CSKNOWN YES\n) print
+    (CSLEN ) print cs length 20 string cvs print (\n) print
+    (NOTDEF ) print cs /.notdef known { (YES) }{ (NO) } ifelse print (\n) print
+    % which of the sample the dictionary publishes, in the painting order
+    SAMPLES {
+      (NAME ) print dup 40 string cvs print
+      ( ) print cs 1 index known { (IN) }{ (OUT) } ifelse print (\n) print
+      pop
+    } forall
+    % whether every name the font's own Encoding holds is published, a
+    % program that re-encodes from the keys needing the two to agree
+    /miss 0 def
+    font /Encoding get {
+      dup type /nametype eq
+        { dup /.notdef eq { pop } { cs exch known not { /miss miss 1 add def } if } ifelse }
+        { pop } ifelse
+    } forall
+    (ENCMISSING ) print miss 20 string cvs print (\n) print
+    % and the pairs, in the order they are painted
+    PAIRS {
+      aload pop
+      (PAIR ) print exch dup 40 string cvs print
+      ( ) print cs 1 index known { (IN) }{ (OUT) } ifelse print
+      pop ( ) print 40 string cvs print (\n) print
+    } forall
+  }
+  {
+    (CSKNOWN NO\n) print
+    SAMPLES { (NAME ) print 40 string cvs print ( OUT\n) print } forall
+    PAIRS {
+      aload pop
+      (PAIR ) print exch 40 string cvs print ( OUT ) print
+      40 string cvs print (\n) print
+    } forall
+  }
+ifelse
+flush
+
+% The pages. Page 1 paints nothing and page 2 paints .notdef, so the
+% wrapper can tell the two apart: a face whose .notdef carries no ink
+% paints the same page for a glyph it does not have and for one it has
+% that is itself blank, and a rule reading only "differs from .notdef"
+% would call the second of those absent. Faces like that are here.
+% Pages 3 onward are the sample, then each pair's two names.
+<< /PageSize [120 120] >> setpagedevice
+FONT findfont 90 scalefont setfont
+/paint { newpath 10 25 moveto glyphshow showpage } bind def
+showpage
+/.notdef paint
+SAMPLES { paint } forall
+PAIRS { aload pop exch paint paint } forall
+flush

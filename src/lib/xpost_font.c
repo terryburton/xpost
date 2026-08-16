@@ -1002,11 +1002,13 @@ xpost_font_face_glyph_index_get(void *face, char c)
 }
 
 #ifdef HAVE_FREETYPE2
-/* Adobe glyph name -> Unicode for the standard-encoding names, derived from
-   ISOLatin1Encoding: over U+0020..U+007E and U+00A0..U+00FF the encoding
-   position is the code point (and equals the Adobe glyph list value). Lets a
-   named /Encoding select a glyph on a face whose post table stores no names,
-   by resolving the name to Unicode and consulting the character map. */
+/* Adobe glyph name -> Unicode for the names the standard encodings hold
+   (PLRM Appendix E.6 and E.7). Over U+0020..U+007E and U+00A0..U+00FF
+   the ISOLatin1Encoding position is the code point, and the rest are
+   named below where they part company. Lets a named /Encoding select a
+   glyph on a face whose post table stores no names, by resolving the
+   name to Unicode and consulting the character map, and is the
+   enumeration such a face's glyph complement is published from. */
 static const struct { const char *name; unsigned short cp; } _xpost_glyph_unicode[] = {
     { "space", 0x0020 },
     { "exclam", 0x0021 },
@@ -1115,7 +1117,13 @@ static const struct { const char *name; unsigned short cp; } _xpost_glyph_unicod
     { "ordfeminine", 0x00AA },
     { "guillemotleft", 0x00AB },
     { "logicalnot", 0x00AC },
-    { "hyphen", 0x00AD },
+    /* the hyphen a line of text is set with. The Latin-1 position the
+       rest of this range follows holds the one a line break leaves
+       behind, which a face need carry no glyph for at all and which the
+       standard encoding does not put this name at: it names the
+       character at position 45, where the two encodings differ only in
+       calling it hyphen and minus. */
+    { "hyphen", 0x002D },
     { "registered", 0x00AE },
     { "macron", 0x00AF },
     { "degree", 0x00B0 },
@@ -1198,6 +1206,46 @@ static const struct { const char *name; unsigned short cp; } _xpost_glyph_unicod
     { "yacute", 0x00FD },
     { "thorn", 0x00FE },
     { "ydieresis", 0x00FF },
+    /* The rest of StandardEncoding (PLRM Appendix E.6). These are the
+       names whose character is not where the Latin-1 rule above puts
+       it: the encoding position and the code point part company above
+       U+00FF, at the ligatures and the letters no Latin-1 position
+       holds, and at the accents, which are the spacing forms rather
+       than the ASCII characters that resemble them -- the circumflex
+       and the tilde of an accent are not asciicircum and asciitilde,
+       which keep their own names and their own positions. */
+    { "quotesingle", 0x0027 },
+    { "grave", 0x0060 },
+    { "dotlessi", 0x0131 },
+    { "Lslash", 0x0141 },
+    { "lslash", 0x0142 },
+    { "OE", 0x0152 },
+    { "oe", 0x0153 },
+    { "florin", 0x0192 },
+    { "circumflex", 0x02C6 },
+    { "caron", 0x02C7 },
+    { "breve", 0x02D8 },
+    { "dotaccent", 0x02D9 },
+    { "ring", 0x02DA },
+    { "ogonek", 0x02DB },
+    { "tilde", 0x02DC },
+    { "hungarumlaut", 0x02DD },
+    { "endash", 0x2013 },
+    { "emdash", 0x2014 },
+    { "quotesinglbase", 0x201A },
+    { "quotedblleft", 0x201C },
+    { "quotedblright", 0x201D },
+    { "quotedblbase", 0x201E },
+    { "dagger", 0x2020 },
+    { "daggerdbl", 0x2021 },
+    { "bullet", 0x2022 },
+    { "ellipsis", 0x2026 },
+    { "perthousand", 0x2030 },
+    { "guilsinglleft", 0x2039 },
+    { "guilsinglright", 0x203A },
+    { "fraction", 0x2044 },
+    { "fi", 0xFB01 },
+    { "fl", 0xFB02 },
 };
 
 static long
@@ -1259,6 +1307,26 @@ xpost_font_face_glyph_name_get(void *face, unsigned int gid, char *buf, int len)
     (void)gid;
     (void)buf;
     (void)len;
+    return 0;
+#endif
+}
+
+int
+xpost_font_face_std_name_at(void *face, unsigned int i,
+                            const char **name, unsigned int *gid)
+{
+#ifdef HAVE_FREETYPE2
+    if (i >= sizeof _xpost_glyph_unicode / sizeof _xpost_glyph_unicode[0])
+        return 0;
+    *name = _xpost_glyph_unicode[i].name;
+    *gid = FT_Get_Char_Index((FT_Face)face,
+                             (FT_ULong)_xpost_glyph_unicode[i].cp);
+    return 1;
+#else
+    (void)face;
+    (void)i;
+    (void)name;
+    (void)gid;
     return 0;
 #endif
 }

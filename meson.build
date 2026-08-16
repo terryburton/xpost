@@ -4661,6 +4661,21 @@ test('check-device-facts',
   suite: cost_fast,
   args: [ meson.current_source_dir(), xpost_exe ])
 
+# A Type 42 font dictionary owes the glyph complement PLRM Table 5.7
+# states, whether or not the TrueType file behind it names its glyphs,
+# and what it publishes has to be what the face can be asked to paint.
+# Membership is therefore held against the rendered bytes rather than
+# against the dictionary that made the claim. Which faces the host has
+# is the host's business: the candidates are resolved through the font
+# machinery and a host offering no Type 42 face skips, so the count of
+# faces driven is checked rather than assumed.
+test('check-type42-charstrings',
+  find_program('tests/check-type42-charstrings.sh'),
+  suite: cost_fast,
+  args: [ xpost_exe,
+          meson.current_source_dir() / 'tests' / 'type42_charstrings_test.ps',
+          meson.current_build_dir() ])
+
 # A test runs on the device it names, and a test that wants a window
 # opens it on a display it conjured. A run with no device named takes
 # whichever one the build was configured with, which where the window

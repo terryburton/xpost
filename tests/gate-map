@@ -197,6 +197,7 @@ font test op-fontcache
 font test op-glyphcontext
 font test outline-font
 font test record-glyph
+font test check-type42-charstrings
 font width witness
 
 # ---- filter: files, the filters over them, and the scanner's reading

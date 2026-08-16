@@ -39,6 +39,7 @@ tests/check-awk-portability.sh \
 tests/check-memory-declarations.sh \
 tests/check-device-skeleton.sh \
 tests/check-width-comparisons.sh \
+tests/check-type42-charstrings.sh \
 tests/check-dict-homes.sh \
 tests/check-dist-lists.sh \
 tests/check-encoder-units.sh \
@@ -448,6 +449,7 @@ tests/run-thin-stroke-test.sh \
 tests/thin_stroke_test.ps \
 tests/token_sign_test.ps \
 tests/trapping_test.ps \
+tests/type42_charstrings_test.ps \
 tests/valgrind.supp \
 tests/vecout_gc_test.ps \
 tests/verdict.sh \

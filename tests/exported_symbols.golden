@@ -211,6 +211,7 @@ xpost_font_face_last_file
 xpost_font_face_new_from_memory
 xpost_font_face_new_from_name
 xpost_font_face_scale
+xpost_font_face_std_name_at
 xpost_font_face_transform
 xpost_font_face_units
 xpost_font_faces_held

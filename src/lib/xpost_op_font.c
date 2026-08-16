@@ -1100,8 +1100,10 @@ int _findfont(Xpost_Context *ctx,
            shared read-only between every dictionary the name produces,
            in global VM so a restore cannot unwind it from under the
            cache. The values are glyph indices, which the text
-           machinery accepts directly; a face without glyph names
-           publishes nothing. */
+           machinery accepts directly. A face carrying no glyph names is
+           enumerated by the standard names its character map answers
+           instead, which is what a TrueType program's dictionary holds;
+           a face that is neither publishes nothing. */
         istt = xpost_font_face_is_truetype(data.face);
         /* a TrueType-backed dictionary is a Type 42 font outright:
            publish the program as sfnts, chunked under the string
@@ -1234,9 +1236,19 @@ int _findfont(Xpost_Context *ctx,
                 Xpost_Object csdict;
                 char nbuf[128];
                 unsigned int gi;
+                const char *snm;
+                unsigned int sgi;
+                unsigned int i;
+                unsigned int nstd = 0;
                 unsigned int oldmode = ctx->vmmode;
+
+                for (i = 0; xpost_font_face_std_name_at(data.face, i,
+                                                        &snm, &sgi); i++)
+                    if (sgi)
+                        nstd++;
+
                 ctx->vmmode = GLOBAL;
-                csdict = xpost_dict_cons(ctx, nglyphs);
+                csdict = xpost_dict_cons(ctx, nglyphs + nstd);
                 for (gi = 0; gi < nglyphs; gi++)
                 {
                     if (!xpost_font_face_glyph_name_get(data.face, gi, nbuf,
@@ -1245,6 +1257,38 @@ int _findfont(Xpost_Context *ctx,
                     ret = xpost_dict_put(ctx, csdict,
                                          xpost_name_cons(ctx, nbuf),
                                          xpost_int_cons((integer)gi));
+                    if (ret)
+                    {
+                        ctx->vmmode = oldmode;
+                        goto fail;
+                    }
+                }
+                /* A file names its glyphs as it pleases, and a standard
+                   name it happens not to use is still a name this face
+                   answers: the character map reaches the glyph, so a
+                   lookup by that name finds it whatever the dictionary
+                   says. The ligatures are the ones that show -- a file
+                   naming its fi glyph after the character rather than
+                   after the ligature is ordinary -- and a dictionary
+                   without them would be missing names the same font
+                   paints, which is the way round that tells a program
+                   nothing is there when something is. The file's own
+                   naming stands where it has one; this only adds what
+                   it left unnamed. */
+                for (i = 0; xpost_font_face_std_name_at(data.face, i,
+                                                        &snm, &sgi); i++)
+                {
+                    Xpost_Object sname;
+
+                    if (!sgi)
+                        continue;
+                    sname = xpost_name_cons(ctx, snm);
+                    if (xpost_object_get_type(xpost_dict_get(ctx, csdict,
+                                                             sname))
+                        != invalidtype)
+                        continue;
+                    ret = xpost_dict_put(ctx, csdict, sname,
+                                         xpost_int_cons((integer)sgi));
                     if (ret)
                     {
                         ctx->vmmode = oldmode;
@@ -1268,6 +1312,77 @@ int _findfont(Xpost_Context *ctx,
                     _face_put(ctx, fname, "CharStrings", csdict);
                 ret = xpost_dict_put(ctx, fontdict, xpost_name_cons(ctx, "CharStrings"),
                                    csdict);
+                if (ret)
+                    goto fail;
+            }
+            else if (istt)
+            {
+                /* A TrueType program whose file names no glyph still
+                   makes a Type 42 dictionary, and PLRM Table 5.7 states
+                   CharStrings among the entries such a dictionary has,
+                   with an entry whose key is .notdef. The names the
+                   face can be asked for are then the standard ones,
+                   each reaching its glyph through the character map --
+                   the same resolution a name goes through when it is
+                   looked up one at a time -- so those are what the
+                   dictionary holds, and a name the character map does
+                   not answer is left out of it rather than published
+                   against a glyph that is not there.
+
+                   The glyph complement is what programs read this
+                   dictionary for: they size tables from it, ask it
+                   whether a name is known, and build an encoding out of
+                   its keys. Publishing the names the face cannot reach
+                   would answer all three wrongly. */
+                Xpost_Object csdict;
+                const char *snm;
+                unsigned int gi;
+                unsigned int i;
+                unsigned int nnames = 1; /* .notdef */
+                unsigned int oldmode;
+
+                for (i = 0; xpost_font_face_std_name_at(data.face, i,
+                                                        &snm, &gi); i++)
+                    if (gi)
+                        nnames++;
+
+                oldmode = ctx->vmmode;
+                ctx->vmmode = GLOBAL;
+                csdict = xpost_dict_cons(ctx, nnames);
+                /* glyph zero is the one a TrueType program has no name
+                   for, which is the glyph .notdef stands for */
+                ret = xpost_dict_put(ctx, csdict,
+                                     xpost_name_cons(ctx, ".notdef"),
+                                     xpost_int_cons(0));
+                for (i = 0; !ret
+                         && xpost_font_face_std_name_at(data.face, i,
+                                                        &snm, &gi); i++)
+                {
+                    if (!gi)
+                        continue;
+                    ret = xpost_dict_put(ctx, csdict,
+                                         xpost_name_cons(ctx, snm),
+                                         xpost_int_cons((integer)gi));
+                }
+                ctx->vmmode = oldmode;
+                if (ret)
+                    goto fail;
+                {
+                    Xpost_Object sealed =
+                        xpost_object_set_access(ctx, csdict,
+                                                XPOST_OBJECT_TAG_ACCESS_READ_ONLY);
+
+                    /* as above: the dictionary was made under the save
+                       level standing over this call, so the seal cannot
+                       be declined the room */
+                    if (xpost_object_get_type(sealed) == dicttype)
+                        csdict = sealed;
+                }
+                if (slot >= 0)
+                    _face_put(ctx, fname, "CharStrings", csdict);
+                ret = xpost_dict_put(ctx, fontdict,
+                                     xpost_name_cons(ctx, "CharStrings"),
+                                     csdict);
                 if (ret)
                     goto fail;
             }
