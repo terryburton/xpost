@@ -30,6 +30,12 @@ faildict /n 0 put
     } ifelse
 } bind def
 
+/bchk { % bool (label) -> -
+    exch { pop }
+    { (FAIL: ) print print (\n) print
+      faildict /n 2 copy get 1 add put } ifelse
+} bind def
+
 % --- arrays: reads need read access, writes need write access ---
 { [1 2 3] 0 4 put }                      /ok            (array unlimited put) chk
 { [1 2 3] readonly 0 get pop }           /ok            (array readonly get) chk
@@ -253,6 +259,104 @@ rgbdev /ImgData [ [ (\001) (\002) (\003) readonly ] ] put
 { systemdict noaccess pop }             /invalidaccess (noaccess systemdict) chk
 { 1183615869 internaldict noaccess pop } /invalidaccess (noaccess internaldict) chk
 
+% --- access only ever moves down ---
+% The four accesses are rungs of one ladder, in increasing order of
+% restriction: unlimited, read-only, execute-only, none (PLRM 3.3.2
+% "Access"). readonly, executeonly and noaccess each reduce access to the
+% rung they name, and "access can only be reduced, never increased"
+% (PLRM 3.6.6), so an object already at or below the rung asked for stays
+% where it is and the request is simply nothing to do. Every case below
+% names a starting rung, applies an operator, and asks what the object can
+% then be made to do, since an access that reads back right while the
+% operators go on obliging is no restriction at all.
+%
+% Files are knowingly NOT covered here. A file's access is a pair of
+% independent read and write flags rather than a rung on this ladder, so
+% neither the ordering these cases rest on nor the answers they expect
+% describe a file, and nothing below applies one.
+
+% Reducing works, and each rung withholds what it says it does. These are
+% the controls: they must keep passing, or a check that merely refuses
+% everything would look like a fix.
+[1 2 3] readonly rcheck
+    (an array reduced to read-only is readable) bchk
+[1 2 3] readonly wcheck not
+    (an array reduced to read-only is not writable) bchk
+[1 2 3] executeonly rcheck not
+    (an array reduced to execute-only is not readable) bchk
+[1 2 3] noaccess rcheck not
+    (an array reduced to no-access is not readable) bchk
+{ [1 2 3] cvx readonly executeonly exec }
+    /ok            (execute-only reduces a read-only array, which still executes) chk
+{ [1 2 3] cvx executeonly noaccess exec }
+    /invalidaccess (no-access reduces an execute-only array, which stops executing) chk
+{ [1 2 3] readonly readonly 0 get pop }
+    /ok            (read-only asked of a read-only array leaves it readable) chk
+{ [1 2 3] readonly executeonly 0 get pop }
+    /invalidaccess (execute-only reduces a read-only array) chk
+
+% Asking for a rung above the one an array sits on leaves it where it is.
+[1 2 3] noaccess readonly rcheck not
+    (read-only does not make a no-access array readable) bchk
+[1 2 3] noaccess readonly wcheck not
+    (read-only does not make a no-access array writable) bchk
+[1 2 3] executeonly readonly rcheck not
+    (read-only does not make an execute-only array readable) bchk
+[1 2 3] noaccess executeonly rcheck not
+    (execute-only does not make a no-access array readable) bchk
+{ [1 2 3] noaccess readonly 0 get pop }
+    /invalidaccess (get from a no-access array read-only could not reopen) chk
+{ [1 2 3] executeonly readonly 0 get pop }
+    /invalidaccess (get from an execute-only array read-only could not reopen) chk
+{ [1 2 3] noaccess readonly aload }
+    /invalidaccess (aload of a no-access array read-only could not reopen) chk
+{ [1 2 3] cvx noaccess readonly exec }
+    /invalidaccess (read-only does not make a no-access array executable) chk
+{ [1 2 3] cvx noaccess executeonly exec }
+    /invalidaccess (execute-only does not make a no-access array executable) chk
+{ [1 2 3] cvx noaccess readonly noaccess exec }
+    /invalidaccess (a detour through read-only does not restore a no-access array) chk
+
+% A string carries its access the same way and answers the same.
+(abc) noaccess readonly rcheck not
+    (read-only does not make a no-access string readable) bchk
+(abc) executeonly readonly rcheck not
+    (read-only does not make an execute-only string readable) bchk
+{ (abc) noaccess readonly 0 get pop }
+    /invalidaccess (get from a no-access string read-only could not reopen) chk
+{ (abc) noaccess readonly length pop }
+    /invalidaccess (length of a no-access string read-only could not reopen) chk
+{ (abc) readonly 0 get pop }
+    /ok            (a string reduced to read-only is still readable) chk
+
+% A dictionary carries its access on its value, not on the object, so every
+% reference to it shares one access (PLRM 3.3.2). A widening would therefore
+% not merely hand a reopened dictionary back to whoever asked: it would
+% reopen the dictionary underneath every other holder, the one that sealed
+% it included. The reduction holds through the original reference.
+/shd 3 dict def
+shd /k 1 put
+/shd2 shd def
+shd noaccess pop
+{ shd2 readonly pop }
+    /ok            (read-only asked of a no-access dictionary is accepted) chk
+shd rcheck not
+    (read-only through a second reference does not reopen the dictionary) bchk
+shd wcheck not
+    (read-only through a second reference does not make the dictionary writable) bchk
+{ shd /k get }
+    /invalidaccess (get through the original reference to a no-access dictionary) chk
+{ shd2 /k get }
+    /invalidaccess (get through the second reference to a no-access dictionary) chk
+
+% and the control: a dictionary that has not been reduced still seals
+/sealme 3 dict def
+sealme readonly pop
+sealme rcheck
+    (a dictionary reduced to read-only is readable) bchk
+sealme wcheck not
+    (a dictionary reduced to read-only is not writable) bchk
+
 % --- the read-into-string operators store into their string operand, so the
 %     destination needs write access. readstring, readline and readhexstring
 %     each fill the string a program hands them, and a read-only or no-access
@@ -302,12 +406,6 @@ rot4w (readstring into a noaccess string) held
 % or a string's is not part of any value and so is nothing for a restore
 % to reach, and a slot holding a sealed reference is reset with the
 % dictionary that holds the slot.
-
-/bchk { % bool (label) -> -
-    exch { pop }
-    { (FAIL: ) print print (\n) print
-      faildict /n 2 copy get 1 add put } ifelse
-} bind def
 
 /svd1 3 dict def
 save svd1 readonly pop restore
