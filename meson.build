@@ -4710,12 +4710,19 @@ test('check-device-facts',
 # is the host's business: the candidates are resolved through the font
 # machinery and a host offering no Type 42 face skips, so the count of
 # faces driven is checked rather than assumed.
+# Renders each glyph the face publishes and compares the bytes, so it
+# pays for an interpreter run per name and the cost follows whatever is
+# instrumenting the allocator. Twenty-eight seconds uninstrumented, and
+# it is the sanitized configuration that decides the rest; the limit is
+# its own rather than the default, which those configurations multiply
+# out to exactly what the work costs there.
 test('check-type42-charstrings',
   find_program('tests/check-type42-charstrings.sh'),
   suite: cost_fast,
   args: [ xpost_exe,
           meson.current_source_dir() / 'tests' / 'type42_charstrings_test.ps',
-          meson.current_build_dir() ])
+          meson.current_build_dir() ],
+  timeout: 300)
 
 # A test runs on the device it names, and a test that wants a window
 # opens it on a display it conjured. A run with no device named takes
