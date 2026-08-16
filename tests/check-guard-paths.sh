@@ -118,9 +118,20 @@ fi
 # after it is a directory or file beneath it, files(...) is a file in the
 # tree, and the two built things are named. An argument this cannot read
 # is a failure rather than something to pass over.
+#
+# The name is taken as everything up to the closing quote it is written
+# inside, rather than as a run of the characters names have been made of
+# so far. A reader spelling out those characters is narrower than the
+# set it reads, and the two part company at whichever name is first
+# written with one it does not list -- which does not read as a reader
+# that came up short. It reads as this check saying a guard is
+# registered nowhere, of a guard the same run has just executed, and the
+# name it says that of is the one piece of evidence pointing away from
+# the cause. Quoting is what the file guarantees about a name, so it is
+# what the name is read to.
 tr -d '\r' < "$src/meson.build" | awk '
-    /find_program\(.tests\/check-[a-z-]*\.sh.\)/ {
-        match($0, /tests\/check[a-z-]*\.sh/)
+    /find_program\(.tests\/check-[^'"'"']*\.sh.\)/ {
+        match($0, /tests\/check[^'"'"']*\.sh/)
         cur = substr($0, RSTART, RLENGTH)
         sub(/^tests\//, "", cur)
         collecting = 0
