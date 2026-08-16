@@ -136,14 +136,44 @@ setglobal
     dup /FontName known not {
         dup /FontName 3 index put
     } if
-    % a serial keys the glyph cache: derived dictionaries keep their
-    % parent's, the transform distinguishing their entries. The counter
-    % is not in virtual memory, so a restore past a definefont cannot
-    % wind it back and hand the number out again -- the masks it keys
-    % are not in virtual memory either, and a serial reissued to a
-    % different font would find the first font's masks
-    dup /.fontid known not {
+    % A serial keys the glyph cache, and it names one dictionary. PLRM
+    % 5.5 identifies a cached glyph by "the original base font or CIDFont
+    % dictionary from which the glyph description was obtained", so a
+    % serial that two dictionaries carry says their glyphs are the same
+    % glyphs, and where they are not, one font is painted the other's.
+    %
+    % A dictionary can carry a serial it was never issued: dict copy
+    % copies the entry along with the rest. The program that copied it
+    % did not ask for the serial and cannot know it is there -- this
+    % stamps it, the program never wrote it -- so PLRM 5.6's rule that a
+    % modified copy should not carry the original's unique ID is not one
+    % the program is in a position to obey. It is obeyed here instead:
+    % the dictionary the serial was issued to is recorded beside it, and
+    % a dictionary holding a serial issued to some other dictionary is
+    % given one of its own.
+    %
+    % Three cases are left alone, and each is a case where the sharing is
+    % right. A serial a program wrote itself carries no record of an
+    % issue, and is the program's business rather than this one's. A
+    % dictionary presented again is the dictionary its serial names. And
+    % a font derived by transform never arrives here at all: scalefont
+    % and makefont build a dictionary and nothing else, so a derived font
+    % keeps its parent's serial without passing this stamp, and its
+    % entries stay told apart by the transform the key already carries.
+    %
+    % The counter is not in virtual memory, so a restore past a
+    % definefont cannot wind it back and hand the number out again -- the
+    % masks it keys are not in virtual memory either, and a serial
+    % reissued to a different font would find the first font's masks.
+    dup /.fontid known not
+    { true }
+    { dup /.fontidof known
+      { dup /.fontidof get 1 index eq not }
+      { false } ifelse
+    } ifelse
+    {
         dup /.fontid //.internaldict /.newfontserial get exec put
+        dup /.fontidof 2 index put
     } if
     % FontDirectory denotes the global directory while the allocation mode
     % is global, so a font built there is filed there and outlives the

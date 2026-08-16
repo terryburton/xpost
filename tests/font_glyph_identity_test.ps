@@ -180,4 +180,69 @@ rvia66 rvia65 same
 csize atone eq
     (and selecting it that way asks the store for nothing new) assert
 
+% --- 4. a copy that changes what the names resolve to ---
+% PLRM 5.5 identifies a cached glyph by "the original base font or
+% CIDFont dictionary from which the glyph description was obtained". A
+% copy is a different dictionary, and where the copy also replaces the
+% descriptions, the same name in the two denotes different glyphs.
+%
+% The serial a font carries is stamped by definefont, not chosen by the
+% program, so a program copying a font dictionary inherits an identity it
+% never asked for and has no way to know it should strip. PLRM 5.6 tells
+% a program not to carry a unique ID across a change that alters the
+% glyphs' appearance -- which it can only obey for an ID it knows it
+% holds. So it is definefont that has to notice: a serial belongs to the
+% dictionary it was issued to, and a dictionary that merely carries a
+% copy of it is given one of its own.
+/GIsrc2 /big mkfont def
+/GIfive GIsrc2 definefont pop
+/rsrc2 GIsrc2 draw def
+rsrc2 rbig same (the source font paints the glyph its procedures draw) assert
+
+/GIswap GIsrc2 dup length dict copy def
+GIswap /CharProcs 3 dict put
+GIswap /CharProcs get /big {
+    750 0  0 0 300 300 setcachedevice
+    0 0 300 300 rectfill
+} put
+GIswap /CharProcs get /small {
+    750 0  0 0 300 300 setcachedevice
+    0 0 300 300 rectfill
+} put
+GIswap /CharProcs get /.notdef { 0 0 setcharwidth } put
+/GIsix GIswap definefont pop
+/rswap GIswap draw def
+
+rswap rsmall same
+    (a copy that replaces its procedures paints what its own procedures draw) assert
+rswap rbig same not
+    (and not what the font it was copied from drew under that name) assert
+GIsrc2 /.fontid get GIswap /.fontid get eq not
+    (a copy is given a serial of its own rather than inheriting one) assert
+
+% --- 5. what must not change: a font derived by transform ---
+% scalefont and makefont build a dictionary and nothing else -- neither
+% passes through definefont -- so a derived font keeps its parent's
+% serial without ever reaching the stamp. Its entries are told apart by
+% the transform, which is what the sharing rests on, and re-stamping at
+% definefont must leave that alone.
+/GIparent /big mkfont def
+/GIseven GIparent definefont pop
+/GIscaled GIparent 2 scalefont def
+GIparent /.fontid get GIscaled /.fontid get eq
+    (a scaled font keeps its parent's serial) assert
+GIparent GIscaled eq not
+    (though it is a dictionary of its own) assert
+GIparent /FontMatrix get 0 get GIscaled /FontMatrix get 0 get eq not
+    (and the transform that tells their entries apart really differs) assert
+
+% --- 6. what must not change: a serial the program wrote itself ---
+% definefont stamps where there is none; a serial a program put there is
+% the program's own and is left as it stands.
+/GIown /big mkfont def
+GIown /.fontid 4242 put
+/GIeight GIown definefont pop
+GIown /.fontid get 4242 eq
+    (a serial the program wrote is left as it stands) assert
+
 faildict /n get 0 eq { (SUCCESS) = } { (FAILURES: ) print faildict /n get = } ifelse
