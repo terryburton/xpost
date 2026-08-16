@@ -6,12 +6,18 @@
 # A guard that writes the pair of comm invocations itself has copied
 # that helper, and a copy drifts -- one direction gets edited and the
 # other does not, leaving a check that is blind to whatever is absent
-# from the list it started from.
+# from the list it started from, which is exactly the state a newly
+# added member is in.
 #
 # So writing the pair by hand is refused unless the guard is named here
-# with a reason. Every name below is a THORN, not a settled difference:
-# the reason is that the conversion has not been done yet, and each one
-# names what it costs to do it. The list may shrink and may not grow.
+# with a reason. Only the pair is refused: a single comm subtracting one
+# set from another to build a third is an ordinary set operation, and
+# several guards need it.
+#
+# THIS FILE IS EMPTY, AND THAT IS THE STATE TO KEEP IT IN. Every guard
+# that holds two sets to each other calls the helper. A name added here
+# is a guard that has stopped doing so, and it owes a reason and what
+# converting it would cost.
 #
 # An entry naming a guard that has since adopted the helper, or a guard
 # that is no longer in tests/, is itself a failure -- an exemption that
@@ -20,4 +26,3 @@
 #
 #   <script>   <reason>
 
-check-device-roster.sh    thorn: thirteen comparisons, several over records rather than names; the largest single conversion left and the one most worth doing carefully

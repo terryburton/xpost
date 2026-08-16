@@ -107,27 +107,17 @@ done
 # $1 label for the roster under test, $2 its file, $3 the accepted list it
 # is held to, $4 where each lives
 report_diff() {
-    missing=$(comm -23 "$3" "$2")
-    extra=$(comm -13 "$3" "$2")
-    if [ -n "$missing" ]; then
-        echo "FAIL: the $1 roster does not name:"
-        printf '%s\n' "$missing" | sed 's/^/      /'
-        echo "      ($4)"
-        fail=1
-    fi
-    if [ -n "$extra" ]; then
-        echo "FAIL: the $1 roster names devices the interpreter cannot make:"
-        printf '%s\n' "$extra" | sed 's/^/      /'
-        echo "      ($4)"
-        fail=1
-    fi
+    guard_held=0
+    guard_hold "$3" "$2" \
+        "not named by the $1 roster ($4):" \
+        "named by the $1 roster and not something the interpreter can
+      make ($4):"
+    [ "$guard_held" -eq 0 ] || fail=1
 }
 
-cmp -s "$work/cmdline" "$work/maker" ||
-    report_diff "command-line" "$work/cmdline" "$work/maker" \
+report_diff "command-line" "$work/cmdline" "$work/maker" \
         "src/bin/xpost_main.c against src/lib/xpost_interpreter.c"
-cmp -s "$work/pagedevice" "$work/maker" ||
-    report_diff "page-device" "$work/pagedevice" "$work/maker" \
+report_diff "page-device" "$work/pagedevice" "$work/maker" \
         "data/init.ps .devicemakers against src/lib/xpost_interpreter.c"
 
 # The fourth spelling: the roster the test wrappers run. It used to be a
@@ -166,8 +156,7 @@ for set in all lifetime marking optional; do
 done
 
 grep -vx -e gdi -e gl -e xcb "$work/maker" > "$work/headless"
-cmp -s "$work/fleet-all" "$work/headless" ||
-    report_diff "device-fleet" "$work/fleet-all" "$work/headless" \
+report_diff "device-fleet" "$work/fleet-all" "$work/headless" \
         "tests/device-fleet.sh DEVICE_FLEET_ALL against src/lib/xpost_interpreter.c,\
  less $exclude"
 
@@ -312,31 +301,19 @@ if [ ! -s "$work/says-yes" ]; then
     exit 1
 fi
 
-if ! cmp -s "$work/says-yes" "$work/routed"; then
-    unrouted=$(comm -23 "$work/says-yes" "$work/routed")
-    undeclared=$(comm -13 "$work/says-yes" "$work/routed")
-    if [ -n "$unrouted" ]; then
-        echo "FAIL: these devices declare BandedPage and are not routed through"
-        echo "      the band loop:"
-        printf '%s\n' "$unrouted" | sed 's/^/      /'
-        echo "      (their class against .playtargets, data/recorddev.ps)"
-        echo "      A page reaches such a device whole whatever --band-bytes"
-        echo "      names, so the declaration describes an arrival that cannot"
-        echo "      happen. Route it, or take the declaration back out where"
-        echo "      the class makes it and say what stands in the way."
-        fail=1
-    fi
-    if [ -n "$undeclared" ]; then
-        echo "FAIL: these devices are routed through the band loop and do not"
-        echo "      declare BandedPage:"
-        printf '%s\n' "$undeclared" | sed 's/^/      /'
-        echo "      (.playtargets, data/recorddev.ps, against their class)"
-        echo "      A device that has not said this is handed the whole page it"
-        echo "      expects everywhere else, and is being handed part of one"
-        echo "      here."
-        fail=1
-    fi
-fi
+guard_held=0
+guard_hold "$work/says-yes" "$work/routed" \
+    "declaring BandedPage and not routed through the band loop (their
+      class against .playtargets, data/recorddev.ps). A page reaches
+      such a device whole whatever --band-bytes names, so the
+      declaration describes an arrival that cannot happen. Route it, or
+      take the declaration back out where the class makes it and say
+      what stands in the way:" \
+    "routed through the band loop and not declaring BandedPage
+      (.playtargets, data/recorddev.ps, against their class). A device
+      that has not said this is handed the whole page it expects
+      everywhere else, and is being handed part of one here:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---------------------------------------------------------------------
 # And which of them leave nothing at the output path
@@ -408,29 +385,17 @@ fi
 # a device this build could not make was never asked, so the list it is
 # held to is narrowed rather than the device counted absent from it
 comm -12 "$work/nofile-fleet" "$work/pathasked" > "$work/nofile-want"
-if ! cmp -s "$work/left" "$work/nofile-want"; then
-    quiet=$(comm -23 "$work/left" "$work/nofile-want")
-    wrote=$(comm -13 "$work/left" "$work/nofile-want")
-    if [ -n "$quiet" ]; then
-        echo "FAIL: these devices left nothing at the output path and"
-        echo "      DEVICE_FLEET_NOFILE does not name them:"
-        printf '%s\n' "$quiet" | sed 's/^/      /'
-        echo "      Every wrapper that compares the bytes of a page reads that"
-        echo "      list to know which devices have none, so a device missing"
-        echo "      from it is one they will each ask for a file and find"
-        echo "      nothing. Name it there with what its page arrives as"
-        echo "      instead."
-        fail=1
-    fi
-    if [ -n "$wrote" ]; then
-        echo "FAIL: DEVICE_FLEET_NOFILE names these devices and they wrote a"
-        echo "      file:"
-        printf '%s\n' "$wrote" | sed 's/^/      /'
-        echo "      A device whose page is a file is one the byte comparisons"
-        echo "      can hold, and naming it there is what keeps them off it."
-        fail=1
-    fi
-fi
+guard_held=0
+guard_hold "$work/left" "$work/nofile-want" \
+    "leaving nothing at the output path and not named by
+      DEVICE_FLEET_NOFILE. Every wrapper that compares the bytes of a
+      page reads that list to know which devices have none, so a device
+      missing from it is one they will each ask for a file and find
+      nothing. Name it there with what its page arrives as instead:" \
+    "named by DEVICE_FLEET_NOFILE and writing a file after all. A device
+      whose page is a file is one the byte comparisons can hold, and
+      naming it there is what keeps them off it:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---------------------------------------------------------------------
 # The devices that hold their pixels outside virtual memory
@@ -488,30 +453,19 @@ if [ ! -s "$work/kindasked" ]; then
     exit 1
 fi
 comm -12 "$work/buffer-fleet" "$work/kindasked" > "$work/buffer-want"
-if ! cmp -s "$work/buffer-saw" "$work/buffer-want"; then
-    unlisted=$(comm -23 "$work/buffer-saw" "$work/buffer-want")
-    listed=$(comm -13 "$work/buffer-saw" "$work/buffer-want")
-    if [ -n "$unlisted" ]; then
-        echo "FAIL: these devices assemble their page in compiled code and hold"
-        echo "      pixels of their own, and DEVICE_FLEET_BUFFER does not name"
-        echo "      them:"
-        printf '%s\n' "$unlisted" | sed 's/^/      /'
-        echo "      The wrappers that compare a band against a whole page, and"
-        echo "      the one that asks which page a device refuses at start-up,"
-        echo "      read that list to know which devices to ask. A device"
-        echo "      missing from it is asked by none of them."
-        fail=1
-    fi
-    if [ -n "$listed" ]; then
-        echo "FAIL: DEVICE_FLEET_BUFFER names these devices and they no longer"
-        echo "      answer that way:"
-        printf '%s\n' "$listed" | sed 's/^/      /'
-        echo "      Either the class stopped assembling its page in compiled"
-        echo "      code or it stopped holding pixels; whichever it is, the"
-        echo "      questions those wrappers ask of it no longer fit."
-        fail=1
-    fi
-fi
+guard_held=0
+guard_hold "$work/buffer-saw" "$work/buffer-want" \
+    "assembling their page in compiled code and holding pixels of their
+      own, and not named by DEVICE_FLEET_BUFFER. The wrappers that
+      compare a band against a whole page, and the one that asks which
+      page a device refuses at start-up, read that list to know which
+      devices to ask. A device missing from it is asked by none of
+      them:" \
+    "named by DEVICE_FLEET_BUFFER and no longer answering that way.
+      Either the class stopped assembling its page in compiled code or
+      it stopped holding pixels; whichever it is, the questions those
+      wrappers ask of it no longer fit:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---------------------------------------------------------------------
 # And the copies of all of it written in prose
@@ -566,24 +520,14 @@ if [ ! -s "$work/manual-devices" ]; then
     echo "      shape this guard reads for has changed. Fix the guard."
     exit 1
 fi
-if ! cmp -s "$work/manual-devices" "$work/maker"; then
-    undocumented=$(comm -13 "$work/manual-devices" "$work/maker")
-    invented=$(comm -23 "$work/manual-devices" "$work/maker")
-    if [ -n "$undocumented" ]; then
-        echo "FAIL: the interpreter makes these devices and doc/MANUAL's table"
-        echo "      does not name them:"
-        printf '%s\n' "$undocumented" | sed 's/^/      /'
-        echo "      A device absent from that table is one a reader of the"
-        echo "      manual has no way of hearing about."
-        fail=1
-    fi
-    if [ -n "$invented" ]; then
-        echo "FAIL: doc/MANUAL's table names devices the interpreter cannot"
-        echo "      make:"
-        printf '%s\n' "$invented" | sed 's/^/      /'
-        fail=1
-    fi
-fi
+guard_held=0
+guard_hold "$work/manual-devices" "$work/maker" \
+    "named by doc/MANUAL's table and not something the interpreter can
+      make:" \
+    "made by the interpreter and not named by doc/MANUAL's table. A
+      device absent from that table is one a reader of the manual has no
+      way of hearing about:"
+[ "$guard_held" -eq 0 ] || fail=1
 
 # ---- the sentence about which devices band
 #
