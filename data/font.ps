@@ -74,11 +74,53 @@ setglobal
     dup 0 eq { pop /composite }{ 3 eq { /build }{ /face } ifelse } ifelse
 } put
 
+% The FontType a CIDFont carries, one per CIDFontType (PLRM Table 5.11).
+% The CIDFontType says where the glyph descriptions come from -- charstrings,
+% build procedures, TrueType descriptions, cached bitmaps -- and each has a
+% FontType of its own, distinct from the base-font type the same kind of
+% description carries. A CIDFontType 2 is stamped 11 and not the 42 a
+% TrueType base font would carry.
+.xpostsys /.cidfonttypes << 0 9 1 10 2 11 4 32 >> put
+
+% dict /operator  .cidstamp  dict
+% Stamp a CIDFont dictionary with the FontType its CIDFontType calls for.
+% PLRM 5.9 requires the entry of both definefont and defineresource, so
+% the correspondence and the refusal of a CIDFontType nobody defined live
+% here rather than once in each; the operator is named by the caller so
+% the refusal says which one was asked.
+%
+% Written whether or not the dictionary already carries a FontType. For a
+% CIDFont the CIDFontType is the authority: the FontType is derived from
+% it, so a program that wrote one itself wrote a value this can only
+% agree with or correct.
+.xpostsys /.cidstamp {
+    exch dup
+    /CIDFontType 2 copy known not
+        { pop pop pop cvx /invalidfont signalerror } if
+    get
+    dup type /integertype ne
+        { pop pop cvx /typecheck signalerror } if
+    //.xpostsys /.cidfonttypes get exch 2 copy known not
+        { pop pop pop cvx /invalidfont signalerror } if
+    get
+    1 index exch /FontType exch put
+    exch pop
+} bind put
+
 /definefont [ /anytype /dicttype ] { % /fontname -dict-
     dup type /dicttype ne
     2 index type /nulltype eq or {
         /definefont cvx /typecheck signalerror
     } if
+    dup /CIDFontType known {
+        % PLRM 5.9: definefont tells a CIDFont from a font by the presence
+        % of a CIDFontType entry, and every font operator does the same. A
+        % CIDFont carries its own structure rather than a base font's, so
+        % none of the checks below applies to it; what it takes here is the
+        % FontType its CIDFontType calls for, which is the entry that lets
+        % the rest of the font machinery treat it as a font at all.
+        /definefont //.xpostsys /.cidstamp get exec
+    }{
     dup /FontType 2 copy known { get }{ pop pop -1 } ifelse
     dup 0 eq {
         pop
@@ -162,6 +204,7 @@ setglobal
                 /definefont cvx /invalidfont signalerror
             } if
         } ifelse
+    } ifelse
     } ifelse
     } ifelse
     } ifelse

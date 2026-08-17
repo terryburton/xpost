@@ -144,6 +144,16 @@ setglobal
     dup null eq { pop }{
         2 index type ne { /defineresource cvx /typecheck signalerror } if
     } ifelse
+    % PLRM 5.9: a CIDFont dictionary also carries a FontType, inserted by
+    % definefont or by defineresource. This is the other of the two. The
+    % question is asked of the CATEGORY rather than of the dictionary,
+    % because a CIDFont defined here is one by virtue of the category it is
+    % being defined into; the correspondence itself belongs with the font
+    % machinery and is fetched from there rather than repeated. It has to
+    % happen before the instance is made read-only below.
+    dup /CIDFont eq {
+        1 index /defineresource //.xpostsys /.cidstamp get exec pop
+    } if
     currentglobal { //.xpostsys /.instof get exec }{ //.xpostsys /.linstof get exec } ifelse
     2 index 2 index put exch pop
     % PLRM 8.2: defineresource "makes the object read-only if its access is

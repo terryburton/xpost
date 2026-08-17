@@ -247,18 +247,89 @@ cp=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
 # definefont takes a type nothing implements
 [ "$(awk '$1 == 14 && $2 == "accepted"' "$work/got.type" | wc -l)" -gt 0 ] \
     && echo unknown-type-accepted >> "$work/got.diverge"
-# a CIDFont dictionary is never stamped with the FontType its kind requires
+sort -u "$work/got.diverge" -o "$work/got.diverge"
+
+# ---- the CIDFontType-to-FontType correspondence, held and probed
+#
+# The register carries PLRM Table 5.11 and .cidfonttypes carries the same
+# table in the interpreter, so the two are held to each other; a row added
+# to one without the other fails. Then each row is probed through BOTH
+# operators the specification requires the stamp of, because one of them
+# doing it looks exactly like both from any single test.
+sed -n 's|^\.xpostsys /\.cidfonttypes[[:space:]]*<<\(.*\)>>.*|\1|p' \
+    "$src/data/font.ps" \
+    | tr -s ' ' '\n' | grep . | paste - - | LC_ALL=C sort -n > "$work/cid.src"
+awk '$1 == "cidtype" && NF >= 3 { print $2 "\t" $3 }' "$work/reg" \
+    | LC_ALL=C sort -n > "$work/cid.reg"
+
+ncid=$(grep -c . "$work/cid.reg" || true)
+if [ "$ncid" -lt 1 ] || [ "$(grep -c . "$work/cid.src")" -lt 1 ]; then
+    echo "FAILURES: the CIDFontType table is empty on one side (register"
+    echo "      $ncid, source $(grep -c . "$work/cid.src")). Two empty sets"
+    echo "      agree about nothing, so this cannot report on them"
+    exit 1
+fi
+if ! diff_out=$(diff "$work/cid.reg" "$work/cid.src" 2>&1); then
+    echo "FAIL: tests/font-facts and .cidfonttypes disagree about which"
+    echo "      FontType a CIDFontType carries. PLRM Table 5.11 decides"
+    echo "      (< register, > interpreter):"
+    printf '%s\n' "$diff_out" | sed 's/^/        /'
+    fail=1
+fi
+
+# the declared count, for the reason every other count here is declared:
+# nothing else would stop the section being emptied
+ncidsaid=$(awk '/^cidtypes /{ print $2; found = 1 } END { if (!found) print "" }' \
+    "$register")
+case $ncidsaid in
+    ''|*[!0-9]*)
+        echo "FAILURES: tests/font-facts has no 'cidtypes <n>' line"
+        fail=1 ;;
+    *)  if [ "$ncidsaid" -ne "$ncid" ]; then
+            echo "FAILURES: tests/font-facts records $ncidsaid CIDFontTypes and holds $ncid"
+            fail=1
+        fi ;;
+esac
+
 {
     printf '/S 40 string def\n'
-    printf '<< /CIDFontName /XpostRegCID /CIDFontType 0 /CIDSystemInfo << >>\n'
-    printf '   /FontMatrix [0.001 0 0 0.001 0 0] /FontBBox [0 0 1000 1000] >>\n'
-    printf 'dup /FontType known { (E stamped\\n) }{ (E unstamped\\n) } ifelse print pop\n'
-} > "$work/cid.ps"
-cs=$( cd "$work" && XPOST_DATA_DIR="$srcdata" \
-      "$xpost" -q --no-sandbox -d null cid.ps </dev/null 2>/dev/null \
-      | awk '$1 == "E" { print $2; exit }' )
-[ "${cs:-}" = unstamped ] && echo cidfont-type-never-stamped >> "$work/got.diverge"
-sort -u "$work/got.diverge" -o "$work/got.diverge"
+    printf '/ask {\n'
+    printf '  /which exch def /ct exch def\n'
+    printf '  /d << /CIDFontType ct /CIDFontName /XpostRegCID\n'
+    printf '        /CIDSystemInfo << /Registry (X) /Ordering (X) /Supplement 0 >>\n'
+    printf '        /FontMatrix [0.001 0 0 0.001 0 0]\n'
+    printf '        /FontBBox [0 0 1000 1000] >> def\n'
+    printf '  { which (definefont) eq\n'
+    printf '      { /XpostRegCID d definefont pop }\n'
+    printf '      { /XpostRegCID d /CIDFont defineresource pop } ifelse\n'
+    printf '  } stopped pop\n'
+    printf '  (E ) print ct S cvs print ( ) print which print ( ) print\n'
+    printf '  d /FontType known { d /FontType get S cvs print }{ (none) print } ifelse\n'
+    printf '  (\\n) print flush clear\n'
+    printf '} bind def\n'
+    while read -r ct ft; do
+        printf '%s (definefont) ask\n' "$ct"
+        printf '%s (defineresource) ask\n' "$ct"
+    done < "$work/cid.reg"
+} > "$work/cidstamp.ps"
+
+( cd "$work" && XPOST_DATA_DIR="$srcdata" \
+  "$xpost" -q --no-sandbox -d null cidstamp.ps </dev/null 2>/dev/null ) \
+  | awk '$1 == "E" && NF == 4 { print $2 "\t" $3 "\t" $4 }' > "$work/cid.got"
+
+: > "$work/cid.want"
+while read -r ct ft; do
+    printf '%s\tdefinefont\t%s\n' "$ct" "$ft" >> "$work/cid.want"
+    printf '%s\tdefineresource\t%s\n' "$ct" "$ft" >> "$work/cid.want"
+done < "$work/cid.reg"
+
+if ! diff_out=$(diff "$work/cid.want" "$work/cid.got" 2>&1); then
+    echo "FAIL: a CIDFont was not stamped with the FontType its CIDFontType"
+    echo "      calls for. PLRM 5.9 requires the entry of definefont AND of"
+    echo "      defineresource (< wanted, > got):"
+    printf '%s\n' "$diff_out" | sed 's/^/        /'
+    fail=1
+fi
 
 guard_held=0
 guard_hold "$work/reg.diverge" "$work/got.diverge" \
@@ -275,7 +346,7 @@ if [ -n "$thorns" ]; then
 fi
 
 [ "$fail" = 0 ] || exit 1
-printf 'SUCCESS (%s font type(s) held to what definefont accepts, %s operator-by-type route(s), %s divergence(s) each found by its own probe)\n' \
+printf 'SUCCESS (%s font type(s) held to what definefont accepts, %s operator-by-type route(s), %s CIDFontType stamp(s) held through both operators, %s divergence(s) each found by its own probe)\n' \
     "$(grep -c . "$work/reg.type")" "$(grep -c . "$work/reg.route")" \
-    "$(grep -c . "$work/reg.diverge")"
+    "$ncid" "$(grep -c . "$work/reg.diverge")"
 exit 0

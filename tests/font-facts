@@ -122,8 +122,30 @@ reads 4
 #
 #   <what>  <settled|thorn|heading>  <reason>
 
+# The FontType a CIDFont carries, one per CIDFontType (PLRM Table 5.11).
+#
+# A CIDFont is not a base font, but every font operator has to treat it as
+# one, and this correspondence is what makes that possible: definefont and
+# defineresource each stamp the dictionary with the FontType its
+# CIDFontType calls for, and from then on the dictionary answers like a
+# font. The two numbers are deliberately different -- TrueType glyph
+# descriptions are FontType 42 in a base font and 11 in a CIDFont -- so a
+# CIDFont that states 42 itself is corrected to 11 rather than believed.
+#
+# Held to the interpreter's own table in both directions, and each row
+# probed through BOTH operators, because the specification requires the
+# stamp of both and one of them getting it would look exactly like both.
+#
+#   cidtype <CIDFontType>  <FontType>  <where the glyph descriptions come from>
+
+cidtype 0   9   charstrings, as in a Type 1 base font
+cidtype 1   10  build procedures, as in a Type 3 base font
+cidtype 2   11  TrueType glyph descriptions, as in a Type 42 base font
+cidtype 4   32  bitmaps installed in the font cache
+
+cidtypes 4
+
 charpath-of-a-procedure-glyph  settled  A Type 3 glyph is described by a procedure, and charpath through one appends only the advance rather than the outline the procedure would paint. MEASURED as a degenerate box. This is not a deviation to correct: BOTH reference implementations consulted return the same degenerate box for the same font, to the digit. A glyph built by running a procedure has no outline until it is run, and running it would paint rather than append; PLRM 5.7 acknowledges as much where it excuses glyphs described by images. Changing it would put this interpreter alone among the three
 
-cidfont-type-never-stamped  thorn  PLRM Table 5.11 requires definefont and defineresource to stamp a CIDFont dictionary with a FontType saying which kind of CIDFont it is -- 9, 10, 11 or 32 by its CIDFontType -- and for a CIDFontType 2 to REPLACE the 42 the dictionary states with 11. None of the four values is ever written here, so the four rows of PLRM's table that this register would otherwise carry do not exist as anything a program can observe. What removes it is stamping at both operators; the cost is that nothing here reads the value yet, so the stamp would be written for the specification's sake and for a program that asks, with no machinery depending on it -- which is worth doing but is not the same job as making the routes agree
 
-divergences 2
+divergences 1
