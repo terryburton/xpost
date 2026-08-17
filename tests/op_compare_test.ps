@@ -1,3 +1,4 @@
+%!testlib
 % The ordered comparisons and what they refuse, run through
 % `xpost -q --no-sandbox -d null` by run-ps-test.sh.
 %
@@ -16,23 +17,8 @@
 % which that test compares between the roads without saying what either
 % should answer.
 
-/failcount 0 def
-/assert { exch { pop } { (FAIL: ) print print (\n) print
-    /failcount failcount 1 add store } ifelse } def
 
-/bad 0 def
-/note { (FAIL: ) print print ( ) print print (\n) print
-    /bad bad 1 add store } def
 
-% {proc} (what)  -  the pairing is refused with a typecheck
-/refuses { % {proc} (what)
-    /c.w exch def /c.p exch def
-    clear /c.p load stopped {
-        $error /errorname get /typecheck ne
-            { c.w (raised something other than typecheck) note } if
-    }{ c.w (was not refused) note } ifelse
-    clear
-} def
 
 % {proc} expected (what)  -  the pairing answers as given
 /answers { % {proc} bool (what)
@@ -71,17 +57,17 @@
 % --------------------------------------------------------- what is refused
 % Everything that is neither two numbers nor two strings.
 
-{ (a) 1 lt }    (a string against a number) refuses
-{ 1 (a) gt }    (a number against a string) refuses
-{ null null lt } (two nulls) refuses
-{ /a /b lt }    (two names) refuses
-{ true false gt } (two booleans) refuses
-{ [1] [2] lt }  (two arrays) refuses
-{ 3 dict 3 dict le } (two dictionaries) refuses
-{ {1} {2} ge }  (two procedures) refuses
-{ 1 null lt }   (a number against a null) refuses
-{ (a) /a gt }   (a string against a name) refuses
-{ 1 true lt }   (a number against a boolean) refuses
+{ (a) 1 lt }    /typecheck (a string against a number) raises
+{ 1 (a) gt }    /typecheck (a number against a string) raises
+{ null null lt } /typecheck (two nulls) raises
+{ /a /b lt }    /typecheck (two names) raises
+{ true false gt } /typecheck (two booleans) raises
+{ [1] [2] lt }  /typecheck (two arrays) raises
+{ 3 dict 3 dict le } /typecheck (two dictionaries) raises
+{ {1} {2} ge }  /typecheck (two procedures) raises
+{ 1 null lt }   /typecheck (a number against a null) raises
+{ (a) /a gt }   /typecheck (a string against a name) raises
+{ 1 true lt }   /typecheck (a number against a boolean) raises
 
 % ------------------------------------------------- the general pair differ
 % eq and ne compare any two objects and must keep doing so, since that
@@ -111,6 +97,4 @@ true true eq (eq compares two booleans) assert
 { ge } (ge with nothing) short
 { le } (le with nothing) short
 
-bad 0 eq (every comparison answers or refuses as defined) assert
-
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict

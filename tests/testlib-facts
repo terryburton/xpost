@@ -6,13 +6,51 @@
 # `%!testlib` on its first line; run-ps-test.sh prepends it to those and to
 # nothing else, because some suites here assert that a program's own
 # dictionary starts empty or count the dictionary stack, and six read their
-# own colour_sampling_test.ps           refuses
+# own source through currentfile.
+#
+# This file is the list of suites that have NOT moved, with the shapes each
+# one's own runner takes -- which is what a conversion has to preserve if
+# the move is to be checked by diffing the suite's output rather than by
+# reading it. The list is held to the tree in BOTH directions: a suite that
+# grows its own runner and is not named here fails, and a name here whose
+# suite no longer has one fails too. So the list can only shrink, and it
+# shrinks by conversion rather than by editing.
+#
+# The guard also refuses the one mistake that would undo all of this: a
+# suite that asks for the framework and then defines one of its names
+# anyway. That shadows the shared runner with a local one silently, which
+# is exactly the arrangement that let a false pass sit in a hundred and
+# forty-six files.
+#
+# TWO DISPOSITIONS, and the second is why this file is a register rather
+# than a to-do list. `own` is a suite that has not moved yet. `cannot` is
+# one that must not move, and carries the reason: a suite whose subject is
+# the state of a program's own dictionary cannot be handed a framework
+# defined into that dictionary, because the framework is then what it
+# reports. Without somewhere to say that, the only records of it would be
+# a conversion that failed and whoever next tried the same thing.
+#
+# HOW A CONVERSION IS CHECKED, and what the check does not cover. Every
+# suite moved here was run through the harness before and after and required
+# to print the same bytes. That is a strong check on behaviour and no check
+# at all on strength: a suite whose own runner fixed the expected error name
+# inside itself, converted to a shared runner that accepts any error, goes
+# on printing SUCCESS while asking a weaker question. So a conversion that
+# changes which question a case asks must also show the case failing when
+# the answer is wrong.
+#
+# The prose above ends at the two legend lines below, and the guard checks
+# they are still there. A rewrite of this file that generates the register
+# by finding the first `own` in it truncates the header at the word in
+# `own source through currentfile` and merges the first entry onto the
+# comment, which nothing reading only the uncommented lines can see.
+#
+#   own    <suite>  <runner>[ <runner>...]
+#   cannot <suite>  <runner>[ <runner>...]  <reason>
 
-own    op_compare_test.ps             refuses
 own    op_radix_test.ps               outcome
-own    privatedict_install_test.ps    refuses
 
 cannot startup_surface_test.ps        raises  it asserts that a program's own dictionary starts empty, which is the first thing it checks and the reason it exists; a framework defined into that dictionary is exactly what it would report. MEASURED: converted, it fails on "userdict starts empty" and on nothing else
 
-owns 3
+owns 1
 cannots 1

@@ -42,6 +42,26 @@ if [ "$(grep -c . "$work/shared")" -lt 4 ]; then
     exit 1
 fi
 
+# ---- the register still carries its own header
+#
+# Everything below reads only the uncommented lines, so none of it can see the
+# header. A rewrite that generates the register by finding the first `own` in
+# the file truncates the header mid-sentence at the word in `own source through
+# currentfile` and merges the first entry onto the comment, and no other check
+# here can tell. The two legend lines are the end of the prose, so requiring
+# them requires the prose that precedes them.
+for legend in 'own    <suite>' 'cannot <suite>'; do
+    if ! grep -q "^#   $legend" "$src/tests/testlib-facts"; then
+        echo "FAIL: tests/testlib-facts has lost the '#   $legend' legend"
+        echo "      line, so its header has been truncated -- most likely by"
+        echo "      something that rewrote the register by searching the whole"
+        echo "      file for a disposition word and finding one in the prose."
+        echo "      Nothing else here reads the header, so this is the only"
+        echo "      check that can say so."
+        fail=1
+    fi
+done
+
 # ---- the harness prepends it, and only on the marker
 if ! grep -q 'testlib.ps' "$src/tests/run-ps-test.sh"; then
     echo "FAIL: tests/run-ps-test.sh does not mention testlib.ps, so nothing"

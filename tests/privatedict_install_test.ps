@@ -1,3 +1,4 @@
+%!testlib
 %!
 % The interpreter's private machinery dictionary is recorded in the
 % context, where the collector roots it and the C reaches it. Two things
@@ -14,34 +15,19 @@
 % no `restore` puts back a dictionary displaced from it, so a second
 % install stands for the rest of the run.
 
-/failcount 0 def
-/note { print (\n) print } def
-/assert {
-  exch { pop } { (FAIL: ) print note /failcount failcount 1 add store } ifelse
-} def
 
 /setpd 1183615869 internaldict /.setprivatedict get def
 
 % proc label  .  -   the proc must raise invalidaccess. A refused
 % operator leaves its operands where its caller pushed them
 % (PLRM 3.11.1), so the depth is put back before the verdict is taken.
-/refuses {
-  /label exch def
-  count 1 sub /base exch def
-  stopped
-  { $error /errorname get /invalidaccess eq }
-  { false } ifelse
-  /ok exch def
-  count base sub { pop } repeat
-  ok label assert
-} def
 
 % --- a dictionary already recorded is not displaced ---
-{ 64 dict setpd } (a second private dictionary is refused) refuses
+{ 64 dict setpd } /invalidaccess (a second private dictionary is refused) raises
 
 % --- nor by one made where the machinery cannot write ---
 currentglobal true setglobal /gd 64 dict def setglobal
-{ gd setpd } (a global private dictionary is refused) refuses
+{ gd setpd } /invalidaccess (a global private dictionary is refused) raises
 
 % --- the refusal is of the install, not of every dictionary: the one
 % the interpreter recorded at startup is still the one in hand ---
@@ -69,7 +55,7 @@ count /nsave exch def
 count nsave sub { pop } repeat
 verdict exch restore
 (a second install is refused inside a save too) assert
-{ 64 dict setpd } (and after the restore) refuses
+{ 64 dict setpd } /invalidaccess (and after the restore) raises
 
-failcount 0 eq { (SUCCESS) = } { (FAILURES: ) print failcount = } ifelse
+verdict
 quit
