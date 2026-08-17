@@ -46,15 +46,22 @@
  *  of the memory space.
 
  *  The free list is a chain of unused ents and their associated memory.
- *  The free list head is ent 0, which points (via the address field in
- *  the memory table entry for ent 0) to a 32bit int which is either 0
- *  (ie. a "NULL" "pointer", also a link back to the head (!)) or the ent
- *  number of the next free allocation. Any subsequent ents in the chain
- *  will have the next ent or 0 in the first 4 bytes of the allocation.
+ *  The heads live in ent 0's data area, one word per bucket, and each
+ *  node names the next through the `nextfree` field of its own row in
+ *  the memory table -- not through the storage it stands for. Zero ends
+ *  a chain, and ent 0 cannot be a node, so it also stands for "none".
  *
- *  (All allocations are padded to at least an even word and zero-sized
- *  allocations are ignored, so any ent that can be put on the free list
- *  is guaranteed to have at least these 4 bytes allocated to it.)
+ *  Keeping the links out of the freed storage is what lets that storage
+ *  be treated as having no meaning at all once it is released: a write
+ *  into it through a stale reference spoils nothing the allocator will
+ *  read, the whole extent can be marked inaccessible to a sanitizer
+ *  rather than all but its first word, and pages that fall entirely
+ *  inside free blocks can be handed back to the system without taking
+ *  the chain with them.
+ *
+ *  (Zero-sized allocations are still not admitted: an entity of no size
+ *  begins where the next allocation does, so handing one back out would
+ *  give two entity numbers one address.)
  */
 
 /**
@@ -92,10 +99,10 @@ typedef enum
 
 /**
  * The free list is bucketed by allocation size: ent 0's data area holds
- * XPOST_FREE_NBUCKETS list-head words, and a freed ent's first word
- * links to the next ent in its bucket. The allocator and the collector's
- * sweep both address the buckets through this one size-to-bucket map,
- * so the layout cannot drift between them.
+ * XPOST_FREE_NBUCKETS list-head words, and a freed ent's `nextfree`
+ * field names the next ent in its bucket. The allocator and the
+ * collector's sweep both address the buckets through this one
+ * size-to-bucket map, so the layout cannot drift between them.
  */
 #define XPOST_FREE_NBUCKETS 16
 
@@ -144,9 +151,9 @@ xpost_free_bucket_for_size(unsigned int sz)
  * inaccessible turns exactly that read into an error with a stack
  * trace, which is what a collector defect needs to be caught by.
  *
- * The first word of a freed entity is the free list's own link, written
- * by the reclaimer and read by the allocator's walk, so the redzone
- * starts after it.
+ * A freed entity's storage holds nothing the file reads -- the free
+ * list's links are in the memory table -- so the redzone covers the
+ * whole extent, first word included.
  */
 #ifdef XPOST_VALGRIND_ARENA
 # include <valgrind/memcheck.h>
@@ -165,15 +172,10 @@ xpost_free_bucket_for_size(unsigned int sz)
    reopening it does not also declare its contents fresh */
 # define XPOST_VG_REOPEN_RANGE(base, adr, len) \
     VALGRIND_MAKE_MEM_DEFINED((char *)(base) + (adr), (len))
-/* the first word of a freed entity is the free list's own link, written
-   by the reclaimer and read by the allocator's walk, so the redzone
-   starts after it */
+/* a freed entity's storage holds nothing the file reads, so the whole
+   extent is closed */
 # define XPOST_VG_POISON_ENT(base, adr, sz) \
-    do { \
-        if ((sz) > sizeof(unsigned int)) \
-            VALGRIND_MAKE_MEM_NOACCESS((char *)(base) + (adr) + sizeof(unsigned int), \
-                                       (sz) - sizeof(unsigned int)); \
-    } while (0)
+    VALGRIND_MAKE_MEM_NOACCESS((char *)(base) + (adr), (sz))
 # define XPOST_VG_UNPOISON_ENT(base, adr, sz) \
     VALGRIND_MAKE_MEM_UNDEFINED((char *)(base) + (adr), (sz))
 #else

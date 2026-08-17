@@ -1,34 +1,41 @@
 /* What the free list will take in, and what it will hand back out.
  *
- * The list is a chain of entity numbers whose links live inside the
- * freed entities' own data. Two things follow from that, and neither is
+ * The list is a chain of entity numbers, and the chain is held entirely
+ * in the memory table: a bucket head per size class in the free list's
+ * own data area, and each node's successor in the `nextfree` field of
+ * its own table row. The storage a freed entity stands for holds
+ * nothing the allocator reads. Three things follow, and none of them is
  * observable from PostScript.
  *
- * An entity of no size has no data to hold a link. Its address is the
- * address the next allocation begins at -- a zero-length allocation
- * advances nothing -- so writing a link into it writes the neighbour's
- * first word, and handing it back out later gives two owners one
- * allocation. Refusing it is therefore a refusal that has to be read off
- * the memory and off the list: the function answers a reclaimed size,
+ * An entity of no size is still refused. Its address is the address the
+ * next allocation begins at -- a zero-length allocation advances
+ * nothing -- so admitting one and handing it back out would give two
+ * entity numbers one address. The refusal has to be read off the list
+ * rather than off the answer: the function answers a reclaimed size,
  * which for an entity of no size is zero whether it refused or not.
  *
- * The neighbour is filled with bytes that differ from the link an
- * admission would write, so that a write let through is a change and not
- * a repetition.
+ * A release writes nothing into what it releases. That is what lets the
+ * storage of a freed entity be treated as meaningless -- closed to a
+ * sanitizer in its whole extent, and returnable to the system a page at
+ * a time. It is read here by filling an entity, releasing it, taking it
+ * back from the list and finding the fill still there: an implementation
+ * that kept its links in the freed storage would have overwritten the
+ * first word of it.
  *
- * The other is a link that is not an entity number at all, which a stale
- * write into a freed entity's data produces. The walk validates every
- * node before it reads the table at that number, and what it does on
- * finding one is more than decline: the lists are unusable from that
- * node on, so it empties every bucket and answers that a collection is
- * due, which is what refills them. Both halves are read here -- the
- * answer, and the buckets afterwards -- because a walk that returned the
- * same answer without emptying the buckets would leave the next walk to
- * reach the same bad link, and a walk that emptied them without asking
- * for a collection would leave the file with no free list at all.
+ * A link can still fail to name an entity, since the rows the chain runs
+ * through are written from more places than the reclaimer. The walk
+ * validates every node before it reads the table at that number, and
+ * what it does on finding a bad one is more than decline: the lists are
+ * unusable from that node on, so it empties every bucket and answers
+ * that a collection is due, which is what refills them. Both halves are
+ * read here -- the answer, and the buckets afterwards -- because a walk
+ * that returned the same answer without emptying the buckets would leave
+ * the next walk to reach the same bad link, and a walk that emptied them
+ * without asking for a collection would leave the file with no free list
+ * at all.
  *
- * Two numbers stand for the two places a stale write can land, and they
- * are asked in an order the second half of that explains. The first is
+ * Two numbers stand for the two places a spoiled link can point, and
+ * they are asked in an order the second half of that explains. The first is
  * inside the table's allocation but past the entities that have been
  * handed out, and the slot there is made to look exactly like a free
  * node -- no tag, a plausible size -- so that nothing but the number's
@@ -44,9 +51,9 @@
  *
  * The fixture is a memory file with no interpreter over it: the free
  * list sits below the object layer, and a PostScript program can neither
- * ask for an entity of no size nor write a link into a freed one. That
- * the collection this asks for then arrives and refills the lists is the
- * interpreter's half, and is held in tests/free_list_recovery_test.c. */
+ * ask for an entity of no size nor spoil a link. That the collection
+ * this asks for then arrives and refills the lists is the interpreter's
+ * half, and is held in tests/free_list_recovery_test.c. */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -92,9 +99,10 @@ static unsigned int bucket_head(Xpost_Memory_File *mem, unsigned int b)
     return v;
 }
 
+/* the successor of a node, in the row the chain runs through */
 static void set_link(Xpost_Memory_File *mem, unsigned int ent, unsigned int v)
 {
-    memcpy(xpost_vm_ptr(mem, mem->table.tab[ent].adr), &v, sizeof v);
+    mem->table.tab[ent].nextfree = v;
 }
 
 /* every bucket, so that a discard is read as the whole free list going
@@ -163,10 +171,12 @@ int main(void)
 {
     Xpost_Memory_File mem;
     unsigned int empty = 0, neighbour = 0, again = 0;
-    unsigned int node = 0;
+    unsigned int node = 0, retaken = 0;
     unsigned int eadr = 0, nadr = 0;
     unsigned char pattern[NEIGHBOUR_SZ];
     unsigned char readback[NEIGHBOUR_SZ];
+    unsigned char nodefill[NODE_SZ];
+    unsigned char nodeback[NODE_SZ];
     unsigned int b0;
     unsigned int i;
     int refuses_invalid;
@@ -215,8 +225,8 @@ int main(void)
     check(eadr == nadr,
           "an entity of no size shares its address with the next allocation");
 
-    /* bytes that differ from the link an admission would write there:
-       the bucket head is zero while the bucket is empty */
+    /* bytes an admission that wrote anything at all would disturb: they
+       are neither zero nor an entity number the file has issued */
     for (i = 0; i < NEIGHBOUR_SZ; i++)
         pattern[i] = (unsigned char)(0xa5 ^ i);
     if (!xpost_memory_put(&mem, neighbour, 0, NEIGHBOUR_SZ, pattern))
@@ -252,17 +262,51 @@ int main(void)
     check(again != empty,
           "a second entity of no size is not the first handed back");
 
-    /* --- a link that is not an entity number --- */
+    /* --- a release writes nothing into what it releases --- */
 
     if (!xpost_memory_table_alloc(&mem, NODE_SZ, 0, &node))
     {
         report_failure("could not allocate the free-list node");
         return verdict();
     }
+
+    /* filled before the release and read after taking it back: an
+       implementation that held its links in the freed storage would have
+       written the first word of this in between */
+    for (i = 0; i < NODE_SZ; i++)
+        nodefill[i] = (unsigned char)(0x5c ^ i);
+    if (!xpost_memory_put(&mem, node, 0, NODE_SZ, nodefill))
+    {
+        report_failure("could not fill the free-list node");
+        return verdict();
+    }
+
     check(xpost_free_memory_ent(&mem, node) == (int)NODE_SZ,
           "an entity with data is admitted, and reports its size");
     check(bucket_head(&mem, xpost_free_bucket_for_size(NODE_SZ)) == node,
           "the admitted entity is the head of its bucket");
+
+    /* the one entity on the list, asked for at exactly its size, so the
+       walk stops at it and the bytes read back are the ones filled in */
+    if (!xpost_memory_table_alloc(&mem, NODE_SZ, 0, &retaken))
+    {
+        report_failure("could not take the node back off the list");
+        return verdict();
+    }
+    check(retaken == node,
+          "a request of the node's own size is answered with the node");
+    memset(nodeback, 0, sizeof nodeback);
+    check(xpost_memory_get(&mem, node, 0, NODE_SZ, nodeback) == 1,
+          "the node reads once it has been handed back out");
+    check(memcmp(nodeback, nodefill, NODE_SZ) == 0,
+          "a release leaves the storage it releases exactly as it was");
+
+    /* --- a link that is not an entity number --- */
+
+    check(xpost_free_memory_ent(&mem, node) == (int)NODE_SZ,
+          "the node goes back on the list for the walk below");
+    check(bucket_head(&mem, xpost_free_bucket_for_size(NODE_SZ)) == node,
+          "and is its bucket's head again");
 
     /* A stale write turns the node's link into a number the table has
        room for but has never handed out. Reading the slot there is

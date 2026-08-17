@@ -911,10 +911,10 @@ static void _clear_slack(Xpost_Memory_File *mem, unsigned int ent)
    time, and the collector's sweep splices whole runs of them onto the
    free list itself, so a release is a place to be forgotten. A release
    the conclusion outlives is not the danger in any case. The storage
-   still holds the bytes that were examined, but for the one word the
-   free list writes its link through, and nothing can offer a released
-   entity for examination: what let it be reclaimed was that nothing
-   referred to it. What makes a conclusion wrong is somebody else
+   still holds the bytes that were examined -- the free list writes no
+   word of it -- and nothing can offer a released entity for
+   examination: what let it be reclaimed was that nothing referred to
+   it. What makes a conclusion wrong is somebody else
    writing the storage, and that begins here. */
 static void
 _ent_issued(Xpost_Memory_File *mem, unsigned int ent)
@@ -974,6 +974,10 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
         {
             _ent_issued(mem, *entity);
             mem->table.tab[*entity].used = sz;
+            /* the link means nothing once the entity is live, so a live
+               row carries the one value rather than whatever the entity
+               was linked to when it was last free */
+            mem->table.tab[*entity].nextfree = 0;
             _clear_slack(mem, *entity);
             return 1;
         }
@@ -998,6 +1002,7 @@ xpost_memory_table_alloc(Xpost_Memory_File *mem,
        with a case in it */
     _ent_issued(mem, *entity);
     mem->table.tab[*entity].used = sz;
+    mem->table.tab[*entity].nextfree = 0;
     return ret;
 }
 

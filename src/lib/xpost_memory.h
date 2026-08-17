@@ -198,6 +198,14 @@ typedef struct Xpost_Memory_Table
         unsigned int sz; /**< size of allocation */
         unsigned int mark; /**< garbage collection metadata */
         unsigned int tag; /**< type of object using this allocation, if needed */
+        /** the next entity on the free list this one is on, or zero at
+            the end of it. Meaningful only while the entity is free.
+            It is here rather than in the entity's own storage so that
+            the storage of a freed entity holds nothing the allocator
+            needs: a stale write into it can no longer turn a link into
+            an arbitrary entity number, and the pages it sits in can be
+            handed back to the system without taking the list with them. */
+        unsigned int nextfree;
     } *tab; /**< table entries */
 } Xpost_Memory_Table;
 

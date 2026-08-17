@@ -867,10 +867,12 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
         {
             unsigned int bz;
             unsigned int b;
-            /* a file is an entity in here and a struct outside, and this
-               is the last reach anything has to either: give the struct
-               up before the entity that points at it joins the free
-               list, since the release writes through that same word. */
+            unsigned int head;
+            /* a file is an entity in here and a struct outside, and the
+               entity's storage is what names the struct: give the
+               struct up while that storage still means something, since
+               from the moment the entity joins the free list its bytes
+               are treated as holding nothing. */
             if (mem->table.tab[i].tag == filetype)
                 xpost_file_release_entity(mem, i);
             /* a handle is likewise an entity in here and a block
@@ -889,7 +891,11 @@ unsigned int _xpost_garbage_sweep(Xpost_Memory_File *mem)
             b = xpost_free_bucket_for_size(mem->table.tab[i].sz);
             bstat[b]++;
             bz = z + b * sizeof(unsigned int);
-            memcpy(xpost_ent_ptr(mem, i), xpost_vm_ptr(mem, bz), sizeof(unsigned int));
+            /* the link goes in the table beside the entity, not in the
+               storage being reclaimed: the sweep and the allocator are
+               the two writers of these lists and they have to agree */
+            memcpy(&head, xpost_vm_ptr(mem, bz), sizeof head);
+            mem->table.tab[i].nextfree = head;
             memcpy(xpost_vm_ptr(mem, bz), &i, sizeof(unsigned int));
             /* the entity has been reclaimed: a reference something still
                holds now reads storage the interpreter has taken back,

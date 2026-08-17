@@ -1,9 +1,11 @@
 /* What the allocator's answer to a corrupt free list is worth.
  *
- * The links of the free list live inside the freed entities' own data,
- * where a stale write can turn one into a number that names no entity.
- * The walk that meets one cannot go on, and cannot leave the lists
- * standing either, since the next walk would arrive at the same place;
+ * A free list runs through entity numbers -- a bucket head in the free
+ * list's own data area, and each node's `nextfree` field in the memory
+ * table -- and a spoiled row or head can turn one into a number that
+ * names no entity. The walk that meets one cannot go on, and cannot
+ * leave the lists standing either, since the next walk would arrive at
+ * the same place;
  * so it empties every bucket and answers that a collection is due. That
  * answer is the whole of the recovery: the entities are still there,
  * unmarked and untagged, and the sweep is what gathers them back.
@@ -29,9 +31,10 @@
  * tests/free_list_admission_test.c.
  *
  * The corruption is planted rather than provoked. Nothing a PostScript
- * program can do writes a link into a freed entity: reaching that state
- * takes a defect elsewhere in the interpreter, which is what the
- * recovery is for and what a test of it cannot wait for. */
+ * program can do puts a number that names no entity into the list:
+ * reaching that state takes a defect elsewhere in the interpreter,
+ * which is what the recovery is for and what a test of it cannot wait
+ * for. */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"

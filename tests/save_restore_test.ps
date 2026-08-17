@@ -140,7 +140,7 @@ heldinarray status pop
 heldindict status pop
 
 % and closed with nothing allocated in between, so that the entity is
-% still on the free list and its payload is the list's own link word
+% still on the free list and nothing has taken its storage
 save [ (45>) /ASCIIHexDecode filter ] exch restore
 0 get dup status pop closefile
 

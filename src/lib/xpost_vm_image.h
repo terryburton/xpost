@@ -226,6 +226,7 @@ typedef enum
     XPOST_VM_IMAGE_ROW_SZ,
     XPOST_VM_IMAGE_ROW_MARK,
     XPOST_VM_IMAGE_ROW_TAG,
+    XPOST_VM_IMAGE_ROW_NEXTFREE,
     XPOST_VM_IMAGE_ROW_FIELDS
 } Xpost_Vm_Image_Row_Field;
 
@@ -240,7 +241,7 @@ typedef enum
  * @def XPOST_VM_IMAGE_VERSION
  * @brief The layout below, which a reader must know in full.
  */
-#define XPOST_VM_IMAGE_VERSION 4u
+#define XPOST_VM_IMAGE_VERSION 5u
 
 /**
  * @def XPOST_VM_IMAGE_DIGEST_SEED

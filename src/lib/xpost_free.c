@@ -100,6 +100,37 @@ static void _xpost_free_bucket_head_set(Xpost_Memory_File *mem,
            &ent, sizeof ent);
 }
 
+static unsigned int _xpost_free_bucket_head(Xpost_Memory_File *mem,
+                                            unsigned int b)
+{
+    unsigned int e;
+
+    memcpy(&e, xpost_vm_ptr(mem, xpost_memory_free_lists_adr(mem)
+                                 + b * (unsigned int)sizeof(unsigned int)),
+           sizeof e);
+    return e;
+}
+
+/* The entity after this one on the list it is on. A predecessor of zero
+   means the bucket's head, so a walk needs no special case for its first
+   step and an unlink none for its first entry. */
+static unsigned int _xpost_free_next(Xpost_Memory_File *mem,
+                                     unsigned int b, unsigned int prev)
+{
+    return prev ? mem->table.tab[prev].nextfree
+                : _xpost_free_bucket_head(mem, b);
+}
+
+static void _xpost_free_next_set(Xpost_Memory_File *mem,
+                                 unsigned int b, unsigned int prev,
+                                 unsigned int next)
+{
+    if (prev)
+        mem->table.tab[prev].nextfree = next;
+    else
+        _xpost_free_bucket_head_set(mem, b, next);
+}
+
 int xpost_free_init(Xpost_Memory_File *mem)
 {
     unsigned int ent;
@@ -176,8 +207,7 @@ void xpost_free_repoison(Xpost_Memory_File *mem)
         unsigned int e;
         unsigned int seen = 0;
 
-        memcpy(&e, xpost_vm_ptr(mem, headz + b * sizeof(unsigned int)),
-               sizeof(unsigned int));
+        e = _xpost_free_bucket_head(mem, b);
         /* the walk is bounded by the table it indexes, so a link spoiled
            by a stale write cannot spin it */
         while (e && xpost_ent_valid(mem, e) && seen <= rows)
@@ -186,7 +216,7 @@ void xpost_free_repoison(Xpost_Memory_File *mem)
             unsigned int s = mem->table.tab[e].sz;
 
             ++seen;
-            memcpy(&e, xpost_vm_ptr(mem, a), sizeof(unsigned int));
+            e = mem->table.tab[e].nextfree;
             XPOST_VG_POISON_ENT(mem->base, a, s);
         }
     }
@@ -199,8 +229,6 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
 {
     Xpost_Memory_Table *tab;
     unsigned int rent = ent; /* relative ent index */
-    unsigned int z; /* free list pointer */
-    unsigned int a; /* adr associated with ent */
     unsigned int sz; /* sz associated with adr */
     /* return; */
 
@@ -213,7 +241,6 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
         return -1;
     }
     tab = &mem->table;
-    a = tab->tab[rent].adr;
     sz = tab->tab[rent].sz;
     if (sz == 0) return 0; /* do not add zero-size allocations to list */
 
@@ -260,35 +287,36 @@ int xpost_free_memory_ent(Xpost_Memory_File *mem,
         xpost_handle_release_entity(mem, ent);
     tab->tab[rent].tag = 0;
 
-    z = xpost_memory_free_lists_adr(mem);
-    z += xpost_free_bucket_for_size(sz) * sizeof(unsigned int);
+    /* push onto the bucket. The link is in the table rather than in the
+       entity's own storage, so nothing the allocator needs survives in
+       the bytes just released. */
+    {
+        unsigned int b = xpost_free_bucket_for_size(sz);
 
-    /* push onto the bucket: link word lives in the ent's data area */
-    memcpy(xpost_vm_ptr(mem, a), xpost_vm_ptr(mem, z), sizeof(unsigned int));
-    memcpy(xpost_vm_ptr(mem, z), &ent, sizeof(unsigned int));
-    XPOST_VG_POISON_ENT(mem->base, a, sz);
+        mem->table.tab[ent].nextfree = _xpost_free_bucket_head(mem, b);
+        _xpost_free_bucket_head_set(mem, b, ent);
+    }
+    XPOST_VG_POISON_ENT(mem->base, tab->tab[rent].adr, sz);
 
     return sz;
 }
 
-static void _dump_chain(Xpost_Memory_File *mem, unsigned int z)
+static void _dump_chain(Xpost_Memory_File *mem, unsigned int b)
 {
-    unsigned int e;
-    memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+    unsigned int e = _xpost_free_bucket_head(mem, b);
+
     while (e)
     {
         unsigned int sz;
         if (!xpost_memory_table_get_size(mem, e, &sz)) return;
         printf("%u(%u) ", e, sz);
-        if (!xpost_memory_table_get_addr(mem, e, &z)) return;
-        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+        e = mem->table.tab[e].nextfree;
     }
 }
 
 unsigned int xpost_free_bytes(Xpost_Memory_File *mem)
 {
     unsigned int total = 0;
-    unsigned int headz;
     unsigned int b;
     /* no chain can hold more entities than the table has rows, which is
        the bound the walk below is held to: a walk that passes it is
@@ -296,15 +324,11 @@ unsigned int xpost_free_bytes(Xpost_Memory_File *mem)
        instead of never returning */
     unsigned int rows = mem->table.nextent;
 
-    headz = xpost_memory_free_lists_adr(mem);
-
     for (b = 0; b < XPOST_FREE_NBUCKETS; b++)
     {
-        unsigned int z = headz + b * (unsigned int)sizeof(unsigned int);
-        unsigned int e;
+        unsigned int e = _xpost_free_bucket_head(mem, b);
         unsigned int seen = 0;
 
-        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
         while (e && seen <= rows)
         {
             unsigned int sz;
@@ -312,10 +336,8 @@ unsigned int xpost_free_bytes(Xpost_Memory_File *mem)
             if (!xpost_memory_table_get_size(mem, e, &sz))
                 break;
             total += sz;
-            if (!xpost_memory_table_get_addr(mem, e, &z))
-                break;
             ++seen;
-            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+            e = mem->table.tab[e].nextfree;
         }
     }
     return total;
@@ -354,7 +376,6 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                      unsigned int tag,
                      unsigned int *entity)
 {
-    unsigned int z;
     unsigned int e;                     /* working pointer */
     int ret;
 
@@ -374,23 +395,19 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
         }
     }
 
-    z = xpost_memory_free_lists_adr(mem); /* free pointer */
-
     {
     unsigned int b;
-    unsigned int headz = z;
 
     for (b = xpost_free_bucket_for_size(sz); b < XPOST_FREE_NBUCKETS; b++)
     {
-        unsigned int best = 0, bestz = 0, bestsz = 0;
+        unsigned int best = 0, bestprev = 0, bestsz = 0;
+        unsigned int prev = 0;
         unsigned int seen = 0;
 
-        z = headz + b * sizeof(unsigned int);
-        memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+        e = _xpost_free_next(mem, b, prev);
         while (e && seen < XPOST_FREE_SCAN_LIMIT) /* e is not zero */
         {
             unsigned int tsz;
-            unsigned int ta;
 
             ++seen;
             /* saturating, so a count this large cannot present itself
@@ -398,12 +415,15 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
             if (mem->free_scan < (unsigned int)INT_MAX)
                 ++mem->free_scan;
 
-            /* The links live inside the freed entities' data, where a stale
-               write can turn one into an arbitrary number. Handing out an
-               entity that is not actually free aliases two owners onto one
-               allocation, so validate every node: freed entities carry a
-               zero tag. On any inconsistency discard the lists and request
-               a collection to rebuild them. */
+            /* Handing out an entity that is not actually free aliases two
+               owners onto one allocation, so validate every node: freed
+               entities carry a zero tag. The links are in the memory
+               table, out of reach of a write through a stale reference,
+               but the table is written from more places than this one --
+               the reclaimer, the collector's sweep, an image read -- and
+               a chain is only as sound as the rows it runs through. On
+               any inconsistency discard the lists and request a
+               collection to rebuild them. */
             if (e > XPOST_OBJECT_COMP_MAX_ENT ||
                 !xpost_ent_valid(mem, e) ||
                 mem->table.tab[e].tag != 0)
@@ -443,20 +463,14 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
             if (tsz >= sz && (best == 0 || tsz < bestsz))
             {
                 best = e;
-                bestz = z;
+                bestprev = prev;
                 bestsz = tsz;
                 if (tsz == sz)
                     break;
             }
 
-            ret = xpost_memory_table_get_addr(mem, e, &ta);
-            if (!ret)
-            {
-                XPOST_LOG_ERR("cannot retrieve address for ent %u", e);
-                return 0;
-            }
-            z = ta;
-            memcpy(&e, xpost_vm_ptr(mem, z), sizeof(unsigned int));
+            prev = e;
+            e = mem->table.tab[e].nextfree;
         }
 
         if (best)
@@ -470,9 +484,10 @@ int xpost_free_alloc(Xpost_Memory_File *mem,
                 XPOST_LOG_ERR("cannot retrieve address of ent %u", best);
                 return 0;
             }
-            /* unlink: the predecessor link slot was recorded when the
-               node was reached */
-            memcpy(xpost_vm_ptr(mem, bestz), xpost_vm_ptr(mem, ad), sizeof(unsigned int));
+            /* unlink: the predecessor was recorded when the node was
+               reached, and zero means the bucket's head */
+            _xpost_free_next_set(mem, b, bestprev, tab->tab[best].nextfree);
+            tab->tab[best].nextfree = 0;
             /* the entity is being handed out again: its storage is
                readable once more, and holds nothing yet */
             XPOST_VG_UNPOISON_ENT(mem->base, ad, bestsz);

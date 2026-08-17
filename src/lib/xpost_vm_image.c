@@ -667,6 +667,7 @@ static int _put_bank(_Writer *w, Xpost_Context *ctx, unsigned int bank,
         if (!_put(w, mem->table.tab[ent].sz)) return 0;
         if (!_put(w, mem->table.tab[ent].mark)) return 0;
         if (!_put(w, mem->table.tab[ent].tag)) return 0;
+        if (!_put(w, mem->table.tab[ent].nextfree)) return 0;
     }
 
     return _put_arena(w, ctx, mem, bank == 0, host_state);
@@ -1036,6 +1037,7 @@ static void _install_bank(Xpost_Memory_File *mem, const _Bank *b)
                             * sizeof(unsigned int), sizeof v);
         mem->table.tab[ent].adr = v[XPOST_VM_IMAGE_ROW_ADR];
         mem->table.tab[ent].used = v[XPOST_VM_IMAGE_ROW_USED];
+        mem->table.tab[ent].nextfree = v[XPOST_VM_IMAGE_ROW_NEXTFREE];
         mem->table.tab[ent].sz = v[XPOST_VM_IMAGE_ROW_SZ];
         mem->table.tab[ent].mark = v[XPOST_VM_IMAGE_ROW_MARK];
         mem->table.tab[ent].tag = v[XPOST_VM_IMAGE_ROW_TAG];
