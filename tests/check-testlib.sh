@@ -74,8 +74,12 @@ for f in "$src"/tests/*.ps; do
     else
         d=""
         while read -r nm; do
+            # only the names that RUN a case count. `note` and `assert`
+            # report one; a suite with its own printer is not a suite the
+            # unwind fails to reach, and counting those overstated this
+            # register by a factor of four when it was first written.
             case $nm in
-                works|works2|refuses|refuses2|raises|raises2|outcome|note) ;;
+                works|works2|refuses|refuses2|raises|raises2|outcome) ;;
                 *) continue ;;
             esac
             grep -q "^/$nm " "$f" && d="$d $nm"
